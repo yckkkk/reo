@@ -1,41 +1,17 @@
 import { app, session } from 'electron';
 import { APP_SHELL_SCHEME } from './appProtocol.js';
+import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.js';
 
-const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-
-function isLoopbackHttpUrl(url: URL): boolean {
-  return (
-    (url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTNAMES.has(url.hostname)
-  );
+function resolveCurrentDevServerUrl(): string | null {
+  return resolveDevServerUrl({
+    rawUrl: process.env['ELECTRON_RENDERER_URL'],
+    isPackaged: app.isPackaged,
+  });
 }
 
-function resolveDevServerUrl(): string | null {
-  const rawUrl = process.env['ELECTRON_RENDERER_URL'];
-  if (!rawUrl) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(rawUrl);
-    if (isLoopbackHttpUrl(parsed)) {
-      return parsed.origin;
-    }
-  } catch {
-    console.warn('[Security] Ignoring invalid ELECTRON_RENDERER_URL');
-    return null;
-  }
-
-  console.warn('[Security] Ignoring non-loopback ELECTRON_RENDERER_URL');
-  return null;
-}
-
-const DEV_SERVER_URL = resolveDevServerUrl();
+const DEV_SERVER_URL = resolveCurrentDevServerUrl();
 const DEV_SERVER_ORIGINS = new Set(DEV_SERVER_URL ? [DEV_SERVER_URL] : []);
-const DEV_CONNECT_SOURCES = Array.from(DEV_SERVER_ORIGINS, (origin) => {
-  const parsed = new URL(origin);
-  parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-  return parsed.origin;
-});
+const DEV_CONNECT_SOURCES = getDevServerConnectSources(DEV_SERVER_ORIGINS);
 
 const PROD_CSP_DIRECTIVES = [
   "default-src 'self'",

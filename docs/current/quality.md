@@ -4,7 +4,8 @@
 
 ## 当前事实
 
-- 当前已有 TypeScript、ESLint、Prettier 和 `npm run verify:quick`。
+- 当前已有 TypeScript、ESLint、Prettier、Node test runner 和 `npm run verify:quick`。
+- 当前 `test:main` 使用 Node test runner 覆盖 main process 纯策略函数。
 - Vitest 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 posthook 或 pre-commit flow。
@@ -33,6 +34,8 @@
 ```bash
 npm run verify:quick
 ```
+
+`verify:quick` 当前包含 typecheck、`test:main`、lint 和 format check。
 
 没有新鲜验证证据，不得宣称完成。
 
