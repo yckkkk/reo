@@ -8,6 +8,8 @@
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 纯策略函数。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
+- 当前 `typecheck` 分别检查 renderer TypeScript 和 main process TypeScript。
+- 当前 ESLint 覆盖 renderer、main process、测试、Electron Vite config 和测试脚本。
 - Vitest 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 posthook 或 pre-commit flow。
@@ -38,6 +40,13 @@ npm run verify:quick
 ```
 
 `verify:quick` 当前包含 typecheck、`test:main`、lint 和 format check。
+
+当前命令边界：
+
+- `typecheck`：运行 renderer `tsconfig.json` 和 main process `tsconfig.main.json`。
+- `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main process 测试。
+- `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
+- `format:check`：运行 `prettier --check .`。
 
 没有新鲜验证证据，不得宣称完成。
 
