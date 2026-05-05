@@ -1,12 +1,12 @@
 # Reo Agent 入口
 
-Reo 是未发布的 Electron 产品。当前任务是建立干净、可维护的基础。
+Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的基础。
 
 `AGENTS.md` 与 `.claude/CLAUDE.md` 是镜像文件。修改任一文件时必须同步另一份。
 
 ## 启动阅读
 
-每次任务默认读取：
+开始工作时默认读取：
 
 1. `README.md`
 2. `docs/README.md`
@@ -21,7 +21,7 @@ Reo 是未发布的 Electron 产品。当前任务是建立干净、可维护的
 - React、Tailwind、shadcn/ui、forms、reusable components、UI state：`docs/current/frontend.md`
 - Type system、TDD、Vitest、lint、format、posthooks、errors、logging、Sentry：`docs/current/quality.md`
 
-只有当用户指定 slug，或当前任务明确延续某个任务时，才读取 `docs/specs/*`。
+只有当用户指定 slug，或当前工作明确关联某个 spec 时，才读取 `docs/specs/*`。
 
 ## 工作原则
 
@@ -30,8 +30,8 @@ Reo 是未发布的 Electron 产品。当前任务是建立干净、可维护的
 - 若歧义会影响架构、数据、UX、验证或工作量，先说明假设再行动。
 - 选择能满足当前目标的最小设计。
 - 减少不必要的复杂性、嵌套、冗余代码和过度抽象。
-- 每一处改动都必须能追溯到当前任务、已接受 spec 或验证需求。
-- 非平凡任务先定义成功标准，再实现，再验证。
+- 每一处改动都必须能追溯到当前请求、已接受 spec 或验证需求。
+- 非平凡改动先定义成功标准，再实现，再验证。
 - 不盲目同意 reviewer 或用户假设；必须用项目目标、源码事实和官方文档判断。
 - 不进入防御式道歉。直接说明取舍、给出建议、继续推进。
 - 对抗性审查用于看清利弊，不用于外包最终判断。
@@ -62,7 +62,7 @@ Reo 是未发布的 Electron 产品。当前任务是建立干净、可维护的
 - Electron Forge
 - Vitest
 
-当前工程事实以 `package.json`、源码和 `docs/current/*` 为准。除非正在执行对应 foundation slice，不得因为技术路线已确认就一次性安装或配置全部依赖。
+当前工程事实以 `package.json`、源码和 `docs/current/*` 为准。除非对应 foundation slice 已进入实施范围，不得因为技术路线已确认就一次性安装或配置全部依赖。
 
 ## 硬红线
 
@@ -92,10 +92,10 @@ Reo 是未发布的 Electron 产品。当前任务是建立干净、可维护的
 
 - `docs/current/*` 是当前真源。
 - `docs/decisions/*` 只记录长期架构决策。
-- `docs/specs/YYYY-MM-DD-HHMM-slug/*` 记录任务意图、方案、任务单和验证证据。
+- `docs/specs/YYYY-MM-DD-HHMM-slug/*` 记录工作意图、方案、执行清单和验证证据。
 - spec 时间使用本机时区，并显式写出 timezone，例如 `2026-05-05 05:47 America/Los_Angeles`。
-- 已完成 specs 保留为任务记录，但不是默认阅读内容。
-- 任务收口时，仍然有效的长期结论必须压缩回 `docs/current/*` 或 `docs/decisions/*`。
+- 已完成 specs 保留为工作记录，但不是默认阅读内容。
+- 工作收口时，仍然有效的长期结论必须压缩回 `docs/current/*` 或 `docs/decisions/*`。
 - 默认文档与代码注释只写当前事实、当前规则和当前决策。
 - 不写“旧、继承、废弃、过去来源、为什么从过去变成现在”这类解释。
 - 无当前用途的内容直接删除，不写废弃标记。
