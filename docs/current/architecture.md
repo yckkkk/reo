@@ -10,6 +10,7 @@ docs/
   archive/    已收口任务记录
   current/    当前真源
   decisions/  长期 ADR
+  initiatives/ 长期任务
   specs/      当前任务工作区
 ```
 

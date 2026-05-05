@@ -7,12 +7,13 @@
 
 Reo 使用 `AGENTS.md` 与 `.claude/CLAUDE.md` 作为镜像 agent 入口文件，基于 Karpathy-style coding-agent 原则，并加入 Reo 专属硬门禁。
 
-Reo docs 使用四层结构：
+Reo docs 使用五层结构：
 
 ```text
 docs/archive/
 docs/current/
 docs/decisions/
+docs/initiatives/
 docs/specs/
 ```
 
@@ -23,10 +24,16 @@ docs/specs/
 - 任务记录必须可追溯，但不能进入默认阅读链。
 - 默认文档层级必须保持短、扁平、可维护。
 - 已收口任务记录必须离开当前任务工作区。
+- 跨 session 长期任务需要独立于当前 slice 记录。
 
 ## 影响
 
+- 跨 session 长期任务使用 `docs/initiatives/*`。
 - 当前任务使用 `docs/specs/*`。
 - 已完成 specs 移入 `docs/archive/specs/*`，但不是默认阅读内容。
+- 已完成、取消或失效的 initiatives 移入 `docs/archive/initiatives/*`。
+- 默认最多 1 个 active initiative。
+- 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
+- 读取归档时先搜索，再只打开相关文件。
 - 长期结论必须压缩进 `docs/current/*` 或 `docs/decisions/*`。
 - 未来新增 docs folder 必须有明确理由。

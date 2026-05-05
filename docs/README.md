@@ -26,8 +26,29 @@ docs/
   archive/     已收口任务记录
   current/     当前实现与设计真源
   decisions/   长期架构决策
+  initiatives/ 跨 session 长期任务
   specs/       当前任务工作区
 ```
+
+## Initiatives
+
+跨多个 session 的长期任务使用：
+
+```text
+docs/initiatives/YYYY-MM-DD-slug/
+```
+
+`docs/initiatives/README.md` 只记录 active initiative 索引和读取入口。默认最多 1 个 active initiative。
+
+Initiative 必须有明确完成条件。完成、取消或失效后移入：
+
+```text
+docs/archive/initiatives/YYYY-MM-DD-slug/
+```
+
+Initiative 不能覆盖 `current/*` 或 `decisions/*`，也不能替代当前 slice spec。
+
+创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 
 ## 任务 Specs
 
@@ -54,4 +75,6 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 1. 把仍然有效的长期事实写回 `current/*`。
 2. 把长期架构决策写入 `decisions/*`。
 3. 把任务证据移入 `archive/specs/*`。
-4. 除非用户明确要求，不创建额外顶层 docs 目录。
+4. 如存在对应 initiative，更新状态和下一步。
+5. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
+6. 除非用户明确要求，不创建额外顶层 docs 目录。
