@@ -23,9 +23,10 @@
 
 ```text
 docs/
+  archive/     已收口任务记录
   current/     当前实现与设计真源
   decisions/   长期架构决策
-  specs/       带时间戳的任务工作区
+  specs/       当前任务工作区
 ```
 
 ## 任务 Specs
@@ -38,7 +39,13 @@ docs/specs/YYYY-MM-DD-HHMM-slug/
 
 使用本机时区，并在 spec `README.md` 中显式写出 timezone。
 
-已完成 specs 保留为任务记录，但不是默认阅读内容，也不能覆盖 `current/*`。
+已完成 specs 移入：
+
+```text
+docs/archive/specs/YYYY-MM-DD-HHMM-slug/
+```
+
+归档 specs 是任务记录，不是默认阅读内容，也不能覆盖 `current/*`。
 
 ## 收口压缩
 
@@ -46,5 +53,5 @@ docs/specs/YYYY-MM-DD-HHMM-slug/
 
 1. 把仍然有效的长期事实写回 `current/*`。
 2. 把长期架构决策写入 `decisions/*`。
-3. 把任务证据留在 `specs/*`。
+3. 把任务证据移入 `archive/specs/*`。
 4. 除非用户明确要求，不创建额外顶层 docs 目录。

@@ -7,9 +7,10 @@ src/
   main/       Electron main process
   renderer/   React renderer
 docs/
+  archive/    已收口任务记录
   current/    当前真源
   decisions/  长期 ADR
-  specs/      任务工作区
+  specs/      当前任务工作区
 ```
 
 ## 当前事实

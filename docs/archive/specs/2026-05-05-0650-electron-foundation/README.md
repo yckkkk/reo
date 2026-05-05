@@ -9,13 +9,13 @@
 
 ## 优先阅读
 
-- `../../../AGENTS.md`
+- `../../../../AGENTS.md`
+- `../../../../README.md`
 - `../../../README.md`
-- `../../README.md`
-- `../../current/foundation.md`
-- `../../current/architecture.md`
-- `../../current/electron.md`
-- `../../current/quality.md`
+- `../../../current/foundation.md`
+- `../../../current/architecture.md`
+- `../../../current/electron.md`
+- `../../../current/quality.md`
 
 ## 产出
 

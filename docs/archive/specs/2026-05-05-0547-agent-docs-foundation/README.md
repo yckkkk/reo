@@ -1,7 +1,7 @@
 # Agent 文档基础
 
 创建时间：2026-05-05 05:47 America/Los_Angeles
-状态：实施中
+状态：已完成
 
 ## 目的
 
@@ -9,14 +9,14 @@
 
 ## 优先阅读
 
-- `../../../AGENTS.md`
-- `../../README.md`
-- `../../current/foundation.md`
-- `../../current/architecture.md`
+- `../../../../AGENTS.md`
+- `../../../README.md`
+- `../../../current/foundation.md`
+- `../../../current/architecture.md`
 
 ## 产出
 
 - 重写 `AGENTS.md` 与 `.claude/CLAUDE.md`。
 - 创建 `docs/current/*`。
 - 创建 `docs/decisions/0001-agent-docs-system.md`。
-- 在 `docs/specs/2026-05-05-0547-agent-docs-foundation/` 记录本任务。
+- 在 `docs/archive/specs/2026-05-05-0547-agent-docs-foundation/` 记录本任务。

@@ -22,6 +22,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - Type system、TDD、Vitest、lint、format、posthooks、errors、logging、Sentry：`docs/current/quality.md`
 
 只有当用户指定 slug，或当前工作明确关联某个 spec 时，才读取 `docs/specs/*`。
+只有当用户指定归档 slug，或需要核对已收口任务记录时，才读取 `docs/archive/specs/*`。
 
 ## 工作原则
 
@@ -106,9 +107,10 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 
 - `docs/current/*` 是当前真源。
 - `docs/decisions/*` 只记录长期架构决策。
-- `docs/specs/YYYY-MM-DD-HHMM-slug/*` 记录工作意图、方案、执行清单和验证证据。
+- `docs/specs/YYYY-MM-DD-HHMM-slug/*` 记录当前工作意图、方案、执行清单和验证证据。
+- `docs/archive/specs/YYYY-MM-DD-HHMM-slug/*` 记录已收口任务证据。
 - spec 时间使用本机时区，并显式写出 timezone，例如 `2026-05-05 05:47 America/Los_Angeles`。
-- 已完成 specs 保留为工作记录，但不是默认阅读内容。
+- 已完成 specs 移入 `docs/archive/specs/*`，但不是默认阅读内容。
 - 工作收口时，仍然有效的长期结论必须压缩回 `docs/current/*` 或 `docs/decisions/*`。
 - 默认文档与代码注释只写当前事实、当前规则和当前决策。
 - 不写“旧、继承、废弃、过去来源、为什么从过去变成现在”这类解释。

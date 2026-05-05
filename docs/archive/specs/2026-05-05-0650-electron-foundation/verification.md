@@ -120,7 +120,7 @@ git ls-files out dist build .vite
 
 ## Closeout patch 验证
 
-- `docs/specs/2026-05-05-0650-electron-foundation/README.md` 状态为 `已完成`。
+- `docs/archive/specs/2026-05-05-0650-electron-foundation/README.md` 状态为 `已完成`。
 - `test/**/*.ts` 由 ESLint 覆盖。
 - `test:main` 使用 `scripts/run-main-tests.mjs` 清理 `.tmp/test-main`、编译测试并把明确测试文件列表传给 Node test runner。
 - `src/main/devServerUrl.ts` 保留 `localhost`、`127.0.0.1` 和 `[::1]` loopback host；IPv6 loopback 由 `test/main/devServerUrl.test.ts` 覆盖。
