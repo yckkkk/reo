@@ -1,0 +1,146 @@
+@theme static {
+  /* Colors */
+  --color-eggshell: #fdfcfc;
+  --color-powder: #f5f3f1;
+  --color-chalk: #e5e5e5;
+  --color-fog: #b1b0b0;
+  --color-gravel: #777169;
+  --color-slate: #a59f97;
+  --color-cinder: #57534f;
+  --color-obsidian: #000000;
+  --color-signal-blue: #0447ff;
+  --color-ember: #ff4704;
+  --color-voice-spectrum: #3d75d8;
+  --color-card-white: #ffffff;
+
+  /* Typography */
+  --font-waldenburg:
+    'Waldenburg', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-waldenburgfh:
+    'WaldenburgFH', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-inter:
+    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Typography - Scale */
+  --text-caption: 10px;
+  --leading-caption: 1.2;
+  --text-body: 14px;
+  --leading-body: 1.43;
+  --text-body-lg: 16px;
+  --leading-body-lg: 1.5;
+  --text-subheading: 18px;
+  --leading-subheading: 1.44;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.4;
+  --text-heading: 32px;
+  --leading-heading: 1.17;
+  --tracking-heading: -0.64px;
+  --text-heading-lg: 36px;
+  --leading-heading-lg: 1.13;
+  --tracking-heading-lg: -0.72px;
+  --text-display: 48px;
+  --leading-display: 1.08;
+  --tracking-display: -0.96px;
+
+  /* Typography - Weights */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /* Spacing */
+  --spacing-unit: 4px;
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-64: 64px;
+  --spacing-72: 72px;
+  --spacing-96: 96px;
+  --spacing-160: 160px;
+
+  /* Layout */
+  --container-page: 1200px;
+
+  /* Border Radius */
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-2xl-2: 20px;
+  --radius-3xl: 24px;
+  --radius-3xl-2: 30px;
+  --radius-full: 9999px;
+  --radius-tags: 9999px;
+  --radius-cards: 16px;
+  --radius-badges: 12px;
+  --radius-inputs: 0px;
+  --radius-modals: 24px;
+  --radius-panels: 20px;
+  --radius-buttons: 9999px;
+
+  /* Shadows */
+  --shadow-subtle: rgba(0, 0, 0, 0.075) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-2:
+    rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px,
+    rgba(0, 0, 0, 0.04) 0px 2px 4px 0px;
+  --shadow-subtle-3: rgba(0, 0, 0, 0.1) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-4: rgba(0, 0, 0, 0.4) 0px 0px 1px 0px, rgba(0, 0, 0, 0.04) 0px 4px 4px 0px;
+  --shadow-subtle-5: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px inset;
+  --shadow-subtle-6: rgb(235, 232, 228) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-7: rgba(0, 0, 0, 0.4) 0px 0px 1px 0px, rgba(0, 0, 0, 0.04) 0px 2px 4px 0px;
+  --shadow-subtle-8: rgba(255, 255, 255, 0.6) 0px 0px 0px 1px inset;
+  --shadow-subtle-9:
+    rgba(0, 0, 0, 0.4) 0px 0px 1px 0px, rgba(0, 0, 0, 0.04) 0px 1px 1px 0px,
+    rgba(0, 0, 0, 0.04) 0px 2px 4px 0px;
+}
+
+:root {
+  --gradient-voice-spectrum: conic-gradient(
+    from 180deg,
+    rgb(61, 117, 216) 11.5931deg,
+    rgb(42, 104, 210) 26.317deg,
+    rgb(117, 190, 229) 32.3924deg,
+    rgb(82, 208, 233) 38.9146deg,
+    rgb(33, 89, 186) 75.3508deg,
+    rgb(58, 116, 218) 85.0388deg,
+    rgb(108, 215, 236) 94.5293deg,
+    rgb(90, 185, 241) 122.11deg,
+    rgb(51, 161, 229) 129.967deg,
+    rgb(31, 95, 207) 136.719deg,
+    rgb(44, 84, 202) 144.313deg,
+    rgb(58, 158, 207) 175.985deg,
+    rgb(49, 103, 197) 183.869deg,
+    rgb(173, 232, 243) 201.635deg,
+    rgb(216, 241, 245) 224.865deg,
+    rgb(165, 219, 230) 239.729deg,
+    rgb(43, 157, 214) 268.165deg,
+    rgb(174, 224, 233) 286.211deg,
+    rgb(32, 186, 208) 329.654deg,
+    rgb(30, 83, 176) 343.551deg,
+    rgb(47, 64, 210) 359.255deg
+  );
+  --page-max-width: 1200px;
+  --section-gap-min: 80px;
+  --section-gap-max: 120px;
+  --card-padding-min: 16px;
+  --card-padding-max: 24px;
+  --element-gap-min: 8px;
+  --element-gap-max: 12px;
+  --surface-page-ground: var(--color-eggshell);
+  --surface-powder-surface: var(--color-powder);
+  --surface-card-white: var(--color-card-white);
+  --surface-obsidian: var(--color-obsidian);
+}

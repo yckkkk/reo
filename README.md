@@ -4,8 +4,9 @@ Reo 是一个未发布的 Electron 应用，当前正在从干净基础重新建
 
 ## 当前事实
 
-- 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier。
-- 当前未建立：preload、IPC、auth、database、updater、packaging、Sentry、logging、Tailwind、shadcn/ui、Vitest。
+- 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier、Tailwind CSS。
+- 当前已建立：Reo 设计系统源文件、Tailwind CSS v4 styling foundation。
+- 当前未建立：preload、IPC、auth、database、updater、packaging、Sentry、logging、shadcn/ui、Vitest。
 - 当前构建权威是 `electron-vite`。
 
 ## 技术路线

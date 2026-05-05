@@ -16,7 +16,7 @@
 - Electron surface：`current/electron.md`
 - 数据与状态归属：`current/data.md`
 - 流程与时序：`current/flow.md`
-- 前端与组件：`current/frontend.md`
+- 前端、组件与设计系统：`current/frontend.md`
 - 质量门槛：`current/quality.md`
 
 ## 结构
@@ -25,6 +25,7 @@
 docs/
   archive/     已收口任务记录
   current/     当前实现与设计真源
+    design-system/ 当前设计系统源文件
   decisions/   长期架构决策
   initiatives/ 跨 session 长期任务
   specs/       当前任务工作区
