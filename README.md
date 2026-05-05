@@ -1,16 +1,30 @@
 # Reo
 
-Reo is a minimal React + TypeScript + Electron app built with electron-vite.
+Reo 是一个未发布的 Electron 应用，当前正在从干净基础重新建立。
 
-## Stack
+## 当前事实
 
-- Electron main process in `src/main`
-- React renderer in `src/renderer`
-- Vite 8 through `electron-vite`
-- No preload or IPC surface yet
-- No packaging, updater, signing, notarization, ASAR, or fuse config yet
+- 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier。
+- 当前未建立：preload、IPC、auth、database、updater、packaging、Sentry、logging、Tailwind、shadcn/ui、Vitest。
+- 当前构建权威是 `electron-vite`。
 
-## Commands
+## 技术路线
+
+- React 19 + TypeScript
+- Electron + Vite through `electron-vite`
+- Tailwind CSS v4、shadcn/ui
+- Zustand、TanStack Query、React Hook Form、Zod
+- Better Auth、Drizzle ORM、`better-sqlite3`
+- Electron Forge、`electron-updater`
+- Vitest、Sentry、`electron-log`、`date-fns`
+
+只有在实现对应 foundation slice 时才安装和配置未启用依赖。
+
+## 文档
+
+Agent-facing 项目真源从 `docs/README.md` 开始。
+
+## 命令
 
 ```bash
 npm install
