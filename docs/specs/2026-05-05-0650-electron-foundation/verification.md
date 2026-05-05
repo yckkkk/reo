@@ -117,3 +117,22 @@ git ls-files out dist build .vite
 第一次审查覆盖 current uncommitted diff、untracked files、`npm run verify:quick`、`git diff --check`、agent 入口镜像、build artifact 跟踪状态和 Electron foundation scope。
 
 补充 IPv6 loopback 断言后，第二次最终审查覆盖 current uncommitted diff、untracked files、`npm run verify:quick`、docs/spec verification count、`package.json` scripts、packaged dev server URL gate、tracked build artifacts、`git diff --check` 和 agent 入口镜像。
+
+## Closeout patch 验证
+
+- `docs/specs/2026-05-05-0650-electron-foundation/README.md` 状态为 `已完成`。
+- `test/**/*.ts` 由 ESLint 覆盖。
+- `test:main` 使用 `scripts/run-main-tests.mjs` 清理 `.tmp/test-main`、编译测试并把明确测试文件列表传给 Node test runner。
+- `src/main/devServerUrl.ts` 保留 `localhost`、`127.0.0.1` 和 `[::1]` loopback host；IPv6 loopback 由 `test/main/devServerUrl.test.ts` 覆盖。
+
+```bash
+npm run verify:quick
+```
+
+结果：通过。包含 typecheck、`test:main`、lint 和 format check。`test:main` 结果为 4 tests passed，0 failed。
+
+```bash
+npm exec --yes --package=node@20.19.0 -- node scripts/run-main-tests.mjs
+```
+
+结果：通过。Node `v20.19.0` 下 4 tests passed，0 failed。

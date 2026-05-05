@@ -13,7 +13,7 @@
     "dev": "electron-vite dev --ignoreConfigWarning",
     "build": "npm run typecheck && electron-vite build --ignoreConfigWarning",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json --noEmit",
-    "test:main": "rm -rf .tmp/test-main && tsc -p tsconfig.main.test.json && node --test .tmp/test-main/test/main/**/*.test.js",
+    "test:main": "node scripts/run-main-tests.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "verify:quick": "npm run typecheck && npm run test:main && npm run lint && npm run format:check"

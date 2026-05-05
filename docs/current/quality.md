@@ -6,6 +6,8 @@
 
 - 当前已有 TypeScript、ESLint、Prettier、Node test runner 和 `npm run verify:quick`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 纯策略函数。
+- 当前 `test/**/*.ts` 由 ESLint 覆盖。
+- 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - Vitest 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 posthook 或 pre-commit flow。
