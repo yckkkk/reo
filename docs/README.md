@@ -1,6 +1,6 @@
 # Reo 文档入口
 
-文档优先服务 agent。目标是减少误判，而不是堆叠知识库。
+文档优先服务 agent。目标是减少误判，而不是堆叠知识库；精简服从交接、收口和验证。
 
 ## 默认阅读
 
@@ -30,6 +30,8 @@ docs/
   specs/       当前任务工作区
 ```
 
+归档子目录在首次写入时创建；不保留空占位目录。
+
 ## Initiatives
 
 跨多个 session 的长期任务使用：
@@ -47,6 +49,8 @@ docs/archive/initiatives/YYYY-MM-DD-slug/
 ```
 
 Initiative 不能覆盖 `current/*` 或 `decisions/*`，也不能替代当前 slice spec。
+
+长期任务的完成条件或范围不再匹配当前任务时，创建新的 initiative。
 
 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 
@@ -78,3 +82,5 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 4. 如存在对应 initiative，更新状态和下一步。
 5. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
 6. 除非用户明确要求，不创建额外顶层 docs 目录。
+
+写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单和临时 TODO 留在 spec 或 archive。

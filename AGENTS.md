@@ -31,7 +31,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 先想清楚、简单优先、外科式改动、目标驱动执行。
 
 - 若歧义会影响架构、数据、UX、验证或工作量，先说明假设再行动。
-- 选择能满足当前目标的最小设计。
+- 选择能满足当前目标、降低关键误判风险的最小设计。
 - 减少不必要的复杂性、嵌套、冗余代码和过度抽象。
 - 每一处改动都必须能追溯到当前请求、已接受 spec 或验证需求。
 - 非平凡改动先定义成功标准，再实现，再验证。
@@ -113,13 +113,16 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - `docs/specs/YYYY-MM-DD-HHMM-slug/*` 记录当前工作意图、方案、执行清单和验证证据。
 - `docs/archive/specs/YYYY-MM-DD-HHMM-slug/*` 记录已收口任务证据。
 - `docs/archive/initiatives/YYYY-MM-DD-slug/*` 记录已完成、取消或失效的长期任务。
+- 归档子目录在首次写入时创建；不保留空占位目录。
 - spec 时间使用本机时区，并显式写出 timezone，例如 `2026-05-05 05:47 America/Los_Angeles`。
 - 已完成 specs 移入 `docs/archive/specs/*`，但不是默认阅读内容。
 - 已完成、取消或失效的 initiatives 移入 `docs/archive/initiatives/*`，但不是默认阅读内容。
 - Initiative 只用于跨 session 任务；每个 session 仍然只推进一个可验证 spec slice。
 - 默认最多 1 个 active initiative；超过 1 个时先收口、取消或归档。
+- 长期任务的完成条件或范围不再匹配当前任务时，创建新的 initiative。
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 - 工作收口时，仍然有效的长期结论必须压缩回 `docs/current/*` 或 `docs/decisions/*`。
+- `docs/current/*` 只写当前行为、边界、接口、设计约束和稳定事实；任务证据、执行清单和临时 TODO 留在 spec 或 archive。
 - 默认文档与代码注释只写当前事实、当前规则和当前决策。
 - 不写“旧、继承、废弃、过去来源、为什么从过去变成现在”这类解释。
 - 无当前用途的内容直接删除，不写废弃标记。

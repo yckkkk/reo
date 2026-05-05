@@ -16,8 +16,10 @@
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 - slice 收口后，任务证据移入 `docs/archive/specs/*`。
 - initiative 完成、取消或失效后，移入 `docs/archive/initiatives/*`。
+- 归档子目录在首次写入时创建；不保留空占位目录。
 - initiative 不能覆盖 `docs/current/*` 或 `docs/decisions/*`。
 - `tasks.md` 只记录跨 slice 里程碑，不复制 spec 执行清单。
+- 长期任务的完成条件或范围不再匹配当前任务时，创建新的 initiative。
 - 读取归档时先搜索，再只打开相关文件。
 
 ## 最小结构
