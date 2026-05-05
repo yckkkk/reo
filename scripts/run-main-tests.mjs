@@ -7,8 +7,9 @@ const testDir = join(outDir, 'test/main');
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' });
-  process.exitCode = result.status ?? 1;
-  return process.exitCode === 0;
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }
 
 function findTestFiles(directory) {
@@ -22,10 +23,7 @@ function findTestFiles(directory) {
 }
 
 rmSync(outDir, { recursive: true, force: true });
-
-if (!run('tsc', ['-p', 'tsconfig.main.test.json'])) {
-  process.exit();
-}
+run('tsc', ['-p', 'tsconfig.main.test.json']);
 
 const testFiles = findTestFiles(testDir);
 if (testFiles.length === 0) {

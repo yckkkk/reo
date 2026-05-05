@@ -27,7 +27,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/main/**/*.ts', 'electron.vite.config.ts'],
+    files: ['src/main/**/*.ts', 'test/**/*.ts', 'electron.vite.config.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
@@ -47,19 +47,6 @@ export default defineConfig([
       globals: {
         ...globals.node,
       },
-    },
-  },
-  {
-    files: ['test/**/*.ts'],
-    extends: [js.configs.recommended, tseslint.configs.recommended],
-    languageOptions: {
-      ecmaVersion: 2022,
-      globals: {
-        ...globals.node,
-      },
-    },
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 ]);
