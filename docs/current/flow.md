@@ -49,8 +49,14 @@
 - Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
 - Workspace creation renderer flow：title/description draft 属于 React Hook Form；folder selection token/displayPath 属于 component state；OS dialog canceled 不修改 draft 并把 focus 返回 folder picker；existing `AGENTS.md` conflict 显示 alert，不清空 draft 或 selected folder；initialize success seed workspace snapshot Query cache 并设置当前 renderer session state。
 - Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。
-- Recording overlay flow：home `Record memory` 打开 Radix Dialog；`Start recording` 创建 draft 后启动 browser MediaRecorder adapter；audio data 通过 append queue 串行写入；pause 暂停 MediaRecorder 和 mock transcript timer；resume 恢复；stop 先停止 recorder，再等待 append queue 清空，最后 finalize。
+- Recording overlay flow：home `Record memory` 打开 Radix Dialog；`Start recording` 创建 draft 后启动 browser MediaRecorder adapter；只有 MediaRecorder controller ready 后 UI 才进入 recording 并显示 pause/stop；audio data 通过 append queue 串行写入；pause 暂停 MediaRecorder 和 mock transcript timer；resume 恢复；stop 先停止 recorder，等待 MediaRecorder `stop` 事件和最后一次 `dataavailable` 转换完成，再等待 append queue 清空，最后 finalize。
 - Audio append 必须按 sequence 串行 ack；每个 recording 只允许 1 个 append 在途，超量进入 failed recoverable。
+- MediaRecorder chunk 转换失败、append 返回错误、append promise reject 或 media start 失败时，recording overlay 立即进入 failed，不调用 finalize，停止当前 recorder controller，discard 当前未完成 draft，并用 recording session token 忽略旧 recorder 后续 stale chunks；failed 状态允许用户重新开始一次新的 recording draft，retry 会清空旧 elapsed、mock transcript、reflections draft 和 saved refs。
+- Finalized recording 不允许继续 append。Finalize 使用实际 `audio.webm` 文件大小写入 `recording.json`、返回值和 `.reo/index.json`，三者的 `audioByteLength` 必须一致。
+- Finalize 更新 `.reo/index.json` 失败时，main process 将 `recording.json` 从 finalized 回滚到 draft，返回 `ERR_RECORDING_FINALIZE_FAILED` 和 `dataRetention: "draft-preserved"`。
+- `.reo/index.json` 损坏、丢失或合法但陈旧时，open/rebuild 会扫描 finalized recording metadata 和 `audio.webm`，只从 metadata/audio 一致的 finalized recordings 协调 summary 并写回 index。
+- 如果进程在 finalized metadata 写入后、`.reo/index.json` 写入前崩溃，后续 open 会把该 finalized recording 恢复到 workspace snapshot。
+- `updateWorkspaceIndex` 在 update 函数成功前不会持久化 open/rebuild 协调结果；失败路径不改变已有合法 index。
 - Finalize 必须等待最后一个 append ack，不得 duplicate stop 提前 finalize。
 - Transcript 和 reflections 各自拥有独立 autosave lifecycle；save failure 显示 alert，保留 renderer draft，main atomic write 保留 previous disk file。
 - Playback 先读 audio manifest，再按 chunk read 组装 Blob；renderer 只在 active playback 期间持有 Blob URL，并在 close/switch/unmount revoke。

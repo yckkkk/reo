@@ -1,6 +1,6 @@
 # 第一产品切片长期任务
 
-状态：活跃
+状态：完成
 
 时间：2026-05-06 America/Los_Angeles
 
@@ -13,8 +13,8 @@
 - 产品设计已完成。
 - 工程执行前设计基线已通过复审。
 - 对齐后的实现计划已通过 `$writing-plans`、subagent、Codex CLI、Claude CLI 和 `$plan-eng-review`。
-- 当前执行权威是归档后的对齐实现计划：`docs/archive/specs/2026-05-06-0452-first-product-slice-implementation-plan/plan.md`。
-- 实现尚未开始。
+- IMPL-001 到 IMPL-007 均已完成。
+- Electron runtime、workspace persistence、Codex CLI read-only validation 和最终验证均已通过。
 
 ## 读取入口
 
@@ -24,8 +24,8 @@
 - 工程设计纪律审查记录：`docs/archive/specs/2026-05-06-0230-first-product-slice-design-discipline/`
 - 工程执行前门禁 spec：`docs/archive/specs/2026-05-06-0338-first-product-slice-design-hardening/`
 - 对齐实现计划 spec：`docs/archive/specs/2026-05-06-0452-first-product-slice-implementation-plan/`
-- 工程执行前门禁规则：`docs/initiatives/2026-05-06-first-product-slice/engineering-readiness.md`
-- 下一 session handoff：`docs/initiatives/2026-05-06-first-product-slice/next-session-handoff.md`
+- 工程执行前门禁规则：`docs/archive/initiatives/2026-05-06-first-product-slice/engineering-readiness.md`
+- 收口 handoff：`docs/archive/initiatives/2026-05-06-first-product-slice/next-session-handoff.md`
 - 长期决策：`docs/decisions/0003-local-memory-workspace.md`
 
 ## 完成条件
@@ -40,6 +40,6 @@
 - `docs/current/*` 只保留稳定当前事实。
 - initiative 归档到 `docs/archive/initiatives/2026-05-06-first-product-slice/`。
 
-## 下一步
+## 收口
 
-下一步使用 `$executing-plans` 执行对齐后的实现计划。进入 IMPL-001 前必须确认 `docs/specs/*` 为空，并按 `using-git-worktrees` 创建隔离工作区；不得在 `main` 上直接实现，除非用户显式授权。
+长期任务完成后，本 initiative 归档到 `docs/archive/initiatives/2026-05-06-first-product-slice/`。

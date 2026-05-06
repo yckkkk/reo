@@ -23,6 +23,7 @@ const recordingMetadataSchema = z.object({
 type RecordingMetadata = z.infer<typeof recordingMetadataSchema>;
 
 const inFlightAppends = new Set<string>();
+const finalizingRecordings = new Set<string>();
 
 function metadataPath(recordingDirectory: string): string {
   return path.join(recordingDirectory, 'recording.json');
@@ -117,6 +118,9 @@ export async function appendRecordingAudioChunk({
   }
 
   const key = `${rootPath}:${recordingId}`;
+  if (finalizingRecordings.has(key)) {
+    return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
+  }
   if (inFlightAppends.has(key)) {
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording append already in flight');
   }
@@ -127,6 +131,9 @@ export async function appendRecordingAudioChunk({
     const metadata = await readMetadata(rootPath, recordingId);
     if (!metadata) {
       return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
+    }
+    if (metadata.status !== 'draft') {
+      return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
     }
     if (metadata.nextSequence !== sequence) {
       return workspaceError('ERR_RECORDING_SEQUENCE', 'Recording audio chunk sequence mismatch');
@@ -169,42 +176,81 @@ export async function finalizeRecordingDraft({
   | WorkspaceErrorEnvelope
 > {
   const key = `${rootPath}:${recordingId}`;
+  if (finalizingRecordings.has(key)) {
+    return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
+  }
   if (inFlightAppends.has(key)) {
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording append still in flight');
   }
 
-  const recordingDirectory = resolveRecordingDirectory(rootPath, recordingId);
-  const metadata = await readMetadata(rootPath, recordingId);
-  if (!metadata) {
-    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
+  finalizingRecordings.add(key);
+  let finalizedMetadataWritten = false;
+  try {
+    const recordingDirectory = resolveRecordingDirectory(rootPath, recordingId);
+    const metadata = await readMetadata(rootPath, recordingId);
+    if (!metadata) {
+      return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
+    }
+    if (metadata.status !== 'draft') {
+      return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
+    }
+
+    const audio = await stat(audioPath(recordingDirectory));
+    const finalized = {
+      ...metadata,
+      audioByteLength: audio.size,
+      status: 'finalized' as const,
+      title,
+      finalizedAt: now(),
+    };
+    await writeWorkspaceFileAtomic(path.join(recordingDirectory, 'transcript.md'), '');
+    await writeWorkspaceFileAtomic(path.join(recordingDirectory, 'reflections.md'), '');
+    await writeMetadata(recordingDirectory, finalized);
+    finalizedMetadataWritten = true;
+    try {
+      await updateWorkspaceIndex(rootPath, (recordings) => [
+        ...recordings.filter((recording) => recording.recordingId !== recordingId),
+        {
+          recordingId,
+          title,
+          audioByteLength: finalized.audioByteLength,
+        },
+      ]);
+    } catch {
+      try {
+        await writeMetadata(recordingDirectory, metadata);
+        finalizedMetadataWritten = false;
+      } catch {
+        return workspaceError(
+          'ERR_RECORDING_FINALIZE_FAILED',
+          'Recording draft could not be finalized',
+          'unknown'
+        );
+      }
+      return workspaceError(
+        'ERR_RECORDING_FINALIZE_FAILED',
+        'Recording draft could not be finalized',
+        'draft-preserved'
+      );
+    }
+
+    return {
+      ok: true,
+      recording: {
+        recordingId,
+        title,
+        audioByteLength: finalized.audioByteLength,
+      },
+    };
+  } catch {
+    return workspaceError(
+      'ERR_RECORDING_FINALIZE_FAILED',
+      'Recording draft could not be finalized',
+      finalizedMetadataWritten ? 'unknown' : 'draft-preserved'
+    );
+  } finally {
+    finalizingRecordings.delete(key);
   }
-
-  const finalized = {
-    ...metadata,
-    status: 'finalized' as const,
-    title,
-    finalizedAt: now(),
-  };
-  await writeMetadata(recordingDirectory, finalized);
-  await writeWorkspaceFileAtomic(path.join(recordingDirectory, 'transcript.md'), '');
-  await writeWorkspaceFileAtomic(path.join(recordingDirectory, 'reflections.md'), '');
-  await updateWorkspaceIndex(rootPath, (recordings) => [
-    ...recordings.filter((recording) => recording.recordingId !== recordingId),
-    {
-      recordingId,
-      title,
-      audioByteLength: finalized.audioByteLength,
-    },
-  ]);
-
-  return {
-    ok: true,
-    recording: {
-      recordingId,
-      title,
-      audioByteLength: finalized.audioByteLength,
-    },
-  };
 }
 
 export async function discardRecordingDraft({

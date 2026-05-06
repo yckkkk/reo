@@ -31,7 +31,7 @@ export function transitionRecordingState(
   if (event.type === 'reset') {
     return createInitialRecordingState();
   }
-  if (event.type === 'start-requested' && state.status === 'idle') {
+  if (event.type === 'start-requested' && (state.status === 'idle' || state.status === 'failed')) {
     return { status: 'acquiring' };
   }
   if (event.type === 'draft-ready' && state.status === 'acquiring') {

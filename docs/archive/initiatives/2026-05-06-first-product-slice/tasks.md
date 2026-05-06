@@ -10,6 +10,6 @@
 - [x] IMPL-004：Workspace data、Query 和创建表单
 - [x] IMPL-005：Workspace home UI 和最小 shadcn primitives
 - [x] IMPL-006：Recording overlay、MediaRecorder、autosave 和 playback
-- [ ] IMPL-007：Runtime、persistence、reference 和 Codex 只读验证
+- [x] IMPL-007：Runtime、persistence、reference 和 Codex 只读验证
 
-新 session 的 `$goal` 覆盖整个第一产品切片长任务。实现阶段必须使用 `$executing-plans` 和隔离 worktree，按归档后的对齐实现计划逐片执行、验证和提交。
+第一产品切片长任务已完成。最终实现阶段在隔离 worktree 中完成，每个实现切片均有独立 spec、验证证据和 commit。

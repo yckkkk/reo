@@ -32,6 +32,8 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
+type AppendResponse = Awaited<ReturnType<Window['reoWorkspace']['appendRecordingAudioChunk']>>;
+
 async function flushPromises() {
   await act(async () => {
     await Promise.resolve();
@@ -57,7 +59,10 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { audioByteLength: 3, recordingId: 'rec_1', title: 'Daily memory recording' },
     })),
-    discardRecordingDraft: vi.fn(),
+    discardRecordingDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { discarded: true as const },
+    })),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(async () => ({
       ok: true as const,
@@ -82,21 +87,26 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
 }
 
 function createMediaAdapter() {
-  let handlers: RecordingMediaHandlers | null = null;
+  const handlers: RecordingMediaHandlers[] = [];
   const controller: RecordingMediaController = {
     pause: vi.fn(),
     resume: vi.fn(),
     stop: vi.fn(async () => {
-      handlers?.onStop();
+      handlers.at(-1)?.onStop();
     }),
   };
   const adapter: RecordingMediaAdapter = {
     start: vi.fn(async (nextHandlers) => {
-      handlers = nextHandlers;
+      handlers.push(nextHandlers);
       return controller;
     }),
   };
-  return { adapter, controller, emitChunk: (chunk: Uint8Array) => handlers?.onChunk(chunk) };
+  return {
+    adapter,
+    controller,
+    emitChunk: (chunk: Uint8Array, index = handlers.length - 1) => handlers[index]?.onChunk(chunk),
+    emitError: (message: string, index = handlers.length - 1) => handlers[index]?.onError(message),
+  };
 }
 
 describe('RecordingOverlay', () => {
@@ -143,10 +153,7 @@ describe('RecordingOverlay', () => {
   });
 
   it('waits for the final append acknowledgement before finalize', async () => {
-    const append = createDeferred<{
-      readonly ok: true;
-      readonly value: { readonly nextSequence: 1 };
-    }>();
+    const append = createDeferred<AppendResponse>();
     const bridge = installWorkspaceBridge({
       appendRecordingAudioChunk: vi.fn(() => append.promise),
     });
@@ -174,6 +181,254 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: 'Edit recording' })).toBeInTheDocument();
+  });
+
+  it('does not expose stop or finalize before the media controller is ready', async () => {
+    const controller: RecordingMediaController = {
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const start = createDeferred<RecordingMediaController>();
+    const bridge = installWorkspaceBridge();
+    const adapter: RecordingMediaAdapter = {
+      start: vi.fn(() => start.promise),
+    };
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+
+    expect(screen.getByText(/Status: acquiring/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop recording' })).not.toBeInTheDocument();
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+
+    start.resolve(controller);
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop recording' })).toBeInTheDocument();
+  });
+
+  it('does not finalize when audio append returns an error envelope', async () => {
+    const bridge = installWorkspaceBridge({
+      appendRecordingAudioChunk: vi.fn(async () => ({
+        error: { code: 'ERR_RECORDING_SEQUENCE', message: 'Append failed' },
+        ok: false as const,
+      })),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    act(() => media.emitChunk(new Uint8Array([1])));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Append failed');
+    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(media.controller.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not finalize when audio append rejects', async () => {
+    const bridge = installWorkspaceBridge({
+      appendRecordingAudioChunk: vi.fn(async () => {
+        throw new Error('Append rejected');
+      }),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    act(() => media.emitChunk(new Uint8Array([1])));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Append rejected');
+    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(media.controller.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a stale stop click after recording failure', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    const staleStop = screen.getByRole('button', { name: 'Stop recording' });
+    act(() => media.emitError('Microphone failed', 0));
+    fireEvent.click(staleStop);
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+  });
+
+  it('discards the draft when media acquisition fails after draft creation', async () => {
+    const bridge = installWorkspaceBridge();
+    const adapter: RecordingMediaAdapter = {
+      start: vi.fn(async () => {
+        throw new Error('Microphone unavailable');
+      }),
+    };
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+
+    expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Microphone unavailable');
+  });
+
+  it('cleans up a failed recorder before retry and ignores stale chunks', async () => {
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true as const,
+          value: { nextSequence: 0, recordingId: 'rec_old' },
+        })
+        .mockResolvedValueOnce({
+          ok: true as const,
+          value: { nextSequence: 0, recordingId: 'rec_new' },
+        }),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText(/Mock transcript 1s/)).toBeInTheDocument();
+    act(() => media.emitError('Microphone failed', 0));
+    await flushPromises();
+    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(media.controller.stop).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.queryByText(/Mock transcript 1s/)).not.toBeInTheDocument();
+    act(() => media.emitChunk(new Uint8Array([1]), 0));
+    act(() => media.emitChunk(new Uint8Array([2]), 1));
+    await flushPromises();
+
+    expect(bridge.appendRecordingAudioChunk).toHaveBeenCalledTimes(1);
+    expect(bridge.appendRecordingAudioChunk).toHaveBeenCalledWith({
+      chunk: new Uint8Array([2]),
+      recordingId: 'rec_new',
+      sequence: 0,
+      workspaceHandle: 'workspace-handle-secret',
+    });
+  });
+
+  it('ignores a stale stop click from a failed recording after retry starts a new draft', async () => {
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true as const,
+          value: { nextSequence: 0, recordingId: 'rec_old' },
+        })
+        .mockResolvedValueOnce({
+          ok: true as const,
+          value: { nextSequence: 0, recordingId: 'rec_new' },
+        }),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    const staleStop = screen.getByRole('button', { name: 'Stop recording' });
+    act(() => media.emitError('Microphone failed', 0));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    fireEvent.click(staleStop);
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(media.controller.stop).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
   });
 
   it('keeps transcript draft when autosave fails', async () => {

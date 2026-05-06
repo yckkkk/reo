@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
@@ -23,15 +23,21 @@ const workspaceMetadataSchema = z.object({
   createdAt: z.string(),
 });
 
+const recordingSummarySchema = z.object({
+  recordingId: z.string(),
+  title: z.string(),
+  audioByteLength: z.number().int().nonnegative(),
+});
+
 const workspaceIndexSchema = z.object({
   schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
-  recordings: z.array(
-    z.object({
-      recordingId: z.string(),
-      title: z.string(),
-      audioByteLength: z.number().int().nonnegative(),
-    })
-  ),
+  recordings: z.array(recordingSummarySchema),
+});
+
+const finalizedRecordingIndexSourceSchema = recordingSummarySchema.extend({
+  schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
+  workspaceId: z.string(),
+  status: z.literal('finalized'),
 });
 
 interface InitializeWorkspaceFilesOptions {
@@ -77,6 +83,25 @@ function snapshotFrom(
   };
 }
 
+function sameRecordingSummaries(
+  first: WorkspaceSnapshot['recordings'],
+  second: WorkspaceSnapshot['recordings']
+): boolean {
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return first.every((recording, index) => {
+    const other = second[index];
+    return (
+      other !== undefined &&
+      recording.recordingId === other.recordingId &&
+      recording.title === other.title &&
+      recording.audioByteLength === other.audioByteLength
+    );
+  });
+}
+
 async function readMetadata(
   canonicalRoot: string
 ): Promise<z.infer<typeof workspaceMetadataSchema> | null> {
@@ -90,20 +115,68 @@ async function readMetadata(
 }
 
 async function readOrRebuildIndex(
-  canonicalRoot: string
+  canonicalRoot: string,
+  { persistReconciliation = true }: { readonly persistReconciliation?: boolean } = {}
 ): Promise<z.infer<typeof workspaceIndexSchema>> {
+  let parsedIndex: z.infer<typeof workspaceIndexSchema> | null;
   try {
-    return workspaceIndexSchema.parse(
+    parsedIndex = workspaceIndexSchema.parse(
       JSON.parse(await readFile(getWorkspaceIndexPath(canonicalRoot), 'utf8'))
     );
   } catch {
-    const index = {
-      schemaVersion: WORKSPACE_SCHEMA_VERSION,
-      recordings: [],
-    } satisfies z.infer<typeof workspaceIndexSchema>;
-    await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(canonicalRoot), index);
-    return index;
+    parsedIndex = null;
   }
+
+  const recordings = await rebuildRecordingSummaries(canonicalRoot);
+  if (parsedIndex && sameRecordingSummaries(parsedIndex.recordings, recordings)) {
+    return parsedIndex;
+  }
+
+  const index = {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    recordings,
+  } satisfies z.infer<typeof workspaceIndexSchema>;
+  if (persistReconciliation) {
+    await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(canonicalRoot), index);
+  }
+  return index;
+}
+
+async function rebuildRecordingSummaries(
+  canonicalRoot: string
+): Promise<WorkspaceSnapshot['recordings']> {
+  let entries;
+  try {
+    entries = await readdir(path.join(canonicalRoot, 'recordings'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const summaries: WorkspaceSnapshot['recordings'] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const recordingDirectory = path.join(canonicalRoot, 'recordings', entry.name);
+      const metadata = finalizedRecordingIndexSourceSchema.parse(
+        JSON.parse(await readFile(path.join(recordingDirectory, 'recording.json'), 'utf8'))
+      );
+      const audio = await stat(path.join(recordingDirectory, 'audio.webm'));
+      if (audio.size !== metadata.audioByteLength) {
+        continue;
+      }
+      summaries.push({
+        recordingId: metadata.recordingId,
+        title: metadata.title,
+        audioByteLength: metadata.audioByteLength,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return summaries.sort((first, second) => first.recordingId.localeCompare(second.recordingId));
 }
 
 export async function initializeWorkspaceFiles({
@@ -182,7 +255,7 @@ export async function updateWorkspaceIndex(
   rootPath: string,
   update: (recordings: WorkspaceSnapshot['recordings']) => WorkspaceSnapshot['recordings']
 ): Promise<void> {
-  const current = await readOrRebuildIndex(rootPath);
+  const current = await readOrRebuildIndex(rootPath, { persistReconciliation: false });
   await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(rootPath), {
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
     recordings: update(current.recordings),

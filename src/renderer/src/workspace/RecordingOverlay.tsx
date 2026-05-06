@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   appendRecordingAudioChunk,
   createRecordingDraft,
+  discardRecordingDraft,
   finalizeRecordingDraft,
   readRecordingAudioChunk,
   readRecordingAudioManifest,
@@ -43,6 +44,10 @@ type RecordingOverlayProps = {
 
 const AUTOSAVE_DELAY_MS = 300;
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function isBusy(state: RecordingState) {
   return (
     state.status === 'acquiring' ||
@@ -71,8 +76,14 @@ export function RecordingOverlay({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const appendQueueRef = useRef<Promise<void>>(Promise.resolve());
   const controllerRef = useRef<RecordingMediaController | null>(null);
+  const activeDraftRef = useRef<{
+    readonly recordingId: string;
+    readonly recordingSession: number;
+  } | null>(null);
   const lastSavedTranscriptRef = useRef('');
   const lastSavedReflectionsRef = useRef('');
+  const appendFailureRef = useRef<string | null>(null);
+  const recordingSessionRef = useRef(0);
   const sequenceRef = useRef(0);
 
   useEffect(() => {
@@ -148,55 +159,125 @@ export function RecordingOverlay({
     };
   }, [playbackUrl]);
 
-  function appendChunk(recordingId: string, chunk: Uint8Array) {
-    appendQueueRef.current = appendQueueRef.current.then(async () => {
-      const response = await appendRecordingAudioChunk({
-        chunk,
-        recordingId,
-        sequence: sequenceRef.current,
+  function discardActiveDraft(recordingSession: number) {
+    const activeDraft = activeDraftRef.current;
+    if (!activeDraft || activeDraft.recordingSession !== recordingSession) {
+      return;
+    }
+    activeDraftRef.current = null;
+    void Promise.resolve(
+      discardRecordingDraft({
+        recordingId: activeDraft.recordingId,
         workspaceHandle: workspaceSession.workspaceHandle,
-      });
-      if (response.ok) {
+      })
+    ).catch(() => {});
+  }
+
+  function failActiveRecording(
+    message: string,
+    recordingSession: number,
+    { discardDraft = false }: { readonly discardDraft?: boolean } = {}
+  ) {
+    if (recordingSessionRef.current !== recordingSession) {
+      return;
+    }
+    recordingSessionRef.current += 1;
+    appendFailureRef.current = message;
+    const controller = controllerRef.current;
+    controllerRef.current = null;
+    void controller?.stop().catch(() => {});
+    if (discardDraft) {
+      discardActiveDraft(recordingSession);
+    }
+    setState({ message, status: 'failed' });
+    setError(message);
+  }
+
+  function appendChunk(recordingId: string, recordingSession: number, chunk: Uint8Array) {
+    if (recordingSessionRef.current !== recordingSession) {
+      return;
+    }
+    appendQueueRef.current = appendQueueRef.current.then(async () => {
+      try {
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
+        const response = await appendRecordingAudioChunk({
+          chunk,
+          recordingId,
+          sequence: sequenceRef.current,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
+        if (!response.ok) {
+          appendFailureRef.current = response.error.message;
+          failActiveRecording(response.error.message, recordingSession, { discardDraft: true });
+          throw new Error(response.error.message);
+        }
         sequenceRef.current = response.value.nextSequence;
-      } else {
-        setError(response.error.message);
+      } catch (appendError) {
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
+        const message =
+          appendFailureRef.current ?? errorMessage(appendError, 'Audio append failed');
+        appendFailureRef.current = message;
+        failActiveRecording(message, recordingSession, { discardDraft: true });
+        throw appendError;
       }
     });
+    // Keep the queue rejected for handleStop while preventing an unhandled rejection.
+    void appendQueueRef.current.catch(() => {});
   }
 
   async function handleStart() {
     setError(null);
+    appendFailureRef.current = null;
+    appendQueueRef.current = Promise.resolve();
+    controllerRef.current = null;
+    setElapsedSeconds(0);
+    setTranscriptDraft('');
+    setReflectionsDraft('');
+    lastSavedTranscriptRef.current = '';
+    lastSavedReflectionsRef.current = '';
+    const recordingSession = recordingSessionRef.current + 1;
+    recordingSessionRef.current = recordingSession;
     setState((current) => transitionRecordingState(current, { type: 'start-requested' }));
 
     const draft = await createRecordingDraft({
       workspaceHandle: workspaceSession.workspaceHandle,
     });
     if (!draft.ok) {
-      setState({ message: draft.error.message, status: 'failed' });
-      setError(draft.error.message);
+      failActiveRecording(draft.error.message, recordingSession);
       return;
     }
 
     sequenceRef.current = draft.value.nextSequence;
     const nextRecordingId = draft.value.recordingId;
-    setState((current) =>
-      transitionRecordingState(current, { recordingId: nextRecordingId, type: 'draft-ready' })
-    );
+    activeDraftRef.current = { recordingId: nextRecordingId, recordingSession };
 
     try {
       const activeMediaAdapter = mediaAdapter ?? createBrowserMediaRecorderAdapter();
-      controllerRef.current = await activeMediaAdapter.start({
-        onChunk: (chunk) => appendChunk(nextRecordingId, chunk),
+      const controller = await activeMediaAdapter.start({
+        onChunk: (chunk) => appendChunk(nextRecordingId, recordingSession, chunk),
         onError: (message) => {
-          setState({ message, status: 'failed' });
-          setError(message);
+          failActiveRecording(message, recordingSession, { discardDraft: true });
         },
         onStop: () => {},
       });
+      if (recordingSessionRef.current !== recordingSession) {
+        await controller.stop().catch(() => {});
+        return;
+      }
+      controllerRef.current = controller;
+      setState((current) =>
+        transitionRecordingState(current, { recordingId: nextRecordingId, type: 'draft-ready' })
+      );
     } catch (startError) {
       const message = startError instanceof Error ? startError.message : 'Microphone unavailable';
-      setState({ message, status: 'failed' });
-      setError(message);
+      failActiveRecording(message, recordingSession, { discardDraft: true });
     }
   }
 
@@ -216,22 +297,46 @@ export function RecordingOverlay({
     }
 
     const recordingId = state.recordingId;
+    const recordingSession = recordingSessionRef.current;
+    const controller = controllerRef.current;
+    if (!controller || appendFailureRef.current) {
+      return;
+    }
     setState((current) => transitionRecordingState(current, { type: 'stop-requested' }));
-    await controllerRef.current?.stop();
-    await appendQueueRef.current;
-
-    const title = titleForRecording(workspaceSession.snapshot.title);
-    const finalized = await finalizeRecordingDraft({
-      recordingId,
-      title,
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
-    if (!finalized.ok) {
-      setState({ message: finalized.error.message, status: 'failed' });
-      setError(finalized.error.message);
+    try {
+      await controller.stop();
+      await appendQueueRef.current;
+    } catch (stopError) {
+      const message =
+        appendFailureRef.current ?? errorMessage(stopError, 'Recording audio could not be saved');
+      failActiveRecording(message, recordingSession, { discardDraft: true });
+      return;
+    }
+    if (recordingSessionRef.current !== recordingSession) {
       return;
     }
 
+    const title = titleForRecording(workspaceSession.snapshot.title);
+    let finalized: Awaited<ReturnType<typeof finalizeRecordingDraft>>;
+    try {
+      finalized = await finalizeRecordingDraft({
+        recordingId,
+        title,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+    } catch (finalizeError) {
+      const message = errorMessage(finalizeError, 'Recording draft could not be finalized');
+      failActiveRecording(message, recordingSession);
+      return;
+    }
+    if (!finalized.ok) {
+      failActiveRecording(finalized.error.message, recordingSession);
+      return;
+    }
+
+    recordingSessionRef.current += 1;
+    controllerRef.current = null;
+    activeDraftRef.current = null;
     const nextTranscript = transcriptDraft.trim()
       ? transcriptDraft
       : 'Local mock transcript. Replace this draft with your own notes.';

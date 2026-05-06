@@ -65,7 +65,12 @@
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
 - Workspace 初始化写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json` 和 `recordings/`；如果已有 `AGENTS.md`，不得写入任何 workspace 文件。
-- Recording draft 写入 `recordings/<recordingId>/recording.json` 和 `audio.webm`；finalize 后写入 `transcript.md` 和 `reflections.md`，并更新 `.reo/index.json`。
+- Recording draft 写入 `recordings/<recordingId>/recording.json` 和 `audio.webm`；finalize 后将 `recording.json` 标记为 `finalized`，写入 title、`finalizedAt` 和实际 `audio.webm` 字节数，创建 `transcript.md` 与 `reflections.md`，并更新 `.reo/index.json`。
+- Finalized recording 的 `recording.json.audioByteLength`、`.reo/index.json` summary `audioByteLength` 和 `audio.webm` 实际文件大小必须一致；finalized recording 不接受后续 audio append。
+- 如果 `.reo/index.json` 更新失败，finalize 返回错误信封并保留 draft metadata；不得留下 metadata finalized 但 index 缺失 summary 的不一致状态。
+- `.reo/index.json` 是可重建 index；损坏、丢失或合法但陈旧时，Reo 从 `recordings/*/recording.json` 中的 finalized metadata 和对应 `audio.webm` 实际文件大小协调并写回 summary，只纳入 metadata/audio 字节数一致的 finalized recordings。
+- 如果进程在 finalized metadata 写入后、`.reo/index.json` 写入前崩溃，下一次 open 会按 workspace 文件真源协调合法但陈旧的 index，避免 finalized recording 永久隐藏。
+- `updateWorkspaceIndex` 不在 update 成功前持久化 index 协调结果；如果 update 失败，已有合法 index 保持原状，避免 index summary 与回滚后的 draft metadata 反向不一致。
 
 ## 数据流设计纪律
 

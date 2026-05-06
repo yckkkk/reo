@@ -74,10 +74,11 @@ npm run verify:quick
 - Codex CLI read-only validation 必须在 Reo quiescent 或 workspace closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
 - Renderer source 禁止直接 import Node/Electron API；`rendererImportBoundary.test.ts` 使用 ESLint API 验证 restricted import 规则。
 - Preload sandbox 边界由 `preloadPath.test.ts` 和 `preloadSandboxBoundary.test.ts` 覆盖：preload path 必须指向 `out/preload/index.cjs`，preload source 不得引入 Zod-backed contract 或普通 Node package。
-- Workspace filesystem 由 main tests 覆盖：path containment、`AGENTS.md` conflict no-write、metadata/index、handle sender binding、single-writer lock、recording draft、audio manifest/chunk read。
+- Workspace filesystem 由 main tests 覆盖：path containment、`AGENTS.md` conflict no-write、metadata/index、corrupt index rebuild from finalized recording metadata/audio、valid-but-stale index reconciliation from finalized recording metadata/audio、index update failure no pre-persisted reconciliation side effect、handle sender binding、single-writer lock、recording draft、finalized recording append guard、finalize index failure draft rollback、audio manifest/chunk read。
 - Workspace creation UI 由 renderer tests 覆盖：初始 focus、folder picker cancel 保留输入、`AGENTS.md` conflict alert、workspace snapshot query key 不包含 handle、初始化成功后 route state 切换。
+- MediaRecorder adapter 由 renderer tests 覆盖：audio-only `getUserMedia`、chunk 转换为 `Uint8Array`、`stop()` 等待最后一次 `dataavailable` chunk 转换完成后再 resolve、重复 stop 复用同一 stop operation、final chunk 转换失败时 reject stop、recorder construction/start failure 停止已获取 media tracks。
 - Workspace home 和最小 UI primitives 由 renderer tests 覆盖：Button role/name/focus-visible/disabled、Label accessible name、home title、单一 record action、`Memory Content`、no future capabilities。
-- Recording loop 由 renderer tests 覆盖：record/pause/resume/stop lifecycle、mock transcript timer、finalize waits for append ack、autosave failure draft retention、manifest/chunk playback 和 Blob URL revoke。
+- Recording loop 由 renderer tests 覆盖：record/pause/resume/stop lifecycle、controller ready 前不显示 stop 或 finalize、mock transcript timer、finalize waits for append ack、append error/reject 立即 failed 且不 finalize、failed 后 retry、failed retry draft/timer reset、failed recorder cleanup、failed draft discard、stale stop ignore、stale chunk ignore、autosave failure draft retention、manifest/chunk playback 和 Blob URL revoke。
 - Recording CSP 由 main tests 覆盖：production policy 必须包含 `media-src 'self' blob:`，且不允许 wildcard media source。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。

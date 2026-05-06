@@ -28,4 +28,14 @@ describe('recording machine', () => {
     expect(duplicateStop).toEqual(stopping);
     expect(editing.status).toBe('editing');
   });
+
+  it('allows retry after a failed recording attempt', () => {
+    const failed = transitionRecordingState(createInitialRecordingState(), {
+      message: 'Append failed',
+      type: 'failed',
+    });
+    const retry = transitionRecordingState(failed, { type: 'start-requested' });
+
+    expect(retry.status).toBe('acquiring');
+  });
 });
