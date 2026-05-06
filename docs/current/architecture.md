@@ -44,7 +44,7 @@ docs/
 - 代码设计必须同时检查精简性：减少不必要的复杂性和嵌套，消除冗余代码和过度抽象，自动应用项目代码规范。
 - 精简不等于省略设计；必须先把实体、关系、协议、状态和组件边界想清楚，再选择更少的代码路径。
 
-## Memory Workspace Direction
+## 记忆 workspace 方向
 
 Reo 的 memory workspace 是用户选择的本地文件夹。Workspace folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 

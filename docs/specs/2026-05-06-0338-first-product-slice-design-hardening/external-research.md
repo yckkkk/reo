@@ -1,0 +1,54 @@
+# 外部研究
+
+## Context7 官方文档
+
+| 主题           | 来源                                                               | 设计影响                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Electron       | Context7 `/electron/electron`、官方 security/process/protocol docs | 使用 `contextBridge`，保持 sandbox/contextIsolation，不给 renderer Node，IPC 显式化，校验 sender，custom protocol 做 path containment，CSP 保守           |
+| shadcn/ui      | Context7 `/shadcn-ui/ui`                                           | shadcn/ui 是 copy-owned source，不是黑盒库；只有 exact component consumer 时初始化；必须 retokenize 到 Reo design system                                  |
+| TanStack Query | Context7 `/tanstack/query`                                         | 使用 `QueryClientProvider`、稳定 query keys、v5 object syntax invalidation；query cache 拥有 main-backed async snapshots，不拥有 local recording UI state |
+
+## 官方或主要网页来源
+
+| 来源                          | URL                                                                  | 发现                                                                                                                                  | Reo 决策                                                                           |
+| ----------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Electron security checklist   | https://www.electronjs.org/docs/latest/tutorial/security             | Security checklist 包含 context isolation、sandbox、CSP、navigation/window controls、IPC sender validation 和避免暴露 Electron APIs。 | 保持当前 baseline；新增 IPC 必须 sender validation 和窄 preload method。           |
+| Electron context isolation    | https://www.electronjs.org/docs/latest/tutorial/context-isolation    | 暴露 raw `ipcRenderer.send` 不安全；正确做法是每个 IPC message 暴露一个方法。                                                         | `window.reoWorkspace` 只暴露 product methods。                                     |
+| ElevenLabs UI docs            | https://ui.elevenlabs.io/docs                                        | ElevenLabs UI 是 shadcn-based custom registry，用于 multimodal agent/audio components。                                               | 逐组件评估，禁止 `add all`。                                                       |
+| ElevenLabs UI components      | https://ui.elevenlabs.io/docs/components                             | 包含 Audio Player、Live Waveform、Speech Input、Transcript Viewer、Voice Button、Waveform。                                           | 每个候选进入 `reuse-decisions.md`。                                                |
+| ElevenLabs Audio Player       | https://ui.elevenlabs.io/docs/components/audio-player                | Open-code player 包含 provider、play/pause、progress、duration 和 error handling。                                                    | Playback UI 变复杂时再 adapt；first slice 可用 native `<audio>` + Reo controls。   |
+| ElevenLabs Live Waveform      | https://ui.elevenlabs.io/docs/components/live-waveform               | Canvas real-time waveform，带 microphone input 和 active/processing modes。                                                           | 采纳 visual model，避免 duplicate mic ownership。                                  |
+| ElevenLabs Waveform           | https://ui.elevenlabs.io/docs/components/waveform                    | Canvas waveform 包含 recording/playback/scrubbing concepts。                                                                          | Full component defer 到 scrubbing/peaks 需求出现。                                 |
+| ElevenLabs Speech Input       | https://ui.elevenlabs.io/docs/components/speech-input                | 使用 ElevenLabs Scribe token flow。                                                                                                   | First slice 使用 mock transcript，无网络/STT provider，拒绝。                      |
+| ElevenLabs Transcript Viewer  | https://ui.elevenlabs.io/docs/components/transcript-viewer           | 用于展示与 audio playback 同步的 word alignment。                                                                                     | First slice transcript 是 editable text，当前拒绝；有 alignment 后再评估。         |
+| ElevenLabs Voice Button       | https://ui.elevenlabs.io/docs/components/voice-button                | Button state model 覆盖 idle/recording/processing/success/error。                                                                     | 只吸收状态表达；Reo 需要 pause/resume/stop cluster。                               |
+| shadcn Drawer                 | https://ui.shadcn.com/docs/components/radix/drawer                   | Drawer built on Vaul。                                                                                                                | 评估但暂不采纳。                                                                   |
+| Vaul GitHub                   | https://github.com/emilkowalski/vaul                                 | Repo note 标记 unmaintained；MIT；8.3k stars。                                                                                        | First slice 不新增该 dependency；用 Radix Dialog semantics + bottom sheet layout。 |
+| wavesurfer.js                 | https://wavesurfer.xyz/                                              | Open-source waveform player，支持 HTML5/Web Audio、plugins、TypeScript API、Record plugin。                                           | Deferred 到 waveform/scrubber pressure。                                           |
+| wavesurfer Record plugin docs | https://wavesurfer.xyz/docs/classes/plugins_record.default           | Record plugin exposes start/pause/resume/stop and record events。                                                                     | 如果 native MediaRecorder adapter 变复杂，是后续 fallback。                        |
+| wavesurfer Record options     | https://wavesurfer.xyz/docs/types/plugins_record.RecordPluginOptions | 支持 `mediaRecorderTimeslice`、`mimeType`、continuous waveform 和 render recorded audio options。                                     | 证明后续可满足 waveform pressure，first lightweight UI 暂不需要。                  |
+| MDN MediaRecorder             | https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder       | MediaRecorder 有 start、pause、resume、stop 和 data events。                                                                          | 直接使用 browser API，包一层可注入 adapter。                                       |
+| Zod                           | https://zod.dev/                                                     | TypeScript-first validation for untrusted data with static type inference。                                                           | 首个边界落地时用于 IPC、metadata 和 form。                                         |
+| Vitest                        | https://vitest.dev/guide/                                            | Vite-powered；`vitest run` 支持非 watch CI execution。                                                                                | RED 证明 Node runner gap 后引入 renderer tests。                                   |
+| React Testing Library         | https://testing-library.com/docs/react-testing-library/intro/        | 测试应接近用户用法，并通过 accessible DOM 查询。                                                                                      | 用于 renderer behavior/accessibility tests。                                       |
+| Obsidian data storage         | https://help.obsidian.md/data-storage                                | Vault 是 local folder；metadata cache 可能与 files drift。                                                                            | 使用 local folder 模型；`.reo/index.json` 可重建。                                 |
+| Obsidian attachments          | https://help.obsidian.md/attachments                                 | Attachments live in vault folder。                                                                                                    | Recording audio 是普通 workspace file，不是 DB-only blob。                         |
+
+## GitHub 与 package 证据
+
+| 候选                                | 证据                                                                           | 决策                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `elevenlabs/ui`                     | MIT，2.2k stars，pushed 2026-04-29，shadcn registry。                          | 逐组件评估。                                                                                              |
+| `katspaugh/wavesurfer.js`           | BSD-3-Clause，10.2k stars，pushed 2026-04-29，npm `7.12.6`，unpacked 1.23 MB。 | First slice defer，作为后续 waveform/scrubber candidate。                                                 |
+| `DeltaCircuit/react-media-recorder` | MIT，589 stars，npm `1.7.2`，exposes hook/render prop and blob URL。           | First slice 拒绝 dependency，因为 Reo 需要 chunk append ordering 和 draft filesystem contract。           |
+| `emilkowalski/vaul`                 | MIT，8.3k stars，npm `1.1.2`，repo note says unmaintained。                    | First slice 不采纳。                                                                                      |
+| `npm/write-file-atomic`             | ISC，小包，updated 2026-03-23。                                                | 如果 Node fs temp/rename/fsync 重复变多，implementation 再评估；当前设计保留 explicit transaction rules。 |
+| `proper-lockfile`                   | MIT，local/network lock utility，last push 2023-10-25。                        | Cross-process workspace lock candidate；采纳前必须测试 stale lock behavior。                              |
+| `chokidar`                          | MIT，12k stars，updated 2026-05-03。                                           | First slice 没有 live external edit sync，defer。                                                         |
+| `xstate`                            | MIT，29.5k stars，updated 2026-05-06。                                         | Feature-local reducer 足够时 defer。                                                                      |
+
+## 研究约束
+
+- Research 只是设计输入，不覆盖 Reo design system 或 Electron security boundary。
+- "不完全适配" 不是自研理由。每个 rejected package 必须在 `reuse-decisions.md` 写 adaptation paths。
+- 如果 implementation 发现某个 package 必须提前引入，slice spec 必须同时更新 `reuse-decisions.md`、`docs/current/*`、tests 和 package install step。

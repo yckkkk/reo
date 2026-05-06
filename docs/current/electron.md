@@ -64,7 +64,19 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Channel 命名必须贴近 domain 行为，不能用技术层动作掩盖产品语义。
 - IPC 设计必须说明数据如何进入 TanStack Query、component state、React Hook Form 或其他明确 owner。
 
-## Forge / electron-vite 边界
+## 第一产品切片 Electron 决策
+
+- First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
+- Renderer 后续读写 workspace 不传裸 `rootPath`；main process 在 choose/open 后 canonicalize 路径，并返回 opaque `workspaceHandle`。
+- `workspaceHandle` 绑定 canonical realpath、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；window close、workspace close、lock lost 或 schema mismatch 时撤销。
+- IPC sender validation 必须校验 main frame、trusted production origin `reo-app://renderer/index.html`、loopback dev origin、session/partition、channel allowlist 和 handle ownership。
+- Custom protocol 只服务 renderer build assets，不服务用户 workspace 文件；host 只允许 `renderer`，路径必须 containment 到 renderer output。
+- Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。
+- Audio playback 不允许一次性 IPC 返回完整 audio 文件；先读 manifest，再按 1 MiB chunk 读取并在 renderer 组装 Blob。
+- Permission policy 只允许 trusted renderer 请求 audio media；video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
+- First product slice 不使用 `shell.openExternal`、generic command bus、generic IPC bridge、logging bridge、Sentry bridge、Forge 或 updater。
+
+## Forge 与 electron-vite 边界
 
 - 当前开发和构建使用 `electron-vite`。
 - 当前 preview 使用 `electron-vite preview`。

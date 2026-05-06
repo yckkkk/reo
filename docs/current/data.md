@@ -50,6 +50,17 @@
 - Form drafts 在提交前属于 React Hook Form。
 - Derived state 默认计算，不存储；只有明确性能或一致性理由才存储。
 
+## 第一产品切片数据决策
+
+- First product slice 的用户内容真源是 workspace folder；不引入 Drizzle schema、SQLite file、migration directory 或 DB-backed content truth。
+- Workspace stable files 包括 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json`、`recordings/<id>/audio.webm`、`transcript.md`、`reflections.md`、`recording.json`。
+- `.reo/index.json` 是可重建 UI index，不是用户内容真源。
+- `.reo/workspace.lock` 是 volatile runtime lock artifact，不进入 Codex read-only validation 的稳定 hash 范围。
+- Query keys 使用 stable `workspaceId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
+- TanStack Query 只拥有 main-backed workspace snapshot 和 recording detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
+- React Hook Form 只拥有 create workspace submit 前的 form draft。
+- Zod 用于 IPC payload、workspace metadata、recording metadata 和 form submit boundary。
+
 ## 数据流设计纪律
 
 - 每个 feature 必须先写 conceptual model，再决定是否需要 physical DB schema。
@@ -68,7 +79,7 @@
 - 不得为 main/server-backed data 绕过 TanStack Query 写临时 fetching。
 - Zod 只用于不可信 runtime boundary，不用于重复 TypeScript 类型。
 
-## Slice Review Gate
+## Slice 审查门禁
 
 每个 spec 在进入实现前必须回答：
 

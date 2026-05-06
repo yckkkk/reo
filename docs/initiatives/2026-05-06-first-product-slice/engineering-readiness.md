@@ -1,10 +1,10 @@
-# Engineering Readiness Gate
+# 工程就绪门禁
 
-状态：blocking implementation
+状态：已通过；实现仍受 `$writing-plans` 和 `$plan-eng-review` 阻断
 
 ## 结论
 
-First product slice 不能直接进入实现。下一步必须先完成执行前工程设计包。
+工程执行前设计包已完成。下一步必须先用 `$writing-plans` 产出对齐后的实现计划，再用 `$plan-eng-review` 审查通过；两者通过前仍不能进入实现。
 
 该 gate 不是扩大产品范围，而是把一个小而完整的产品闭环按正规软件工程方式设计清楚，避免实现阶段把需求、架构、数据、协议、状态和验证临时拼接。
 
@@ -18,53 +18,53 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 
 进入实现前，必须完成以下产物。
 
-### 1. Requirements Baseline
+### 1. 需求基线
 
 必须定义：
 
-- Stakeholders：用户、Reo owner、实现者、QA、未来 AI consumer。
-- Operational context：本地 Electron app、本地文件夹、Codex CLI read-only validation。
-- Requirement IDs：每个 requirement 必须使用稳定 ID，例如 `FR-*`、`NFR-*`、`ERR-*`、`NG-*`。
-- Functional requirements：workspace 创建、文件夹选择、录音、暂停、继续、停止、waveform/progress visualization、mock transcript、编辑 transcript、编辑 reflections、保存、重开、播放。
-- Quality attributes：security、local-first durability、recoverability、accessibility、responsiveness、maintainability、testability。
-- Non-goals：本 slice 不实现的能力及其不出现于 UI 的规则。
-- Traceability：每个 requirement 对应 architecture view、interface contract、data contract、state owner、test 和 validation path。
-- Acceptance matrix：每个 requirement 必须有客观验收方式。
+- 相关方：用户、Reo owner、实现者、QA、未来 AI consumer。
+- 运行语境：本地 Electron app、本地文件夹、Codex CLI read-only validation。
+- 需求 ID：每个 requirement 必须使用稳定 ID，例如 `FR-*`、`NFR-*`、`ERR-*`、`NG-*`。
+- 功能需求：workspace 创建、文件夹选择、录音、暂停、继续、停止、waveform/progress visualization、mock transcript、编辑 transcript、编辑 reflections、保存、重开、播放。
+- 质量属性：security、local-first durability、recoverability、accessibility、responsiveness、maintainability、testability。
+- 非目标：本 slice 不实现的能力及其不出现于 UI 的规则。
+- 可追溯性：每个 requirement 对应 architecture view、interface contract、data contract、state owner、test 和 validation path。
+- 验收矩阵：每个 requirement 必须有客观验收方式。
 
-### 2. Product And Interaction Design
+### 2. 产品和交互设计
 
 必须定义：
 
 - Workspace management 页面：first-run、create workspace、open existing workspace、recent/missing workspace、folder conflict、permission failure。
 - Workspace 页面：sidebar、main layout、header、record action、Memory Content、recording card、empty/loading/error/reopened states。
 - Recording overlay：recording、paused、stopping、editing、playback、saving、save failed、pending close。
-- Sidebar decision：必须明确第一版 sidebar 是否显示；如果显示，只显示已实现 navigation，并定义内容、宽度、responsive behavior、keyboard model 和 tests；如果不显示，说明 reference 结构如何被 Reo layout 替代。
-- Layout：desktop、narrow desktop、minimum Electron window 的 grid、scroll region、long text behavior。
-- Keyboard and focus：dialog focus trap、icon buttons accessible label、tooltip/focus-visible。
-- Motion：overlay open/close、record/pause/resume、transcript reveal、autosave status。
-- Reference comparison：必须对照 `/Users/yck/Downloads/PM/设计参考/记忆录音/` 和 `/private/tmp/reo-reference-frames/`，只吸收结构、层级和 micro-interactions，视觉服从 Reo design system。
-- Reference map：必须逐项映射 reference asset/frame 到 Reo screen、state、interaction、accepted structure、rejected visual 和 verification evidence。
-- Accessibility matrix：必须覆盖每个 page/state/component 的 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
+- Sidebar 决策：必须明确第一版 sidebar 是否显示；如果显示，只显示已实现 navigation，并定义内容、宽度、responsive behavior、keyboard model 和 tests；如果不显示，说明 reference 结构如何被 Reo layout 替代。
+- 布局：desktop、narrow desktop、minimum Electron window 的 grid、scroll region、long text behavior。
+- 键盘和焦点：dialog focus trap、icon buttons accessible label、tooltip/focus-visible。
+- 动效：overlay open/close、record/pause/resume、transcript reveal、autosave status。
+- 参考对比：必须对照 `/Users/yck/Downloads/PM/设计参考/记忆录音/` 和 `/private/tmp/reo-reference-frames/`，只吸收结构、层级和 micro-interactions，视觉服从 Reo design system。
+- 参考映射：必须逐项映射 reference asset/frame 到 Reo screen、state、interaction、accepted structure、rejected visual 和 verification evidence。
+- 可访问性矩阵：必须覆盖每个 page/state/component 的 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
 
-### 2.1 External Reference Gate
+### 2.1 外部参考门禁
 
 必须定义：
 
-- Official docs check：通过 Context7 核对 Electron security/preload/IPC、shadcn/ui component ownership、TanStack Query query/mutation/cache ownership，以及任何被 design-hardening 触发的新 foundation。
-- Design trend check：使用网络搜索核对当年主流 productivity/local-first/AI-assisted interface 做法，只吸收结构性约束，不追随装饰趋势。
-- Open-source reuse check：使用 GitHub 搜索和仓库查看核对 audio recording/transcription、local-first note/workspace、Electron file app 是否有可复用方案。
-- Reuse-first decision：所有前端组件、overlay/drawer、audio/media、editor、main process capability、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form handling、data fetching、DB/migration、testing/QA、logging/observability 和 packaging/updater 能力必须先评估成熟开源包或官方方案；能满足 Reo security、local-first、design system 和代码精简边界时优先复用。
-- ElevenLabs UI check：audio/agent UI 必须优先评估 ElevenLabs UI；至少覆盖 Audio Player、Live Waveform、Waveform、Speech Input、Transcript Viewer、Voice Button，并记录哪些组件可 copy/adapt、哪些因网络/token/agent runtime/demo dependency 被拒绝。
-- Drawer check：recording overlay 必须优先评估 Vaul 或 shadcn drawer 的 bottom drawer model，不能自写 modal mechanics。
-- Audio engine check：recording、waveform、playback、scrubber 必须评估 wavesurfer.js、ElevenLabs UI 和至少一个其他成熟 audio package。
-- Adaptation before self-design：发现现成方案不完全适配时，必须先评估裁剪、retokenize、组合、薄适配或 fork；不能把“不完全适配”直接等同于“自研”。
-- Self-design exception：只有裁剪、retokenize、组合、薄适配或 fork 仍不能满足 Electron 安全边界、Reo design system、workspace 文件真源、测试可控性或代码复杂度预算时，才允许自研；必须记录 rejected package、已评估适配路径、拒绝原因、风险和替代设计。
-- Obsidian reference boundary：Obsidian 的可借鉴点是 vault 文件夹、普通文件、附件、配置目录和 workspace 管理；不得把 Obsidian 主程序当作可直接复用的开源实现。
-- Research log：每个被采纳或拒绝的外部资料必须记录 source、用途、采纳点、拒绝点和对 Reo design system/architecture 的影响。
-- Reuse decisions table：`reuse-decisions.md` 必须逐项覆盖 UI primitives、page/overlay primitives、recording controls、waveform/progress、audio playback/editor、transcription mock seam、IPC/preload typing、filesystem atomic write、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater；每行必须包含 capability、candidates、adopt/adapt/compose/fork/self-design decision、adaptation paths considered、reason、risks、tests、owner。`self-design` 只能作为最后手段。
-- Table ownership：`reuse-decisions.md` 是开源/官方方案取舍真源；component extraction table 和 code-simplicity abstraction table 必须引用它的 capability id，不能复制一份会漂移的取舍结论。
+- 官方文档检查：通过 Context7 核对 Electron security/preload/IPC、shadcn/ui component ownership、TanStack Query query/mutation/cache ownership，以及任何被 design-hardening 触发的新 foundation。
+- 设计趋势检查：使用网络搜索核对当年主流 productivity/local-first/AI-assisted interface 做法，只吸收结构性约束，不追随装饰趋势。
+- 开源复用检查：使用 GitHub 搜索和仓库查看核对 audio recording/transcription、local-first note/workspace、Electron file app 是否有可复用方案。
+- 复用优先决策：所有前端组件、overlay/drawer、audio/media、editor、main process capability、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form handling、data fetching、DB/migration、testing/QA、logging/observability 和 packaging/updater 能力必须先评估成熟开源包或官方方案；能满足 Reo security、local-first、design system 和代码精简边界时优先复用。
+- ElevenLabs UI 检查：audio/agent UI 必须优先评估 ElevenLabs UI；至少覆盖 Audio Player、Live Waveform、Waveform、Speech Input、Transcript Viewer、Voice Button，并记录哪些组件可 copy/adapt、哪些因网络/token/agent runtime/demo dependency 被拒绝。
+- Drawer 检查：recording overlay 必须优先评估 Vaul 或 shadcn drawer 的 bottom drawer model，不能自写 modal mechanics。
+- Audio engine 检查：recording、waveform、playback、scrubber 必须评估 wavesurfer.js、ElevenLabs UI 和至少一个其他成熟 audio package。
+- 自研前适配：发现现成方案不完全适配时，必须先评估裁剪、retokenize、组合、薄适配或 fork；不能把“不完全适配”直接等同于“自研”。
+- 自研例外：只有裁剪、retokenize、组合、薄适配或 fork 仍不能满足 Electron 安全边界、Reo design system、workspace 文件真源、测试可控性或代码复杂度预算时，才允许自研；必须记录 rejected package、已评估适配路径、拒绝原因、风险和替代设计。
+- Obsidian 参考边界：Obsidian 的可借鉴点是 vault 文件夹、普通文件、附件、配置目录和 workspace 管理；不得把 Obsidian 主程序当作可直接复用的开源实现。
+- 研究记录：每个被采纳或拒绝的外部资料必须记录 source、用途、采纳点、拒绝点和对 Reo design system/architecture 的影响。
+- 复用决策表：`reuse-decisions.md` 必须逐项覆盖 UI primitives、page/overlay primitives、recording controls、waveform/progress、audio playback/editor、transcription mock seam、IPC/preload typing、filesystem atomic write、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater；每行必须包含 capability、candidates、adopt/adapt/compose/fork/self-design decision、adaptation paths considered、reason、risks、tests、owner。`self-design` 只能作为最后手段。
+- 表格归属：`reuse-decisions.md` 是开源/官方方案取舍真源；component extraction table 和 code-simplicity abstraction table 必须引用它的 capability id，不能复制一份会漂移的取舍结论。
 
-### 2.2 Component And Layout Design
+### 2.2 组件和布局设计
 
 必须定义：
 
@@ -79,7 +79,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - Component extraction table：每个候选组件必须标记 `extract` 或 `inline`，并写明真实 consumer、invariant、props/events、test owner 和不抽象理由。
 - Simplification review：是否存在过深组件树、重复 class、重复 derived state、无意义 wrapper、一次性 abstraction。
 
-### 3. Architecture Views
+### 3. 架构视图
 
 必须定义：
 
@@ -91,7 +91,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - Behavior view：workspace lifecycle、recording lifecycle、autosave lifecycle、playback lifecycle、recovery lifecycle。
 - Cross-view mapping：每个 requirement 映射到 module、runtime connector、data contract 和 test。
 
-### 4. Data Design
+### 4. 数据设计
 
 必须定义：
 
@@ -108,7 +108,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - Field design：每个 durable JSON field 的语义、类型、是否用户可改、是否可重建、失败时保留策略。
 - Filesystem transaction table：workspace init、index rebuild、draft create、audio append、finalize、discard、transcript save、reflections save、recovery scan 必须定义 atomic temp/rename、file fsync、parent directory fsync、multi-file ordering、crash window、idempotency、cross-process lock、multi-window detection、single-writer rule、stale partial cleanup 和 recovery。
 
-### 5. Protocol And Boundary Design
+### 5. 协议和边界设计
 
 必须定义：
 
@@ -123,7 +123,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - IPC simplicity：helper 只能提取真实共享协议不变量，不能隐藏 channel 的产品语义。
 - Security threat model：必须使用 STRIDE-by-asset 矩阵，资产至少包括 workspace folder、IPC channel、preload bridge、custom protocol、renderer window、audio artifact、metadata files。威胁至少包括 path traversal、symlink escape、sender spoofing、folder overwrite、large-file DoS、JSON size/parse failure、media permission、CSP/media-src、custom protocol、Blob URL、navigation/window-open、shell/openExternal 和用户文件保护。每行必须包含 asset、trust boundary、threat、attack path、mitigation/prevention、detection/recovery、negative test 或 manual verification、owner、residual risk；不能只列威胁名称。
 
-### 6. State And Lifecycle Design
+### 6. 状态和生命周期设计
 
 必须定义：
 
@@ -138,9 +138,9 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - 本 slice 不引入 SQLite 时，state ownership matrix 的 SQLite column 必须为空；任何非空项都触发 DB schema decision。
 - Redundancy check：同一事实是否被重复存储；如果必须重复，source of truth 和同步方向是什么。
 
-### 7. Foundation Activation Matrix
+### 7. 基础能力激活矩阵
 
-| Foundation               | 是否在 first product slice 建立 | 判断                                                                                                     |
+| 基础能力                 | 是否在 first product slice 建立 | 判断                                                                                                     |
 | ------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Vitest                   | 是                              | Renderer TSX、DOM interaction、autosave UI 和 recording overlay 需要行为测试。                           |
 | preload                  | 是                              | Renderer 需要选择文件夹、读写 workspace 和读取音频。                                                     |
@@ -159,7 +159,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 | electron-updater         | 否                              | 没有 signed packaged app、release metadata 和 publish channel。                                          |
 | date-fns                 | 否                              | 第一版可用明确 native local formatting；复杂日期需求出现后再引入。                                       |
 
-### 8. QA And Validation Design
+### 8. QA 和验证设计
 
 必须定义：
 
@@ -171,7 +171,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 - Regression matrix：security、data loss、filesystem corruption、permission denial、long text、long recording、save failure、reopen recovery。
 - Review exit：`review.md` 必须记录独立对抗审查结果；存在 unresolved BLOCKER 或 MAJOR 时不得归档 spec、不得进入 Slice 1。
 
-### 9. Code Simplicity Design
+### 9. 代码精简设计
 
 必须定义可审查表格：
 

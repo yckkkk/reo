@@ -1,6 +1,6 @@
-# First Product Slice Initiative
+# 第一产品切片长期任务
 
-状态：active
+状态：活跃
 
 时间：2026-05-06 America/Los_Angeles
 
@@ -11,8 +11,8 @@
 ## 当前状态
 
 - 产品设计已完成。
-- Archived implementation plan 已归档，但待 design-hardening reconciliation；不是当前执行权威。
-- 工程执行前设计基线未完成，当前阻断实现。
+- 工程执行前设计基线已通过复审。
+- 归档 implementation plan 只能作为背景，当前执行权威来自 design-hardening reconciliation 和后续 `$writing-plans` 产物。
 - 实现尚未开始。
 
 ## 读取入口
@@ -21,7 +21,8 @@
 - archived implementation plan 背景证据：`docs/archive/specs/2026-05-06-0116-first-product-slice-plan/plan.md`。执行差异以后续 design-hardening 的 `implementation-plan-reconciliation.md` 为准。
 - 工程 readiness 审查记录：`docs/archive/specs/2026-05-06-0223-first-product-slice-engineering-design/`
 - 工程设计纪律审查记录：`docs/archive/specs/2026-05-06-0230-first-product-slice-design-discipline/`
-- 工程执行前门禁：`docs/initiatives/2026-05-06-first-product-slice/engineering-readiness.md`
+- 工程执行前门禁 spec：`docs/specs/2026-05-06-0338-first-product-slice-design-hardening/`
+- 工程执行前门禁规则：`docs/initiatives/2026-05-06-first-product-slice/engineering-readiness.md`
 - 下一 session handoff：`docs/initiatives/2026-05-06-first-product-slice/next-session-handoff.md`
 - 长期决策：`docs/decisions/0003-local-memory-workspace.md`
 
@@ -39,4 +40,4 @@
 
 ## 下一步
 
-新 session 先设定完整 first product slice 长任务 `$goal`，再创建当前 session spec 完成 design-hardening gate。该 gate 通过前不得执行 Slice 1；gate 通过后进入 `$writing-plans`、`$plan-eng-review` 和 `$executing-plans`。
+下一步使用 `$writing-plans` 产出对齐后的实现计划；该计划通过 `$plan-eng-review` 前不得进入实现。实现阶段必须按 `$executing-plans` 和 worktree 要求执行。

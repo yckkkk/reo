@@ -38,6 +38,17 @@
 - 每个 state transition 必须说明触发事件、允许来源、失败行为、用户可见状态和验证路径。
 - State ownership 必须用矩阵表达；每个 state row 只能有一个 source-of-truth owner，重复投影必须写同步方向和冲突处理。
 
+## 第一产品切片流程决策
+
+- Workspace lifecycle 覆盖 none、creating、ready、missing、conflict、unsupported、failed。
+- Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
+- Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。
+- Audio append 必须按 sequence 串行 ack；每个 recording 只允许 1 个 append 在途，超量进入 failed recoverable。
+- Finalize 必须等待最后一个 append ack，不得 duplicate stop 提前 finalize。
+- Transcript 和 reflections 各自拥有独立 autosave lifecycle；save failure 必须保留 renderer draft 和 previous disk file。
+- Playback 先读 audio manifest，再 chunk read，renderer 只在 active playback 期间持有 Blob URL。
+- Workspace write 使用 single-writer lock；第二个 Reo writer 返回 locked error，stale lock 只能通过明确 recovery 处理。
+
 ## 时序规则
 
 - 多步骤 write 必须有 transaction boundary。

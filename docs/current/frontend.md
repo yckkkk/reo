@@ -47,7 +47,7 @@
 - 每个 feature slice 必须显式判断是否产生 reusable component、feature-local component、form component 或 layout primitive。
 - 可复用组件必须有真实 consumer、明确 invariant 和测试/验证路径；不得为了“未来复用”抽象。
 
-## Component Design Gate
+## 组件设计门禁
 
 进入 UI 实现前必须定义：
 
@@ -61,7 +61,7 @@
 - Accessibility matrix：每个 page/state/component 必须定义 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
 - Simplification review：避免过深组件树、重复 class 组合、重复状态派生和无意义 wrapper；只有能降低重复或表达不变量时才提取组件。
 
-## Audio And Agent UI Reuse Boundary
+## 音频与 Agent UI 复用边界
 
 - ElevenLabs UI 是 Reo audio/agent UI 的默认优先评估来源。
 - ElevenLabs UI 组件是基于 shadcn/ui 的 open-code registry；只能逐组件引入，不得一次性安装全部组件。
@@ -70,6 +70,18 @@
 - Audio recording、waveform recording/playback 和 scrubber 必须同时评估 wavesurfer.js、ElevenLabs UI 和其他成熟开源方案。
 - 采纳的组件 source 必须 retokenize 到 Reo design system，并删去不符合 Reo 边界的 demo、agent runtime、network/token、未实现能力和 decorative behavior。
 - 若开源组件不完全适配，必须先评估裁剪、retokenize、组合、薄适配或 fork。拒绝开源组件并自研前，必须记录这些适配路径仍不满足的边界：Electron 安全、local-first 文件真源、无网络依赖、设计系统、可访问性、测试可控性、bundle/依赖成本或代码复杂度。
+
+## 第一产品切片 UI 决策
+
+- First product slice 不显示完整 sidebar；workspace home 使用 top header、record action 和 `Memory Content`。
+- 未实现的 photo、video、file、film、search、tag、sharing、sync 能力不得显示为 disabled control、placeholder section 或 future action。
+- Recording overlay 使用 Radix Dialog 语义组合 bottom sheet layout；Vaul/shadcn Drawer 已评估，first product slice 不引入 Vaul dependency。
+- ElevenLabs UI 只按组件摘取结构和状态表达，不执行 `add all`。
+- Live Waveform/Waveform 只提供 visual model；first product slice 使用 Reo-owned MediaRecorder adapter 和 lightweight state bars，不复制 ElevenLabs microphone owner。
+- wavesurfer.js 保持 deferred；只有出现 scrubber、peaks、regions、long waveform performance 或第二个 waveform consumer 时重新评估。
+- Recording 中的 transcript 必须标记为本地草稿提示，不得暗示真实 speech-to-text 已完成。
+- Audio playback 使用 Reo controls 和 chunked audio read；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke。
+- shadcn/ui 初始化必须与 exact primitives、business consumers、renderer alias、`components.json`、tests 和同 slice commit 同批完成。
 
 ## shadcn/ui 边界
 
