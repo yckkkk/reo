@@ -225,11 +225,11 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-foundation-closeout/`.
 
-- [ ] Audit every completed slice and compress stable facts into `docs/current/*`.
-- [ ] Move durable architecture choices into `docs/decisions/*` only when they are long-lived.
-- [ ] Produce verification matrix covering current commands and package/runtime boundaries.
-- [ ] Archive all completed specs.
-- [ ] Move this initiative to `docs/archive/initiatives/2026-05-05-foundation-completion/`.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`, docs lifecycle checks and final multi-review.
+- [x] Audited every completed slice and confirmed stable facts are compressed into `docs/current/*`.
+- [x] No new ADR was created because Task 01-09 produced current truth gates, not a new long-lived architecture choice.
+- [x] Produced verification matrix covering current commands and package/runtime boundaries in `closeout.md`.
+- [x] All completed specs are archived under `docs/archive/specs/*`.
+- [x] Move this initiative to `docs/archive/initiatives/2026-05-05-foundation-completion/`.
+- [x] Ran `npm run verify:quick`, `npm run build`, `git diff --check`, docs lifecycle checks and final multi-review.
 
 **Install allowed:** none by default.

@@ -2,7 +2,7 @@
 
 ## 状态
 
-Active。
+Completed；归档于 `docs/archive/initiatives/2026-05-05-foundation-completion/`。
 
 ## 目标
 
@@ -20,6 +20,8 @@ Active。
 - `plan.md`：10 个子任务排序、依赖、每个 slice 的验收门槛。
 - `tasks.md`：跨 session 任务状态。
 - `review.md`：plan engineering review、失败模式、测试策略、独立挑战。
+- `closeout.md`：最终压缩结果、verification matrix、remaining gates。
+- `handoff.md`：下一 session handoff。
 
 ## 当前边界
 
