@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-当前没有 active initiative。
+当前 active initiative：
+
+- `2026-05-05-foundation-completion/`：正式功能开发前的 foundation completion 路线。每个 session 仍然只推进一个可验证 foundation slice。
 
 ## 使用规则
 
