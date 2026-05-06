@@ -11,7 +11,10 @@
 - 当前没有 transaction boundary。
 - 当前没有 DB migration 或 startup database lifecycle。
 - 当前没有 background queue。
+- 当前没有 query invalidation 或 mutation flow。
 - 当前没有 optimistic update path。
+- 当前没有 form submit、form draft 或 field validation flow。
+- 当前没有 persisted client-state migration flow。
 
 ## 技术方向
 
@@ -27,6 +30,9 @@
 
 - 多步骤 write 必须有 transaction boundary。
 - 改变 cached data 的 mutation 必须有 invalidation 或 rollback。
+- TanStack Query mutation 必须定义 query key、invalidation scope、pending/error state 和 rollback 策略。
+- Zustand persist 必须定义 storage、version、partialize/migrate 和 user-visible recovery。
+- Form submit 必须定义 validation timing、submit owner、failure behavior 和 reset behavior。
 - Background task 必须有 owner、trigger、cancellation、retry、error reporting。
 - Session/auth change 必须写明 caller、persistence effect、renderer visibility、recovery behavior。
 - Better Auth Electron flow 必须先定义 system-browser request、PKCE/state、callback exchange、session persistence、renderer visibility、sign-out、error 和 recovery。

@@ -11,6 +11,8 @@
 - 当前没有 auth session persistence owner。
 - 当前没有 TanStack Query keys。
 - 当前没有 Zustand stores。
+- 当前没有 React Hook Form form owner。
+- 当前没有 Zod runtime schema owner。
 
 ## 技术方向
 
@@ -20,8 +22,11 @@
 - 没有真实 session lifecycle、auth tables 和 secure persistence owner 前，不引入 Better Auth package 或 auth storage。
 - Form、IPC、auth、persistence 边界使用 Zod 做运行时校验。
 - Main/server-backed async data 使用 TanStack Query。
+- 没有真实 main/server-backed async data consumer 前，不引入 TanStack Query provider、query keys 或 mutation cache。
 - 非 server-backed 的本地 UI/client state 使用 Zustand。
+- 没有跨 component subtree 的 client state owner 前，不引入 Zustand store。
 - Form state 使用 React Hook Form。
+- 没有真实 form submit/draft/validation owner 前，不引入 React Hook Form、resolver 或 form schema。
 
 ## Schema 规则
 
@@ -46,6 +51,7 @@
 - 改变底层数据的 mutation 必须定义 invalidation。
 - Optimistic update 必须在 `flow.md` 写 rollback。
 - 不得为 main/server-backed data 绕过 TanStack Query 写临时 fetching。
+- Zod 只用于不可信 runtime boundary，不用于重复 TypeScript 类型。
 
 ## 变更门禁
 

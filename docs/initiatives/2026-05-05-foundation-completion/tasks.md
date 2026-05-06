@@ -7,7 +7,7 @@
 - [x] Task 03：Electron runtime readiness，preload/IPC 真实 consumer 判断，禁止 generic bridge。
 - [x] Task 04：Data foundation，Drizzle、`better-sqlite3`、migration、schema ownership。
 - [x] Task 05：Auth foundation，Better Auth Electron、session lifecycle、secure persistence。
-- [ ] Task 06：Data fetching/state/forms foundation，TanStack Query、Zustand、React Hook Form、Zod 的实际归属。
+- [x] Task 06：Data fetching/state/forms foundation，TanStack Query、Zustand、React Hook Form、Zod 的实际归属。
 - [ ] Task 07：Component/UI foundation gate，shadcn 初始化条件与真实 consumer。
 - [ ] Task 08：Logging/error foundation，electron-log、Sentry、error shape、diagnostic boundary。
 - [ ] Task 09：Packaging/update foundation，Forge、fuses、ASAR、signing、notarization、electron-updater 顺序。

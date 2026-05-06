@@ -14,6 +14,7 @@
 - 当前没有 `components.json`、renderer import alias、`components/ui` 或 `lib/utils`。
 - 当前没有真实 reusable component consumer。
 - Zustand、TanStack Query、React Hook Form、Zod 已选型，但当前未安装。
+- 当前没有 async data、cross-subtree client state、form 或 runtime validation consumer。
 
 ## 技术方向
 
@@ -24,8 +25,11 @@
 - 有真实 reusable component consumer 时，使用 shadcn/ui 和 Radix primitives 建立 reusable components。
 - 有现成 lucide icon 时使用 lucide。
 - 表单使用 React Hook Form + Zod。
+- 没有真实 form consumer 前，不安装 React Hook Form、`@hookform/resolvers` 或 Zod resolver。
 - 来自 main/server boundary 的 async data 使用 TanStack Query。
+- 没有真实 async data consumer 前，不创建 QueryClient provider。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
+- 没有跨 component subtree state owner 前，不创建 Zustand store。
 
 ## 组件规则
 

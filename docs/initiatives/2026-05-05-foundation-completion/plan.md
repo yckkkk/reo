@@ -156,12 +156,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-state-form-query-foundation/`.
 
-- [ ] Inventory actual async data, local UI state and form state.
-- [ ] Do not install query/store/form packages without a real consumer.
-- [ ] Define query key naming, invalidation, optimistic update rollback if a mutation exists.
-- [ ] Define Zustand persistence only with storage/version/migration and user-visible recovery.
-- [ ] Use Zod at untrusted boundaries, not as decorative type duplication.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
+- [x] No actual async data, local UI state or form state consumer exists.
+- [x] Query/store/form packages were not installed because no real consumer exists.
+- [x] No mutation exists; query key naming, invalidation and optimistic rollback remain future gates.
+- [x] No persisted client state exists; Zustand persistence storage/version/migration remain future gates.
+- [x] Zod remains limited to future untrusted boundaries, not decorative type duplication.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
 
 **Install allowed:** only the package needed by the real consumer in the slice.
 
