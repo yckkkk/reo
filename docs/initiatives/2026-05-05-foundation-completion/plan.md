@@ -89,11 +89,11 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-quality-test-completion/`.
 
-- [ ] Start by proving whether current Node test runner is insufficient.
-- [ ] If no renderer/component behavior exists, keep Vitest deferred and update docs only.
-- [ ] If Vitest is introduced, write RED test for the real renderer/component behavior before config.
-- [ ] Update `verify:quick` only after the new command proves value.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
+- [x] Start by proving whether current Node test runner is insufficient.
+- [x] If no renderer/component behavior exists, keep Vitest deferred and update docs only.
+- [x] Vitest was not introduced; RED test for a Vitest consumer is not applicable in this slice.
+- [x] `verify:quick` was not changed because no new test runner proved value.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
 
 **Install allowed:** only if a real renderer/component/browser test consumer exists.
 

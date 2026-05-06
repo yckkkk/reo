@@ -50,6 +50,14 @@ npm run verify:quick
 
 没有新鲜验证证据，不得宣称完成。
 
+## Vitest 边界
+
+- 当前不安装 Vitest。
+- 当前 main process 纯策略测试继续使用 Node test runner。
+- 只有存在真实 renderer/component/browser 行为测试 consumer 时，才允许引入 Vitest。
+- 引入 Vitest 必须同批说明它覆盖的 Vite transform、JSX/component、browser mode、mock、snapshot、coverage 或 watch 需求。
+- 引入 Vitest 必须先写 RED 测试证明当前 runner 不足，再更新测试配置和 `verify:quick`。
+
 ## Error Handling
 
 - IPC 和 UI 边界的 error shape 必须有意设计。
