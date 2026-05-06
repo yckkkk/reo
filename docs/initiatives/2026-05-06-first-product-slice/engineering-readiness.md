@@ -12,7 +12,7 @@ First product slice 不能直接进入实现。下一步必须先完成执行前
 
 - 本文件和后续 design-hardening spec 是进入实现前的当前执行权威。
 - Archived design spec 和 archived implementation plan 只作为产品背景、参考素材和历史审查证据；与本文件或 design-hardening spec 冲突时，以当前 active initiative 和 `docs/current/*` 为准。
-- Design-hardening 完成后，必须更新、替换或显式 supersede archived implementation plan 的执行差异；未完成 plan reconciliation 前不得执行 Slice 1。
+- 禁止编辑 archived implementation plan。Design-hardening 必须创建 `implementation-plan-reconciliation.md`，记录 archived plan delta、supersession decisions 和 `$writing-plans` 输入；未完成 plan reconciliation 前不得执行 Slice 1。
 
 ## 正规工程设计基线
 

@@ -23,6 +23,8 @@
 13. `docs/initiatives/2026-05-06-first-product-slice/plan.md`
 14. `docs/initiatives/2026-05-06-first-product-slice/tasks.md`
 
+`.claude/CLAUDE.md` 与 `AGENTS.md` 是镜像文件。Claude worker 可读任一入口，但必须确认两者一致。
+
 读取 archived spec 或 archived plan 前，必须先完成以上 active/current 文件。Archived plan 不能作为 Slice 命名、顺序或执行来源。
 
 ## 背景材料
@@ -124,7 +126,7 @@ docs/specs/YYYY-MM-DD-HHMM-first-product-slice-design-hardening/
 
 - design-hardening spec 通过自审和独立对抗审查，且没有 unresolved BLOCKER/MAJOR。
 - active initiative 更新下一步。
-- archived implementation plan 已被更新、替换或明确 supersede，并产出 `$writing-plans` 输入。
+- archived implementation plan 保持历史证据，不得编辑；`implementation-plan-reconciliation.md` 已记录 archived plan delta、supersession decisions 和 `$writing-plans` 输入。
 - design-hardening gate 通过后，另行使用 `$writing-plans` 产出可执行的 reconciled implementation plan。
 - reconciled implementation plan 已通过 `$writing-plans` 格式要求和 `$plan-eng-review` 工程审查。
 - 长期结论压缩回 `docs/current/*` 或 `docs/decisions/*`；initiative 只保留跨 session 进度和读取入口。

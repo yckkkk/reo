@@ -59,7 +59,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - 代码和文档只描述当前事实、当前规则和已接受决策。
 - 不保留无当前用途的实现、文档、目录或接口。
 - 不重复造轮子。优先使用官方文档、主流包和已验证方案。
-- 自研不是默认选项。前端组件、audio/media、main process capability、IPC typing、filesystem transaction、state machine、form/schema、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。
+- 自研不是默认选项。前端组件、UI primitives、page/overlay primitives、overlay/drawer、audio/media、editor、main process capability、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。
 - 发现现成方案不完全适配 Reo 时，先思考如何裁剪、retokenize、组合、包一层薄适配或 fork；只有这些方式仍不能满足 Electron 安全边界、Reo 本地文件真源、Reo design system、测试可控性或代码复杂度预算时，才允许自研，并必须记录已尝试的适配路径和拒绝原因。
 - 不创建 generic runtime 或 speculative abstraction。
 - 基础未稳固前，不启动会扩大架构面的功能建设。

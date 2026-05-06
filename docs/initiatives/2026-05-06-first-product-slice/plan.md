@@ -2,7 +2,7 @@
 
 ## 执行顺序
 
-先完成工程执行前设计基线，并更新、替换或显式 supersede archived implementation plan，再执行 implementation slices。不允许合并 slices。
+先完成工程执行前设计基线，并在 `implementation-plan-reconciliation.md` 记录 archived plan delta、supersession decisions 和 `$writing-plans` 输入，再执行 implementation slices。不允许合并 slices，不得编辑 archived implementation plan。
 
 新 session 必须先设定 `$goal`：完成 Reo first product slice 的完整长任务交付。该 goal 覆盖 design-hardening、plan reconciliation、implementation、QA、review、verification 和 commit，不得把 design-hardening 当作最终交付。
 

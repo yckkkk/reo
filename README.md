@@ -21,6 +21,8 @@ Reo 是一个未发布的 Electron 应用，当前正在从干净基础重新建
 
 只有在实现对应 foundation slice 时才安装和配置未启用依赖。
 
+技术路线不等于安装或激活许可。未启用依赖必须先有当前 feature 的 exact consumer、capability contract、测试路径和 `docs/current/*` 更新。
+
 ## 文档
 
 Agent-facing 项目真源从 `docs/README.md` 开始。
