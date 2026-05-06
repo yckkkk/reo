@@ -4,8 +4,8 @@
 
 ## 当前事实
 
-- 当前没有 IPC request flow。
-- 当前没有需要建模的 preload/IPC consumer。
+- 当前有一个 IPC request flow：`window.reoWorkspace.chooseDirectory()`。
+- 当前 preload/IPC consumer 只覆盖 workspace 目录选择，不初始化 workspace、不写文件。
 - 当前没有 auth/session lifecycle。
 - 当前没有 auth request、exchange、sign-out 或 user-update flow。
 - 当前没有 transaction boundary。
@@ -24,7 +24,7 @@
 - 多步骤行为先建模，再实现。
 - Command/event 名称必须具体、贴近 domain。
 - 在没有真实 queue/stream 需求前，优先 request/response。
-- 在没有真实 renderer-to-main 特权需求前，不创建 preload/IPC flow。
+- 新 preload/IPC flow 只能跟随真实 renderer-to-main 特权需求创建。
 - 在没有真实 schema 和 migration owner 前，不创建 DB migration flow。
 - 每个 lifecycle transition 都必须有 owner。
 - failure、cancellation、retry、recovery 行为必须明确。
@@ -40,6 +40,8 @@
 
 ## 第一产品切片流程决策
 
+- Workspace directory selection flow：renderer 调用 `window.reoWorkspace.chooseDirectory()`；preload 调用 `workspace:chooseDirectory`；main 校验 channel、main frame、trusted URL 和 session；OS dialog canceled 返回 canceled；selected 返回 `selectionToken` 和 `displayPath`；真实路径只保存在 main 的 selection token store。
+- Selection token lifecycle：issued、consumed、expired、sender-mismatch、not-found；consume 后立即删除，expired 或错误 sender 都不返回 path。
 - Workspace lifecycle 覆盖 none、creating、ready、missing、conflict、unsupported、failed。
 - Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
 - Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。

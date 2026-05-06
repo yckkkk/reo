@@ -12,7 +12,7 @@
 - 当前没有 TanStack Query keys。
 - 当前没有 Zustand stores。
 - 当前没有 React Hook Form form owner。
-- 当前没有 Zod runtime schema owner。
+- 当前 Zod runtime schema owner 是 workspace IPC contract 和错误信封。
 
 ## 技术方向
 
@@ -59,7 +59,8 @@
 - Query keys 使用 stable `workspaceId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
 - TanStack Query 只拥有 main-backed workspace snapshot 和 recording detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft。
-- Zod 用于 IPC payload、workspace metadata、recording metadata 和 form submit boundary。
+- Zod 当前用于 `workspace:chooseDirectory` no-input request、choose result 和错误信封；后续用于 workspace metadata、recording metadata 和 form submit boundary。
+- `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
 
 ## 数据流设计纪律
 

@@ -6,8 +6,10 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 
 - Main process 位于 `src/main`。
 - Renderer 位于 `src/renderer`。
-- 当前没有 preload bridge。
-- 当前没有 IPC API。
+- Preload 位于 `src/preload`。
+- 当前 preload 只暴露 `window.reoWorkspace.chooseDirectory()`。
+- 当前 preload bundle 输出为 `out/preload/index.cjs`；sandbox preload source 不引入 Zod-backed contract 或普通 Node package。
+- 当前 IPC API 只有 `workspace:chooseDirectory`。
 - 当前没有 renderer error capture、preload logging bridge 或 IPC logging channel。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
@@ -31,7 +33,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - `webviewTag: false`
 - 导航默认拦截非可信 URL
 - `setWindowOpenHandler` 默认 deny
-- 权限请求默认拒绝
+- 权限请求除 trusted renderer 的 audio media 外默认拒绝
 - Dev server 只允许 loopback
 - Packaged app 忽略 `ELECTRON_RENDERER_URL`
 - 生产 CSP 不允许 `unsafe-inline` 或 `unsafe-eval`
@@ -41,8 +43,8 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 
 - 优先依据 Electron 官方 process model、security、context isolation、IPC、sandbox、protocol 文档。
 - Renderer 永远按 Web app 写，不直接 import/use `electron`、`node:*`、`fs`、`path`、`child_process` 或需要 Node/OS 权限的 SDK。
-- Preload 不是默认必需。只有 renderer 需要调用主进程特权能力时，才允许通过明确设计新增 preload。
-- 当前没有真实 renderer 特权能力 consumer，因此不新增 preload 或 IPC。
+- Preload 只服务明确设计的 renderer 特权能力。
+- 当前 `window.reoWorkspace` 只能暴露已实现且有 contract、handler、preload、renderer type 和测试覆盖的产品方法。
 - 当前没有 auth lifecycle、custom auth protocol 或 secure session persistence owner，因此不引入 Better Auth Electron bridge。
 - 新增 preload 时，只能用 `contextBridge` 暴露窄 API。
 - 禁止暴露 `ipcRenderer`、`electron`、`fs`、通用 `send(channel, ...args)` 或通用 command bus。
@@ -67,6 +69,10 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 ## 第一产品切片 Electron 决策
 
 - First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
+- `workspace:chooseDirectory` 是当前唯一 workspace IPC channel；request DTO 必须是 no-input。
+- `chooseDirectory` 只返回 `selectionToken` 和 `displayPath` 或 canceled 结果，不返回裸 `rootPath`，也不提前返回 conflict 或 permission 判断。
+- Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；错误结果不得泄露真实路径。
+- Preload 只导入无 Zod、无普通包依赖的 channel 常量；DTO 校验和错误信封属于 main process contract。
 - Renderer 后续读写 workspace 不传裸 `rootPath`；main process 在 choose/open 后 canonicalize 路径，并返回 opaque `workspaceHandle`。
 - `workspaceHandle` 绑定 canonical realpath、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；window close、workspace close、lock lost 或 schema mismatch 时撤销。
 - IPC sender validation 必须校验 main frame、trusted production origin `reo-app://renderer/index.html`、loopback dev origin、session/partition、channel allowlist 和 handle ownership。

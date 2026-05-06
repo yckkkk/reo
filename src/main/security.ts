@@ -1,4 +1,5 @@
 import { app, session } from 'electron';
+import type { MediaAccessPermissionRequest, PermissionCheckHandlerHandlerDetails } from 'electron';
 import { APP_SHELL_SCHEME } from './appProtocol.js';
 import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.js';
 
@@ -110,9 +111,40 @@ export function setupContentSecurityPolicy(): void {
 }
 
 export function setupPermissionRequestHandler(): void {
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, _origin, details) =>
+    isAllowedPermissionCheck(permission, details)
+  );
   session.defaultSession.setDevicePermissionHandler(() => false);
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      callback(isAllowedPermissionRequest(permission, details));
+    }
+  );
+}
+
+function isAllowedPermissionCheck(
+  permission: string,
+  details: PermissionCheckHandlerHandlerDetails
+): boolean {
+  return (
+    permission === 'media' &&
+    details.isMainFrame &&
+    details.mediaType === 'audio' &&
+    typeof details.requestingUrl === 'string' &&
+    isTrustedAppUrl(details.requestingUrl)
+  );
+}
+
+function isAllowedPermissionRequest(
+  permission: string,
+  details: MediaAccessPermissionRequest
+): boolean {
+  return (
+    permission === 'media' &&
+    details.isMainFrame &&
+    isTrustedAppUrl(details.requestingUrl) &&
+    Array.isArray(details.mediaTypes) &&
+    details.mediaTypes.length > 0 &&
+    details.mediaTypes.every((mediaType) => mediaType === 'audio')
+  );
 }

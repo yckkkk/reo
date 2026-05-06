@@ -1,8 +1,9 @@
 import { app } from 'electron';
 import type { WebPreferences } from 'electron';
 
-export function createSecureWebPreferences(): WebPreferences {
+export function createSecureWebPreferences(preloadPath: string): WebPreferences {
   return {
+    preload: preloadPath,
     sandbox: true,
     contextIsolation: true,
     nodeIntegration: false,

@@ -1,12 +1,14 @@
 import {
   app,
   BrowserWindow,
+  session,
   type Event,
   type WebContentsWillFrameNavigateEventParams,
   type WebContentsWillNavigateEventParams,
   type WebContentsWillRedirectEventParams,
 } from 'electron';
 import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from './appProtocol.js';
+import { resolvePreloadPath } from './preloadPath.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
   getDevServerUrl,
@@ -14,6 +16,7 @@ import {
   setupContentSecurityPolicy,
   setupPermissionRequestHandler,
 } from './security.js';
+import { registerWorkspaceIpc } from './workspaceIpc.js';
 
 app.enableSandbox();
 registerAppShellScheme();
@@ -21,6 +24,10 @@ registerAppShellScheme();
 const DEV_SERVER_URL = getDevServerUrl();
 
 let mainWindow: BrowserWindow | null = null;
+
+function getPreloadPath(): string {
+  return resolvePreloadPath(import.meta.url);
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -31,7 +38,7 @@ function createWindow(): void {
     title: 'Reo',
     backgroundColor: '#f8f7f4',
     show: false,
-    webPreferences: createSecureWebPreferences(),
+    webPreferences: createSecureWebPreferences(getPreloadPath()),
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -77,6 +84,11 @@ app
   .then(() => {
     setupContentSecurityPolicy();
     setupPermissionRequestHandler();
+    registerWorkspaceIpc({
+      expectedSession: session.defaultSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: isTrustedAppUrl,
+    });
     registerAppShellProtocol();
     createWindow();
 

@@ -5,14 +5,14 @@
 ## 当前事实
 
 - 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library 和 `npm run verify:quick`。
-- 当前 `test:main` 使用 Node test runner 覆盖 main process 纯策略函数。
+- 当前 `test:main` 使用 Node test runner 覆盖 main process 和 preload 纯策略函数。
 - 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
-- 当前 `typecheck` 分别检查 renderer TypeScript 和 main process TypeScript。
-- 当前 ESLint 覆盖 renderer、main process、测试、Electron Vite config 和测试脚本。
+- 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
+- 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
 - Better Auth 已选型，但当前未安装。
-- Zod 已选型，但当前未安装。
+- Zod 已安装，当前只服务 workspace IPC contract、DTO 和错误信封。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
 - 当前没有 posthook 或 pre-commit flow。
@@ -49,8 +49,8 @@ npm run verify:quick
 
 当前命令边界：
 
-- `typecheck`：运行 renderer `tsconfig.json` 和 main process `tsconfig.main.json`。
-- `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main process 测试。
+- `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
+- `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
 - `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
 - `format:check`：运行 `prettier --check .`。
@@ -69,6 +69,8 @@ npm run verify:quick
 - Runtime validation slice 不把“检查通过”伪装成 RED；只有发现行为缺陷并修改代码时，才先写 failing test 或记录可复现失败，再进入 GREEN。
 - Renderer behavior tests 引入 Vitest + Testing Library 时，必须先用 RED 证明当前 runner 不足，再把配置纳入 `verify:quick`。
 - Codex CLI read-only validation 必须在 Reo quiescent 或 workspace closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
+- Renderer source 禁止直接 import Node/Electron API；`rendererImportBoundary.test.ts` 使用 ESLint API 验证 restricted import 规则。
+- Preload sandbox 边界由 `preloadPath.test.ts` 和 `preloadSandboxBoundary.test.ts` 覆盖：preload path 必须指向 `out/preload/index.cjs`，preload source 不得引入 Zod-backed contract 或普通 Node package。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
 

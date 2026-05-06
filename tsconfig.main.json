@@ -23,5 +23,5 @@
     "allowUnreachableCode": false,
     "allowUnusedLabels": false
   },
-  "include": ["src/main/**/*", "electron.vite.config.ts"]
+  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"]
 }

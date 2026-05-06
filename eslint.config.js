@@ -16,6 +16,13 @@ export default defineConfig([
     },
     rules: {
       'no-console': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['electron', 'fs', 'fs/promises', 'path', 'child_process', 'crypto', 'os', 'url'],
+          patterns: ['node:*'],
+        },
+      ],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -27,7 +34,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/main/**/*.ts', 'test/**/*.ts', 'electron.vite.config.ts'],
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'test/**/*.ts', 'electron.vite.config.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
