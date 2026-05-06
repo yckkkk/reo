@@ -34,6 +34,14 @@ docs/
 - 新抽象必须消除有意义的重复，或强制真实不变量。
 - 不保留占位目录。
 
+## Memory Workspace Direction
+
+Reo 的 memory workspace 是用户选择的本地文件夹。Workspace folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
+
+Workspace root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`。用户内容使用普通文件保存，例如 recording 的 `audio.webm`、`transcript.md` 和 `reflections.md`。
+
+该方向已接受，见 `docs/decisions/0003-local-memory-workspace.md`。当前代码尚未实现 workspace 初始化、preload/IPC 文件能力、recording 或 persistence/index layer。
+
 ## 基础切片
 
 除非用户调整优先级，按以下顺序引入基础能力：

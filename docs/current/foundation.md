@@ -42,6 +42,14 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 - 无当前用途的内容直接删除，不写废弃标记。
 - 需要解释设计原因时，只写当前约束、当前目标和当前 tradeoff。
 
+## 产品方向
+
+Reo 面向本地优先的 memory workspace。Memory workspace 是用户选择的本地文件夹，用于保存一个用户定义的记忆主题，例如一本书的笔记、一门课、一次生活经历、一个生日派对或一个领域感悟。
+
+Workspace 文件夹是真实产物源。用户记忆内容以普通文件保存，供用户、文件系统工具、Codex CLI 和未来 Reo 内置 AI 直接读取。DB 可以作为索引、关系、查询和处理状态层，但不替代 workspace 文件夹作为用户记忆内容真源。
+
+每个 workspace root 使用 `AGENTS.md` 作为 AI 协作入口，Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。长期决策见 `docs/decisions/0003-local-memory-workspace.md`。
+
 ## Agent 行为
 
 - 当歧义会影响架构、数据、UX、验证或工作量时，先问或先声明假设。
