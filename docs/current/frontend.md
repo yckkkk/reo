@@ -25,6 +25,7 @@
 - Reo tokens/theme 是视觉真源；shadcn/ui + Radix primitives + Tailwind CSS v4 是 UI 实现框架。
 - Tailwind token 优先写在 `src/renderer/src/theme.css` 的 `@theme static` 中。
 - 组件和页面设计必须先核对 Reo 设计系统真源。
+- 组件和交互设计必须先评估 shadcn/ui、Radix、ElevenLabs UI、Vaul、wavesurfer.js 和其他成熟开源组件；符合 Reo 边界时优先复用或适配。
 - 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
@@ -45,6 +46,30 @@
 - UI 文案必须在 mobile 和 desktop 上不溢出。
 - 每个 feature slice 必须显式判断是否产生 reusable component、feature-local component、form component 或 layout primitive。
 - 可复用组件必须有真实 consumer、明确 invariant 和测试/验证路径；不得为了“未来复用”抽象。
+
+## Component Design Gate
+
+进入 UI 实现前必须定义：
+
+- Open-source component evaluation：每个 page-level、overlay、audio/media、form、editor、list/grid、state feedback 和 accessibility primitive 都必须先列出候选开源组件或官方方案。
+- 页面结构：workspace management、workspace home、recording overlay 的 page/component tree。
+- Layout primitives：first-run shell、sidebar、main shell、header、content region、overlay shell、scroll region、grid/list 的排版责任。
+- UI primitives：button、icon button、textarea、label、dialog、tooltip、card/panel 的来源、token 映射和 accessibility invariant。
+- Feature components：create workspace form、folder picker row、workspace card、recording card、recording controls、waveform/progress visualization、transcript editor、reflections editor、autosave status 的数据输入和事件输出。
+- Reuse decision：哪些组件复用，哪些保持 feature-local；复用必须来自真实 consumer 或共享 invariant。
+- Reference mapping：参考图只约束结构、层级和 micro-interactions；视觉 token、spacing、radius、surface 和 icon 必须服从 Reo design system。
+- Accessibility matrix：每个 page/state/component 必须定义 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
+- Simplification review：避免过深组件树、重复 class 组合、重复状态派生和无意义 wrapper；只有能降低重复或表达不变量时才提取组件。
+
+## Audio And Agent UI Reuse Boundary
+
+- ElevenLabs UI 是 Reo audio/agent UI 的默认优先评估来源。
+- ElevenLabs UI 组件是基于 shadcn/ui 的 open-code registry；只能逐组件引入，不得一次性安装全部组件。
+- 需要优先评估的 ElevenLabs UI 组件包括 Audio Player、Live Waveform、Waveform、Speech Input、Transcript Viewer、Voice Button。
+- Bottom drawer / large overlay 必须优先评估 Vaul 或 shadcn drawer，而不是自写 modal mechanics。
+- Audio recording、waveform recording/playback 和 scrubber 必须同时评估 wavesurfer.js、ElevenLabs UI 和其他成熟开源方案。
+- 采纳的组件 source 必须 retokenize 到 Reo design system，并删去不符合 Reo 边界的 demo、agent runtime、network/token、未实现能力和 decorative behavior。
+- 若开源组件不完全适配，必须先评估裁剪、retokenize、组合、薄适配或 fork。拒绝开源组件并自研前，必须记录这些适配路径仍不满足的边界：Electron 安全、local-first 文件真源、无网络依赖、设计系统、可访问性、测试可控性、bundle/依赖成本或代码复杂度。
 
 ## shadcn/ui 边界
 

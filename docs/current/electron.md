@@ -55,6 +55,15 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - `electron-log` 或 Sentry 的 renderer/preload bridge 只能在真实 diagnostics slice 中引入。
 - Diagnostics slice 必须同批定义 process boundary、sensitive data rules、redaction、retention、DSN/release/privacy/source-map 计划和 renderer visibility。
 
+## IPC 设计纪律
+
+- IPC 是产品能力协议，不是 renderer 调 main 的临时通道。
+- 每个 IPC channel 必须先写清 capability、caller、owner、request DTO、response DTO、error envelope、timeout、cancellation、sender validation、permission effect 和 test owner。
+- Cancellation 必须说明信号传递机制、main 端如何中止、renderer 端如何确认、部分写入如何回滚或保留；不可取消的 channel 必须说明用户可见时长上限、timeout 语义和恢复行为。
+- 多个 channel 只有在共享真实协议不变量时才提取 helper；不得为了减少文件数创建 generic invoke、generic command 或 generic backend service。
+- Channel 命名必须贴近 domain 行为，不能用技术层动作掩盖产品语义。
+- IPC 设计必须说明数据如何进入 TanStack Query、component state、React Hook Form 或其他明确 owner。
+
 ## Forge / electron-vite 边界
 
 - 当前开发和构建使用 `electron-vite`。

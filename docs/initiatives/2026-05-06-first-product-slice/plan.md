@@ -2,16 +2,17 @@
 
 ## 执行顺序
 
-先完成工程执行前设计基线，再按照 archived implementation plan 执行。不允许合并 slices：
+先完成工程执行前设计基线，并更新、替换或显式 supersede archived implementation plan，再执行 implementation slices。不允许合并 slices。
+
+新 session 必须先设定 `$goal`：完成 Reo first product slice 的完整长任务交付。该 goal 覆盖 design-hardening、plan reconciliation、implementation、QA、review、verification 和 commit，不得把 design-hardening 当作最终交付。
+
+Design-hardening 完成前，只有 Slice 0 是当前执行项：
 
 0. Engineering Design Readiness Gate
-1. Renderer Test Foundation
-2. Preload + Trusted IPC + Zod Foundation
-3. Workspace IPC + Filesystem + Recording Draft Foundation
-4. Renderer Workspace Data And Create Form
-5. Workspace Home UI + shadcn Foundation
-6. Recording Overlay, MediaRecorder And Autosave
-7. Runtime, Persistence And Codex CLI Validation
+
+Slice 1+ 的候选数量、名称、顺序和 foundation activation 由 `implementation-plan-reconciliation.md` 作为 `$writing-plans` 输入。不得沿用 archived plan 的 7-slice 名称作为当前执行清单。
+
+可执行的 reconciled implementation plan 必须由 `$writing-plans` 产出，并先通过 `$plan-eng-review` 工程审查，再进入 `$executing-plans`。
 
 ## 规则
 
@@ -21,6 +22,8 @@
 - 每个 slice 必须提交后才能进入下一 slice。
 - 不得跳过 foundation slice 直接实现产品 UI。
 - Engineering Design Readiness Gate 通过前，不得执行 Slice 1。
+- Archived implementation plan 未完成 reconciliation 前，不得执行 Slice 1。
+- Active initiative、后续 design-hardening spec 和 `docs/current/*` 优先于 archived specs；archive 只作背景和证据。
 
 ## 每个 Slice 的必检问题
 
@@ -45,3 +48,4 @@
 - state and lifecycle design
 - foundation activation decisions
 - QA and validation design
+- implementation plan reconciliation

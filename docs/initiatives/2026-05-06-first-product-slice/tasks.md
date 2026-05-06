@@ -1,9 +1,8 @@
 # Tasks
 
-- [ ] Slice 1: Renderer Test Foundation
-- [ ] Slice 2: Preload + Trusted IPC + Zod Foundation
-- [ ] Slice 3: Workspace IPC + Filesystem + Recording Draft Foundation
-- [ ] Slice 4: Renderer Workspace Data And Create Form
-- [ ] Slice 5: Workspace Home UI + shadcn Foundation
-- [ ] Slice 6: Recording Overlay, MediaRecorder And Autosave
-- [ ] Slice 7: Runtime, Persistence And Codex CLI Validation
+- [ ] Slice 0: Engineering Design Readiness Gate
+- [ ] Gate: `$writing-plans` produces reconciled implementation plan
+- [ ] Gate: `$plan-eng-review` approves reconciled implementation plan
+- [ ] Gate: `$executing-plans` starts only after both gates pass
+
+新 session 的 `$goal` 覆盖整个 first product slice 长任务。Slice 1+ 由 design-hardening 的 `implementation-plan-reconciliation.md` 产出前不得列入执行任务；产出后必须先通过 `$writing-plans` 和 `$plan-eng-review`，再进入 `$executing-plans`。

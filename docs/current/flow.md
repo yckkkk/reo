@@ -29,6 +29,15 @@
 - 每个 lifecycle transition 都必须有 owner。
 - failure、cancellation、retry、recovery 行为必须明确。
 
+## 状态管理纪律
+
+- 状态机必须先描述 domain lifecycle，再决定使用 component state、reducer、React Hook Form、TanStack Query 或 Zustand。
+- 不得把同一状态同时放入 component state、cache、form draft 和 metadata。
+- UI 状态、form 状态、main-backed async data、durable file state 和 derived state 必须分开定义 owner。
+- 复杂状态优先用 feature-local reducer 表达转移；只有跨 component subtree 且有真实 owner 时才引入 Zustand。
+- 每个 state transition 必须说明触发事件、允许来源、失败行为、用户可见状态和验证路径。
+- State ownership 必须用矩阵表达；每个 state row 只能有一个 source-of-truth owner，重复投影必须写同步方向和冲突处理。
+
 ## 时序规则
 
 - 多步骤 write 必须有 transaction boundary。

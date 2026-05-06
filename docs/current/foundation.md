@@ -6,6 +6,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 - 优先官方文档、框架约定和成熟包。
 - 不重复实现已被技术栈解决的能力。
+- 所有工程设计先做 official/open-source reuse evaluation，再决定复用、适配、fork 或自研。
 - 代码和文档保持小、扁平、显式。
 - 精简服务于交接、收口和验证；能降低误判风险的规则保留在当前真源。
 - 删除无当前用途的实现、文档、目录或接口。
@@ -15,7 +16,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 ## 技术路线
 
-以下是已确认路线，不代表当前全部已安装：
+以下是已确认技术路线，不代表当前全部已安装、已配置或已被当前 slice 激活：
 
 - React 19 + TypeScript
 - Vite through `electron-vite`
@@ -34,6 +35,10 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 ## 实施规则
 
 只在实现对应 foundation slice 时安装或配置相关包。不得加入空闲依赖、占位目录或未来架构壳。
+
+技术路线不是激活许可。任何 package、provider、schema、IPC、component source、store、query client、auth、DB、logging、packaging 或 updater 能力，都必须先有当前 feature 的 exact consumer、capability contract、测试路径和 `docs/current/*` 更新。
+
+自研不是默认选项。前端组件、audio/media、main process capability、IPC typing、filesystem transaction、state machine、form/schema、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。发现现成方案不完全适配 Reo 时，先思考如何裁剪、retokenize、组合、包一层薄适配或 fork；只有这些方式仍不能满足 Electron 安全边界、Reo 本地文件真源、Reo design system、测试可控性或代码复杂度预算时，才允许自研，并必须记录已尝试的适配路径和拒绝原因。
 
 ## 文档与注释规则
 

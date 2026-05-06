@@ -42,11 +42,23 @@
 
 ## 状态归属
 
-- Durable data 属于 SQLite。
+- 用户记忆内容的 durable artifact source 属于 workspace files。
+- `.reo` metadata 和 rebuildable index 属于 workspace folder，由 Reo 管理。
+- SQLite 只有在引入后才拥有明确的 app index、relationship、query、session 或 processing state；不得替代 workspace files 成为用户内容真源。
 - Main/server-backed async data 属于 TanStack Query。
 - Ephemeral UI state 属于 component state 或 Zustand。
 - Form drafts 在提交前属于 React Hook Form。
 - Derived state 默认计算，不存储；只有明确性能或一致性理由才存储。
+
+## 数据流设计纪律
+
+- 每个 feature 必须先写 conceptual model，再决定是否需要 physical DB schema。
+- 数据流必须写清 write owner、read owner、durable source、cache owner、mutation owner、invalidation 和 recovery。
+- Workspace file、`.reo` metadata、rebuildable index、TanStack Query cache、component state 和 form state 不能存储同一事实的不同版本。
+- 如果同一事实需要出现在多个位置，必须说明 source of truth、同步方向、冲突处理和丢失恢复。
+- 不得因为未来可能查询就提前建表；也不得因为第一版小就省略实体、关系和字段语义设计。
+- Durable file write 必须定义 atomic rename 边界、file fsync、parent directory fsync、跨平台差异、失败时 `.part` 状态和恢复策略。
+- Workspace write 必须定义 single-writer 策略；同一 workspace 被多个 Reo window 或进程打开时，必须设计检测、拒绝或合并语义。
 
 ## Query 规则
 
@@ -62,7 +74,7 @@
 
 - 是否需要 DB schema；如果需要，实体和表关系是什么。
 - 是否需要 migration；如果需要，foreign key、index、delete/update effect 是什么。
-- durable source 是 SQLite、workspace file，还是两者分工；谁是真源。
+- durable source 是 workspace file、`.reo` metadata、SQLite，还是多者分工；谁是真源。
 - 数据获取模式是什么：TanStack Query、direct component state、filesystem scan 或其他明确 owner。
 - Query keys、mutation invalidation、optimistic update 和 rollback 是否定义。
 - Form state、client state、server/main-backed state 的 owner 是否清楚。
