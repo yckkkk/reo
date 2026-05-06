@@ -13,6 +13,7 @@
 - shadcn/ui 已选型，但当前未安装。
 - 当前没有 `components.json`、renderer import alias、`components/ui` 或 `lib/utils`。
 - 当前没有真实 reusable component consumer。
+- 当前 renderer 只有单个静态 shell，没有 component extraction pressure。
 - Zustand、TanStack Query、React Hook Form、Zod 已选型，但当前未安装。
 - 当前没有 async data、cross-subtree client state、form 或 runtime validation consumer。
 

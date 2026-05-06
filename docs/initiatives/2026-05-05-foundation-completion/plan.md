@@ -173,12 +173,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-component-ui-foundation/`.
 
-- [ ] Confirm whether a real component consumer exists.
-- [ ] If none exists, keep shadcn/ui uninitialized.
-- [ ] If one exists, configure renderer alias, `components.json`, Tailwind CSS path and generated component source in the same slice.
-- [ ] Ensure generated source immediately serves the real consumer.
-- [ ] Keep Reo design system tokens as visual authority.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
+- [x] No real component consumer exists.
+- [x] shadcn/ui remains uninitialized.
+- [x] No renderer alias, `components.json`, Tailwind CSS path change or generated component source was added.
+- [x] No generated source exists because no real consumer exists.
+- [x] Reo design system tokens remain visual authority.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
 
 **Install allowed:** shadcn/ui related dependencies only with a real generated component consumer.
 
