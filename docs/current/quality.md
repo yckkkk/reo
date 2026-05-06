@@ -11,6 +11,7 @@
 - 当前 `typecheck` 分别检查 renderer TypeScript 和 main process TypeScript。
 - 当前 ESLint 覆盖 renderer、main process、测试、Electron Vite config 和测试脚本。
 - Vitest 已选型，但当前未安装。
+- Better Auth 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 posthook 或 pre-commit flow。
 
@@ -22,6 +23,7 @@
 - 不得用 `@ts-ignore` 或 `@ts-expect-error` 压制类型错误。
 - 不得用 non-null assertion 跳过真实不确定性。
 - Form、IPC、auth、persistence 边界必须使用 Zod 做运行时校验。
+- Auth boundary 必须测试 session request、callback exchange、storage failure、expired/invalid session、sign-out、renderer visibility 和 recovery。
 
 ## TDD
 
@@ -61,6 +63,7 @@ npm run verify:quick
 ## Error Handling
 
 - IPC 和 UI 边界的 error shape 必须有意设计。
+- Auth error shape 必须区分 request、callback、exchange、storage、session refresh 和 sign-out failure。
 - 不得静默吞错。
 - 用户可见错误必须可行动。
 - 日志应保留诊断信息，但不得泄露 secrets。

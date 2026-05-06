@@ -139,12 +139,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-auth-foundation/`.
 
-- [ ] Confirm whether auth is currently needed before product feature work.
-- [ ] Map Better Auth Electron system-browser flow, PKCE/state, session persistence and renderer visibility.
-- [ ] Refuse auth product screens and business onboarding.
-- [ ] If implemented, TDD session lifecycle boundaries and failure paths.
-- [ ] Update data, flow, electron and quality current docs in the same slice.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check` and any Electron runtime evidence required by the auth boundary.
+- [x] No auth is currently needed before product feature work.
+- [x] Better Auth Electron flow requires system browser, PKCE/state, session persistence and renderer visibility, but those remain future gates.
+- [x] Auth product screens and business onboarding were refused.
+- [x] Auth was not implemented; TDD for session lifecycle is not applicable in this slice.
+- [x] Updated data, flow, electron and quality current docs in the same slice.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check` and any Electron runtime evidence required by the auth boundary.
 
 **Install allowed:** Better Auth packages only if the slice owns a real session lifecycle and persistence design.
 

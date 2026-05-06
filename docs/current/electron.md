@@ -41,6 +41,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Renderer 永远按 Web app 写，不直接 import/use `electron`、`node:*`、`fs`、`path`、`child_process` 或需要 Node/OS 权限的 SDK。
 - Preload 不是默认必需。只有 renderer 需要调用主进程特权能力时，才允许通过明确设计新增 preload。
 - 当前没有真实 renderer 特权能力 consumer，因此不新增 preload 或 IPC。
+- 当前没有 auth lifecycle、custom auth protocol 或 secure session persistence owner，因此不引入 Better Auth Electron bridge。
 - 新增 preload 时，只能用 `contextBridge` 暴露窄 API。
 - 禁止暴露 `ipcRenderer`、`electron`、`fs`、通用 `send(channel, ...args)` 或通用 command bus。
 - IPC 必须是每个能力一个显式 channel/handler。
@@ -48,6 +49,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 特权能力必须逐项授权、校验、记录，不允许 generic privileged proxy。
 - 需要 Node/OS 权限的未来 runtime integration 必须进入 main process、utility process 或独立受控后端边界。
 - 如果未来引入 custom session 或 partition，custom protocol 和 permission policy 必须注册到同一个 session。
+- Better Auth Electron 只能在真实 auth slice 中引入，并且必须同批设计 custom protocol、trusted origin、preload bundle、IPC bridges、token/session exposure 和 renderer visibility。
 
 ## Forge / electron-vite 边界
 

@@ -8,6 +8,7 @@
 - 当前没有真实 durable data contract。
 - 当前没有 Drizzle config。
 - 当前没有 Better Auth tables。
+- 当前没有 auth session persistence owner。
 - 当前没有 TanStack Query keys。
 - 当前没有 Zustand stores。
 
@@ -16,6 +17,7 @@
 - 本地 SQLite 使用 Drizzle ORM + `better-sqlite3`。
 - 没有真实 schema、关系和 migration owner 前，不引入 Drizzle、`better-sqlite3`、Drizzle config 或 migration directory。
 - Auth/session foundation 使用 Better Auth 的 Electron 支持。
+- 没有真实 session lifecycle、auth tables 和 secure persistence owner 前，不引入 Better Auth package 或 auth storage。
 - Form、IPC、auth、persistence 边界使用 Zod 做运行时校验。
 - Main/server-backed async data 使用 TanStack Query。
 - 非 server-backed 的本地 UI/client state 使用 Zustand。
