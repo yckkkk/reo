@@ -2,8 +2,9 @@
 
 ## 执行顺序
 
-按照 archived implementation plan 执行，不允许合并 slices：
+先完成工程执行前设计基线，再按照 archived implementation plan 执行。不允许合并 slices：
 
+0. Engineering Design Readiness Gate
 1. Renderer Test Foundation
 2. Preload + Trusted IPC + Zod Foundation
 3. Workspace IPC + Filesystem + Recording Draft Foundation
@@ -19,6 +20,7 @@
 - 如果某个 slice 未完成，该 slice spec 留在 `docs/specs/*`，不能 archive-only。
 - 每个 slice 必须提交后才能进入下一 slice。
 - 不得跳过 foundation slice 直接实现产品 UI。
+- Engineering Design Readiness Gate 通过前，不得执行 Slice 1。
 
 ## 每个 Slice 的必检问题
 
@@ -30,3 +32,16 @@
 - 可复用组件：哪些是 reusable primitives，哪些是 feature-local；真实 consumer 和 invariant 是什么。
 - 文件夹结构：用户文件、Reo metadata、rebuildable index、临时文件和恢复路径。
 - 错误处理：用户可见错误、内部诊断、失败时保留的数据、retry/recovery 行为。
+
+## Engineering Design Readiness Gate
+
+实现前必须先完成 `engineering-readiness.md` 要求的设计包：
+
+- requirements baseline
+- product and interaction design
+- architecture views
+- data design
+- protocol and boundary design
+- state and lifecycle design
+- foundation activation decisions
+- QA and validation design

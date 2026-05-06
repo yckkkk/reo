@@ -56,6 +56,12 @@ npm run verify:quick
 
 没有新鲜验证证据，不得宣称完成。
 
+## 操作验证
+
+- 需要真实桌面操作、OS dialog、Electron runtime、录音、播放、保存、重开或视觉对比的任务，必须使用 Computer Use 验证。
+- 操作验证不能替代 TDD、typecheck、lint 或 format。
+- 如果 spec 指定 reference assets，验证证据必须说明哪些结构、状态和交互已对照 reference，哪些视觉由 Reo design system 替换。
+
 ## Packaging / Update 验证
 
 - 当前没有 packaging、maker、fuse、signing、notarization、publish 或 updater verification command。
