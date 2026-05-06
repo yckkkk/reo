@@ -18,6 +18,8 @@
 
 - 本地 SQLite 使用 Drizzle ORM + `better-sqlite3`。
 - 没有真实 schema、关系和 migration owner 前，不引入 Drizzle、`better-sqlite3`、Drizzle config 或 migration directory。
+- 每个 feature slice 都必须显式判断是否产生 DB schema、table relationship、query key、cache ownership、form owner、client state owner 或 durable file contract。
+- 如果判断为不引入 DB schema，必须说明当前 durable source、恢复路径、未来触发 DB 的具体 pressure。
 - Auth/session foundation 使用 Better Auth 的 Electron 支持。
 - 没有真实 session lifecycle、auth tables 和 secure persistence owner 前，不引入 Better Auth package 或 auth storage。
 - Form、IPC、auth、persistence 边界使用 Zod 做运行时校验。
@@ -32,6 +34,7 @@
 
 - 从产品实体和关系定义表，不从 UI screen 倒推表。
 - 实现 migration 前必须写清每个 table relationship。
+- 设计表时必须先写 entity、relationship、cardinality、ownership、lifecycle、delete/update effect，再写 columns。
 - 优先显式 foreign key 和 index，不靠隐式耦合。
 - 不为同一 domain concept 建多个重复 table shape。
 - 不创建 speculative columns 或 generic metadata bucket。
@@ -52,6 +55,18 @@
 - Optimistic update 必须在 `flow.md` 写 rollback。
 - 不得为 main/server-backed data 绕过 TanStack Query 写临时 fetching。
 - Zod 只用于不可信 runtime boundary，不用于重复 TypeScript 类型。
+
+## Slice Review Gate
+
+每个 spec 在进入实现前必须回答：
+
+- 是否需要 DB schema；如果需要，实体和表关系是什么。
+- 是否需要 migration；如果需要，foreign key、index、delete/update effect 是什么。
+- durable source 是 SQLite、workspace file，还是两者分工；谁是真源。
+- 数据获取模式是什么：TanStack Query、direct component state、filesystem scan 或其他明确 owner。
+- Query keys、mutation invalidation、optimistic update 和 rollback 是否定义。
+- Form state、client state、server/main-backed state 的 owner 是否清楚。
+- 文件夹结构是否有 source-of-truth、rebuildable index、用户文件和 Reo metadata 的边界。
 
 ## 变更门禁
 

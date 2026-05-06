@@ -43,6 +43,8 @@
 - 不得为 shadcn/ui 创建没有真实 invariant 的 generic wrapper。
 - 项目 UI primitives 建立后，业务组件必须通过项目 primitives 使用。
 - UI 文案必须在 mobile 和 desktop 上不溢出。
+- 每个 feature slice 必须显式判断是否产生 reusable component、feature-local component、form component 或 layout primitive。
+- 可复用组件必须有真实 consumer、明确 invariant 和测试/验证路径；不得为了“未来复用”抽象。
 
 ## shadcn/ui 边界
 

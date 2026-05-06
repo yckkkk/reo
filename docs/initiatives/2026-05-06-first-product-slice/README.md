@@ -24,6 +24,7 @@
 
 - Implementation plan 中 7 个 slices 全部完成。
 - 每个 slice 都有独立 spec、RED/GREEN/REFACTOR 证据、`docs/current/*` 更新、`npm run verify:quick` 和 commit。
+- 每个 slice spec 都必须回答 DB schema、表关系、数据获取模式、可复用组件、文件夹结构和错误处理 review gates。
 - Electron runtime 验证通过。
 - Workspace 磁盘文件验证通过。
 - Codex CLI read-only 验证通过。
