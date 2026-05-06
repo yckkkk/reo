@@ -12,7 +12,8 @@
 
 - 产品设计已完成。
 - 工程执行前设计基线已通过复审。
-- 归档 implementation plan 只能作为背景，当前执行权威来自 design-hardening reconciliation 和后续 `$writing-plans` 产物。
+- 对齐后的实现计划已通过 `$writing-plans`、subagent、Codex CLI、Claude CLI 和 `$plan-eng-review`。
+- 当前执行权威是归档后的对齐实现计划：`docs/archive/specs/2026-05-06-0452-first-product-slice-implementation-plan/plan.md`。
 - 实现尚未开始。
 
 ## 读取入口
@@ -21,7 +22,8 @@
 - archived implementation plan 背景证据：`docs/archive/specs/2026-05-06-0116-first-product-slice-plan/plan.md`。执行差异以后续 design-hardening 的 `implementation-plan-reconciliation.md` 为准。
 - 工程 readiness 审查记录：`docs/archive/specs/2026-05-06-0223-first-product-slice-engineering-design/`
 - 工程设计纪律审查记录：`docs/archive/specs/2026-05-06-0230-first-product-slice-design-discipline/`
-- 工程执行前门禁 spec：`docs/specs/2026-05-06-0338-first-product-slice-design-hardening/`
+- 工程执行前门禁 spec：`docs/archive/specs/2026-05-06-0338-first-product-slice-design-hardening/`
+- 对齐实现计划 spec：`docs/archive/specs/2026-05-06-0452-first-product-slice-implementation-plan/`
 - 工程执行前门禁规则：`docs/initiatives/2026-05-06-first-product-slice/engineering-readiness.md`
 - 下一 session handoff：`docs/initiatives/2026-05-06-first-product-slice/next-session-handoff.md`
 - 长期决策：`docs/decisions/0003-local-memory-workspace.md`
@@ -40,4 +42,4 @@
 
 ## 下一步
 
-下一步使用 `$writing-plans` 产出对齐后的实现计划；该计划通过 `$plan-eng-review` 前不得进入实现。实现阶段必须按 `$executing-plans` 和 worktree 要求执行。
+下一步使用 `$executing-plans` 执行对齐后的实现计划。进入 IMPL-001 前必须确认 `docs/specs/*` 为空，并按 `using-git-worktrees` 创建隔离工作区；不得在 `main` 上直接实现，除非用户显式授权。
