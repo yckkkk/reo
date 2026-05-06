@@ -2,6 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import {
   chooseWorkspaceDirectory,
   initializeWorkspace,
@@ -120,9 +122,10 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
       </header>
 
       <div className="flex flex-col gap-16">
-        <label className="flex flex-col gap-8 text-body font-medium leading-body text-cinder">
-          Workspace title
+        <div className="flex flex-col gap-8">
+          <Label htmlFor="workspace-title">Workspace title</Label>
           <input
+            id="workspace-title"
             {...titleRegistration}
             ref={(element) => {
               titleRegistration.ref(element);
@@ -132,30 +135,31 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
             type="text"
             aria-invalid={Boolean(errors.title)}
           />
-        </label>
+        </div>
         {errors.title ? (
           <p className="text-body leading-body text-ember">{errors.title.message}</p>
         ) : null}
 
-        <label className="flex flex-col gap-8 text-body font-medium leading-body text-cinder">
-          Description
+        <div className="flex flex-col gap-8">
+          <Label htmlFor="workspace-description">Description</Label>
           <textarea
+            id="workspace-description"
             className="min-h-96 resize-none border border-chalk bg-card-white px-16 py-12 text-body-lg leading-body-lg text-obsidian outline-none focus:border-signal-blue"
             {...register('description')}
           />
-        </label>
+        </div>
       </div>
 
       <section className="flex flex-col gap-12" aria-label="Workspace folder">
         <div className="flex flex-col gap-12 sm:flex-row sm:items-center">
-          <button
+          <Button
             ref={folderButtonRef}
-            className="min-h-48 border border-obsidian bg-obsidian px-20 text-body font-bold leading-body text-card-white disabled:border-fog disabled:bg-fog"
             type="button"
+            variant="default"
             onClick={handleChooseFolder}
           >
             Choose folder
-          </button>
+          </Button>
           {folderSelection ? (
             <p className="text-body leading-body text-cinder" aria-label="Selected folder">
               {folderSelection.displayPath}
@@ -177,13 +181,9 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
         </p>
       ) : null}
 
-      <button
-        className="min-h-48 border border-signal-blue bg-signal-blue px-24 text-body font-bold leading-body text-card-white disabled:border-fog disabled:bg-fog"
-        type="submit"
-        disabled={!canSubmit}
-      >
+      <Button type="submit" variant="primary" disabled={!canSubmit}>
         Create workspace
-      </button>
+      </Button>
     </form>
   );
 }

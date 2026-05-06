@@ -8,6 +8,9 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./src/renderer/src/*"]
+    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

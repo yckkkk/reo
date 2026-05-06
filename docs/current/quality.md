@@ -14,6 +14,7 @@
 - Better Auth 已选型，但当前未安装。
 - Zod 已安装，当前服务 workspace IPC contract、DTO、workspace metadata、recording metadata 和错误信封。
 - TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 workspace creation form 和 workspace snapshot cache。
+- `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot` 和 `@radix-ui/react-label` 已安装，当前只服务 Button/Label primitives。
 - `proper-lockfile` 已安装，当前只服务 workspace single-writer lock。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
@@ -75,6 +76,7 @@ npm run verify:quick
 - Preload sandbox 边界由 `preloadPath.test.ts` 和 `preloadSandboxBoundary.test.ts` 覆盖：preload path 必须指向 `out/preload/index.cjs`，preload source 不得引入 Zod-backed contract 或普通 Node package。
 - Workspace filesystem 由 main tests 覆盖：path containment、`AGENTS.md` conflict no-write、metadata/index、handle sender binding、single-writer lock、recording draft、audio manifest/chunk read。
 - Workspace creation UI 由 renderer tests 覆盖：初始 focus、folder picker cancel 保留输入、`AGENTS.md` conflict alert、workspace snapshot query key 不包含 handle、初始化成功后 route state 切换。
+- Workspace home 和最小 UI primitives 由 renderer tests 覆盖：Button role/name/focus-visible/disabled、Label accessible name、home title、单一 record action、`Memory Content`、no future capabilities。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
 

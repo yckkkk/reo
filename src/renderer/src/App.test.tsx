@@ -81,7 +81,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
     expect(await screen.findByRole('heading', { name: 'Daily memory' })).toBeInTheDocument();
-    expect(screen.getByText('Workspace ready.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Memory Content' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
   });
 });
