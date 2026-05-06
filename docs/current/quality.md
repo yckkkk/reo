@@ -4,13 +4,13 @@
 
 ## 当前事实
 
-- 当前已有 TypeScript、ESLint、Prettier、Node test runner 和 `npm run verify:quick`。
+- 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library 和 `npm run verify:quick`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 纯策略函数。
+- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - 当前 `typecheck` 分别检查 renderer TypeScript 和 main process TypeScript。
 - 当前 ESLint 覆盖 renderer、main process、测试、Electron Vite config 和测试脚本。
-- Vitest 已选型，但当前未安装。
 - Better Auth 已选型，但当前未安装。
 - Zod 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
@@ -45,12 +45,13 @@
 npm run verify:quick
 ```
 
-`verify:quick` 当前包含 typecheck、`test:main`、lint 和 format check。
+`verify:quick` 当前包含 typecheck、`test:main`、`test:renderer`、lint 和 format check。
 
 当前命令边界：
 
 - `typecheck`：运行 renderer `tsconfig.json` 和 main process `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main process 测试。
+- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
 - `format:check`：运行 `prettier --check .`。
 
@@ -81,11 +82,11 @@ npm run verify:quick
 
 ## Vitest 边界
 
-- 当前不安装 Vitest。
+- 当前 Vitest 只服务 renderer/component 行为测试。
 - 当前 main process 纯策略测试继续使用 Node test runner。
-- 只有存在真实 renderer/component/browser 行为测试 consumer 时，才允许引入 Vitest。
-- 引入 Vitest 必须同批说明它覆盖的 Vite transform、JSX/component、browser mode、mock、snapshot、coverage 或 watch 需求。
-- 引入 Vitest 必须先写 RED 测试证明当前 runner 不足，再更新测试配置和 `verify:quick`。
+- 当前 Vitest 配置覆盖 Vite transform、React JSX、jsdom DOM queries 和 Testing Library matchers。
+- 当前不启用 snapshot、coverage、browser mode 或 watch 作为验证门禁。
+- 新 renderer 行为必须优先写 Testing Library 测试，断言 accessible role/name 和用户可见状态。
 
 ## 错误处理
 
