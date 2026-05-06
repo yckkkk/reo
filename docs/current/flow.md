@@ -8,6 +8,7 @@
 - 当前没有需要建模的 preload/IPC consumer。
 - 当前没有 auth/session lifecycle。
 - 当前没有 transaction boundary。
+- 当前没有 DB migration 或 startup database lifecycle。
 - 当前没有 background queue。
 - 当前没有 optimistic update path。
 
@@ -17,6 +18,7 @@
 - Command/event 名称必须具体、贴近 domain。
 - 在没有真实 queue/stream 需求前，优先 request/response。
 - 在没有真实 renderer-to-main 特权需求前，不创建 preload/IPC flow。
+- 在没有真实 schema 和 migration owner 前，不创建 DB migration flow。
 - 每个 lifecycle transition 都必须有 owner。
 - failure、cancellation、retry、recovery 行为必须明确。
 

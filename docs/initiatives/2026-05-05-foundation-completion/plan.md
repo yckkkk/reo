@@ -122,12 +122,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-data-foundation/`.
 
-- [ ] Identify the smallest durable data contract that is not a product feature.
-- [ ] If no contract exists, do not install Drizzle or `better-sqlite3`.
-- [ ] If contract exists, model schema relationships before migration.
-- [ ] Add migration generation/application plan with rollback and startup failure behavior.
-- [ ] Keep DB access out of renderer; expose future access only through approved Electron boundary.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
+- [x] No durable data contract exists outside product features.
+- [x] Drizzle and `better-sqlite3` were not installed.
+- [x] No schema relationships exist; migration modeling remains a future gate.
+- [x] No migration generation/application plan exists because there is no schema owner.
+- [x] DB access remains absent from renderer and main process.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check`.
 
 **Install allowed:** Drizzle, `better-sqlite3`, `drizzle-kit`, `@types/better-sqlite3` only with a real schema and migration.
 
