@@ -82,7 +82,13 @@ type ReoWorkspaceBridge = {
     payload: RecordingHandleRequest & {
       readonly title: string;
     }
-  ) => Promise<WorkspaceResponse<{ readonly recordingId: string }>>;
+  ) => Promise<
+    WorkspaceResponse<{
+      readonly recordingId: string;
+      readonly title: string;
+      readonly audioByteLength: number;
+    }>
+  >;
   readonly discardRecordingDraft: (
     payload: RecordingHandleRequest
   ) => Promise<WorkspaceResponse<{ readonly discarded: true }>>;

@@ -5,7 +5,7 @@
 ## 当前事实
 
 - 当前 IPC request flows 覆盖 `window.reoWorkspace` 的 choose、initialize、open、close、recording draft、audio manifest/chunk read、transcript/reflections save。
-- 当前 preload/IPC consumer 覆盖 workspace 文件事务基础和 create workspace UI flow，不覆盖 MediaRecorder。
+- 当前 preload/IPC consumer 覆盖 workspace 文件事务基础、create workspace UI flow、MediaRecorder recording overlay、autosave 和 playback。
 - 当前没有 auth/session lifecycle。
 - 当前没有 auth request、exchange、sign-out 或 user-update flow。
 - 当前 workspace file write 使用 atomic temp file + rename 边界。
@@ -49,10 +49,11 @@
 - Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
 - Workspace creation renderer flow：title/description draft 属于 React Hook Form；folder selection token/displayPath 属于 component state；OS dialog canceled 不修改 draft 并把 focus 返回 folder picker；existing `AGENTS.md` conflict 显示 alert，不清空 draft 或 selected folder；initialize success seed workspace snapshot Query cache 并设置当前 renderer session state。
 - Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。
+- Recording overlay flow：home `Record memory` 打开 Radix Dialog；`Start recording` 创建 draft 后启动 browser MediaRecorder adapter；audio data 通过 append queue 串行写入；pause 暂停 MediaRecorder 和 mock transcript timer；resume 恢复；stop 先停止 recorder，再等待 append queue 清空，最后 finalize。
 - Audio append 必须按 sequence 串行 ack；每个 recording 只允许 1 个 append 在途，超量进入 failed recoverable。
 - Finalize 必须等待最后一个 append ack，不得 duplicate stop 提前 finalize。
-- Transcript 和 reflections 各自拥有独立 autosave lifecycle；save failure 必须保留 renderer draft 和 previous disk file。
-- Playback 先读 audio manifest，再 chunk read，renderer 只在 active playback 期间持有 Blob URL。
+- Transcript 和 reflections 各自拥有独立 autosave lifecycle；save failure 显示 alert，保留 renderer draft，main atomic write 保留 previous disk file。
+- Playback 先读 audio manifest，再按 chunk read 组装 Blob；renderer 只在 active playback 期间持有 Blob URL，并在 close/switch/unmount revoke。
 - Workspace write 使用 single-writer lock；第二个 Reo writer 返回 locked error，stale lock 只能通过明确 recovery 处理。
 
 ## 时序规则

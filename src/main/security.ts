@@ -2,6 +2,7 @@ import { app, session } from 'electron';
 import type { MediaAccessPermissionRequest, PermissionCheckHandlerHandlerDetails } from 'electron';
 import { APP_SHELL_SCHEME } from './appProtocol.js';
 import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.js';
+import { createContentSecurityPolicy } from './securityPolicy.js';
 
 function resolveCurrentDevServerUrl(): string | null {
   return resolveDevServerUrl({
@@ -13,36 +14,6 @@ function resolveCurrentDevServerUrl(): string | null {
 const DEV_SERVER_URL = resolveCurrentDevServerUrl();
 const DEV_SERVER_ORIGINS = new Set(DEV_SERVER_URL ? [DEV_SERVER_URL] : []);
 const DEV_CONNECT_SOURCES = getDevServerConnectSources(DEV_SERVER_ORIGINS);
-
-const PROD_CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "worker-src 'none'",
-  "connect-src 'self'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-];
-
-const DEV_CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "worker-src 'none'",
-  `connect-src 'self' ${DEV_CONNECT_SOURCES.join(' ')}`,
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-];
 
 function isAppShellUrl(url: URL): boolean {
   if (url.protocol !== `${APP_SHELL_SCHEME}:`) {
@@ -79,8 +50,10 @@ export function isTrustedAppUrl(rawUrl: string): boolean {
 
 export function setupContentSecurityPolicy(): void {
   const usesDevServer = DEV_SERVER_URL !== null;
-  const directives = usesDevServer ? DEV_CSP_DIRECTIVES : PROD_CSP_DIRECTIVES;
-  const policy = directives.join('; ');
+  const policy = createContentSecurityPolicy({
+    devConnectSources: DEV_CONNECT_SOURCES,
+    usesDevServer,
+  });
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     let isAppPage: boolean;

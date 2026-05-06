@@ -1,0 +1,43 @@
+const PROD_CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "media-src 'self' blob:",
+  "worker-src 'none'",
+  "connect-src 'self'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+];
+
+export function createContentSecurityPolicy({
+  devConnectSources = [],
+  usesDevServer,
+}: {
+  readonly devConnectSources?: readonly string[];
+  readonly usesDevServer: boolean;
+}) {
+  if (!usesDevServer) {
+    return PROD_CSP_DIRECTIVES.join('; ');
+  }
+
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "media-src 'self' blob:",
+    "worker-src 'none'",
+    `connect-src 'self' ${devConnectSources.join(' ')}`.trim(),
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+}

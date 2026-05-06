@@ -57,9 +57,11 @@
 - `.reo/index.json` 是可重建 UI index，不是用户内容真源。
 - `.reo/workspace.lock` 是 volatile runtime lock artifact，不进入 Codex read-only validation 的稳定 hash 范围。
 - Query keys 使用 stable `workspaceId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
-- TanStack Query 只拥有 main-backed workspace snapshot 和 recording detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
+- TanStack Query 只拥有 main-backed workspace snapshot cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft。
 - Create workspace folder selection token 和 displayPath 属于 form component state；selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files。
+- Recording overlay state 拥有 active recording lifecycle、elapsed timer、mock transcript draft、reflections draft、autosave status 和 active playback Blob URL。
+- Finalized recording summary 从 main finalize response 投影回 renderer workspace session snapshot；durable truth 仍是 workspace files 和 `.reo/index.json`。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
 - Workspace 初始化写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json` 和 `recordings/`；如果已有 `AGENTS.md`，不得写入任何 workspace 文件。

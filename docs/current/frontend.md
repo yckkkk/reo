@@ -11,12 +11,13 @@
 - 当前 styling foundation 使用 Reo 设计系统 token：暖白底、黑色主文字、低饱和中性色、蓝/橙小型点缀、细边界和轻量阴影。
 - Renderer 可执行主题文件是 `src/renderer/src/theme.css`。
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
-- shadcn/ui 已按 source-owned 模式初始化最小配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/label.tsx` 和 `lib/utils.ts`。
-- 当前 Radix primitives 只安装并使用 `@radix-ui/react-slot` 和 `@radix-ui/react-label`。
-- 当前真实 reusable component consumer 是 workspace creation form 和 workspace home。
+- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
+- 当前 Radix primitives 只安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label` 和 `@radix-ui/react-dialog`。
+- 当前真实 reusable component consumer 是 workspace creation form、workspace home 和 recording overlay。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 workspace 的创建页和已初始化 workspace 的最小 loaded state。
 - 当前 workspace home 展示 workspace title、一个 record action、`Memory Content`、recording empty/list region。
+- 当前 recording overlay 使用 Radix Dialog/shadcn Dialog source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
 - 当前有 `CreateWorkspaceForm` 业务表单，使用 React Hook Form + Zod resolver。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
 - Zustand 已选型，但当前未安装。
@@ -32,6 +33,7 @@
 - 组件和交互设计必须先评估 shadcn/ui、Radix、ElevenLabs UI、Vaul、wavesurfer.js 和其他成熟开源组件；符合 Reo 边界时优先复用或适配。
 - 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 当前 Button/Label primitive 已 retokenize 到 Reo design system；Button 使用 pill shape、Reo focus-visible ring、disabled state，Label 使用 Reo body typography。
+- 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 bottom-sheet/mobile 和 centered desktop layout，Textarea 使用 0 radius input shape。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
@@ -80,9 +82,11 @@
 - First product slice 不显示完整 sidebar；workspace home 使用 top header、record action 和 `Memory Content`。
 - Workspace creation page 使用 feature-local `CreateWorkspaceForm`，包含 title、description、folder picker 和 submit；folder picker cancel 和 initialization failure 不清空用户输入。
 - Create workspace form 当前使用 Button/Label primitives 和语义 input/textarea。
-- Workspace home 使用居中 header、单一 `Record memory` action 和 `Memory Content` 内容区；recording overlay 尚未创建。
+- Workspace home 使用居中 header、单一 `Record memory` action 和 `Memory Content` 内容区；`Record memory` 打开 recording overlay。
 - 未实现的 photo、video、file、film、search、tag、sharing、sync 能力不得显示为 disabled control、placeholder section 或 future action。
 - Recording overlay 使用 Radix Dialog 语义组合 bottom sheet layout；Vaul/shadcn Drawer 已评估，first product slice 不引入 Vaul dependency。
+- Recording overlay 使用官方 browser MediaRecorder API 的薄 adapter，不引入 agent runtime 或网络 STT。
+- Recording overlay 的 transcript 是本地 mock draft，UI 不暗示真实 speech-to-text。
 - ElevenLabs UI 只按组件摘取结构和状态表达，不执行 `add all`。
 - Live Waveform/Waveform 只提供 visual model；first product slice 使用 Reo-owned MediaRecorder adapter 和 lightweight state bars，不复制 ElevenLabs microphone owner。
 - wavesurfer.js 保持 deferred；只有出现 scrubber、peaks、regions、long waveform performance 或第二个 waveform consumer 时重新评估。
@@ -92,8 +96,8 @@
 
 ## shadcn/ui 边界
 
-- 当前 shadcn/ui 初始化范围只包含 Button 和 Label。
-- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/label.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 Button、Label、Dialog 和 Textarea。
+- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
 - 只有存在真实 reusable component consumer 时，才允许继续添加 shadcn/ui source。
 - 该 gate 只是安装与初始化门禁，不是框架选择保留项；Reo 的 UI 技术框架已经确定为 shadcn/ui + Radix primitives + Tailwind CSS v4。
 - 该 consumer 必须需要 reusable primitive、accessible interaction primitive，或明确的 shared visual invariant。

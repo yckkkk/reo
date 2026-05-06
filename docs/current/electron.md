@@ -15,6 +15,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
+- 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL。
 - `package.json` 的 Electron entry 指向 `./out/main/index.js`。
 - `out/` 是 `electron-vite` build output，不进入 git。
 
@@ -37,6 +38,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Dev server 只允许 loopback
 - Packaged app 忽略 `ELECTRON_RENDERER_URL`
 - 生产 CSP 不允许 `unsafe-inline` 或 `unsafe-eval`
+- 生产 CSP 只允许 `'self'` 和 `blob:` media source
 - 自定义 protocol 必须保留 privileged scheme 注册时序、host allowlist、path containment、CSP 和 handler 注册时序
 
 ## 必须遵守
@@ -80,6 +82,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Custom protocol 只服务 renderer build assets，不服务用户 workspace 文件；host 只允许 `renderer`，路径必须 containment 到 renderer output。
 - Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。
 - Audio playback 不允许一次性 IPC 返回完整 audio 文件；先读 manifest，再按 1 MiB chunk 读取并在 renderer 组装 Blob。
+- Renderer audio playback Blob URL 只在 active playback 期间存在，close/switch/unmount 必须 revoke。
 - Permission policy 只允许 trusted renderer 请求 audio media；video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
 - First product slice 不使用 `shell.openExternal`、generic command bus、generic IPC bridge、logging bridge、Sentry bridge、Forge 或 updater。
 

@@ -9,7 +9,7 @@
 - [x] IMPL-003：Workspace 文件系统、handle、lock 和 recording draft
 - [x] IMPL-004：Workspace data、Query 和创建表单
 - [x] IMPL-005：Workspace home UI 和最小 shadcn primitives
-- [ ] IMPL-006：Recording overlay、MediaRecorder、autosave 和 playback
+- [x] IMPL-006：Recording overlay、MediaRecorder、autosave 和 playback
 - [ ] IMPL-007：Runtime、persistence、reference 和 Codex 只读验证
 
 新 session 的 `$goal` 覆盖整个第一产品切片长任务。实现阶段必须使用 `$executing-plans` 和隔离 worktree，按归档后的对齐实现计划逐片执行、验证和提交。
