@@ -10,7 +10,8 @@
 - Reo 设计系统包含 tokens、component shape、surfaces、elevation、layout 和 usage rules。
 - 当前 styling foundation 使用 Reo 设计系统 token：暖白底、黑色主文字、低饱和中性色、蓝/橙小型点缀、细边界和轻量阴影。
 - Renderer 可执行主题文件是 `src/renderer/src/theme.css`。
-- shadcn/ui 已选型，但当前未安装。
+- Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
+- shadcn/ui 和 Radix primitives 当前未安装。
 - 当前没有 `components.json`、renderer import alias、`components/ui` 或 `lib/utils`。
 - 当前没有真实 reusable component consumer。
 - 当前 renderer 只有单个静态 shell，没有 component extraction pressure。
@@ -21,9 +22,10 @@
 
 - 直接使用 React 19 模式。
 - 使用 Tailwind CSS v4 作为 styling foundation。
+- Reo tokens/theme 是视觉真源；shadcn/ui + Radix primitives + Tailwind CSS v4 是 UI 实现框架。
 - Tailwind token 优先写在 `src/renderer/src/theme.css` 的 `@theme static` 中。
 - 组件和页面设计必须先核对 Reo 设计系统真源。
-- 有真实 reusable component consumer 时，使用 shadcn/ui 和 Radix primitives 建立 reusable components。
+- 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
@@ -47,6 +49,7 @@
 - 当前不初始化 shadcn/ui。
 - 当前不创建 `components.json`、`components/ui`、`lib/utils` 或 renderer import alias。
 - 只有存在真实 reusable component consumer 时，才允许初始化 shadcn/ui。
+- 该 gate 只是安装与初始化门禁，不是框架选择保留项；Reo 的 UI 技术框架已经确定为 shadcn/ui + Radix primitives + Tailwind CSS v4。
 - 该 consumer 必须需要 reusable primitive、accessible interaction primitive，或明确的 shared visual invariant。
 - 初始化 shadcn/ui 必须同批配置 renderer import alias，并同步 `tsconfig.json` 与 `electron.vite.config.ts`。
 - 初始化 shadcn/ui 必须同批创建 `components.json`，并让 `tailwind.css` 指向 `src/renderer/src/index.css`。

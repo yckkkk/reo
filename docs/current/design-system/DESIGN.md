@@ -2,6 +2,13 @@
 
 本文档记录 Reo 当前视觉规则。可执行 token 以 `theme.css`、`variables.css`、`tokens.json` 和 `src/renderer/src/theme.css` 为准。
 
+## Implementation Framework
+
+- Reo tokens/theme are the visual source of truth.
+- Tailwind CSS v4 + shadcn/ui + Radix primitives are the UI implementation framework.
+- shadcn/ui source and Radix behavior must be retokenized to Reo visual rules.
+- Do not invent a parallel custom component framework when shadcn/ui or Radix already covers the interaction primitive.
+
 ## 基调
 
 - Theme：light。

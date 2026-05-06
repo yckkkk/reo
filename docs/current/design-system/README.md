@@ -21,3 +21,5 @@
 - 前端实现先核对本目录，再改 renderer theme 或组件样式。
 - `theme.css`、`variables.css`、`tokens.json` 与 runtime theme 的 token 语义必须保持一致。
 - 组件命名、产品文案和业务结构不从设计系统示例推导。
+- 本目录定义 Reo 视觉真源，不替代 UI 技术框架。
+- UI 技术框架是 Tailwind CSS v4 + shadcn/ui + Radix primitives；组件 source 必须映射回 Reo tokens/theme。

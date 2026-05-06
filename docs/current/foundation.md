@@ -20,7 +20,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 - React 19 + TypeScript
 - Vite through `electron-vite`
 - Tailwind CSS v4
-- shadcn/ui
+- shadcn/ui + Radix primitives
 - Zustand + TanStack Query
 - React Hook Form + Zod
 - Better Auth with Electron support

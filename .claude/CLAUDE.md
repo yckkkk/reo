@@ -68,7 +68,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - React 19 + TypeScript
 - Vite through `electron-vite`
 - Tailwind CSS v4
-- shadcn/ui
+- shadcn/ui + Radix primitives
 - Zustand + TanStack Query
 - React Hook Form + Zod
 - Better Auth with Electron support
@@ -115,6 +115,10 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - `docs/archive/initiatives/YYYY-MM-DD-slug/*` 记录已完成、取消或失效的长期任务。
 - 归档子目录在首次写入时创建；不保留空占位目录。
 - spec 时间使用本机时区，并显式写出 timezone，例如 `2026-05-05 05:47 America/Los_Angeles`。
+- 未完成的 spec 不能只存在于 `docs/archive/specs/*`。
+- spec 只有在当前 spec objective 已完成、取消或被明确 supersede 后，才允许移入 `docs/archive/specs/*`。
+- 如果 spec 产出的是 plan，而 plan 指向的产品、实现或长期工作尚未完成，归档前必须先创建或更新 active initiative 来承接剩余工作；否则该 spec 留在 `docs/specs/*`。
+- `docs/archive/specs/*` 是已收口 session 证据，不是未完成工作的追踪位置。
 - 已完成 specs 移入 `docs/archive/specs/*`，但不是默认阅读内容。
 - 已完成、取消或失效的 initiatives 移入 `docs/archive/initiatives/*`，但不是默认阅读内容。
 - Initiative 只用于跨 session 任务；每个 session 仍然只推进一个可验证 spec slice。

@@ -73,6 +73,12 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 
 归档 specs 是任务记录，不是默认阅读内容，也不能覆盖 `current/*`。
 
+未完成的 spec 不能只存在于 `archive/specs/*`。只有当前 spec objective 已完成、取消或被明确 supersede，才允许归档。
+
+如果 spec 完成的是 plan，而 plan 指向的产品、实现或长期工作尚未完成，归档前必须先创建或更新 active initiative 来承接剩余工作；否则该 spec 留在 `docs/specs/*`。
+
+`archive/specs/*` 是已收口 session 证据，不是未完成工作的追踪位置。
+
 ## 收口压缩
 
 任务收口时：
@@ -80,8 +86,9 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 1. 把仍然有效的长期事实写回 `current/*`。
 2. 把长期架构决策写入 `decisions/*`。
 3. 把任务证据移入 `archive/specs/*`。
-4. 如存在对应 initiative，更新状态和下一步。
-5. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
-6. 除非用户明确要求，不创建额外顶层 docs 目录。
+4. 如果任务仍有跨 session 剩余工作，先创建或更新 active initiative，再归档 session spec。
+5. 如存在对应 initiative，更新状态和下一步。
+6. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
+7. 除非用户明确要求，不创建额外顶层 docs 目录。
 
 写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单和临时 TODO 留在 spec 或 archive。
