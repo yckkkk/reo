@@ -237,6 +237,9 @@ Base unit：4px。
 - Use Eggshell for page-level surface; use Card White only for framed card and contained form surfaces.
 - Do not create ad hoc palettes in product components.
 - Do not put display-scale type inside compact controls, panels, or cards.
+- Do not use emoji in UI for icons, status, decoration, empty states, buttons, labels, or emotional tone.
+- Use lucide icons when a symbol is needed and a matching icon exists; otherwise use text, Reo token status dots, or simple product graphics.
+- Keep product UI software-like and engineered: clear hierarchy, precise controls, accessible states, and restrained motion. Do not make Reo feel toy-like.
 
 ## Layout
 

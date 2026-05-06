@@ -24,7 +24,8 @@
 - Tailwind token 优先写在 `src/renderer/src/theme.css` 的 `@theme static` 中。
 - 组件和页面设计必须先核对 Reo 设计系统真源。
 - 有真实 reusable component consumer 时，使用 shadcn/ui 和 Radix primitives 建立 reusable components。
-- 有现成 lucide icon 时使用 lucide。
+- 界面不使用 emoji 表达图标、状态、装饰或情绪。
+- 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
 - 没有真实 form consumer 前，不安装 React Hook Form、`@hookform/resolvers` 或 Zod resolver。
 - 来自 main/server boundary 的 async data 使用 TanStack Query。
@@ -70,6 +71,7 @@
 - 按钮和 pill tag 使用 fully rounded 形状；输入控件保持 0 radius。
 - Card 和 panel 使用 16-20px radius，并保持轻量边界或 hairline shadow。
 - Geist Mono 只用于代码、技术注记和机器生成标记。
+- 所有产品界面必须保持标准软件工程产品气质：清晰、克制、可维护、可验证，不做玩具化视觉或交互。
 
 ## 变更门禁
 

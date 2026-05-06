@@ -224,6 +224,9 @@ Reference elements to adapt, not copy:
 - Replace pink accents with Reo small accent usage.
 - Use Eggshell, Obsidian, Chalk, Gravel/Slate, Card White, hairline elevation.
 - Do not create a one-off palette.
+- Do not use emoji anywhere in the interface.
+- Use lucide icons for icon-only controls when a matching icon exists.
+- Keep the UI software-like and engineered, not toy-like: restrained motion, precise controls, clear state, and no playful decorative shortcuts.
 
 Micro-interactions:
 
@@ -279,6 +282,7 @@ Retokenization requirements:
   - Filled maps to Reo Filled Pill Button.
   - Secondary maps to Reo Ghost Pill Button.
   - Icon/compact maps to Reo Compact Action Button.
+  - Icon-only controls use lucide icons, not emoji.
 - Dialog:
   - Reo modal/panel radius and hairline elevation.
   - Card White surface over blurred workspace.
@@ -953,6 +957,8 @@ npm install lucide-react
 
 If controls use visible text labels, do not install lucide.
 
+Do not use emoji as a fallback for recording, pause, resume, stop, playback, save, error, empty, or workspace states.
+
 - [ ] **Step 2: Add shadcn Dialog/Textarea**
 
 Run:
@@ -1237,4 +1243,6 @@ git commit -m "docs: verify first memory recording slice"
 - Reopen restores audio, transcript and reflections.
 - Autosave failure preserves user edits and previous disk content.
 - UI keeps the reference structure while using Reo design system.
+- UI contains no emoji; any icon-only controls use lucide icons when a matching icon exists.
+- UI remains a standard engineered software product, not a toy-like interface.
 - `npm run verify:quick`, `npm run build`, Electron runtime smoke and Codex CLI validation pass.
