@@ -10,6 +10,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前没有 IPC API。
 - 当前没有 renderer error capture、preload logging bridge 或 IPC logging channel。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
+- 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
 - `package.json` 的 Electron entry 指向 `./out/main/index.js`。
@@ -59,8 +60,13 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前开发和构建使用 `electron-vite`。
 - 当前 preview 使用 `electron-vite preview`。
 - 不得把 Electron Forge snippets 混进当前 electron-vite 结构。
-- 只有在 packaging slice 中做出明确决策后，才引入 Forge、makers、updater、signing、notarization、ASAR 或 fuses。
+- 当前不安装或配置 Electron Forge、makers、publishers、`electron-updater` 或 `@electron/fuses`。
+- 只有在 packaging slice 同批定义 app identity、platform targets、makers、artifact output、ASAR policy、fuses、signing/notarization、packaged launch verification 和 tracked-output checks 后，才引入 Forge 或 makers。
 - 如果未来采用 Forge，必须整体设计 Forge Vite plugin 配置模型、entry、输出路径和 packaging 生命周期。
+- `@electron/fuses` 必须在 package time、code signing 前执行；fuse policy 必须同批说明 ASAR integrity、only-load-from-ASAR、Node options、inspect flags 和 rollback 风险。
+- ASAR policy 必须同批说明 packed/unpacked 边界、native module/resource 例外和 packaged app launch evidence。
+- `electron-updater` 只能在已有 packaged artifact、publish provider、release metadata、signed/notarized app、logging/error owner 和 installed-app update test path 后引入。
+- Updater 不得先创建 hidden polling、dev update feed、generic update IPC 或 UI shell。
 
 ## 验证规则
 

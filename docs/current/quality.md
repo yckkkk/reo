@@ -56,6 +56,14 @@ npm run verify:quick
 
 没有新鲜验证证据，不得宣称完成。
 
+## Packaging / Update 验证
+
+- 当前没有 packaging、maker、fuse、signing、notarization、publish 或 updater verification command。
+- 引入 packaging 必须同批新增 package/make 验证、packaged app launch evidence、artifact output 检查和 tracked-output exclusion 检查。
+- 引入 fuses 或 ASAR integrity 必须同批验证 packaged artifact 的 fuse/ASAR 状态。
+- 引入 updater 必须同批验证 update metadata、publish target、signed/notarized installed app、update failure path 和 no-secret logging。
+- 没有 packaged app 和 release metadata 前，不创建 updater tests 或 dev update config。
+
 ## Vitest 边界
 
 - 当前不安装 Vitest。

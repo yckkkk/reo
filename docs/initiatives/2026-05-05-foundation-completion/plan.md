@@ -208,12 +208,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-packaging-update-foundation/`.
 
-- [ ] Decide whether to keep electron-vite as build authority and add Forge only for packaging.
-- [ ] Define makers, platform targets, ASAR policy, fuses, signing, notarization and artifact output.
-- [ ] Do not add updater before release metadata and publish target exist.
-- [ ] Add verification for packaged app launch and security fuses where feasible.
-- [ ] Keep `out/`, `dist/`, `build/`, `.vite/`, `.tmp/` out of git.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check`, packaged launch evidence and tracked-output checks.
+- [x] Kept `electron-vite` as current build authority; Forge was not added because no coherent release pipeline exists.
+- [x] Makers, platform targets, ASAR policy, fuses, signing, notarization and artifact output remain future packaging gates.
+- [x] Updater was not added because release metadata, signed packaged app and publish target do not exist.
+- [x] Packaged app launch and security fuse verification are future gates because no packaged artifact exists.
+- [x] `out/`, `dist/`, `build/`, `.vite/`, `.tmp/` remain excluded from git.
+- [x] Ran `npm run verify:quick`, `npm run build`, `git diff --check` and tracked-output checks; packaged launch evidence was not required because packaging was not introduced.
 
 **Install allowed:** Forge/updater packages only when packaging target and verification are in scope.
 

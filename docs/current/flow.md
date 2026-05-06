@@ -17,6 +17,7 @@
 - 当前没有 persisted client-state migration flow。
 - 当前 main process 有最小 fatal exception path：`uncaughtException` 写入 `console.error` 后退出。
 - 当前没有 structured diagnostic lifecycle 或 background error reporting flow。
+- 当前没有 package、make、publish、release 或 update lifecycle。
 
 ## 技术方向
 
@@ -39,6 +40,8 @@
 - Diagnostic/background error flow 必须有 owner、trigger、redaction、retention、retry 和 failure behavior。
 - Session/auth change 必须写明 caller、persistence effect、renderer visibility、recovery behavior。
 - Better Auth Electron flow 必须先定义 system-browser request、PKCE/state、callback exchange、session persistence、renderer visibility、sign-out、error 和 recovery。
+- Packaging flow 必须先定义 build、package、sign、notarize、make、publish、verify 的顺序和 failure behavior。
+- Update flow 必须先定义 trigger、channel、metadata source、download/install timing、cancellation、retry、rollback、error reporting 和 renderer visibility。
 - Concurrency-sensitive flow 必须写 race condition analysis。
 
 ## 禁止
@@ -46,6 +49,7 @@
 - 禁止 generic event runtime。
 - 禁止没有当前产品需求的 mailbox 或 queue runtime。
 - 禁止没有 observability 的 hidden background job。
+- 禁止没有 signed packaged app 和 release metadata 的 updater polling。
 - 禁止没有 rollback 的 optimistic UI path。
 - 禁止依赖未记录 timing assumption 的 async flow。
 

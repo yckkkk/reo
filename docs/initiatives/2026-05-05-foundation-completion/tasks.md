@@ -10,7 +10,7 @@
 - [x] Task 06：Data fetching/state/forms foundation，TanStack Query、Zustand、React Hook Form、Zod 的实际归属。
 - [x] Task 07：Component/UI foundation gate，shadcn 初始化条件与真实 consumer。
 - [x] Task 08：Logging/error foundation，electron-log、Sentry、error shape、diagnostic boundary。
-- [ ] Task 09：Packaging/update foundation，Forge、fuses、ASAR、signing、notarization、electron-updater 顺序。
+- [x] Task 09：Packaging/update foundation，Forge、fuses、ASAR、signing、notarization、electron-updater 顺序。
 - [ ] Task 10：Full foundation closeout，current 压缩、decisions、verification matrix、archive、handoff prompt。
 
 ## 全局门槛
