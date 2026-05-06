@@ -14,6 +14,7 @@
 - Better Auth 已选型，但当前未安装。
 - Zod 已选型，但当前未安装。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
+- 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
 - 当前没有 posthook 或 pre-commit flow。
 
 ## Type System
@@ -67,14 +68,21 @@ npm run verify:quick
 
 - IPC 和 UI 边界的 error shape 必须有意设计。
 - Auth error shape 必须区分 request、callback、exchange、storage、session refresh 和 sign-out failure。
+- 不创建无 consumer 的通用 error taxonomy。
+- 每个真实边界必须分别定义 user-facing error shape 和 internal diagnostic shape。
+- Diagnostic payload 必须有 owner、category、cause、recovery hint 和 redaction rule。
 - 不得静默吞错。
 - 用户可见错误必须可行动。
 - 日志应保留诊断信息，但不得泄露 secrets。
 
 ## Observability
 
+- 当前不安装 `electron-log` 或 Sentry。
+- 没有真实 diagnostic owner 前，不创建 logging subsystem。
 - 引入 logging 时，本地诊断使用 `electron-log`。
 - 引入 crash/error reporting 时，使用 Sentry。
+- 没有 DSN、release/environment、source map upload、privacy/scrubbing 和 sampling 计划前，不初始化 Sentry。
+- Renderer error capture、preload logging bridge 或 IPC logging channel 必须在真实 diagnostics slice 中设计，不得先创建 bridge 等 consumer。
 - Background work 必须暴露足够状态，用于排查时序和失败。
 
 ## 变更门禁

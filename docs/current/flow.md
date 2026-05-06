@@ -15,6 +15,8 @@
 - 当前没有 optimistic update path。
 - 当前没有 form submit、form draft 或 field validation flow。
 - 当前没有 persisted client-state migration flow。
+- 当前 main process 有最小 fatal exception path：`uncaughtException` 写入 `console.error` 后退出。
+- 当前没有 structured diagnostic lifecycle 或 background error reporting flow。
 
 ## 技术方向
 
@@ -34,6 +36,7 @@
 - Zustand persist 必须定义 storage、version、partialize/migrate 和 user-visible recovery。
 - Form submit 必须定义 validation timing、submit owner、failure behavior 和 reset behavior。
 - Background task 必须有 owner、trigger、cancellation、retry、error reporting。
+- Diagnostic/background error flow 必须有 owner、trigger、redaction、retention、retry 和 failure behavior。
 - Session/auth change 必须写明 caller、persistence effect、renderer visibility、recovery behavior。
 - Better Auth Electron flow 必须先定义 system-browser request、PKCE/state、callback exchange、session persistence、renderer visibility、sign-out、error 和 recovery。
 - Concurrency-sensitive flow 必须写 race condition analysis。

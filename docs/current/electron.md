@@ -8,6 +8,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Renderer 位于 `src/renderer`。
 - 当前没有 preload bridge。
 - 当前没有 IPC API。
+- 当前没有 renderer error capture、preload logging bridge 或 IPC logging channel。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
@@ -50,6 +51,8 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 需要 Node/OS 权限的未来 runtime integration 必须进入 main process、utility process 或独立受控后端边界。
 - 如果未来引入 custom session 或 partition，custom protocol 和 permission policy 必须注册到同一个 session。
 - Better Auth Electron 只能在真实 auth slice 中引入，并且必须同批设计 custom protocol、trusted origin、preload bundle、IPC bridges、token/session exposure 和 renderer visibility。
+- `electron-log` 或 Sentry 的 renderer/preload bridge 只能在真实 diagnostics slice 中引入。
+- Diagnostics slice 必须同批定义 process boundary、sensitive data rules、redaction、retention、DSN/release/privacy/source-map 计划和 renderer visibility。
 
 ## Forge / electron-vite 边界
 

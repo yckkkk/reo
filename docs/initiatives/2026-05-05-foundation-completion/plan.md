@@ -190,12 +190,13 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-logging-error-foundation/`.
 
-- [ ] Define error categories, user-facing error shape and diagnostic shape.
-- [ ] Decide whether local `electron-log` is needed before Sentry.
-- [ ] If logging is introduced, define main/renderer/preload boundaries and sensitive data rules.
-- [ ] Do not initialize Sentry until DSN, privacy, source map and release environment are defined.
-- [ ] Add tests for error normalization and failure paths when behavior changes.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check` and runtime evidence if Electron logging or renderer error capture changes.
+- [x] No real error surface exists, so no universal error taxonomy was created.
+- [x] User-facing error shape and internal diagnostic shape remain boundary-specific gates in `docs/current/quality.md`.
+- [x] Local `electron-log` is not needed before a real diagnostic owner exists.
+- [x] Logging was not introduced; main/renderer/preload boundaries and sensitive data rules remain future diagnostics-slice gates.
+- [x] Sentry was not initialized because DSN, privacy, source map and release environment are undefined.
+- [x] Error normalization tests are not applicable because no behavior changed.
+- [x] Ran `npm run verify:quick`, `npm run build` and `git diff --check`; runtime evidence was not required because Electron logging and renderer error capture did not change.
 
 **Install allowed:** `electron-log` only with a real diagnostic owner; Sentry only with release/privacy/source-map plan.
 
