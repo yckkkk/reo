@@ -5,15 +5,15 @@
 ## 当前事实
 
 - 当前 IPC request flows 覆盖 `window.reoWorkspace` 的 choose、initialize、open、close、recording draft、audio manifest/chunk read、transcript/reflections save。
-- 当前 preload/IPC consumer 覆盖 workspace 文件事务基础，不覆盖 UI form、TanStack Query 或 MediaRecorder。
+- 当前 preload/IPC consumer 覆盖 workspace 文件事务基础和 create workspace UI flow，不覆盖 MediaRecorder。
 - 当前没有 auth/session lifecycle。
 - 当前没有 auth request、exchange、sign-out 或 user-update flow。
 - 当前 workspace file write 使用 atomic temp file + rename 边界。
 - 当前没有 DB migration 或 startup database lifecycle。
 - 当前没有 background queue。
-- 当前没有 query invalidation 或 mutation flow。
+- 当前 Query flow 覆盖 workspace initialization 后 seed workspace snapshot cache；没有 optimistic update。
 - 当前没有 optimistic update path。
-- 当前没有 form submit、form draft 或 field validation flow。
+- 当前 form submit flow 覆盖 create workspace title/description validation、folder selection、submit failure 保留输入和成功后 route state 切换。
 - 当前没有 persisted client-state migration flow。
 - 当前 main process 有最小 fatal exception path：`uncaughtException` 写入 `console.error` 后退出。
 - 当前没有 structured diagnostic lifecycle 或 background error reporting flow。
@@ -47,6 +47,7 @@
 - Workspace close flow：renderer 传 `workspaceHandle`；main 校验 sender ownership，释放 lock 并撤销 handle。
 - Workspace lifecycle 覆盖 none、creating、ready、missing、conflict、unsupported、failed。
 - Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
+- Workspace creation renderer flow：title/description draft 属于 React Hook Form；folder selection token/displayPath 属于 component state；OS dialog canceled 不修改 draft 并把 focus 返回 folder picker；existing `AGENTS.md` conflict 显示 alert，不清空 draft 或 selected folder；initialize success seed workspace snapshot Query cache 并设置当前 renderer session state。
 - Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。
 - Audio append 必须按 sequence 串行 ack；每个 recording 只允许 1 个 append 在途，超量进入 failed recoverable。
 - Finalize 必须等待最后一个 append ack，不得 duplicate stop 提前 finalize。

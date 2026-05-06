@@ -13,6 +13,7 @@
 - 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
 - Better Auth 已选型，但当前未安装。
 - Zod 已安装，当前服务 workspace IPC contract、DTO、workspace metadata、recording metadata 和错误信封。
+- TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 workspace creation form 和 workspace snapshot cache。
 - `proper-lockfile` 已安装，当前只服务 workspace single-writer lock。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
@@ -52,7 +53,7 @@ npm run verify:quick
 
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
-- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers。
+- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers，并在每个测试后执行 DOM cleanup。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
 - `format:check`：运行 `prettier --check .`。
 
@@ -73,6 +74,7 @@ npm run verify:quick
 - Renderer source 禁止直接 import Node/Electron API；`rendererImportBoundary.test.ts` 使用 ESLint API 验证 restricted import 规则。
 - Preload sandbox 边界由 `preloadPath.test.ts` 和 `preloadSandboxBoundary.test.ts` 覆盖：preload path 必须指向 `out/preload/index.cjs`，preload source 不得引入 Zod-backed contract 或普通 Node package。
 - Workspace filesystem 由 main tests 覆盖：path containment、`AGENTS.md` conflict no-write、metadata/index、handle sender binding、single-writer lock、recording draft、audio manifest/chunk read。
+- Workspace creation UI 由 renderer tests 覆盖：初始 focus、folder picker cancel 保留输入、`AGENTS.md` conflict alert、workspace snapshot query key 不包含 handle、初始化成功后 route state 切换。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
 

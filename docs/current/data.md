@@ -9,9 +9,9 @@
 - 当前没有 Drizzle config。
 - 当前没有 Better Auth tables。
 - 当前没有 auth session persistence owner。
-- 当前没有 TanStack Query keys。
+- 当前 TanStack Query key 覆盖 workspace snapshot：`['workspace', 'snapshot', workspaceId]`。
 - 当前没有 Zustand stores。
-- 当前没有 React Hook Form form owner。
+- 当前 React Hook Form form owner 覆盖 create workspace submit 前的 title/description draft。
 - 当前 Zod runtime schema owner 是 workspace IPC contract 和错误信封。
 
 ## 技术方向
@@ -24,11 +24,11 @@
 - 没有真实 session lifecycle、auth tables 和 secure persistence owner 前，不引入 Better Auth package 或 auth storage。
 - Form、IPC、auth、persistence 边界使用 Zod 做运行时校验。
 - Main/server-backed async data 使用 TanStack Query。
-- 没有真实 main/server-backed async data consumer 前，不引入 TanStack Query provider、query keys 或 mutation cache。
+- TanStack Query provider 当前只服务真实 main-backed workspace snapshot consumer。
 - 非 server-backed 的本地 UI/client state 使用 Zustand。
 - 没有跨 component subtree 的 client state owner 前，不引入 Zustand store。
 - Form state 使用 React Hook Form。
-- 没有真实 form submit/draft/validation owner 前，不引入 React Hook Form、resolver 或 form schema。
+- React Hook Form 当前只服务真实 create workspace form submit、draft 和 validation owner。
 
 ## Schema 规则
 
@@ -59,6 +59,7 @@
 - Query keys 使用 stable `workspaceId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
 - TanStack Query 只拥有 main-backed workspace snapshot 和 recording detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft。
+- Create workspace folder selection token 和 displayPath 属于 form component state；selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
 - Workspace 初始化写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json` 和 `recordings/`；如果已有 `AGENTS.md`，不得写入任何 workspace 文件。

@@ -13,7 +13,6 @@ import {
   readRecordingAudioManifest,
   saveReflections,
   saveTranscript,
-  workspaceSnapshotQueryKey,
 } from './workspaceApi';
 
 describe('workspace renderer API wrapper', () => {
@@ -117,11 +116,5 @@ describe('workspace renderer API wrapper', () => {
       offset: 0,
       length: 1,
     });
-  });
-
-  it('builds workspace snapshot query key without workspaceHandle', () => {
-    expect(
-      workspaceSnapshotQueryKey({ workspaceId: 'ws_1', workspaceHandle: 'wh_secret' })
-    ).toEqual(['workspace', 'snapshot', 'ws_1']);
   });
 });

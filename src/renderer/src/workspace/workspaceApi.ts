@@ -66,11 +66,12 @@ export function saveReflections(payload: Parameters<Window['reoWorkspace']['save
   return window.reoWorkspace.saveReflections(payload);
 }
 
-export function workspaceSnapshotQueryKey({
-  workspaceId,
-}: {
-  readonly workspaceId: string;
-  readonly workspaceHandle: string;
-}) {
-  return ['workspace', 'snapshot', workspaceId] as const;
-}
+export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;
+export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
+export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
+export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
+export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;
+export type WorkspaceDirectorySelection = Extract<
+  Extract<WorkspaceChooseDirectoryResponse, { readonly ok: true }>['value'],
+  { readonly status: 'selected' }
+>;

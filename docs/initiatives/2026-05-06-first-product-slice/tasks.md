@@ -7,7 +7,7 @@
 - [x] IMPL-001：Renderer 测试基础和 App 提取
 - [x] IMPL-002：Preload、显式 IPC 和 Zod 边界
 - [x] IMPL-003：Workspace 文件系统、handle、lock 和 recording draft
-- [ ] IMPL-004：Workspace data、Query 和创建表单
+- [x] IMPL-004：Workspace data、Query 和创建表单
 - [ ] IMPL-005：Workspace home UI 和最小 shadcn primitives
 - [ ] IMPL-006：Recording overlay、MediaRecorder、autosave 和 playback
 - [ ] IMPL-007：Runtime、persistence、reference 和 Codex 只读验证

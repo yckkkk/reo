@@ -14,9 +14,12 @@
 - shadcn/ui 和 Radix primitives 当前未安装。
 - 当前没有 `components.json`、renderer import alias、`components/ui` 或 `lib/utils`。
 - 当前没有真实 reusable component consumer。
-- 当前 renderer 只有单个静态 shell，没有 component extraction pressure。
-- Zustand、TanStack Query、React Hook Form、Zod 已选型，但当前未安装。
-- 当前没有 async data、cross-subtree client state、form 或 runtime validation consumer。
+- 当前 renderer 入口由 QueryClient provider 包裹。
+- 当前 renderer route state 覆盖无 workspace 的创建页和已初始化 workspace 的最小 loaded state。
+- 当前有 `CreateWorkspaceForm` 业务表单，使用 React Hook Form + Zod resolver。
+- TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
+- Zustand 已选型，但当前未安装。
+- 当前没有跨 subtree client state consumer。
 
 ## 技术方向
 
@@ -30,9 +33,8 @@
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
-- 没有真实 form consumer 前，不安装 React Hook Form、`@hookform/resolvers` 或 Zod resolver。
 - 来自 main/server boundary 的 async data 使用 TanStack Query。
-- 没有真实 async data consumer 前，不创建 QueryClient provider。
+- 当前 QueryClient provider 只服务 workspace snapshot cache；active recording lifecycle 不进入 Query。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
 - 没有跨 component subtree state owner 前，不创建 Zustand store。
 
@@ -74,6 +76,8 @@
 ## 第一产品切片 UI 决策
 
 - First product slice 不显示完整 sidebar；workspace home 使用 top header、record action 和 `Memory Content`。
+- Workspace creation page 使用 feature-local `CreateWorkspaceForm`，包含 title、description、folder picker 和 submit；folder picker cancel 和 initialization failure 不清空用户输入。
+- Create workspace form 当前使用语义 HTML 控件；Button/Label primitive 在 IMPL-005 同批初始化 shadcn/ui 后接入。
 - 未实现的 photo、video、file、film、search、tag、sharing、sync 能力不得显示为 disabled control、placeholder section 或 future action。
 - Recording overlay 使用 Radix Dialog 语义组合 bottom sheet layout；Vaul/shadcn Drawer 已评估，first product slice 不引入 Vaul dependency。
 - ElevenLabs UI 只按组件摘取结构和状态表达，不执行 `add all`。

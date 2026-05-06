@@ -1,4 +1,26 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { CreateWorkspaceForm } from './workspace/CreateWorkspaceForm';
+import type { WorkspaceSession } from './workspace/workspaceApi';
+import { seedWorkspaceSnapshot } from './workspace/workspaceQueries';
+
 export function App() {
+  const queryClient = useQueryClient();
+  const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
+
+  function handleWorkspaceReady(nextWorkspaceSession: WorkspaceSession) {
+    seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
+    setWorkspaceSession(nextWorkspaceSession);
+  }
+
+  if (!workspaceSession) {
+    return (
+      <main className="min-h-screen bg-eggshell text-obsidian">
+        <CreateWorkspaceForm onWorkspaceReady={handleWorkspaceReady} />
+      </main>
+    );
+  }
+
   return (
     <main className="grid min-h-screen place-items-center bg-eggshell px-24 py-64 text-obsidian sm:px-40">
       <section
@@ -15,11 +37,9 @@ export function App() {
           id="app-title"
           className="font-waldenburg text-display font-light leading-display tracking-display text-obsidian"
         >
-          Reo
+          {workspaceSession.snapshot.title}
         </h1>
-        <p className="mt-24 text-body-lg leading-body-lg text-gravel">
-          React + TypeScript + Vite + Electron.
-        </p>
+        <p className="mt-24 text-body-lg leading-body-lg text-gravel">Workspace ready.</p>
       </section>
     </main>
   );
