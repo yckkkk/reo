@@ -12,7 +12,8 @@
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
 - 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
 - Better Auth 已选型，但当前未安装。
-- Zod 已安装，当前只服务 workspace IPC contract、DTO 和错误信封。
+- Zod 已安装，当前服务 workspace IPC contract、DTO、workspace metadata、recording metadata 和错误信封。
+- `proper-lockfile` 已安装，当前只服务 workspace single-writer lock。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
 - 当前没有 posthook 或 pre-commit flow。
@@ -71,6 +72,7 @@ npm run verify:quick
 - Codex CLI read-only validation 必须在 Reo quiescent 或 workspace closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
 - Renderer source 禁止直接 import Node/Electron API；`rendererImportBoundary.test.ts` 使用 ESLint API 验证 restricted import 规则。
 - Preload sandbox 边界由 `preloadPath.test.ts` 和 `preloadSandboxBoundary.test.ts` 覆盖：preload path 必须指向 `out/preload/index.cjs`，preload source 不得引入 Zod-backed contract 或普通 Node package。
+- Workspace filesystem 由 main tests 覆盖：path containment、`AGENTS.md` conflict no-write、metadata/index、handle sender binding、single-writer lock、recording draft、audio manifest/chunk read。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
 

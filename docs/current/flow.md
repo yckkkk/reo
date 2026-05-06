@@ -4,11 +4,11 @@
 
 ## 当前事实
 
-- 当前有一个 IPC request flow：`window.reoWorkspace.chooseDirectory()`。
-- 当前 preload/IPC consumer 只覆盖 workspace 目录选择，不初始化 workspace、不写文件。
+- 当前 IPC request flows 覆盖 `window.reoWorkspace` 的 choose、initialize、open、close、recording draft、audio manifest/chunk read、transcript/reflections save。
+- 当前 preload/IPC consumer 覆盖 workspace 文件事务基础，不覆盖 UI form、TanStack Query 或 MediaRecorder。
 - 当前没有 auth/session lifecycle。
 - 当前没有 auth request、exchange、sign-out 或 user-update flow。
-- 当前没有 transaction boundary。
+- 当前 workspace file write 使用 atomic temp file + rename 边界。
 - 当前没有 DB migration 或 startup database lifecycle。
 - 当前没有 background queue。
 - 当前没有 query invalidation 或 mutation flow。
@@ -41,7 +41,10 @@
 ## 第一产品切片流程决策
 
 - Workspace directory selection flow：renderer 调用 `window.reoWorkspace.chooseDirectory()`；preload 调用 `workspace:chooseDirectory`；main 校验 channel、main frame、trusted URL 和 session；OS dialog canceled 返回 canceled；selected 返回 `selectionToken` 和 `displayPath`；真实路径只保存在 main 的 selection token store。
-- Selection token lifecycle：issued、consumed、expired、sender-mismatch、not-found；consume 后立即删除，expired 或错误 sender 都不返回 path。
+- Selection token lifecycle：issued、consumed、expired、sender-mismatch、not-found；成功 consume 和 expired 会删除 token，错误 sender 不删除 token；所有错误都不返回 path。
+- Workspace initialize flow：renderer 传 selection token、title、description；main 校验 sender 和 token，canonicalize root，获取 single-writer lock，检测 `AGENTS.md` conflict，写入 workspace files，返回 opaque `workspaceHandle`、`workspaceId` 和 snapshot。
+- Workspace open flow：renderer 传 selection token；main 校验 sender 和 token，canonicalize root，获取 single-writer lock，读取 metadata，corrupt index 可重建，corrupt metadata 阻断写入。
+- Workspace close flow：renderer 传 `workspaceHandle`；main 校验 sender ownership，释放 lock 并撤销 handle。
 - Workspace lifecycle 覆盖 none、creating、ready、missing、conflict、unsupported、failed。
 - Workspace creation form lifecycle 覆盖 idle、folder selecting、canceled、validating、submitting、submitted、failed。
 - Recording lifecycle 覆盖 idle、acquiring、recording、paused、stopping、editing、playback、failed；mic cancel 或 permission denial 从 acquiring 回到 idle，不创建 finalized recording。

@@ -1,4 +1,19 @@
-import { WORKSPACE_CHOOSE_DIRECTORY_CHANNEL } from '../main/workspaceChannels.js';
+import {
+  WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
+  WORKSPACE_CLOSE_CHANNEL,
+  WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
+  WORKSPACE_INITIALIZE_CHANNEL,
+  WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
+  WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
+  WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
+  type WorkspaceIpcChannel,
+} from '../main/workspaceChannels.js';
 
 export type WorkspaceChooseDirectoryResponse =
   | {
@@ -22,11 +37,23 @@ export type WorkspaceChooseDirectoryResponse =
     };
 
 export interface WorkspaceBridgeInvoker {
-  readonly invoke: (channel: typeof WORKSPACE_CHOOSE_DIRECTORY_CHANNEL) => Promise<unknown>;
+  readonly invoke: (channel: WorkspaceIpcChannel, payload?: unknown) => Promise<unknown>;
 }
 
 export interface ReoWorkspaceBridge {
   readonly chooseDirectory: () => Promise<WorkspaceChooseDirectoryResponse>;
+  readonly initializeWorkspace: (payload: unknown) => Promise<unknown>;
+  readonly openWorkspace: (payload: unknown) => Promise<unknown>;
+  readonly closeWorkspace: (payload: unknown) => Promise<unknown>;
+  readonly createRecordingDraft: (payload: unknown) => Promise<unknown>;
+  readonly appendRecordingAudioChunk: (payload: unknown) => Promise<unknown>;
+  readonly finalizeRecordingDraft: (payload: unknown) => Promise<unknown>;
+  readonly discardRecordingDraft: (payload: unknown) => Promise<unknown>;
+  readonly getRecordingDetail: (payload: unknown) => Promise<unknown>;
+  readonly readRecordingAudioManifest: (payload: unknown) => Promise<unknown>;
+  readonly readRecordingAudioChunk: (payload: unknown) => Promise<unknown>;
+  readonly saveTranscript: (payload: unknown) => Promise<unknown>;
+  readonly saveReflections: (payload: unknown) => Promise<unknown>;
 }
 
 export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorkspaceBridge {
@@ -36,5 +63,27 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_CHOOSE_DIRECTORY_CHANNEL
       )) as WorkspaceChooseDirectoryResponse;
     },
+    initializeWorkspace: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_INITIALIZE_CHANNEL, payload),
+    openWorkspace: (payload: unknown) => invoker.invoke(WORKSPACE_OPEN_CHANNEL, payload),
+    closeWorkspace: (payload: unknown) => invoker.invoke(WORKSPACE_CLOSE_CHANNEL, payload),
+    createRecordingDraft: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, payload),
+    appendRecordingAudioChunk: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL, payload),
+    finalizeRecordingDraft: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, payload),
+    discardRecordingDraft: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL, payload),
+    getRecordingDetail: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_GET_RECORDING_DETAIL_CHANNEL, payload),
+    readRecordingAudioManifest: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL, payload),
+    readRecordingAudioChunk: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL, payload),
+    saveTranscript: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, payload),
+    saveReflections: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_SAVE_REFLECTIONS_CHANNEL, payload),
   });
 }

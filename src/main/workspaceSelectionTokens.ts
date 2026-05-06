@@ -80,9 +80,8 @@ export function createWorkspaceSelectionTokenStore({
         return workspaceError('ERR_WORKSPACE_SELECTION_NOT_FOUND', 'Workspace selection not found');
       }
 
-      selections.delete(selectionToken);
-
       if (entry.expiresAtMs < now()) {
+        selections.delete(selectionToken);
         return workspaceError('ERR_WORKSPACE_SELECTION_EXPIRED', 'Workspace selection expired');
       }
 
@@ -92,6 +91,8 @@ export function createWorkspaceSelectionTokenStore({
           'Workspace selection belongs to a different sender'
         );
       }
+
+      selections.delete(selectionToken);
 
       return {
         ok: true,

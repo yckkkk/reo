@@ -5,6 +5,7 @@ Reo 当前是最小 Electron + React + TypeScript + Vite 项目。
 ```text
 src/
   main/       Electron main process
+  preload/    Electron preload bridge
   renderer/   React renderer
 docs/
   archive/    已收口任务记录
@@ -17,10 +18,12 @@ docs/
 ## 当前事实
 
 - Electron main process 位于 `src/main`。
+- Preload bridge 位于 `src/preload`。
 - React renderer 位于 `src/renderer`。
 - Vite 集成由 `electron-vite` 管理。
-- 当前没有 preload API。
-- 当前没有 IPC surface。
+- 当前 preload API 是 `window.reoWorkspace`。
+- 当前 IPC surface 是显式 workspace channels。
+- 当前 main process 拥有 workspace 目录选择、初始化、打开、关闭、recording draft 写入和 audio chunk 读取能力。
 - 当前没有 database layer。
 - 当前没有 auth layer。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
@@ -48,9 +51,9 @@ docs/
 
 Reo 的 memory workspace 是用户选择的本地文件夹。Workspace folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 
-Workspace root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`。用户内容使用普通文件保存，例如 recording 的 `audio.webm`、`transcript.md` 和 `reflections.md`。
+Workspace root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock`。用户内容使用普通文件保存，例如 recording 的 `audio.webm`、`transcript.md` 和 `reflections.md`。
 
-该方向已接受，见 `docs/decisions/0003-local-memory-workspace.md`。当前代码尚未实现 workspace 初始化、preload/IPC 文件能力、recording 或 persistence/index layer。
+该方向已接受，见 `docs/decisions/0003-local-memory-workspace.md`。当前代码已实现 workspace 初始化、preload/IPC 文件能力、recording draft 和可重建 index；当前没有 DB-backed persistence layer。
 
 ## 基础切片
 

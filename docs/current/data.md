@@ -5,7 +5,7 @@
 ## 当前事实
 
 - 当前没有 database schema。
-- 当前没有真实 durable data contract。
+- 当前 durable data contract 是 workspace folder 文件。
 - 当前没有 Drizzle config。
 - 当前没有 Better Auth tables。
 - 当前没有 auth session persistence owner。
@@ -59,8 +59,10 @@
 - Query keys 使用 stable `workspaceId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
 - TanStack Query 只拥有 main-backed workspace snapshot 和 recording detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft。
-- Zod 当前用于 `workspace:chooseDirectory` no-input request、choose result 和错误信封；后续用于 workspace metadata、recording metadata 和 form submit boundary。
+- Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
+- Workspace 初始化写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json` 和 `recordings/`；如果已有 `AGENTS.md`，不得写入任何 workspace 文件。
+- Recording draft 写入 `recordings/<recordingId>/recording.json` 和 `audio.webm`；finalize 后写入 `transcript.md` 和 `reflections.md`，并更新 `.reo/index.json`。
 
 ## 数据流设计纪律
 

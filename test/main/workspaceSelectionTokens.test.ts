@@ -27,13 +27,13 @@ test('selection token is returned without rootPath and is consumed once', () => 
 
   const issued = store.issueSelection({
     rootPath: '/Users/example/Voice Notes',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
     sender: senderA,
   });
 
   assert.deepEqual(issued, {
     selectionToken: 'selection-token-1',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
   });
   assert.equal('rootPath' in issued, false);
 
@@ -63,7 +63,7 @@ test('selection token expires without exposing rootPath', () => {
 
   const issued = store.issueSelection({
     rootPath: '/Users/example/Voice Notes',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
     sender: senderA,
   });
 
@@ -89,7 +89,7 @@ test('selection token is bound to sender identity', () => {
 
   const issued = store.issueSelection({
     rootPath: '/Users/example/Voice Notes',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
     sender: senderA,
   });
 
@@ -102,4 +102,15 @@ test('selection token is bound to sender identity', () => {
     assert.equal('rootPath' in mismatch.error, false);
     assert.equal(mismatch.error.code, 'ERR_WORKSPACE_SELECTION_SENDER_MISMATCH');
   }
+
+  assert.deepEqual(
+    store.consumeSelection({
+      selectionToken: issued.selectionToken,
+      sender: senderA,
+    }),
+    {
+      ok: true,
+      rootPath: '/Users/example/Voice Notes',
+    }
+  );
 });

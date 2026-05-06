@@ -3,6 +3,12 @@ import test from 'node:test';
 import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  workspaceCloseRequestSchema,
+  workspaceGenericOkResponseSchema,
+  workspaceInitializeRequestSchema,
+  workspaceInitializeResponseSchema,
+  workspaceOpenRequestSchema,
+  workspaceRecordingAppendRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
   workspaceErrorEnvelopeSchema,
@@ -11,8 +17,112 @@ import {
 
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
   assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
-  assert.deepEqual(WORKSPACE_IPC_CHANNELS, ['workspace:chooseDirectory']);
+  assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
+    'workspace:chooseDirectory',
+    'workspace:initialize',
+    'workspace:open',
+    'workspace:close',
+    'workspace:createRecordingDraft',
+    'workspace:appendRecordingAudioChunk',
+    'workspace:finalizeRecordingDraft',
+    'workspace:discardRecordingDraft',
+    'workspace:getRecordingDetail',
+    'workspace:readRecordingAudioManifest',
+    'workspace:readRecordingAudioChunk',
+    'workspace:saveTranscript',
+    'workspace:saveReflections',
+  ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
+});
+
+test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot, and no rootPath', () => {
+  assert.deepEqual(
+    workspaceInitializeRequestSchema.parse({
+      selectionToken: 'selection-token-1',
+      title: '新的 workspace',
+      description: '',
+    }),
+    {
+      selectionToken: 'selection-token-1',
+      title: '新的 workspace',
+      description: '',
+    }
+  );
+
+  const response = workspaceInitializeResponseSchema.parse({
+    ok: true,
+    value: {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      rootPath: '/Users/example/Voice Notes',
+      snapshot: {
+        workspaceId: 'ws_1',
+        title: '新的 workspace',
+        description: '',
+        recordings: [],
+      },
+    },
+  });
+
+  assert.deepEqual(response, {
+    ok: true,
+    value: {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      snapshot: {
+        workspaceId: 'ws_1',
+        title: '新的 workspace',
+        description: '',
+        recordings: [],
+      },
+    },
+  });
+});
+
+test('open and close contracts use token or handle but never rootPath', () => {
+  assert.deepEqual(workspaceOpenRequestSchema.parse({ selectionToken: 'selection-token-1' }), {
+    selectionToken: 'selection-token-1',
+  });
+  assert.throws(() =>
+    workspaceOpenRequestSchema.parse({
+      selectionToken: 'selection-token-1',
+      rootPath: '/Users/example/Voice Notes',
+    })
+  );
+
+  assert.deepEqual(workspaceCloseRequestSchema.parse({ workspaceHandle: 'wh_1' }), {
+    workspaceHandle: 'wh_1',
+  });
+  assert.deepEqual(workspaceGenericOkResponseSchema.parse({ ok: true, value: { closed: true } }), {
+    ok: true,
+    value: { closed: true },
+  });
+});
+
+test('recording append contract caps chunks at 1 MiB and requires opaque workspace handle', () => {
+  const chunk = new Uint8Array(1_048_576);
+  assert.deepEqual(
+    workspaceRecordingAppendRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      recordingId: 'rec_20260506_000001',
+      sequence: 0,
+      chunk,
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      recordingId: 'rec_20260506_000001',
+      sequence: 0,
+      chunk,
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingAppendRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      recordingId: 'rec_20260506_000001',
+      sequence: 0,
+      chunk: new Uint8Array(1_048_577),
+    })
+  );
 });
 
 test('chooseDirectory has no request payload', () => {
@@ -24,7 +134,7 @@ test('chooseDirectory result does not expose raw root path or early judgments', 
   const selected = workspaceChooseDirectoryResultSchema.parse({
     status: 'selected',
     selectionToken: 'selection-token-1',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
     rootPath: '/Users/example/Voice Notes',
     conflict: true,
     permission: 'granted',
@@ -33,7 +143,7 @@ test('chooseDirectory result does not expose raw root path or early judgments', 
   assert.deepEqual(selected, {
     status: 'selected',
     selectionToken: 'selection-token-1',
-    displayPath: '/Users/example/Voice Notes',
+    displayPath: 'Voice Notes',
   });
   assert.throws(() =>
     workspaceChooseDirectoryResultSchema.parse({
