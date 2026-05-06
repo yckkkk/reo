@@ -5,6 +5,7 @@
 ## 当前事实
 
 - 当前没有 IPC request flow。
+- 当前没有需要建模的 preload/IPC consumer。
 - 当前没有 auth/session lifecycle。
 - 当前没有 transaction boundary。
 - 当前没有 background queue。
@@ -15,6 +16,7 @@
 - 多步骤行为先建模，再实现。
 - Command/event 名称必须具体、贴近 domain。
 - 在没有真实 queue/stream 需求前，优先 request/response。
+- 在没有真实 renderer-to-main 特权需求前，不创建 preload/IPC flow。
 - 每个 lifecycle transition 都必须有 owner。
 - failure、cancellation、retry、recovery 行为必须明确。
 

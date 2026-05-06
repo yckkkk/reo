@@ -4,7 +4,7 @@
 
 - [x] Task 01：Initiative scope、成功标准、非目标、10 天节奏、每个 slice 的验收门槛。
 - [x] Task 02：Quality/Test 完整化，Vitest gate、renderer/component test 边界、verify 命令分层。
-- [ ] Task 03：Electron runtime readiness，preload/IPC 真实 consumer 判断，禁止 generic bridge。
+- [x] Task 03：Electron runtime readiness，preload/IPC 真实 consumer 判断，禁止 generic bridge。
 - [ ] Task 04：Data foundation，Drizzle、`better-sqlite3`、migration、schema ownership。
 - [ ] Task 05：Auth foundation，Better Auth Electron、session lifecycle、secure persistence。
 - [ ] Task 06：Data fetching/state/forms foundation，TanStack Query、Zustand、React Hook Form、Zod 的实际归属。

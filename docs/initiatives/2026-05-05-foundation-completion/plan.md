@@ -105,12 +105,12 @@ Run required checks, archive planning spec, run independent `$review` style suba
 
 **Expected slice spec:** `docs/specs/YYYY-MM-DD-HHMM-electron-runtime-readiness/`.
 
-- [ ] Inventory any real renderer need for main-process privilege.
-- [ ] Reject generic bridge, generic command bus and `window.api` dumping ground.
-- [ ] If a real capability exists, TDD the narrow contract and error behavior before implementation.
-- [ ] Every IPC channel must define owner, contract, Zod validation, `senderFrame` check, timeout/cancel, and error shape.
-- [ ] If no real capability exists, produce a no-op readiness decision and keep preload/IPC absent.
-- [ ] Run `npm run verify:quick`, `npm run build`, `git diff --check` and any runtime evidence required by `docs/current/electron.md`.
+- [x] Inventory any real renderer need for main-process privilege.
+- [x] Reject generic bridge, generic command bus and `window.api` dumping ground.
+- [x] No real capability exists; TDD for a new IPC contract is not applicable in this slice.
+- [x] No IPC channel exists; channel contract requirements remain future gates.
+- [x] If no real capability exists, produce a no-op readiness decision and keep preload/IPC absent.
+- [x] Run `npm run verify:quick`, `npm run build`, `git diff --check` and any runtime evidence required by `docs/current/electron.md`.
 
 **Install allowed:** Zod only if the same slice implements a real runtime boundary that needs validation.
 

@@ -40,6 +40,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 优先依据 Electron 官方 process model、security、context isolation、IPC、sandbox、protocol 文档。
 - Renderer 永远按 Web app 写，不直接 import/use `electron`、`node:*`、`fs`、`path`、`child_process` 或需要 Node/OS 权限的 SDK。
 - Preload 不是默认必需。只有 renderer 需要调用主进程特权能力时，才允许通过明确设计新增 preload。
+- 当前没有真实 renderer 特权能力 consumer，因此不新增 preload 或 IPC。
 - 新增 preload 时，只能用 `contextBridge` 暴露窄 API。
 - 禁止暴露 `ipcRenderer`、`electron`、`fs`、通用 `send(channel, ...args)` 或通用 command bus。
 - IPC 必须是每个能力一个显式 channel/handler。
