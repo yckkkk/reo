@@ -576,10 +576,10 @@ export function RecordingOverlay({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby="recording-description">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit recording' : 'Recording'}</DialogTitle>
-          <DialogDescription id="recording-description">
+          <DialogDescription>
             Record local audio, then edit the local transcript and reflections draft.
           </DialogDescription>
         </DialogHeader>

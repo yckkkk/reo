@@ -38,6 +38,8 @@
 - 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 bottom-sheet/mobile 和 centered desktop layout，`WorkspaceEntryDialog` 组合 `DialogClose` 与 lucide close control；Textarea 使用 0 radius input shape。
 - 当前 Button source 的 filled pill primary 使用 Obsidian；Signal Blue 只用于 Button `accentCircle` variant 的小型圆形 control，例如 Home `+`；naked icon-only controls 使用 Button `ghostIcon` variant。
 - 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
+- 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
+- 当前深色主题由 `src/renderer/src/theme.css` 的 Reo token 覆盖实现：背景避免纯黑，面板使用抬升暖中性色，文字、弱文字、描边、阴影、scrim、Signal Blue、Ember 和 Voice Spectrum 都有暗色 token。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
@@ -92,6 +94,7 @@
 - Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，open submit 只发送 `selectionToken`。Create initialize 失败后保留 title/description，但清除已消费的 folder token 和 display name，要求用户重新选择 folder。
 - 当前 App shell 已实现底层可拖拽 sidebar 和上层悬浮内容 panel；sidebar 默认 240px、最小 240px、最大 520px，resize separator 有 8px 真实命中区和 hover affordance；panel 顶/右/底贴合窗口，展开态用 transform 移出 sidebar 宽度并只保留左侧 12px radius，covered 态用 transform 覆盖 sidebar、左缘归零、宽度 100% 且 radius 归零。
 - 当前 App shell 的 hide/show sidebar icon-only control 位于左上窗口控制区旁边，不创建 rail sidebar。
+- 当前 App shell 的浅色/深色主题切换是 sidebar 左下角工具按钮，使用 lucide Moon/Sun icon-only control 和 Tooltip accessible name；它不创建 settings 页面、系统主题跟随或持久化。
 - 当前 App shell navigation 在 starter shell 只显示 Home；loaded shell 显示 Home 和 New memory；Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
 - 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上。
 - 当前 Workspace home 是 loaded workspace 的 Home surface：主标题是 `All memories`，workspace title 作为上方标签；`Search memories` 只过滤当前 snapshot 中已加载的 memory summary；内容按 `createdAt` 月份倒序分组，同月内 memory 倒序；memory card 只展示 title、创建日期、recording count、duration、Transcript/Reflections presence。
@@ -141,11 +144,14 @@
 - Reo 设计系统覆盖不到的新 UI 状态、尺寸、层级、motion 或交互形态，必须先补充为可复用 token、primitive variant 或 usage rule，再落到业务组件。
 - 设计系统补充必须同时满足行业通用 UI 规范、Practical UI 指南、可访问性要求和本次参考图结构；不得为了单个页面写一次性视觉例外。
 - 不得为单个 screen 创建一次性 palette。
+- 深色模式必须通过 Reo token 覆盖实现；不得在业务组件里散落页面级暗色 class，也不得用简单反色替代信息层级。
+- 深色主题的 base、raised surface、overlay surface、scrim、text strong、text weak、stroke、focus、shadow 和 accent token 必须能覆盖 Radix portal 与当前业务 surface。
 - 避免不服务产品 workflow 的装饰性 UI。
 
 ## 设计系统规则
 
 - 页面底色使用 Eggshell，主要文字使用 Obsidian，边界使用 Chalk，辅助文字使用 Gravel 或 Slate。
+- 浅色主题是默认主题；深色主题使用同名 token 的暗色值，而不是新增第二套业务 class 名称。
 - Signal Blue 和 Ember 只用于小型圆点、avatar、状态指示或小型圆形 accent control，不用于正文、页面背景或 pill button 填充。
 - 32px 及以上标题使用 Waldenburg 300、负 tracking 和紧凑 line-height。
 - 正文和通用 UI 文案使用 Inter；产品族标签使用 WaldenburgFH 700。

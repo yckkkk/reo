@@ -1,10 +1,11 @@
-import { Home, Menu, Mic2, PanelLeftClose } from 'lucide-react';
+import { Home, Menu, Mic2, Moon, PanelLeftClose, Sun } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export type AppShellState = 'expanded' | 'covered';
+export type ThemeMode = 'light' | 'dark';
 
 export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
@@ -15,7 +16,9 @@ const PANEL_MOTION_CLASS =
 
 type AppShellProps = {
   readonly children: React.ReactNode;
-  readonly onNewMemory?: () => void;
+  readonly onNewMemory?: (() => void) | undefined;
+  readonly onToggleTheme: () => void;
+  readonly themeMode: ThemeMode;
 };
 
 type DragState = {
@@ -28,7 +31,7 @@ export function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 }
 
-export function AppShell({ children, onNewMemory }: AppShellProps) {
+export function AppShell({ children, onNewMemory, onToggleTheme, themeMode }: AppShellProps) {
   const [sidebarState, setSidebarState] = React.useState<AppShellState>('expanded');
   const [sidebarWidth, setSidebarWidth] = React.useState(MIN_SIDEBAR_WIDTH);
   const [dragState, setDragState] = React.useState<DragState | null>(null);
@@ -78,10 +81,15 @@ export function AppShell({ children, onNewMemory }: AppShellProps) {
   const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? 'Hide sidebar' : 'Show sidebar';
+  const ThemeToggleIcon = themeMode === 'dark' ? Sun : Moon;
+  const themeToggleLabel = themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
 
   return (
     <TooltipProvider>
-      <div className="relative min-h-screen overflow-hidden bg-eggshell text-obsidian">
+      <div
+        data-theme={themeMode}
+        className="relative min-h-screen overflow-hidden bg-eggshell text-obsidian"
+      >
         <div
           role="group"
           aria-label="Window controls"
@@ -89,7 +97,7 @@ export function AppShell({ children, onNewMemory }: AppShellProps) {
           style={{ zIndex: 3 }}
         >
           <Tooltip>
-            <Button asChild variant="ghostIcon" size="icon" className="text-cinder">
+            <Button asChild variant="ghostIcon" size="icon">
               <TooltipTrigger
                 type="button"
                 aria-label={sidebarToggleLabel}
@@ -139,6 +147,17 @@ export function AppShell({ children, onNewMemory }: AppShellProps) {
               </Button>
             ) : null}
           </nav>
+
+          <div className="mt-auto flex items-center">
+            <Tooltip>
+              <Button asChild variant="ghostIcon" size="icon">
+                <TooltipTrigger type="button" aria-label={themeToggleLabel} onClick={onToggleTheme}>
+                  <ThemeToggleIcon className="size-16" aria-hidden="true" />
+                </TooltipTrigger>
+              </Button>
+              <TooltipContent side="right">{themeToggleLabel}</TooltipContent>
+            </Tooltip>
+          </div>
 
           <Separator
             aria-label="Resize sidebar"

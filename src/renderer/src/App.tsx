@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { AppShell } from './app-shell/AppShell';
+import { useEffect, useState } from 'react';
+import { AppShell, type ThemeMode } from './app-shell/AppShell';
 import { RecordingOverlay } from './workspace/RecordingOverlay';
 import { WorkspaceEntryDialog } from './workspace/WorkspaceEntryDialog';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
@@ -45,6 +45,21 @@ export function App() {
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
   const [workspaceEntryOpen, setWorkspaceEntryOpen] = useState(false);
   const [recordingOpen, setRecordingOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+
+  useEffect(() => {
+    return () => {
+      document.documentElement.removeAttribute('data-theme');
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset['theme'] = themeMode;
+  }, [themeMode]);
+
+  function toggleTheme() {
+    setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'));
+  }
 
   function handleWorkspaceReady(nextWorkspaceSession: WorkspaceSession) {
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
@@ -54,7 +69,7 @@ export function App() {
   if (!workspaceSession) {
     return (
       <>
-        <AppShell>
+        <AppShell themeMode={themeMode} onToggleTheme={toggleTheme}>
           <WorkspaceStarterHome onCreateWorkspace={() => setWorkspaceEntryOpen(true)} />
         </AppShell>
         <WorkspaceEntryDialog
@@ -79,7 +94,11 @@ export function App() {
 
   return (
     <>
-      <AppShell onNewMemory={() => setRecordingOpen(true)}>
+      <AppShell
+        themeMode={themeMode}
+        onToggleTheme={toggleTheme}
+        onNewMemory={() => setRecordingOpen(true)}
+      >
         <WorkspaceHome
           workspaceSession={workspaceSession}
           onStartRecording={() => setRecordingOpen(true)}

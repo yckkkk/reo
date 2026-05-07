@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light;
+
   /* Colors */
   --color-eggshell: #fdfcfc;
   --color-powder: #f5f3f1;
@@ -12,6 +14,7 @@
   --color-ember: #ff4704;
   --color-voice-spectrum: #3d75d8;
   --color-card-white: #ffffff;
+  --color-scrim: #0f0e0d;
   --gradient-voice-spectrum: conic-gradient(
     from 180deg,
     rgb(61, 117, 216) 11.5931deg,
@@ -141,4 +144,48 @@
   --surface-powder-surface: #f5f3f1;
   --surface-card-white: #ffffff;
   --surface-obsidian: #000000;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --color-eggshell: #151412;
+  --color-powder: #1d1b18;
+  --color-chalk: #393631;
+  --color-fog: #6f675f;
+  --color-gravel: #b5ada2;
+  --color-slate: #8f877d;
+  --color-cinder: #d8d1c8;
+  --color-obsidian: #f7f2ea;
+  --color-signal-blue: #7f9cff;
+  --color-ember: #ff8a63;
+  --color-voice-spectrum: #8db0ff;
+  --color-card-white: #24221f;
+  --color-scrim: #0f0e0d;
+  --gradient-voice-spectrum: conic-gradient(
+    from 180deg,
+    #8db0ff 0deg,
+    #77d6ef 54deg,
+    #597cff 120deg,
+    #d9f5ff 190deg,
+    #6ee1f2 258deg,
+    #4f7dff 330deg,
+    #8db0ff 360deg
+  );
+  --shadow-subtle: rgba(255, 255, 255, 0.1) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-2:
+    rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.32) 0px 1px 2px 0px,
+    rgba(0, 0, 0, 0.28) 0px 2px 4px 0px;
+  --shadow-subtle-3: rgba(255, 255, 255, 0.12) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-4: rgba(255, 255, 255, 0.18) 0px 0px 1px 0px, rgba(0, 0, 0, 0.38) 0px 4px 4px 0px;
+  --shadow-subtle-5: rgba(255, 255, 255, 0.12) 0px 0px 0px 1px inset;
+  --shadow-subtle-6: rgba(255, 255, 255, 0.14) 0px 0px 0px 0.5px inset;
+  --shadow-subtle-7: rgba(255, 255, 255, 0.16) 0px 0px 1px 0px, rgba(0, 0, 0, 0.28) 0px 2px 4px 0px;
+  --shadow-subtle-8: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px inset;
+  --shadow-subtle-9:
+    rgba(255, 255, 255, 0.16) 0px 0px 1px 0px, rgba(0, 0, 0, 0.26) 0px 1px 1px 0px,
+    rgba(0, 0, 0, 0.3) 0px 2px 4px 0px;
+  --surface-page-ground: #151412;
+  --surface-powder-surface: #1d1b18;
+  --surface-card-white: #24221f;
+  --surface-obsidian: #f7f2ea;
 }

@@ -14,7 +14,7 @@ export function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn('fixed inset-0 z-50 bg-obsidian/20', className)}
+      className={cn('fixed inset-0 z-50 bg-scrim/20', className)}
       {...props}
     />
   );

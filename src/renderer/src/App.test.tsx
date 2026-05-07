@@ -84,6 +84,12 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
+    await user.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
+    expect(
+      screen.getByRole('main', { name: 'Workspace content' }).closest('[data-theme]')
+    ).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
     await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
     await user.type(screen.getByLabelText('Description'), 'Private notes');
@@ -92,11 +98,33 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
     expect(await screen.findByRole('heading', { name: 'All memories' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('main', { name: 'Workspace content' }).closest('[data-theme]')
+    ).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByText('Daily memory')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Workspace content' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Search memories' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
+  });
+
+  it('opens workspace creation with a named and described dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    const dialog = screen.getByRole('dialog', {
+      description: /keeps user content in this folder/i,
+      name: 'Create workspace',
+    });
+    expect(dialog).toHaveAttribute('aria-labelledby');
+    expect(dialog).toHaveAttribute('aria-describedby');
   });
 
   it('opens an existing workspace from the entry dialog', async () => {

@@ -11,11 +11,12 @@
 
 ## 基调
 
-- Theme：light。
+- Theme：light 为默认主题，dark 通过同名 token 覆盖实现。
 - 页面基底使用 Eggshell，保持接近白色但带轻微暖调。
 - 主要文字使用 Obsidian，边界使用 Chalk，辅助文字使用 Gravel 或 Slate。
 - 高饱和颜色只作为小型 avatar、圆点或状态指示使用，不作为正文、按钮或大面积背景色。
 - 视觉层级主要由字号、字重、间距、hairline shadow 和低饱和 surface 建立。
+- Dark theme 不是简单反色：背景避免纯黑，面板使用逐级抬升的暖中性色，scrim 不复用文字 token。
 
 ## Tokens — Colors
 
@@ -34,6 +35,29 @@
 | Voice Spectrum          | `#3d75d8`             | `--color-voice-spectrum`    | Reo voice spectrum mark 的基础色                                                             |
 | Voice Spectrum Gradient | `conic-gradient(...)` | `--gradient-voice-spectrum` | Reo voice spectrum mark gradient；完整值位于 `variables.css` 和 `src/renderer/src/theme.css` |
 | Card White              | `#ffffff`             | `--color-card-white`        | 需要从 Eggshell 基底中分离出来的 card 和 contained form surface                              |
+| Scrim                   | `#0f0e0d`             | `--color-scrim`             | Dialog、drawer 和 overlay 遮罩基色；不得复用 text token                                      |
+
+## Tokens — 深色主题颜色
+
+深色主题使用与浅色主题相同的 token 名称，由 `data-theme="dark"` 覆盖值。
+
+| 名称           | 深色值    | Token                    | 用途                             |
+| -------------- | --------- | ------------------------ | -------------------------------- |
+| Eggshell       | `#151412` | `--color-eggshell`       | 深色页面背景和基础 surface       |
+| Powder         | `#1d1b18` | `--color-powder`         | 深色次级抬升 surface             |
+| Chalk          | `#393631` | `--color-chalk`          | 深色边界和分隔线                 |
+| Fog            | `#6f675f` | `--color-fog`            | 深色 disabled 和 placeholder     |
+| Gravel         | `#b5ada2` | `--color-gravel`         | 深色次级正文                     |
+| Slate          | `#8f877d` | `--color-slate`          | 深色三级文字和 icon stroke       |
+| Cinder         | `#d8d1c8` | `--color-cinder`         | 深色中强调标题和导航文字         |
+| Obsidian       | `#f7f2ea` | `--color-obsidian`       | 深色主文字和 filled control 文字 |
+| Signal Blue    | `#7f9cff` | `--color-signal-blue`    | 深色强调圆形 control 和焦点色    |
+| Ember          | `#ff8a63` | `--color-ember`          | 深色次级状态强调色               |
+| Voice Spectrum | `#8db0ff` | `--color-voice-spectrum` | 深色 voice spectrum 基础色       |
+| Card White     | `#24221f` | `--color-card-white`     | 深色 contained card 和表单面板   |
+| Scrim          | `#0f0e0d` | `--color-scrim`          | 深色 overlay 遮罩基色            |
+
+深色主题同步覆盖 `--gradient-voice-spectrum`，保持 voice spectrum 在深色 surface 上仍有可读的亮蓝/青色层次。
 
 ## Tokens — Typography
 
@@ -249,6 +273,7 @@ Base unit：4px。
 - Use 0px radius for input fields.
 - Keep text, surface, border, and button colors near monochrome.
 - Use Signal Blue and Ember only for small avatar dots or status indicators.
+- Scrim 只用于 overlay 遮罩；不得把 Obsidian 当遮罩色，因为 Obsidian 在深色模式中是文字色。
 - Use Geist Mono only for code, technical annotation, and machine-style markers.
 - Use hairline elevation only; avoid heavy shadows.
 - Use Eggshell for page-level surface; use Card White only for framed card and contained form surfaces.

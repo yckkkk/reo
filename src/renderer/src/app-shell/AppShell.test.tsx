@@ -1,13 +1,36 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppShell } from './AppShell';
+import { AppShell, type ThemeMode } from './AppShell';
 
 describe('AppShell', () => {
+  function TestAppShell({
+    children,
+    onNewMemory,
+  }: {
+    readonly children: ReactNode;
+    readonly onNewMemory?: () => void;
+  }) {
+    const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+
+    return (
+      <AppShell
+        themeMode={themeMode}
+        onToggleTheme={() =>
+          setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'))
+        }
+        onNewMemory={onNewMemory}
+      >
+        {children}
+      </AppShell>
+    );
+  }
+
   it('renders a layered workspace sidebar without unimplemented media routes', () => {
     render(
-      <AppShell onNewMemory={vi.fn()}>
+      <TestAppShell onNewMemory={vi.fn()}>
         <div>Home content</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
@@ -29,20 +52,36 @@ describe('AppShell', () => {
 
   it('can render starter shell navigation before a workspace exists', () => {
     render(
-      <AppShell>
+      <TestAppShell>
         <div>Starter home</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     expect(screen.getByText('Home')).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('button', { name: 'New memory' })).not.toBeInTheDocument();
   });
 
+  it('toggles the app theme from the sidebar tool area', () => {
+    render(
+      <TestAppShell>
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    const shell = screen.getByRole('main', { name: 'Workspace content' }).closest('[data-theme]');
+    expect(shell).toHaveAttribute('data-theme', 'light');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
+
+    expect(shell).toHaveAttribute('data-theme', 'dark');
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
+  });
+
   it('covers the sidebar with a transform-driven floating panel when collapsed', () => {
     render(
-      <AppShell onNewMemory={vi.fn()}>
+      <TestAppShell onNewMemory={vi.fn()}>
         <div>Home content</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide sidebar' }));
@@ -59,9 +98,9 @@ describe('AppShell', () => {
 
   it('clamps direct sidebar resizing between 240 and 520 pixels', () => {
     render(
-      <AppShell onNewMemory={vi.fn()}>
+      <TestAppShell onNewMemory={vi.fn()}>
         <div>Home content</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     const handle = screen.getByRole('separator', { name: 'Resize sidebar' });
@@ -99,9 +138,9 @@ describe('AppShell', () => {
 
   it('supports keyboard sidebar resizing through the separator', () => {
     render(
-      <AppShell onNewMemory={vi.fn()}>
+      <TestAppShell onNewMemory={vi.fn()}>
         <div>Home content</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     const handle = screen.getByRole('separator', { name: 'Resize sidebar' });
@@ -122,9 +161,9 @@ describe('AppShell', () => {
 
   it('stops resizing after pointer cancellation', () => {
     render(
-      <AppShell onNewMemory={vi.fn()}>
+      <TestAppShell onNewMemory={vi.fn()}>
         <div>Home content</div>
-      </AppShell>
+      </TestAppShell>
     );
 
     const handle = screen.getByRole('separator', { name: 'Resize sidebar' });

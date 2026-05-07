@@ -57,12 +57,9 @@ export function WorkspaceEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby="workspace-entry-description">
-        <DialogTitle id="workspace-entry-title">Create workspace</DialogTitle>
-        <DialogDescription
-          id="workspace-entry-description"
-          className="max-w-[560px] text-body-lg leading-body-lg"
-        >
+      <DialogContent>
+        <DialogTitle>Create workspace</DialogTitle>
+        <DialogDescription className="max-w-[560px] text-body-lg leading-body-lg">
           Start with a local memory workspace. Reo keeps user content in this folder.
         </DialogDescription>
         <Button

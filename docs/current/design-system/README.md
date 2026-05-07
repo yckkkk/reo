@@ -15,6 +15,7 @@
 - Renderer 样式入口是 `../../../src/renderer/src/index.css`。
 - Runtime theme 使用 `@theme static` 发出完整 token 集合。
 - Runtime CSS 只使用合法 CSS 值；Cinder 当前值是 `#57534f`。
+- Runtime theme 通过 `data-theme="dark"` 覆盖同名 token；不得另建业务级暗色 class palette。
 
 ## 使用规则
 
