@@ -14,7 +14,8 @@
 - shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
 - Vaul 已作为 shadcn Drawer 的 bottom drawer mechanics dependency 引入。
 - ElevenLabs UI source-derived `Waveform` 与 `VoiceButton` 已作为 Reo audio UI primitive 引入，并已裁剪掉 agent runtime、network/API key、demo feedback 和未实现文案。
-- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
+- 当前 `AudioPlayer` 是 Reo local playback primitive：已评估 ElevenLabs Audio Player source，当前采纳 HTML5 audio underlay、Reo play/pause control、Radix Slider playback position、time labels、playback surface 信息层级和 Reo token；完整 provider、playlist、speed 和 global progress 等到出现真实 consumer 时再引入。
+- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-slider`。
 - 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace entry dialog/form、workspace home、memory detail、recording overlay 和 recording drawer control shell。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
@@ -45,6 +46,7 @@
 - 当前 Button source 的 filled pill primary 使用 Obsidian；Signal Blue 只用于 Button `accentCircle` variant 的小型圆形 control，例如 Home `+`；naked icon-only controls 使用 Button `ghostIcon` variant。
 - 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
 - 当前 Waveform/VoiceButton source 来自 ElevenLabs UI registry 的逐组件评估；Reo 只保留 canvas waveform bar renderer、recording/error/processing control visual 和 Button semantics，不在 renderer component 内申请 microphone stream、调用网络、创建 agent runtime 或显示 API key/model 文案。
+- ElevenLabs Transcript Viewer 已评估但当前不引入为 shared primitive；它需要 alignment/STT 数据和 scrubber runtime，当前 slice 只有用户本地 draft，因此 transcript preview 保持在 `TranscriptReflectionsEditor` feature-local 边界内，并使用有界 live preview。
 - 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
 - 当前深色主题由 `src/renderer/src/theme.css` 的 Reo token 覆盖实现：背景避免纯黑，面板使用抬升暖中性色，文字、弱文字、描边、阴影、scrim、Signal Blue、Ember 和 Voice Spectrum 都有暗色 token。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
@@ -112,9 +114,9 @@
 - 当前 Memory detail 的 `Record memory` 打开现有 recording overlay；录音追加到当前 memory 的目标语义尚未实现，因此页面不声称 append-to-memory。
 - 当前 Memory detail 不渲染 More、Rename、Delete、Show in folder、Export、Films、photo、video、file、AI、entity、contact 或 global search command。
 - 当前 Memory detail 使用 `MemoryDetailPage` 和 file-local `MemoryDetailSection`；它们是 feature-local components，不是 design-system primitive。
-- 当前 `Record memory` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 仍持有当前 durable recording transaction，并复用 feature-local `RecordAudioDrawer` shell、`RecordingWaveform` 和 `RecordingControls`。Drawer 使用固定 header/footer 和中间滚动区，保证编辑态长内容不挤出 close command；非忙碌关闭后再次打开回到 ready recording state。
+- 当前 `Record memory` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 仍持有当前 durable recording transaction，并复用 feature-local `RecordAudioDrawer` shell、`RecordingWaveform`、`RecordingControls`、`RecordingPlayback` 和 `TranscriptReflectionsEditor`。Drawer 使用固定 header/footer 和中间滚动区，保证编辑态长内容不挤出 close command；非忙碌关闭后再次打开回到 ready recording state。
 - Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime、网络 STT 或本地 mock transcript。
-- 当前 recording overlay 停止录音后展示空白 transcript/reflections draft，内容只来自用户编辑或未来明确引入的真实转写 foundation。
+- 当前 recording overlay 停止录音后展示空白 transcript/reflections draft、Transcript preview 和 `Load recording` 本地加载 command；加载成功后隐藏加载 command 并展示本地 playback surface。内容只来自用户编辑或未来明确引入的真实转写 foundation。
 - 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC；单个 chunk read 失败后不得继续调度后续 chunk IPC。
 
 已接受但尚未全部实现的 first-slice 交付约束：

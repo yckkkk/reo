@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   appendRecordingAudioChunk,
   beginMicrophoneIntent,
@@ -21,8 +19,10 @@ import {
   type RecordingMediaController,
 } from './mediaRecorderAdapter';
 import { RecordAudioDrawer } from './recording/RecordAudioDrawer';
+import { RecordingPlayback } from './recording/RecordingPlayback';
 import { RecordingControls } from './recording/RecordingControls';
 import { RecordingWaveform } from './recording/RecordingWaveform';
+import { TranscriptReflectionsEditor } from './recording/TranscriptReflectionsEditor';
 import {
   createInitialRecordingState,
   isRecordingCloseBlocked,
@@ -494,7 +494,7 @@ export function RecordingOverlay({
     onRecordingFinalized(finalized.value);
   }
 
-  async function handlePlay() {
+  const handleLoadPlayback = useCallback(async () => {
     if (state.status !== 'editing') {
       return;
     }
@@ -502,16 +502,16 @@ export function RecordingOverlay({
     const playbackSession = playbackSessionRef.current + 1;
     playbackSessionRef.current = playbackSession;
     setError(null);
-    if (playbackUrl) {
-      URL.revokeObjectURL(playbackUrl);
-      setPlaybackUrl(null);
-    }
+    setPlaybackUrl(null);
 
     const manifest = await readRecordingAudioManifest({
       memoryId: state.memoryId,
       recordingId: state.recordingId,
       workspaceHandle: workspaceSession.workspaceHandle,
     });
+    if (playbackSessionRef.current !== playbackSession) {
+      return;
+    }
     if (!manifest.ok) {
       setError(manifest.error.message);
       return;
@@ -571,7 +571,7 @@ export function RecordingOverlay({
       return;
     }
     setPlaybackUrl(URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' })));
-  }
+  }, [state, workspaceSession.workspaceHandle]);
 
   function resetClosedDrawerState() {
     recordingSessionRef.current += 1;
@@ -638,30 +638,13 @@ export function RecordingOverlay({
         </div>
       ) : (
         <div className="flex flex-col gap-16">
-          <div className="flex flex-col gap-8">
-            <Label htmlFor="recording-transcript">Transcript</Label>
-            <Textarea
-              id="recording-transcript"
-              value={transcriptDraft}
-              onChange={(event) => setTranscriptDraft(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-8">
-            <Label htmlFor="recording-reflections">Reflections</Label>
-            <Textarea
-              id="recording-reflections"
-              value={reflectionsDraft}
-              onChange={(event) => setReflectionsDraft(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-12">
-            <Button type="button" variant="secondary" onClick={handlePlay}>
-              Play recording
-            </Button>
-            {playbackUrl ? (
-              <audio aria-label="Recording playback" controls src={playbackUrl} />
-            ) : null}
-          </div>
+          <TranscriptReflectionsEditor
+            reflections={reflectionsDraft}
+            transcript={transcriptDraft}
+            onReflectionsChange={setReflectionsDraft}
+            onTranscriptChange={setTranscriptDraft}
+          />
+          <RecordingPlayback playbackUrl={playbackUrl} onLoad={handleLoadPlayback} />
         </div>
       )}
     </RecordAudioDrawer>
