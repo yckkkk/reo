@@ -37,6 +37,7 @@ import {
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingIdRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
+  workspaceRecordingReadRequestSchema,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
   type WorkspaceErrorEnvelope,
@@ -1014,12 +1015,13 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
-    workspaceRecordingIdRequestSchema,
+    workspaceRecordingReadRequestSchema,
     'getRecordingDetail request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await getRecordingDetail({
           rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
           recordingId: request.recordingId,
           assertWorkspaceUsable: assertUsable,
         });
@@ -1028,12 +1030,13 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-    workspaceRecordingIdRequestSchema,
+    workspaceRecordingReadRequestSchema,
     'readRecordingAudioManifest request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await readRecordingAudioManifest({
           rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
           recordingId: request.recordingId,
           assertWorkspaceUsable: assertUsable,
         });
@@ -1048,6 +1051,7 @@ export function registerWorkspaceIpc({
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await readRecordingAudioChunk({
           rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
           recordingId: request.recordingId,
           offset: request.offset,
           length: request.length,
@@ -1068,6 +1072,7 @@ export function registerWorkspaceIpc({
         withUsableWorkspaceHandle(assertUsable, async () => {
           const result = await saveRecordingMarkdown({
             rootPath: handle.canonicalRoot,
+            memoryId: request.memoryId,
             recordingId: request.recordingId,
             fileName,
             markdown: request.markdown,

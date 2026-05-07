@@ -74,6 +74,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
 - Workspace IPC channels 覆盖 choose、initialize、open、close、memory detail、recording draft、audio manifest/chunk read、transcript/reflections save、microphone intent begin/clear。
 - `workspace:getMemoryDetail` request 只接受 `workspaceHandle` 和 `memoryId`；response 不返回 raw path，只返回 memory identity、title、created/updated time、full `recordingIds` identity list、总 `recordingCount`、`recordingsTruncated`、`hasTranscript`、`hasReflections` 和有界 recording summary preview。
+- `workspace:getRecordingDetail`、`workspace:readRecordingAudioManifest`、`workspace:readRecordingAudioChunk`、`workspace:saveTranscript` 和 `workspace:saveReflections` 只接受 finalized recording identity：`workspaceHandle`、`memoryId` 和 `recordingId`。Draft create/append/finalize/discard 仍使用 draft `recordingId` transaction identity。
 - `chooseDirectory` 只返回 `selectionToken` 和 `displayPath` 或 canceled 结果，不返回裸 `rootPath`，也不提前返回 conflict 或 permission 判断。
 - `displayPath` 只使用文件夹 basename，不等同真实绝对路径。
 - Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；过期 token 会删除，错误 sender 不烧掉 token，错误结果不得泄露真实路径。
@@ -85,7 +86,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - IPC sender validation 必须校验 main frame、trusted production origin `reo-app://renderer/index.html`、loopback dev origin、session/partition、channel allowlist 和 handle ownership。
 - Custom protocol 只服务 renderer build assets，不服务用户 workspace 文件；host 只允许 `renderer`，路径必须 containment 到 renderer output。
 - Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。
-- Audio playback 不允许一次性 IPC 返回完整 audio 文件；manifest/chunk 只读取 finalized recording truth，拒绝 draft-only recording；renderer 最多并发 4 个 1 MiB chunk read 后组装 Blob。
+- Audio playback 不允许一次性 IPC 返回完整 audio 文件；manifest/chunk 只读取 `memoryId + recordingId` 指向的 finalized recording truth，拒绝 draft-only recording；renderer 最多并发 4 个 1 MiB chunk read 后组装 Blob。
 - Renderer audio playback Blob URL 只在 active playback 期间存在，close/switch/unmount 必须 revoke；close 后完成的过期 chunk read 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
 - 当前 permission policy 使用 one-shot microphone intent：renderer 必须先 await `workspace:beginMicrophoneIntent` 成功，再调用 `navigator.mediaDevices.getUserMedia`；main 的 `media` permission check 永远不授予也不消费 intent；permission request handler 先按 sender id 消费一个未过期 intent，再要求 trusted main-frame renderer 和 audio-only request。
 - `workspace:beginMicrophoneIntent` 只接受 `workspaceHandle` 与 `drawerSessionId`，handler 使用 `event.sender.id` 作为 sender identity，不信任 renderer sender id；同一 sender 已有未过期 intent 时返回 `ERR_MIC_INTENT_ALREADY_ACTIVE`。

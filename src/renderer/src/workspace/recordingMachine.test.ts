@@ -20,6 +20,7 @@ describe('recording machine', () => {
     const finalizing = transitionRecordingState(resumed, { type: 'stop-requested' });
     const duplicateStop = transitionRecordingState(finalizing, { type: 'stop-requested' });
     const editing = transitionRecordingState(finalizing, {
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       title: 'Recording',
       type: 'finalized',
@@ -57,6 +58,7 @@ describe('recording machine', () => {
     ).toEqual(idle);
 
     const editing: RecordingState = {
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       status: 'editing',
       title: 'Recording',
@@ -79,6 +81,7 @@ describe('recording machine', () => {
     expect(isRecordingCloseBlocked({ recordingId: 'rec_1', status: 'finalizing' })).toBe(true);
     expect(
       isRecordingCloseBlocked({
+        memoryId: 'mem_1',
         recordingId: 'rec_1',
         status: 'editing',
         title: 'Recording',

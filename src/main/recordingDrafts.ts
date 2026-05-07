@@ -33,7 +33,6 @@ import {
   assertNoDuplicateRecordingDirectoryById,
   createMemoryForRecording,
   createMemoryForRecordingForTest,
-  findFinalizedRecordingById,
   lookupRecordingDirectoryById,
   memoryRecordingDirectory,
   readFinalizedRecordingSummary,
@@ -42,14 +41,29 @@ import {
   type FinalizeTransactionHooksForTest,
   type MemorySummary,
 } from './memoryFiles.js';
-import { recordingMetadataSchema, type RecordingMetadata } from './recordingMetadata.js';
+import {
+  recordingMetadataSchema,
+  type FinalizedRecordingMetadata,
+  type RecordingMetadata,
+} from './recordingMetadata.js';
 import { createSafeRecordingId, ensureWorkspaceDraftsDirectory } from './workspacePaths.js';
 import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
 
 const MAX_AUDIO_CHUNK_BYTES = 1_048_576;
+const MAX_RECORDING_METADATA_BYTES = 1_048_576;
 type MaybePromise<T> = T | Promise<T>;
 const readFileDescriptor = promisify(readFileCallback);
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
+type RecordingMarkdownSaveInput = {
+  readonly rootPath: string;
+  readonly recordingId: string;
+  readonly fileName: 'transcript.md' | 'reflections.md';
+  readonly markdown: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+};
+type FinalizedRecordingMarkdownSaveInput = RecordingMarkdownSaveInput & {
+  readonly memoryId: string;
+};
 
 function checkWorkspaceUsable(
   assertWorkspaceUsable?: AssertWorkspaceUsable
@@ -207,74 +221,59 @@ function resolveDraftRecordingDirectory(canonicalRoot: string, recordingId: stri
   return recordingDirectory;
 }
 
-async function resolveReadableRecordingDirectory(
+async function resolveDraftRecordingWriteDirectory(
   rootPath: string,
   recordingId: string
 ): Promise<string> {
-  const lookup = await lookupRecordingDirectoryById(rootPath, recordingId);
-  if (lookup.status === 'found') {
-    return lookup.directory;
-  }
-  if (lookup.status !== 'not-found') {
-    throw new Error('Recording durable truth is invalid');
-  }
-
   const draftDirectory = resolveDraftRecordingDirectory(rootPath, recordingId);
-  try {
-    const entry = await stat(draftDirectory);
-    if (entry.isDirectory()) {
-      return draftDirectory;
-    }
-  } catch {
-    // The caller returns the typed not-found/audio error.
+  const entry = await stat(draftDirectory);
+  if (!entry.isDirectory()) {
+    throw new Error('Recording draft is invalid');
   }
-
-  throw new Error('Recording not found');
+  return draftDirectory;
 }
 
 async function resolveFinalizedRecordingReadTarget(
   rootPath: string,
-  recordingId: string,
-  verifyDuplicateOwner: boolean
+  memoryId: string,
+  recordingId: string
 ): Promise<{
   readonly directory: string;
   readonly audioByteLength: number;
+  readonly metadata: FinalizedRecordingMetadata;
 }> {
-  const cacheKey = recordingKey(rootPath, recordingId);
+  const cacheKey = recordingKey(rootPath, `${memoryId}:${recordingId}`);
+  const directory = await memoryRecordingDirectory(rootPath, memoryId, recordingId);
   const cached = finalizedAudioTargets.get(cacheKey);
-  if (cached) {
-    const directory = await memoryRecordingDirectory(rootPath, cached.memoryId, recordingId);
-    if (verifyDuplicateOwner) {
-      await assertNoDuplicateRecordingDirectoryById(rootPath, cached.memoryId, recordingId);
-    }
-    const metadata = await readMetadataFromDirectory(directory);
-    if (
-      metadata.status !== 'finalized' ||
-      metadata.memoryId !== cached.memoryId ||
-      metadata.recordingId !== recordingId ||
-      metadata.durationMs === undefined ||
-      metadata.audioByteLength !== cached.audioByteLength
-    ) {
-      finalizedAudioTargets.delete(cacheKey);
-      throw new Error('Cached recording target is stale');
-    }
-    return { directory, audioByteLength: cached.audioByteLength };
+  await assertNoDuplicateRecordingDirectoryById(rootPath, memoryId, recordingId);
+  const summary = await readFinalizedRecordingSummary(rootPath, memoryId, recordingId);
+  const metadata = await readMetadataFromDirectory(directory);
+  if (
+    metadata.status !== 'finalized' ||
+    metadata.memoryId !== memoryId ||
+    metadata.recordingId !== recordingId ||
+    metadata.audioByteLength !== summary.audioByteLength ||
+    (cached && summary.audioByteLength !== cached.audioByteLength)
+  ) {
+    finalizedAudioTargets.delete(cacheKey);
+    throw new Error('Recording durable truth is invalid');
   }
-  const finalized = await findFinalizedRecordingById(rootPath, recordingId);
-  const memoryId = path.basename(path.dirname(path.dirname(finalized.directory)));
-  finalizedAudioTargets.set(cacheKey, {
-    memoryId,
-    audioByteLength: finalized.recording.audioByteLength,
-  });
-  if (finalizedAudioTargets.size > MAX_FINALIZED_AUDIO_TARGETS) {
-    const oldestKey = finalizedAudioTargets.keys().next().value;
-    if (oldestKey) {
-      finalizedAudioTargets.delete(oldestKey);
+  if (!cached) {
+    finalizedAudioTargets.set(cacheKey, {
+      memoryId,
+      audioByteLength: summary.audioByteLength,
+    });
+    if (finalizedAudioTargets.size > MAX_FINALIZED_AUDIO_TARGETS) {
+      const oldestKey = finalizedAudioTargets.keys().next().value;
+      if (oldestKey) {
+        finalizedAudioTargets.delete(oldestKey);
+      }
     }
   }
   return {
-    directory: finalized.directory,
-    audioByteLength: finalized.recording.audioByteLength,
+    directory,
+    audioByteLength: summary.audioByteLength,
+    metadata,
   };
 }
 
@@ -301,6 +300,9 @@ async function readMetadataFromDirectory(recordingDirectory: string): Promise<Re
     const metadata = fstatSync(fileFd);
     if (!metadata.isFile()) {
       throw new Error('Recording metadata path is unsafe');
+    }
+    if (metadata.size > MAX_RECORDING_METADATA_BYTES) {
+      throw new Error('Recording metadata is too large');
     }
     const content = (await readFileDescriptor(fileFd, 'utf8')) as string;
     await assertSameDirectory(recordingDirectory, directoryIdentity);
@@ -966,10 +968,12 @@ export async function discardRecordingDraft({
 
 export async function readRecordingAudioManifest({
   rootPath,
+  memoryId,
   recordingId,
   assertWorkspaceUsable,
 }: {
   readonly rootPath: string;
+  readonly memoryId: string;
   readonly recordingId: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
@@ -988,7 +992,7 @@ export async function readRecordingAudioManifest({
     return usable;
   }
   try {
-    const finalized = await resolveFinalizedRecordingReadTarget(rootPath, recordingId, true);
+    const finalized = await resolveFinalizedRecordingReadTarget(rootPath, memoryId, recordingId);
     const audio = await readAudioFileMetadata(
       finalized.directory,
       finalized.audioByteLength,
@@ -1012,12 +1016,14 @@ export async function readRecordingAudioManifest({
 
 export async function readRecordingAudioChunk({
   rootPath,
+  memoryId,
   recordingId,
   offset,
   length,
   assertWorkspaceUsable,
 }: {
   readonly rootPath: string;
+  readonly memoryId: string;
   readonly recordingId: string;
   readonly offset: number;
   readonly length: number;
@@ -1032,7 +1038,7 @@ export async function readRecordingAudioChunk({
   }
 
   try {
-    const finalized = await resolveFinalizedRecordingReadTarget(rootPath, recordingId, true);
+    const finalized = await resolveFinalizedRecordingReadTarget(rootPath, memoryId, recordingId);
     const chunk = await readAudioFileChunk(
       finalized.directory,
       offset,
@@ -1057,10 +1063,12 @@ export async function readRecordingAudioChunk({
 
 export async function getRecordingDetail({
   rootPath,
+  memoryId,
   recordingId,
   assertWorkspaceUsable,
 }: {
   readonly rootPath: string;
+  readonly memoryId: string;
   readonly recordingId: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<{ readonly ok: true; readonly recording: RecordingMetadata } | WorkspaceErrorEnvelope> {
@@ -1069,10 +1077,10 @@ export async function getRecordingDetail({
     return usable;
   }
   try {
-    const recordingDirectory = await resolveReadableRecordingDirectory(rootPath, recordingId);
+    const finalized = await resolveFinalizedRecordingReadTarget(rootPath, memoryId, recordingId);
     return {
       ok: true,
-      recording: await readMetadataFromDirectory(recordingDirectory),
+      recording: finalized.metadata,
     };
   } catch {
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording not found');
@@ -1105,43 +1113,79 @@ async function writeMarkdownInRecordingDirectory({
   });
 }
 
-export async function saveRecordingMarkdown(input: {
-  readonly rootPath: string;
-  readonly recordingId: string;
-  readonly fileName: 'transcript.md' | 'reflections.md';
-  readonly markdown: string;
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
-}): Promise<{ readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope> {
+export async function saveRecordingDraftMarkdown(
+  input: RecordingMarkdownSaveInput
+): Promise<{ readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope> {
   return withMarkdownSaveQueue(
-    recordingKey(input.rootPath, `${input.recordingId}:${input.fileName}`),
+    recordingKey(input.rootPath, `draft:${input.recordingId}:${input.fileName}`),
+    () => saveRecordingDraftMarkdownNow(input)
+  );
+}
+
+async function saveRecordingDraftMarkdownNow({
+  rootPath,
+  recordingId,
+  fileName,
+  markdown,
+  assertWorkspaceUsable,
+}: RecordingMarkdownSaveInput): Promise<
+  { readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+  try {
+    const recordingDirectory = await resolveDraftRecordingWriteDirectory(rootPath, recordingId);
+    await writeMarkdownInRecordingDirectory({
+      recordingDirectory,
+      fileName,
+      markdown,
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+    });
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Recording markdown could not be saved',
+      'previous-file-preserved'
+    );
+  }
+  return { ok: true, saved: true };
+}
+
+export async function saveRecordingMarkdown(
+  input: FinalizedRecordingMarkdownSaveInput
+): Promise<{ readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope> {
+  return withMarkdownSaveQueue(
+    recordingKey(input.rootPath, `${input.memoryId}:${input.recordingId}:${input.fileName}`),
     () => saveRecordingMarkdownNow(input)
   );
 }
 
 async function saveRecordingMarkdownNow({
   rootPath,
+  memoryId,
   recordingId,
   fileName,
   markdown,
   assertWorkspaceUsable,
-}: {
-  readonly rootPath: string;
-  readonly recordingId: string;
-  readonly fileName: 'transcript.md' | 'reflections.md';
-  readonly markdown: string;
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
-}): Promise<{ readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope> {
+}: FinalizedRecordingMarkdownSaveInput): Promise<
+  { readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope
+> {
   const usable = checkWorkspaceUsable(assertWorkspaceUsable);
   if (usable) {
     return usable;
   }
-  let memoryId: string | undefined;
   try {
-    const recordingDirectory = await resolveReadableRecordingDirectory(rootPath, recordingId);
-    const recording = await readMetadataFromDirectory(recordingDirectory);
-    if (recording.status === 'finalized') {
-      memoryId = recording.memoryId;
-    }
+    const { directory: recordingDirectory } = await resolveFinalizedRecordingReadTarget(
+      rootPath,
+      memoryId,
+      recordingId
+    );
     await writeMarkdownInRecordingDirectory({
       recordingDirectory,
       fileName,
@@ -1161,9 +1205,7 @@ async function saveRecordingMarkdownNow({
   }
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-    if (memoryId) {
-      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    }
+    await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
     if (workspaceErrorEnvelope) {

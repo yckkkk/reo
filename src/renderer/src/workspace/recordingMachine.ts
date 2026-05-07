@@ -5,6 +5,7 @@ export type RecordingState =
   | { readonly recordingId: string; readonly status: 'paused' }
   | { readonly recordingId: string; readonly status: 'finalizing' }
   | {
+      readonly memoryId: string;
       readonly recordingId: string;
       readonly status: 'editing';
       readonly title: string;
@@ -20,6 +21,7 @@ export type RecordingEvent =
   | { readonly type: 'resume-requested' }
   | { readonly type: 'stop-requested' }
   | {
+      readonly memoryId: string;
       readonly recordingId: string;
       readonly title: string;
       readonly type: 'finalized';
@@ -66,6 +68,7 @@ export function transitionRecordingState(
   }
   if (event.type === 'finalized' && state.status === 'finalizing') {
     return {
+      memoryId: event.memoryId,
       recordingId: event.recordingId,
       status: 'editing',
       title: event.title,

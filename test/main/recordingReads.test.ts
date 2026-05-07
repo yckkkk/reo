@@ -27,6 +27,9 @@ import {
 } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 
+const READ_MEMORY_ID = 'mem_20260506_000001';
+const READ_RECORDING_ID = 'rec_20260506_000001';
+
 async function finalizedWorkspace(): Promise<string> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-read-'));
   await initializeWorkspaceFiles({
@@ -106,11 +109,15 @@ test('audio manifest and chunk reads enforce bounds and never expose full-file I
   const rootPath = await finalizedWorkspace();
 
   assert.deepEqual(
-    await readRecordingAudioManifest({ rootPath, recordingId: 'rec_20260506_000001' }),
+    await readRecordingAudioManifest({
+      rootPath,
+      memoryId: READ_MEMORY_ID,
+      recordingId: READ_RECORDING_ID,
+    }),
     {
       ok: true,
       manifest: {
-        recordingId: 'rec_20260506_000001',
+        recordingId: READ_RECORDING_ID,
         byteLength: 4,
         maxChunkBytes: 1_048_576,
       },
@@ -120,7 +127,8 @@ test('audio manifest and chunk reads enforce bounds and never expose full-file I
   assert.deepEqual(
     await readRecordingAudioChunk({
       rootPath,
-      recordingId: 'rec_20260506_000001',
+      memoryId: READ_MEMORY_ID,
+      recordingId: READ_RECORDING_ID,
       offset: 1,
       length: 2,
     }),
@@ -131,9 +139,9 @@ test('audio manifest and chunk reads enforce bounds and never expose full-file I
   );
 
   for (const request of [
-    { recordingId: '../escape', offset: 0, length: 1 },
-    { recordingId: 'rec_20260506_000001', offset: -1, length: 1 },
-    { recordingId: 'rec_20260506_000001', offset: 0, length: 1_048_577 },
+    { memoryId: READ_MEMORY_ID, recordingId: '../escape', offset: 0, length: 1 },
+    { memoryId: READ_MEMORY_ID, recordingId: READ_RECORDING_ID, offset: -1, length: 1 },
+    { memoryId: READ_MEMORY_ID, recordingId: READ_RECORDING_ID, offset: 0, length: 1_048_577 },
   ]) {
     const result = await readRecordingAudioChunk({ rootPath, ...request });
     assert.equal(result.ok, false);
@@ -142,7 +150,11 @@ test('audio manifest and chunk reads enforce bounds and never expose full-file I
 
 test('missing audio returns typed error', async () => {
   const rootPath = await finalizedWorkspace();
-  const result = await readRecordingAudioManifest({ rootPath, recordingId: 'rec_missing' });
+  const result = await readRecordingAudioManifest({
+    rootPath,
+    memoryId: READ_MEMORY_ID,
+    recordingId: 'rec_missing',
+  });
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_RECORDING_AUDIO_MISSING');
@@ -174,10 +186,12 @@ test('audio playback reads finalized truth only, not draft audio', async () => {
 
   const manifest = await readRecordingAudioManifest({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_draft_only_audio',
   });
   const chunk = await readRecordingAudioChunk({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_draft_only_audio',
     offset: 0,
     length: 1,
@@ -214,6 +228,7 @@ test('cold audio manifest rejects invalid duplicate durable recording truth', as
 
   const manifest = await readRecordingAudioManifest({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_000001',
   });
 
@@ -248,7 +263,11 @@ test('recording detail rejects oversized finalized metadata', async () => {
     })
   );
 
-  const detail = await getRecordingDetail({ rootPath, recordingId: 'rec_20260506_000001' });
+  const detail = await getRecordingDetail({
+    rootPath,
+    memoryId: READ_MEMORY_ID,
+    recordingId: READ_RECORDING_ID,
+  });
 
   assert.equal(detail.ok, false);
 });
@@ -301,9 +320,14 @@ test('finalized audio symlinks are rejected before manifest or chunk reads', asy
   );
 
   for (const result of [
-    await readRecordingAudioManifest({ rootPath, recordingId: 'rec_audio_link' }),
+    await readRecordingAudioManifest({
+      rootPath,
+      memoryId: 'mem_audio_link',
+      recordingId: 'rec_audio_link',
+    }),
     await readRecordingAudioChunk({
       rootPath,
+      memoryId: 'mem_audio_link',
       recordingId: 'rec_audio_link',
       offset: 0,
       length: 3,
@@ -327,6 +351,7 @@ test('audio manifest aborts when workspace handle is lost before audio open', as
   try {
     const manifest = await readRecordingAudioManifest({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       assertWorkspaceUsable: () =>
         usable
@@ -357,6 +382,7 @@ test('audio chunk aborts when workspace handle is lost before audio open', async
   try {
     const chunk = await readRecordingAudioChunk({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       offset: 0,
       length: 1,
@@ -400,6 +426,7 @@ test('audio chunk reads use the guarded file handle after audio validation', asy
     assert.deepEqual(
       await readRecordingAudioChunk({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         offset: 0,
         length: 4,
@@ -436,6 +463,7 @@ test('audio chunk reads reject finalized ancestor swap before opening audio', as
   try {
     const result = await readRecordingAudioChunk({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId,
       offset: 0,
       length: 4,
@@ -484,6 +512,7 @@ test('cached audio chunk reads reject finalized ancestor swap', async () => {
     (
       await readRecordingAudioChunk({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId,
         offset: 0,
         length: 1,
@@ -496,6 +525,7 @@ test('cached audio chunk reads reject finalized ancestor swap', async () => {
 
   const chunk = await readRecordingAudioChunk({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId,
     offset: 0,
     length: 4,
@@ -526,6 +556,7 @@ test('audio reads reject bytes beyond finalized metadata length after audio grow
   try {
     const chunk = await readRecordingAudioChunk({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       offset: 4,
       length: 1,
@@ -550,6 +581,7 @@ test('audio chunk reads only the requested byte range', async () => {
     assert.deepEqual(
       await readRecordingAudioChunk({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         offset: 1,
         length: 2,
@@ -565,7 +597,7 @@ test('audio chunk reads only the requested byte range', async () => {
   assert.equal(requestedLength, 2);
 });
 
-test('audio chunk reads reuse the finalized audio target after the first lookup', async () => {
+test('audio chunk reads use explicit memory ownership without global lookup', async () => {
   const rootPath = await finalizedWorkspace();
   let lookups = 0;
   setBeforeRecordingLookupForTest(() => {
@@ -577,6 +609,7 @@ test('audio chunk reads reuse the finalized audio target after the first lookup'
       (
         await readRecordingAudioChunk({
           rootPath,
+          memoryId: READ_MEMORY_ID,
           recordingId: 'rec_20260506_000001',
           offset: 0,
           length: 1,
@@ -588,6 +621,7 @@ test('audio chunk reads reuse the finalized audio target after the first lookup'
       (
         await readRecordingAudioChunk({
           rootPath,
+          memoryId: READ_MEMORY_ID,
           recordingId: 'rec_20260506_000001',
           offset: 1,
           length: 1,
@@ -599,7 +633,7 @@ test('audio chunk reads reuse the finalized audio target after the first lookup'
     setBeforeRecordingLookupForTest(null);
   }
 
-  assert.equal(lookups, 1);
+  assert.equal(lookups, 0);
 });
 
 test('cached audio chunk reads revalidate duplicate ownership per chunk', async () => {
@@ -608,6 +642,7 @@ test('cached audio chunk reads revalidate duplicate ownership per chunk', async 
     (
       await readRecordingAudioManifest({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
       })
     ).ok,
@@ -623,6 +658,7 @@ test('cached audio chunk reads revalidate duplicate ownership per chunk', async 
       (
         await readRecordingAudioChunk({
           rootPath,
+          memoryId: READ_MEMORY_ID,
           recordingId: 'rec_20260506_000001',
           offset: 0,
           length: 1,
@@ -634,6 +670,7 @@ test('cached audio chunk reads revalidate duplicate ownership per chunk', async 
       (
         await readRecordingAudioChunk({
           rootPath,
+          memoryId: READ_MEMORY_ID,
           recordingId: 'rec_20260506_000001',
           offset: 1,
           length: 1,
@@ -655,6 +692,7 @@ test('cached audio chunk reads reject stale finalized metadata after cache fill'
     (
       await readRecordingAudioManifest({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId,
       })
     ).ok,
@@ -683,6 +721,7 @@ test('cached audio chunk reads reject stale finalized metadata after cache fill'
 
   const chunk = await readRecordingAudioChunk({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId,
     offset: 0,
     length: 1,
@@ -700,6 +739,7 @@ test('cached audio reads reject duplicate finalized ids created after cache fill
     (
       await readRecordingAudioChunk({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         offset: 0,
         length: 1,
@@ -716,6 +756,7 @@ test('cached audio reads reject duplicate finalized ids created after cache fill
 
   const manifest = await readRecordingAudioManifest({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_000001',
   });
 
@@ -732,6 +773,7 @@ test('cached audio chunk reads reject duplicate finalized ids without a fresh ma
     (
       await readRecordingAudioChunk({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId,
         offset: 0,
         length: 1,
@@ -747,6 +789,7 @@ test('cached audio chunk reads reject duplicate finalized ids without a fresh ma
 
   const chunk = await readRecordingAudioChunk({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId,
     offset: 1,
     length: 1,
@@ -774,17 +817,25 @@ test('recording reads resolve finalized file truth before stale draft shadows', 
   });
 
   assert.deepEqual(
-    await readRecordingAudioManifest({ rootPath, recordingId: 'rec_20260506_000001' }),
+    await readRecordingAudioManifest({
+      rootPath,
+      memoryId: READ_MEMORY_ID,
+      recordingId: READ_RECORDING_ID,
+    }),
     {
       ok: true,
       manifest: {
-        recordingId: 'rec_20260506_000001',
+        recordingId: READ_RECORDING_ID,
         byteLength: 4,
         maxChunkBytes: 1_048_576,
       },
     }
   );
-  const detail = await getRecordingDetail({ rootPath, recordingId: 'rec_20260506_000001' });
+  const detail = await getRecordingDetail({
+    rootPath,
+    memoryId: READ_MEMORY_ID,
+    recordingId: READ_RECORDING_ID,
+  });
   assert.equal(detail.ok, true);
   if (detail.ok) {
     assert.equal(detail.recording.status, 'finalized');
@@ -813,13 +864,20 @@ test('recording read and save reject duplicate finalized ids instead of falling 
   });
 
   assert.equal(
-    (await readRecordingAudioManifest({ rootPath, recordingId: 'rec_20260506_000001' })).ok,
+    (
+      await readRecordingAudioManifest({
+        rootPath,
+        memoryId: READ_MEMORY_ID,
+        recordingId: READ_RECORDING_ID,
+      })
+    ).ok,
     false
   );
   assert.equal(
     (
       await saveRecordingMarkdown({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         fileName: 'transcript.md',
         markdown: '不应写入 stale draft\n',
@@ -870,7 +928,7 @@ test('recording detail rejects unsafe finalized metadata instead of falling back
     now: () => '2026-05-06T13:10:00.000Z',
   });
 
-  const detail = await getRecordingDetail({ rootPath, recordingId });
+  const detail = await getRecordingDetail({ rootPath, memoryId: READ_MEMORY_ID, recordingId });
 
   assert.equal(detail.ok, false);
   if (!detail.ok) {
@@ -895,6 +953,7 @@ test('saving markdown rejects recording parent swap before write', async () => {
   try {
     const saved = await saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId,
       fileName: 'transcript.md',
       markdown: 'should not escape\n',
@@ -921,6 +980,7 @@ test('saving transcript and reflections refreshes the workspace memory index pro
     (
       await saveRecordingMarkdown({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         fileName: 'transcript.md',
         markdown: '转写内容\n',
@@ -932,6 +992,7 @@ test('saving transcript and reflections refreshes the workspace memory index pro
     (
       await saveRecordingMarkdown({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         fileName: 'reflections.md',
         markdown: '反思内容\n',
@@ -954,6 +1015,7 @@ test('saving markdown refreshes one memory index entry without a full workspace 
   try {
     const saved = await saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       fileName: 'transcript.md',
       markdown: '单条刷新\n',
@@ -1008,12 +1070,14 @@ test('concurrent markdown saves preserve both memory index entry refreshes', asy
     const [firstSave, secondSave] = await Promise.all([
       saveRecordingMarkdown({
         rootPath,
+        memoryId: READ_MEMORY_ID,
         recordingId: 'rec_20260506_000001',
         fileName: 'transcript.md',
         markdown: '第一段转写\n',
       }),
       saveRecordingMarkdown({
         rootPath,
+        memoryId: 'mem_20260506_000002',
         recordingId: 'rec_20260506_000002',
         fileName: 'reflections.md',
         markdown: '第二段反思\n',
@@ -1044,6 +1108,7 @@ test('markdown index refresh reads memory summary inside the workspace index que
     setBeforeMemoryIndexEntryReadForTest(null);
     nestedSave = await saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       fileName: 'reflections.md',
       markdown: '后写入的反思\n',
@@ -1053,6 +1118,7 @@ test('markdown index refresh reads memory summary inside the workspace index que
   try {
     const transcriptSave = await saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       fileName: 'transcript.md',
       markdown: '先写入的转写\n',
@@ -1089,6 +1155,7 @@ test('full index rebuild cannot overwrite a queued markdown index refresh', asyn
     await persistEntered;
     const transcriptSave = saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       fileName: 'transcript.md',
       markdown: '并发保存的转写\n',
@@ -1112,6 +1179,7 @@ test('full index rebuild computes replacement after queued markdown refresh', as
     setBeforeReadModelReplaceForTest(null);
     transcriptSave = await saveRecordingMarkdown({
       rootPath,
+      memoryId: READ_MEMORY_ID,
       recordingId: 'rec_20260506_000001',
       fileName: 'transcript.md',
       markdown: '队列前保存的转写\n',
@@ -1138,6 +1206,7 @@ test('saving markdown reports index refresh failure without claiming previous fi
 
   const result = await saveRecordingMarkdown({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_000001',
     fileName: 'transcript.md',
     markdown: '已保存但投影失败\n',
@@ -1170,6 +1239,7 @@ test('saving markdown rechecks the workspace handle before refreshing the index'
 
   const result = await saveRecordingMarkdown({
     rootPath,
+    memoryId: READ_MEMORY_ID,
     recordingId: 'rec_20260506_000001',
     fileName: 'transcript.md',
     markdown: '写入后锁丢失\n',

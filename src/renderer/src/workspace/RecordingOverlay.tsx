@@ -124,6 +124,7 @@ export function RecordingOverlay({
       const saveSession = recordingSessionRef.current;
       void saveTranscript({
         markdown: transcriptDraft,
+        memoryId: state.memoryId,
         recordingId: state.recordingId,
         workspaceHandle: workspaceSession.workspaceHandle,
       }).then((response) => {
@@ -151,6 +152,7 @@ export function RecordingOverlay({
       const saveSession = recordingSessionRef.current;
       void saveReflections({
         markdown: reflectionsDraft,
+        memoryId: state.memoryId,
         recordingId: state.recordingId,
         workspaceHandle: workspaceSession.workspaceHandle,
       }).then((response) => {
@@ -483,6 +485,7 @@ export function RecordingOverlay({
     lastSavedReflectionsRef.current = reflectionsDraft;
     setState((current) =>
       transitionRecordingState(current, {
+        memoryId: finalized.value.recording.memoryId,
         recordingId,
         title: finalized.value.recording.title,
         type: 'finalized',
@@ -505,6 +508,7 @@ export function RecordingOverlay({
     }
 
     const manifest = await readRecordingAudioManifest({
+      memoryId: state.memoryId,
       recordingId: state.recordingId,
       workspaceHandle: workspaceSession.workspaceHandle,
     });
@@ -514,6 +518,7 @@ export function RecordingOverlay({
     }
 
     const recordingId = state.recordingId;
+    const memoryId = state.memoryId;
     const { byteLength, maxChunkBytes } = manifest.value;
     const chunkCount = Math.ceil(byteLength / maxChunkBytes);
     const chunks = new Array<Uint8Array>(chunkCount);
@@ -531,6 +536,7 @@ export function RecordingOverlay({
         const length = Math.min(maxChunkBytes, byteLength - offset);
         const response = await readRecordingAudioChunk({
           length,
+          memoryId,
           offset,
           recordingId,
           workspaceHandle: workspaceSession.workspaceHandle,

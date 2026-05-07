@@ -11,7 +11,10 @@ import {
   workspaceMicrophoneIntentResponseSchema,
   workspaceOpenRequestSchema,
   workspaceRecordingAppendRequestSchema,
+  workspaceRecordingAudioChunkRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
+  workspaceRecordingMarkdownSaveRequestSchema,
+  workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
   workspaceErrorEnvelopeSchema,
@@ -152,6 +155,42 @@ test('recording finalize contract requires explicit durable duration', () => {
     workspaceRecordingFinalizeRequestSchema.parse({
       recordingId: 'rec_20260506_000001',
       title: '录音',
+      workspaceHandle: 'wh_1',
+    })
+  );
+});
+
+test('finalized recording read and save contracts require memory id plus recording id', () => {
+  assert.deepEqual(
+    workspaceRecordingReadRequestSchema.parse({
+      memoryId: 'mem_20260506_000001',
+      recordingId: 'rec_20260506_000001',
+      workspaceHandle: 'wh_1',
+    }),
+    {
+      memoryId: 'mem_20260506_000001',
+      recordingId: 'rec_20260506_000001',
+      workspaceHandle: 'wh_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingReadRequestSchema.parse({
+      recordingId: 'rec_20260506_000001',
+      workspaceHandle: 'wh_1',
+    })
+  );
+  assert.throws(() =>
+    workspaceRecordingAudioChunkRequestSchema.parse({
+      length: 1,
+      offset: 0,
+      recordingId: 'rec_20260506_000001',
+      workspaceHandle: 'wh_1',
+    })
+  );
+  assert.throws(() =>
+    workspaceRecordingMarkdownSaveRequestSchema.parse({
+      markdown: 'note',
+      recordingId: 'rec_20260506_000001',
       workspaceHandle: 'wh_1',
     })
   );

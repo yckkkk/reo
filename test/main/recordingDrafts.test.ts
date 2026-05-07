@@ -20,7 +20,7 @@ import {
   discardRecordingDraft,
   finalizeRecordingDraft,
   initializeRecordingDraftWorkspace,
-  saveRecordingMarkdown,
+  saveRecordingDraftMarkdown,
   setAfterDraftDirectoryCreateForTest,
   setBeforeDraftAudioCreateForTest,
   setBeforeDraftAudioOpenForTest,
@@ -259,7 +259,7 @@ test('recording finalize preserves draft transcript and reflections markdown', a
   });
   assert.equal(
     (
-      await saveRecordingMarkdown({
+      await saveRecordingDraftMarkdown({
         rootPath,
         recordingId: 'rec_20260506_markdown_preserve',
         fileName: 'transcript.md',
@@ -270,7 +270,7 @@ test('recording finalize preserves draft transcript and reflections markdown', a
   );
   assert.equal(
     (
-      await saveRecordingMarkdown({
+      await saveRecordingDraftMarkdown({
         rootPath,
         recordingId: 'rec_20260506_markdown_preserve',
         fileName: 'reflections.md',
@@ -365,7 +365,7 @@ test('recording markdown save aborts when workspace handle is lost before write'
   });
 
   try {
-    const result = await saveRecordingMarkdown({
+    const result = await saveRecordingDraftMarkdown({
       rootPath,
       recordingId,
       fileName: 'transcript.md',
@@ -409,14 +409,14 @@ test('recording markdown saves the latest same-file edit when writes overlap', a
   });
 
   try {
-    const first = saveRecordingMarkdown({
+    const first = saveRecordingDraftMarkdown({
       rootPath,
       recordingId,
       fileName: 'transcript.md',
       markdown: '旧内容\n',
     });
     await firstWriteEntered;
-    const second = saveRecordingMarkdown({
+    const second = saveRecordingDraftMarkdown({
       rootPath,
       recordingId,
       fileName: 'transcript.md',

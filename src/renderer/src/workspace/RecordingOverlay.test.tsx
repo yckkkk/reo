@@ -809,7 +809,7 @@ describe('RecordingOverlay', () => {
   });
 
   it('keeps transcript draft when autosave fails', async () => {
-    installWorkspaceBridge({
+    const bridge = installWorkspaceBridge({
       saveTranscript: vi.fn(async () => ({
         error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Save failed' },
         ok: false as const,
@@ -840,7 +840,45 @@ describe('RecordingOverlay', () => {
     await flushPromises();
 
     expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
+    expect(bridge.saveTranscript).toHaveBeenCalledWith({
+      markdown: 'Edited local transcript',
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
     expect(transcript).toHaveValue('Edited local transcript');
+  });
+
+  it('saves reflections with the finalized memory identity', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Reflections' }), {
+      target: { value: 'Local reflection' },
+    });
+    act(() => vi.advanceTimersByTime(500));
+    await flushPromises();
+
+    expect(bridge.saveReflections).toHaveBeenCalledWith({
+      markdown: 'Local reflection',
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
   });
 
   it('ignores transcript autosave results after the drawer is closed and reopened', async () => {
@@ -933,6 +971,18 @@ describe('RecordingOverlay', () => {
       throw new Error('Missing playback call order');
     }
     expect(manifestCallOrder).toBeLessThan(chunkCallOrder);
+    expect(bridge.readRecordingAudioManifest).toHaveBeenCalledWith({
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledWith({
+      length: 2,
+      memoryId: 'mem_1',
+      offset: 0,
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText('Recording playback')).toHaveAttribute('src', 'blob:recording');
 

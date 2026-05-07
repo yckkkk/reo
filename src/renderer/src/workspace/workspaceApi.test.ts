@@ -145,16 +145,31 @@ describe('workspace renderer API wrapper', () => {
     });
     await discardRecordingDraft({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
     await getMemoryDetail({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
-    await getRecordingDetail({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
-    await readRecordingAudioManifest({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
+    await getRecordingDetail({ workspaceHandle: 'wh_1', memoryId: 'mem_1', recordingId: 'rec_1' });
+    await readRecordingAudioManifest({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+    });
     await readRecordingAudioChunk({
       workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       offset: 0,
       length: 1,
     });
-    await saveTranscript({ workspaceHandle: 'wh_1', recordingId: 'rec_1', markdown: '文字' });
-    await saveReflections({ workspaceHandle: 'wh_1', recordingId: 'rec_1', markdown: '想法' });
+    await saveTranscript({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+      markdown: '文字',
+    });
+    await saveReflections({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      recordingId: 'rec_1',
+      markdown: '想法',
+    });
     await beginMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
     await clearMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
 
@@ -166,6 +181,7 @@ describe('workspace renderer API wrapper', () => {
     });
     expect(reoWorkspace.readRecordingAudioChunk).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       offset: 0,
       length: 1,

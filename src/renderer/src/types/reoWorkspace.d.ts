@@ -85,6 +85,10 @@ type RecordingHandleRequest = WorkspaceHandleRequest & {
   readonly recordingId: string;
 };
 
+type FinalizedRecordingHandleRequest = RecordingHandleRequest & {
+  readonly memoryId: string;
+};
+
 type ReoWorkspaceBridge = {
   readonly chooseDirectory: () => Promise<
     WorkspaceResponse<WorkspaceChooseDirectoryResult> | WorkspaceErrorEnvelope
@@ -141,9 +145,9 @@ type ReoWorkspaceBridge = {
     payload: WorkspaceHandleRequest & { readonly memoryId: string }
   ) => Promise<WorkspaceResponse<WorkspaceMemoryDetail>>;
   readonly getRecordingDetail: (
-    payload: RecordingHandleRequest
+    payload: FinalizedRecordingHandleRequest
   ) => Promise<WorkspaceResponse<unknown>>;
-  readonly readRecordingAudioManifest: (payload: RecordingHandleRequest) => Promise<
+  readonly readRecordingAudioManifest: (payload: FinalizedRecordingHandleRequest) => Promise<
     WorkspaceResponse<{
       readonly recordingId: string;
       readonly byteLength: number;
@@ -151,16 +155,16 @@ type ReoWorkspaceBridge = {
     }>
   >;
   readonly readRecordingAudioChunk: (
-    payload: RecordingHandleRequest & {
+    payload: FinalizedRecordingHandleRequest & {
       readonly offset: number;
       readonly length: number;
     }
   ) => Promise<WorkspaceResponse<{ readonly chunk: Uint8Array }>>;
   readonly saveTranscript: (
-    payload: RecordingHandleRequest & { readonly markdown: string }
+    payload: FinalizedRecordingHandleRequest & { readonly markdown: string }
   ) => Promise<WorkspaceResponse<{ readonly saved: true }>>;
   readonly saveReflections: (
-    payload: RecordingHandleRequest & { readonly markdown: string }
+    payload: FinalizedRecordingHandleRequest & { readonly markdown: string }
   ) => Promise<WorkspaceResponse<{ readonly saved: true }>>;
   readonly beginMicrophoneIntent: (
     payload: WorkspaceHandleRequest & { readonly drawerSessionId: string }

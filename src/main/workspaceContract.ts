@@ -185,6 +185,12 @@ export const workspaceRecordingIdRequestSchema = workspaceHandleSchema
   })
   .strict();
 
+export const workspaceRecordingReadRequestSchema = workspaceRecordingIdRequestSchema
+  .extend({
+    memoryId: memoryIdSchema,
+  })
+  .strict();
+
 export const workspaceMemoryIdRequestSchema = workspaceHandleSchema
   .extend({
     memoryId: memoryIdSchema,
@@ -232,14 +238,14 @@ export const workspaceRecordingFinalizeRequestSchema = workspaceRecordingIdReque
   })
   .strict();
 
-export const workspaceRecordingAudioChunkRequestSchema = workspaceRecordingIdRequestSchema
+export const workspaceRecordingAudioChunkRequestSchema = workspaceRecordingReadRequestSchema
   .extend({
     offset: z.number().int().nonnegative(),
     length: z.number().int().positive().max(1_048_576),
   })
   .strict();
 
-export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingIdRequestSchema
+export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingReadRequestSchema
   .extend({
     markdown: z.string(),
   })
