@@ -109,8 +109,8 @@
 - 当前 Memory detail 不渲染 More、Rename、Delete、Show in folder、Export、Films、photo、video、file、AI、entity、contact 或 global search command。
 - 当前 Memory detail 使用 `MemoryDetailPage` 和 file-local `MemoryDetailSection`；它们是 feature-local components，不是 design-system primitive。
 - 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
-- Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime 或网络 STT。
-- 当前 recording overlay 代码仍包含本地 placeholder transcript 机制；产品级 first slice 完成形态不得显示 mock transcript，也不得暗示真实 speech-to-text。
+- Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime、网络 STT 或本地 mock transcript。
+- 当前 recording overlay 停止录音后展示空白 transcript/reflections draft，内容只来自用户编辑或未来明确引入的真实转写 foundation。
 - 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
 
 已接受但尚未全部实现的 first-slice 交付约束：
@@ -125,7 +125,7 @@
 - Workspace home 完成形态使用 `All memories` header、本地搜索/filter、日期分组、recording card、empty/error/loading states 和 `Record memory` action；`Record memory` 打开 recording drawer。
 - 未实现的 photo、video、file、film、sharing、sync、auth user、camera、AI generation、global search 能力不得显示为 disabled control、placeholder section 或 future action。
 - Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
-- 产品级 first slice 必须把 placeholder transcript 替换为停止后可编辑 transcript/reflections draft，或在新增 STT foundation 后接入真实转写。
+- 当前 recording overlay 不生成 transcript 文本；停止后只进入可编辑 transcript/reflections draft。
 - ElevenLabs UI 逐组件 source-owned 采纳，优先范围是 Waveform、Live Waveform、Voice Button、Audio Player、Transcript Viewer；不得执行 `add all`。
 - Waveform 不能用自研 lightweight bars 作为最终形态；必须优先 retokenize ElevenLabs UI waveform source，只有 Electron 安全、local-first、可访问性、测试或复杂度被证据阻断时才允许 fork 或替代。
 - wavesurfer.js 不负责 current durable capture；若实现 long waveform、peaks、regions、visual scrubber 或第二个 waveform consumer，必须重新作为优先候选并记录采用、fork 或拒绝证据。

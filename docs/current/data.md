@@ -65,7 +65,7 @@
 - Memory detail 使用 `['workspace', 'memory-detail', workspaceId, memoryId]` 读取当前 memory detail projection；`workspaceHandle` 只作为 `getMemoryDetail` request capability 进入 preload/main 边界，不进入 Query key、DOM、URL、workspace files、`.reo/index.json` 或持久化缓存身份。
 - Memory detail response 读取 `memory.json` 作为 detail identity 真源，使用 `.reo/index.json` 中同一 memory summary 的 `recordingCount`、`hasTranscript` 和 `hasReflections` 投影，并只返回前 24 条 recording summary 作为当前首屏 preview；`recordingsTruncated` 标明还有未展示的 recordings，避免 detail navigation 对长 memory 做无界 recording 文件读取或 DOM 渲染。
 - Create workspace folder selection token 和 displayPath 属于当前 RHF form lifecycle；open existing workspace 的 selection token 只存在于该 open action 的当前事件流。selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files；initialize/open 消费 token 后如果返回错误，renderer 不复用该 token。
-- Recording overlay state 拥有 active recording lifecycle、elapsed timer、当前代码中的本地 transcript placeholder、reflections draft、autosave status 和 active playback Blob URL。placeholder 不是 STT 真源，产品级 first slice 不能把它作为可交付转写能力。
+- Recording overlay state 拥有 active recording lifecycle、elapsed timer、transcript draft、reflections draft、autosave status 和 active playback Blob URL。Transcript draft 初始为空，只来自用户编辑或已保存文件，不生成本地 mock transcript，也不作为 STT 真源。
 - Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须同时更新当前 workspace session 的 `memories` 投影和临时 `recordings` 兼容视图。durable truth 仍是 workspace files 和 `.reo/index.json` 的 memory summary。后续 Home/Memory detail slice 会改为直接消费 `memories`。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。

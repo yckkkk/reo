@@ -107,14 +107,7 @@ export function RecordingOverlay({
     }
 
     const interval = window.setInterval(() => {
-      setElapsedSeconds((current) => {
-        const next = current + 1;
-        setTranscriptDraft((draft) => {
-          const line = `Mock transcript ${next}s`;
-          return draft ? `${draft}\n${line}` : line;
-        });
-        return next;
-      });
+      setElapsedSeconds((current) => current + 1);
     }, 1000);
 
     return () => window.clearInterval(interval);
@@ -472,12 +465,8 @@ export function RecordingOverlay({
     recordingSessionRef.current += 1;
     controllerRef.current = null;
     activeDraftRef.current = null;
-    const nextTranscript = transcriptDraft.trim()
-      ? transcriptDraft
-      : 'Local mock transcript. Replace this draft with your own notes.';
-    setTranscriptDraft(nextTranscript);
-    lastSavedTranscriptRef.current = nextTranscript;
-    lastSavedReflectionsRef.current = '';
+    lastSavedTranscriptRef.current = transcriptDraft;
+    lastSavedReflectionsRef.current = reflectionsDraft;
     setState((current) =>
       transitionRecordingState(current, {
         recordingId,
@@ -572,7 +561,6 @@ export function RecordingOverlay({
 
   const canClose = !isBusy(state);
   const isEditing = state.status === 'editing';
-  const latestTranscript = transcriptDraft.split('\n').filter(Boolean).at(-1);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -596,11 +584,6 @@ export function RecordingOverlay({
               <p className="text-body leading-body text-gravel">
                 Status: {state.status}. Elapsed: {elapsedSeconds}s.
               </p>
-              {latestTranscript ? (
-                <p className="border border-chalk bg-card-white px-16 py-12 text-body leading-body text-cinder">
-                  {latestTranscript}
-                </p>
-              ) : null}
               <div className="flex flex-wrap gap-12">
                 {state.status === 'idle' || state.status === 'failed' ? (
                   <Button type="button" onClick={handleStart}>

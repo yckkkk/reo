@@ -138,6 +138,11 @@ function createMediaAdapter() {
   };
 }
 
+function expectNoMockTranscript() {
+  expect(screen.queryByText(/Mock transcript/i)).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue(/Mock transcript/i)).not.toBeInTheDocument();
+}
+
 describe('RecordingOverlay', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -148,7 +153,7 @@ describe('RecordingOverlay', () => {
     vi.useRealTimers();
   });
 
-  it('pauses and resumes timer plus local mock transcript', async () => {
+  it('pauses and resumes the timer without synthesizing transcript text', async () => {
     installWorkspaceBridge();
     const media = createMediaAdapter();
 
@@ -169,16 +174,19 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     expect(window.reoWorkspace.appendRecordingAudioChunk).toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Mock transcript 1s/)).toBeInTheDocument();
+    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expectNoMockTranscript();
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause recording' }));
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.queryByText(/Mock transcript 2s/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expectNoMockTranscript();
     expect(media.controller.pause).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Resume recording' }));
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Mock transcript 2s/)).toBeInTheDocument();
+    expect(screen.getByText(/Elapsed: 2s/)).toBeInTheDocument();
+    expectNoMockTranscript();
     expect(media.controller.resume).toHaveBeenCalledTimes(1);
   });
 
@@ -733,7 +741,8 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Mock transcript 1s/)).toBeInTheDocument();
+    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expectNoMockTranscript();
     act(() => media.emitError('Microphone failed', 0));
     await flushPromises();
     expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
@@ -742,7 +751,7 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
     expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
-    expect(screen.queryByText(/Mock transcript 1s/)).not.toBeInTheDocument();
+    expectNoMockTranscript();
     act(() => media.emitChunk(new Uint8Array([1]), 0));
     act(() => media.emitChunk(new Uint8Array([2]), 1));
     await flushPromises();
@@ -823,6 +832,7 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
     await flushPromises();
     const transcript = screen.getByRole('textbox', { name: 'Transcript' });
+    expect(transcript).toHaveValue('');
 
     fireEvent.change(transcript, { target: { value: 'Edited local transcript' } });
     act(() => vi.advanceTimersByTime(500));
