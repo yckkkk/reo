@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
+import { App, mergeFinalizedRecordingIntoSession } from './App';
 import { ReoQueryProvider } from './queryClient';
 
 describe('App', () => {
@@ -63,6 +63,7 @@ describe('App', () => {
           workspaceId: 'ws_1',
           title: 'Daily memory',
           description: 'Private notes',
+          memories: [],
           recordings: [],
         },
       },
@@ -83,5 +84,45 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Daily memory' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Memory Content' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
+  });
+
+  it('keeps memory and recording projections fresh after finalize', () => {
+    const session = {
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      snapshot: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [],
+        recordings: [],
+      },
+    };
+
+    expect(
+      mergeFinalizedRecordingIntoSession(session, {
+        memory: {
+          audioByteLength: 3,
+          createdAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 2000,
+          hasReflections: false,
+          hasTranscript: false,
+          memoryId: 'mem_1',
+          recordingCount: 1,
+          title: 'Daily memory recording',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+        },
+        recording: {
+          audioByteLength: 3,
+          durationMs: 2000,
+          memoryId: 'mem_1',
+          recordingId: 'rec_1',
+          title: 'Daily memory recording',
+        },
+      }).snapshot
+    ).toMatchObject({
+      memories: [{ memoryId: 'mem_1', recordingCount: 1 }],
+      recordings: [{ recordingId: 'rec_1' }],
+    });
   });
 });

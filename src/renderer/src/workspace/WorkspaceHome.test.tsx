@@ -11,6 +11,7 @@ const workspaceSession: WorkspaceSession = {
     workspaceId: 'ws_1',
     title: 'Daily memory',
     description: 'Private notes',
+    memories: [],
     recordings: [],
   },
 };

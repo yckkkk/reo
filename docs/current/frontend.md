@@ -79,20 +79,33 @@
 
 ## 第一产品切片 UI 决策
 
-- First product slice 不显示完整 sidebar；workspace home 使用 top header、record action 和 `Memory Content`。
-- Workspace creation page 使用 feature-local `CreateWorkspaceForm`，包含 title、description、folder picker 和 submit；folder picker cancel 和 initialization failure 不清空用户输入。
-- Create workspace form 当前使用 Button/Label primitives 和语义 input/textarea。
-- Workspace home 使用居中 header、单一 `Record memory` action 和 `Memory Content` 内容区；`Record memory` 打开 recording overlay。
-- 未实现的 photo、video、file、film、search、tag、sharing、sync 能力不得显示为 disabled control、placeholder section 或 future action。
-- Recording overlay 使用 Radix Dialog 语义组合 bottom sheet layout；Vaul/shadcn Drawer 已评估，first product slice 不引入 Vaul dependency。
-- Recording overlay 使用官方 browser MediaRecorder API 的薄 adapter，不引入 agent runtime 或网络 STT。
-- Recording overlay 的 transcript 是本地 mock draft，UI 不暗示真实 speech-to-text。
-- ElevenLabs UI 只按组件摘取结构和状态表达，不执行 `add all`。
-- Live Waveform/Waveform 只提供 visual model；first product slice 使用 Reo-owned MediaRecorder adapter 和 lightweight state bars，不复制 ElevenLabs microphone owner。
-- wavesurfer.js 保持 deferred；只有出现 scrubber、peaks、regions、long waveform performance 或第二个 waveform consumer 时重新评估。
-- Recording 中的 transcript 必须标记为本地草稿提示，不得暗示真实 speech-to-text 已完成。
-- Audio playback 使用 Reo controls 和 chunked audio read；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke。
-- shadcn/ui 初始化必须与 exact primitives、business consumers、renderer alias、`components.json`、tests 和同 slice commit 同批完成。
+当前实现事实：
+
+- Workspace creation page 使用 feature-local `CreateWorkspaceForm`，包含 title、description、folder picker 和 create submit；folder picker cancel 和 initialization failure 不清空用户输入。
+- Create workspace form 当前使用 Button/Label primitives、React Hook Form、Zod 和语义 input/textarea；submit 允许触发验证，不使用无解释的 disabled trap。
+- 当前 Workspace home 仍是基础 home：显示 workspace title、单一 `Record memory` action 和 `Memory Content`；它还没有 sidebar、本地 search/filter、日期分组或 memory card。
+- 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
+- Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime 或网络 STT。
+- 当前 recording overlay 代码仍包含本地 placeholder transcript 机制；产品级 first slice 完成形态不得显示 mock transcript，也不得暗示真实 speech-to-text。
+- 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
+
+已接受但尚未全部实现的 first-slice 交付约束：
+
+- First product slice 的完成形态必须包含真实 app shell：可覆盖/展开的分层 sidebar、Home、New memory 和 workspace identity。
+- Sidebar 使用分层 overlay shell：sidebar 是底层 `z-index: 1`，紧贴窗口左边缘并铺满高度；主内容是上层悬浮面板 `z-index: 2`，四周 8px inset，四角 12px radius，从窗口顶部延伸到底部，不设置独立 top bar。
+- Sidebar 宽度可拖拽，最小 240px，最大 520px；折叠状态是主内容面板用 transform 向左滑动并覆盖在 sidebar 上方。
+- Sidebar 展开/折叠动效使用 280ms ease-out，动画只作用于 transform/opacity；拖拽 resize 只更新宽度变量，不给 width 加 transition。
+- macOS 红黄绿窗口按钮悬浮在 sidebar 图层左上角之上；Reo 不绘制假的标题栏或顶部栏。
+- Sidebar 中的 Search 只能作为聚焦 Home 本地搜索的入口；若 Home 本地搜索尚未实现，Search control 不得出现在 current build。
+- Home 本地搜索只过滤当前 workspace snapshot 中已加载的 recording/memory title、日期和状态；full-text、跨 workspace、entity、tag、semantic search 属于后续 DB/index foundation。
+- Workspace home 完成形态使用 `All memories` header、本地搜索/filter、日期分组、recording card、empty/error/loading states 和 `Record memory` action；`Record memory` 打开 recording drawer。
+- 未实现的 photo、video、file、film、sharing、sync、auth user、camera、AI generation、global search 能力不得显示为 disabled control、placeholder section 或 future action。
+- Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
+- 产品级 first slice 必须把 placeholder transcript 替换为停止后可编辑 transcript/reflections draft，或在新增 STT foundation 后接入真实转写。
+- ElevenLabs UI 逐组件 source-owned 采纳，优先范围是 Waveform、Live Waveform、Voice Button、Audio Player、Transcript Viewer；不得执行 `add all`。
+- Waveform 不能用自研 lightweight bars 作为最终形态；必须优先 retokenize ElevenLabs UI waveform source，只有 Electron 安全、local-first、可访问性、测试或复杂度被证据阻断时才允许 fork 或替代。
+- wavesurfer.js 不负责 current durable capture；若实现 long waveform、peaks、regions、visual scrubber 或第二个 waveform consumer，必须重新作为优先候选并记录采用、fork 或拒绝证据。
+- shadcn/ui source 变更必须与 exact primitives、business consumers、shared invariants、tests 和同 slice commit 同批完成。
 
 ## shadcn/ui 边界
 
@@ -112,6 +125,8 @@
 - Component foundation 建立后，优先使用 token 和 primitive variants。
 - 当前业务样式优先使用 Tailwind utility class 和已定义 token。
 - 不得在业务组件中散落硬编码视觉常量。
+- Reo 设计系统覆盖不到的新 UI 状态、尺寸、层级、motion 或交互形态，必须先补充为可复用 token、primitive variant 或 usage rule，再落到业务组件。
+- 设计系统补充必须同时满足行业通用 UI 规范、Practical UI 指南、可访问性要求和本次参考图结构；不得为了单个页面写一次性视觉例外。
 - 不得为单个 screen 创建一次性 palette。
 - 避免不服务产品 workflow 的装饰性 UI。
 
@@ -122,7 +137,7 @@
 - 32px 及以上标题使用 Waldenburg 300、负 tracking 和紧凑 line-height。
 - 正文和通用 UI 文案使用 Inter；产品族标签使用 WaldenburgFH 700。
 - 按钮和 pill tag 使用 fully rounded 形状；输入控件保持 0 radius。
-- Card 和 panel 使用 16-20px radius，并保持轻量边界或 hairline shadow。
+- Card 使用 16-20px radius，并保持轻量边界或 hairline shadow；App 主内容悬浮面板固定 12px radius。
 - Geist Mono 只用于代码、技术注记和机器生成标记。
 - 所有产品界面必须保持标准软件工程产品气质：清晰、克制、可维护、可验证，不做玩具化视觉或交互。
 

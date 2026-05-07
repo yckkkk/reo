@@ -16,7 +16,7 @@ import {
   setupContentSecurityPolicy,
   setupPermissionRequestHandler,
 } from './security.js';
-import { registerWorkspaceIpc } from './workspaceIpc.js';
+import { closeAllWorkspaceHandles, registerWorkspaceIpc } from './workspaceIpc.js';
 
 app.enableSandbox();
 registerAppShellScheme();
@@ -54,7 +54,12 @@ function createWindow(): void {
     void mainWindow.loadURL(getAppShellUrl('index.html'));
   }
 
+  mainWindow.webContents.on('render-process-gone', () => {
+    void closeAllWorkspaceHandles();
+  });
+
   mainWindow.on('closed', () => {
+    void closeAllWorkspaceHandles();
     mainWindow = null;
   });
 }
@@ -111,5 +116,7 @@ app.on('window-all-closed', () => {
 
 process.on('uncaughtException', (error: Error) => {
   console.error('[Main] Uncaught Exception', error);
-  app.exit(1);
+  void closeAllWorkspaceHandles().finally(() => {
+    app.exit(1);
+  });
 });

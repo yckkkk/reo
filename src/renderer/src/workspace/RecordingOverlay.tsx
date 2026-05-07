@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -32,7 +31,10 @@ import {
   type RecordingState,
 } from './recordingMachine';
 
-type FinalizedRecording = WorkspaceSession['snapshot']['recordings'][number];
+type FinalizedRecording = Extract<
+  Awaited<ReturnType<typeof finalizeRecordingDraft>>,
+  { readonly ok: true }
+>['value'];
 
 type RecordingOverlayProps = {
   readonly mediaAdapter?: RecordingMediaAdapter;
@@ -43,6 +45,7 @@ type RecordingOverlayProps = {
 };
 
 const AUTOSAVE_DELAY_MS = 300;
+const PLAYBACK_CHUNK_CONCURRENCY = 4;
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -80,9 +83,14 @@ export function RecordingOverlay({
     readonly recordingId: string;
     readonly recordingSession: number;
   } | null>(null);
+  const playbackSessionRef = useRef(0);
   const lastSavedTranscriptRef = useRef('');
   const lastSavedReflectionsRef = useRef('');
   const appendFailureRef = useRef<string | null>(null);
+  const recordingDurationRef = useRef<{
+    accumulatedMs: number;
+    startedAtMs: number | null;
+  }>({ accumulatedMs: 0, startedAtMs: null });
   const recordingSessionRef = useRef(0);
   const sequenceRef = useRef(0);
 
@@ -153,6 +161,12 @@ export function RecordingOverlay({
 
   useEffect(() => {
     return () => {
+      playbackSessionRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       if (playbackUrl) {
         URL.revokeObjectURL(playbackUrl);
       }
@@ -171,6 +185,39 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
       })
     ).catch(() => {});
+  }
+
+  function resetRecordingDurationClock(startedAtMs: number | null = null) {
+    recordingDurationRef.current = { accumulatedMs: 0, startedAtMs };
+  }
+
+  function pauseRecordingDurationClock() {
+    const clock = recordingDurationRef.current;
+    if (clock.startedAtMs === null) {
+      return;
+    }
+    recordingDurationRef.current = {
+      accumulatedMs: clock.accumulatedMs + Math.max(0, performance.now() - clock.startedAtMs),
+      startedAtMs: null,
+    };
+  }
+
+  function resumeRecordingDurationClock() {
+    const clock = recordingDurationRef.current;
+    if (clock.startedAtMs !== null) {
+      return;
+    }
+    recordingDurationRef.current = {
+      accumulatedMs: clock.accumulatedMs,
+      startedAtMs: performance.now(),
+    };
+  }
+
+  function readRecordingDurationMs() {
+    const clock = recordingDurationRef.current;
+    const activeMs =
+      clock.startedAtMs === null ? 0 : Math.max(0, performance.now() - clock.startedAtMs);
+    return Math.round(clock.accumulatedMs + activeMs);
   }
 
   function failActiveRecording(
@@ -242,6 +289,7 @@ export function RecordingOverlay({
     setReflectionsDraft('');
     lastSavedTranscriptRef.current = '';
     lastSavedReflectionsRef.current = '';
+    resetRecordingDurationClock();
     const recordingSession = recordingSessionRef.current + 1;
     recordingSessionRef.current = recordingSession;
     setState((current) => transitionRecordingState(current, { type: 'start-requested' }));
@@ -271,6 +319,7 @@ export function RecordingOverlay({
         await controller.stop().catch(() => {});
         return;
       }
+      resetRecordingDurationClock(performance.now());
       controllerRef.current = controller;
       setState((current) =>
         transitionRecordingState(current, { recordingId: nextRecordingId, type: 'draft-ready' })
@@ -282,11 +331,13 @@ export function RecordingOverlay({
   }
 
   function handlePause() {
+    pauseRecordingDurationClock();
     controllerRef.current?.pause();
     setState((current) => transitionRecordingState(current, { type: 'pause-requested' }));
   }
 
   function handleResume() {
+    resumeRecordingDurationClock();
     controllerRef.current?.resume();
     setState((current) => transitionRecordingState(current, { type: 'resume-requested' }));
   }
@@ -302,6 +353,8 @@ export function RecordingOverlay({
     if (!controller || appendFailureRef.current) {
       return;
     }
+    const durationMs = readRecordingDurationMs();
+    pauseRecordingDurationClock();
     setState((current) => transitionRecordingState(current, { type: 'stop-requested' }));
     try {
       await controller.stop();
@@ -320,6 +373,7 @@ export function RecordingOverlay({
     let finalized: Awaited<ReturnType<typeof finalizeRecordingDraft>>;
     try {
       finalized = await finalizeRecordingDraft({
+        durationMs,
         recordingId,
         title,
         workspaceHandle: workspaceSession.workspaceHandle,
@@ -346,7 +400,7 @@ export function RecordingOverlay({
     setState((current) =>
       transitionRecordingState(current, {
         recordingId,
-        title: finalized.value.title,
+        title: finalized.value.recording.title,
         type: 'finalized',
       })
     );
@@ -358,6 +412,8 @@ export function RecordingOverlay({
       return;
     }
 
+    const playbackSession = playbackSessionRef.current + 1;
+    playbackSessionRef.current = playbackSession;
     setError(null);
     if (playbackUrl) {
       URL.revokeObjectURL(playbackUrl);
@@ -373,34 +429,62 @@ export function RecordingOverlay({
       return;
     }
 
-    const chunks: Uint8Array[] = [];
-    for (let offset = 0; offset < manifest.value.byteLength; ) {
-      const length = Math.min(manifest.value.maxChunkBytes, manifest.value.byteLength - offset);
-      const response = await readRecordingAudioChunk({
-        length,
-        offset,
-        recordingId: state.recordingId,
-        workspaceHandle: workspaceSession.workspaceHandle,
-      });
-      if (!response.ok) {
-        setError(response.error.message);
-        return;
+    const recordingId = state.recordingId;
+    const { byteLength, maxChunkBytes } = manifest.value;
+    const chunkCount = Math.ceil(byteLength / maxChunkBytes);
+    const chunks = new Array<Uint8Array>(chunkCount);
+    let nextChunkIndex = 0;
+
+    async function readNextChunk() {
+      while (nextChunkIndex < chunkCount) {
+        if (playbackSessionRef.current !== playbackSession) {
+          return;
+        }
+        const chunkIndex = nextChunkIndex;
+        nextChunkIndex += 1;
+        const offset = chunkIndex * maxChunkBytes;
+        const length = Math.min(maxChunkBytes, byteLength - offset);
+        const response = await readRecordingAudioChunk({
+          length,
+          offset,
+          recordingId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+        if (!response.ok) {
+          throw new Error(response.error.message);
+        }
+        if (playbackSessionRef.current !== playbackSession) {
+          return;
+        }
+        chunks[chunkIndex] = response.value.chunk;
       }
-      chunks.push(response.value.chunk);
-      offset += length;
     }
 
-    const blobParts = chunks.map((chunk): BlobPart => {
-      const copy = new Uint8Array(chunk.byteLength);
-      copy.set(chunk);
-      return copy.buffer as ArrayBuffer;
-    });
-    setPlaybackUrl(URL.createObjectURL(new Blob(blobParts, { type: 'audio/webm' })));
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(PLAYBACK_CHUNK_CONCURRENCY, chunkCount) }, readNextChunk)
+      );
+    } catch (playbackError) {
+      if (playbackSessionRef.current !== playbackSession) {
+        return;
+      }
+      setError(errorMessage(playbackError, 'Recording audio could not be loaded'));
+      return;
+    }
+
+    if (playbackSessionRef.current !== playbackSession) {
+      return;
+    }
+    setPlaybackUrl(URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' })));
   }
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isBusy(state)) {
       return;
+    }
+    if (!nextOpen) {
+      playbackSessionRef.current += 1;
+      setPlaybackUrl(null);
     }
     onOpenChange(nextOpen);
   }
@@ -489,11 +573,14 @@ export function RecordingOverlay({
           )}
 
           <div className="flex justify-end">
-            <DialogClose asChild disabled={!canClose}>
-              <Button type="button" variant="secondary" disabled={!canClose}>
-                Close recording panel
-              </Button>
-            </DialogClose>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!canClose}
+              onClick={() => handleOpenChange(false)}
+            >
+              Close recording panel
+            </Button>
           </div>
         </div>
       </DialogContent>

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Session } from 'electron';
+import type { z } from 'zod';
 import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
@@ -31,6 +32,7 @@ import {
   workspaceRecordingMarkdownSaveRequestSchema,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
+  type WorkspaceErrorEnvelope,
 } from './workspaceContract.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import { acquireWorkspaceLock } from './workspaceLock.js';
@@ -45,6 +47,8 @@ import {
 } from './trustedSender.js';
 import {
   appendRecordingAudioChunk,
+  clearRecordingRuntimeState,
+  clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
@@ -53,11 +57,16 @@ import {
   readRecordingAudioManifest,
   saveRecordingMarkdown,
 } from './recordingDrafts.js';
-import { initializeWorkspaceFiles, openWorkspaceFiles } from './workspaceFiles.js';
-import { resolveWorkspaceRoot } from './workspacePaths.js';
+import {
+  initializeWorkspaceFiles,
+  openWorkspaceFiles,
+  validateWorkspaceInitializeTarget,
+  validateWorkspaceOpenTarget,
+} from './workspaceFiles.js';
 
 const require = createRequire(import.meta.url);
 const { dialog, ipcMain } = require('electron') as typeof import('electron');
+const defaultHandleStore = createWorkspaceHandleStore();
 
 interface ShowOpenDirectoryDialogResult {
   readonly canceled: boolean;
@@ -65,6 +74,7 @@ interface ShowOpenDirectoryDialogResult {
 }
 
 type ShowOpenDirectoryDialog = () => Promise<ShowOpenDirectoryDialogResult>;
+type MaybePromise<T> = T | Promise<T>;
 
 export interface RegisterWorkspaceIpcOptions {
   readonly expectedSession: Session | object;
@@ -87,6 +97,10 @@ export interface HandleInitializeWorkspaceOptions extends RegisterWorkspaceIpcOp
   readonly createHandle?: () => string;
   readonly now?: () => string;
 }
+
+type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
+  readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
+};
 
 type TrustedResult =
   | {
@@ -155,6 +169,11 @@ export async function handleChooseWorkspaceDirectory({
   }
 }
 
+export async function closeAllWorkspaceHandles(): Promise<void> {
+  await defaultHandleStore.closeAllHandles();
+  clearRecordingRuntimeState();
+}
+
 function createWorkspaceId(): string {
   return `ws_${randomUUID()}`;
 }
@@ -167,11 +186,54 @@ function createRecordingId(): string {
   return `rec_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
+function createMemoryId(): string {
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return `mem_${timestamp}_${randomUUID().slice(0, 8)}`;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-export async function handleInitializeWorkspace({
+async function releaseWorkspaceLockAfterFailure(
+  lock: Awaited<ReturnType<typeof acquireWorkspaceLock>>
+): Promise<void> {
+  if (lock.ok && lock.lock.isHeld()) {
+    await lock.lock.release().catch(() => {});
+  }
+}
+
+async function releaseWorkspaceRegistrationAfterFailure({
+  lock,
+  store,
+  registered,
+  sender,
+}: {
+  readonly lock: Awaited<ReturnType<typeof acquireWorkspaceLock>>;
+  readonly store: WorkspaceHandleStore;
+  readonly registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
+  readonly sender: TrustedSenderIdentity;
+}): Promise<void> {
+  if (registered) {
+    const closed = await store
+      .closeHandle({
+        workspaceHandle: registered.workspaceHandle,
+        sender,
+      })
+      .catch(() => null);
+
+    if (closed?.ok) {
+      return;
+    }
+  }
+
+  await releaseWorkspaceLockAfterFailure(lock);
+}
+
+async function handleInitializeWorkspaceCore({
   event,
   input,
   expectedSession,
@@ -182,7 +244,8 @@ export async function handleInitializeWorkspace({
   createWorkspaceId: createWorkspaceIdOption = createWorkspaceId,
   createHandle,
   now = nowIso,
-}: HandleInitializeWorkspaceOptions): Promise<WorkspaceInitializeResponse> {
+  afterWorkspaceLockAcquiredForTest,
+}: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateTrustedWorkspaceSender({
     event,
     channel: WORKSPACE_INITIALIZE_CHANNEL,
@@ -212,45 +275,92 @@ export async function handleInitializeWorkspace({
     return consumed;
   }
 
-  const canonicalRoot = await resolveWorkspaceRoot(consumed.rootPath);
-  if (typeof canonicalRoot !== 'string') {
-    return canonicalRoot;
+  const target = await validateWorkspaceInitializeTarget(consumed.rootPath);
+  if (!target.ok) {
+    return target;
   }
+  const { canonicalRoot } = target;
 
   const lock = await acquireWorkspaceLock({ canonicalRoot });
   if (!lock.ok) {
     return lock;
   }
+  await afterWorkspaceLockAcquiredForTest?.();
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
 
-  const initialized = await initializeWorkspaceFiles({
-    rootPath: canonicalRoot,
-    title: request.data.title,
-    description: request.data.description,
-    createWorkspaceId: createWorkspaceIdOption,
-    now,
-  });
+  let initialized: Awaited<ReturnType<typeof initializeWorkspaceFiles>>;
+  try {
+    initialized = await initializeWorkspaceFiles({
+      rootPath: canonicalRoot,
+      title: request.data.title,
+      description: request.data.description,
+      createWorkspaceId: createWorkspaceIdOption,
+      now,
+      assertWorkspaceUsable: () =>
+        lock.lock.isUsable()
+          ? { ok: true as const }
+          : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
+    });
+  } catch {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_INIT_FAILED',
+      'Workspace could not be initialized',
+      'unknown'
+    );
+  }
 
   if (!initialized.ok) {
-    await lock.lock.release();
+    await releaseWorkspaceLockAfterFailure(lock);
     return initialized;
   }
 
   const store =
     createHandle === undefined ? handleStore : createWorkspaceHandleStore({ createHandle });
-  const registered = store.register({
-    canonicalRoot,
-    workspaceId: initialized.snapshot.workspaceId,
-    sender: trusted.sender,
-    lock: lock.lock,
-  });
+  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
+  try {
+    registered = store.register({
+      canonicalRoot,
+      workspaceId: initialized.snapshot.workspaceId,
+      sender: trusted.sender,
+      lock: lock.lock,
+    });
 
-  return workspaceInitializeResponseSchema.parse({
-    ok: true,
-    value: {
-      ...registered,
-      snapshot: initialized.snapshot,
-    },
-  });
+    return workspaceInitializeResponseSchema.parse({
+      ok: true,
+      value: {
+        ...registered,
+        snapshot: initialized.snapshot,
+      },
+    });
+  } catch {
+    await releaseWorkspaceRegistrationAfterFailure({
+      lock,
+      store,
+      registered,
+      sender: trusted.sender,
+    });
+    return workspaceError(
+      'ERR_WORKSPACE_INIT_FAILED',
+      'Workspace could not be initialized',
+      'unknown'
+    );
+  }
+}
+
+export async function handleInitializeWorkspace(
+  options: HandleInitializeWorkspaceOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleInitializeWorkspaceCore(options);
+}
+
+export async function handleInitializeWorkspaceForTest(
+  options: HandleInitializeWorkspaceForTestOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleInitializeWorkspaceCore(options);
 }
 
 function validateWorkspaceSender({
@@ -276,7 +386,87 @@ function validateWorkspaceSender({
   });
 }
 
-export async function handleOpenWorkspace({
+type WorkspaceHandleRequestData = {
+  readonly workspaceHandle: string;
+};
+
+type RequiredWorkspaceHandle = Extract<
+  ReturnType<WorkspaceHandleStore['requireHandle']>,
+  { readonly ok: true }
+>['handle'];
+type AssertWorkspaceHandleUsable = RequiredWorkspaceHandle['assertUsable'];
+
+async function withUsableWorkspaceHandle<Result>(
+  assertUsable: AssertWorkspaceHandleUsable,
+  run: () => MaybePromise<Result | WorkspaceErrorEnvelope>
+): Promise<Result | WorkspaceErrorEnvelope> {
+  const usable = assertUsable();
+  return usable.ok ? await run() : usable;
+}
+
+async function withWorkspaceHandleRequest<
+  Schema extends z.ZodType<WorkspaceHandleRequestData>,
+  Result,
+>({
+  event,
+  input,
+  channel,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore,
+  schema,
+  invalidMessage,
+  run,
+}: {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly channel: string;
+  readonly expectedSession: Session | object;
+  readonly expectedSessionKey: string;
+  readonly isTrustedUrl: (url: string) => boolean;
+  readonly handleStore: WorkspaceHandleStore;
+  readonly schema: Schema;
+  readonly invalidMessage: string;
+  readonly run: (
+    data: z.infer<Schema>,
+    handle: RequiredWorkspaceHandle,
+    assertUsable: AssertWorkspaceHandleUsable
+  ) => MaybePromise<Result | WorkspaceErrorEnvelope>;
+}): Promise<Result | WorkspaceErrorEnvelope> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = schema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', invalidMessage);
+  }
+
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.data.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return required;
+  }
+
+  const usable = required.handle.assertUsable();
+  if (!usable.ok) {
+    return usable;
+  }
+
+  return run(request.data as z.infer<Schema>, required.handle, required.handle.assertUsable);
+}
+
+async function handleOpenWorkspaceCore({
   event,
   input,
   expectedSession,
@@ -284,7 +474,8 @@ export async function handleOpenWorkspace({
   isTrustedUrl,
   tokenStore = createWorkspaceSelectionTokenStore(),
   handleStore = createWorkspaceHandleStore(),
-}: HandleInitializeWorkspaceOptions): Promise<WorkspaceInitializeResponse> {
+  afterWorkspaceLockAcquiredForTest,
+}: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateWorkspaceSender({
     event,
     channel: WORKSPACE_OPEN_CHANNEL,
@@ -309,36 +500,81 @@ export async function handleOpenWorkspace({
     return consumed;
   }
 
-  const canonicalRoot = await resolveWorkspaceRoot(consumed.rootPath);
-  if (typeof canonicalRoot !== 'string') {
-    return canonicalRoot;
+  const target = await validateWorkspaceOpenTarget(consumed.rootPath);
+  if (!target.ok) {
+    return target;
   }
+  const { canonicalRoot } = target;
 
   const lock = await acquireWorkspaceLock({ canonicalRoot });
   if (!lock.ok) {
     return lock;
   }
-
-  const opened = await openWorkspaceFiles({ rootPath: canonicalRoot });
-  if (!opened.ok) {
-    await lock.lock.release();
-    return opened;
+  await afterWorkspaceLockAcquiredForTest?.();
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
   }
 
-  const registered = handleStore.register({
-    canonicalRoot,
-    workspaceId: opened.snapshot.workspaceId,
-    sender: trusted.sender,
-    lock: lock.lock,
-  });
+  let opened: Awaited<ReturnType<typeof openWorkspaceFiles>>;
+  try {
+    opened = await openWorkspaceFiles({
+      rootPath: canonicalRoot,
+      assertWorkspaceUsable: () =>
+        lock.lock.isUsable()
+          ? { ok: true as const }
+          : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
+    });
+  } catch {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_OPEN_FAILED', 'Workspace could not be opened', 'unknown');
+  }
+  if (!opened.ok) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return opened;
+  }
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
 
-  return workspaceInitializeResponseSchema.parse({
-    ok: true,
-    value: {
-      ...registered,
-      snapshot: opened.snapshot,
-    },
-  });
+  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
+  try {
+    registered = handleStore.register({
+      canonicalRoot,
+      workspaceId: opened.snapshot.workspaceId,
+      sender: trusted.sender,
+      lock: lock.lock,
+    });
+
+    return workspaceInitializeResponseSchema.parse({
+      ok: true,
+      value: {
+        ...registered,
+        snapshot: opened.snapshot,
+      },
+    });
+  } catch {
+    await releaseWorkspaceRegistrationAfterFailure({
+      lock,
+      store: handleStore,
+      registered,
+      sender: trusted.sender,
+    });
+    return workspaceError('ERR_WORKSPACE_OPEN_FAILED', 'Workspace could not be opened', 'unknown');
+  }
+}
+
+export async function handleOpenWorkspace(
+  options: HandleInitializeWorkspaceOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleOpenWorkspaceCore(options);
+}
+
+export async function handleOpenWorkspaceForTest(
+  options: HandleInitializeWorkspaceForTestOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleOpenWorkspaceCore(options);
 }
 
 export function registerWorkspaceIpc({
@@ -346,7 +582,7 @@ export function registerWorkspaceIpc({
   expectedSessionKey,
   isTrustedUrl,
   tokenStore = createWorkspaceSelectionTokenStore(),
-  handleStore = createWorkspaceHandleStore(),
+  handleStore = defaultHandleStore,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
 }: RegisterWorkspaceIpcOptions): void {
   ipcMain.handle(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
@@ -382,7 +618,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) => {
+  ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, async (event, input) => {
     const trusted = validateWorkspaceSender({
       event,
       channel: WORKSPACE_CLOSE_CHANNEL,
@@ -397,269 +633,180 @@ export function registerWorkspaceIpc({
     if (!request.success) {
       return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'closeWorkspace request is invalid');
     }
-    return handleStore.closeHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-  });
-  ipcMain.handle(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceCloseRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'createRecordingDraft request is invalid'
-      );
-    }
     const handle = handleStore.requireHandle({
       workspaceHandle: request.data.workspaceHandle,
       sender: trusted.sender,
     });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await createRecordingDraft({
-      rootPath: handle.handle.canonicalRoot,
-      workspaceId: handle.handle.workspaceId,
-      createRecordingId,
-      now: nowIso,
-    });
-    return result.ok ? { ok: true, value: result } : result;
-  });
-  ipcMain.handle(WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingAppendRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'appendRecordingAudioChunk request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
+    const closed = await handleStore.closeHandle({
       workspaceHandle: request.data.workspaceHandle,
       sender: trusted.sender,
     });
-    if (!handle.ok) {
-      return handle;
+    if (closed.ok && handle.ok) {
+      clearRecordingRuntimeStateForRoot(handle.handle.canonicalRoot);
     }
-    const result = await appendRecordingAudioChunk({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-      sequence: request.data.sequence,
-      chunk: request.data.chunk,
-    });
-    return result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result;
+    return closed;
   });
-  ipcMain.handle(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingFinalizeRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'finalizeRecordingDraft request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await finalizeRecordingDraft({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-      title: request.data.title,
-      now: nowIso,
-    });
-    return result.ok ? { ok: true, value: result.recording } : result;
-  });
-  ipcMain.handle(WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingIdRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'discardRecordingDraft request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await discardRecordingDraft({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-    });
-    return result.ok ? { ok: true, value: { discarded: true } } : result;
-  });
-  ipcMain.handle(WORKSPACE_GET_RECORDING_DETAIL_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingIdRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'getRecordingDetail request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await getRecordingDetail({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-    });
-    return result.ok ? { ok: true, value: result.recording } : result;
-  });
-  ipcMain.handle(WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingIdRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'readRecordingAudioManifest request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await readRecordingAudioManifest({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-    });
-    return result.ok ? { ok: true, value: result.manifest } : result;
-  });
-  ipcMain.handle(WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel: WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceRecordingAudioChunkRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError(
-        'ERR_WORKSPACE_INVALID_REQUEST',
-        'readRecordingAudioChunk request is invalid'
-      );
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (!handle.ok) {
-      return handle;
-    }
-    const result = await readRecordingAudioChunk({
-      rootPath: handle.handle.canonicalRoot,
-      recordingId: request.data.recordingId,
-      offset: request.data.offset,
-      length: request.data.length,
-    });
-    return result.ok ? { ok: true, value: { chunk: result.chunk } } : result;
-  });
-  for (const [channel, fileName] of [
-    [WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, 'transcript.md'],
-    [WORKSPACE_SAVE_REFLECTIONS_CHANNEL, 'reflections.md'],
-  ] as const) {
-    ipcMain.handle(channel, async (event, input) => {
-      const trusted = validateWorkspaceSender({
+
+  function registerWorkspaceHandleRequest<
+    Schema extends z.ZodType<WorkspaceHandleRequestData>,
+    Result,
+  >(
+    channel: string,
+    schema: Schema,
+    invalidMessage: string,
+    run: (
+      data: z.infer<Schema>,
+      handle: RequiredWorkspaceHandle,
+      assertUsable: AssertWorkspaceHandleUsable
+    ) => MaybePromise<Result | WorkspaceErrorEnvelope>
+  ): void {
+    ipcMain.handle(channel, (event, input) =>
+      withWorkspaceHandleRequest({
         event,
+        input,
         channel,
         expectedSession,
         expectedSessionKey,
         isTrustedUrl,
-      });
-      if (!trusted.ok) {
-        return trusted;
-      }
-      const request = workspaceRecordingMarkdownSaveRequestSchema.safeParse(input);
-      if (!request.success) {
-        return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'save markdown request is invalid');
-      }
-      const handle = handleStore.requireHandle({
-        workspaceHandle: request.data.workspaceHandle,
-        sender: trusted.sender,
-      });
-      if (!handle.ok) {
-        return handle;
-      }
-      const result = await saveRecordingMarkdown({
-        rootPath: handle.handle.canonicalRoot,
-        recordingId: request.data.recordingId,
-        fileName,
-        markdown: request.data.markdown,
-      });
-      return result.ok ? { ok: true, value: { saved: true } } : result;
-    });
+        handleStore,
+        schema,
+        invalidMessage,
+        run,
+      })
+    );
+  }
+
+  registerWorkspaceHandleRequest(
+    WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+    workspaceCloseRequestSchema,
+    'createRecordingDraft request is invalid',
+    (_request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await createRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          createRecordingId,
+          now: nowIso,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: result } : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+    workspaceRecordingAppendRequestSchema,
+    'appendRecordingAudioChunk request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await appendRecordingAudioChunk({
+          rootPath: handle.canonicalRoot,
+          recordingId: request.recordingId,
+          sequence: request.sequence,
+          chunk: request.chunk,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+    workspaceRecordingFinalizeRequestSchema,
+    'finalizeRecordingDraft request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await finalizeRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          recordingId: request.recordingId,
+          createMemoryId,
+          title: request.title,
+          durationMs: request.durationMs,
+          now: nowIso,
+          ...(request.memoryId ? { memoryId: request.memoryId } : {}),
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok
+          ? { ok: true, value: { memory: result.memory, recording: result.recording } }
+          : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+    workspaceRecordingIdRequestSchema,
+    'discardRecordingDraft request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await discardRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          recordingId: request.recordingId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: { discarded: true } } : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
+    workspaceRecordingIdRequestSchema,
+    'getRecordingDetail request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await getRecordingDetail({
+          rootPath: handle.canonicalRoot,
+          recordingId: request.recordingId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: result.recording } : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
+    workspaceRecordingIdRequestSchema,
+    'readRecordingAudioManifest request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await readRecordingAudioManifest({
+          rootPath: handle.canonicalRoot,
+          recordingId: request.recordingId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: result.manifest } : result;
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
+    workspaceRecordingAudioChunkRequestSchema,
+    'readRecordingAudioChunk request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await readRecordingAudioChunk({
+          rootPath: handle.canonicalRoot,
+          recordingId: request.recordingId,
+          offset: request.offset,
+          length: request.length,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return result.ok ? { ok: true, value: { chunk: result.chunk } } : result;
+      })
+  );
+  for (const [channel, fileName] of [
+    [WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, 'transcript.md'],
+    [WORKSPACE_SAVE_REFLECTIONS_CHANNEL, 'reflections.md'],
+  ] as const) {
+    registerWorkspaceHandleRequest(
+      channel,
+      workspaceRecordingMarkdownSaveRequestSchema,
+      'save markdown request is invalid',
+      (request, handle, assertUsable) =>
+        withUsableWorkspaceHandle(assertUsable, async () => {
+          const result = await saveRecordingMarkdown({
+            rootPath: handle.canonicalRoot,
+            recordingId: request.recordingId,
+            fileName,
+            markdown: request.markdown,
+            assertWorkspaceUsable: assertUsable,
+          });
+          return result.ok ? { ok: true, value: { saved: true } } : result;
+        })
+    );
   }
 }

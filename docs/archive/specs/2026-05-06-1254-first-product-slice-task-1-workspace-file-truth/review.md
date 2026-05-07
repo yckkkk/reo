@@ -1,0 +1,315 @@
+# 审查
+
+## 当前结论
+
+自审结论：Review 49 是 Task 1 最后一轮审查。子代理与 Codex CLI `$ycksimplify` 提出的 BLOCKER/MAJOR 已通过 RED/GREEN 修复；用户已在 2026-05-07 05:06 PDT 明确豁免本轮 Claude CLI 复审。最终归档和提交前仅保留固定验证门禁。
+
+## 计划审查
+
+- 本 task 覆盖 main process workspace 文件真源、`.reo/index.json` projection、现有 recording finalize IPC DTO/handler 的 memory 参数透传，以及 renderer bridge type 的同步。
+- 不触碰 renderer UI、preload、新 IPC channel、Drizzle/SQLite activation 或新依赖。
+- TDD 执行采用垂直 tracer。Implementation plan 中列出的多个 RED 测试作为目标行为清单，不作为一次性横向 RED 批次。
+
+## 简化审查
+
+已按 `/simplify` 检查：
+
+- 复用现有 workspace path、error envelope、atomic write 和 draft helper。
+- 避免 generic repository/service/runtime。
+- 避免重复 schema、重复 path 拼接和过深条件嵌套。
+- 保持 hot path 文件读取有边界，避免无界缓存。
+- 确保 file handle、directory handle、temporary path、staging path 和 rollback 清理明确。
+
+修复项：
+
+- 将空 `AppendRecordingToMemoryInput` interface 改为 type alias。
+- 删除 recovery 中无效的 `memory = null` 赋值。
+- `rebuildMemoryIndex` 增加 `persist` 选项，避免 `updateWorkspaceIndex` 在 update callback 成功前持久化 reconciliation。
+- 抽出 finalized recording summary 读取，避免 finalize response 错用 aggregate memory bytes。
+- 将 markdown save 的文件写入和 index refresh 拆开，避免 index refresh 失败时误报用户文件未保存。
+- 将 finalized recording lookup 收紧为只返回 status、ownership 和 audio bytes 匹配的 durable recording directory。
+- 删除旧 `recordings/` path helper，避免当前文件真源迁移后保留无 consumer 的旧路径抽象。
+
+## 第一轮对抗审查
+
+Codex CLI 与 subagent 审查结论：FAIL。
+
+发现并修复：
+
+- BLOCKER：target rollback 会删除既有 durable recording。已增加 duplicate target preflight 和 marker-owned rollback；新增 `duplicate recording finalize cannot delete an existing durable recording`。
+- BLOCKER：open snapshot `recordings[]` 为空导致当前 renderer reopen 后看不到 recording。已从 memory 文件真源重建临时兼容 projection；更新 workspace open tests。
+- MAJOR：recovery 清 marker 前未删除 stale draft，后续读取可能落回 draft。已改为先删除 draft、fsync parent、再清 marker；新增 stale draft recovery test。
+- MAJOR：同一 memory 并发 append 存在 last-writer-wins。已增加 per-memory write lock；并发未获锁的一方保留 draft。
+- MAJOR：existing memory append 返回 aggregate bytes。已改为从 durable recording summary 返回单条 recording bytes；新增 response test。
+- MAJOR：markdown save 不刷新 index 的 transcript/reflections presence。已在保存后触发 index refresh；新增 projection test。
+- MAJOR：同名 memory create 可能覆盖既有 memory。已增加 existing memory preflight；新增 collision test。
+- MAJOR：`docs/current/electron.md` 提前声明 microphone intent 已实现。已改为当前事实，并把 intent sequencing 留给 recording capability slice。
+
+## 后续对抗审查
+
+- Codex CLI 多轮审查发现并推动修复：symlinked recovery、metadata schema、duration default、renderer session stale projection、unsupported directory fsync fallback。中间轮次曾通过 typecheck、main tests、renderer tests、lint、format 和 `git diff --check`，后续继续按新增审查点迭代。
+- Subagent 后续审查发现：symlinked `.reo` IPC 初始化可写出 workspace、AGENTS conflict IPC 路径会留下 `.reo/workspace.lock`、finalized + stale draft 并存时 append 仍写 stale draft、spec 验证证据过期。已新增 RED 测试并修复：
+  - `initializeWorkspace rejects symlinked .reo before writing workspace files`
+  - `initializeWorkspace returns AGENTS conflict without leaving a workspace lock`
+  - `recording append rejects stale draft when a finalized recording already exists`
+- Claude CLI 只读审查按用户要求只传 prompt、model `claude-opus-4-7` 和 effort `max`；早期模型参数不可用问题已按用户给出的 CLI 格式修正。
+- Codex/subagent 复审新增问题：nested `.reo/drafts` symlink 可写出 workspace、open 非 Reo 目录先留下 lock、unsafe `memories/` target 会留下 partial `.reo` 或抛异常。已新增 RED 测试并修复：
+  - `openWorkspace rejects non-Reo directories before writing a workspace lock`
+  - `initializeWorkspace rejects unsafe memories targets before writing workspace files`
+  - `initializeWorkspace rejects symlinked .reo draft ancestors before writing outside workspace`
+- Codex 最终复审新增 P2：open 现有 workspace 时 unsafe child directory 仍可能 lock 后失败，以及 renderer durable duration 使用显示秒表会对 sub-second recording 写 0。已新增 RED 测试并修复：
+  - `openWorkspace rejects unsafe child directories before writing a workspace lock`
+  - `uses sub-second recording duration instead of the rounded display timer`
+- Codex 复审新增 P2：`copyDraftRecordingIntoMemory` 的递归 `mkdir` 可能在 `memories/<memoryId>` 被替换成 symlink 后跟随到 workspace 外创建 `recordings/` 和 staging tree。已新增 RED 测试并修复：
+  - `preserves a draft when the memory parent is swapped to a symlink before staging`
+  - 修复方式为 finalized parent directory 逐段非递归创建、`lstat` 复核，并在 staging 前再次复核 `recordings/` parent。
+- Subagent 复审新增 P2：IPC initialize/open 获取 workspace lock 后，如果后续 workspace 文件写入、recovery 或 index rebuild 抛异常，lock 可能泄漏。已新增 RED 测试并修复：
+  - `initializeWorkspace releases the lock when post-lock file writes throw`
+  - `openWorkspace releases the lock when post-lock recovery or index writes throw`
+- Codex 复审新增 P2：transaction directory fsync 在不支持 directory fsync 的平台可能让 finalize 误回滚。已新增 RED 测试并修复：
+  - `finalize transaction directory fsync tolerates unsupported directory fsync`
+  - 修复方式为复用 atomic write 的 unsupported directory fsync 判定，对 `EACCES`、`EISDIR`、`EINVAL`、`ENOTSUP`、`EPERM` 做 best-effort。
+- Subagent 复审新增 P2：IPC initialize/open 在 handle registration 或 response parse 抛异常时，lock ownership 尚未安全交接，可能泄漏 lock。已新增 RED 测试并修复：
+  - `initializeWorkspace releases the lock when handle registration throws`
+  - `openWorkspace releases the lock when handle registration throws`
+  - 修复方式为把 register 和 response parse 放进同一交接保护区，失败时释放 lock；如果 handle 已注册，则先 close handle。
+- Codex 复审新增 P2：pre-expose finalize setup 在 marker hook、copy 或 staging fsync 失败时会留下 `.reo-finalizing-*` staging tree；新 memory 还会留下空目录，导致同一 deterministic `memoryId` 重试失败。已新增 RED 测试并修复：
+  - `new memory finalize can retry with the same memory id after marker write failure`
+  - 修复方式为 staging 暴露前失败时清理 staging tree；如果 memory 尚无 `memory.json`，清理该空 memory 目录。
+- Subagent 复审新增 P2：pre-expose cleanup 不能用未经重新复核的 staging path 删除目录，否则 memory 父目录 symlink swap 后可能删除 workspace 外同名 staging。已新增 RED 测试并修复：
+  - `pre-expose cleanup does not delete outside staging when memory parent is swapped to a symlink`
+  - 修复方式为 cleanup 前用 canonical workspace root 做相对路径判断，并逐段 `lstat` workspace 内目录。
+- Codex 复审新增 P1：finalized `audio.webm` symlink 会被 `stat()` 接受，manifest/chunk read 可暴露 workspace 外字节。已新增 RED 测试并修复：
+  - `finalized audio symlinks are rejected before manifest or chunk reads`
+  - 修复方式为 finalized lookup、index summary 和 audio read 统一 `lstat` audio，并只接受普通文件。
+- Codex 复审新增 P2：finalize 复制 draft 后会把已保存的 `transcript.md` / `reflections.md` 覆盖为空，导致用户草稿和 projection 丢失。已新增 RED 测试并修复：
+  - `recording finalize preserves draft transcript and reflections markdown`
+  - 修复方式为 finalize 只补齐缺失 markdown 文件；已有普通 markdown 文件保留内容，symlink 或非文件则失败回滚。
+- Subagent 复审新增 P1：draft `audio.webm` 被替换成目录时，finalize 会写入 invalid durable memory/index、删除 draft，却返回 `dataRetention: "draft-preserved"`。已新增 RED 测试并修复：
+  - `recording finalize rejects non-file draft audio before deleting the draft`
+  - 修复方式为 finalize 写 finalized metadata 前要求 staging audio 是普通文件，非文件或 symlink 都触发 rollback 并保留 draft。
+- Codex 复审新增 P2：draft `audio.webm` 被替换成 symlink 后，append chunk 会跟随 symlink 写到 workspace 外并推进 metadata。已新增 RED 测试并修复：
+  - `recording draft rejects symlinked draft audio before appending chunks`
+  - 修复方式为 append 前复核 draft audio 为普通文件，并用 no-follow append 打开；失败返回 `ERR_WORKSPACE_UNSAFE_PATH` 和 `dataRetention: "draft-preserved"`，不写外部文件、不推进 sequence 或 bytes。
+- Codex 复审新增 P2：audio chunk read 在 `lstat` 后重新按 path `readFile`，如果路径在 validation 后被替换为 symlink，仍可能暴露 workspace 外字节。已新增 RED 测试并修复：
+  - `audio chunk reads use the guarded file handle after audio validation`
+  - 修复方式为 read path 用 no-follow file handle 打开并 fstat，validation 和读取都在同一个 handle 上完成；路径被替换时仍读取已验证的原文件，不跟随新 symlink。
+- Subagent 复审新增 P2：dangling `AGENTS.md` symlink 会绕过 initialize no-write preflight，最后写 `AGENTS.md` 失败时已留下 `.reo/` 和 `memories/`。已新增 RED 测试并修复：
+  - `dangling AGENTS.md symlink conflict does not write workspace files`
+  - `initializeWorkspace treats dangling AGENTS.md symlink as conflict before lock`
+  - 修复方式为 `AGENTS.md` existence preflight 改用 `lstat`，dangling symlink 和任何 symlink 条目都按已有 `AGENTS.md` conflict 处理。
+- Codex 复审新增 P2：finalize marker 写入后 draft source directory 被替换成 symlink 时，copy 会跟随 workspace 外 draft 并提交为 durable truth。已新增 RED 测试并修复：
+  - `finalize rejects draft directory symlink swap before copying source files`
+  - 修复方式为 copy 前重新复核 draft source directory 为普通目录，且只复制普通 file entry；symlink 或目录 entry 触发 rollback 并保留 draft。
+- Subagent 复审新增 P2：`.reo/drafts/recordings` ancestor 被替换成 symlink 时，leaf-only `lstat` 仍会跟随 ancestor 到 workspace 外同名 draft。已新增 RED 测试并修复：
+  - `finalize rejects draft recordings ancestor symlink swap before copying source files`
+  - 修复方式为 marker 后重新调用 `draftRecordingDirectory()` 走完整 workspace child containment，再复制普通 draft files。
+- Codex 复审新增 P1：`beforeExpose` 后 `memories/<memoryId>/recordings` parent 被替换成 symlink 时，cached staging/target path 会把 workspace 外 staging rename 成 durable truth，或在 rollback 中删除 outside staging。已新增 RED 测试并修复：
+  - `finalize rejects recordings parent symlink swap before exposing staging`
+  - 修复方式为 expose 前重新调用 `memoryRecordingDirectory()` 走完整 containment，并复核 current staging directory；rollback cleanup 改用 safe workspace cleanup，避免跟随 symlink parent 删除 outside。
+- Codex 复审新增 P1/P2：draft copy、final rename、safe cleanup remove 和 workspace lock file write 仍存在 post-validation symlink swap TOCTOU。已新增 RED/回归测试并修复：
+  - `finalize rejects draft recordings ancestor symlink swap after draft validation before copy`
+  - `finalize rejects recordings parent symlink swap after rename validation`
+  - `pre-expose cleanup does not delete outside staging after cleanup validation`
+  - `workspace lock rejects .reo symlink swap before lock file write`
+  - 修复方式为 hook 后再次走完整 containment；final rename 只使用复核后的 staging/target path；cleanup remove 前后各做一次 safe resolution；lock 写入前复核 `.reo` directory identity。
+- Codex/subagent 复审新增 P1：finalize draft cleanup、recovery cleanup 和 final rename 后 memory metadata write 仍有 cached-path symlink swap 风险。已新增 RED 测试并修复：
+  - `finalize does not delete outside draft after draft cleanup validation`
+  - `finalize rejects memory directory symlink swap before memory metadata write`
+  - `recovery does not delete outside staging after recordings cleanup validation`
+  - 修复方式为 draft/recovery cleanup 统一走 safe cleanup helper；metadata write 前重新解析 memory directory；previous-memory rollback 不复用 cached path；safe cleanup 同时支持 input root 与 canonical root，避免 macOS `/var` 到 `/private/var` realpath 造成正常 cleanup 被误跳过。
+- Codex 复审新增 P1/P2：recovery repair 仍复用旧 `memoriesDirectory` 写 `memory.json`，memory directory swap 后可写出 workspace；finalize 已删除 draft 但 marker 尚未清除的正常崩溃窗口会让 recovery 永久保留 marker。已新增 RED 测试并修复：
+  - `recovery clears marker when the stale draft is already missing`
+  - `recovery does not write memory repair outside after memory directory swap`
+  - 修复方式为 recovery repair 写入前重新解析 `memoryDirectory()`；valid finalized recording 的 stale draft 缺失且 parent 安全时视作已完成 draft cleanup，继续 fsync draft parent 并清 marker。
+- Subagent 复审新增 BLOCKER/P1/P2：finalize 和 recovery 清 marker 仍复用 cached target path；`discardRecordingDraft` cleanup 仍可在 validation 后跟随 symlink parent 删除 workspace 外 draft；lock target 写入异常会直接 throw，handle close 在 release 失败时先删除 handle。已新增 RED 测试并修复：
+  - `finalize does not unlink outside marker after draft cleanup validation`
+  - `recovery does not unlink outside marker after draft cleanup validation`
+  - `discard draft does not delete outside draft after cleanup validation`
+  - `workspace lock returns an error envelope when lock target cannot be written`
+  - `initializeWorkspace returns an error envelope when the lock file target cannot be written`
+  - `workspace handle remains registered when lock release fails`
+  - 修复方式为 marker unlink 前重新解析 `memoryRecordingDirectory()` 并复核 target；draft discard 复用 safe cleanup helper；lock target write failure 返回 `ERR_WORKSPACE_LOCK_FAILED` error envelope；handle close 只有 release 成功后删除 handle，release 失败保留 handle 以便后续重试。
+- Codex 复审新增 P2：audio chunk read 虽使用 no-follow handle，但为每个 chunk 分配完整 audio file buffer；`memories/` root 或 `memories/<memoryId>` 在创建阶段被 symlink swap 时仍可能让 mkdir 跟随到 workspace 外。已新增 RED 测试并修复：
+  - `audio chunk reads only the requested byte range`
+  - `finalize rejects memories root symlink swap before creating a memory directory`
+  - `finalize rejects memory directory symlink swap before creating recordings directory`
+  - 修复方式为 audio chunk 读取只按 request `offset/length` 做 bounded file-handle `read()`；创建 memory 与 recordings directory 前后重新解析 workspace child containment，并拒绝 symlink ancestor swap。
+- Subagent 与 Codex 复审新增 MAJOR/P1/P2：audio playback 仍 fallback 读取 draft audio；append chunk 已写 audio 后 metadata 写失败会污染 draft；`AGENTS.md` 初始化不是 no-replace atomic write；finalize draft 已安全缺失时仍回滚 durable recording；recovery 会留下 metadata-less 空 memory 目录阻断同 id 重试。已新增 RED 测试并修复：
+  - `audio playback reads finalized truth only, not draft audio`
+  - `recording draft rolls back audio when metadata write fails after append`
+  - `no-replace atomic workspace writes link the target and fsync the parent`
+  - `finalize keeps durable recording when the draft is already missing at cleanup`
+  - `recovery removes empty new-memory directories after staging cleanup`
+  - 修复方式为 playback manifest/chunk 只使用 finalized lookup；append metadata 写失败时 truncate audio 到 append 前 size 并 fsync；`AGENTS.md` 使用 hard-link no-replace atomic path；draft cleanup 对 safe missing 视为完成；recovery 只清理没有 `memory.json` 且仅剩空 `recordings/` 的 new-memory directory。
+- `/ycksimplify` 复用、质量和效率审查新增简化项。已直接采纳低复杂度项：删除隐藏 `mem_${recordingId.slice(4)}` fallback，new memory finalize 必须由 IPC 或测试显式提供 `createMemoryId`；`memorySummarySchema` 复用 `workspaceMemorySummarySchema`；audio playback Blob 不再二次复制 chunk；transcript/reflections presence 不再读取完整 markdown；append durable lookup 改为 status union，删除 string-message control flow。暂不在本 task 合并 open-workspace 单次扫描、playback read token 和 autosave 单 memory index patch，因为它们会扩大数据读取协议和 IPC 合同，已作为后续优化输入保留。
+- Subagent 最终复审新增 2 个 BLOCKER：atomic write 在父目录 post-validation swap 后仍可能把 temp/final target 写到 workspace 外；recording draft create/append 仍可能在 ancestor swap 后把 draft/audio 写到 workspace 外。已新增回归测试并修复：
+  - `atomic workspace writes keep final rename inside the validated parent directory`
+  - `no-replace atomic workspace writes keep final link inside the validated parent directory`
+  - `recording draft create rejects ancestor swap before writing draft files`
+  - `recording append rejects ancestor swap before opening draft audio`
+  - 修复方式为 atomic writer 在已验证 parent directory 内完成 temp write、rename/link 和 parent fsync，最终 commit 前复核 parent path identity；draft create 在 mkdir 前后复核 recordings root identity，并在写 audio/metadata 前复核 draft directory identity；draft append 在打开 audio 前后复核 draft directory identity，并要求 opened file 与当前 path `lstat` 指向同一 file identity。
+- Subagent 再次复审指出 final path operation 窗口仍存在：atomic writer 的最终 `rename/link`、recording draft metadata atomic write、finalize expose 的最终 `rename` 仍可能在最终操作前 parent swap。已新增回归测试并修复：
+  - `finalize does not expose outside target after final rename validation`
+  - 修复方式为 production atomic writer 和 finalize expose 改成已验证 parent directory 内的相对文件/目录操作，并在 parent path identity 改变时失败；draft metadata 复用该 atomic writer，不再通过 swapped parent path commit。
+- 最终 subagent/Claude 复审继续要求覆盖更窄的 final commit 后置失败清理、draft create 空目录泄漏、audio read ancestor swap，以及 open workspace 缺失托管目录。已新增 RED 并修复：
+  - `atomic workspace writes keep final rename inside the validated parent directory`
+  - `no-replace atomic workspace writes keep final link inside the validated parent directory`
+  - `finalize does not expose outside target after final rename validation`
+  - `recording draft create rejects ancestor swap before writing draft files`
+  - `audio chunk reads reject finalized ancestor swap before opening audio`
+  - `open workspace recreates missing managed directories before returning ready`
+  - 修复方式为 final commit 后若 parent path identity 改变则删除已暴露 target 并失败；draft create 在 ancestor swap 后清理自己刚创建的空 draft directory；audio read 在打开 audio 前后绑定 finalized recording directory identity；open workspace 在返回 ready 前复用 managed directory ensure。
+- Codex CLI 最新复审新增 P2：open 缺失 `.reo/drafts/recordings` 或 `memories/` 时会返回不可用 session。该 P2 已按上面的 `open workspace recreates missing managed directories before returning ready` RED/GREEN 修复。
+- Codex CLI 最终复审新增 4 个 P2：workspace lock release 失败后 lock 仍被视为 held、atomic replace 后置失败会删除唯一 target、不可读 `memories/` 被协调为空 index、recovery 会跟随 symlinked recording leaf directory。已新增 RED 测试并修复：
+  - `workspace lock is marked lost when release fails`
+  - `atomic replace restores existing target after final rename validation fails`
+  - `open workspace fails without replacing index when memories cannot be read`
+  - `recovery drops recording references whose leaf directory is a symlink`
+  - 修复方式为 release `finally` 标记 lock lost；atomic replace 在同目录保留 backup 并在后置失败时恢复旧 target；rebuild/open 对真实 read error 失败并保留旧 index；recovery valid finalized check 拒绝 recording leaf symlink。
+- Claude CLI 最新只读 `/simplify` 复审结论：PASS；仅余 MINOR 建议，包括 append 错误码精化、recording detail no-follow metadata read、`process.chdir` 约束文档化。当前 task 已采纳 `process.chdir` 文档化；错误码精化和 detail no-follow metadata read 不影响本 slice BLOCKER/MAJOR 门禁，留给后续精简/安全收口输入。
+- Claude CLI 只读 `/simplify` 复审结论：PASS，无 BLOCKER/MAJOR。逐项确认 workspace lock release failure 后 lock lost、atomic replace 后置失败恢复旧 target、不可读 `memories/` open/rebuild 不写空 index、recovery 拒绝 symlinked recording leaf directory；仅余 MINOR：临时 `recordings[]` compatibility projection 命名、既有 mock transcript 占位、lock release single-flight 可后续收紧。
+- 使用额度恢复后的 subagent safety/correctness 复审新增 2 个 BLOCKER 和 2 个 MAJOR。已新增 RED 测试并修复：
+  - `workspace lock rejects symlinked lock file leaf without writing outside`
+  - `finalize rejects recordings parent symlink swap before creating staging`
+  - `rebuild index rejects symlinked memory metadata leaf files`
+  - `rebuild index rejects symlinked recording metadata leaf files`
+  - `atomic replace does not report failure after successful commit and backup removal`
+  - 修复方式为 lock target no-follow 打开并拒绝 symlink leaf；finalize staging 在已验证 `recordings/` parent 内用相对 `mkdir` 创建；`memory.json` 与 finalized `recording.json` 用 no-follow file handle 读取并拒绝 symlink leaf；atomic replace 在 target 已提交且 backup 已删除后，把 backup cleanup durability 作为 best-effort，不再误报失败或删除唯一 target。
+- 后续 subagent `/simplify` 与 safety 复审新增 BLOCKER/MAJOR：lock 在 `.reo` identity 复核后仍可能通过缓存 absolute path 写到 swapped parent；finalize staging 创建后 marker/fsync/copy 仍复用缓存 staging path；unsafe finalized `recording.json` 会让 detail/save fallback 到 stale draft；markdown save 在 parent swap 后仍可能写到 workspace 外。已新增 RED 测试并修复：
+  - `workspace lock rejects .reo parent swap before lock target open`
+  - `finalize rejects recordings parent symlink swap after creating staging`
+  - `recording detail rejects unsafe finalized metadata instead of falling back to stale draft`
+  - `saving markdown rejects recording parent swap before write`
+  - 修复方式为 lock 在当前 `.reo` directory identity 内打开 no-follow `workspace.lock` 并创建同目录 lock directory；finalize 在 staging 创建后、marker/fsync/copy/expose 前重新解析 staging；finalized lookup 增加 invalid durable status，detail/save 遇到 unsafe durable truth 不再 fallback；metadata/detail 使用 no-follow file handle；markdown save 在当前 recording directory identity 内写入。
+- 简化收口：移除已不再使用的 `proper-lockfile` 和类型依赖，workspace lock 改为本 slice 内显式目录锁，不新增 generic lock service。
+- Safety subagent 最终复审新增 2 个 BLOCKER 和 2 个 MAJOR：window close/renderer crash 会泄漏 workspace lock、托管 `.reo/drafts` 子目录创建仍存在 ancestor symlink TOCTOU、final expose 不是 no-replace、finalize 读取 staging `recording.json` 未显式 no-follow。已新增 RED 测试并修复：
+  - `main window teardown releases workspace handles`
+  - `workspace handle store releases all handles for window teardown`
+  - `managed draft directory creation rejects .reo ancestor swap before child mkdir`
+  - `finalize rejects recording target created after duplicate preflight`
+  - `finalize rejects staging metadata symlink after draft copy`
+  - 修复方式为 BrowserWindow `closed` 和 `render-process-gone` 释放全部 workspace handles；托管 child directory 在已验证 parent identity 内相对创建；final expose 在已验证 parent 内执行 no-replace 相对 rename；staging metadata 读取复用 no-follow file helper。
+- Safety/simplify subagent 复审新增 2 个 BLOCKER 和 5 个 MAJOR：workspace lock 未绑定 root identity、teardown release 失败会吞掉 handle、workspace metadata/index 读取会 follow symlink、audio read 未绑定 finalized metadata byte length、transcript/reflections presence 会 follow symlink、open workspace 为临时兼容投影重复扫描、directory fsync unsupported 判断重复。已新增 RED 测试并修复：
+  - `workspace lock is unusable when workspace root identity changes`
+  - `workspace handle store keeps handles whose teardown release fails`
+  - `open workspace rejects symlinked workspace metadata`
+  - `open workspace rebuilds instead of trusting a symlinked index`
+  - `audio reads reject bytes beyond finalized metadata length after audio grows`
+  - `index rebuild ignores symlinked transcript and reflections presence files`
+  - 修复方式为 lock 增加 `isUsable()` 并绑定 root/`.reo` identity；handle require 检查 lock usability；teardown close-all 只删除 release 成功的 handle；workspace metadata/index 改为 no-follow file handle；audio manifest/chunk 使用 finalized metadata `audioByteLength` 约束最终 file handle；markdown presence 改用 no-follow `lstat`；open workspace 通过一次 read model 同时产出 `memories[]` 和临时 `recordings[]`。
+- Safety/correctness 与 `/simplify` 复审新增 Review 33 阻断点：safe resolution 后绝对 `mkdir`、final expose check-then-rename、read model root swap 可写空 index、post-lock/pre-file-write lock loss、delayed handle 缺少二次 usability assertion、audio chunk read 每次全 workspace lookup、markdown autosave 每次全 workspace rebuild。已新增 RED 测试并修复：
+  - `initializeWorkspace rejects lock identity loss before workspace files are written`
+  - `openWorkspace rejects lock identity loss before workspace files are opened`
+  - `finalize rejects memories root swap after resolving the memory mkdir target`
+  - `finalize rejects memory directory swap after resolving the recordings mkdir target`
+  - `finalize rejects recording target created after final duplicate preflight`
+  - `rebuild preserves the existing index when memories root changes before scan`
+  - `audio chunk reads reuse the finalized audio target after the first lookup`
+  - `saving markdown refreshes one memory index entry without a full workspace rescan`
+  - `required workspace handles can recheck lock usability before delayed filesystem work`
+  - 修复方式为目录创建全部改为已验证 parent 内相对 `mkdir`；final expose 先相对保留 target 再搬迁 staging 内容，避免 late-created target 被替换；read model 绑定 `memories/` root identity；initialize/open lock 后立即复核 lock usability；handle 返回 delayed `assertUsable()`；audio hot path 增加 finalized target cache；markdown autosave 改为单 memory index entry refresh。
+- Subagent 复审新增 Review 34/35 阻断点：active spec 验证证据停留在旧轮次、initiative task 状态未收口、`workspaceIndexWriteQueues` 的单条 index refresh 并发事实未写入 current docs、draft metadata 在 finalize copy 后未经 schema 校验即可暴露 durable truth、audio cache hit 会绕过 duplicate finalized recording id 检测。已新增 RED 测试并修复：
+  - `finalize rejects invalid draft metadata before exposing durable recording truth`
+  - `cached audio reads reject duplicate finalized ids created after cache fill`
+  - 修复方式为 finalized 写入前按 draft metadata schema 重新解析 staging `recording.json`，并比较 workspace、recording id 与实际 audio byte length；manifest 查找或 cache revalidation 执行 duplicate durable directory 扫描，chunk read 复用已解析 owner 并进入 no-follow handle 读取；`docs/current/data.md`、`docs/current/flow.md` 和 `docs/current/quality.md` 已同步 current truth。
+- Review 36 复审新增 1 个 BLOCKER 和 1 个 MAJOR：recording draft leaf directory 创建后 ancestor swap 仍可能让 audio/metadata 写到 workspace 外；markdown index refresh queue 在队列外预先计算 summary，会用 stale summary 覆盖并发保存后的更新。已新增 RED 测试并修复：
+  - `recording draft create rejects ancestor swap after leaf directory create`
+  - `markdown index refresh reads memory summary inside the workspace index queue`
+  - 修复方式为 draft create 在 leaf mkdir 后立即绑定 leaf identity，并在写 audio/metadata 前重新解析完整 draft path；cleanup 只删除自己创建且 identity 未变的 leaf。单条 index refresh 在 write queue 内重新读取当前 memory summary，再合并当前 index。
+- Review 37 `/simplify` 和效率复审新增 3 个 MAJOR：测试 hook 泄漏到 production finalize API、directory identity/IPC handler 重复、atomic writer temp write/fsync 在 main hot path 同步执行、audio chunk cache 命中仍每个 chunk 扫描全部 memories。已修复：
+  - production `createMemoryForRecording`、`appendRecordingToMemory`、`finalizeRecordingDraft` 不再携带 `transactionHooks`；故障注入只通过 `ForTest` 出口。
+  - `src/main/directoryIdentity.ts` 收口目录 identity helper；`workspaceIpc.ts` 使用 file-local request helper，未新增 generic IPC bridge。
+  - atomic writer 改为异步 temp write/fsync，final rename/link 保留短同步 critical section；`writeMarkdownInRecordingDirectory` 改为 absolute path atomic write，避免依赖异步期间的 `process.cwd()`。
+  - `cached audio chunk reads do not rescan duplicate ownership per chunk` 锁定 chunk hot path；manifest 仍做 duplicate finalized id revalidation。
+- Review 38 复审修复：cache 命中后的 audio chunk read 必须重验 finalized metadata；final expose 必须拒绝 staging source 被替换为 symlink；recovery 遇到 marker-bearing durable recording 且 finalized files invalid 时 fail-open 保留用户数据；uncaught exception 必须释放 workspace handles；durable transaction 内部必须重新消费 delayed workspace usability assertion；append metadata 写失败返回 `ERR_RECORDING_APPEND_FAILED` 和 `draft-preserved`；workspace lock 可替换死进程 owner 的 stale lock directory；`memoryFiles` 和 `recordingDrafts` 的 metadata/audio/markdown 读写继续收口到已验证 directory identity 下。已新增 RED 测试并修复：
+  - `cached audio chunk reads reject stale finalized metadata after cache fill`
+  - `finalize rejects staging source swap before final expose`
+  - `recovery preserves marker-bearing durable recording when finalized files are invalid`
+  - `main window teardown releases workspace handles`
+  - `finalize aborts when workspace handle is lost during durable transaction`
+  - `recording draft rolls back audio when metadata write fails after append`
+  - `workspace lock replaces stale lock directories owned by dead processes`
+  - 修复方式为 cached chunk path 每次重验 cached metadata；final expose 在已验证 parent 内绑定 source staging identity；recovery 对已被 memory metadata 引用但当前 finalized validation 失败的 marker-bearing durable directory 不删除；uncaught exception 先 close-all handles 再 exit；memory finalize/copy/expose/cleanup 阶段传入并消费 `assertWorkspaceUsable`；append 写 audio 后先 fsync，再写 metadata，metadata 失败时 truncate/fsync 并返回专用错误码；lock directory 写入 owner pid，owner 进程不存在时只替换该 stale lock；metadata/audio/markdown read/write 改为相对当前 directory identity 的 no-follow file operation。
+- Review 39/40 复审修复：Codex CLI 按 `$ycksimplify` 找到 2 个 BLOCKER 与 4 个 MAJOR，Claude CLI 按 `/simplify` 找到 2 个 lock MAJOR；子代理 PASS。已新增 RED 测试并修复：
+  - `recovery preserves marker-bearing durable recording when finalized files are invalid` 增加 `memory.json.recordingIds` 保留断言。
+  - `workspace lock is unusable when its lock directory is replaced`
+  - `recording draft create aborts when workspace handle is lost before draft files are written`
+  - `recording append aborts when workspace handle is lost before audio write`
+  - `recording markdown save aborts when workspace handle is lost before write`
+  - `cached audio chunk reads revalidate duplicate ownership per chunk`
+  - `cached audio chunk reads reject duplicate finalized ids without a fresh manifest`
+  - `workspace lock replaces stale lock directories with missing owner files`
+  - `workspace lock replaces stale lock directories with symlinked owner files`
+  - 修复方式为 recovery fail-open 同时保留 memory file truth 引用；workspace lock 绑定 lock directory identity，release 不删除新 owner lock；create/append/markdown save 在关键文件写入前重新消费 delayed handle usability；chunk cache 命中也重验 duplicate finalized id；`recording.json` schema owner 收口到 `recordingMetadata.ts`；finalize draft copy 改为异步 fd read/write/fsync；renderer playback 改为最多 4 个并发 chunk read；stale partial lock 和 symlinked owner file 通过 no-follow owner read 识别并替换。
+- Review 41 子代理复审新增 2 个 BLOCKER 和 2 个 MAJOR：draft create 在 directory create 前未消费 delayed handle usability、finalize 在 parent/staging/marker 早期写入前存在 lock lost 空窗、spec verification 证据停留在 Review 40 前、bounded playback concurrency 缺少 renderer test 证据。已新增 RED 测试并修复：
+  - `recording draft create aborts when workspace handle is lost before draft directory create`
+  - `finalize aborts when workspace handle is lost before memory parent writes`
+  - `finalize aborts when workspace handle is lost before staging writes`
+  - `limits playback chunk reads to four concurrent requests`
+  - 修复方式为 draft create 在 `beforeDraftDirectoryCreateForTest` 后、任何目录创建前重新消费 `assertWorkspaceUsable`；finalize 在 `beforeParentDirectoryCreate` 后、`beforeStagingDirectoryCreate` 后、marker 写入前重新消费 `assertWorkspaceUsable`；renderer playback 增加最多 4 个并发 chunk read 的行为测试。
+- Review 42 子代理复审新增 2 个 BLOCKER 和 1 个 MAJOR：finalize 在 `WorkspaceHandleLost` 后 catch 仍执行 rollback/cleanup/rebuild，memory metadata 与 markdown 写入后进入 index 写入前缺少 handle 重验，final expose 的旧搬运流程可能留下 markerless partial new-memory target 阻断 deterministic retry。已新增 RED 测试并修复：
+  - `finalize does not roll back files after the workspace handle is lost`
+  - `finalize rechecks the workspace handle before rebuilding the index`
+  - `recovery removes markerless partial new-memory recordings for retry`
+  - `saving markdown rechecks the workspace handle before refreshing the index`
+  - 修复方式为 `WorkspaceHandleLost` 进入 catch 后立即抛出，不再执行旧 handle cleanup/rollback；memory metadata 与 markdown durable write 后、index write 前重新消费 handle usability；final expose 改为已验证 parent 内 no-replace 暴露，并在 preflight 后再次确认 target missing；metadata-less new-memory recovery 会清理仅剩 `recordings/` 的 partial directory 以允许 retry。
+- Review 43 子代理复审新增 2 个 BLOCKER 和 1 个 MAJOR：`copyDraftRecordingIntoMemory` 的 pre-expose catch 在 `WorkspaceHandleLost` 后仍会用旧 handle 执行 staging cleanup，metadata-less 但带 marker 与 recording payload 的 durable recording 会被 recovery 删除，Review 42 证据没有覆盖这两条路径。已新增 RED 测试并修复：
+  - `finalize does not run pre-expose cleanup after the workspace handle is lost`
+  - `recovery preserves metadata-less marker-bearing finalized recordings`
+  - 修复方式为 pre-expose catch 遇到 `WorkspaceHandleLost` 立即抛出，不执行旧 handle cleanup；recovery 对缺失 `memory.json` 但带 marker 且含 `recording.json` 或 `audio.webm` 的 finalized recording payload fail-open 保留，marker-only partial 仍按 retry cleanup 处理。
+- Review 44 子代理复审新增 2 个 MAJOR：`rebuildWorkspaceReadModel` 在 scan 后、persist `.reo/index.json` 前缺少 `memories/` root identity 复核；renderer close recording panel 不清空 playback Blob URL，违反 close/switch/unmount revoke current truth。已新增 RED 测试并修复：
+  - `rebuild preserves the existing index when memories root changes before persist`
+  - `revokes playback Blob URL when closing the recording panel`
+  - 修复方式为 read model persist 前重新复核 scan 时绑定的 `memories/` directory identity，失败时保留既有 index；非 busy close 时清空 `playbackUrl`，复用既有 effect cleanup revoke Blob URL。
+- Codex CLI 按 `$ycksimplify` 最终复审新增 2 个 BLOCKER 和 3 个 MAJOR：open reconciliation persist 未覆盖 production open path；final expose 仍是 check-then-rename；close 后 in-flight playback 仍可创建 Blob URL；全量 index writer 未进入同一 write queue；metadata/index no-follow read 缺少 parent identity 绑定。已新增 RED 测试并修复：
+  - `open workspace preserves the existing index when memories root changes before reconciliation persist`
+  - `finalize rejects recording target created after the last target preflight`
+  - `does not create a Blob URL when playback finishes after closing the recording panel`
+  - `full index rebuild cannot overwrite a queued markdown index refresh`
+  - `open workspace rejects workspace metadata when .reo changes during read`
+  - 修复方式为 open path 复用 read model scan 后绑定的 `memories/` identity，在 reconciliation persist 前重新复核；final expose 改为已验证 parent 内创建 target directory 作为 no-replace reservation，再先搬迁 marker、后搬迁 staging 内容；recording panel close 使 playback session 失效，过期 chunk 完成后不创建 Blob；全量 index replace 与单条 refresh 共用 workspace index write queue；`.reo/workspace.json` 和 `.reo/index.json` 在 no-follow read 后复核 parent directory identity。
+- Review 46 子代理最终复审新增 1 个 BLOCKER 和 1 个 MAJOR：open 文件阶段只在 `openWorkspaceFiles` 前检查 lock usability，lock/root 在 open 中途失效仍可能写入未持锁 `.reo`；full index replace 虽进入 queue，但 replace payload 仍在队列外预计算，可能覆盖先完成的 markdown refresh。已新增 RED 测试并修复：
+  - `openWorkspace rejects lock identity loss during index reconciliation`
+  - `full index rebuild computes replacement after queued markdown refresh`
+  - 修复方式为 open 文件阶段在补齐托管目录、recovery、read model rebuild、index reconciliation 和返回 session 前消费 lock usability；index reconciliation 写前也消费 lock usability。`rebuildWorkspaceReadModel({ persist: true })` 在进入 workspace index write queue 后重新读取当前 read model，再写入 full replace payload，避免 stale full replace 覆盖队列中先完成的 single-memory refresh。
+- Review 47 复审分歧按最高严重度处理：Codex CLI 给出 2 个 MAJOR，子代理给出 1 个 BLOCKER，Claude CLI 判定 PASS 但列出同类 MINOR。已新增 RED 测试并修复：
+  - `open workspace does not create drafts when lock identity is lost during drafts ensure`
+  - `open workspace reconciliation computes replacement after a metadata refresh`
+  - `recovery stops before stale staging cleanup when workspace usability is lost`
+  - `does not create a Blob URL when playback finishes after unmount`
+  - 修复方式为托管目录创建在相对 parent mkdir 前消费 lock usability，并把 early abort 纳入 open error envelope；open reconciliation replace 与 full rebuild 一样在 workspace index queue 内重新读取当前 read model；recovery 在 staging/partial 删除、draft cleanup、fsync、marker unlink、memory repair 写入前消费 usability；recording overlay unmount 失效 playback session，pending chunk 完成后不再创建 Blob URL。
+- Review 47 后 `npm run verify:quick` PASS：main 206、renderer 38、typecheck、lint、format 全部通过。归档前必须重新执行固定门禁、Codex CLI、Claude CLI 和子代理最终只读复审。
+- Review 48 Codex CLI `$ycksimplify` 复审新增 1 个 BLOCKER 和 4 个 MAJOR：initialize 文件阶段未传入 lock/root/`.reo` usability，open target revalidation/metadata read 前未优先报告 lock lost，recovery metadata-less cleanup 删除前缺少 usability，finalize 删除 draft 后 fsync/marker 前缺少 delayed handle usability，active spec 与 current/code 在 audio chunk duplicate revalidation 上不一致。已新增 RED 测试并修复：
+  - `initializeWorkspace rejects lock identity loss during managed directory creation`
+  - `open workspace reports lock lost before target revalidation errors`
+  - `recovery stops before metadata-less memory cleanup when workspace usability is lost`
+  - `finalize keeps durable marker when workspace lock is lost after draft cleanup`
+  - 修复方式为 initialize 文件阶段传入并消费 lock usability；open 从 target revalidation 前开始消费 usability，metadata invalid 前先确认不是 lock lost；metadata-less cleanup helper 在实际 remove 前再次消费 usability；finalize 删除 draft 后在 draft parent fsync 和 marker unlink 前重新消费 delayed handle usability；active spec 改为与 current/code 一致，chunk read 继续重验 duplicate finalized id，避免 direct chunk IPC 绕过 manifest。
+- Review 48 定向 RED/GREEN 已通过；归档前必须重新执行 `npm run verify:quick`、固定门禁、Codex CLI、Claude CLI 和子代理最终只读复审。
+- Review 49 是 Task 1 最后一轮审查。子代理 safety/correctness 复审新增 1 个 BLOCKER 和 2 个 MAJOR；Codex CLI `$ycksimplify` 复审新增 3 个 BLOCKER 和 7 个 MAJOR；Claude CLI 原需在额度 reset 后补同轮只读 `/simplify` 复审，但用户已在 2026-05-07 05:06 PDT 明确豁免；不再开启新的 Task 1 审查轮次。已新增 RED 测试并修复：
+  - `initialize workspace does not write AGENTS when lock is lost inside atomic write`
+  - `audio manifest aborts when workspace handle is lost before audio open`
+  - `audio chunk aborts when workspace handle is lost before audio open`
+  - `recovery ignores symlinked finalize markers when repairing invalid recordings`
+  - `workspace lock rejects lock directory replacement before owner write`
+  - `cold audio manifest rejects invalid duplicate durable recording truth`
+  - `rebuild preserves the existing index when memories root changes after replacement read`
+  - `recording markdown saves the latest same-file edit when writes overlap`
+  - `recording append checks finalized truth after root draft state is cleared`
+  - `discard draft aborts when workspace handle is lost before removal`
+  - `stops scheduling playback chunks after closing the recording panel`
+  - `recording finalize rejects unknown draft files before durable expose`
+  - `recording detail rejects oversized finalized metadata`
+  - 修复方式为 atomic writer 在 temp open、commit、final validation 窗口消费 workspace usability；audio manifest/chunk open/read 前后消费 delayed handle usability 并保留 typed lock-lost envelope；recovery marker 用 no-follow leaf 判定，symlink marker 不触发 fail-open；workspace lock 创建 lock directory 后绑定 identity，并在 lock directory 内 no-follow 创建/fsync owner；cold finalized lookup 遇到同 id invalid durable truth 返回 invalid-durable，不返回合法 sibling；index replace 在 queue 内 read 后、write 前再次复核 `memories/` identity；markdown save 增加 root/recording/file 级写队列并在 index queue 内消费 usability；close/teardown 清 root-scoped recording runtime state；discard cleanup 删除前消费 usability；playback session stale 后停止调度后续 chunk IPC；finalize draft copy 只允许 `recording.json`、`audio.webm`、`transcript.md`、`reflections.md`；workspace/memory/recording metadata 与 index 增加 1 MiB 上限并收紧 schema strict。
+- Review 49 修复后 `npm run verify:quick` PASS：main 222、renderer 39、typecheck、lint、format 全部通过。归档前仍需执行固定门禁和 archive/commit。
+- 2026-05-07 05:08 PDT 归档前固定门禁 PASS：
+  - `npm run verify:quick` PASS：main 222、renderer 39、typecheck、lint、format 全部通过。
+  - `git diff --check` PASS，空输出。
+  - `diff -u AGENTS.md .claude/CLAUDE.md` PASS，空输出。
+  - `find docs/specs -mindepth 1 -maxdepth 1 -print` 只列出当前 Task 1 spec。
+- 2026-05-07 05:10 PDT 归档后固定门禁 PASS：
+  - `npm run verify:quick` PASS：main 222、renderer 39、typecheck、lint、format 全部通过。
+  - `git diff --check` PASS，空输出。
+  - `diff -u AGENTS.md .claude/CLAUDE.md` PASS，空输出。
+  - `find docs/specs -mindepth 1 -maxdepth 1 -print` PASS，空输出。

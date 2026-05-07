@@ -1,20 +1,20 @@
-# 第一产品切片长期任务
+# 第一产品切片旧长期任务
 
-状态：完成
+状态：已被当前 product-grade design-hardening 和 active initiative 取代
+
+归档路径：`docs/archive/initiatives/2026-05-06-first-product-slice-superseded-pre-hardening/`
 
 时间：2026-05-06 America/Los_Angeles
 
 ## 目标
 
-交付 Reo 第一个真实产品功能闭环：用户创建本地 memory workspace，录音，看到 live mock transcript，停止后得到可编辑 transcript 与 reflections，并能重新打开 recording 播放和编辑。Workspace 文件必须能被 Codex CLI 读取理解。
+记录早期 first product slice 方案。当前执行以 active initiative、当前 spec、`docs/current/*` 和源码事实为准。
 
 ## 当前状态
 
-- 产品设计已完成。
-- 工程执行前设计基线已通过复审。
-- 对齐后的实现计划已通过 `$writing-plans`、subagent、Codex CLI、Claude CLI 和 `$plan-eng-review`。
-- IMPL-001 到 IMPL-007 均已完成。
-- Electron runtime、workspace persistence、Codex CLI read-only validation 和最终验证均已通过。
+- 本目录只保留旧任务证据。
+- 当前长期任务在 `docs/initiatives/2026-05-06-first-product-slice/`。
+- 当前 design-hardening 归档在 `docs/archive/specs/2026-05-06-0912-first-product-slice-product-grade-design-hardening/`。
 
 ## 读取入口
 
@@ -35,11 +35,11 @@
 - 每个 slice 都有独立 spec、RED/GREEN/REFACTOR 证据、`docs/current/*` 更新、`npm run verify:quick` 和 commit。
 - 每个 slice spec 都必须回答 DB schema、表关系、数据获取模式、可复用组件、文件夹结构和错误处理 review gates。
 - Electron runtime 验证通过。
-- Workspace 磁盘文件验证通过。
+- workspace 磁盘文件验证通过。
 - Codex CLI read-only 验证通过。
 - `docs/current/*` 只保留稳定当前事实。
 - initiative 归档到 `docs/archive/initiatives/2026-05-06-first-product-slice/`。
 
 ## 收口
 
-长期任务完成后，本 initiative 归档到 `docs/archive/initiatives/2026-05-06-first-product-slice/`。
+此旧 initiative 已归档并更名为 superseded 证据目录，避免与当前 active initiative 同名。

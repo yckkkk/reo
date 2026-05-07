@@ -1,10 +1,10 @@
-# Initiatives
+# 长期任务
 
 `initiatives/` 记录需要跨 session 推进的长期任务。
 
 ## 当前状态
 
-当前 active initiative：无。
+当前 active initiative：`2026-05-06-first-product-slice`。
 
 ## 使用规则
 
@@ -12,7 +12,7 @@
 - 一个 initiative 必须有明确完成条件。
 - 默认最多 1 个 active initiative；超过 1 个时先收口、取消或归档。
 - 每个 session 仍然只执行一个可验证 slice。
-- 当前 slice 仍然记录在 `docs/specs/*`。
+- 当前执行 slice 记录在 `docs/specs/*`；没有进行中的 slice 时该目录应为空。
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 - slice 收口后，任务证据移入 `docs/archive/specs/*`。
 - initiative 完成、取消或失效后，移入 `docs/archive/initiatives/*`。

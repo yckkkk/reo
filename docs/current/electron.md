@@ -77,13 +77,16 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；过期 token 会删除，错误 sender 不烧掉 token，错误结果不得泄露真实路径。
 - Preload 只导入无 Zod、无普通包依赖的 channel 常量；DTO 校验和错误信封属于 main process contract。
 - Renderer 后续读写 workspace 不传裸 `rootPath`；main process 在 choose/open 后 canonicalize 路径，并返回 opaque `workspaceHandle`。
-- `workspaceHandle` 绑定 canonical realpath、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；window close、workspace close、lock lost 或 schema mismatch 时撤销。
+- `workspaceHandle` 绑定 canonical realpath、workspace root identity、`.reo` directory identity、lock directory identity、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；workspace close、BrowserWindow closed、renderer process gone、`uncaughtException` teardown、lock lost、root identity changed 或 schema mismatch 时撤销。Teardown close-all 只能删除 release 成功的 handle；release 失败的 handle 保留但不可继续授权写入，用于后续 close-all 重试。每个 handler 在 delayed filesystem operation 前必须能重新断言 handle lock usability，不能只依赖最初的 `requireHandle` 返回值。
+- Workspace initialize 在 lock 前做 no-write target preflight；已有 `AGENTS.md`、dangling `AGENTS.md` symlink 或任何 `AGENTS.md` symlink 条目都返回 conflict 且不得留下 `.reo/workspace.lock*`。新建 `AGENTS.md` 使用 no-replace atomic write，不允许覆盖用户文件。`.reo`、`.reo/drafts`、`.reo/drafts/recordings` 或 `memories/` 为 symlink 或非目录时返回 unsafe path，不得跟随到 workspace 外；lock 必须绑定当前 `.reo` directory identity，`.reo/workspace.lock` leaf 用 no-follow 打开，`.reo/workspace.lock.lock` 只在同一目录内创建并绑定 identity，owner file 在该目录内 no-follow 创建并 fsync。
+- Workspace open 在 lock 前确认 `.reo/workspace.json` 是合法 Reo metadata，并拒绝 unsafe `.reo`、`.reo/drafts`、`.reo/drafts/recordings` 或 `memories/`；非 Reo 目录、缺失 metadata 或 corrupt metadata 返回 metadata invalid，且不得创建 `.reo/workspace.lock*`。Lock target leaf symlink 或 lock 前 `.reo` parent swap 必须拒绝，不能写入 workspace 外。
 - IPC sender validation 必须校验 main frame、trusted production origin `reo-app://renderer/index.html`、loopback dev origin、session/partition、channel allowlist 和 handle ownership。
 - Custom protocol 只服务 renderer build assets，不服务用户 workspace 文件；host 只允许 `renderer`，路径必须 containment 到 renderer output。
 - Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。
-- Audio playback 不允许一次性 IPC 返回完整 audio 文件；先读 manifest，再按 1 MiB chunk 读取并在 renderer 组装 Blob。
-- Renderer audio playback Blob URL 只在 active playback 期间存在，close/switch/unmount 必须 revoke。
-- Permission policy 只允许 trusted renderer 请求 audio media；video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
+- Audio playback 不允许一次性 IPC 返回完整 audio 文件；manifest/chunk 只读取 finalized recording truth，拒绝 draft-only recording；renderer 最多并发 4 个 1 MiB chunk read 后组装 Blob。
+- Renderer audio playback Blob URL 只在 active playback 期间存在，close/switch/unmount 必须 revoke；close 后完成的过期 chunk read 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
+- 当前 permission policy 只允许 trusted main-frame renderer 请求 audio media；video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
+- 产品级 first slice 必须在 recording capability slice 中把 microphone permission 改为 one-shot intent：renderer 先 await `recording:beginMicIntent`，再调用 `navigator.mediaDevices.getUserMedia`；main 的 permission request handler 只消费未过期 intent，`media` permission check 不授予也不消费 intent。
 - First product slice 不使用 `shell.openExternal`、generic command bus、generic IPC bridge、logging bridge、Sentry bridge、Forge 或 updater。
 
 ## Forge 与 electron-vite 边界

@@ -9,6 +9,7 @@ import {
   workspaceInitializeResponseSchema,
   workspaceOpenRequestSchema,
   workspaceRecordingAppendRequestSchema,
+  workspaceRecordingFinalizeRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
   workspaceErrorEnvelopeSchema,
@@ -59,6 +60,7 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
         workspaceId: 'ws_1',
         title: '新的 workspace',
         description: '',
+        memories: [],
         recordings: [],
       },
     },
@@ -73,6 +75,7 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
         workspaceId: 'ws_1',
         title: '新的 workspace',
         description: '',
+        memories: [],
         recordings: [],
       },
     },
@@ -121,6 +124,30 @@ test('recording append contract caps chunks at 1 MiB and requires opaque workspa
       recordingId: 'rec_20260506_000001',
       sequence: 0,
       chunk: new Uint8Array(1_048_577),
+    })
+  );
+});
+
+test('recording finalize contract requires explicit durable duration', () => {
+  assert.deepEqual(
+    workspaceRecordingFinalizeRequestSchema.parse({
+      durationMs: 2000,
+      recordingId: 'rec_20260506_000001',
+      title: '录音',
+      workspaceHandle: 'wh_1',
+    }),
+    {
+      durationMs: 2000,
+      recordingId: 'rec_20260506_000001',
+      title: '录音',
+      workspaceHandle: 'wh_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingFinalizeRequestSchema.parse({
+      recordingId: 'rec_20260506_000001',
+      title: '录音',
+      workspaceHandle: 'wh_1',
     })
   );
 });

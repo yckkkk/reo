@@ -5,6 +5,7 @@ import type { TrustedSenderIdentity } from './trustedSender.js';
 
 export interface WorkspaceHandleLock {
   readonly isHeld: () => boolean;
+  readonly isUsable: () => boolean;
   readonly release: () => Promise<void>;
 }
 
@@ -39,6 +40,7 @@ export interface WorkspaceHandleStore {
         readonly handle: {
           readonly canonicalRoot: string;
           readonly workspaceId: string;
+          readonly assertUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
         };
       }
     | WorkspaceErrorEnvelope;
@@ -46,6 +48,7 @@ export interface WorkspaceHandleStore {
     readonly workspaceHandle: string;
     readonly sender: TrustedSenderIdentity;
   }): Promise<{ readonly ok: true; readonly closed: true } | WorkspaceErrorEnvelope>;
+  closeAllHandles(): Promise<void>;
 }
 
 function defaultCreateHandle(): string {
@@ -59,6 +62,15 @@ function sameSender(a: TrustedSenderIdentity, b: TrustedSenderIdentity): boolean
     a.origin === b.origin &&
     a.sessionKey === b.sessionKey
   );
+}
+
+function assertLockUsable(
+  lock: WorkspaceHandleLock
+): { readonly ok: true } | WorkspaceErrorEnvelope {
+  if (!lock.isHeld() || !lock.isUsable()) {
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
+  }
+  return { ok: true };
 }
 
 export function createWorkspaceHandleStore({
@@ -92,8 +104,9 @@ export function createWorkspaceHandleStore({
           'Workspace handle workspace mismatch'
         );
       }
-      if (!entry.lock.isHeld()) {
-        return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
+      const usable = assertLockUsable(entry.lock);
+      if (!usable.ok) {
+        return usable;
       }
 
       return {
@@ -101,6 +114,7 @@ export function createWorkspaceHandleStore({
         handle: {
           canonicalRoot: entry.canonicalRoot,
           workspaceId: entry.workspaceId,
+          assertUsable: () => assertLockUsable(entry.lock),
         },
       };
     },
@@ -114,9 +128,32 @@ export function createWorkspaceHandleStore({
         return workspaceError('ERR_WORKSPACE_HANDLE_UNTRUSTED', 'Workspace handle sender mismatch');
       }
 
+      try {
+        await entry.lock.release();
+      } catch {
+        return workspaceError('ERR_WORKSPACE_LOCK_FAILED', 'Workspace lock could not be released');
+      }
+
       handles.delete(workspaceHandle);
-      await entry.lock.release();
       return { ok: true, closed: true };
+    },
+
+    async closeAllHandles() {
+      const entries = [...handles.entries()];
+      await Promise.all(
+        entries.map(async ([workspaceHandle, entry]) => {
+          if (entry.lock.isHeld()) {
+            await entry.lock.release().then(
+              () => {
+                handles.delete(workspaceHandle);
+              },
+              () => {}
+            );
+          } else {
+            handles.delete(workspaceHandle);
+          }
+        })
+      );
     },
   };
 }

@@ -58,7 +58,26 @@ describe('workspace renderer API wrapper', () => {
     });
     reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
       ok: true,
-      value: { recordingId: 'rec_1' },
+      value: {
+        memory: {
+          audioByteLength: 1,
+          createdAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 0,
+          hasReflections: false,
+          hasTranscript: false,
+          memoryId: 'mem_1',
+          recordingCount: 1,
+          title: '录音',
+          updatedAt: '2026-05-06T13:08:00.000Z',
+        },
+        recording: {
+          audioByteLength: 1,
+          durationMs: 0,
+          memoryId: 'mem_1',
+          recordingId: 'rec_1',
+          title: '录音',
+        },
+      },
     });
     reoWorkspace.discardRecordingDraft.mockResolvedValue({ ok: true, value: { discarded: true } });
     reoWorkspace.getRecordingDetail.mockResolvedValue({
@@ -91,7 +110,12 @@ describe('workspace renderer API wrapper', () => {
       sequence: 0,
       chunk: new Uint8Array([1]),
     });
-    await finalizeRecordingDraft({ workspaceHandle: 'wh_1', recordingId: 'rec_1', title: '录音' });
+    await finalizeRecordingDraft({
+      durationMs: 1000,
+      recordingId: 'rec_1',
+      title: '录音',
+      workspaceHandle: 'wh_1',
+    });
     await discardRecordingDraft({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
     await getRecordingDetail({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
     await readRecordingAudioManifest({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });

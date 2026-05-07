@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rename, stat, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
   createSafeRecordingId,
-  resolveRecordingDirectory,
+  ensureWorkspaceMemoriesDirectory,
+  ensureWorkspaceReoDirectory,
+  ensureWorkspaceDraftsDirectory,
   resolveWorkspaceRoot,
+  setAfterWorkspaceReoDirectoryCheckForTest,
+  setBeforeWorkspaceRootRealpathForTest,
+  setBeforeWorkspaceRootChildDirectoryCreateForTest,
 } from '../../src/main/workspacePaths.js';
 
 test('workspace root resolves to canonical real path and rejects symlink roots', async () => {
@@ -25,20 +30,97 @@ test('workspace root resolves to canonical real path and rejects symlink roots',
   }
 });
 
-test('recording paths reject traversal, slash, and symlink parent escapes', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-recording-path-'));
-  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-recording-outside-'));
-  await mkdir(path.join(root, 'recordings'), { recursive: true });
-  await symlink(outside, path.join(root, 'recordings', 'rec_link'));
+test('workspace root rejects root swap before canonical realpath', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-workspace-root-swap-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-workspace-root-outside-'));
 
+  setBeforeWorkspaceRootRealpathForTest(async () => {
+    setBeforeWorkspaceRootRealpathForTest(null);
+    await rename(root, `${root}-preserved`);
+    await symlink(outside, root, 'dir');
+  });
+
+  try {
+    const resolved = await resolveWorkspaceRoot(root);
+
+    assert.notEqual(typeof resolved, 'string');
+    if (typeof resolved !== 'string') {
+      assert.equal(resolved.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    }
+  } finally {
+    setBeforeWorkspaceRootRealpathForTest(null);
+  }
+});
+
+test('recording ids reject traversal and slash characters', () => {
   assert.equal(createSafeRecordingId('rec_20260506_000001'), 'rec_20260506_000001');
   assert.throws(() => createSafeRecordingId('../escape'));
   assert.throws(() => createSafeRecordingId('rec_bad/slash'));
+});
 
-  assert.equal(
-    resolveRecordingDirectory(root, 'rec_20260506_000001'),
-    path.join(root, 'recordings', 'rec_20260506_000001')
-  );
-  assert.throws(() => resolveRecordingDirectory(root, '../escape'));
-  assert.throws(() => resolveRecordingDirectory(root, 'rec_link'));
+test('managed draft directory creation rejects .reo ancestor swap before child mkdir', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-drafts-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-drafts-outside-'));
+  await mkdir(path.join(root, '.reo'));
+
+  setAfterWorkspaceReoDirectoryCheckForTest(async () => {
+    await rename(path.join(root, '.reo'), path.join(root, '.reo-preserved'));
+    await symlink(outside, path.join(root, '.reo'), 'dir');
+  });
+  const result = await ensureWorkspaceDraftsDirectory(root);
+  setAfterWorkspaceReoDirectoryCheckForTest(null);
+
+  assert.notEqual(typeof result, 'string');
+  if (typeof result !== 'string') {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  await assert.rejects(stat(path.join(outside, 'drafts')));
+});
+
+test('managed .reo directory creation rejects root swap before child mkdir', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-reo-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-reo-outside-'));
+  setBeforeWorkspaceRootChildDirectoryCreateForTest(async (directoryName) => {
+    if (directoryName === '.reo') {
+      setBeforeWorkspaceRootChildDirectoryCreateForTest(null);
+      await rename(root, `${root}-preserved`);
+      await symlink(outside, root, 'dir');
+    }
+  });
+
+  try {
+    const result = await ensureWorkspaceReoDirectory(root);
+
+    assert.notEqual(typeof result, 'string');
+    if (typeof result !== 'string') {
+      assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    }
+    await assert.rejects(stat(path.join(outside, '.reo')));
+  } finally {
+    setBeforeWorkspaceRootChildDirectoryCreateForTest(null);
+  }
+});
+
+test('managed memories directory creation rejects root swap before child mkdir', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-memories-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-managed-memories-outside-'));
+  setBeforeWorkspaceRootChildDirectoryCreateForTest(async (directoryName) => {
+    if (directoryName === 'memories') {
+      setBeforeWorkspaceRootChildDirectoryCreateForTest(null);
+      await rename(root, `${root}-preserved`);
+      await symlink(outside, root, 'dir');
+    }
+  });
+
+  try {
+    const result = await ensureWorkspaceMemoriesDirectory(root);
+
+    assert.notEqual(typeof result, 'string');
+    if (typeof result !== 'string') {
+      assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    }
+    await assert.rejects(stat(path.join(outside, 'memories')));
+  } finally {
+    setBeforeWorkspaceRootChildDirectoryCreateForTest(null);
+  }
 });

@@ -51,7 +51,7 @@ docs/
 
 Reo 的 memory workspace 是用户选择的本地文件夹。Workspace folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 
-Workspace root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock`。用户内容使用普通文件保存，例如 recording 的 `audio.webm`、`transcript.md` 和 `reflections.md`。
+Workspace root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock` 与同目录 `.reo/workspace.lock.lock`，并绑定当前 workspace root 和 `.reo` directory identity；lock directory 写入当前 owner pid，死进程 owner 的 stale lock 只允许在重新获取 lock 时被替换。用户内容使用普通文件保存：memory 元数据位于 `memories/<memoryId>/memory.json`，finalized recording 位于 `memories/<memoryId>/recordings/<recordingId>/`，draft recording 位于 `.reo/drafts/recordings/<recordingId>/`。
 
 该方向已接受，见 `docs/decisions/0003-local-memory-workspace.md`。当前代码已实现 workspace 初始化、preload/IPC 文件能力、recording draft 和可重建 index；当前没有 DB-backed persistence layer。
 

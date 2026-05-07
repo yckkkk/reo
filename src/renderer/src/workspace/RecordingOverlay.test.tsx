@@ -15,6 +15,7 @@ const workspaceSession: WorkspaceSession = {
     workspaceId: 'ws_1',
     title: 'Daily memory',
     description: '',
+    memories: [],
     recordings: [],
   },
 };
@@ -57,7 +58,26 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     })),
     finalizeRecordingDraft: vi.fn(async () => ({
       ok: true as const,
-      value: { audioByteLength: 3, recordingId: 'rec_1', title: 'Daily memory recording' },
+      value: {
+        memory: {
+          audioByteLength: 3,
+          createdAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 0,
+          hasReflections: false,
+          hasTranscript: false,
+          memoryId: 'mem_1',
+          recordingCount: 1,
+          title: 'Daily memory recording',
+          updatedAt: '2026-05-06T13:08:00.000Z',
+        },
+        recording: {
+          audioByteLength: 3,
+          durationMs: 0,
+          memoryId: 'mem_1',
+          recordingId: 'rec_1',
+          title: 'Daily memory recording',
+        },
+      },
     })),
     discardRecordingDraft: vi.fn(async () => ({
       ok: true as const,
@@ -115,6 +135,7 @@ describe('RecordingOverlay', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -181,6 +202,66 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: 'Edit recording' })).toBeInTheDocument();
+  });
+
+  it('passes the elapsed recording duration to finalize', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(2000));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
+      durationMs: 2000,
+      recordingId: 'rec_1',
+      title: 'Daily memory recording',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+  });
+
+  it('uses sub-second recording duration instead of the rounded display timer', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(750));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
+      durationMs: 750,
+      recordingId: 'rec_1',
+      title: 'Daily memory recording',
+      workspaceHandle: 'workspace-handle-secret',
+    });
   });
 
   it('does not expose stop or finalize before the media controller is ready', async () => {
@@ -502,5 +583,196 @@ describe('RecordingOverlay', () => {
 
     unmount();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+  });
+
+  it('revokes playback Blob URL when closing the recording panel', async () => {
+    installWorkspaceBridge();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+    expect(screen.getByLabelText('Recording playback')).toHaveAttribute('src', 'blob:recording');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    await flushPromises();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:recording');
+    expect(screen.queryByLabelText('Recording playback')).not.toBeInTheDocument();
+  });
+
+  it('does not create a Blob URL when playback finishes after closing the recording panel', async () => {
+    const pending = createDeferred<{ ok: true; value: { chunk: Uint8Array } }>();
+    installWorkspaceBridge({
+      readRecordingAudioChunk: vi.fn(() => pending.promise),
+    });
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    pending.resolve({ ok: true, value: { chunk: new Uint8Array([1, 2, 3]) } });
+    await flushPromises();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Recording playback')).not.toBeInTheDocument();
+  });
+
+  it('does not create a Blob URL when playback finishes after unmount', async () => {
+    const pending = createDeferred<{ ok: true; value: { chunk: Uint8Array } }>();
+    installWorkspaceBridge({
+      readRecordingAudioChunk: vi.fn(() => pending.promise),
+    });
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
+    const media = createMediaAdapter();
+    const { unmount } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+    unmount();
+    pending.resolve({ ok: true, value: { chunk: new Uint8Array([1, 2, 3]) } });
+    await flushPromises();
+
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('limits playback chunk reads to four concurrent requests', async () => {
+    const pending: Array<() => void> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const bridge = installWorkspaceBridge({
+      readRecordingAudioManifest: vi.fn(async () => ({
+        ok: true as const,
+        value: { byteLength: 10, maxChunkBytes: 1, recordingId: 'rec_1' },
+      })),
+      readRecordingAudioChunk: vi.fn(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise<void>((resolve) => pending.push(resolve));
+        inFlight -= 1;
+        return { ok: true as const, value: { chunk: new Uint8Array([1]) } };
+      }),
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
+    const media = createMediaAdapter();
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
+    expect(maxInFlight).toBe(4);
+
+    act(() => pending.shift()?.());
+    await flushPromises();
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(5);
+    expect(maxInFlight).toBe(4);
+
+    while (pending.length > 0) {
+      act(() => {
+        pending.splice(0).forEach((resolve) => resolve());
+      });
+      await flushPromises();
+    }
+
+    expect(screen.getByLabelText('Recording playback')).toHaveAttribute('src', 'blob:recording');
+  });
+
+  it('stops scheduling playback chunks after closing the recording panel', async () => {
+    const pending: Array<() => void> = [];
+    const bridge = installWorkspaceBridge({
+      readRecordingAudioManifest: vi.fn(async () => ({
+        ok: true as const,
+        value: { byteLength: 10, maxChunkBytes: 1, recordingId: 'rec_1' },
+      })),
+      readRecordingAudioChunk: vi.fn(async () => {
+        await new Promise<void>((resolve) => pending.push(resolve));
+        return { ok: true as const, value: { chunk: new Uint8Array([1]) } };
+      }),
+    });
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    act(() => pending.shift()?.());
+    await flushPromises();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
   });
 });

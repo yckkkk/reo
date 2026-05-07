@@ -15,6 +15,13 @@ type WorkspaceErrorEnvelope = {
   readonly error: {
     readonly code: string;
     readonly message: string;
+    readonly dataRetention?:
+      | 'none-written'
+      | 'previous-file-preserved'
+      | 'draft-preserved'
+      | 'durable-marker-recovery-required'
+      | 'file-written-index-stale'
+      | 'unknown';
   };
 };
 
@@ -25,15 +32,30 @@ type WorkspaceResponse<T> =
     }
   | WorkspaceErrorEnvelope;
 
+type WorkspaceMemorySummary = {
+  readonly memoryId: string;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly recordingCount: number;
+  readonly durationMs: number;
+  readonly audioByteLength: number;
+  readonly hasTranscript: boolean;
+  readonly hasReflections: boolean;
+};
+
+type WorkspaceRecordingSummary = {
+  readonly recordingId: string;
+  readonly title: string;
+  readonly audioByteLength: number;
+};
+
 type WorkspaceSnapshot = {
   readonly workspaceId: string;
   readonly title: string;
   readonly description: string;
-  readonly recordings: ReadonlyArray<{
-    readonly recordingId: string;
-    readonly title: string;
-    readonly audioByteLength: number;
-  }>;
+  readonly memories: ReadonlyArray<WorkspaceMemorySummary>;
+  readonly recordings: ReadonlyArray<WorkspaceRecordingSummary>;
 };
 
 type WorkspaceHandleRequest = {
@@ -80,13 +102,17 @@ type ReoWorkspaceBridge = {
   ) => Promise<WorkspaceResponse<{ readonly nextSequence: number }>>;
   readonly finalizeRecordingDraft: (
     payload: RecordingHandleRequest & {
+      readonly memoryId?: string;
       readonly title: string;
+      readonly durationMs: number;
     }
   ) => Promise<
     WorkspaceResponse<{
-      readonly recordingId: string;
-      readonly title: string;
-      readonly audioByteLength: number;
+      readonly memory: WorkspaceMemorySummary;
+      readonly recording: WorkspaceRecordingSummary & {
+        readonly memoryId: string;
+        readonly durationMs: number;
+      };
     }>
   >;
   readonly discardRecordingDraft: (

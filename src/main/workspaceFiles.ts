@@ -1,44 +1,59 @@
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
 import {
+  writeWorkspaceFileNoReplaceAtomic,
+  writeWorkspaceJsonAtomic,
+} from './atomicWorkspaceFile.js';
+import {
+  rebuildMemoryIndex,
+  rebuildWorkspaceReadModel,
+  recoverRecordingFinalizeTransactions,
+  replaceWorkspaceIndex,
+  updateWorkspaceIndexFromCurrent,
+  type MemorySummary,
+} from './memoryFiles.js';
+import {
+  assertSameDirectoryIdentity as assertSameDirectory,
+  readSafeDirectoryIdentity as readDirectoryIdentity,
+} from './directoryIdentity.js';
+import {
+  checkWorkspaceDraftsDirectory,
+  checkWorkspaceMemoriesDirectory,
+  checkWorkspaceReoDirectory,
+  ensureWorkspaceDraftsDirectory,
+  ensureWorkspaceMemoriesDirectory,
   getWorkspaceIndexPath,
   getWorkspaceMetadataPath,
   resolveWorkspaceRoot,
 } from './workspacePaths.js';
 import {
   workspaceError,
+  workspaceMemorySummarySchema,
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
 } from './workspaceContract.js';
 
 const WORKSPACE_SCHEMA_VERSION = 1;
+const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
 
-const workspaceMetadataSchema = z.object({
-  schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
-  workspaceId: z.string().min(1),
-  title: z.string(),
-  description: z.string(),
-  createdAt: z.string(),
-});
+const workspaceMetadataSchema = z
+  .object({
+    schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
+    workspaceId: z.string().min(1),
+    title: z.string(),
+    description: z.string(),
+    createdAt: z.string(),
+  })
+  .strict();
 
-const recordingSummarySchema = z.object({
-  recordingId: z.string(),
-  title: z.string(),
-  audioByteLength: z.number().int().nonnegative(),
-});
-
-const workspaceIndexSchema = z.object({
-  schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
-  recordings: z.array(recordingSummarySchema),
-});
-
-const finalizedRecordingIndexSourceSchema = recordingSummarySchema.extend({
-  schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
-  workspaceId: z.string(),
-  status: z.literal('finalized'),
-});
+const workspaceIndexSchema = z
+  .object({
+    schemaVersion: z.literal(WORKSPACE_SCHEMA_VERSION),
+    memories: z.array(workspaceMemorySummarySchema),
+  })
+  .strict();
 
 interface InitializeWorkspaceFilesOptions {
   readonly rootPath: string;
@@ -46,11 +61,36 @@ interface InitializeWorkspaceFilesOptions {
   readonly description: string;
   readonly createWorkspaceId: () => string;
   readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
 interface OpenWorkspaceFilesOptions {
   readonly rootPath: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
+
+type MaybePromise<T> = T | Promise<T>;
+type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
+
+class WorkspaceOpenAborted extends Error {
+  readonly envelope: WorkspaceErrorEnvelope;
+
+  constructor(envelope: WorkspaceErrorEnvelope) {
+    super(envelope.error.message);
+    this.envelope = envelope;
+  }
+}
+
+function assertWorkspaceUsable(assertUsable: AssertWorkspaceUsable | undefined): void {
+  const usable = assertUsable?.();
+  if (usable && !usable.ok) {
+    throw new WorkspaceOpenAborted(usable);
+  }
+}
+
+let beforeWorkspaceJsonNoFollowFinalAssertForTest:
+  | ((filePath: string) => MaybePromise<void>)
+  | null = null;
 
 type WorkspaceFilesResult =
   | {
@@ -59,9 +99,30 @@ type WorkspaceFilesResult =
     }
   | WorkspaceErrorEnvelope;
 
+export type WorkspaceInitializeTarget =
+  | {
+      readonly ok: true;
+      readonly canonicalRoot: string;
+    }
+  | WorkspaceErrorEnvelope;
+
+export function setBeforeWorkspaceJsonNoFollowFinalAssertForTest(
+  hook: ((filePath: string) => MaybePromise<void>) | null
+): void {
+  beforeWorkspaceJsonNoFollowFinalAssertForTest = hook;
+}
+
+let beforeWorkspaceIndexReconciliationPersistForTest: (() => MaybePromise<void>) | null = null;
+
+export function setBeforeWorkspaceIndexReconciliationPersistForTest(
+  hook: (() => MaybePromise<void>) | null
+): void {
+  beforeWorkspaceIndexReconciliationPersistForTest = hook;
+}
+
 async function exists(filePath: string): Promise<boolean> {
   try {
-    await stat(filePath);
+    await lstat(filePath);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -73,119 +134,46 @@ async function exists(filePath: string): Promise<boolean> {
 
 function snapshotFrom(
   metadata: z.infer<typeof workspaceMetadataSchema>,
-  index: z.infer<typeof workspaceIndexSchema>
+  index: z.infer<typeof workspaceIndexSchema>,
+  recordings: WorkspaceSnapshot['recordings']
 ): WorkspaceSnapshot {
   return {
     workspaceId: metadata.workspaceId,
     title: metadata.title,
     description: metadata.description,
-    recordings: index.recordings,
+    memories: index.memories,
+    recordings,
   };
 }
 
-function sameRecordingSummaries(
-  first: WorkspaceSnapshot['recordings'],
-  second: WorkspaceSnapshot['recordings']
+function sameMemorySummaries(
+  first: readonly MemorySummary[],
+  second: readonly MemorySummary[]
 ): boolean {
   if (first.length !== second.length) {
     return false;
   }
 
-  return first.every((recording, index) => {
+  return first.every((memory, index) => {
     const other = second[index];
     return (
       other !== undefined &&
-      recording.recordingId === other.recordingId &&
-      recording.title === other.title &&
-      recording.audioByteLength === other.audioByteLength
+      memory.memoryId === other.memoryId &&
+      memory.title === other.title &&
+      memory.createdAt === other.createdAt &&
+      memory.updatedAt === other.updatedAt &&
+      memory.recordingCount === other.recordingCount &&
+      memory.durationMs === other.durationMs &&
+      memory.audioByteLength === other.audioByteLength &&
+      memory.hasTranscript === other.hasTranscript &&
+      memory.hasReflections === other.hasReflections
     );
   });
 }
 
-async function readMetadata(
-  canonicalRoot: string
-): Promise<z.infer<typeof workspaceMetadataSchema> | null> {
-  try {
-    return workspaceMetadataSchema.parse(
-      JSON.parse(await readFile(getWorkspaceMetadataPath(canonicalRoot), 'utf8'))
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function readOrRebuildIndex(
-  canonicalRoot: string,
-  { persistReconciliation = true }: { readonly persistReconciliation?: boolean } = {}
-): Promise<z.infer<typeof workspaceIndexSchema>> {
-  let parsedIndex: z.infer<typeof workspaceIndexSchema> | null;
-  try {
-    parsedIndex = workspaceIndexSchema.parse(
-      JSON.parse(await readFile(getWorkspaceIndexPath(canonicalRoot), 'utf8'))
-    );
-  } catch {
-    parsedIndex = null;
-  }
-
-  const recordings = await rebuildRecordingSummaries(canonicalRoot);
-  if (parsedIndex && sameRecordingSummaries(parsedIndex.recordings, recordings)) {
-    return parsedIndex;
-  }
-
-  const index = {
-    schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    recordings,
-  } satisfies z.infer<typeof workspaceIndexSchema>;
-  if (persistReconciliation) {
-    await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(canonicalRoot), index);
-  }
-  return index;
-}
-
-async function rebuildRecordingSummaries(
-  canonicalRoot: string
-): Promise<WorkspaceSnapshot['recordings']> {
-  let entries;
-  try {
-    entries = await readdir(path.join(canonicalRoot, 'recordings'), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const summaries: WorkspaceSnapshot['recordings'] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    try {
-      const recordingDirectory = path.join(canonicalRoot, 'recordings', entry.name);
-      const metadata = finalizedRecordingIndexSourceSchema.parse(
-        JSON.parse(await readFile(path.join(recordingDirectory, 'recording.json'), 'utf8'))
-      );
-      const audio = await stat(path.join(recordingDirectory, 'audio.webm'));
-      if (audio.size !== metadata.audioByteLength) {
-        continue;
-      }
-      summaries.push({
-        recordingId: metadata.recordingId,
-        title: metadata.title,
-        audioByteLength: metadata.audioByteLength,
-      });
-    } catch {
-      continue;
-    }
-  }
-
-  return summaries.sort((first, second) => first.recordingId.localeCompare(second.recordingId));
-}
-
-export async function initializeWorkspaceFiles({
-  rootPath,
-  title,
-  description,
-  createWorkspaceId,
-  now,
-}: InitializeWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
+export async function validateWorkspaceInitializeTarget(
+  rootPath: string
+): Promise<WorkspaceInitializeTarget> {
   const canonicalRoot = await resolveWorkspaceRoot(rootPath);
   if (typeof canonicalRoot !== 'string') {
     return canonicalRoot;
@@ -199,40 +187,50 @@ export async function initializeWorkspaceFiles({
     );
   }
 
-  const metadata = {
-    schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    workspaceId: createWorkspaceId(),
-    title,
-    description,
-    createdAt: now(),
-  } satisfies z.infer<typeof workspaceMetadataSchema>;
-  const index = {
-    schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    recordings: [],
-  } satisfies z.infer<typeof workspaceIndexSchema>;
+  const reoDirectory = await checkWorkspaceReoDirectory(canonicalRoot);
+  if (typeof reoDirectory !== 'string') {
+    return reoDirectory;
+  }
+  const draftsDirectory = await checkWorkspaceDraftsDirectory(canonicalRoot);
+  if (typeof draftsDirectory !== 'string') {
+    return draftsDirectory;
+  }
+  const memoriesDirectory = await checkWorkspaceMemoriesDirectory(canonicalRoot);
+  if (typeof memoriesDirectory !== 'string') {
+    return memoriesDirectory;
+  }
 
-  await mkdir(path.join(canonicalRoot, '.reo'), { recursive: true });
-  await mkdir(path.join(canonicalRoot, 'recordings'), { recursive: true });
-  await writeFile(
-    path.join(canonicalRoot, 'AGENTS.md'),
-    '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n',
-    { flag: 'wx' }
-  );
-  await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), metadata);
-  await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(canonicalRoot), index);
-
-  return {
-    ok: true,
-    snapshot: snapshotFrom(metadata, index),
-  };
+  return { ok: true, canonicalRoot };
 }
 
-export async function openWorkspaceFiles({
-  rootPath,
-}: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
+async function readMetadata(
+  canonicalRoot: string
+): Promise<z.infer<typeof workspaceMetadataSchema> | null> {
+  return readWorkspaceJsonNoFollow(
+    getWorkspaceMetadataPath(canonicalRoot),
+    workspaceMetadataSchema
+  );
+}
+
+export async function validateWorkspaceOpenTarget(
+  rootPath: string
+): Promise<WorkspaceInitializeTarget> {
   const canonicalRoot = await resolveWorkspaceRoot(rootPath);
   if (typeof canonicalRoot !== 'string') {
     return canonicalRoot;
+  }
+
+  const reoDirectory = await checkWorkspaceReoDirectory(canonicalRoot);
+  if (typeof reoDirectory !== 'string') {
+    return reoDirectory;
+  }
+  const draftsDirectory = await checkWorkspaceDraftsDirectory(canonicalRoot);
+  if (typeof draftsDirectory !== 'string') {
+    return draftsDirectory;
+  }
+  const memoriesDirectory = await checkWorkspaceMemoriesDirectory(canonicalRoot);
+  if (typeof memoriesDirectory !== 'string') {
+    return memoriesDirectory;
   }
 
   const metadata = await readMetadata(canonicalRoot);
@@ -244,20 +242,230 @@ export async function openWorkspaceFiles({
     );
   }
 
-  const index = await readOrRebuildIndex(canonicalRoot);
+  return { ok: true, canonicalRoot };
+}
+
+async function readOrRebuildIndex(
+  canonicalRoot: string,
+  {
+    persistReconciliation = true,
+    assertBeforePersist,
+    rebuiltMemories,
+  }: {
+    readonly persistReconciliation?: boolean;
+    readonly assertBeforePersist?: () => Promise<void>;
+    readonly rebuiltMemories?: readonly MemorySummary[];
+  } = {}
+): Promise<z.infer<typeof workspaceIndexSchema>> {
+  const parsedIndex = await readWorkspaceJsonNoFollow(
+    getWorkspaceIndexPath(canonicalRoot),
+    workspaceIndexSchema
+  );
+
+  let memories = [
+    ...(rebuiltMemories ?? (await rebuildMemoryIndex(canonicalRoot, { persist: false }))),
+  ];
+  if (parsedIndex && sameMemorySummaries(parsedIndex.memories, memories)) {
+    return parsedIndex;
+  }
+
+  if (persistReconciliation) {
+    memories = [
+      ...(await replaceWorkspaceIndex(
+        canonicalRoot,
+        async () => rebuildMemoryIndex(canonicalRoot, { persist: false }),
+        async () => {
+          await beforeWorkspaceIndexReconciliationPersistForTest?.();
+          await assertBeforePersist?.();
+        }
+      )),
+    ];
+  }
+  return {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    memories,
+  };
+}
+
+export async function initializeWorkspaceFiles({
+  rootPath,
+  title,
+  description,
+  createWorkspaceId,
+  now,
+  assertWorkspaceUsable: assertUsable,
+}: InitializeWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
+  let canonicalRoot: string;
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceInitializeTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+    canonicalRoot = target.canonicalRoot;
+    assertWorkspaceUsable(assertUsable);
+    const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
+    if (typeof draftsDirectory !== 'string') {
+      return draftsDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
+    const memoriesDirectory = await ensureWorkspaceMemoriesDirectory(canonicalRoot, assertUsable);
+    if (typeof memoriesDirectory !== 'string') {
+      return memoriesDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_INIT_FAILED',
+      'Workspace could not be initialized',
+      'previous-file-preserved'
+    );
+  }
+
+  const metadata = {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    workspaceId: createWorkspaceId(),
+    title,
+    description,
+    createdAt: now(),
+  } satisfies z.infer<typeof workspaceMetadataSchema>;
+  const index = {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    memories: [],
+  } satisfies z.infer<typeof workspaceIndexSchema>;
+
+  try {
+    assertWorkspaceUsable(assertUsable);
+    await writeWorkspaceFileNoReplaceAtomic(
+      path.join(canonicalRoot, 'AGENTS.md'),
+      '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n',
+      () => assertWorkspaceUsable(assertUsable)
+    );
+    assertWorkspaceUsable(assertUsable);
+    await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), metadata, () =>
+      assertWorkspaceUsable(assertUsable)
+    );
+    assertWorkspaceUsable(assertUsable);
+    await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(canonicalRoot), index, () =>
+      assertWorkspaceUsable(assertUsable)
+    );
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    throw error;
+  }
+
   return {
     ok: true,
-    snapshot: snapshotFrom(metadata, index),
+    snapshot: snapshotFrom(metadata, index, []),
   };
+}
+
+export async function openWorkspaceFiles({
+  rootPath,
+  assertWorkspaceUsable: assertUsable,
+}: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
+  let index: z.infer<typeof workspaceIndexSchema>;
+  let recordings: WorkspaceSnapshot['recordings'];
+  let metadata: z.infer<typeof workspaceMetadataSchema>;
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceOpenTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+    const { canonicalRoot } = target;
+
+    const parsedMetadata = await readMetadata(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    if (!parsedMetadata) {
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'none-written'
+      );
+    }
+    metadata = parsedMetadata;
+    const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
+    if (typeof draftsDirectory !== 'string') {
+      return draftsDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
+    const memoriesDirectory = await ensureWorkspaceMemoriesDirectory(canonicalRoot, assertUsable);
+    if (typeof memoriesDirectory !== 'string') {
+      return memoriesDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
+    await recoverRecordingFinalizeTransactions(canonicalRoot, {
+      assertWorkspaceUsable: () => assertWorkspaceUsable(assertUsable),
+    });
+    assertWorkspaceUsable(assertUsable);
+    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    index = await readOrRebuildIndex(canonicalRoot, {
+      assertBeforePersist: async () => {
+        assertWorkspaceUsable(assertUsable);
+        await readModel.assertMemoriesRootCurrent();
+      },
+      rebuiltMemories: readModel.memories,
+    });
+    assertWorkspaceUsable(assertUsable);
+    recordings = readModel.recordings;
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_OPEN_FAILED',
+      'Workspace could not be opened',
+      'previous-file-preserved'
+    );
+  }
+  return {
+    ok: true,
+    snapshot: snapshotFrom(metadata, index, recordings),
+  };
+}
+
+async function readWorkspaceJsonNoFollow<T>(
+  filePath: string,
+  schema: z.ZodType<T>
+): Promise<T | null> {
+  let file: Awaited<ReturnType<typeof open>> | null = null;
+  const directory = path.dirname(filePath);
+  const directoryIdentity = await readDirectoryIdentity(directory).catch(() => null);
+  if (!directoryIdentity) {
+    return null;
+  }
+  try {
+    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const metadata = await file.stat();
+    if (!metadata.isFile()) {
+      return null;
+    }
+    if (metadata.size > MAX_WORKSPACE_JSON_BYTES) {
+      return null;
+    }
+    const parsed = schema.parse(JSON.parse(await file.readFile('utf8')));
+    await beforeWorkspaceJsonNoFollowFinalAssertForTest?.(filePath);
+    await assertSameDirectory(directory, directoryIdentity);
+    return parsed;
+  } catch {
+    return null;
+  } finally {
+    await file?.close().catch(() => {});
+  }
 }
 
 export async function updateWorkspaceIndex(
   rootPath: string,
-  update: (recordings: WorkspaceSnapshot['recordings']) => WorkspaceSnapshot['recordings']
+  update: (memories: readonly MemorySummary[]) => readonly MemorySummary[]
 ): Promise<void> {
-  const current = await readOrRebuildIndex(rootPath, { persistReconciliation: false });
-  await writeWorkspaceJsonAtomic(getWorkspaceIndexPath(rootPath), {
-    schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    recordings: update(current.recordings),
-  });
+  await updateWorkspaceIndexFromCurrent(rootPath, update);
 }

@@ -54,19 +54,29 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_RECORDING_INVALID_ID',
   'ERR_RECORDING_NOT_FOUND',
   'ERR_RECORDING_SEQUENCE',
+  'ERR_RECORDING_APPEND_FAILED',
   'ERR_RECORDING_APPEND_IN_FLIGHT',
   'ERR_RECORDING_CHUNK_TOO_LARGE',
   'ERR_RECORDING_FINALIZED',
   'ERR_RECORDING_AUDIO_MISSING',
   'ERR_RECORDING_INVALID_RANGE',
   'ERR_RECORDING_FINALIZE_FAILED',
+  'ERR_WORKSPACE_INDEX_WRITE_FAILED',
+  'ERR_MEMORY_NOT_FOUND',
 ]);
 
 export const workspaceErrorSchema = z.object({
   code: workspaceErrorCodeSchema,
   message: z.string().min(1),
   dataRetention: z
-    .enum(['none-written', 'previous-file-preserved', 'draft-preserved', 'unknown'])
+    .enum([
+      'none-written',
+      'previous-file-preserved',
+      'draft-preserved',
+      'durable-marker-recovery-required',
+      'file-written-index-stale',
+      'unknown',
+    ])
     .optional(),
 });
 
@@ -89,10 +99,23 @@ export const workspaceRecordingSummarySchema = z.object({
   audioByteLength: z.number().int().nonnegative(),
 });
 
+export const workspaceMemorySummarySchema = z.object({
+  memoryId: z.string().min(1),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  recordingCount: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  hasTranscript: z.boolean(),
+  hasReflections: z.boolean(),
+});
+
 export const workspaceSnapshotSchema = z.object({
   workspaceId: z.string().min(1),
   title: z.string(),
   description: z.string(),
+  memories: z.array(workspaceMemorySummarySchema),
   recordings: z.array(workspaceRecordingSummarySchema),
 });
 
@@ -158,7 +181,12 @@ export const workspaceRecordingIdRequestSchema = workspaceHandleSchema
 
 export const workspaceRecordingFinalizeRequestSchema = workspaceRecordingIdRequestSchema
   .extend({
+    memoryId: z
+      .string()
+      .regex(/^mem_[A-Za-z0-9_-]+$/)
+      .optional(),
     title: z.string().trim().min(1),
+    durationMs: z.number().int().nonnegative(),
   })
   .strict();
 
