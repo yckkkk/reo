@@ -11,14 +11,14 @@
 - 当前 styling foundation 使用 Reo 设计系统 token：暖白底、黑色主文字、低饱和中性色、蓝/橙小型点缀、细边界和轻量阴影。
 - Renderer 可执行主题文件是 `src/renderer/src/theme.css`。
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
-- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
+- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
 - 当前 Radix primitives 只安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label` 和 `@radix-ui/react-dialog`。
-- 当前真实 reusable component consumer 是 workspace creation form、workspace home 和 recording overlay。
+- 当前真实 reusable component consumer 是 workspace entry form、workspace home 和 recording overlay。
 - 当前 renderer 入口由 QueryClient provider 包裹。
-- 当前 renderer route state 覆盖无 workspace 的创建页和已初始化 workspace 的最小 loaded state。
+- 当前 renderer route state 覆盖无 workspace 的 entry page 和已初始化或已打开 workspace 的最小 loaded state。
 - 当前 workspace home 展示 workspace title、一个 record action、`Memory Content`、recording empty/list region。
 - 当前 recording overlay 使用 Radix Dialog/shadcn Dialog source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
-- 当前有 `CreateWorkspaceForm` 业务表单，使用 React Hook Form + Zod resolver。
+- 当前有 `WorkspaceEntryPage`，组合 `CreateWorkspaceForm` 与 `OpenWorkspaceAction`；创建表单使用 React Hook Form + Zod resolver，打开现有 workspace 走独立 open branch。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
 - Zustand 已选型，但当前未安装。
 - 当前没有跨 subtree client state consumer。
@@ -81,8 +81,9 @@
 
 当前实现事实：
 
-- Workspace creation page 使用 feature-local `CreateWorkspaceForm`，包含 title、description、folder picker 和 create submit；folder picker cancel 和 initialization failure 不清空用户输入。
-- Create workspace form 当前使用 Button/Label primitives、React Hook Form、Zod 和语义 input/textarea；submit 允许触发验证，不使用无解释的 disabled trap。
+- Workspace entry page 使用 feature-local `CreateWorkspaceForm` 和 `OpenWorkspaceAction`，覆盖 create/open 两条入口；open existing workspace 不清空 create draft，也不显示 create conflict。
+- Create workspace form 当前使用 Button/Input/Label/Textarea primitives、React Hook Form、Zod 和 submit-time validation；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
+- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，open submit 只发送 `selectionToken`。Create initialize 失败后保留 title/description，但清除已消费的 folder token 和 display name，要求用户重新选择 folder。
 - 当前 Workspace home 仍是基础 home：显示 workspace title、单一 `Record memory` action 和 `Memory Content`；它还没有 sidebar、本地 search/filter、日期分组或 memory card。
 - 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
 - Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime 或网络 STT。
@@ -109,8 +110,8 @@
 
 ## shadcn/ui 边界
 
-- 当前 shadcn/ui source 范围包含 Button、Label、Dialog 和 Textarea。
-- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 Button、Input、Label、Dialog 和 Textarea。
+- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
 - 只有存在真实 reusable component consumer 时，才允许继续添加 shadcn/ui source。
 - 该 gate 只是安装与初始化门禁，不是框架选择保留项；Reo 的 UI 技术框架已经确定为 shadcn/ui + Radix primitives + Tailwind CSS v4。
 - 该 consumer 必须需要 reusable primitive、accessible interaction primitive，或明确的 shared visual invariant。

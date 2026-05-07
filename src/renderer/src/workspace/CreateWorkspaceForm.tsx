@@ -3,18 +3,26 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { FolderPickerField } from './FolderPickerField';
+import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 import {
-  chooseWorkspaceDirectory,
-  initializeWorkspace,
-  type WorkspaceDirectorySelection,
-  type WorkspaceError,
-  type WorkspaceSession,
-} from './workspaceApi';
+  isSafeWorkspaceDisplayPath,
+  workspaceFolderErrorMessage,
+} from './workspaceFolderSelection';
+import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from './workspaceApi';
 
 const createWorkspaceSchema = z.object({
-  title: z.string().trim().min(1, 'Enter a workspace title.'),
+  title: z.string().trim().min(1, 'Workspace title is required'),
   description: z.string(),
+  selectionToken: z.string().trim().min(1, workspaceFolderErrorMessage),
+  displayPath: z
+    .string()
+    .trim()
+    .min(1, workspaceFolderErrorMessage)
+    .refine(isSafeWorkspaceDisplayPath, workspaceFolderErrorMessage),
 });
 
 type CreateWorkspaceValues = z.infer<typeof createWorkspaceSchema>;
@@ -32,67 +40,52 @@ function workspaceErrorMessage(error: WorkspaceError) {
 }
 
 export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormProps) {
-  const [folderSelection, setFolderSelection] = useState<WorkspaceDirectorySelection | null>(null);
-  const [folderError, setFolderError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const folderButtonRef = useRef<HTMLButtonElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const {
+    clearErrors,
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
+    setError,
+    setValue,
     watch,
   } = useForm<CreateWorkspaceValues>({
     defaultValues: {
       title: '',
       description: '',
+      selectionToken: '',
+      displayPath: '',
     },
     resolver: zodResolver(createWorkspaceSchema),
   });
-  const titleValue = watch('title');
+  const displayPath = watch('displayPath');
   const titleRegistration = register('title');
-  const canSubmit = Boolean(folderSelection && titleValue.trim()) && !isSubmitting;
 
   useEffect(() => {
     titleInputRef.current?.focus();
   }, []);
 
-  async function handleChooseFolder() {
-    setFolderError(null);
+  function handleFolderError(message: string) {
     setSubmitError(null);
-
-    const response = await chooseWorkspaceDirectory();
-
-    if (!response.ok) {
-      setFolderError(response.error.message);
-      folderButtonRef.current?.focus();
-      return;
-    }
-
-    if (response.value.status === 'canceled') {
-      folderButtonRef.current?.focus();
-      return;
-    }
-
-    setFolderSelection(response.value);
+    setValue('selectionToken', '');
+    setValue('displayPath', '');
+    setError('selectionToken', { message });
   }
 
   const submit = handleSubmit(async (values) => {
     setSubmitError(null);
 
-    if (!folderSelection) {
-      setFolderError('Choose a folder before creating the workspace.');
-      folderButtonRef.current?.focus();
-      return;
-    }
-
     const response = await initializeWorkspace({
-      selectionToken: folderSelection.selectionToken,
+      selectionToken: values.selectionToken,
       title: values.title.trim(),
       description: values.description,
     });
 
     if (!response.ok) {
+      setValue('selectionToken', '');
+      setValue('displayPath', '');
+      clearErrors(['selectionToken', 'displayPath']);
       setSubmitError(workspaceErrorMessage(response.error));
       return;
     }
@@ -102,7 +95,7 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
 
   return (
     <form
-      className="mx-auto flex w-full max-w-[720px] flex-col gap-24 px-24 py-40 sm:px-40"
+      className="flex flex-col gap-24"
       aria-labelledby="create-workspace-title"
       onSubmit={submit}
     >
@@ -124,14 +117,13 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
       <div className="flex flex-col gap-16">
         <div className="flex flex-col gap-8">
           <Label htmlFor="workspace-title">Workspace title</Label>
-          <input
+          <Input
             id="workspace-title"
             {...titleRegistration}
             ref={(element) => {
               titleRegistration.ref(element);
               titleInputRef.current = element;
             }}
-            className="min-h-48 border border-chalk bg-card-white px-16 text-body-lg leading-body-lg text-obsidian outline-none focus:border-signal-blue"
             type="text"
             aria-invalid={Boolean(errors.title)}
           />
@@ -142,47 +134,27 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
 
         <div className="flex flex-col gap-8">
           <Label htmlFor="workspace-description">Description</Label>
-          <textarea
-            id="workspace-description"
-            className="min-h-96 resize-none border border-chalk bg-card-white px-16 py-12 text-body-lg leading-body-lg text-obsidian outline-none focus:border-signal-blue"
-            {...register('description')}
-          />
+          <Textarea id="workspace-description" className="min-h-96" {...register('description')} />
         </div>
       </div>
 
-      <section className="flex flex-col gap-12" aria-label="Workspace folder">
-        <div className="flex flex-col gap-12 sm:flex-row sm:items-center">
-          <Button
-            ref={folderButtonRef}
-            type="button"
-            variant="default"
-            onClick={handleChooseFolder}
-          >
-            Choose folder
-          </Button>
-          {folderSelection ? (
-            <p className="text-body leading-body text-cinder" aria-label="Selected folder">
-              {folderSelection.displayPath}
-            </p>
-          ) : (
-            <p className="text-body leading-body text-gravel">No folder selected.</p>
-          )}
-        </div>
-        {folderError ? (
-          <p className="text-body leading-body text-ember" role="alert">
-            {folderError}
-          </p>
-        ) : null}
-      </section>
+      <FolderPickerField
+        displayPath={displayPath}
+        error={errors.selectionToken?.message}
+        onCancel={() => setSubmitError(null)}
+        onError={handleFolderError}
+        onSelection={(selection) => {
+          setSubmitError(null);
+          clearErrors(['selectionToken', 'displayPath']);
+          setValue('selectionToken', selection.selectionToken, { shouldValidate: true });
+          setValue('displayPath', selection.displayPath, { shouldValidate: true });
+        }}
+      />
 
-      {submitError ? (
-        <p className="text-body leading-body text-ember" role="alert">
-          {submitError}
-        </p>
-      ) : null}
+      {submitError ? <WorkspaceErrorBanner>{submitError}</WorkspaceErrorBanner> : null}
 
-      <Button type="submit" variant="primary" disabled={!canSubmit}>
-        Create workspace
+      <Button type="submit" variant="primary" disabled={isSubmitting}>
+        {isSubmitting ? 'Creating workspace' : 'Create workspace'}
       </Button>
     </form>
   );

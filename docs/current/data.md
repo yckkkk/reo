@@ -11,7 +11,7 @@
 - 当前没有 auth session persistence owner。
 - 当前 TanStack Query key 覆盖 workspace snapshot：`['workspace', 'snapshot', workspaceId]`。
 - 当前没有 Zustand stores。
-- 当前 React Hook Form form owner 覆盖 create workspace submit 前的 title/description draft。
+- 当前 React Hook Form form owner 覆盖 create workspace submit 前的 title、description、selection token 和 displayPath draft。
 - 当前 Zod runtime schema owner 是 workspace IPC contract 和错误信封。
 
 ## 技术方向
@@ -28,7 +28,7 @@
 - 非 server-backed 的本地 UI/client state 使用 Zustand。
 - 没有跨 component subtree 的 client state owner 前，不引入 Zustand store。
 - Form state 使用 React Hook Form。
-- React Hook Form 当前只服务真实 create workspace form submit、draft 和 validation owner。
+- React Hook Form 当前只服务真实 create workspace form submit、folder selection draft 和 validation owner。
 
 ## Schema 规则
 
@@ -59,8 +59,8 @@
 - `.reo/workspace.lock` 和 `.reo/workspace.lock.lock` 是 volatile runtime lock artifacts，不进入 Codex read-only validation 的稳定 hash 范围；`.reo/workspace.lock.lock/owner.json` 只记录当前 main process pid，用于识别 stale lock，不是用户内容。缺失、损坏或 symlinked owner file 代表未完成或无效 lock，可在下一次 acquire 时替换。
 - Query keys 使用 stable `workspaceId`、`memoryId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
 - TanStack Query 只拥有 main-backed workspace snapshot cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
-- React Hook Form 只拥有 create workspace submit 前的 form draft。
-- Create workspace folder selection token 和 displayPath 属于 form component state；selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files。
+- React Hook Form 只拥有 create workspace submit 前的 form draft，包括 title、description、selection token 和 displayPath。
+- Create workspace folder selection token 和 displayPath 属于当前 RHF form lifecycle；open existing workspace 的 selection token 只存在于该 open action 的当前事件流。selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files；initialize/open 消费 token 后如果返回错误，renderer 不复用该 token。
 - Recording overlay state 拥有 active recording lifecycle、elapsed timer、当前代码中的本地 transcript placeholder、reflections draft、autosave status 和 active playback Blob URL。placeholder 不是 STT 真源，产品级 first slice 不能把它作为可交付转写能力。
 - Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须同时更新当前 workspace session 的 `memories` 投影和临时 `recordings` 兼容视图。durable truth 仍是 workspace files 和 `.reo/index.json` 的 memory summary。后续 Home/Memory detail slice 会改为直接消费 `memories`。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。

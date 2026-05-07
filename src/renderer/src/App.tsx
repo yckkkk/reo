@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { CreateWorkspaceForm } from './workspace/CreateWorkspaceForm';
 import { RecordingOverlay } from './workspace/RecordingOverlay';
+import { WorkspaceEntryPage } from './workspace/WorkspaceEntryPage';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
 import type { WorkspaceSession } from './workspace/workspaceApi';
 import { seedWorkspaceSnapshot } from './workspace/workspaceQueries';
@@ -51,7 +51,7 @@ export function App() {
   if (!workspaceSession) {
     return (
       <main className="min-h-screen bg-eggshell text-obsidian">
-        <CreateWorkspaceForm onWorkspaceReady={handleWorkspaceReady} />
+        <WorkspaceEntryPage onWorkspaceReady={handleWorkspaceReady} />
       </main>
     );
   }

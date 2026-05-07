@@ -19,6 +19,8 @@ describe('App', () => {
     readRecordingAudioChunk: vi.fn(),
     saveTranscript: vi.fn(),
     saveReflections: vi.fn(),
+    beginMicrophoneIntent: vi.fn(),
+    clearMicrophoneIntent: vi.fn(),
   };
 
   beforeEach(() => {
@@ -84,6 +86,48 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Daily memory' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Memory Content' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
+  });
+
+  it('opens an existing workspace from the entry page', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-open',
+        displayPath: 'Existing memory',
+      },
+    });
+    reoWorkspace.openWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-open',
+        workspaceId: 'ws_open',
+        snapshot: {
+          workspaceId: 'ws_open',
+          title: 'Existing memory',
+          description: '',
+          memories: [],
+          recordings: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }));
+
+    expect(await screen.findByRole('heading', { name: 'Existing memory' })).toBeInTheDocument();
+    expect(reoWorkspace.openWorkspace).toHaveBeenCalledWith({
+      selectionToken: 'selection-token-open',
+    });
+    expect(reoWorkspace.openWorkspace).not.toHaveBeenCalledWith(
+      expect.objectContaining({ displayPath: expect.any(String) })
+    );
   });
 
   it('keeps memory and recording projections fresh after finalize', () => {

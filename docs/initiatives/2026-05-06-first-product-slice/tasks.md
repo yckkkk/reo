@@ -14,13 +14,13 @@
 
 ## 当前下一步
 
-Task 2 已完成验证并准备归档提交；下一步执行 Task 3：Workspace entry create/open、RHF + Zod、folder picker 和错误分支。
+Task 3 已完成验证并准备归档提交；下一步执行 Task 4：App shell、可拖动 sidebar、悬浮内容面板、lucide icon-only controls 和基础导航。
 
 ## 实施任务
 
 - [x] Task 1：Workspace 文件真源、atomic write、durable memory、recording nested path 和 recover/rebuild。
 - [x] Task 2：显式 IPC/preload、sender validation、microphone intent 和 media permission contract。
-- [ ] Task 3：Workspace entry create/open、RHF + Zod、folder picker 和错误分支。
+- [x] Task 3：Workspace entry create/open、RHF + Zod、folder picker 和错误分支。
 - [ ] Task 4：App shell、可拖动 sidebar、悬浮内容面板、lucide icon-only controls 和基础导航。
 - [ ] Task 5：Home 页面 local search、月份分组、memory card、空状态和禁止 future capability。
 - [ ] Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
