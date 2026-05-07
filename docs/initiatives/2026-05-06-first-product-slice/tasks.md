@@ -14,7 +14,7 @@
 
 ## 当前下一步
 
-Task 11 下一步执行：App integration、routing、query/cache ownership 和 forbidden capability audit。
+Task 12 下一步执行：Runtime QA、reference comparison、accessibility、security 和 release verification。
 
 ## 实施任务
 
@@ -29,6 +29,6 @@ Task 11 下一步执行：App integration、routing、query/cache ownership 和 
 - [x] Task 8：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。
 - [x] Task 9：Mic sequencing、MediaRecorder adapter、draft append、finalize transaction 和错误恢复。
 - [x] Task 10：本地 playback、transcript/reflections 编辑和文件优先保存。
-- [ ] Task 11：App integration、routing、query/cache ownership、forbidden capability audit。
+- [x] Task 11：App integration、routing、query/cache ownership、forbidden capability audit。
 - [ ] Task 12：Runtime QA、reference comparison、accessibility、security 和 release verification。
 - [ ] Task 13：Docs/current 压缩、initiative 收口、最终 review、verification 和 commit。

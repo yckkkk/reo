@@ -10,8 +10,8 @@
 - Reconciled implementation plan 已通过 `$writing-plans` 和 `$plan-eng-review` 对抗审查，无 unresolved BLOCKER/MAJOR。
 - 当前 implementation 阶段执行权威是本 initiative、`implementation-plan.md`、当前唯一 active 任务 spec、`docs/current/*` 和源码事实。
 - Design-hardening spec 在 plan handoff 完成后归档到 `docs/archive/specs/2026-05-06-0912-first-product-slice-product-grade-design-hardening/`，归档后只作为背景证据。
-- 当前已完成 Task 1 到 Task 10 的实现、审查和提交准备。
-- 当前下一步是 Task 11：App integration、routing、query/cache ownership 和 forbidden capability audit。
+- 当前已完成 Task 1 到 Task 11 的实现、审查和提交准备。
+- 当前下一步是 Task 12：Runtime QA、reference comparison、accessibility、security 和 release verification。
 - 不得把计划写入 `docs/superpowers/*`。
 - 不得编辑 archived implementation plan。
 

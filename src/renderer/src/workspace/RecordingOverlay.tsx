@@ -40,8 +40,13 @@ type RecordingOverlayProps = {
   readonly onOpenChange: (open: boolean) => void;
   readonly onRecordingFinalized: (recording: FinalizedRecording) => void;
   readonly open: boolean;
+  readonly recordingTarget: RecordingTarget;
   readonly workspaceSession: WorkspaceSession;
 };
+
+export type RecordingTarget =
+  | { readonly kind: 'new-memory' }
+  | { readonly kind: 'existing-memory'; readonly memoryId: string };
 
 const AUTOSAVE_DELAY_MS = 300;
 const PLAYBACK_CHUNK_CONCURRENCY = 4;
@@ -73,6 +78,7 @@ export function RecordingOverlay({
   onOpenChange,
   onRecordingFinalized,
   open,
+  recordingTarget,
   workspaceSession,
 }: RecordingOverlayProps) {
   const [state, setState] = useState<RecordingState>(() => createInitialRecordingState());
@@ -464,6 +470,9 @@ export function RecordingOverlay({
     try {
       finalized = await finalizeRecordingDraft({
         durationMs,
+        ...(recordingTarget.kind === 'existing-memory'
+          ? { memoryId: recordingTarget.memoryId }
+          : {}),
         recordingId,
         title,
         workspaceHandle: workspaceSession.workspaceHandle,

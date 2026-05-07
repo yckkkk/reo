@@ -2,12 +2,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AppShell, type ThemeMode } from './app-shell/AppShell';
 import { MemoryDetailPage } from './workspace/MemoryDetailPage';
-import { RecordingOverlay } from './workspace/RecordingOverlay';
+import { RecordingOverlay, type RecordingTarget } from './workspace/RecordingOverlay';
 import { WorkspaceEntryDialog } from './workspace/WorkspaceEntryDialog';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
 import type { WorkspaceSession } from './workspace/workspaceApi';
-import { seedWorkspaceSnapshot } from './workspace/workspaceQueries';
+import { memoryDetailQueryKey, seedWorkspaceSnapshot } from './workspace/workspaceQueries';
 
 type FinalizedRecording = {
   readonly memory: WorkspaceSession['snapshot']['memories'][number];
@@ -49,7 +49,7 @@ export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
   const [workspaceEntryOpen, setWorkspaceEntryOpen] = useState(false);
-  const [recordingOpen, setRecordingOpen] = useState(false);
+  const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ name: 'home' });
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
 
@@ -87,16 +87,28 @@ export function App() {
       </>
     );
   }
+  const activeWorkspaceSession = workspaceSession;
 
   function handleRecordingFinalized(finalized: FinalizedRecording) {
-    setWorkspaceSession((current) => {
-      if (!current) {
-        return current;
-      }
-      const nextSession = mergeFinalizedRecordingIntoSession(current, finalized);
-      seedWorkspaceSnapshot(queryClient, nextSession);
-      return nextSession;
+    const nextSession = mergeFinalizedRecordingIntoSession(activeWorkspaceSession, finalized);
+    seedWorkspaceSnapshot(queryClient, nextSession);
+    void queryClient.invalidateQueries({
+      queryKey: memoryDetailQueryKey({
+        memoryId: finalized.recording.memoryId,
+        workspaceId: activeWorkspaceSession.workspaceId,
+      }),
     });
+    setWorkspaceSession(nextSession);
+  }
+
+  function openRecording(target: RecordingTarget) {
+    setRecordingTarget(target);
+  }
+
+  function handleRecordingOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setRecordingTarget(null);
+    }
   }
 
   return (
@@ -104,30 +116,35 @@ export function App() {
       <AppShell
         themeMode={themeMode}
         onToggleTheme={toggleTheme}
-        onNewMemory={() => setRecordingOpen(true)}
+        onNewMemory={() => openRecording({ kind: 'new-memory' })}
       >
         {workspaceView.name === 'home' ? (
           <WorkspaceHome
-            workspaceSession={workspaceSession}
+            workspaceSession={activeWorkspaceSession}
             onOpenMemory={(memoryId) => setWorkspaceView({ name: 'memory-detail', memoryId })}
-            onStartRecording={() => setRecordingOpen(true)}
+            onStartRecording={() => openRecording({ kind: 'new-memory' })}
           />
         ) : (
           <MemoryDetailPage
             memoryId={workspaceView.memoryId}
-            workspaceHandle={workspaceSession.workspaceHandle}
-            workspaceId={workspaceSession.workspaceId}
+            workspaceHandle={activeWorkspaceSession.workspaceHandle}
+            workspaceId={activeWorkspaceSession.workspaceId}
             onBack={() => setWorkspaceView({ name: 'home' })}
-            onRecordMemory={() => setRecordingOpen(true)}
+            onRecordMemory={() =>
+              openRecording({ kind: 'existing-memory', memoryId: workspaceView.memoryId })
+            }
           />
         )}
       </AppShell>
-      <RecordingOverlay
-        onOpenChange={setRecordingOpen}
-        onRecordingFinalized={handleRecordingFinalized}
-        open={recordingOpen}
-        workspaceSession={workspaceSession}
-      />
+      {recordingTarget ? (
+        <RecordingOverlay
+          onOpenChange={handleRecordingOpenChange}
+          onRecordingFinalized={handleRecordingFinalized}
+          open
+          recordingTarget={recordingTarget}
+          workspaceSession={activeWorkspaceSession}
+        />
+      ) : null}
     </>
   );
 }

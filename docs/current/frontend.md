@@ -111,7 +111,7 @@
 - 当前 Workspace home 直接使用 `Input` primitive 承载 searchbox，使用 `Separator` primitive 承载 header/month 的装饰性分隔；memory card 使用 `article`、`time`、`dl` 表达条目、日期和元数据，并用覆盖按钮提供打开当前 memory detail 的 command。`MemorySection` 和 `MemoryCard` 是 feature-local components，只服务 loaded workspace Home，不是 design-system primitive。
 - 当前 Memory detail 使用最小 in-memory route 从 Home 进入和返回，不引入 router dependency、page registry、generic route service 或额外 provider。
 - 当前 Memory detail 通过 TanStack Query 读取 main-backed detail projection；`workspaceHandle` 只在 query function 闭包中作为 request capability 使用，不进入 DOM、URL、query key 或持久化状态。
-- 当前 Memory detail 的 `Record memory` 打开现有 recording overlay；录音追加到当前 memory 的目标语义尚未实现，因此页面不声称 append-to-memory。
+- 当前 Memory detail 的 `Record memory` 打开现有 recording overlay，并把当前 `memoryId` 作为 existing memory recording target 传入 finalize request。
 - 当前 Memory detail 不渲染 More、Rename、Delete、Show in folder、Export、Films、photo、video、file、AI、entity、contact 或 global search command。
 - 当前 Memory detail 使用 `MemoryDetailPage` 和 file-local `MemoryDetailSection`；它们是 feature-local components，不是 design-system primitive。
 - 当前 `Record memory` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 仍持有当前 durable recording transaction，并复用 feature-local `RecordAudioDrawer` shell、`RecordingWaveform`、`RecordingControls`、`RecordingPlayback` 和 `TranscriptReflectionsEditor`。Drawer 使用固定 header/footer 和中间滚动区，保证编辑态长内容不挤出 close command；非忙碌关闭后再次打开回到 ready recording state。

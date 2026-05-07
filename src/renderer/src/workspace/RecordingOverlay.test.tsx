@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RecordingOverlay } from './RecordingOverlay';
+import { RecordingOverlay, type RecordingTarget } from './RecordingOverlay';
 import type {
   RecordingMediaAdapter,
   RecordingMediaController,
@@ -19,6 +20,22 @@ const workspaceSession: WorkspaceSession = {
     recordings: [],
   },
 };
+
+const newMemoryTarget = { kind: 'new-memory' } satisfies RecordingTarget;
+
+type RecordingOverlayForTestProps = Omit<
+  ComponentProps<typeof RecordingOverlay>,
+  'recordingTarget'
+> & {
+  readonly recordingTarget?: RecordingTarget;
+};
+
+function RecordingOverlayForTest({
+  recordingTarget = newMemoryTarget,
+  ...props
+}: RecordingOverlayForTestProps) {
+  return <RecordingOverlay recordingTarget={recordingTarget} {...props} />;
+}
 
 type Deferred<T> = {
   readonly promise: Promise<T>;
@@ -158,7 +175,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -199,7 +216,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -227,7 +244,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -252,12 +269,43 @@ describe('RecordingOverlay', () => {
     });
   });
 
+  it('passes the current memory target when recording from memory detail', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        recordingTarget={{ kind: 'existing-memory', memoryId: 'mem_birthday' }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryId: 'mem_birthday',
+        recordingId: 'rec_1',
+        workspaceHandle: 'workspace-handle-secret',
+      })
+    );
+  });
+
   it('uses sub-second recording duration instead of the rounded display timer', async () => {
     const bridge = installWorkspaceBridge();
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -295,7 +343,7 @@ describe('RecordingOverlay', () => {
     };
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -347,7 +395,7 @@ describe('RecordingOverlay', () => {
     });
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -379,7 +427,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -407,7 +455,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -436,7 +484,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     const { unmount } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -468,7 +516,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     const { unmount } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -508,7 +556,7 @@ describe('RecordingOverlay', () => {
     vi.mocked(media.adapter.start).mockReturnValue(start.promise);
 
     const { unmount } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -554,7 +602,7 @@ describe('RecordingOverlay', () => {
     };
 
     const { rerender } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -566,7 +614,7 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
     rerender(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -600,7 +648,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -630,7 +678,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -656,7 +704,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -689,7 +737,7 @@ describe('RecordingOverlay', () => {
     };
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -729,7 +777,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -782,7 +830,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -818,7 +866,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -854,7 +902,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -890,7 +938,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     const { rerender } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -911,7 +959,7 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
     rerender(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -920,7 +968,7 @@ describe('RecordingOverlay', () => {
       />
     );
     rerender(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -945,7 +993,7 @@ describe('RecordingOverlay', () => {
     const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const media = createMediaAdapter();
     const { unmount } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -996,7 +1044,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
 
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -1029,7 +1077,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1059,7 +1107,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     const { rerender } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1078,7 +1126,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     rerender(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1087,7 +1135,7 @@ describe('RecordingOverlay', () => {
       />
     );
     rerender(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1112,7 +1160,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1147,7 +1195,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1183,7 +1231,7 @@ describe('RecordingOverlay', () => {
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
     const media = createMediaAdapter();
     const { unmount } = render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -1225,7 +1273,7 @@ describe('RecordingOverlay', () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording');
     const media = createMediaAdapter();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
@@ -1274,7 +1322,7 @@ describe('RecordingOverlay', () => {
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onRecordingFinalized={() => {}}
@@ -1313,7 +1361,7 @@ describe('RecordingOverlay', () => {
     });
     const media = createMediaAdapter();
     render(
-      <RecordingOverlay
+      <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onRecordingFinalized={() => {}}
