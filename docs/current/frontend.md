@@ -11,9 +11,11 @@
 - 当前 styling foundation 使用 Reo 设计系统 token：暖白底、黑色主文字、低饱和中性色、蓝/橙小型点缀、细边界和轻量阴影。
 - Renderer 可执行主题文件是 `src/renderer/src/theme.css`。
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
-- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
+- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
+- Vaul 已作为 shadcn Drawer 的 bottom drawer mechanics dependency 引入。
+- ElevenLabs UI source-derived `Waveform` 与 `VoiceButton` 已作为 Reo audio UI primitive 引入，并已裁剪掉 agent runtime、network/API key、demo feedback 和未实现文案。
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
-- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace entry dialog/form、workspace home、memory detail 和 recording overlay。
+- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace entry dialog/form、workspace home、memory detail、recording overlay 和 recording drawer control shell。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
 - 当前无 workspace state 使用 `AppShell` + `WorkspaceStarterHome`；Home `+` 打开 `WorkspaceEntryDialog`。
@@ -22,7 +24,7 @@
 - 当前 memory detail 展示 memory title、创建日期、单一 `Record memory` action、Voice recordings、Transcript、Reflections 和 Memory content section；录音卡展示 recording title、duration 和 audio byte size。
 - 当前 memory detail 的 Voice recordings 是有界首屏 preview：meta 显示总 recording count，列表最多展示 main detail response 返回的前 24 条 recording summary；当 `recordingsTruncated` 为 true 时显示当前只展示 first recordings 的提示，不创建分页、virtualization 或后续加载 action。
 - 当前 memory detail 的 Transcript/Reflections section 使用 file-backed summary flags 显示 saved/empty 状态；不在未知文件真源时硬编码 “No ... saved.”。
-- 当前 recording overlay 使用 Radix Dialog/shadcn Dialog source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
+- 当前 recording overlay 使用 shadcn Drawer/Vaul source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
 - 当前有 `WorkspaceEntryDialog`，组合 `CreateWorkspaceForm` 与 `OpenWorkspaceAction`；创建表单使用 React Hook Form + Zod resolver，打开现有 workspace 走独立 open branch。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
 - Zustand 已选型，但当前未安装。
@@ -38,16 +40,18 @@
 - 组件和交互设计必须先评估 shadcn/ui、Radix、ElevenLabs UI、Vaul、wavesurfer.js 和其他成熟开源组件；符合 Reo 边界时优先复用或适配。
 - 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 当前 Button/Label primitive 已 retokenize 到 Reo design system；Button 使用 pill shape、Reo focus-visible ring、disabled state，Label 使用 Reo body typography。
-- 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 bottom-sheet/mobile 和 centered desktop layout，`WorkspaceEntryDialog` 组合 `DialogClose` 与 lucide close control；Textarea 使用 0 radius input shape。
+- 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 用于 workspace entry，`WorkspaceEntryDialog` 组合 `DialogClose` 与 lucide close control；Textarea 使用 0 radius input shape。
+- 当前 Drawer source 基于 shadcn/ui Drawer + Vaul，retokenize 到 Reo bottom drawer surface；controlled `open/onOpenChange`、`dismissible={false}` 和 `data-vaul-no-drag` 用于录音忙碌态关闭保护与 waveform/control 交互区。
 - 当前 Button source 的 filled pill primary 使用 Obsidian；Signal Blue 只用于 Button `accentCircle` variant 的小型圆形 control，例如 Home `+`；naked icon-only controls 使用 Button `ghostIcon` variant。
 - 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
+- 当前 Waveform/VoiceButton source 来自 ElevenLabs UI registry 的逐组件评估；Reo 只保留 canvas waveform bar renderer、recording/error/processing control visual 和 Button semantics，不在 renderer component 内申请 microphone stream、调用网络、创建 agent runtime 或显示 API key/model 文案。
 - 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
 - 当前深色主题由 `src/renderer/src/theme.css` 的 Reo token 覆盖实现：背景避免纯黑，面板使用抬升暖中性色，文字、弱文字、描边、阴影、scrim、Signal Blue、Ember 和 Voice Spectrum 都有暗色 token。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
 - 来自 main/server boundary 的 async data 使用 TanStack Query。
-- 当前 QueryClient provider 只服务 workspace snapshot cache；active recording lifecycle 不进入 Query。
+- 当前 QueryClient provider 只服务 workspace snapshot cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
 - 没有跨 component subtree state owner 前，不创建 Zustand store。
 
@@ -108,10 +112,10 @@
 - 当前 Memory detail 的 `Record memory` 打开现有 recording overlay；录音追加到当前 memory 的目标语义尚未实现，因此页面不声称 append-to-memory。
 - 当前 Memory detail 不渲染 More、Rename、Delete、Show in folder、Export、Films、photo、video、file、AI、entity、contact 或 global search command。
 - 当前 Memory detail 使用 `MemoryDetailPage` 和 file-local `MemoryDetailSection`；它们是 feature-local components，不是 design-system primitive。
-- 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
+- 当前 `Record memory` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 仍持有当前 durable recording transaction，并复用 feature-local `RecordAudioDrawer` shell、`RecordingWaveform` 和 `RecordingControls`。Drawer 使用固定 header/footer 和中间滚动区，保证编辑态长内容不挤出 close command；非忙碌关闭后再次打开回到 ready recording state。
 - Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime、网络 STT 或本地 mock transcript。
 - 当前 recording overlay 停止录音后展示空白 transcript/reflections draft，内容只来自用户编辑或未来明确引入的真实转写 foundation。
-- 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
+- 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC；单个 chunk read 失败后不得继续调度后续 chunk IPC。
 
 已接受但尚未全部实现的 first-slice 交付约束：
 
@@ -127,14 +131,14 @@
 - Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
 - 当前 recording overlay 不生成 transcript 文本；停止后只进入可编辑 transcript/reflections draft。
 - ElevenLabs UI 逐组件 source-owned 采纳，优先范围是 Waveform、Live Waveform、Voice Button、Audio Player、Transcript Viewer；不得执行 `add all`。
-- Waveform 不能用自研 lightweight bars 作为最终形态；必须优先 retokenize ElevenLabs UI waveform source，只有 Electron 安全、local-first、可访问性、测试或复杂度被证据阻断时才允许 fork 或替代。
+- Waveform 不能用与官方/成熟源码无关的自研 lightweight bars 作为最终形态；当前 Task 8 采用 ElevenLabs UI waveform registry 的 canvas/bar rendering pattern 并裁剪到 Reo local-first 边界。引入 long waveform、live microphone waveform、peaks、regions 或 playback scrubber 时，必须重新评估 ElevenLabs UI、wavesurfer.js 或成熟开源实现。
 - wavesurfer.js 不负责 current durable capture；若实现 long waveform、peaks、regions、visual scrubber 或第二个 waveform consumer，必须重新作为优先候选并记录采用、fork 或拒绝证据。
 - shadcn/ui source 变更必须与 exact primitives、business consumers、shared invariants、tests 和同 slice commit 同批完成。
 
 ## shadcn/ui 边界
 
-- 当前 shadcn/ui source 范围包含 Button、Input、Label、Dialog、Textarea、Tooltip 和 Separator。
-- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 Button、Input、Label、Dialog、Drawer、Textarea、Tooltip 和 Separator。
+- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
 - 只有存在真实 reusable component consumer 时，才允许继续添加 shadcn/ui source。
 - 该 gate 只是安装与初始化门禁，不是框架选择保留项；Reo 的 UI 技术框架已经确定为 shadcn/ui + Radix primitives + Tailwind CSS v4。
 - 该 consumer 必须需要 reusable primitive、accessible interaction primitive，或明确的 shared visual invariant。

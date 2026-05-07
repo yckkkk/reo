@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -27,8 +20,12 @@ import {
   type RecordingMediaAdapter,
   type RecordingMediaController,
 } from './mediaRecorderAdapter';
+import { RecordAudioDrawer } from './recording/RecordAudioDrawer';
+import { RecordingControls } from './recording/RecordingControls';
+import { RecordingWaveform } from './recording/RecordingWaveform';
 import {
   createInitialRecordingState,
+  isRecordingCloseBlocked,
   transitionRecordingState,
   type RecordingState,
 } from './recordingMachine';
@@ -53,17 +50,22 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function isBusy(state: RecordingState) {
-  return (
-    state.status === 'acquiring' ||
-    state.status === 'recording' ||
-    state.status === 'paused' ||
-    state.status === 'stopping'
-  );
-}
-
 function titleForRecording(workspaceTitle: string) {
   return `${workspaceTitle} recording`;
+}
+
+const RECORDING_STATUS_TEXT = {
+  'acquiring-permission': 'Preparing microphone access.',
+  editing: 'Recording saved. Edit the draft before closing.',
+  failed: 'Recording did not save.',
+  finalizing: 'Saving local audio.',
+  idle: 'Ready to record local audio.',
+  paused: 'Recording paused.',
+  recording: 'Recording local audio.',
+} satisfies Record<RecordingState['status'], string>;
+
+function statusTextFor(state: RecordingState): string {
+  return RECORDING_STATUS_TEXT[state.status];
 }
 
 export function RecordingOverlay({
@@ -119,11 +121,15 @@ export function RecordingOverlay({
     }
 
     const timeout = window.setTimeout(() => {
+      const saveSession = recordingSessionRef.current;
       void saveTranscript({
         markdown: transcriptDraft,
         recordingId: state.recordingId,
         workspaceHandle: workspaceSession.workspaceHandle,
       }).then((response) => {
+        if (recordingSessionRef.current !== saveSession) {
+          return;
+        }
         if (response.ok) {
           lastSavedTranscriptRef.current = transcriptDraft;
           setError(null);
@@ -142,11 +148,15 @@ export function RecordingOverlay({
     }
 
     const timeout = window.setTimeout(() => {
+      const saveSession = recordingSessionRef.current;
       void saveReflections({
         markdown: reflectionsDraft,
         recordingId: state.recordingId,
         workspaceHandle: workspaceSession.workspaceHandle,
       }).then((response) => {
+        if (recordingSessionRef.current !== saveSession) {
+          return;
+        }
         if (response.ok) {
           lastSavedReflectionsRef.current = reflectionsDraft;
           setError(null);
@@ -276,7 +286,7 @@ export function RecordingOverlay({
     if (discardDraft) {
       discardActiveDraft(recordingSession);
     }
-    setState({ message, status: 'failed' });
+    setState((current) => transitionRecordingState(current, { type: 'failed' }));
     setError(message);
   }
 
@@ -333,7 +343,11 @@ export function RecordingOverlay({
     const recordingSession = recordingSessionRef.current + 1;
     const drawerSessionId = `recording-${recordingSession}`;
     recordingSessionRef.current = recordingSession;
-    setState((current) => transitionRecordingState(current, { type: 'start-requested' }));
+    setState((current) =>
+      transitionRecordingState(current, {
+        type: 'start-requested',
+      })
+    );
 
     const microphoneIntent = await beginMicrophoneIntent({
       drawerSessionId,
@@ -504,9 +518,10 @@ export function RecordingOverlay({
     const chunkCount = Math.ceil(byteLength / maxChunkBytes);
     const chunks = new Array<Uint8Array>(chunkCount);
     let nextChunkIndex = 0;
+    let playbackFailed = false;
 
     async function readNextChunk() {
-      while (nextChunkIndex < chunkCount) {
+      while (nextChunkIndex < chunkCount && !playbackFailed) {
         if (playbackSessionRef.current !== playbackSession) {
           return;
         }
@@ -520,7 +535,11 @@ export function RecordingOverlay({
           recordingId,
           workspaceHandle: workspaceSession.workspaceHandle,
         });
+        if (playbackFailed) {
+          return;
+        }
         if (!response.ok) {
+          playbackFailed = true;
           throw new Error(response.error.message);
         }
         if (playbackSessionRef.current !== playbackSession) {
@@ -548,106 +567,97 @@ export function RecordingOverlay({
     setPlaybackUrl(URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' })));
   }
 
+  function resetClosedDrawerState() {
+    recordingSessionRef.current += 1;
+    appendFailureRef.current = null;
+    appendQueueRef.current = Promise.resolve();
+    lastSavedTranscriptRef.current = '';
+    lastSavedReflectionsRef.current = '';
+    playbackSessionRef.current += 1;
+    resetRecordingDurationClock();
+    setElapsedSeconds(0);
+    setError(null);
+    setPlaybackUrl(null);
+    setReflectionsDraft('');
+    setState(createInitialRecordingState());
+    setTranscriptDraft('');
+  }
+
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && isBusy(state)) {
+    if (!nextOpen && isRecordingCloseBlocked(state)) {
       return;
     }
     if (!nextOpen) {
-      playbackSessionRef.current += 1;
-      setPlaybackUrl(null);
+      resetClosedDrawerState();
     }
     onOpenChange(nextOpen);
   }
 
-  const canClose = !isBusy(state);
+  const canClose = !isRecordingCloseBlocked(state);
   const isEditing = state.status === 'editing';
+  const statusText = statusTextFor(state);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit recording' : 'Recording'}</DialogTitle>
-          <DialogDescription>
-            Record local audio, then edit the local transcript and reflections draft.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="mt-24 flex flex-col gap-20">
-          {error ? (
-            <p role="alert" className="text-body leading-body text-ember">
-              {error}
-            </p>
-          ) : null}
-
-          {!isEditing ? (
-            <div className="flex flex-col gap-16">
-              <p className="text-body leading-body text-gravel">
-                Status: {state.status}. Elapsed: {elapsedSeconds}s.
-              </p>
-              <div className="flex flex-wrap gap-12">
-                {state.status === 'idle' || state.status === 'failed' ? (
-                  <Button type="button" onClick={handleStart}>
-                    Start recording
-                  </Button>
-                ) : null}
-                {state.status === 'recording' ? (
-                  <Button type="button" variant="secondary" onClick={handlePause}>
-                    Pause recording
-                  </Button>
-                ) : null}
-                {state.status === 'paused' ? (
-                  <Button type="button" variant="secondary" onClick={handleResume}>
-                    Resume recording
-                  </Button>
-                ) : null}
-                {state.status === 'recording' || state.status === 'paused' ? (
-                  <Button type="button" variant="default" onClick={handleStop}>
-                    Stop recording
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-16">
-              <div className="flex flex-col gap-8">
-                <Label htmlFor="recording-transcript">Transcript</Label>
-                <Textarea
-                  id="recording-transcript"
-                  value={transcriptDraft}
-                  onChange={(event) => setTranscriptDraft(event.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-8">
-                <Label htmlFor="recording-reflections">Reflections</Label>
-                <Textarea
-                  id="recording-reflections"
-                  value={reflectionsDraft}
-                  onChange={(event) => setReflectionsDraft(event.target.value)}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-12">
-                <Button type="button" variant="secondary" onClick={handlePlay}>
-                  Play recording
-                </Button>
-                {playbackUrl ? (
-                  <audio aria-label="Recording playback" controls src={playbackUrl} />
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!canClose}
-              onClick={() => handleOpenChange(false)}
-            >
-              Close recording panel
+    <RecordAudioDrawer
+      description="Record local audio, then edit the local transcript and reflections draft."
+      closeBlocked={!canClose}
+      error={error}
+      footer={
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!canClose}
+          onClick={() => handleOpenChange(false)}
+        >
+          Close recording panel
+        </Button>
+      }
+      onOpenChange={handleOpenChange}
+      open={open}
+      title={isEditing ? 'Edit recording' : 'Recording'}
+    >
+      {!isEditing ? (
+        <div className="flex flex-col gap-16">
+          <p className="text-body leading-body text-gravel">
+            {statusText} Elapsed: {elapsedSeconds}s.
+          </p>
+          <RecordingWaveform state={state} />
+          <RecordingControls
+            onPause={handlePause}
+            onResume={handleResume}
+            onStart={handleStart}
+            onStop={handleStop}
+            state={state}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-16">
+          <div className="flex flex-col gap-8">
+            <Label htmlFor="recording-transcript">Transcript</Label>
+            <Textarea
+              id="recording-transcript"
+              value={transcriptDraft}
+              onChange={(event) => setTranscriptDraft(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-8">
+            <Label htmlFor="recording-reflections">Reflections</Label>
+            <Textarea
+              id="recording-reflections"
+              value={reflectionsDraft}
+              onChange={(event) => setReflectionsDraft(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-12">
+            <Button type="button" variant="secondary" onClick={handlePlay}>
+              Play recording
             </Button>
+            {playbackUrl ? (
+              <audio aria-label="Recording playback" controls src={playbackUrl} />
+            ) : null}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </RecordAudioDrawer>
   );
 }

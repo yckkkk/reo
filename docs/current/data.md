@@ -59,13 +59,13 @@
 - `.reo/index.json` 当前保存 `memories[]` 投影；每个 summary 包含 `memoryId`、title、created/updated time、recording count、duration、audio bytes、非空 transcript/reflections presence。
 - `.reo/workspace.lock` 和 `.reo/workspace.lock.lock` 是 volatile runtime lock artifacts，不进入 Codex read-only validation 的稳定 hash 范围；`.reo/workspace.lock.lock/owner.json` 只记录当前 main process pid，用于识别 stale lock，不是用户内容。缺失、损坏或 symlinked owner file 代表未完成或无效 lock，可在下一次 acquire 时替换。
 - Query keys 使用 stable `workspaceId`、`memoryId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
-- TanStack Query 只拥有 main-backed workspace snapshot 和 memory detail cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
+- TanStack Query 只拥有 main-backed workspace snapshot 和 memory detail cache；active recording lifecycle、drawer close protection、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft，包括 title、description、selection token 和 displayPath。
 - Workspace Home 本地搜索只使用当前 loaded workspace snapshot 的 `memories` 投影和 renderer component state；搜索词不进入 Query key、Zustand、IPC、DB、workspace files 或 `.reo/index.json`。
 - Memory detail 使用 `['workspace', 'memory-detail', workspaceId, memoryId]` 读取当前 memory detail projection；`workspaceHandle` 只作为 `getMemoryDetail` request capability 进入 preload/main 边界，不进入 Query key、DOM、URL、workspace files、`.reo/index.json` 或持久化缓存身份。
 - Memory detail response 读取 `memory.json` 作为 detail identity 真源，使用 `.reo/index.json` 中同一 memory summary 的 `recordingCount`、`hasTranscript` 和 `hasReflections` 投影，并只返回前 24 条 recording summary 作为当前首屏 preview；`recordingsTruncated` 标明还有未展示的 recordings，避免 detail navigation 对长 memory 做无界 recording 文件读取或 DOM 渲染。
 - Create workspace folder selection token 和 displayPath 属于当前 RHF form lifecycle；open existing workspace 的 selection token 只存在于该 open action 的当前事件流。selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files；initialize/open 消费 token 后如果返回错误，renderer 不复用该 token。
-- Recording overlay state 拥有 active recording lifecycle、elapsed timer、transcript draft、reflections draft、autosave status 和 active playback Blob URL。Transcript draft 初始为空，只来自用户编辑或已保存文件，不生成本地 mock transcript，也不作为 STT 真源。
+- Recording overlay/drawer component state 拥有 active recording lifecycle、drawer close protection、elapsed timer、transcript draft、reflections draft、autosave status 和 active playback Blob URL。Transcript draft 初始为空，只来自用户编辑或已保存文件，不生成本地 mock transcript，也不作为 STT 真源。
 - Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须同时更新当前 workspace session 的 `memories` 投影和临时 `recordings` 兼容视图。durable truth 仍是 workspace files 和 `.reo/index.json` 的 memory summary。后续 Home/Memory detail slice 会改为直接消费 `memories`。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。

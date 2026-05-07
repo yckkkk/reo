@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialRecordingState, transitionRecordingState } from './recordingMachine';
+import {
+  createInitialRecordingState,
+  isRecordingCloseBlocked,
+  transitionRecordingState,
+  type RecordingState,
+} from './recordingMachine';
 
 describe('recording machine', () => {
   it('models record, pause, resume, stop, editing, and duplicate stop', () => {
@@ -12,30 +17,72 @@ describe('recording machine', () => {
     });
     const paused = transitionRecordingState(recording, { type: 'pause-requested' });
     const resumed = transitionRecordingState(paused, { type: 'resume-requested' });
-    const stopping = transitionRecordingState(resumed, { type: 'stop-requested' });
-    const duplicateStop = transitionRecordingState(stopping, { type: 'stop-requested' });
-    const editing = transitionRecordingState(stopping, {
+    const finalizing = transitionRecordingState(resumed, { type: 'stop-requested' });
+    const duplicateStop = transitionRecordingState(finalizing, { type: 'stop-requested' });
+    const editing = transitionRecordingState(finalizing, {
       recordingId: 'rec_1',
       title: 'Recording',
       type: 'finalized',
     });
 
-    expect(acquiring.status).toBe('acquiring');
+    expect(acquiring.status).toBe('acquiring-permission');
     expect(recording.status).toBe('recording');
     expect(paused.status).toBe('paused');
     expect(resumed.status).toBe('recording');
-    expect(stopping.status).toBe('stopping');
-    expect(duplicateStop).toEqual(stopping);
+    expect(finalizing.status).toBe('finalizing');
+    expect(duplicateStop).toEqual(finalizing);
     expect(editing.status).toBe('editing');
   });
 
   it('allows retry after a failed recording attempt', () => {
-    const failed = transitionRecordingState(createInitialRecordingState(), {
-      message: 'Append failed',
+    const acquiring = transitionRecordingState(createInitialRecordingState(), {
+      type: 'start-requested',
+    });
+    const failed = transitionRecordingState(acquiring, {
       type: 'failed',
     });
-    const retry = transitionRecordingState(failed, { type: 'start-requested' });
+    const retry = transitionRecordingState(failed, {
+      type: 'start-requested',
+    });
 
-    expect(retry.status).toBe('acquiring');
+    expect(retry.status).toBe('acquiring-permission');
+  });
+
+  it('ignores late failed events from idle and editing states', () => {
+    const idle: RecordingState = { status: 'idle' };
+    expect(
+      transitionRecordingState(idle, {
+        type: 'failed',
+      })
+    ).toEqual(idle);
+
+    const editing: RecordingState = {
+      recordingId: 'rec_1',
+      status: 'editing',
+      title: 'Recording',
+    };
+    expect(
+      transitionRecordingState(editing, {
+        type: 'failed',
+      })
+    ).toEqual(editing);
+  });
+
+  it('blocks close only while capture work is active', () => {
+    expect(isRecordingCloseBlocked({ status: 'idle' })).toBe(false);
+    expect(
+      isRecordingCloseBlocked({
+        status: 'acquiring-permission',
+      })
+    ).toBe(true);
+    expect(isRecordingCloseBlocked({ recordingId: 'rec_1', status: 'recording' })).toBe(true);
+    expect(isRecordingCloseBlocked({ recordingId: 'rec_1', status: 'finalizing' })).toBe(true);
+    expect(
+      isRecordingCloseBlocked({
+        recordingId: 'rec_1',
+        status: 'editing',
+        title: 'Recording',
+      })
+    ).toBe(false);
   });
 });

@@ -14,7 +14,7 @@
 
 ## 当前下一步
 
-Task 8 下一步执行：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。
+Task 9 下一步执行：Mic sequencing、MediaRecorder adapter、draft append、finalize transaction 和错误恢复的剩余收口。
 
 ## 实施任务
 
@@ -26,7 +26,7 @@ Task 8 下一步执行：Recording drawer、ElevenLabs waveform/source retokeniz
 - [x] Task 6A：App shell 浅色/深色主题切换、sidebar 左下角入口、深色模式 tokens 适配和 Dialog accessibility warning 修复。
 - [x] Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
 - [x] Task 7：移除 `RecordingOverlay` mock transcript，拆分录音状态和副作用。
-- [ ] Task 8：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。
+- [x] Task 8：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。
 - [ ] Task 9：Mic sequencing、MediaRecorder adapter、draft append、finalize transaction 和错误恢复。
 - [ ] Task 10：本地 playback、transcript/reflections 编辑和文件优先保存。
 - [ ] Task 11：App integration、routing、query/cache ownership、forbidden capability audit。

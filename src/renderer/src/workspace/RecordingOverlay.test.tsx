@@ -169,7 +169,8 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Audio waveform')).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
     expect(window.reoWorkspace.appendRecordingAudioChunk).toHaveBeenCalled();
@@ -209,7 +210,7 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
     fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
     await flushPromises();
@@ -306,13 +307,13 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
 
-    expect(screen.getByText(/Status: acquiring/)).toBeInTheDocument();
+    expect(screen.getByText(/Preparing microphone access/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Stop recording' })).not.toBeInTheDocument();
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
 
     start.resolve(controller);
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop recording' })).toBeInTheDocument();
   });
 
@@ -610,13 +611,13 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent('Append failed');
-    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
   });
 
@@ -640,13 +641,13 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent('Append rejected');
-    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
   });
 
@@ -676,7 +677,7 @@ describe('RecordingOverlay', () => {
       recordingId: 'rec_1',
       workspaceHandle: 'workspace-handle-secret',
     });
-    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
   });
 
   it('discards the draft when media acquisition fails after draft creation', async () => {
@@ -739,18 +740,18 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(1000));
     expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
     expectNoMockTranscript();
     act(() => media.emitError('Microphone failed', 0));
     await flushPromises();
-    expect(screen.getByText(/Status: failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     expectNoMockTranscript();
     act(() => media.emitChunk(new Uint8Array([1]), 0));
     act(() => media.emitChunk(new Uint8Array([2]), 1));
@@ -796,15 +797,15 @@ describe('RecordingOverlay', () => {
     act(() => media.emitError('Microphone failed', 0));
     await flushPromises();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     fireEvent.click(staleStop);
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
   });
 
   it('keeps transcript draft when autosave fails', async () => {
@@ -828,7 +829,7 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
     await flushPromises();
     const transcript = screen.getByRole('textbox', { name: 'Transcript' });
@@ -840,6 +841,64 @@ describe('RecordingOverlay', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
     expect(transcript).toHaveValue('Edited local transcript');
+  });
+
+  it('ignores transcript autosave results after the drawer is closed and reopened', async () => {
+    const saveTranscript =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['saveTranscript']>>>();
+    installWorkspaceBridge({
+      saveTranscript: vi.fn(() => saveTranscript.promise),
+    });
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Transcript' }), {
+      target: { value: 'Edited local transcript' },
+    });
+    act(() => vi.advanceTimersByTime(500));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    rerender(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open={false}
+        workspaceSession={workspaceSession}
+      />
+    );
+    rerender(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+    saveTranscript.resolve({
+      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Save failed' },
+      ok: false,
+    });
+    await flushPromises();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.getByText(/Ready to record local audio/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('reads audio through manifest and chunks, then revokes Blob URL on close', async () => {
@@ -859,7 +918,7 @@ describe('RecordingOverlay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
     await flushPromises();
-    expect(screen.getByText(/Status: recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
@@ -911,6 +970,54 @@ describe('RecordingOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:recording');
     expect(screen.queryByLabelText('Recording playback')).not.toBeInTheDocument();
+  });
+
+  it('resets the drawer to ready state when reopened after editing', async () => {
+    installWorkspaceBridge();
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    expect(screen.getByRole('heading', { name: 'Edit recording' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    await flushPromises();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    rerender(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open={false}
+        workspaceSession={workspaceSession}
+      />
+    );
+    rerender(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'Recording' })).toBeInTheDocument();
+    expect(screen.getByText(/Ready to record local audio/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Transcript' })).not.toBeInTheDocument();
   });
 
   it('does not create a Blob URL when playback finishes after closing the recording panel', async () => {
@@ -1069,6 +1176,51 @@ describe('RecordingOverlay', () => {
     await flushPromises();
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
+  });
+
+  it('stops scheduling playback chunks after a chunk read fails', async () => {
+    type ChunkResponse = Awaited<ReturnType<Window['reoWorkspace']['readRecordingAudioChunk']>>;
+    const pending: Array<(response: ChunkResponse) => void> = [];
+    const bridge = installWorkspaceBridge({
+      readRecordingAudioManifest: vi.fn(async () => ({
+        ok: true as const,
+        value: { byteLength: 10, maxChunkBytes: 1, recordingId: 'rec_1' },
+      })),
+      readRecordingAudioChunk: vi.fn(
+        () => new Promise<ChunkResponse>((resolve) => pending.push(resolve))
+      ),
+    });
+    const media = createMediaAdapter();
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: 'Play recording' }));
+    await flushPromises();
+    expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
+
+    act(() =>
+      pending.shift()?.({
+        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Chunk failed' },
+        ok: false,
+      })
+    );
+    await flushPromises();
+    act(() => pending.shift()?.({ ok: true, value: { chunk: new Uint8Array([1]) } }));
+    await flushPromises();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Chunk failed');
     expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
   });
 });
