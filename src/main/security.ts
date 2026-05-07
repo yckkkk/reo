@@ -5,7 +5,7 @@ import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.
 import { createContentSecurityPolicy } from './securityPolicy.js';
 import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
 
-const require = createRequire(import.meta.url);
+const nodeRequire = createRequire(import.meta.url);
 const MICROPHONE_INTENT_TTL_MS = 15_000;
 
 type MediaPermissionDecisionInput = {
@@ -146,7 +146,7 @@ export function decideMediaPermissionRequest(input: MediaPermissionDecisionInput
 let cachedDevServerUrl: string | null | undefined;
 
 function electronRuntime(): Partial<typeof import('electron')> {
-  return require('electron') as Partial<typeof import('electron')>;
+  return nodeRequire('electron') as Partial<typeof import('electron')>;
 }
 
 function defaultSession(): import('electron').Session {

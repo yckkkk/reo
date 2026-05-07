@@ -31,15 +31,22 @@ describe('App', () => {
     });
   });
 
-  it('renders the workspace creation route without future capability controls', () => {
+  it('renders starter home and opens workspace creation from the plus action', async () => {
+    const user = userEvent.setup();
     render(
       <ReoQueryProvider>
         <App />
       </ReoQueryProvider>
     );
 
-    expect(screen.getByRole('main')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Create workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'All memories' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Create workspace' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Workspace title')).toHaveFocus();
     expect(screen.queryByText(/photo/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/video/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/file/i)).not.toBeInTheDocument();
@@ -77,6 +84,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
     await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
     await user.type(screen.getByLabelText('Description'), 'Private notes');
     await user.click(screen.getByRole('button', { name: 'Choose folder' }));
@@ -84,11 +92,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
     expect(await screen.findByRole('heading', { name: 'Daily memory' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'Workspace content' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Memory Content' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
   });
 
-  it('opens an existing workspace from the entry page', async () => {
+  it('opens an existing workspace from the entry dialog', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -119,6 +129,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
     await user.click(screen.getByRole('button', { name: 'Open workspace' }));
 
     expect(await screen.findByRole('heading', { name: 'Existing memory' })).toBeInTheDocument();

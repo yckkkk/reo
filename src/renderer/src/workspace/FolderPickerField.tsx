@@ -5,6 +5,7 @@ import { chooseSafeWorkspaceFolder } from './workspaceFolderSelection';
 import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 
 type FolderPickerFieldProps = {
+  readonly disabled?: boolean;
   readonly displayPath: string;
   readonly error?: string | undefined;
   readonly onCancel?: () => void;
@@ -13,6 +14,7 @@ type FolderPickerFieldProps = {
 };
 
 export function FolderPickerField({
+  disabled = false,
   displayPath,
   error,
   onCancel,
@@ -23,13 +25,17 @@ export function FolderPickerField({
   const [selecting, setSelecting] = useState(false);
 
   async function handleChooseFolder() {
-    if (selecting) {
+    if (disabled || selecting) {
       return;
     }
 
     setSelecting(true);
-    const result = await chooseSafeWorkspaceFolder();
-    setSelecting(false);
+    let result: Awaited<ReturnType<typeof chooseSafeWorkspaceFolder>>;
+    try {
+      result = await chooseSafeWorkspaceFolder();
+    } finally {
+      setSelecting(false);
+    }
 
     if (result.status === 'error') {
       onError(result.message);
@@ -53,7 +59,7 @@ export function FolderPickerField({
           ref={buttonRef}
           type="button"
           variant="default"
-          disabled={selecting}
+          disabled={disabled || selecting}
           onClick={handleChooseFolder}
         >
           {selecting ? 'Choosing folder' : 'Choose folder'}

@@ -10,3 +10,9 @@ test('main window teardown releases workspace handles', async () => {
   assert.match(source, /mainWindow\.on\('closed'[\s\S]*closeAllWorkspaceHandles/);
   assert.match(source, /uncaughtException[\s\S]*closeAllWorkspaceHandles/);
 });
+
+test('main window uses hidden-inset chrome for the layered app shell', async () => {
+  const source = await readFile('src/main/index.ts', 'utf8');
+
+  assert.match(source, /titleBarStyle:\s*'hiddenInset'/);
+});

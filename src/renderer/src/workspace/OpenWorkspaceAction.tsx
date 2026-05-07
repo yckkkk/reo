@@ -6,42 +6,56 @@ import { chooseSafeWorkspaceFolder } from './workspaceFolderSelection';
 import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 
 type OpenWorkspaceActionProps = {
+  readonly disabled?: boolean;
+  readonly onOpenFinish: () => void;
+  readonly onOpenStart: () => boolean;
   readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => void;
 };
 
-export function OpenWorkspaceAction({ onWorkspaceReady }: OpenWorkspaceActionProps) {
+export function OpenWorkspaceAction({
+  disabled = false,
+  onOpenFinish,
+  onOpenStart,
+  onWorkspaceReady,
+}: OpenWorkspaceActionProps) {
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
 
+  function finishOpening() {
+    setOpening(false);
+    onOpenFinish();
+  }
+
   async function handleOpenWorkspace() {
-    if (opening) {
+    if (disabled || opening || !onOpenStart()) {
       return;
     }
 
     setOpening(true);
     setError(null);
-    const selection = await chooseSafeWorkspaceFolder();
+    try {
+      const selection = await chooseSafeWorkspaceFolder();
 
-    if (selection.status === 'error') {
-      setError(selection.message);
-      setOpening(false);
-      return;
+      if (selection.status === 'error') {
+        setError(selection.message);
+        return;
+      }
+
+      if (selection.status === 'canceled') {
+        return;
+      }
+
+      const response = await openWorkspace({ selectionToken: selection.selection.selectionToken });
+
+      if (!response.ok) {
+        setError(response.error.message);
+        return;
+      }
+
+      onWorkspaceReady(response.value);
+    } finally {
+      finishOpening();
     }
-
-    if (selection.status === 'canceled') {
-      setOpening(false);
-      return;
-    }
-
-    const response = await openWorkspace({ selectionToken: selection.selection.selectionToken });
-    setOpening(false);
-
-    if (!response.ok) {
-      setError(response.error.message);
-      return;
-    }
-
-    onWorkspaceReady(response.value);
   }
 
   return (
@@ -57,7 +71,12 @@ export function OpenWorkspaceAction({ onWorkspaceReady }: OpenWorkspaceActionPro
           Continue from a local Reo workspace folder.
         </p>
       </div>
-      <Button type="button" variant="secondary" disabled={opening} onClick={handleOpenWorkspace}>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={disabled || opening}
+        onClick={handleOpenWorkspace}
+      >
         {opening ? 'Opening workspace' : 'Open workspace'}
       </Button>
       {error ? <WorkspaceErrorBanner>{error}</WorkspaceErrorBanner> : null}

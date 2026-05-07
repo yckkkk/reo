@@ -14,10 +14,15 @@ const buttonVariants = cva(
       size: {
         default: 'min-h-48 px-24',
         compact: 'min-h-40 px-16',
+        icon: 'size-32 p-0',
+        iconMedium: 'size-40 p-0',
+        iconLarge: 'size-56 p-0',
       },
       variant: {
         default: 'border border-obsidian bg-obsidian text-card-white hover:bg-cinder',
-        primary: 'border border-signal-blue bg-signal-blue text-card-white hover:border-obsidian',
+        accentCircle:
+          'rounded-full border border-signal-blue bg-signal-blue text-card-white shadow-subtle-4 hover:border-obsidian hover:bg-obsidian',
+        ghostIcon: 'border border-transparent bg-transparent text-cinder hover:text-obsidian',
         secondary: 'border border-chalk bg-card-white text-obsidian hover:border-slate',
       },
     },

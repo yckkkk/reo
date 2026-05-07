@@ -36,6 +36,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 620,
     title: 'Reo',
+    titleBarStyle: 'hiddenInset',
     backgroundColor: '#f8f7f4',
     show: false,
     webPreferences: createSecureWebPreferences(getPreloadPath()),

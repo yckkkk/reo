@@ -29,7 +29,7 @@
 | Slate                   | `#a59f97`             | `--color-slate`             | Tertiary text、icon stroke、deemphasized label                                               |
 | Cinder                  | `#57534f`             | `--color-cinder`            | Mid-tone text、light surface 上的 secondary heading                                          |
 | Obsidian                | `#000000`             | `--color-obsidian`          | Primary text、filled action background、logo mark                                            |
-| Signal Blue             | `#0447ff`             | `--color-signal-blue`       | Reo brand avatar accent，仅用于小型圆形 UI 元素                                              |
+| Signal Blue             | `#0447ff`             | `--color-signal-blue`       | Reo accent，仅用于小型圆形 UI 元素，不用于正文或 pill button                                 |
 | Ember                   | `#ff4704`             | `--color-ember`             | Secondary Reo avatar accent，仅用于小型圆形 UI 元素                                          |
 | Voice Spectrum          | `#3d75d8`             | `--color-voice-spectrum`    | Reo voice spectrum mark 的基础色                                                             |
 | Voice Spectrum Gradient | `conic-gradient(...)` | `--gradient-voice-spectrum` | Reo voice spectrum mark gradient；完整值位于 `variables.css` 和 `src/renderer/src/theme.css` |
@@ -167,6 +167,16 @@ Base unit：4px。
 - Radius：`9999px`。
 - Padding：horizontal 12px。
 - Border：1px solid `#e5e5e5`。
+
+### Accent Circle Button
+
+- Role：single compact create/add action。
+- Background：Signal Blue。
+- Text/Icon：`#ffffff`。
+- Shape：circle。
+- Minimum size：40px；primary Home create action may use 56px。
+- Hover：background and border switch to Obsidian，保持 icon/text 为 Card White。
+- Usage：only for icon-only compact controls such as Home `+`。
 
 ### Segmented Control
 

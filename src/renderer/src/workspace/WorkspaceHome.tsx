@@ -10,7 +10,7 @@ export function WorkspaceHome({ onStartRecording, workspaceSession }: WorkspaceH
   const { snapshot } = workspaceSession;
 
   return (
-    <main className="min-h-screen bg-eggshell px-24 py-48 text-obsidian sm:px-40 sm:py-64">
+    <section className="min-h-full px-24 py-40 text-obsidian sm:px-40 sm:py-56">
       <section className="mx-auto flex w-full max-w-[960px] flex-col gap-48">
         <header className="mx-auto flex max-w-[720px] flex-col items-center gap-20 text-center">
           <p className="font-waldenburgfh text-body font-bold uppercase leading-body text-gravel">
@@ -24,7 +24,7 @@ export function WorkspaceHome({ onStartRecording, workspaceSession }: WorkspaceH
               {snapshot.description}
             </p>
           ) : null}
-          <Button type="button" variant="primary" onClick={onStartRecording}>
+          <Button type="button" onClick={onStartRecording}>
             Record memory
           </Button>
         </header>
@@ -66,6 +66,6 @@ export function WorkspaceHome({ onStartRecording, workspaceSession }: WorkspaceH
           )}
         </section>
       </section>
-    </main>
+    </section>
   );
 }

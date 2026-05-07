@@ -78,8 +78,8 @@ import {
   validateWorkspaceOpenTarget,
 } from './workspaceFiles.js';
 
-const require = createRequire(import.meta.url);
-const { dialog, ipcMain } = require('electron') as typeof import('electron');
+const nodeRequire = createRequire(import.meta.url);
+const { dialog, ipcMain } = nodeRequire('electron') as typeof import('electron');
 const defaultHandleStore = createWorkspaceHandleStore();
 
 interface ShowOpenDirectoryDialogResult {

@@ -18,6 +18,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL。
 - `package.json` 的 Electron entry 指向 `./out/main/index.js`。
 - `out/` 是 `electron-vite` build output，不进入 git。
+- 当前主 BrowserWindow 使用 `titleBarStyle: 'hiddenInset'`；Reo renderer 负责 app shell 内容区域，macOS 红黄绿按钮保持原生控件，不在 renderer 中伪造。
 
 ## 当前安全基线
 

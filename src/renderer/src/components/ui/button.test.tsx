@@ -23,4 +23,26 @@ describe('Button primitive', () => {
 
     expect(screen.getByRole('button', { name: 'Record memory' })).toBeDisabled();
   });
+
+  it('supports the accent icon action shape', () => {
+    render(
+      <Button variant="accentCircle" size="iconLarge" aria-label="Create workspace">
+        +
+      </Button>
+    );
+
+    const button = screen.getByRole('button', { name: 'Create workspace' });
+    expect(button).toHaveClass('size-56', 'rounded-full', 'bg-signal-blue', 'hover:bg-obsidian');
+  });
+
+  it('supports naked icon controls without raw button styling', () => {
+    render(
+      <Button variant="ghostIcon" size="icon" aria-label="Hide sidebar">
+        H
+      </Button>
+    );
+
+    const button = screen.getByRole('button', { name: 'Hide sidebar' });
+    expect(button).toHaveClass('size-32', 'border-transparent', 'bg-transparent');
+  });
 });

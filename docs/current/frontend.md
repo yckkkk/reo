@@ -11,14 +11,16 @@
 - 当前 styling foundation 使用 Reo 设计系统 token：暖白底、黑色主文字、低饱和中性色、蓝/橙小型点缀、细边界和轻量阴影。
 - Renderer 可执行主题文件是 `src/renderer/src/theme.css`。
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
-- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
-- 当前 Radix primitives 只安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label` 和 `@radix-ui/react-dialog`。
-- 当前真实 reusable component consumer 是 workspace entry form、workspace home 和 recording overlay。
+- shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
+- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
+- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace entry dialog/form、workspace home 和 recording overlay。
 - 当前 renderer 入口由 QueryClient provider 包裹。
-- 当前 renderer route state 覆盖无 workspace 的 entry page 和已初始化或已打开 workspace 的最小 loaded state。
+- 当前 renderer route state 覆盖无 workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
+- 当前无 workspace state 使用 `AppShell` + `WorkspaceStarterHome`；Home `+` 打开 `WorkspaceEntryDialog`。
+- 当前 loaded workspace state 使用 `AppShell` 包裹 workspace home。
 - 当前 workspace home 展示 workspace title、一个 record action、`Memory Content`、recording empty/list region。
 - 当前 recording overlay 使用 Radix Dialog/shadcn Dialog source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
-- 当前有 `WorkspaceEntryPage`，组合 `CreateWorkspaceForm` 与 `OpenWorkspaceAction`；创建表单使用 React Hook Form + Zod resolver，打开现有 workspace 走独立 open branch。
+- 当前有 `WorkspaceEntryDialog`，组合 `CreateWorkspaceForm` 与 `OpenWorkspaceAction`；创建表单使用 React Hook Form + Zod resolver，打开现有 workspace 走独立 open branch。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
 - Zustand 已选型，但当前未安装。
 - 当前没有跨 subtree client state consumer。
@@ -33,7 +35,9 @@
 - 组件和交互设计必须先评估 shadcn/ui、Radix、ElevenLabs UI、Vaul、wavesurfer.js 和其他成熟开源组件；符合 Reo 边界时优先复用或适配。
 - 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 当前 Button/Label primitive 已 retokenize 到 Reo design system；Button 使用 pill shape、Reo focus-visible ring、disabled state，Label 使用 Reo body typography。
-- 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 bottom-sheet/mobile 和 centered desktop layout，Textarea 使用 0 radius input shape。
+- 当前 Dialog/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 bottom-sheet/mobile 和 centered desktop layout，`WorkspaceEntryDialog` 组合 `DialogClose` 与 lucide close control；Textarea 使用 0 radius input shape。
+- 当前 Button source 的 filled pill primary 使用 Obsidian；Signal Blue 只用于 Button `accentCircle` variant 的小型圆形 control，例如 Home `+`；naked icon-only controls 使用 Button `ghostIcon` variant。
+- 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
@@ -81,10 +85,16 @@
 
 当前实现事实：
 
-- Workspace entry page 使用 feature-local `CreateWorkspaceForm` 和 `OpenWorkspaceAction`，覆盖 create/open 两条入口；open existing workspace 不清空 create draft，也不显示 create conflict。
+- Workspace starter Home 使用 App shell 承载无 workspace 状态；Create workspace 入口是 Home 主内容区的 `+` icon-only control，不存在独立 Create workspace page。
+- Workspace entry Dialog 使用 feature-local `CreateWorkspaceForm` 和 `OpenWorkspaceAction`，覆盖 create/open 两条入口；open existing workspace 不清空 create draft，也不显示 create conflict。
+- Workspace entry Dialog 是 create/open 两条入口的 pending owner；任一 async branch 进行中时 sibling action 和 close control 必须 disabled，branch 结束必须释放 action lock。
 - Create workspace form 当前使用 Button/Input/Label/Textarea primitives、React Hook Form、Zod 和 submit-time validation；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
 - Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，open submit 只发送 `selectionToken`。Create initialize 失败后保留 title/description，但清除已消费的 folder token 和 display name，要求用户重新选择 folder。
-- 当前 Workspace home 仍是基础 home：显示 workspace title、单一 `Record memory` action 和 `Memory Content`；它还没有 sidebar、本地 search/filter、日期分组或 memory card。
+- 当前 App shell 已实现底层可拖拽 sidebar 和上层悬浮内容 panel；sidebar 默认 240px、最小 240px、最大 520px，resize separator 有 8px 真实命中区和 hover affordance；panel 顶/右/底贴合窗口，展开态用 transform 移出 sidebar 宽度并只保留左侧 12px radius，covered 态用 transform 覆盖 sidebar、左缘归零、宽度 100% 且 radius 归零。
+- 当前 App shell 的 hide/show sidebar icon-only control 位于左上窗口控制区旁边，不创建 rail sidebar。
+- 当前 App shell navigation 在 starter shell 只显示 Home；loaded shell 显示 Home 和 New memory；Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
+- 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上。
+- 当前 Workspace home 仍是基础 home：显示 workspace title、单一 `Record memory` action 和 `Memory Content`；它还没有本地 search/filter、日期分组或 memory card。
 - 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
 - Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime 或网络 STT。
 - 当前 recording overlay 代码仍包含本地 placeholder transcript 机制；产品级 first slice 完成形态不得显示 mock transcript，也不得暗示真实 speech-to-text。
@@ -92,10 +102,10 @@
 
 已接受但尚未全部实现的 first-slice 交付约束：
 
-- First product slice 的完成形态必须包含真实 app shell：可覆盖/展开的分层 sidebar、Home、New memory 和 workspace identity。
-- Sidebar 使用分层 overlay shell：sidebar 是底层 `z-index: 1`，紧贴窗口左边缘并铺满高度；主内容是上层悬浮面板 `z-index: 2`，四周 8px inset，四角 12px radius，从窗口顶部延伸到底部，不设置独立 top bar。
-- Sidebar 宽度可拖拽，最小 240px，最大 520px；折叠状态是主内容面板用 transform 向左滑动并覆盖在 sidebar 上方。
-- Sidebar 展开/折叠动效使用 280ms ease-out，动画只作用于 transform/opacity；拖拽 resize 只更新宽度变量，不给 width 加 transition。
+- First product slice 的完成形态必须继续在当前 app shell 上完成 Home local search、memory cards 和 recording drawer，而不是另建 page shell。
+- Sidebar 使用分层 overlay shell：sidebar 是底层 `z-index: 1`，紧贴窗口左边缘并铺满高度；主内容是上层悬浮面板 `z-index: 2`，顶/右/底与窗口边缘重叠，展开态只在左侧边界显示 12px radius，不设置独立 top bar。
+- Sidebar 宽度可拖拽，最小 240px，最大 520px；covered 状态是主内容面板用 transform 向左滑动并覆盖在 sidebar 上方。
+- Sidebar 展开/covered 动效使用 280ms ease-out，同步过渡 panel 的 transform 和 width；reduced motion 下关闭 transition；拖拽 resize 时关闭 motion，只直接更新 width。
 - macOS 红黄绿窗口按钮悬浮在 sidebar 图层左上角之上；Reo 不绘制假的标题栏或顶部栏。
 - Sidebar 中的 Search 只能作为聚焦 Home 本地搜索的入口；若 Home 本地搜索尚未实现，Search control 不得出现在 current build。
 - Home 本地搜索只过滤当前 workspace snapshot 中已加载的 recording/memory title、日期和状态；full-text、跨 workspace、entity、tag、semantic search 属于后续 DB/index foundation。
@@ -110,8 +120,8 @@
 
 ## shadcn/ui 边界
 
-- 当前 shadcn/ui source 范围包含 Button、Input、Label、Dialog 和 Textarea。
-- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 Button、Input、Label、Dialog、Textarea、Tooltip 和 Separator。
+- 当前存在 `components.json`、renderer import alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx` 和 `lib/utils.ts`。
 - 只有存在真实 reusable component consumer 时，才允许继续添加 shadcn/ui source。
 - 该 gate 只是安装与初始化门禁，不是框架选择保留项；Reo 的 UI 技术框架已经确定为 shadcn/ui + Radix primitives + Tailwind CSS v4。
 - 该 consumer 必须需要 reusable primitive、accessible interaction primitive，或明确的 shared visual invariant。
@@ -134,11 +144,11 @@
 ## 设计系统规则
 
 - 页面底色使用 Eggshell，主要文字使用 Obsidian，边界使用 Chalk，辅助文字使用 Gravel 或 Slate。
-- Signal Blue 和 Ember 只用于小型圆点、avatar 或状态指示，不用于正文、背景填充或按钮。
+- Signal Blue 和 Ember 只用于小型圆点、avatar、状态指示或小型圆形 accent control，不用于正文、页面背景或 pill button 填充。
 - 32px 及以上标题使用 Waldenburg 300、负 tracking 和紧凑 line-height。
 - 正文和通用 UI 文案使用 Inter；产品族标签使用 WaldenburgFH 700。
 - 按钮和 pill tag 使用 fully rounded 形状；输入控件保持 0 radius。
-- Card 使用 16-20px radius，并保持轻量边界或 hairline shadow；App 主内容悬浮面板固定 12px radius。
+- Card 使用 16-20px radius，并保持轻量边界或 hairline shadow；App 主内容悬浮面板展开态只在左侧使用 12px radius，covered 态归零以贴满窗口。
 - Geist Mono 只用于代码、技术注记和机器生成标记。
 - 所有产品界面必须保持标准软件工程产品气质：清晰、克制、可维护、可验证，不做玩具化视觉或交互。
 

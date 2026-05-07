@@ -1,8 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { AppShell } from './app-shell/AppShell';
 import { RecordingOverlay } from './workspace/RecordingOverlay';
-import { WorkspaceEntryPage } from './workspace/WorkspaceEntryPage';
+import { WorkspaceEntryDialog } from './workspace/WorkspaceEntryDialog';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
+import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
 import type { WorkspaceSession } from './workspace/workspaceApi';
 import { seedWorkspaceSnapshot } from './workspace/workspaceQueries';
 
@@ -41,6 +43,7 @@ export function mergeFinalizedRecordingIntoSession(
 export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
+  const [workspaceEntryOpen, setWorkspaceEntryOpen] = useState(false);
   const [recordingOpen, setRecordingOpen] = useState(false);
 
   function handleWorkspaceReady(nextWorkspaceSession: WorkspaceSession) {
@@ -50,9 +53,16 @@ export function App() {
 
   if (!workspaceSession) {
     return (
-      <main className="min-h-screen bg-eggshell text-obsidian">
-        <WorkspaceEntryPage onWorkspaceReady={handleWorkspaceReady} />
-      </main>
+      <>
+        <AppShell>
+          <WorkspaceStarterHome onCreateWorkspace={() => setWorkspaceEntryOpen(true)} />
+        </AppShell>
+        <WorkspaceEntryDialog
+          onOpenChange={setWorkspaceEntryOpen}
+          onWorkspaceReady={handleWorkspaceReady}
+          open={workspaceEntryOpen}
+        />
+      </>
     );
   }
 
@@ -69,10 +79,12 @@ export function App() {
 
   return (
     <>
-      <WorkspaceHome
-        workspaceSession={workspaceSession}
-        onStartRecording={() => setRecordingOpen(true)}
-      />
+      <AppShell onNewMemory={() => setRecordingOpen(true)}>
+        <WorkspaceHome
+          workspaceSession={workspaceSession}
+          onStartRecording={() => setRecordingOpen(true)}
+        />
+      </AppShell>
       <RecordingOverlay
         onOpenChange={setRecordingOpen}
         onRecordingFinalized={handleRecordingFinalized}

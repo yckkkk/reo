@@ -603,7 +603,7 @@ export function RecordingOverlay({
               ) : null}
               <div className="flex flex-wrap gap-12">
                 {state.status === 'idle' || state.status === 'failed' ? (
-                  <Button type="button" variant="primary" onClick={handleStart}>
+                  <Button type="button" onClick={handleStart}>
                     Start recording
                   </Button>
                 ) : null}

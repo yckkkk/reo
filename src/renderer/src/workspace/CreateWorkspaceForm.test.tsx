@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateWorkspaceForm } from './CreateWorkspaceForm';
-import { WorkspaceEntryPage } from './WorkspaceEntryPage';
+import { WorkspaceEntryDialog } from './WorkspaceEntryDialog';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -40,10 +40,24 @@ describe('CreateWorkspaceForm', () => {
     });
   });
 
-  it('starts with title, description, folder picker, submit, and title focus', () => {
-    render(<CreateWorkspaceForm onWorkspaceReady={vi.fn()} />);
+  function renderCreateWorkspaceForm(onWorkspaceReady = vi.fn()) {
+    render(
+      <CreateWorkspaceForm
+        onCreateFinish={vi.fn()}
+        onCreateStart={() => true}
+        onWorkspaceReady={onWorkspaceReady}
+      />
+    );
+  }
 
-    expect(screen.getByRole('heading', { name: 'Create workspace' })).toBeInTheDocument();
+  function renderWorkspaceEntryDialog() {
+    render(<WorkspaceEntryDialog open onOpenChange={vi.fn()} onWorkspaceReady={vi.fn()} />);
+  }
+
+  it('starts with title, description, folder picker, submit, and title focus', () => {
+    renderCreateWorkspaceForm();
+
+    expect(screen.getByRole('form', { name: 'Workspace details' })).toBeInTheDocument();
     expect(screen.getByLabelText('Workspace title')).toHaveFocus();
     expect(screen.getByLabelText('Description')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Choose folder' })).toBeInTheDocument();
@@ -54,7 +68,7 @@ describe('CreateWorkspaceForm', () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({ ok: true, value: { status: 'canceled' } });
 
-    render(<CreateWorkspaceForm onWorkspaceReady={vi.fn()} />);
+    renderCreateWorkspaceForm();
 
     await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
     await user.type(screen.getByLabelText('Description'), 'Private notes');
@@ -73,7 +87,7 @@ describe('CreateWorkspaceForm', () => {
     const selection = deferred<Awaited<ReturnType<(typeof reoWorkspace)['chooseDirectory']>>>();
     reoWorkspace.chooseDirectory.mockReturnValue(selection.promise);
 
-    render(<CreateWorkspaceForm onWorkspaceReady={vi.fn()} />);
+    renderCreateWorkspaceForm();
 
     await user.dblClick(screen.getByRole('button', { name: 'Choose folder' }));
 
@@ -101,7 +115,7 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<CreateWorkspaceForm onWorkspaceReady={onWorkspaceReady} />);
+    renderCreateWorkspaceForm(onWorkspaceReady);
 
     await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
     await user.type(screen.getByLabelText('Description'), 'Private notes');
@@ -134,7 +148,7 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<CreateWorkspaceForm onWorkspaceReady={vi.fn()} />);
+    renderCreateWorkspaceForm();
 
     await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: 'Choose folder' }));
@@ -150,7 +164,7 @@ describe('CreateWorkspaceForm', () => {
   it('validates on submit instead of trapping users in a disabled button', async () => {
     const user = userEvent.setup();
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
@@ -168,7 +182,7 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
     await user.click(screen.getByRole('button', { name: 'Open workspace' }));
@@ -202,7 +216,7 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
     await user.click(screen.getByRole('button', { name: 'Choose folder' }));
@@ -240,7 +254,7 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
     await user.click(screen.getByRole('button', { name: 'Open workspace' }));
@@ -256,7 +270,7 @@ describe('CreateWorkspaceForm', () => {
     const selection = deferred<Awaited<ReturnType<(typeof reoWorkspace)['chooseDirectory']>>>();
     reoWorkspace.chooseDirectory.mockReturnValue(selection.promise);
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.dblClick(screen.getByRole('button', { name: 'Open workspace' }));
 
@@ -276,11 +290,67 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    render(<WorkspaceEntryPage onWorkspaceReady={vi.fn()} />);
+    renderWorkspaceEntryDialog();
 
     await user.click(screen.getByRole('button', { name: 'Choose folder' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a workspace folder');
     expect(screen.queryByText('/Users/yck/Memories')).not.toBeInTheDocument();
+  });
+
+  it('locks open and close while create is submitting', async () => {
+    const user = userEvent.setup();
+    const response = deferred<Awaited<ReturnType<(typeof reoWorkspace)['initializeWorkspace']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'folder_token_4',
+        displayPath: 'Memories',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockReturnValue(response.promise);
+
+    renderWorkspaceEntryDialog();
+
+    await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
+    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await screen.findByText('Memories');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    expect(screen.getByRole('button', { name: 'Open workspace' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
+
+    response.resolve({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_AGENTS_CONFLICT',
+        message: 'Folder already contains AGENTS.md',
+      },
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already contains AGENTS.md');
+    expect(screen.getByRole('button', { name: 'Open workspace' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
+  });
+
+  it('locks create and close while open is choosing a folder', async () => {
+    const user = userEvent.setup();
+    const selection = deferred<Awaited<ReturnType<(typeof reoWorkspace)['chooseDirectory']>>>();
+    reoWorkspace.chooseDirectory.mockReturnValue(selection.promise);
+
+    renderWorkspaceEntryDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }));
+
+    expect(screen.getByRole('button', { name: 'Create workspace' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
+
+    selection.resolve({ ok: true, value: { status: 'canceled' } });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Create workspace' })).toBeEnabled()
+    );
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
   });
 });

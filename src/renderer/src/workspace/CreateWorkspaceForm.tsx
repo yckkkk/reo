@@ -28,6 +28,9 @@ const createWorkspaceSchema = z.object({
 type CreateWorkspaceValues = z.infer<typeof createWorkspaceSchema>;
 
 type CreateWorkspaceFormProps = {
+  readonly disabled?: boolean;
+  readonly onCreateFinish: () => void;
+  readonly onCreateStart: () => boolean;
   readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => void;
 };
 
@@ -39,7 +42,12 @@ function workspaceErrorMessage(error: WorkspaceError) {
   return error.message;
 }
 
-export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormProps) {
+export function CreateWorkspaceForm({
+  disabled = false,
+  onCreateFinish,
+  onCreateStart,
+  onWorkspaceReady,
+}: CreateWorkspaceFormProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const {
@@ -74,46 +82,34 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
   }
 
   const submit = handleSubmit(async (values) => {
-    setSubmitError(null);
-
-    const response = await initializeWorkspace({
-      selectionToken: values.selectionToken,
-      title: values.title.trim(),
-      description: values.description,
-    });
-
-    if (!response.ok) {
-      setValue('selectionToken', '');
-      setValue('displayPath', '');
-      clearErrors(['selectionToken', 'displayPath']);
-      setSubmitError(workspaceErrorMessage(response.error));
+    if (!onCreateStart()) {
       return;
     }
 
-    onWorkspaceReady(response.value);
+    setSubmitError(null);
+    try {
+      const response = await initializeWorkspace({
+        selectionToken: values.selectionToken,
+        title: values.title.trim(),
+        description: values.description,
+      });
+
+      if (!response.ok) {
+        setValue('selectionToken', '');
+        setValue('displayPath', '');
+        clearErrors(['selectionToken', 'displayPath']);
+        setSubmitError(workspaceErrorMessage(response.error));
+        return;
+      }
+
+      onWorkspaceReady(response.value);
+    } finally {
+      onCreateFinish();
+    }
   });
 
   return (
-    <form
-      className="flex flex-col gap-24"
-      aria-labelledby="create-workspace-title"
-      onSubmit={submit}
-    >
-      <header className="flex flex-col gap-12">
-        <p className="font-waldenburgfh text-body font-bold uppercase leading-body text-gravel">
-          Reo
-        </p>
-        <h1
-          id="create-workspace-title"
-          className="font-waldenburg text-heading-lg font-light leading-heading-lg text-obsidian"
-        >
-          Create workspace
-        </h1>
-        <p className="max-w-[560px] text-body-lg leading-body-lg text-gravel">
-          Start with a local memory workspace. Reo keeps user content in this folder.
-        </p>
-      </header>
-
+    <form className="flex flex-col gap-24" aria-label="Workspace details" onSubmit={submit}>
       <div className="flex flex-col gap-16">
         <div className="flex flex-col gap-8">
           <Label htmlFor="workspace-title">Workspace title</Label>
@@ -125,6 +121,7 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
               titleInputRef.current = element;
             }}
             type="text"
+            disabled={disabled}
             aria-invalid={Boolean(errors.title)}
           />
         </div>
@@ -134,11 +131,17 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
 
         <div className="flex flex-col gap-8">
           <Label htmlFor="workspace-description">Description</Label>
-          <Textarea id="workspace-description" className="min-h-96" {...register('description')} />
+          <Textarea
+            id="workspace-description"
+            className="min-h-96"
+            disabled={disabled}
+            {...register('description')}
+          />
         </div>
       </div>
 
       <FolderPickerField
+        disabled={disabled}
         displayPath={displayPath}
         error={errors.selectionToken?.message}
         onCancel={() => setSubmitError(null)}
@@ -153,7 +156,7 @@ export function CreateWorkspaceForm({ onWorkspaceReady }: CreateWorkspaceFormPro
 
       {submitError ? <WorkspaceErrorBanner>{submitError}</WorkspaceErrorBanner> : null}
 
-      <Button type="submit" variant="primary" disabled={isSubmitting}>
+      <Button type="submit" disabled={disabled || isSubmitting}>
         {isSubmitting ? 'Creating workspace' : 'Create workspace'}
       </Button>
     </form>
