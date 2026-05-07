@@ -88,7 +88,19 @@ describe('workspace renderer API wrapper', () => {
     reoWorkspace.discardRecordingDraft.mockResolvedValue({ ok: true, value: { discarded: true } });
     reoWorkspace.getMemoryDetail.mockResolvedValue({
       ok: true,
-      value: { memoryId: 'mem_1', recordings: [] },
+      value: {
+        memoryId: 'mem_1',
+        title: '录音',
+        sourceKind: 'recording',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:08:00.000Z',
+        recordingIds: [],
+        recordingCount: 0,
+        recordingsTruncated: false,
+        hasTranscript: false,
+        hasReflections: false,
+        recordings: [],
+      },
     });
     reoWorkspace.getRecordingDetail.mockResolvedValue({
       ok: true,

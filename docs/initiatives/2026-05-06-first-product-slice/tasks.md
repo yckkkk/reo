@@ -14,7 +14,7 @@
 
 ## 当前下一步
 
-Task 6A 已完成实现、审查和验证；归档和提交完成后进入 Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
+Task 7 下一步执行：移除 `RecordingOverlay` mock transcript，拆分录音状态和副作用。
 
 ## 实施任务
 
@@ -24,7 +24,7 @@ Task 6A 已完成实现、审查和验证；归档和提交完成后进入 Task 
 - [x] Task 4：App shell、可拖动 sidebar、悬浮内容面板、lucide icon-only controls 和基础导航。
 - [x] Task 5：Home 页面 local search、月份分组、memory card、空状态和禁止 future capability。
 - [x] Task 6A：App shell 浅色/深色主题切换、sidebar 左下角入口、深色模式 tokens 适配和 Dialog accessibility warning 修复。
-- [ ] Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
+- [x] Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
 - [ ] Task 7：移除 `RecordingOverlay` mock transcript，拆分录音状态和副作用。
 - [ ] Task 8：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。
 - [ ] Task 9：Mic sequencing、MediaRecorder adapter、draft append、finalize transaction 和错误恢复。

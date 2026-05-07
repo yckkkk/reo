@@ -1,5 +1,10 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
-import type { WorkspaceSession, WorkspaceSnapshot } from './workspaceApi';
+import {
+  getMemoryDetail,
+  type WorkspaceMemoryDetail,
+  type WorkspaceSession,
+  type WorkspaceSnapshot,
+} from './workspaceApi';
 
 export function workspaceSnapshotQueryKey({
   workspaceId,
@@ -21,4 +26,38 @@ export function workspaceSnapshotQueryOptions(session: WorkspaceSession) {
 
 export function seedWorkspaceSnapshot(queryClient: QueryClient, session: WorkspaceSession) {
   queryClient.setQueryData<WorkspaceSnapshot>(workspaceSnapshotQueryKey(session), session.snapshot);
+}
+
+export function memoryDetailQueryKey({
+  memoryId,
+  workspaceId,
+}: {
+  readonly memoryId: string;
+  readonly workspaceId: string;
+}) {
+  return ['workspace', 'memory-detail', workspaceId, memoryId] as const;
+}
+
+export function memoryDetailQueryOptions({
+  memoryId,
+  workspaceHandle,
+  workspaceId,
+}: {
+  readonly memoryId: string;
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
+}) {
+  return queryOptions({
+    queryKey: memoryDetailQueryKey({ memoryId, workspaceId }),
+    queryFn: async (): Promise<WorkspaceMemoryDetail> => {
+      const result = await getMemoryDetail({ workspaceHandle, memoryId });
+
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      return result.value;
+    },
+    staleTime: Infinity,
+  });
 }

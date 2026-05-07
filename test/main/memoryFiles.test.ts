@@ -37,6 +37,7 @@ import {
   fsyncWorkspaceDirectoryForTest,
   rebuildMemoryIndex,
   rebuildRecordingCompatibilitySummaries,
+  readMemoryDetail,
   recoverRecordingFinalizeTransactions,
   setAfterReadModelReplaceReadForTest,
   setBeforeReadModelReaddirForTest,
@@ -345,6 +346,65 @@ test('rebuild index rejects memory metadata whose memoryId does not match its di
   );
 
   assert.deepEqual(await rebuildMemoryIndex(rootPath, { persist: false }), []);
+});
+
+test('reads memory detail with bounded recordings and saved content flags', async () => {
+  const rootPath = await workspaceRoot();
+  const recordingIds = Array.from({ length: 30 }, (_, index) => `rec_detail_${index}`);
+  const transcriptRecordingId = 'rec_detail_25';
+  const reflectionsRecordingId = 'rec_detail_26';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId: 'mem_detail_many',
+    title: 'Many recordings',
+    sourceKind: 'recording',
+    recordingIds,
+  });
+  await Promise.all(
+    recordingIds.map((recordingId) =>
+      writeFinalizedRecordingForTest(rootPath, {
+        memoryId: 'mem_detail_many',
+        recordingId,
+        title: recordingId,
+      })
+    )
+  );
+  await writeFile(
+    path.join(
+      rootPath,
+      'memories',
+      'mem_detail_many',
+      'recordings',
+      transcriptRecordingId,
+      'transcript.md'
+    ),
+    'Saved transcript\n'
+  );
+  await writeFile(
+    path.join(
+      rootPath,
+      'memories',
+      'mem_detail_many',
+      'recordings',
+      reflectionsRecordingId,
+      'reflections.md'
+    ),
+    'Saved reflections\n'
+  );
+  await rebuildMemoryIndex(rootPath);
+
+  const detail = await readMemoryDetail({
+    rootPath,
+    memoryId: 'mem_detail_many',
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.recordingCount, 30);
+    assert.equal(detail.value.recordings.length, 24);
+    assert.equal(detail.value.recordingsTruncated, true);
+    assert.equal(detail.value.hasTranscript, true);
+    assert.equal(detail.value.hasReflections, true);
+  }
 });
 
 test('rebuild index rejects symlinked memory metadata leaf files', async () => {

@@ -14,6 +14,7 @@ describe('App', () => {
     appendRecordingAudioChunk: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
+    getMemoryDetail: vi.fn(),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(),
     readRecordingAudioChunk: vi.fn(),
@@ -169,6 +170,90 @@ describe('App', () => {
     expect(reoWorkspace.openWorkspace).not.toHaveBeenCalledWith(
       expect.objectContaining({ displayPath: expect.any(String) })
     );
+  });
+
+  it('opens a saved memory detail from Home and returns to Home', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [
+            {
+              memoryId: 'mem_birthday',
+              title: 'My seventh birthday',
+              createdAt: '2026-04-12T09:00:00.000Z',
+              updatedAt: '2026-04-12T09:10:00.000Z',
+              recordingCount: 1,
+              durationMs: 135_000,
+              audioByteLength: 4096,
+              hasTranscript: true,
+              hasReflections: false,
+            },
+          ],
+          recordings: [],
+        },
+      },
+    });
+    reoWorkspace.getMemoryDetail.mockResolvedValue({
+      ok: true,
+      value: {
+        memoryId: 'mem_birthday',
+        title: 'My seventh birthday',
+        sourceKind: 'recording',
+        createdAt: '2026-04-12T09:00:00.000Z',
+        updatedAt: '2026-04-12T09:10:00.000Z',
+        recordingIds: ['rec_1'],
+        recordingCount: 1,
+        recordingsTruncated: false,
+        hasTranscript: true,
+        hasReflections: false,
+        recordings: [
+          {
+            recordingId: 'rec_1',
+            title: 'Birthday_summary_01',
+            durationMs: 135_000,
+            audioByteLength: 4096,
+          },
+        ],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(await screen.findByRole('button', { name: 'Open My seventh birthday' }));
+
+    expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
+    expect(screen.getByText('Birthday_summary_01')).toBeInTheDocument();
+    expect(reoWorkspace.getMemoryDetail).toHaveBeenCalledWith({
+      workspaceHandle: 'workspace-handle-1',
+      memoryId: 'mem_birthday',
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'All memories' })).toBeInTheDocument();
   });
 
   it('keeps memory and recording projections fresh after finalize', () => {

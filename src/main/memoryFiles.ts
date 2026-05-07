@@ -54,6 +54,7 @@ import {
 const FINALIZE_STAGING_PREFIX = '.reo-finalizing-';
 const FINALIZE_TRANSACTION_MARKER = '.reo-finalize-transaction.json';
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
+const MEMORY_DETAIL_RECORDING_LIMIT = 24;
 const DRAFT_RECORDING_FILES = new Set([
   'audio.webm',
   'recording.json',
@@ -113,6 +114,10 @@ export interface MemoryRecordingSummary {
 }
 
 export type MemoryDetail = MemoryJson & {
+  readonly recordingCount: number;
+  readonly recordingsTruncated: boolean;
+  readonly hasTranscript: boolean;
+  readonly hasReflections: boolean;
   readonly recordings: readonly MemoryRecordingSummary[];
 };
 
@@ -1021,6 +1026,16 @@ async function summarizeMemoryWithRecordings(
 
 async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
   return (await summarizeMemoryWithRecordings(rootPath, memory)).memory;
+}
+
+async function readMemorySummaryFromIndex(
+  rootPath: string,
+  memoryId: string
+): Promise<MemorySummary | null> {
+  const index = workspaceIndexSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
+  );
+  return index.memories.find((memory) => memory.memoryId === memoryId) ?? null;
 }
 
 export async function rebuildWorkspaceReadModel(
@@ -2276,16 +2291,27 @@ export async function readMemoryDetail(
   try {
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const memory = await readMemoryJson(input.rootPath, input.memoryId);
+    const summary = await readMemorySummaryFromIndex(input.rootPath, memory.memoryId);
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const recordings: MemoryRecordingSummary[] = [];
-    for (const recordingId of memory.recordingIds) {
+    for (const recordingId of memory.recordingIds.slice(0, MEMORY_DETAIL_RECORDING_LIMIT)) {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const recording = await summarizeRecording(input.rootPath, memory.memoryId, recordingId);
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       recordings.push(recording);
     }
     assertWorkspaceUsable(input.assertWorkspaceUsable);
-    return { ok: true, value: { ...memory, recordings } };
+    return {
+      ok: true,
+      value: {
+        ...memory,
+        recordingCount: summary?.recordingCount ?? memory.recordingIds.length,
+        recordingsTruncated: memory.recordingIds.length > MEMORY_DETAIL_RECORDING_LIMIT,
+        hasTranscript: summary?.hasTranscript ?? false,
+        hasReflections: summary?.hasReflections ?? false,
+        recordings,
+      },
+    };
   } catch (error) {
     return memoryFilesError(error, 'ERR_MEMORY_NOT_FOUND', 'Memory not found', 'none-written');
   }

@@ -10,8 +10,8 @@
 - Reconciled implementation plan 已通过 `$writing-plans` 和 `$plan-eng-review` 对抗审查，无 unresolved BLOCKER/MAJOR。
 - 当前 implementation 阶段执行权威是本 initiative、`implementation-plan.md`、当前唯一 active 任务 spec、`docs/current/*` 和源码事实。
 - Design-hardening spec 在 plan handoff 完成后归档到 `docs/archive/specs/2026-05-06-0912-first-product-slice-product-grade-design-hardening/`，归档后只作为背景证据。
-- 当前已完成 Task 1 到 Task 6A 的实现、审查和验证；Task 6A 归档和提交完成后继续 Task 6。
-- 下一步是 Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
+- 当前已完成 Task 1 到 Task 6 的归档和提交。
+- 当前下一步是 Task 7：移除 `RecordingOverlay` mock transcript，拆分录音状态和副作用。
 - 不得把计划写入 `docs/superpowers/*`。
 - 不得编辑 archived implementation plan。
 

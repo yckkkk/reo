@@ -12,6 +12,7 @@
 - 当前没有 DB migration 或 startup database lifecycle。
 - 当前没有 background queue。
 - 当前 Query flow 覆盖 workspace initialization 后 seed workspace snapshot cache；没有 optimistic update。
+- 当前 memory detail flow 是 request/response read：renderer 用 TanStack Query 发起 `workspace:getMemoryDetail`，main 先读取 `memory.json`，再读取 `.reo/index.json` 中同 memory summary 的 count/status 投影，并只汇总前 24 条 recording preview 后返回；该 flow 不做 optimistic update、不创建 pagination state、不读取完整 audio 或 transcript/reflections markdown。
 - 当前没有 optimistic update path。
 - 当前 form submit flow 覆盖 create workspace title/description/folder selection validation、open existing workspace、submit failure 保留 create draft 和成功后 route state 切换。
 - 当前没有 persisted client-state migration flow。

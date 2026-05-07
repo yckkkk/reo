@@ -11,13 +11,20 @@ export type MemoryCardView = {
 
 type MemoryCardProps = {
   readonly memory: MemoryCardView;
+  readonly onOpenMemory: (memoryId: string) => void;
 };
 
-export function MemoryCard({ memory }: MemoryCardProps) {
+export function MemoryCard({ memory, onOpenMemory }: MemoryCardProps) {
   const hasStatus = memory.hasTranscript || memory.hasReflections;
 
   return (
-    <article className="rounded-cards border border-chalk bg-card-white px-20 py-20 shadow-subtle">
+    <article className="relative rounded-cards border border-chalk bg-card-white px-20 py-20 text-left shadow-subtle transition-colors hover:border-slate focus-within:ring-2 focus-within:ring-signal-blue focus-within:ring-offset-2 focus-within:ring-offset-eggshell">
+      <button
+        type="button"
+        aria-label={`Open ${memory.title}`}
+        className="absolute inset-0 z-10 rounded-cards focus-visible:outline-none"
+        onClick={() => onOpenMemory(memory.memoryId)}
+      />
       <h3 className="break-words text-body-lg font-medium leading-body-lg text-obsidian">
         {memory.title}
       </h3>

@@ -20,7 +20,11 @@ describe('forbidden first-slice capabilities', () => {
   it('does not show future photo, video, file, or film capabilities', () => {
     render(
       <AppShell themeMode="light" onToggleTheme={() => {}} onNewMemory={() => {}}>
-        <WorkspaceHome workspaceSession={workspaceSession} onStartRecording={() => {}} />
+        <WorkspaceHome
+          workspaceSession={workspaceSession}
+          onOpenMemory={() => {}}
+          onStartRecording={() => {}}
+        />
       </AppShell>
     );
 

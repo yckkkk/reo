@@ -86,6 +86,8 @@ export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWo
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
+export type MemoryDetailResponse = Awaited<ReturnType<typeof getMemoryDetail>>;
+export type WorkspaceMemoryDetail = Extract<MemoryDetailResponse, { readonly ok: true }>['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;
 export type WorkspaceDirectorySelection = Extract<
   Extract<WorkspaceChooseDirectoryResponse, { readonly ok: true }>['value'],

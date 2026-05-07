@@ -168,6 +168,10 @@ test('memory detail response contract strips raw paths', () => {
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         recordingIds: ['rec_20260506_000001'],
+        recordingCount: 1,
+        recordingsTruncated: false,
+        hasTranscript: true,
+        hasReflections: false,
         rootPath: '/Users/example/Voice Notes',
         recordings: [
           {
@@ -189,6 +193,10 @@ test('memory detail response contract strips raw paths', () => {
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         recordingIds: ['rec_20260506_000001'],
+        recordingCount: 1,
+        recordingsTruncated: false,
+        hasTranscript: true,
+        hasReflections: false,
         recordings: [
           {
             recordingId: 'rec_20260506_000001',

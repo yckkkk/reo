@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import type { MemoryCardView } from './MemoryCard';
+import { countLabel, durationLabel } from './memoryLabels';
 import { MemorySection } from './MemorySection';
 import type { WorkspaceSession } from './workspaceApi';
 
 type WorkspaceHomeProps = {
+  readonly onOpenMemory: (memoryId: string) => void;
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
 };
@@ -25,26 +27,6 @@ type MemoryMonthSection = {
   readonly countLabel: string;
   readonly memories: readonly MemoryCardView[];
 };
-
-function countLabel(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function durationLabel(durationMs: number) {
-  const seconds = Math.round(durationMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-
-  if (minutes === 0) {
-    return `${seconds} sec`;
-  }
-
-  if (remainingSeconds === 0) {
-    return `${minutes} min`;
-  }
-
-  return `${minutes} min ${remainingSeconds} sec`;
-}
 
 function createMemoryView(memory: WorkspaceMemory): MemoryView {
   const createdAt = new Date(memory.createdAt);
@@ -94,7 +76,11 @@ function groupMemoryViews(memories: readonly MemoryView[]): MemoryMonthSection[]
   }));
 }
 
-export function WorkspaceHome({ onStartRecording, workspaceSession }: WorkspaceHomeProps) {
+export function WorkspaceHome({
+  onOpenMemory,
+  onStartRecording,
+  workspaceSession,
+}: WorkspaceHomeProps) {
   const { snapshot } = workspaceSession;
   const [searchTerm, setSearchTerm] = useState('');
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
@@ -172,7 +158,7 @@ export function WorkspaceHome({ onStartRecording, workspaceSession }: WorkspaceH
           ) : (
             <div className="flex flex-col gap-32">
               {monthSections.map((section) => (
-                <MemorySection key={section.month} section={section} />
+                <MemorySection key={section.month} section={section} onOpenMemory={onOpenMemory} />
               ))}
             </div>
           )}

@@ -73,6 +73,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 
 - First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
 - Workspace IPC channels 覆盖 choose、initialize、open、close、memory detail、recording draft、audio manifest/chunk read、transcript/reflections save、microphone intent begin/clear。
+- `workspace:getMemoryDetail` request 只接受 `workspaceHandle` 和 `memoryId`；response 不返回 raw path，只返回 memory identity、title、created/updated time、full `recordingIds` identity list、总 `recordingCount`、`recordingsTruncated`、`hasTranscript`、`hasReflections` 和有界 recording summary preview。
 - `chooseDirectory` 只返回 `selectionToken` 和 `displayPath` 或 canceled 结果，不返回裸 `rootPath`，也不提前返回 conflict 或 permission 判断。
 - `displayPath` 只使用文件夹 basename，不等同真实绝对路径。
 - Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；过期 token 会删除，错误 sender 不烧掉 token，错误结果不得泄露真实路径。

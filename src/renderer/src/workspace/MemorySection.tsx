@@ -3,6 +3,7 @@ import { MemoryCard } from './MemoryCard';
 import type { MemoryCardView } from './MemoryCard';
 
 type MemorySectionProps = {
+  readonly onOpenMemory: (memoryId: string) => void;
   readonly section: {
     readonly month: string;
     readonly countLabel: string;
@@ -10,7 +11,7 @@ type MemorySectionProps = {
   };
 };
 
-export function MemorySection({ section }: MemorySectionProps) {
+export function MemorySection({ onOpenMemory, section }: MemorySectionProps) {
   return (
     <section className="flex flex-col gap-20" aria-label={section.month}>
       <div className="flex items-center justify-between gap-16">
@@ -23,7 +24,7 @@ export function MemorySection({ section }: MemorySectionProps) {
 
       <div className="grid gap-16 lg:grid-cols-2">
         {section.memories.map((memory) => (
-          <MemoryCard key={memory.memoryId} memory={memory} />
+          <MemoryCard key={memory.memoryId} memory={memory} onOpenMemory={onOpenMemory} />
         ))}
       </div>
     </section>

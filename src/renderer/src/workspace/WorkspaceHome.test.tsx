@@ -62,6 +62,7 @@ describe('WorkspaceHome', () => {
     render(
       <WorkspaceHome
         workspaceSession={workspaceSession({ memories: [birthdayMemory, morningMemory] })}
+        onOpenMemory={vi.fn()}
         onStartRecording={vi.fn()}
       />
     );
@@ -101,6 +102,7 @@ describe('WorkspaceHome', () => {
         workspaceSession={workspaceSession({
           memories: [morningMemory, recitalMemory, birthdayMemory],
         })}
+        onOpenMemory={vi.fn()}
         onStartRecording={vi.fn()}
       />
     );
@@ -122,12 +124,33 @@ describe('WorkspaceHome', () => {
     expect(screen.queryByText(/photos|videos|films|files|global search/i)).not.toBeInTheDocument();
   });
 
+  it('opens a saved memory from its memory card', async () => {
+    const user = userEvent.setup();
+    const onOpenMemory = vi.fn();
+
+    render(
+      <WorkspaceHome
+        workspaceSession={workspaceSession({ memories: [birthdayMemory] })}
+        onStartRecording={vi.fn()}
+        onOpenMemory={onOpenMemory}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Open My seventh birthday' }));
+
+    expect(onOpenMemory).toHaveBeenCalledWith('mem_birthday');
+  });
+
   it('keeps an empty workspace scoped to saved recordings', async () => {
     const user = userEvent.setup();
     const onStartRecording = vi.fn();
 
     render(
-      <WorkspaceHome workspaceSession={workspaceSession()} onStartRecording={onStartRecording} />
+      <WorkspaceHome
+        workspaceSession={workspaceSession()}
+        onOpenMemory={vi.fn()}
+        onStartRecording={onStartRecording}
+      />
     );
 
     expect(screen.getByRole('heading', { name: 'All memories' })).toBeInTheDocument();

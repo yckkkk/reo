@@ -51,6 +51,10 @@ type WorkspaceMemoryDetail = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly recordingIds: ReadonlyArray<string>;
+  readonly recordingCount: number;
+  readonly recordingsTruncated: boolean;
+  readonly hasTranscript: boolean;
+  readonly hasReflections: boolean;
   readonly recordings: ReadonlyArray<{
     readonly recordingId: string;
     readonly title: string;

@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AppShell, type ThemeMode } from './app-shell/AppShell';
+import { MemoryDetailPage } from './workspace/MemoryDetailPage';
 import { RecordingOverlay } from './workspace/RecordingOverlay';
 import { WorkspaceEntryDialog } from './workspace/WorkspaceEntryDialog';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
@@ -15,6 +16,10 @@ type FinalizedRecording = {
     readonly durationMs: number;
   };
 };
+
+type WorkspaceView =
+  | { readonly name: 'home' }
+  | { readonly name: 'memory-detail'; readonly memoryId: string };
 
 export function mergeFinalizedRecordingIntoSession(
   current: WorkspaceSession,
@@ -45,6 +50,7 @@ export function App() {
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
   const [workspaceEntryOpen, setWorkspaceEntryOpen] = useState(false);
   const [recordingOpen, setRecordingOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ name: 'home' });
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
 
   useEffect(() => {
@@ -63,6 +69,7 @@ export function App() {
 
   function handleWorkspaceReady(nextWorkspaceSession: WorkspaceSession) {
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
+    setWorkspaceView({ name: 'home' });
     setWorkspaceSession(nextWorkspaceSession);
   }
 
@@ -99,10 +106,21 @@ export function App() {
         onToggleTheme={toggleTheme}
         onNewMemory={() => setRecordingOpen(true)}
       >
-        <WorkspaceHome
-          workspaceSession={workspaceSession}
-          onStartRecording={() => setRecordingOpen(true)}
-        />
+        {workspaceView.name === 'home' ? (
+          <WorkspaceHome
+            workspaceSession={workspaceSession}
+            onOpenMemory={(memoryId) => setWorkspaceView({ name: 'memory-detail', memoryId })}
+            onStartRecording={() => setRecordingOpen(true)}
+          />
+        ) : (
+          <MemoryDetailPage
+            memoryId={workspaceView.memoryId}
+            workspaceHandle={workspaceSession.workspaceHandle}
+            workspaceId={workspaceSession.workspaceId}
+            onBack={() => setWorkspaceView({ name: 'home' })}
+            onRecordMemory={() => setRecordingOpen(true)}
+          />
+        )}
       </AppShell>
       <RecordingOverlay
         onOpenChange={setRecordingOpen}
