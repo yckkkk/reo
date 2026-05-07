@@ -91,10 +91,11 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
-    expect(await screen.findByRole('heading', { name: 'Daily memory' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All memories' })).toBeInTheDocument();
+    expect(screen.getByText('Daily memory')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Workspace content' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Memory Content' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search memories' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
   });
 
@@ -132,7 +133,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
     await user.click(screen.getByRole('button', { name: 'Open workspace' }));
 
-    expect(await screen.findByRole('heading', { name: 'Existing memory' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All memories' })).toBeInTheDocument();
+    expect(screen.getByText('Existing memory')).toBeInTheDocument();
     expect(reoWorkspace.openWorkspace).toHaveBeenCalledWith({
       selectionToken: 'selection-token-open',
     });

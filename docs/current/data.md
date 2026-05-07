@@ -60,6 +60,7 @@
 - Query keys 使用 stable `workspaceId`、`memoryId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
 - TanStack Query 只拥有 main-backed workspace snapshot cache；active recording lifecycle、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft，包括 title、description、selection token 和 displayPath。
+- Workspace Home 本地搜索只使用当前 loaded workspace snapshot 的 `memories` 投影和 renderer component state；搜索词不进入 Query key、Zustand、IPC、DB、workspace files 或 `.reo/index.json`。
 - Create workspace folder selection token 和 displayPath 属于当前 RHF form lifecycle；open existing workspace 的 selection token 只存在于该 open action 的当前事件流。selection token 只用于一次 initialize/open request，不进入 Query cache 或 durable files；initialize/open 消费 token 后如果返回错误，renderer 不复用该 token。
 - Recording overlay state 拥有 active recording lifecycle、elapsed timer、当前代码中的本地 transcript placeholder、reflections draft、autosave status 和 active playback Blob URL。placeholder 不是 STT 真源，产品级 first slice 不能把它作为可交付转写能力。
 - Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须同时更新当前 workspace session 的 `memories` 投影和临时 `recordings` 兼容视图。durable truth 仍是 workspace files 和 `.reo/index.json` 的 memory summary。后续 Home/Memory detail slice 会改为直接消费 `memories`。

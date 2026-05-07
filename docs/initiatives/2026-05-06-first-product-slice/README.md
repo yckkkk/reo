@@ -10,7 +10,8 @@
 - Reconciled implementation plan 已通过 `$writing-plans` 和 `$plan-eng-review` 对抗审查，无 unresolved BLOCKER/MAJOR。
 - 当前 implementation 阶段执行权威是本 initiative、`implementation-plan.md`、当前唯一 active 任务 spec、`docs/current/*` 和源码事实。
 - Design-hardening spec 在 plan handoff 完成后归档到 `docs/archive/specs/2026-05-06-0912-first-product-slice-product-grade-design-hardening/`，归档后只作为背景证据。
-- 任务 1 workspace 文件真源实现已完成，当前处于最终对抗复审收口中；归档 任务 1 spec 和提交 任务 1 commit 前必须重新补齐最终 review、固定验证和 docs lifecycle 证据。
+- 当前已完成 Task 1 到 Task 4 的归档和提交；Task 5 已完成实现、审查和运行时验证，等待固定门禁、归档和提交。
+- Task 5 runtime 发现 Workspace entry Dialog 的 Radix DialogTitle/Description warning；提交 Task 5 后，下一步先执行 App shell dark/light theme toggle、深色模式 tokens 适配和该 Dialog accessibility 修复，再继续 Memory detail。
 - 不得把计划写入 `docs/superpowers/*`。
 - 不得编辑 archived implementation plan。
 

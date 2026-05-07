@@ -14,7 +14,7 @@
 
 ## 当前下一步
 
-Task 4 已完成验证、归档和提交；下一步执行 Task 5：Home 页面 local search、月份分组、memory card、空状态和禁止 future capability。
+Task 5 已完成实现、审查和运行时验证，等待固定门禁、归档和提交。提交后下一步执行 Task 6A：App shell dark/light theme toggle、深色模式 tokens 适配和 Dialog accessibility warning 修复。
 
 ## 实施任务
 
@@ -22,7 +22,8 @@ Task 4 已完成验证、归档和提交；下一步执行 Task 5：Home 页面 
 - [x] Task 2：显式 IPC/preload、sender validation、microphone intent 和 media permission contract。
 - [x] Task 3：Workspace entry create/open、RHF + Zod、folder picker 和错误分支。
 - [x] Task 4：App shell、可拖动 sidebar、悬浮内容面板、lucide icon-only controls 和基础导航。
-- [ ] Task 5：Home 页面 local search、月份分组、memory card、空状态和禁止 future capability。
+- [x] Task 5：Home 页面 local search、月份分组、memory card、空状态和禁止 future capability。
+- [ ] Task 6A：App shell dark/light theme toggle、sidebar 左下角入口、深色模式 tokens 适配和 Dialog accessibility warning 修复。
 - [ ] Task 6：Memory detail high-fidelity 当前范围和 More future wireframe boundary。
 - [ ] Task 7：移除 `RecordingOverlay` mock transcript，拆分录音状态和副作用。
 - [ ] Task 8：Recording drawer、ElevenLabs waveform/source retokenize、录音控制和全部当前状态。

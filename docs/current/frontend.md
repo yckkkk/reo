@@ -18,7 +18,7 @@
 - 当前 renderer route state 覆盖无 workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
 - 当前无 workspace state 使用 `AppShell` + `WorkspaceStarterHome`；Home `+` 打开 `WorkspaceEntryDialog`。
 - 当前 loaded workspace state 使用 `AppShell` 包裹 workspace home。
-- 当前 workspace home 展示 workspace title、一个 record action、`Memory Content`、recording empty/list region。
+- 当前 workspace home 展示 `All memories`、workspace title 标签、workspace description、本地 `Search memories` 输入、memory count、月份分组、memory card、空 workspace 状态、search 空结果状态和单一 `Record memory` action。
 - 当前 recording overlay 使用 Radix Dialog/shadcn Dialog source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
 - 当前有 `WorkspaceEntryDialog`，组合 `CreateWorkspaceForm` 与 `OpenWorkspaceAction`；创建表单使用 React Hook Form + Zod resolver，打开现有 workspace 走独立 open branch。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
@@ -94,7 +94,9 @@
 - 当前 App shell 的 hide/show sidebar icon-only control 位于左上窗口控制区旁边，不创建 rail sidebar。
 - 当前 App shell navigation 在 starter shell 只显示 Home；loaded shell 显示 Home 和 New memory；Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
 - 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上。
-- 当前 Workspace home 仍是基础 home：显示 workspace title、单一 `Record memory` action 和 `Memory Content`；它还没有本地 search/filter、日期分组或 memory card。
+- 当前 Workspace home 是 loaded workspace 的 Home surface：主标题是 `All memories`，workspace title 作为上方标签；`Search memories` 只过滤当前 snapshot 中已加载的 memory summary；内容按 `createdAt` 月份倒序分组，同月内 memory 倒序；memory card 只展示 title、创建日期、recording count、duration、Transcript/Reflections presence。
+- 当前 Workspace home 的本地搜索使用 component state；它不创建 global search、full-text search、semantic search、tag/entity filter、Zustand store、TanStack Query key、IPC 或 DB surface。
+- 当前 Workspace home 直接使用 `Input` primitive 承载 searchbox，使用 `Separator` primitive 承载 header/month 的装饰性分隔；memory card 使用 `article`、`time`、`dl` 表达条目、日期和元数据。`MemorySection` 和 `MemoryCard` 是 feature-local components，只服务 loaded workspace Home，不是 design-system primitive。
 - 当前 `Record memory` 打开 Radix Dialog recording overlay；它是迁移基础，不是 first product slice 的最终 recording drawer。
 - Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime 或网络 STT。
 - 当前 recording overlay 代码仍包含本地 placeholder transcript 机制；产品级 first slice 完成形态不得显示 mock transcript，也不得暗示真实 speech-to-text。

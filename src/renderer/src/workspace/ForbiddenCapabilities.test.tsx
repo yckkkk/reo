@@ -28,5 +28,9 @@ describe('forbidden first-slice capabilities', () => {
     expect(screen.queryByText(/video/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/file/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/film/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /photo|video|file|film/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /photo|video|file|film/i })).not.toBeInTheDocument();
   });
 });
