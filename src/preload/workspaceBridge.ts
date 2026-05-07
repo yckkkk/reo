@@ -1,10 +1,13 @@
 import {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
+  WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
@@ -49,11 +52,14 @@ export interface ReoWorkspaceBridge {
   readonly appendRecordingAudioChunk: (payload: unknown) => Promise<unknown>;
   readonly finalizeRecordingDraft: (payload: unknown) => Promise<unknown>;
   readonly discardRecordingDraft: (payload: unknown) => Promise<unknown>;
+  readonly getMemoryDetail: (payload: unknown) => Promise<unknown>;
   readonly getRecordingDetail: (payload: unknown) => Promise<unknown>;
   readonly readRecordingAudioManifest: (payload: unknown) => Promise<unknown>;
   readonly readRecordingAudioChunk: (payload: unknown) => Promise<unknown>;
   readonly saveTranscript: (payload: unknown) => Promise<unknown>;
   readonly saveReflections: (payload: unknown) => Promise<unknown>;
+  readonly beginMicrophoneIntent: (payload: unknown) => Promise<unknown>;
+  readonly clearMicrophoneIntent: (payload: unknown) => Promise<unknown>;
 }
 
 export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorkspaceBridge {
@@ -75,6 +81,8 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       invoker.invoke(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, payload),
     discardRecordingDraft: (payload: unknown) =>
       invoker.invoke(WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL, payload),
+    getMemoryDetail: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_GET_MEMORY_DETAIL_CHANNEL, payload),
     getRecordingDetail: (payload: unknown) =>
       invoker.invoke(WORKSPACE_GET_RECORDING_DETAIL_CHANNEL, payload),
     readRecordingAudioManifest: (payload: unknown) =>
@@ -85,5 +93,9 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       invoker.invoke(WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, payload),
     saveReflections: (payload: unknown) =>
       invoker.invoke(WORKSPACE_SAVE_REFLECTIONS_CHANNEL, payload),
+    beginMicrophoneIntent: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, payload),
+    clearMicrophoneIntent: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, payload),
   });
 }

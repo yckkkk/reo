@@ -1,9 +1,7 @@
 import { app, net, protocol } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-export const APP_SHELL_SCHEME = 'reo-app';
-const APP_SHELL_HOST = 'renderer';
+import { APP_SHELL_HOST, APP_SHELL_SCHEME } from './appShellConstants.js';
 
 let schemeRegistered = false;
 let protocolRegistered = false;

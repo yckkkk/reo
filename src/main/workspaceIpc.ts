@@ -6,10 +6,13 @@ import type { z } from 'zod';
 import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
+  WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
+  WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
@@ -23,6 +26,10 @@ import {
   workspaceError,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceMemoryDetailResponseSchema,
+  workspaceMemoryIdRequestSchema,
+  workspaceMicrophoneIntentRequestSchema,
+  workspaceMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
   workspaceRecordingAppendRequestSchema,
@@ -57,6 +64,13 @@ import {
   readRecordingAudioManifest,
   saveRecordingMarkdown,
 } from './recordingDrafts.js';
+import { readMemoryDetail, type MemoryDetail } from './memoryFiles.js';
+import {
+  clearAllMicrophoneIntents,
+  clearMicrophoneIntent,
+  clearMicrophoneIntentsForWorkspaceHandle,
+  createMicrophoneIntent,
+} from './security.js';
 import {
   initializeWorkspaceFiles,
   openWorkspaceFiles,
@@ -96,6 +110,19 @@ export interface HandleInitializeWorkspaceOptions extends RegisterWorkspaceIpcOp
   readonly createWorkspaceId?: () => string;
   readonly createHandle?: () => string;
   readonly now?: () => string;
+}
+
+interface HandleWorkspaceRequestOptions {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly expectedSession: Session | object;
+  readonly expectedSessionKey: string;
+  readonly isTrustedUrl: (url: string) => boolean;
+  readonly handleStore?: WorkspaceHandleStore;
+}
+
+export interface HandleMicrophoneIntentOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => number;
 }
 
 type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
@@ -170,6 +197,7 @@ export async function handleChooseWorkspaceDirectory({
 }
 
 export async function closeAllWorkspaceHandles(): Promise<void> {
+  clearAllMicrophoneIntents();
   await defaultHandleStore.closeAllHandles();
   clearRecordingRuntimeState();
 }
@@ -396,6 +424,12 @@ type RequiredWorkspaceHandle = Extract<
 >['handle'];
 type AssertWorkspaceHandleUsable = RequiredWorkspaceHandle['assertUsable'];
 
+function ipcSenderId(event: TrustedSenderEventAdapter): number | WorkspaceErrorEnvelope {
+  return typeof event.sender.id === 'number'
+    ? event.sender.id
+    : workspaceError('ERR_WORKSPACE_UNTRUSTED_SENDER', 'IPC sender is not trusted');
+}
+
 async function withUsableWorkspaceHandle<Result>(
   assertUsable: AssertWorkspaceHandleUsable,
   run: () => MaybePromise<Result | WorkspaceErrorEnvelope>
@@ -456,11 +490,6 @@ async function withWorkspaceHandleRequest<
   });
   if (!required.ok) {
     return required;
-  }
-
-  const usable = required.handle.assertUsable();
-  if (!usable.ok) {
-    return usable;
   }
 
   return run(request.data as z.infer<Schema>, required.handle, required.handle.assertUsable);
@@ -577,6 +606,233 @@ export async function handleOpenWorkspaceForTest(
   return handleOpenWorkspaceCore(options);
 }
 
+async function handleBeginMicrophoneIntentCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  now,
+}: HandleMicrophoneIntentOptions): Promise<ReturnType<typeof createMicrophoneIntent>> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const senderId = ipcSenderId(event);
+  if (typeof senderId !== 'number') {
+    return senderId;
+  }
+
+  const request = workspaceMicrophoneIntentRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'beginMicrophoneIntent request is invalid'
+    );
+  }
+
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.data.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return required;
+  }
+
+  return workspaceMicrophoneIntentResponseSchema.parse(
+    createMicrophoneIntent({
+      senderId,
+      workspaceHandle: request.data.workspaceHandle,
+      drawerSessionId: request.data.drawerSessionId,
+      ...(now ? { now } : {}),
+    })
+  );
+}
+
+export async function handleBeginMicrophoneIntent(
+  options: HandleMicrophoneIntentOptions
+): Promise<ReturnType<typeof createMicrophoneIntent>> {
+  return handleBeginMicrophoneIntentCore(options);
+}
+
+export async function handleBeginMicrophoneIntentForTest(
+  options: HandleMicrophoneIntentOptions
+): Promise<ReturnType<typeof createMicrophoneIntent>> {
+  return handleBeginMicrophoneIntentCore(options);
+}
+
+async function handleClearMicrophoneIntentCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+}: HandleWorkspaceRequestOptions): Promise<
+  { readonly ok: true; readonly value: { readonly cleared: true } } | WorkspaceErrorEnvelope
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const senderId = ipcSenderId(event);
+  if (typeof senderId !== 'number') {
+    return senderId;
+  }
+
+  const request = workspaceMicrophoneIntentRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'clearMicrophoneIntent request is invalid'
+    );
+  }
+
+  const required = handleStore.requireOwnedHandle({
+    workspaceHandle: request.data.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return required;
+  }
+
+  clearMicrophoneIntent({
+    senderId,
+    workspaceHandle: request.data.workspaceHandle,
+    drawerSessionId: request.data.drawerSessionId,
+  });
+  return { ok: true, value: { cleared: true } };
+}
+
+export async function handleClearMicrophoneIntent(
+  options: HandleWorkspaceRequestOptions
+): Promise<
+  { readonly ok: true; readonly value: { readonly cleared: true } } | WorkspaceErrorEnvelope
+> {
+  return handleClearMicrophoneIntentCore(options);
+}
+
+export async function handleClearMicrophoneIntentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<
+  { readonly ok: true; readonly value: { readonly cleared: true } } | WorkspaceErrorEnvelope
+> {
+  return handleClearMicrophoneIntentCore(options);
+}
+
+async function handleCloseWorkspaceCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+}: HandleWorkspaceRequestOptions): Promise<
+  { readonly ok: true; readonly value: { readonly closed: true } } | WorkspaceErrorEnvelope
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_CLOSE_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceCloseRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'closeWorkspace request is invalid');
+  }
+
+  const handle = handleStore.requireOwnedHandle({
+    workspaceHandle: request.data.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!handle.ok) {
+    return handle;
+  }
+
+  clearMicrophoneIntentsForWorkspaceHandle(request.data.workspaceHandle);
+  const closed = await handleStore.closeHandle({
+    workspaceHandle: request.data.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!closed.ok) {
+    return closed;
+  }
+
+  clearRecordingRuntimeStateForRoot(handle.handle.canonicalRoot);
+  return { ok: true, value: { closed: true } };
+}
+
+export async function handleCloseWorkspace(
+  options: HandleWorkspaceRequestOptions
+): Promise<
+  { readonly ok: true; readonly value: { readonly closed: true } } | WorkspaceErrorEnvelope
+> {
+  return handleCloseWorkspaceCore(options);
+}
+
+export async function handleCloseWorkspaceForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<
+  { readonly ok: true; readonly value: { readonly closed: true } } | WorkspaceErrorEnvelope
+> {
+  return handleCloseWorkspaceCore(options);
+}
+
+function handleGetMemoryDetailCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMemoryIdRequestSchema,
+    invalidMessage: 'getMemoryDetail request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await readMemoryDetail({
+          rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceMemoryDetailResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
+export async function handleGetMemoryDetail(
+  options: HandleWorkspaceRequestOptions
+): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
+  return handleGetMemoryDetailCore(options);
+}
+
+export async function handleGetMemoryDetailForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
+  return handleGetMemoryDetailCore(options);
+}
+
 export function registerWorkspaceIpc({
   expectedSession,
   expectedSessionKey,
@@ -618,34 +874,46 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, async (event, input) => {
-    const trusted = validateWorkspaceSender({
+  ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+    handleBeginMicrophoneIntent({
       event,
-      channel: WORKSPACE_CLOSE_CHANNEL,
+      input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return trusted;
-    }
-    const request = workspaceCloseRequestSchema.safeParse(input);
-    if (!request.success) {
-      return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'closeWorkspace request is invalid');
-    }
-    const handle = handleStore.requireHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    const closed = await handleStore.closeHandle({
-      workspaceHandle: request.data.workspaceHandle,
-      sender: trusted.sender,
-    });
-    if (closed.ok && handle.ok) {
-      clearRecordingRuntimeStateForRoot(handle.handle.canonicalRoot);
-    }
-    return closed;
-  });
+      handleStore,
+    })
+  );
+  ipcMain.handle(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+    handleClearMicrophoneIntent({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  ipcMain.handle(WORKSPACE_GET_MEMORY_DETAIL_CHANNEL, (event, input) =>
+    handleGetMemoryDetail({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
+    handleCloseWorkspace({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
 
   function registerWorkspaceHandleRequest<
     Schema extends z.ZodType<WorkspaceHandleRequestData>,

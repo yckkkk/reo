@@ -40,6 +40,10 @@ export function discardRecordingDraft(
   return window.reoWorkspace.discardRecordingDraft(payload);
 }
 
+export function getMemoryDetail(payload: Parameters<Window['reoWorkspace']['getMemoryDetail']>[0]) {
+  return window.reoWorkspace.getMemoryDetail(payload);
+}
+
 export function getRecordingDetail(
   payload: Parameters<Window['reoWorkspace']['getRecordingDetail']>[0]
 ) {
@@ -64,6 +68,18 @@ export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveT
 
 export function saveReflections(payload: Parameters<Window['reoWorkspace']['saveReflections']>[0]) {
   return window.reoWorkspace.saveReflections(payload);
+}
+
+export function beginMicrophoneIntent(
+  payload: Parameters<Window['reoWorkspace']['beginMicrophoneIntent']>[0]
+) {
+  return window.reoWorkspace.beginMicrophoneIntent(payload);
+}
+
+export function clearMicrophoneIntent(
+  payload: Parameters<Window['reoWorkspace']['clearMicrophoneIntent']>[0]
+) {
+  return window.reoWorkspace.clearMicrophoneIntent(payload);
 }
 
 export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;

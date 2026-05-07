@@ -83,6 +83,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { discarded: true as const },
     })),
+    getMemoryDetail: vi.fn(),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(async () => ({
       ok: true as const,
@@ -97,6 +98,14 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       value: { saved: true as const },
     })),
     saveReflections: vi.fn(async () => ({ ok: true as const, value: { saved: true as const } })),
+    beginMicrophoneIntent: vi.fn(async () => ({
+      ok: true as const,
+      value: { registered: true as const },
+    })),
+    clearMicrophoneIntent: vi.fn(async () => ({
+      ok: true as const,
+      value: { cleared: true as const },
+    })),
     ...overrides,
   };
   Object.defineProperty(window, 'reoWorkspace', {
@@ -299,6 +308,279 @@ describe('RecordingOverlay', () => {
     expect(screen.getByRole('button', { name: 'Stop recording' })).toBeInTheDocument();
   });
 
+  it('opens a microphone intent before media acquisition starts', async () => {
+    const order: string[] = [];
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi.fn(async () => {
+        order.push('create-draft');
+        return {
+          ok: true as const,
+          value: { nextSequence: 0, recordingId: 'rec_1' },
+        };
+      }),
+      beginMicrophoneIntent: vi.fn(async () => {
+        order.push('begin-intent');
+        return {
+          ok: true as const,
+          value: { registered: true as const },
+        };
+      }),
+    });
+    const media = createMediaAdapter();
+    const controller: RecordingMediaController = {
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    vi.mocked(media.adapter.start).mockImplementation(async () => {
+      order.push('media-start');
+      return controller;
+    });
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+
+    expect(order).toEqual(['begin-intent', 'create-draft', 'media-start']);
+    expect(bridge.beginMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+  });
+
+  it('does not start media acquisition when microphone intent is rejected', async () => {
+    const bridge = installWorkspaceBridge({
+      beginMicrophoneIntent: vi.fn(async () => ({
+        error: {
+          code: 'ERR_MIC_INTENT_ALREADY_ACTIVE',
+          message: 'Microphone intent already active',
+        },
+        ok: false as const,
+      })),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+
+    expect(media.adapter.start).not.toHaveBeenCalled();
+    expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
+    expect(bridge.discardRecordingDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Microphone intent already active');
+  });
+
+  it('clears microphone intent when draft creation fails after intent registration', async () => {
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi.fn(async () => ({
+        error: { code: 'ERR_WORKSPACE_LOCK_LOST', message: 'Workspace lock was lost' },
+        ok: false as const,
+      })),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+
+    expect(media.adapter.start).not.toHaveBeenCalled();
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Workspace lock was lost');
+  });
+
+  it('clears microphone intent when begin resolves after unmount', async () => {
+    const begin =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['beginMicrophoneIntent']>>>();
+    const bridge = installWorkspaceBridge({
+      beginMicrophoneIntent: vi.fn(() => begin.promise),
+    });
+    const media = createMediaAdapter();
+
+    const { unmount } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    unmount();
+    begin.resolve({ ok: true, value: { registered: true } });
+    await flushPromises();
+
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
+    expect(media.adapter.start).not.toHaveBeenCalled();
+  });
+
+  it('clears microphone intent and discards the draft when unmounted during draft creation', async () => {
+    const draft =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['createRecordingDraft']>>>();
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi.fn(() => draft.promise),
+    });
+    const media = createMediaAdapter();
+
+    const { unmount } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    unmount();
+
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+
+    draft.resolve({ ok: true, value: { nextSequence: 0, recordingId: 'rec_1' } });
+    await flushPromises();
+
+    expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(media.adapter.start).not.toHaveBeenCalled();
+  });
+
+  it('discards the draft when unmounted while media acquisition is pending', async () => {
+    const start = createDeferred<RecordingMediaController>();
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+    const controller: RecordingMediaController = {
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    vi.mocked(media.adapter.start).mockReturnValue(start.promise);
+
+    const { unmount } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    unmount();
+
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+
+    start.resolve(controller);
+    await flushPromises();
+
+    expect(controller.stop).toHaveBeenCalled();
+  });
+
+  it('clears microphone intent when the workspace handle changes during draft creation', async () => {
+    const draft =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['createRecordingDraft']>>>();
+    const bridge = installWorkspaceBridge({
+      createRecordingDraft: vi.fn(() => draft.promise),
+    });
+    const media = createMediaAdapter();
+    const nextWorkspaceSession: WorkspaceSession = {
+      ...workspaceSession,
+      workspaceHandle: 'workspace-handle-next',
+      workspaceId: 'ws_2',
+      snapshot: {
+        ...workspaceSession.snapshot,
+        workspaceId: 'ws_2',
+      },
+    };
+
+    const { rerender } = render(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await flushPromises();
+    rerender(
+      <RecordingOverlay
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={nextWorkspaceSession}
+      />
+    );
+
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+
+    draft.resolve({ ok: true, value: { nextSequence: 0, recordingId: 'rec_1' } });
+    await flushPromises();
+
+    expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
+      recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(media.adapter.start).not.toHaveBeenCalled();
+  });
+
   it('does not finalize when audio append returns an error envelope', async () => {
     const bridge = installWorkspaceBridge({
       appendRecordingAudioChunk: vi.fn(async () => ({
@@ -412,6 +694,10 @@ describe('RecordingOverlay', () => {
 
     expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
       recordingId: 'rec_1',
+      workspaceHandle: 'workspace-handle-secret',
+    });
+    expect(bridge.clearMicrophoneIntent).toHaveBeenCalledWith({
+      drawerSessionId: 'recording-1',
       workspaceHandle: 'workspace-handle-secret',
     });
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();

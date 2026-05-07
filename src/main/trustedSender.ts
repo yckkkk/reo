@@ -11,6 +11,7 @@ export interface TrustedSenderIdentity {
 export interface TrustedSenderEventAdapter {
   readonly processId: number;
   readonly sender: {
+    readonly id?: number;
     readonly session: object;
   };
   readonly senderFrame: {

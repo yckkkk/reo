@@ -1,11 +1,15 @@
 import { z } from 'zod';
+import { MEMORY_ID_PATTERN, RECORDING_ID_PATTERN } from './recordingMetadata.js';
 export {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
+  WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
+  WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
@@ -63,6 +67,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_RECORDING_FINALIZE_FAILED',
   'ERR_WORKSPACE_INDEX_WRITE_FAILED',
   'ERR_MEMORY_NOT_FOUND',
+  'ERR_MIC_INTENT_ALREADY_ACTIVE',
 ]);
 
 export const workspaceErrorSchema = z.object({
@@ -163,7 +168,8 @@ const workspaceHandleSchema = z.object({
   workspaceHandle: z.string().min(1),
 });
 
-const recordingIdSchema = z.string().regex(/^rec_[A-Za-z0-9_-]+$/);
+const recordingIdSchema = z.string().regex(RECORDING_ID_PATTERN);
+const memoryIdSchema = z.string().regex(MEMORY_ID_PATTERN);
 
 export const workspaceRecordingAppendRequestSchema = workspaceHandleSchema
   .extend({
@@ -179,12 +185,44 @@ export const workspaceRecordingIdRequestSchema = workspaceHandleSchema
   })
   .strict();
 
+export const workspaceMemoryIdRequestSchema = workspaceHandleSchema
+  .extend({
+    memoryId: memoryIdSchema,
+  })
+  .strict();
+
+export const workspaceMemoryRecordingSummarySchema = z.object({
+  recordingId: recordingIdSchema,
+  title: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+});
+
+export const workspaceMemoryDetailResponseSchema = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      memoryId: memoryIdSchema,
+      title: z.string(),
+      sourceKind: z.literal('recording'),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+      recordingIds: z.array(recordingIdSchema),
+      recordings: z.array(workspaceMemoryRecordingSummarySchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceMicrophoneIntentRequestSchema = workspaceHandleSchema
+  .extend({
+    drawerSessionId: z.string().min(1),
+  })
+  .strict();
+
 export const workspaceRecordingFinalizeRequestSchema = workspaceRecordingIdRequestSchema
   .extend({
-    memoryId: z
-      .string()
-      .regex(/^mem_[A-Za-z0-9_-]+$/)
-      .optional(),
+    memoryId: memoryIdSchema.optional(),
     title: z.string().trim().min(1),
     durationMs: z.number().int().nonnegative(),
   })
@@ -202,6 +240,16 @@ export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingIdR
     markdown: z.string(),
   })
   .strict();
+
+export const workspaceMicrophoneIntentResponseSchema = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      registered: z.literal(true),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
 
 export type WorkspaceErrorCode = z.infer<typeof workspaceErrorCodeSchema>;
 export type WorkspaceError = z.infer<typeof workspaceErrorSchema>;

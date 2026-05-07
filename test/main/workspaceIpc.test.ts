@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  closeAllWorkspaceHandles,
   handleChooseWorkspaceDirectory,
+  handleBeginMicrophoneIntentForTest,
+  handleClearMicrophoneIntentForTest,
+  handleCloseWorkspaceForTest,
+  handleGetMemoryDetailForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
   handleOpenWorkspace,
@@ -16,6 +21,11 @@ import {
   initializeWorkspaceFiles,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
 } from '../../src/main/workspaceFiles.js';
+import {
+  createMicrophoneIntent,
+  decideMediaPermissionRequest,
+  resetMicrophoneIntentsForTest,
+} from '../../src/main/security.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
 import type {
@@ -38,6 +48,10 @@ const event: TrustedSenderEventAdapter = {
     topRoutingId: 4,
     url: 'reo-app://renderer/index.html',
   },
+};
+const microphoneEvent = {
+  ...event,
+  sender: { ...event.sender, id: 101 },
 };
 
 async function assertWorkspaceLockCanBeReacquired(rootPath: string): Promise<void> {
@@ -96,6 +110,25 @@ async function writeFinalizedMemoryRecording({
       reflectionsPath: 'reflections.md',
     })}\n`
   );
+}
+
+function createRegisteredHandleStore(
+  rootPath: string,
+  isUsable: () => boolean = () => true,
+  release: () => Promise<void> = async () => {}
+) {
+  const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_ipc' });
+  handleStore.register({
+    canonicalRoot: rootPath,
+    workspaceId: 'ws_ipc',
+    sender,
+    lock: {
+      isHeld: () => true,
+      isUsable,
+      release,
+    },
+  });
+  return handleStore;
 }
 
 test('initializeWorkspace consumes selection token and never exposes rootPath', async () => {
@@ -188,6 +221,362 @@ test('chooseDirectory response does not expose rootPath or equivalent absolute d
       displayPath: 'Voice Notes',
     },
   });
+});
+
+test('beginMicrophoneIntent uses sender id from the IPC event and returns no raw path', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-mic-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, { registered: true });
+    assert.equal('rootPath' in result.value, false);
+    assert.equal('microphoneIntentId' in result.value, false);
+  }
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    true
+  );
+});
+
+test('clearMicrophoneIntent requires the matching workspace handle owner', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-clear-mic-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  const result = await handleClearMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.deepEqual(result, { ok: true, value: { cleared: true } });
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('clearMicrophoneIntent clears pending intent after workspace lock is lost', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-clear-mic-lock-lost-'));
+  let usable = true;
+  const handleStore = createRegisteredHandleStore(rootPath, () => usable);
+
+  await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  usable = false;
+  const result = await handleClearMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.deepEqual(result, { ok: true, value: { cleared: true } });
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('closeWorkspace clears pending microphone intent for the closed workspace handle', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-mic-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  const closed = await handleCloseWorkspaceForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.deepEqual(closed, { ok: true, value: { closed: true } });
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('closeWorkspace clears pending microphone intent after workspace lock is lost', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-mic-lock-lost-'));
+  let usable = true;
+  const handleStore = createRegisteredHandleStore(rootPath, () => usable);
+
+  await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  usable = false;
+  const closed = await handleCloseWorkspaceForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.deepEqual(closed, { ok: true, value: { closed: true } });
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('closeWorkspace clears pending microphone intent when lock release fails', async () => {
+  resetMicrophoneIntentsForTest();
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-mic-release-fails-'));
+  const handleStore = createRegisteredHandleStore(
+    rootPath,
+    () => true,
+    async () => {
+      throw new Error('release failed');
+    }
+  );
+
+  await handleBeginMicrophoneIntentForTest({
+    event: microphoneEvent,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      drawerSessionId: 'drawer_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => 1_000,
+  });
+
+  const closed = await handleCloseWorkspaceForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(closed.ok, false);
+  if (!closed.ok) {
+    assert.equal(closed.error.code, 'ERR_WORKSPACE_LOCK_FAILED');
+  }
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('window teardown clears all pending microphone intents through workspace cleanup', async () => {
+  resetMicrophoneIntentsForTest();
+  createMicrophoneIntent({
+    senderId: 101,
+    workspaceHandle: 'wh_teardown',
+    drawerSessionId: 'drawer_1',
+  });
+
+  await closeAllWorkspaceHandles();
+
+  assert.equal(
+    decideMediaPermissionRequest({
+      permission: 'media',
+      senderFrameUrl: 'reo-app://renderer/index.html',
+      senderId: 101,
+      isMainFrame: true,
+      requested: { audio: true, video: false },
+      now: () => 1_001,
+    }),
+    false
+  );
+});
+
+test('getMemoryDetail returns finalized memory detail through a workspace handle', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-detail-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc',
+    recordingId: 'rec_ipc',
+    title: 'IPC 录音',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleGetMemoryDetailForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc', memoryId: 'mem_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.memoryId, 'mem_ipc');
+    assert.equal(result.value.recordings[0]?.recordingId, 'rec_ipc');
+    assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('getMemoryDetail stops when the workspace lock is lost during detail read', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-detail-lock-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc',
+    recordingId: 'rec_ipc',
+    title: 'IPC 录音',
+  });
+  let usableChecks = 0;
+  const handleStore = createRegisteredHandleStore(rootPath, () => {
+    usableChecks += 1;
+    return usableChecks < 5;
+  });
+
+  const result = await handleGetMemoryDetailForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc', memoryId: 'mem_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
 });
 
 test('initializeWorkspace rejects symlinked .reo before writing workspace files', async () => {

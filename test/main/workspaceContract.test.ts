@@ -7,6 +7,8 @@ import {
   workspaceGenericOkResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceMemoryDetailResponseSchema,
+  workspaceMicrophoneIntentResponseSchema,
   workspaceOpenRequestSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
@@ -27,11 +29,14 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:appendRecordingAudioChunk',
     'workspace:finalizeRecordingDraft',
     'workspace:discardRecordingDraft',
+    'workspace:getMemoryDetail',
     'workspace:getRecordingDetail',
     'workspace:readRecordingAudioManifest',
     'workspace:readRecordingAudioChunk',
     'workspace:saveTranscript',
     'workspace:saveReflections',
+    'workspace:beginMicrophoneIntent',
+    'workspace:clearMicrophoneIntent',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
 });
@@ -149,6 +154,68 @@ test('recording finalize contract requires explicit durable duration', () => {
       title: '录音',
       workspaceHandle: 'wh_1',
     })
+  );
+});
+
+test('memory detail response contract strips raw paths', () => {
+  assert.deepEqual(
+    workspaceMemoryDetailResponseSchema.parse({
+      ok: true,
+      value: {
+        memoryId: 'mem_20260506_000001',
+        title: '录音记忆',
+        sourceKind: 'recording',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        recordingIds: ['rec_20260506_000001'],
+        rootPath: '/Users/example/Voice Notes',
+        recordings: [
+          {
+            recordingId: 'rec_20260506_000001',
+            title: '录音',
+            durationMs: 1000,
+            audioByteLength: 3,
+            rootPath: '/Users/example/Voice Notes',
+          },
+        ],
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        memoryId: 'mem_20260506_000001',
+        title: '录音记忆',
+        sourceKind: 'recording',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        recordingIds: ['rec_20260506_000001'],
+        recordings: [
+          {
+            recordingId: 'rec_20260506_000001',
+            title: '录音',
+            durationMs: 1000,
+            audioByteLength: 3,
+          },
+        ],
+      },
+    }
+  );
+});
+
+test('microphone intent response exposes no token-like authority', () => {
+  assert.deepEqual(
+    workspaceMicrophoneIntentResponseSchema.parse({
+      ok: true,
+      value: {
+        registered: true,
+        microphoneIntentId: 'mic_1',
+        expiresAt: 16_000,
+      },
+    }),
+    {
+      ok: true,
+      value: { registered: true },
+    }
   );
 });
 

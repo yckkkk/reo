@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appendRecordingAudioChunk,
+  beginMicrophoneIntent,
   chooseWorkspaceDirectory,
+  clearMicrophoneIntent,
   closeWorkspace,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
+  getMemoryDetail,
   getRecordingDetail,
   initializeWorkspace,
   openWorkspace,
@@ -25,11 +28,14 @@ describe('workspace renderer API wrapper', () => {
     appendRecordingAudioChunk: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
+    getMemoryDetail: vi.fn(),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(),
     readRecordingAudioChunk: vi.fn(),
     saveTranscript: vi.fn(),
     saveReflections: vi.fn(),
+    beginMicrophoneIntent: vi.fn(),
+    clearMicrophoneIntent: vi.fn(),
   };
 
   beforeEach(() => {
@@ -80,6 +86,10 @@ describe('workspace renderer API wrapper', () => {
       },
     });
     reoWorkspace.discardRecordingDraft.mockResolvedValue({ ok: true, value: { discarded: true } });
+    reoWorkspace.getMemoryDetail.mockResolvedValue({
+      ok: true,
+      value: { memoryId: 'mem_1', recordings: [] },
+    });
     reoWorkspace.getRecordingDetail.mockResolvedValue({
       ok: true,
       value: { recordingId: 'rec_1' },
@@ -94,6 +104,11 @@ describe('workspace renderer API wrapper', () => {
     });
     reoWorkspace.saveTranscript.mockResolvedValue({ ok: true, value: { saved: true } });
     reoWorkspace.saveReflections.mockResolvedValue({ ok: true, value: { saved: true } });
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.clearMicrophoneIntent.mockResolvedValue({ ok: true, value: { cleared: true } });
 
     await chooseWorkspaceDirectory();
     await initializeWorkspace({
@@ -117,6 +132,7 @@ describe('workspace renderer API wrapper', () => {
       workspaceHandle: 'wh_1',
     });
     await discardRecordingDraft({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
+    await getMemoryDetail({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
     await getRecordingDetail({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
     await readRecordingAudioManifest({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
     await readRecordingAudioChunk({
@@ -127,6 +143,8 @@ describe('workspace renderer API wrapper', () => {
     });
     await saveTranscript({ workspaceHandle: 'wh_1', recordingId: 'rec_1', markdown: '文字' });
     await saveReflections({ workspaceHandle: 'wh_1', recordingId: 'rec_1', markdown: '想法' });
+    await beginMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+    await clearMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
 
     expect(reoWorkspace.chooseDirectory).toHaveBeenCalledTimes(1);
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledWith({
@@ -139,6 +157,18 @@ describe('workspace renderer API wrapper', () => {
       recordingId: 'rec_1',
       offset: 0,
       length: 1,
+    });
+    expect(reoWorkspace.getMemoryDetail).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+    });
+    expect(reoWorkspace.beginMicrophoneIntent).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      drawerSessionId: 'drawer_1',
+    });
+    expect(reoWorkspace.clearMicrophoneIntent).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      drawerSessionId: 'drawer_1',
     });
   });
 });

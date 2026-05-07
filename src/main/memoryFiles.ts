@@ -191,6 +191,7 @@ export type AppendRecordingToMemoryForTestInput = AppendRecordingToMemoryInput &
 export interface ReadMemoryDetailInput {
   readonly rootPath: string;
   readonly memoryId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
 export interface UpdateMemoryTitleInput extends ReadMemoryDetailInput {
@@ -2273,14 +2274,20 @@ export async function readMemoryDetail(
   input: ReadMemoryDetailInput
 ): Promise<MemoryFilesResult<MemoryDetail>> {
   try {
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
     const memory = await readMemoryJson(input.rootPath, input.memoryId);
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
     const recordings: MemoryRecordingSummary[] = [];
     for (const recordingId of memory.recordingIds) {
-      recordings.push(await summarizeRecording(input.rootPath, memory.memoryId, recordingId));
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const recording = await summarizeRecording(input.rootPath, memory.memoryId, recordingId);
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      recordings.push(recording);
     }
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
     return { ok: true, value: { ...memory, recordings } };
-  } catch {
-    return workspaceError('ERR_MEMORY_NOT_FOUND', 'Memory not found', 'none-written');
+  } catch (error) {
+    return memoryFilesError(error, 'ERR_MEMORY_NOT_FOUND', 'Memory not found', 'none-written');
   }
 }
 

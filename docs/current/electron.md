@@ -34,7 +34,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - `webviewTag: false`
 - 导航默认拦截非可信 URL
 - `setWindowOpenHandler` 默认 deny
-- 权限请求除 trusted renderer 的 audio media 外默认拒绝
+- 权限请求默认拒绝；audio media 只能通过 one-shot microphone intent 临时授予
 - Dev server 只允许 loopback
 - Packaged app 忽略 `ELECTRON_RENDERER_URL`
 - 生产 CSP 不允许 `unsafe-inline` 或 `unsafe-eval`
@@ -71,7 +71,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 ## 第一产品切片 Electron 决策
 
 - First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
-- Workspace IPC channels 覆盖 choose、initialize、open、close、recording draft、audio manifest/chunk read、transcript/reflections save。
+- Workspace IPC channels 覆盖 choose、initialize、open、close、memory detail、recording draft、audio manifest/chunk read、transcript/reflections save、microphone intent begin/clear。
 - `chooseDirectory` 只返回 `selectionToken` 和 `displayPath` 或 canceled 结果，不返回裸 `rootPath`，也不提前返回 conflict 或 permission 判断。
 - `displayPath` 只使用文件夹 basename，不等同真实绝对路径。
 - Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；过期 token 会删除，错误 sender 不烧掉 token，错误结果不得泄露真实路径。
@@ -85,8 +85,9 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。
 - Audio playback 不允许一次性 IPC 返回完整 audio 文件；manifest/chunk 只读取 finalized recording truth，拒绝 draft-only recording；renderer 最多并发 4 个 1 MiB chunk read 后组装 Blob。
 - Renderer audio playback Blob URL 只在 active playback 期间存在，close/switch/unmount 必须 revoke；close 后完成的过期 chunk read 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC。
-- 当前 permission policy 只允许 trusted main-frame renderer 请求 audio media；video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
-- 产品级 first slice 必须在 recording capability slice 中把 microphone permission 改为 one-shot intent：renderer 先 await `recording:beginMicIntent`，再调用 `navigator.mediaDevices.getUserMedia`；main 的 permission request handler 只消费未过期 intent，`media` permission check 不授予也不消费 intent。
+- 当前 permission policy 使用 one-shot microphone intent：renderer 必须先 await `workspace:beginMicrophoneIntent` 成功，再调用 `navigator.mediaDevices.getUserMedia`；main 的 `media` permission check 永远不授予也不消费 intent；permission request handler 先按 sender id 消费一个未过期 intent，再要求 trusted main-frame renderer 和 audio-only request。
+- `workspace:beginMicrophoneIntent` 只接受 `workspaceHandle` 与 `drawerSessionId`，handler 使用 `event.sender.id` 作为 sender identity，不信任 renderer sender id；同一 sender 已有未过期 intent 时返回 `ERR_MIC_INTENT_ALREADY_ACTIVE`。
+- `workspace:clearMicrophoneIntent` 要求 sender、workspace handle 和 drawer session owner 匹配；owner 匹配后即使 workspace lock 已 lost 也允许清理 pending intent。Workspace close 在 owner 匹配后先清理该 handle 的 pending microphone intents，再释放 lock；即使 release 失败也不得保留 pending microphone authorization。Window teardown 清理全部 pending microphone intents。Video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
 - First product slice 不使用 `shell.openExternal`、generic command bus、generic IPC bridge、logging bridge、Sentry bridge、Forge 或 updater。
 
 ## Forge 与 electron-vite 边界

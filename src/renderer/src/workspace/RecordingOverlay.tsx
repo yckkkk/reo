@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   appendRecordingAudioChunk,
+  beginMicrophoneIntent,
+  clearMicrophoneIntent,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
@@ -82,6 +84,11 @@ export function RecordingOverlay({
   const activeDraftRef = useRef<{
     readonly recordingId: string;
     readonly recordingSession: number;
+  } | null>(null);
+  const pendingMicrophoneIntentRef = useRef<{
+    readonly drawerSessionId: string;
+    readonly recordingSession: number;
+    readonly workspaceHandle: string;
   } | null>(null);
   const playbackSessionRef = useRef(0);
   const lastSavedTranscriptRef = useRef('');
@@ -162,8 +169,30 @@ export function RecordingOverlay({
   useEffect(() => {
     return () => {
       playbackSessionRef.current += 1;
+      recordingSessionRef.current += 1;
+      const pendingMicrophoneIntent = pendingMicrophoneIntentRef.current;
+      pendingMicrophoneIntentRef.current = null;
+      if (pendingMicrophoneIntent) {
+        void clearMicrophoneIntent({
+          drawerSessionId: pendingMicrophoneIntent.drawerSessionId,
+          workspaceHandle: pendingMicrophoneIntent.workspaceHandle,
+        });
+      }
+      const controller = controllerRef.current;
+      controllerRef.current = null;
+      if (controller) {
+        void Promise.resolve(controller.stop()).catch(() => {});
+      }
+      const activeDraft = activeDraftRef.current;
+      activeDraftRef.current = null;
+      if (activeDraft) {
+        void discardRecordingDraft({
+          recordingId: activeDraft.recordingId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+      }
     };
-  }, []);
+  }, [workspaceSession.workspaceHandle]);
 
   useEffect(() => {
     return () => {
@@ -185,6 +214,24 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
       })
     ).catch(() => {});
+  }
+
+  function clearPendingMicrophoneIntent(recordingSession: number) {
+    const pendingMicrophoneIntent = pendingMicrophoneIntentRef.current;
+    if (!pendingMicrophoneIntent || pendingMicrophoneIntent.recordingSession !== recordingSession) {
+      return;
+    }
+    pendingMicrophoneIntentRef.current = null;
+    void clearMicrophoneIntent({
+      drawerSessionId: pendingMicrophoneIntent.drawerSessionId,
+      workspaceHandle: pendingMicrophoneIntent.workspaceHandle,
+    });
+  }
+
+  function forgetPendingMicrophoneIntent(recordingSession: number) {
+    if (pendingMicrophoneIntentRef.current?.recordingSession === recordingSession) {
+      pendingMicrophoneIntentRef.current = null;
+    }
   }
 
   function resetRecordingDurationClock(startedAtMs: number | null = null) {
@@ -291,19 +338,50 @@ export function RecordingOverlay({
     lastSavedReflectionsRef.current = '';
     resetRecordingDurationClock();
     const recordingSession = recordingSessionRef.current + 1;
+    const drawerSessionId = `recording-${recordingSession}`;
     recordingSessionRef.current = recordingSession;
     setState((current) => transitionRecordingState(current, { type: 'start-requested' }));
+
+    const microphoneIntent = await beginMicrophoneIntent({
+      drawerSessionId,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    if (!microphoneIntent.ok) {
+      failActiveRecording(microphoneIntent.error.message, recordingSession);
+      return;
+    }
+    if (recordingSessionRef.current !== recordingSession) {
+      void clearMicrophoneIntent({
+        drawerSessionId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      return;
+    }
+    pendingMicrophoneIntentRef.current = {
+      drawerSessionId,
+      recordingSession,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    };
 
     const draft = await createRecordingDraft({
       workspaceHandle: workspaceSession.workspaceHandle,
     });
     if (!draft.ok) {
+      clearPendingMicrophoneIntent(recordingSession);
       failActiveRecording(draft.error.message, recordingSession);
       return;
     }
 
     sequenceRef.current = draft.value.nextSequence;
     const nextRecordingId = draft.value.recordingId;
+    if (recordingSessionRef.current !== recordingSession) {
+      clearPendingMicrophoneIntent(recordingSession);
+      void discardRecordingDraft({
+        recordingId: nextRecordingId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      return;
+    }
     activeDraftRef.current = { recordingId: nextRecordingId, recordingSession };
 
     try {
@@ -316,15 +394,18 @@ export function RecordingOverlay({
         onStop: () => {},
       });
       if (recordingSessionRef.current !== recordingSession) {
+        clearPendingMicrophoneIntent(recordingSession);
         await controller.stop().catch(() => {});
         return;
       }
+      forgetPendingMicrophoneIntent(recordingSession);
       resetRecordingDurationClock(performance.now());
       controllerRef.current = controller;
       setState((current) =>
         transitionRecordingState(current, { recordingId: nextRecordingId, type: 'draft-ready' })
       );
     } catch (startError) {
+      clearPendingMicrophoneIntent(recordingSession);
       const message = startError instanceof Error ? startError.message : 'Microphone unavailable';
       failActiveRecording(message, recordingSession, { discardDraft: true });
     }

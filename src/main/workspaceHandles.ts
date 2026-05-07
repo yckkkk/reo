@@ -16,6 +16,12 @@ interface WorkspaceHandleEntry {
   readonly lock: WorkspaceHandleLock;
 }
 
+interface RequiredWorkspaceHandle {
+  readonly canonicalRoot: string;
+  readonly workspaceId: string;
+  readonly assertUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
+}
+
 export interface CreateWorkspaceHandleStoreOptions {
   readonly createHandle?: () => string;
 }
@@ -37,11 +43,17 @@ export interface WorkspaceHandleStore {
   }):
     | {
         readonly ok: true;
-        readonly handle: {
-          readonly canonicalRoot: string;
-          readonly workspaceId: string;
-          readonly assertUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
-        };
+        readonly handle: RequiredWorkspaceHandle;
+      }
+    | WorkspaceErrorEnvelope;
+  requireOwnedHandle(options: {
+    readonly workspaceHandle: string;
+    readonly sender: TrustedSenderIdentity;
+    readonly workspaceId?: string;
+  }):
+    | {
+        readonly ok: true;
+        readonly handle: RequiredWorkspaceHandle;
       }
     | WorkspaceErrorEnvelope;
   closeHandle(options: {
@@ -78,6 +90,44 @@ export function createWorkspaceHandleStore({
 }: CreateWorkspaceHandleStoreOptions = {}): WorkspaceHandleStore {
   const handles = new Map<string, WorkspaceHandleEntry>();
 
+  function requireOwnedHandle({
+    workspaceHandle,
+    sender,
+    workspaceId,
+  }: {
+    readonly workspaceHandle: string;
+    readonly sender: TrustedSenderIdentity;
+    readonly workspaceId?: string;
+  }):
+    | {
+        readonly ok: true;
+        readonly handle: RequiredWorkspaceHandle;
+      }
+    | WorkspaceErrorEnvelope {
+    const entry = handles.get(workspaceHandle);
+    if (!entry) {
+      return workspaceError('ERR_WORKSPACE_HANDLE_NOT_FOUND', 'Workspace handle not found');
+    }
+    if (!sameSender(entry.sender, sender)) {
+      return workspaceError('ERR_WORKSPACE_HANDLE_UNTRUSTED', 'Workspace handle sender mismatch');
+    }
+    if (workspaceId !== undefined && workspaceId !== entry.workspaceId) {
+      return workspaceError(
+        'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+        'Workspace handle workspace mismatch'
+      );
+    }
+
+    return {
+      ok: true,
+      handle: {
+        canonicalRoot: entry.canonicalRoot,
+        workspaceId: entry.workspaceId,
+        assertUsable: () => assertLockUsable(entry.lock),
+      },
+    };
+  }
+
   return {
     register({ canonicalRoot, workspaceId, sender, lock }) {
       const workspaceHandle = createHandle();
@@ -90,33 +140,19 @@ export function createWorkspaceHandleStore({
       return { workspaceHandle, workspaceId };
     },
 
-    requireHandle({ workspaceHandle, sender, workspaceId }) {
-      const entry = handles.get(workspaceHandle);
-      if (!entry) {
-        return workspaceError('ERR_WORKSPACE_HANDLE_NOT_FOUND', 'Workspace handle not found');
+    requireOwnedHandle,
+
+    requireHandle(options) {
+      const required = requireOwnedHandle(options);
+      if (!required.ok) {
+        return required;
       }
-      if (!sameSender(entry.sender, sender)) {
-        return workspaceError('ERR_WORKSPACE_HANDLE_UNTRUSTED', 'Workspace handle sender mismatch');
-      }
-      if (workspaceId !== undefined && workspaceId !== entry.workspaceId) {
-        return workspaceError(
-          'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-          'Workspace handle workspace mismatch'
-        );
-      }
-      const usable = assertLockUsable(entry.lock);
+
+      const usable = required.handle.assertUsable();
       if (!usable.ok) {
         return usable;
       }
-
-      return {
-        ok: true,
-        handle: {
-          canonicalRoot: entry.canonicalRoot,
-          workspaceId: entry.workspaceId,
-          assertUsable: () => assertLockUsable(entry.lock),
-        },
-      };
+      return required;
     },
 
     async closeHandle({ workspaceHandle, sender }) {

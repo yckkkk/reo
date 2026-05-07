@@ -44,6 +44,21 @@ type WorkspaceMemorySummary = {
   readonly hasReflections: boolean;
 };
 
+type WorkspaceMemoryDetail = {
+  readonly memoryId: string;
+  readonly title: string;
+  readonly sourceKind: 'recording';
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly recordingIds: ReadonlyArray<string>;
+  readonly recordings: ReadonlyArray<{
+    readonly recordingId: string;
+    readonly title: string;
+    readonly durationMs: number;
+    readonly audioByteLength: number;
+  }>;
+};
+
 type WorkspaceRecordingSummary = {
   readonly recordingId: string;
   readonly title: string;
@@ -118,6 +133,9 @@ type ReoWorkspaceBridge = {
   readonly discardRecordingDraft: (
     payload: RecordingHandleRequest
   ) => Promise<WorkspaceResponse<{ readonly discarded: true }>>;
+  readonly getMemoryDetail: (
+    payload: WorkspaceHandleRequest & { readonly memoryId: string }
+  ) => Promise<WorkspaceResponse<WorkspaceMemoryDetail>>;
   readonly getRecordingDetail: (
     payload: RecordingHandleRequest
   ) => Promise<WorkspaceResponse<unknown>>;
@@ -140,6 +158,12 @@ type ReoWorkspaceBridge = {
   readonly saveReflections: (
     payload: RecordingHandleRequest & { readonly markdown: string }
   ) => Promise<WorkspaceResponse<{ readonly saved: true }>>;
+  readonly beginMicrophoneIntent: (
+    payload: WorkspaceHandleRequest & { readonly drawerSessionId: string }
+  ) => Promise<WorkspaceResponse<{ readonly registered: true }>>;
+  readonly clearMicrophoneIntent: (
+    payload: WorkspaceHandleRequest & { readonly drawerSessionId: string }
+  ) => Promise<WorkspaceResponse<{ readonly cleared: true }>>;
 };
 
 declare global {
