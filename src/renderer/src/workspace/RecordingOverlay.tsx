@@ -29,6 +29,7 @@ import {
   transitionRecordingState,
   type RecordingState,
 } from './recordingMachine';
+import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 type FinalizedRecording = Extract<
   Awaited<ReturnType<typeof finalizeRecordingDraft>>,
@@ -52,21 +53,21 @@ const AUTOSAVE_DELAY_MS = 300;
 const PLAYBACK_CHUNK_CONCURRENCY = 4;
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return unknownErrorDisplayMessage(error, fallback);
 }
 
 function titleForRecording(workspaceTitle: string) {
-  return `${workspaceTitle} recording`;
+  return `${workspaceTitle} 录音`;
 }
 
 const RECORDING_STATUS_TEXT = {
-  'acquiring-permission': 'Preparing microphone access.',
-  editing: 'Recording saved. Edit the draft before closing.',
-  failed: 'Recording did not save.',
-  finalizing: 'Saving local audio.',
-  idle: 'Ready to record local audio.',
-  paused: 'Recording paused.',
-  recording: 'Recording local audio.',
+  'acquiring-permission': '正在准备麦克风权限。',
+  editing: '录音已保存。关闭前可以编辑草稿。',
+  failed: '录音没有保存。',
+  finalizing: '正在保存本地音频。',
+  idle: '可以开始录制本地音频。',
+  paused: '录音已暂停。',
+  recording: '正在录制本地音频。',
 } satisfies Record<RecordingState['status'], string>;
 
 function statusTextFor(state: RecordingState): string {
@@ -141,7 +142,7 @@ export function RecordingOverlay({
           lastSavedTranscriptRef.current = transcriptDraft;
           setError(null);
         } else {
-          setError(response.error.message);
+          setError(workspaceErrorDisplayMessage(response.error, '无法保存转写。'));
         }
       });
     }, AUTOSAVE_DELAY_MS);
@@ -169,7 +170,7 @@ export function RecordingOverlay({
           lastSavedReflectionsRef.current = reflectionsDraft;
           setError(null);
         } else {
-          setError(response.error.message);
+          setError(workspaceErrorDisplayMessage(response.error, '无法保存反思。'));
         }
       });
     }, AUTOSAVE_DELAY_MS);
@@ -317,17 +318,17 @@ export function RecordingOverlay({
           return;
         }
         if (!response.ok) {
-          appendFailureRef.current = response.error.message;
-          failActiveRecording(response.error.message, recordingSession, { discardDraft: true });
-          throw new Error(response.error.message);
+          const message = workspaceErrorDisplayMessage(response.error, '音频写入失败。');
+          appendFailureRef.current = message;
+          failActiveRecording(message, recordingSession, { discardDraft: true });
+          throw new Error(message);
         }
         sequenceRef.current = response.value.nextSequence;
       } catch (appendError) {
         if (recordingSessionRef.current !== recordingSession) {
           return;
         }
-        const message =
-          appendFailureRef.current ?? errorMessage(appendError, 'Audio append failed');
+        const message = appendFailureRef.current ?? errorMessage(appendError, '音频写入失败。');
         appendFailureRef.current = message;
         failActiveRecording(message, recordingSession, { discardDraft: true });
         throw appendError;
@@ -362,7 +363,10 @@ export function RecordingOverlay({
       workspaceHandle: workspaceSession.workspaceHandle,
     });
     if (!microphoneIntent.ok) {
-      failActiveRecording(microphoneIntent.error.message, recordingSession);
+      failActiveRecording(
+        workspaceErrorDisplayMessage(microphoneIntent.error, '无法使用麦克风。'),
+        recordingSession
+      );
       return;
     }
     if (recordingSessionRef.current !== recordingSession) {
@@ -383,7 +387,10 @@ export function RecordingOverlay({
     });
     if (!draft.ok) {
       clearPendingMicrophoneIntent(recordingSession);
-      failActiveRecording(draft.error.message, recordingSession);
+      failActiveRecording(
+        workspaceErrorDisplayMessage(draft.error, '无法创建录音。'),
+        recordingSession
+      );
       return;
     }
 
@@ -404,7 +411,11 @@ export function RecordingOverlay({
       const controller = await activeMediaAdapter.start({
         onChunk: (chunk) => appendChunk(nextRecordingId, recordingSession, chunk),
         onError: (message) => {
-          failActiveRecording(message, recordingSession, { discardDraft: true });
+          failActiveRecording(
+            workspaceErrorDisplayMessage({ message }, '无法使用麦克风。'),
+            recordingSession,
+            { discardDraft: true }
+          );
         },
         onStop: () => {},
       });
@@ -421,7 +432,7 @@ export function RecordingOverlay({
       );
     } catch (startError) {
       clearPendingMicrophoneIntent(recordingSession);
-      const message = startError instanceof Error ? startError.message : 'Microphone unavailable';
+      const message = errorMessage(startError, '无法使用麦克风。');
       failActiveRecording(message, recordingSession, { discardDraft: true });
     }
   }
@@ -456,8 +467,7 @@ export function RecordingOverlay({
       await controller.stop();
       await appendQueueRef.current;
     } catch (stopError) {
-      const message =
-        appendFailureRef.current ?? errorMessage(stopError, 'Recording audio could not be saved');
+      const message = appendFailureRef.current ?? errorMessage(stopError, '录音音频无法保存。');
       failActiveRecording(message, recordingSession, { discardDraft: true });
       return;
     }
@@ -478,12 +488,15 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
       });
     } catch (finalizeError) {
-      const message = errorMessage(finalizeError, 'Recording draft could not be finalized');
+      const message = errorMessage(finalizeError, '录音草稿无法完成保存。');
       failActiveRecording(message, recordingSession);
       return;
     }
     if (!finalized.ok) {
-      failActiveRecording(finalized.error.message, recordingSession);
+      failActiveRecording(
+        workspaceErrorDisplayMessage(finalized.error, '无法完成录音保存。'),
+        recordingSession
+      );
       return;
     }
 
@@ -522,7 +535,7 @@ export function RecordingOverlay({
       return;
     }
     if (!manifest.ok) {
-      setError(manifest.error.message);
+      setError(workspaceErrorDisplayMessage(manifest.error, '无法加载录音音频。'));
       return;
     }
 
@@ -555,7 +568,7 @@ export function RecordingOverlay({
         }
         if (!response.ok) {
           playbackFailed = true;
-          throw new Error(response.error.message);
+          throw new Error(workspaceErrorDisplayMessage(response.error, '无法加载录音音频。'));
         }
         if (playbackSessionRef.current !== playbackSession) {
           return;
@@ -572,7 +585,7 @@ export function RecordingOverlay({
       if (playbackSessionRef.current !== playbackSession) {
         return;
       }
-      setError(errorMessage(playbackError, 'Recording audio could not be loaded'));
+      setError(errorMessage(playbackError, '无法加载录音音频。'));
       return;
     }
 
@@ -614,7 +627,7 @@ export function RecordingOverlay({
 
   return (
     <RecordAudioDrawer
-      description="Record local audio, then edit the local transcript and reflections draft."
+      description="录制本地音频，然后编辑本地转写和反思草稿。"
       closeBlocked={!canClose}
       error={error}
       footer={
@@ -624,17 +637,17 @@ export function RecordingOverlay({
           disabled={!canClose}
           onClick={() => handleOpenChange(false)}
         >
-          Close recording panel
+          关闭录音面板
         </Button>
       }
       onOpenChange={handleOpenChange}
       open={open}
-      title={isEditing ? 'Edit recording' : 'Recording'}
+      title={isEditing ? '编辑录音' : '录音'}
     >
       {!isEditing ? (
         <div className="flex flex-col gap-16">
           <p className="text-body leading-body text-gravel">
-            {statusText} Elapsed: {elapsedSeconds}s.
+            {statusText} 已录制：{elapsedSeconds} 秒。
           </p>
           <RecordingWaveform state={state} />
           <RecordingControls

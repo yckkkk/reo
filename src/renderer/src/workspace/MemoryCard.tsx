@@ -21,7 +21,7 @@ export function MemoryCard({ memory, onOpenMemory }: MemoryCardProps) {
     <article className="relative rounded-cards border border-chalk bg-card-white px-20 py-20 text-left shadow-subtle transition-colors hover:border-slate focus-within:ring-2 focus-within:ring-signal-blue focus-within:ring-offset-2 focus-within:ring-offset-eggshell">
       <button
         type="button"
-        aria-label={`Open ${memory.title}`}
+        aria-label={`打开 ${memory.title}`}
         className="absolute inset-0 z-10 rounded-cards focus-visible:outline-none"
         onClick={() => onOpenMemory(memory.memoryId)}
       />
@@ -35,13 +35,13 @@ export function MemoryCard({ memory, onOpenMemory }: MemoryCardProps) {
       <dl className="mt-20 grid grid-cols-2 gap-12">
         <div>
           <dt className="font-waldenburgfh text-caption font-bold uppercase leading-caption text-slate">
-            Recordings
+            录音
           </dt>
           <dd className="mt-4 text-body leading-body text-gravel">{memory.recordingCountLabel}</dd>
         </div>
         <div>
           <dt className="font-waldenburgfh text-caption font-bold uppercase leading-caption text-slate">
-            Duration
+            时长
           </dt>
           <dd className="mt-4 text-body leading-body text-gravel">{memory.durationLabel}</dd>
         </div>
@@ -51,12 +51,12 @@ export function MemoryCard({ memory, onOpenMemory }: MemoryCardProps) {
         <div className="mt-16 flex flex-wrap gap-8">
           {memory.hasTranscript ? (
             <span className="rounded-tags border border-chalk bg-eggshell px-12 py-4 text-body leading-body text-gravel">
-              Transcript
+              转写
             </span>
           ) : null}
           {memory.hasReflections ? (
             <span className="rounded-tags border border-chalk bg-eggshell px-12 py-4 text-body leading-body text-gravel">
-              Reflections
+              反思
             </span>
           ) : null}
         </div>

@@ -18,35 +18,35 @@ export function RecordingControls({
   state,
 }: RecordingControlsProps) {
   if (state.status === 'idle') {
-    return <VoiceButton label="Start recording" onClick={onStart} state="idle" />;
+    return <VoiceButton label="开始录音" onClick={onStart} state="idle" />;
   }
 
   if (state.status === 'failed') {
-    return <VoiceButton label="Try again" onClick={onStart} />;
+    return <VoiceButton label="重试" onClick={onStart} />;
   }
 
   if (state.status === 'acquiring-permission') {
-    return <VoiceButton disabled label="Preparing microphone" state="processing" />;
+    return <VoiceButton disabled label="正在准备麦克风" state="processing" />;
   }
 
   if (state.status === 'finalizing') {
-    return <VoiceButton disabled label="Saving recording" state="processing" />;
+    return <VoiceButton disabled label="正在保存录音" state="processing" />;
   }
 
   return (
     <div className="flex flex-wrap gap-12">
       {state.status === 'recording' ? (
         <Button type="button" variant="secondary" onClick={onPause}>
-          Pause recording
+          暂停录音
         </Button>
       ) : null}
       {state.status === 'paused' ? (
         <Button type="button" variant="secondary" onClick={onResume}>
-          Resume recording
+          继续录音
         </Button>
       ) : null}
       {state.status === 'recording' || state.status === 'paused' ? (
-        <VoiceButton label="Stop recording" onClick={onStop} state="recording" />
+        <VoiceButton label="停止录音" onClick={onStop} state="recording" />
       ) : null}
     </div>
   );

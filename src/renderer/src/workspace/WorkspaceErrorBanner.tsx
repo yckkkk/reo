@@ -6,7 +6,7 @@ type WorkspaceErrorBannerProps = {
 
 export function WorkspaceErrorBanner({ children }: WorkspaceErrorBannerProps) {
   return (
-    <p className="text-body leading-body text-ember" role="alert">
+    <p className="text-ui-xs leading-ui-xs text-ember" role="alert">
       {children}
     </p>
   );

@@ -30,8 +30,8 @@ type MemoryMonthSection = {
 
 function createMemoryView(memory: WorkspaceMemory): MemoryView {
   const createdAt = new Date(memory.createdAt);
-  const month = format(createdAt, 'MMMM yyyy');
-  const createdDateLabel = format(createdAt, 'MMM d, yyyy');
+  const month = format(createdAt, 'yyyy年M月');
+  const createdDateLabel = format(createdAt, 'yyyy年M月d日');
 
   return {
     createdAt: memory.createdAt,
@@ -42,13 +42,13 @@ function createMemoryView(memory: WorkspaceMemory): MemoryView {
     hasTranscript: memory.hasTranscript,
     memoryId: memory.memoryId,
     month,
-    recordingCountLabel: countLabel(memory.recordingCount, 'recording', 'recordings'),
+    recordingCountLabel: countLabel(memory.recordingCount, '段录音'),
     searchText: [
       memory.title,
       month,
       createdDateLabel,
-      memory.hasTranscript ? 'Transcript' : '',
-      memory.hasReflections ? 'Reflections' : '',
+      memory.hasTranscript ? '转写' : '',
+      memory.hasReflections ? '反思' : '',
     ]
       .join(' ')
       .toLowerCase(),
@@ -70,7 +70,7 @@ function groupMemoryViews(memories: readonly MemoryView[]): MemoryMonthSection[]
   }
 
   return sections.map((section) => ({
-    countLabel: countLabel(section.memories.length, 'memory', 'memories'),
+    countLabel: countLabel(section.memories.length, '条记忆'),
     memories: section.memories,
     month: section.month,
   }));
@@ -110,7 +110,7 @@ export function WorkspaceHome({
               {snapshot.title}
             </p>
             <h1 className="mt-8 font-waldenburg text-display font-light leading-display tracking-display text-obsidian">
-              All memories
+              全部记忆
             </h1>
             {snapshot.description ? (
               <p className="mt-12 break-words text-body-lg leading-body-lg text-gravel">
@@ -119,7 +119,7 @@ export function WorkspaceHome({
             ) : null}
           </div>
           <Button type="button" onClick={onStartRecording}>
-            Record memory
+            记录记忆
           </Button>
         </header>
 
@@ -127,32 +127,30 @@ export function WorkspaceHome({
 
         <section className="flex flex-col gap-24" aria-labelledby="memories-list-title">
           <h2 id="memories-list-title" className="sr-only">
-            Saved memories
+            已保存的记忆
           </h2>
           <div className="flex flex-col gap-16 sm:flex-row sm:items-center sm:justify-between">
             <div className="w-full sm:max-w-[420px]">
               <Input
-                aria-label="Search memories"
-                placeholder="Search memories"
+                aria-label="搜索记忆"
+                placeholder="搜索记忆"
                 type="search"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
             </div>
             <p className="text-body leading-body text-gravel">
-              {countLabel(visibleMemories.length, 'memory', 'memories')}
+              {countLabel(visibleMemories.length, '条记忆')}
             </p>
           </div>
 
           {monthSections.length === 0 ? (
             <div className="rounded-cards border border-chalk bg-card-white px-24 py-32 shadow-subtle">
               <p className="text-body-lg leading-body-lg text-obsidian">
-                {isSearching ? 'No matching memories.' : 'No memories yet.'}
+                {isSearching ? '没有匹配的记忆。' : '还没有记忆。'}
               </p>
               <p className="mt-8 text-body leading-body text-gravel">
-                {isSearching
-                  ? 'Clear search to return to this workspace.'
-                  : 'Recorded memories appear here after they are saved.'}
+                {isSearching ? '清空搜索即可返回此工作区。' : '保存后的记忆会显示在这里。'}
               </p>
             </div>
           ) : (

@@ -5,6 +5,7 @@ import {
   type WorkspaceSession,
   type WorkspaceSnapshot,
 } from './workspaceApi';
+import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 export function workspaceSnapshotQueryKey({
   workspaceId,
@@ -53,7 +54,7 @@ export function memoryDetailQueryOptions({
       const result = await getMemoryDetail({ workspaceHandle, memoryId });
 
       if (!result.ok) {
-        throw new Error(result.error.message);
+        throw new Error(workspaceErrorDisplayMessage(result.error, '无法打开这条记忆。'));
       }
 
       return result.value;

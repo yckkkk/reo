@@ -60,16 +60,16 @@ describe('MemoryDetailPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
-    expect(screen.getByText('April 12, 2026')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Record memory' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Voice recordings' })).toBeInTheDocument();
+    expect(screen.getByText('2026年4月12日')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '继续记录' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '语音录音' })).toBeInTheDocument();
     expect(screen.getByText('Birthday_summary_01')).toBeInTheDocument();
-    expect(screen.getByText('2 min 15 sec')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Transcript' })).toBeInTheDocument();
-    expect(screen.getByText('Transcript saved.')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Reflections' })).toBeInTheDocument();
-    expect(screen.getByText('No reflections saved.')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Memory content' })).toBeInTheDocument();
+    expect(screen.getByText('2 分 15 秒')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '转写' })).toBeInTheDocument();
+    expect(screen.getByText('已保存转写。')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '反思' })).toBeInTheDocument();
+    expect(screen.getByText('还没有保存反思。')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '记忆内容' })).toBeInTheDocument();
     expect(reoWorkspace.getMemoryDetail).toHaveBeenCalledWith({
       workspaceHandle: 'workspace-handle-secret',
       memoryId: 'mem_birthday',

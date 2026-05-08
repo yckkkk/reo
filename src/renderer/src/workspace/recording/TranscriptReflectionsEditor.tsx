@@ -22,13 +22,13 @@ export function TranscriptReflectionsEditor({
       <div className="grid gap-16 md:grid-cols-2">
         <DraftField
           id="recording-transcript"
-          label="Transcript"
+          label="转写"
           value={transcript}
           onChange={onTranscriptChange}
         />
         <DraftField
           id="recording-reflections"
-          label="Reflections"
+          label="反思"
           value={reflections}
           onChange={onReflectionsChange}
         />
@@ -47,20 +47,18 @@ function TranscriptDraftPreview({ value }: TranscriptDraftPreviewProps) {
 
   return (
     <section
-      aria-label="Transcript preview"
+      aria-label="转写预览"
       className="rounded-cards border border-chalk bg-card-white px-16 py-16"
     >
-      <h3 className="mb-8 text-body-lg font-medium leading-body-lg text-obsidian">
-        Transcript preview
-      </h3>
+      <h3 className="mb-8 text-body-lg font-medium leading-body-lg text-obsidian">转写预览</h3>
       {preview.trim().length > 0 ? (
         <p className="whitespace-pre-wrap text-body leading-body text-cinder">{preview}</p>
       ) : (
-        <p className="text-body leading-body text-gravel">Transcript draft is empty.</p>
+        <p className="text-body leading-body text-gravel">转写草稿为空。</p>
       )}
       {truncated ? (
         <p className="mt-8 text-caption leading-caption text-gravel">
-          Preview shows the first {TRANSCRIPT_PREVIEW_LIMIT} characters.
+          预览仅显示前 {TRANSCRIPT_PREVIEW_LIMIT} 个字符。
         </p>
       ) : null}
     </section>

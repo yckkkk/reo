@@ -22,7 +22,7 @@ const workspaceSession: WorkspaceSession = {
 describe('forbidden first-slice capabilities', () => {
   it('does not show future media, AI, auth, or global search capabilities', () => {
     render(
-      <AppShell themeMode="light" onToggleTheme={() => {}} onNewMemory={() => {}}>
+      <AppShell themeMode="light" onHome={() => {}} onToggleTheme={() => {}} onNewMemory={() => {}}>
         <WorkspaceHome
           workspaceSession={workspaceSession}
           onOpenMemory={() => {}}

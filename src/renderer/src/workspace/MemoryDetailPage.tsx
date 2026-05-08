@@ -29,7 +29,7 @@ export function MemoryDetailPage({
   if (memoryQuery.isPending) {
     return (
       <section className="min-h-full px-24 py-32 text-obsidian sm:px-48 sm:py-48">
-        <p className="text-body-lg leading-body-lg text-gravel">Loading memory.</p>
+        <p className="text-body-lg leading-body-lg text-gravel">正在加载记忆。</p>
       </section>
     );
   }
@@ -39,15 +39,15 @@ export function MemoryDetailPage({
       <section className="min-h-full px-24 py-32 text-obsidian sm:px-48 sm:py-48">
         <Button type="button" variant="secondary" onClick={onBack}>
           <ArrowLeft className="size-16" aria-hidden="true" />
-          Back
+          返回
         </Button>
-        <p className="mt-24 text-body-lg leading-body-lg text-gravel">Memory unavailable.</p>
+        <p className="mt-24 text-body-lg leading-body-lg text-gravel">无法打开这条记忆。</p>
       </section>
     );
   }
 
   const memory = memoryQuery.data;
-  const createdDateLabel = format(new Date(memory.createdAt), 'MMMM d, yyyy');
+  const createdDateLabel = format(new Date(memory.createdAt), 'yyyy年M月d日');
 
   return (
     <section className="min-h-full px-24 py-32 text-obsidian sm:px-48 sm:py-48">
@@ -55,7 +55,7 @@ export function MemoryDetailPage({
         <header className="grid gap-24">
           <Button type="button" variant="secondary" className="justify-self-start" onClick={onBack}>
             <ArrowLeft className="size-16" aria-hidden="true" />
-            Back
+            返回
           </Button>
 
           <div className="mx-auto flex max-w-[760px] flex-col items-center text-center">
@@ -71,7 +71,7 @@ export function MemoryDetailPage({
             <div className="mt-28 flex flex-wrap items-center justify-center gap-12">
               <Button type="button" onClick={onRecordMemory}>
                 <Mic2 className="size-16" aria-hidden="true" />
-                Record memory
+                继续记录
               </Button>
             </div>
           </div>
@@ -79,11 +79,11 @@ export function MemoryDetailPage({
 
         <MemoryDetailSection
           id="voice-recordings"
-          title="Voice recordings"
-          meta={countLabel(memory.recordingCount, 'recording', 'recordings')}
+          title="语音录音"
+          meta={countLabel(memory.recordingCount, '段录音')}
         >
           {memory.recordings.length === 0 ? (
-            <p className="text-body-lg leading-body-lg text-gravel">No recordings saved.</p>
+            <p className="text-body-lg leading-body-lg text-gravel">还没有保存录音。</p>
           ) : (
             <div className="grid gap-16 lg:grid-cols-2">
               {memory.recordings.map((recording) => (
@@ -97,7 +97,7 @@ export function MemoryDetailPage({
                   <dl className="mt-20 grid grid-cols-2 gap-12">
                     <div>
                       <dt className="font-waldenburgfh text-caption font-bold uppercase leading-caption text-slate">
-                        Duration
+                        时长
                       </dt>
                       <dd className="mt-4 text-body leading-body text-gravel">
                         {durationLabel(recording.durationMs)}
@@ -105,7 +105,7 @@ export function MemoryDetailPage({
                     </div>
                     <div>
                       <dt className="font-waldenburgfh text-caption font-bold uppercase leading-caption text-slate">
-                        Audio
+                        音频
                       </dt>
                       <dd className="mt-4 text-body leading-body text-gravel">
                         {byteLengthLabel(recording.audioByteLength)}
@@ -118,24 +118,24 @@ export function MemoryDetailPage({
           )}
           {memory.recordingsTruncated ? (
             <p className="text-body leading-body text-gravel">
-              Showing first {memory.recordings.length} recordings.
+              已显示前 {memory.recordings.length} 段录音。
             </p>
           ) : null}
         </MemoryDetailSection>
 
         <div className="grid gap-16 lg:grid-cols-3">
-          <MemoryDetailSection id="transcript" title="Transcript">
+          <MemoryDetailSection id="transcript" title="转写">
             <p className="text-body leading-body text-gravel">
-              {memory.hasTranscript ? 'Transcript saved.' : 'No transcript saved.'}
+              {memory.hasTranscript ? '已保存转写。' : '还没有保存转写。'}
             </p>
           </MemoryDetailSection>
-          <MemoryDetailSection id="reflections" title="Reflections">
+          <MemoryDetailSection id="reflections" title="反思">
             <p className="text-body leading-body text-gravel">
-              {memory.hasReflections ? 'Reflections saved.' : 'No reflections saved.'}
+              {memory.hasReflections ? '已保存反思。' : '还没有保存反思。'}
             </p>
           </MemoryDetailSection>
-          <MemoryDetailSection id="memory-content" title="Memory content">
-            <p className="text-body leading-body text-gravel">Saved memory content appears here.</p>
+          <MemoryDetailSection id="memory-content" title="记忆内容">
+            <p className="text-body leading-body text-gravel">保存后的记忆内容会显示在这里。</p>
           </MemoryDetailSection>
         </div>
       </div>

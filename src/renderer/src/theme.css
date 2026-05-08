@@ -29,6 +29,12 @@
   /* Typography - Scale */
   --text-caption: 10px;
   --leading-caption: 1.2;
+  --text-ui-xs: 11px;
+  --leading-ui-xs: 1.35;
+  --text-ui-sm: 12px;
+  --leading-ui-sm: 1.4;
+  --text-ui-md: 13px;
+  --leading-ui-md: 1.43;
   --text-body: 14px;
   --leading-body: 1.43;
   --text-body-lg: 16px;
@@ -71,9 +77,16 @@
   --spacing-72: 72px;
   --spacing-96: 96px;
   --spacing-160: 160px;
+  --spacing-titlebar: 48px;
+  --spacing-titlebar-control-left: 80px;
+  --spacing-titlebar-control-top: 2px;
+  --spacing-sidebar-content-top: 56px;
 
   /* Layout */
   --container-page: 1200px;
+  --container-form: 720px;
+  --field-label-min-width: 120px;
+  --field-label-max-width: 160px;
 
   /* Border Radius */
   --radius-md: 4px;
@@ -87,10 +100,10 @@
   --radius-tags: 9999px;
   --radius-cards: 16px;
   --radius-badges: 12px;
-  --radius-inputs: 0px;
+  --radius-inputs: 8px;
   --radius-modals: 24px;
   --radius-panels: 20px;
-  --radius-buttons: 9999px;
+  --radius-buttons: 8px;
 
   /* Shadows */
   --shadow-subtle: rgba(0, 0, 0, 0.075) 0px 0px 0px 0.5px inset;
@@ -135,6 +148,12 @@
     rgb(47, 64, 210) 359.255deg
   );
   --page-max-width: 1200px;
+  --form-max-width: 720px;
+  --field-label-min-width: 120px;
+  --field-label-max-width: 160px;
+  --spacing-titlebar: 48px;
+  --spacing-titlebar-control-left: 80px;
+  --spacing-titlebar-control-top: 2px;
   --section-gap-min: 80px;
   --section-gap-max: 120px;
   --card-padding-min: 16px;

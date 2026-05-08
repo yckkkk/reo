@@ -56,6 +56,22 @@ const recitalMemory = {
 };
 
 describe('WorkspaceHome', () => {
+  it('uses Chinese interface copy for the workspace home surface', () => {
+    render(
+      <WorkspaceHome
+        workspaceSession={workspaceSession()}
+        onOpenMemory={vi.fn()}
+        onStartRecording={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: '搜索记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '记录记忆' })).toBeInTheDocument();
+    expect(screen.getByText('还没有记忆。')).toBeInTheDocument();
+    expect(screen.queryByText('All memories')).not.toBeInTheDocument();
+  });
+
   it('filters the loaded workspace snapshot locally by title, date, month, and status', async () => {
     const user = userEvent.setup();
 
@@ -67,32 +83,32 @@ describe('WorkspaceHome', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: 'All memories' })).toBeInTheDocument();
-    const search = screen.getByRole('searchbox', { name: 'Search memories' });
+    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: '搜索记忆' });
 
     await user.type(search, 'birthday');
     expect(screen.getByText('My seventh birthday')).toBeInTheDocument();
     expect(screen.queryByText('Morning note')).not.toBeInTheDocument();
 
     await user.clear(search);
-    await user.type(search, 'April 2026');
+    await user.type(search, '2026年4月');
     expect(screen.getByText('Morning note')).toBeInTheDocument();
     expect(screen.queryByText('My seventh birthday')).not.toBeInTheDocument();
 
     await user.clear(search);
-    await user.type(search, 'May 6, 2026');
+    await user.type(search, '2026年5月6日');
     expect(screen.getByText('My seventh birthday')).toBeInTheDocument();
     expect(screen.queryByText('Morning note')).not.toBeInTheDocument();
 
     await user.clear(search);
-    await user.type(search, 'Reflections');
+    await user.type(search, '反思');
     expect(screen.getByText('Morning note')).toBeInTheDocument();
     expect(screen.queryByText('My seventh birthday')).not.toBeInTheDocument();
 
     await user.clear(search);
     await user.type(search, 'not in this workspace');
-    expect(screen.getByText('No matching memories.')).toBeInTheDocument();
-    expect(screen.getByText('Clear search to return to this workspace.')).toBeInTheDocument();
+    expect(screen.getByText('没有匹配的记忆。')).toBeInTheDocument();
+    expect(screen.getByText('清空搜索即可返回此工作区。')).toBeInTheDocument();
     expect(screen.queryByText(/global search/i)).not.toBeInTheDocument();
   });
 
@@ -107,20 +123,20 @@ describe('WorkspaceHome', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: 'May 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'April 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026年5月' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2026年4月' })).toBeInTheDocument();
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
-    ).toEqual(['Saved memories', 'May 2026', 'April 2026']);
+    ).toEqual(['已保存的记忆', '2026年5月', '2026年4月']);
     expect(
-      within(screen.getByRole('region', { name: 'May 2026' }))
+      within(screen.getByRole('region', { name: '2026年5月' }))
         .getAllByRole('heading', { level: 3 })
         .map((heading) => heading.textContent)
     ).toEqual(['My seventh birthday', 'School recital']);
-    expect(screen.getByText('2 recordings')).toBeInTheDocument();
-    expect(screen.getByText('2 min 5 sec')).toBeInTheDocument();
-    expect(screen.getByText('Transcript')).toBeInTheDocument();
-    expect(screen.getByText('Reflections')).toBeInTheDocument();
+    expect(screen.getByText('2 段录音')).toBeInTheDocument();
+    expect(screen.getByText('2 分 5 秒')).toBeInTheDocument();
+    expect(screen.getByText('转写')).toBeInTheDocument();
+    expect(screen.getByText('反思')).toBeInTheDocument();
     expect(screen.queryByText(/photos|videos|films|files|global search/i)).not.toBeInTheDocument();
   });
 
@@ -136,7 +152,7 @@ describe('WorkspaceHome', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: 'Open My seventh birthday' }));
+    await user.click(screen.getByRole('button', { name: '打开 My seventh birthday' }));
 
     expect(onOpenMemory).toHaveBeenCalledWith('mem_birthday');
   });
@@ -153,15 +169,13 @@ describe('WorkspaceHome', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: 'All memories' })).toBeInTheDocument();
-    expect(screen.getByText('No memories yet.')).toBeInTheDocument();
-    expect(
-      screen.getByText('Recorded memories appear here after they are saved.')
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByText('还没有记忆。')).toBeInTheDocument();
+    expect(screen.getByText('保存后的记忆会显示在这里。')).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-secret')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Record memory' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: '记录记忆' })).toHaveLength(1);
 
-    await user.click(screen.getByRole('button', { name: 'Record memory' }));
+    await user.click(screen.getByRole('button', { name: '记录记忆' }));
     expect(onStartRecording).toHaveBeenCalledTimes(1);
   });
 });

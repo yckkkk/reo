@@ -11,14 +11,10 @@ function RecordingPlaybackComponent({ onLoad, playbackUrl }: RecordingPlaybackPr
   return (
     <div className="flex flex-col gap-12">
       {playbackUrl ? (
-        <AudioPlayer
-          description="Stored as a local recording file."
-          src={playbackUrl}
-          title="Local recording"
-        />
+        <AudioPlayer description="已保存为本地录音文件。" src={playbackUrl} title="本地录音" />
       ) : (
         <Button type="button" variant="secondary" onClick={onLoad}>
-          Load recording
+          加载录音
         </Button>
       )}
     </div>

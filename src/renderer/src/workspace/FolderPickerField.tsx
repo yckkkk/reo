@@ -53,26 +53,26 @@ export function FolderPickerField({
   }
 
   return (
-    <section className="flex flex-col gap-12" aria-label="Workspace folder">
-      <div className="flex flex-col gap-12 sm:flex-row sm:items-center">
+    <div className="flex min-w-0 flex-col gap-8">
+      <div className="flex min-w-0 items-center gap-8">
+        <div
+          className="min-h-32 min-w-0 flex-1 truncate rounded-inputs border border-transparent px-12 py-8 text-ui-sm font-medium leading-ui-sm text-cinder"
+          aria-label="已选择文件夹"
+        >
+          {displayPath || '未选择文件夹'}
+        </div>
         <Button
           ref={buttonRef}
           type="button"
-          variant="default"
+          variant="secondary"
+          size="compact"
           disabled={disabled || selecting}
           onClick={handleChooseFolder}
         >
-          {selecting ? 'Choosing folder' : 'Choose folder'}
+          {selecting ? '选择中' : '浏览'}
         </Button>
-        {displayPath ? (
-          <p className="text-body leading-body text-cinder" aria-label="Selected folder">
-            {displayPath}
-          </p>
-        ) : (
-          <p className="text-body leading-body text-gravel">No folder selected.</p>
-        )}
       </div>
       {error ? <WorkspaceErrorBanner>{error}</WorkspaceErrorBanner> : null}
-    </section>
+    </div>
   );
 }

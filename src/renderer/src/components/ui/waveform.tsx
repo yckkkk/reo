@@ -82,7 +82,7 @@ export function Waveform({
   return (
     <div
       aria-hidden={decorative}
-      aria-label={decorative ? undefined : 'Audio waveform'}
+      aria-label={decorative ? undefined : '音频波形'}
       className={cn('relative overflow-hidden', className)}
       ref={containerRef}
       role={decorative ? undefined : 'img'}

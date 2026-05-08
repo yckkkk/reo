@@ -3,8 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import {
+  FieldControl,
+  FieldError,
+  FieldGroup,
+  FieldHint,
+  FieldLabel,
+  FieldRow,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FolderPickerField } from './FolderPickerField';
 import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
@@ -13,9 +20,10 @@ import {
   workspaceFolderErrorMessage,
 } from './workspaceFolderSelection';
 import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from './workspaceApi';
+import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 const createWorkspaceSchema = z.object({
-  title: z.string().trim().min(1, 'Workspace title is required'),
+  title: z.string().trim().min(1, '请输入工作区名称'),
   description: z.string(),
   selectionToken: z.string().trim().min(1, workspaceFolderErrorMessage),
   displayPath: z
@@ -35,11 +43,7 @@ type CreateWorkspaceFormProps = {
 };
 
 function workspaceErrorMessage(error: WorkspaceError) {
-  if (error.code === 'ERR_WORKSPACE_AGENTS_CONFLICT') {
-    return 'This folder already contains AGENTS.md. Choose an empty folder for a Reo workspace.';
-  }
-
-  return error.message;
+  return workspaceErrorDisplayMessage(error, '无法创建工作区。');
 }
 
 export function CreateWorkspaceForm({
@@ -109,56 +113,74 @@ export function CreateWorkspaceForm({
   });
 
   return (
-    <form className="flex flex-col gap-24" aria-label="Workspace details" onSubmit={submit}>
-      <div className="flex flex-col gap-16">
-        <div className="flex flex-col gap-8">
-          <Label htmlFor="workspace-title">Workspace title</Label>
-          <Input
-            id="workspace-title"
-            {...titleRegistration}
-            ref={(element) => {
-              titleRegistration.ref(element);
-              titleInputRef.current = element;
-            }}
-            type="text"
-            disabled={disabled}
-            aria-invalid={Boolean(errors.title)}
-          />
-        </div>
-        {errors.title ? (
-          <p className="text-body leading-body text-ember">{errors.title.message}</p>
-        ) : null}
-
-        <div className="flex flex-col gap-8">
-          <Label htmlFor="workspace-description">Description</Label>
-          <Textarea
-            id="workspace-description"
-            className="min-h-96"
-            disabled={disabled}
-            {...register('description')}
-          />
-        </div>
-      </div>
-
-      <FolderPickerField
-        disabled={disabled}
-        displayPath={displayPath}
-        error={errors.selectionToken?.message}
-        onCancel={() => setSubmitError(null)}
-        onError={handleFolderError}
-        onSelection={(selection) => {
-          setSubmitError(null);
-          clearErrors(['selectionToken', 'displayPath']);
-          setValue('selectionToken', selection.selectionToken, { shouldValidate: true });
-          setValue('displayPath', selection.displayPath, { shouldValidate: true });
-        }}
-      />
+    <form className="flex flex-col gap-24" aria-label="创建本地工作区" onSubmit={submit}>
+      <FieldGroup aria-label="工作区设置">
+        <FieldRow>
+          <div>
+            <FieldLabel htmlFor="workspace-title">工作区名称</FieldLabel>
+            <FieldHint>给新工作区起一个名字</FieldHint>
+          </div>
+          <FieldControl>
+            <Input
+              id="workspace-title"
+              size="compact"
+              placeholder="工作区名称"
+              {...titleRegistration}
+              ref={(element) => {
+                titleRegistration.ref(element);
+                titleInputRef.current = element;
+              }}
+              type="text"
+              disabled={disabled}
+              aria-invalid={Boolean(errors.title)}
+            />
+            {errors.title ? <FieldError>{errors.title.message}</FieldError> : null}
+          </FieldControl>
+        </FieldRow>
+        <FieldRow>
+          <div>
+            <FieldLabel htmlFor="workspace-description">描述</FieldLabel>
+            <FieldHint>补充这个工作区的用途，可选</FieldHint>
+          </div>
+          <FieldControl>
+            <Textarea
+              id="workspace-description"
+              placeholder="例如：产品研究资料"
+              disabled={disabled}
+              {...register('description')}
+            />
+          </FieldControl>
+        </FieldRow>
+        <FieldRow>
+          <div>
+            <FieldLabel>工作区位置</FieldLabel>
+            <FieldHint>新工作区将存放于</FieldHint>
+          </div>
+          <FieldControl>
+            <FolderPickerField
+              disabled={disabled}
+              displayPath={displayPath}
+              error={errors.selectionToken?.message}
+              onCancel={() => setSubmitError(null)}
+              onError={handleFolderError}
+              onSelection={(selection) => {
+                setSubmitError(null);
+                clearErrors(['selectionToken', 'displayPath']);
+                setValue('selectionToken', selection.selectionToken, { shouldValidate: true });
+                setValue('displayPath', selection.displayPath, { shouldValidate: true });
+              }}
+            />
+          </FieldControl>
+        </FieldRow>
+      </FieldGroup>
 
       {submitError ? <WorkspaceErrorBanner>{submitError}</WorkspaceErrorBanner> : null}
 
-      <Button type="submit" disabled={disabled || isSubmitting}>
-        {isSubmitting ? 'Creating workspace' : 'Create workspace'}
-      </Button>
+      <div className="flex justify-end">
+        <Button type="submit" size="compact" disabled={disabled || isSubmitting}>
+          {isSubmitting ? '创建中' : '创建'}
+        </Button>
+      </div>
     </form>
   );
 }

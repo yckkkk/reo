@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-body font-bold leading-body outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-card-white disabled:opacity-100',
+  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-ui-md font-medium leading-ui-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-card-white disabled:opacity-100',
   {
     defaultVariants: {
       size: 'default',
@@ -12,8 +12,8 @@ const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: 'min-h-48 px-24',
-        compact: 'min-h-40 px-16',
+        default: 'min-h-40 px-16',
+        compact: 'min-h-32 px-12 text-ui-sm leading-ui-sm',
         icon: 'size-32 p-0',
         iconMedium: 'size-40 p-0',
         iconLarge: 'size-56 p-0',

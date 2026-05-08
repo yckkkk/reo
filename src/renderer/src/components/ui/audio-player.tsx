@@ -65,7 +65,7 @@ export function AudioPlayer({ className, description, src, title }: AudioPlayerP
       </div>
       <div className="flex items-center gap-12">
         <Button
-          aria-label={playing ? 'Pause local recording' : 'Play local recording'}
+          aria-label={playing ? '暂停本地录音' : '播放本地录音'}
           size="iconMedium"
           type="button"
           variant="secondary"
@@ -88,7 +88,7 @@ export function AudioPlayer({ className, description, src, title }: AudioPlayerP
             <SliderPrimitive.Range className="absolute h-full bg-signal-blue" />
           </SliderPrimitive.Track>
           <SliderPrimitive.Thumb
-            aria-label="Recording position"
+            aria-label="录音位置"
             className="block size-12 rounded-full border border-chalk bg-card-white shadow-subtle outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
           />
         </SliderPrimitive.Root>

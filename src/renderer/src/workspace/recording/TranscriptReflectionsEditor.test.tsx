@@ -16,13 +16,11 @@ describe('TranscriptReflectionsEditor', () => {
       />
     );
 
-    expect(screen.getByRole('region', { name: 'Transcript preview' })).toHaveTextContent(
-      'What I said.'
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Transcript' }), {
+    expect(screen.getByRole('region', { name: '转写预览' })).toHaveTextContent('What I said.');
+    fireEvent.change(screen.getByRole('textbox', { name: '转写' }), {
       target: { value: 'Edited transcript' },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Reflections' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '反思' }), {
       target: { value: 'Edited reflection' },
     });
 
@@ -41,8 +39,8 @@ describe('TranscriptReflectionsEditor', () => {
       />
     );
 
-    const preview = screen.getByRole('region', { name: 'Transcript preview' });
-    expect(preview).toHaveTextContent('Preview shows the first 1200 characters.');
+    const preview = screen.getByRole('region', { name: '转写预览' });
+    expect(preview).toHaveTextContent('预览仅显示前 1200 个字符。');
     expect(within(preview).queryByText(/tail/)).not.toBeInTheDocument();
   });
 
@@ -56,6 +54,6 @@ describe('TranscriptReflectionsEditor', () => {
       />
     );
 
-    expect(screen.getByText('Transcript draft is empty.')).toBeInTheDocument();
+    expect(screen.getByText('转写草稿为空。')).toBeInTheDocument();
   });
 });

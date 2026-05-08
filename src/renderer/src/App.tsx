@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { AppShell, type ThemeMode } from './app-shell/AppShell';
 import { MemoryDetailPage } from './workspace/MemoryDetailPage';
 import { RecordingOverlay, type RecordingTarget } from './workspace/RecordingOverlay';
-import { WorkspaceEntryDialog } from './workspace/WorkspaceEntryDialog';
+import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
-import type { WorkspaceSession } from './workspace/workspaceApi';
+import { openWorkspace, type WorkspaceSession } from './workspace/workspaceApi';
+import { workspaceErrorDisplayMessage } from './workspace/workspaceErrorMessages';
+import { chooseSafeWorkspaceFolder } from './workspace/workspaceFolderSelection';
 import { memoryDetailQueryKey, seedWorkspaceSnapshot } from './workspace/workspaceQueries';
 
 type FinalizedRecording = {
@@ -48,7 +50,9 @@ export function mergeFinalizedRecordingIntoSession(
 export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
-  const [workspaceEntryOpen, setWorkspaceEntryOpen] = useState(false);
+  const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
+  const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
+  const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ name: 'home' });
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
@@ -70,19 +74,119 @@ export function App() {
   function handleWorkspaceReady(nextWorkspaceSession: WorkspaceSession) {
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
     setWorkspaceView({ name: 'home' });
+    setWorkspaceCreateOpen(false);
+    setWorkspaceEntryError(null);
+    setWorkspaceActionPending(false);
     setWorkspaceSession(nextWorkspaceSession);
   }
+
+  function beginWorkspaceAction() {
+    if (workspaceActionPending) {
+      return false;
+    }
+
+    setWorkspaceActionPending(true);
+    return true;
+  }
+
+  function finishWorkspaceAction() {
+    setWorkspaceActionPending(false);
+  }
+
+  function openWorkspaceCreateDialog() {
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(true);
+  }
+
+  function handleWorkspaceCreateOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+
+    setWorkspaceCreateOpen(nextOpen);
+    if (!nextOpen) {
+      setWorkspaceEntryError(null);
+    }
+  }
+
+  function selectWorkspaceFromSidebar(workspaceId: string) {
+    if (!workspaceSession || workspaceSession.workspaceId !== workspaceId) {
+      return;
+    }
+
+    handleWorkspaceCreateOpenChange(false);
+    setWorkspaceView({ name: 'home' });
+  }
+
+  async function handleOpenLocalWorkspace() {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    try {
+      const selectionResult = await chooseSafeWorkspaceFolder();
+
+      if (selectionResult.status === 'canceled') {
+        return;
+      }
+
+      if (selectionResult.status === 'error') {
+        setWorkspaceEntryError(selectionResult.message);
+        return;
+      }
+
+      const response = await openWorkspace({
+        selectionToken: selectionResult.selection.selectionToken,
+      });
+
+      if (!response.ok) {
+        setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, '无法打开工作区。'));
+        return;
+      }
+
+      handleWorkspaceReady(response.value);
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  const workspaceProjects = workspaceSession
+    ? [
+        {
+          title: workspaceSession.snapshot.title,
+          workspaceId: workspaceSession.workspaceId,
+        },
+      ]
+    : [];
 
   if (!workspaceSession) {
     return (
       <>
-        <AppShell themeMode={themeMode} onToggleTheme={toggleTheme}>
-          <WorkspaceStarterHome onCreateWorkspace={() => setWorkspaceEntryOpen(true)} />
+        <AppShell
+          themeMode={themeMode}
+          workspaceProjects={workspaceProjects}
+          onCreateWorkspace={openWorkspaceCreateDialog}
+          onHome={() => {
+            handleWorkspaceCreateOpenChange(false);
+            setWorkspaceView({ name: 'home' });
+          }}
+          onToggleTheme={toggleTheme}
+          onOpenLocalWorkspace={() => {
+            void handleOpenLocalWorkspace();
+          }}
+          onSelectWorkspace={selectWorkspaceFromSidebar}
+        >
+          <WorkspaceStarterHome />
         </AppShell>
-        <WorkspaceEntryDialog
-          onOpenChange={setWorkspaceEntryOpen}
+        <WorkspaceCreateDialog
+          disabled={workspaceActionPending}
+          error={workspaceEntryError}
+          onCreateFinish={finishWorkspaceAction}
+          onCreateStart={beginWorkspaceAction}
+          onOpenChange={handleWorkspaceCreateOpenChange}
           onWorkspaceReady={handleWorkspaceReady}
-          open={workspaceEntryOpen}
+          open={workspaceCreateOpen}
         />
       </>
     );
@@ -114,8 +218,19 @@ export function App() {
   return (
     <>
       <AppShell
+        activeWorkspaceId={activeWorkspaceSession.workspaceId}
         themeMode={themeMode}
+        workspaceProjects={workspaceProjects}
+        onCreateWorkspace={openWorkspaceCreateDialog}
+        onHome={() => {
+          handleWorkspaceCreateOpenChange(false);
+          setWorkspaceView({ name: 'home' });
+        }}
         onToggleTheme={toggleTheme}
+        onOpenLocalWorkspace={() => {
+          void handleOpenLocalWorkspace();
+        }}
+        onSelectWorkspace={selectWorkspaceFromSidebar}
         onNewMemory={() => openRecording({ kind: 'new-memory' })}
       >
         {workspaceView.name === 'home' ? (
@@ -145,6 +260,15 @@ export function App() {
           workspaceSession={activeWorkspaceSession}
         />
       ) : null}
+      <WorkspaceCreateDialog
+        disabled={workspaceActionPending}
+        error={workspaceEntryError}
+        onCreateFinish={finishWorkspaceAction}
+        onCreateStart={beginWorkspaceAction}
+        onOpenChange={handleWorkspaceCreateOpenChange}
+        onWorkspaceReady={handleWorkspaceReady}
+        open={workspaceCreateOpen}
+      />
     </>
   );
 }

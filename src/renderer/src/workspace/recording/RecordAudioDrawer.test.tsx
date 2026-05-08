@@ -12,21 +12,21 @@ describe('RecordAudioDrawer', () => {
     render(
       <RecordAudioDrawer
         closeBlocked
-        description="Record local audio."
+        description="录制本地音频。"
         error={null}
-        footer={<Button type="button">Close recording panel</Button>}
+        footer={<Button type="button">关闭录音面板</Button>}
         onOpenChange={onOpenChange}
         open
-        title="Record memory"
+        title="记录记忆"
       >
-        <p>Recording</p>
+        <p>录音</p>
       </RecordAudioDrawer>
     );
 
-    expect(screen.getByRole('dialog', { name: 'Record memory' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '记录记忆' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
 
-    expect(screen.getByText('Recording')).toBeInTheDocument();
+    expect(screen.getByText('录音')).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
@@ -34,41 +34,41 @@ describe('RecordAudioDrawer', () => {
     render(
       <RecordAudioDrawer
         closeBlocked={false}
-        description="Record local audio."
+        description="录制本地音频。"
         error={null}
         footer={
           <Button type="button" variant="secondary">
-            Close recording panel
+            关闭录音面板
           </Button>
         }
         onOpenChange={vi.fn()}
         open
-        title="Record memory"
+        title="记录记忆"
       >
-        <Button type="button">Start recording</Button>
+        <Button type="button">开始录音</Button>
       </RecordAudioDrawer>
     );
 
-    expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Close recording panel' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '开始录音' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭录音面板' })).toBeEnabled();
   });
 
   it('renders errors without agent runtime copy', () => {
     render(
       <RecordAudioDrawer
         closeBlocked={false}
-        description="Record local audio."
-        error="Microphone unavailable"
-        footer={<Button type="button">Close recording panel</Button>}
+        description="录制本地音频。"
+        error="无法使用麦克风"
+        footer={<Button type="button">关闭录音面板</Button>}
         onOpenChange={vi.fn()}
         open
-        title="Record memory"
+        title="记录记忆"
       >
-        <p>Local audio only</p>
+        <p>仅使用本地音频</p>
       </RecordAudioDrawer>
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Microphone unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('无法使用麦克风');
     expect(screen.queryByText(/agent|cloud|api key|model/i)).not.toBeInTheDocument();
   });
 });

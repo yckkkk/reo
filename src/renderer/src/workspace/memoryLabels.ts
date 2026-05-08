@@ -1,5 +1,5 @@
-export function countLabel(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
+export function countLabel(count: number, unit: string) {
+  return `${count} ${unit}`;
 }
 
 export function durationLabel(durationMs: number) {
@@ -8,19 +8,19 @@ export function durationLabel(durationMs: number) {
   const remainingSeconds = seconds % 60;
 
   if (minutes === 0) {
-    return `${seconds} sec`;
+    return `${seconds} 秒`;
   }
 
   if (remainingSeconds === 0) {
-    return `${minutes} min`;
+    return `${minutes} 分钟`;
   }
 
-  return `${minutes} min ${remainingSeconds} sec`;
+  return `${minutes} 分 ${remainingSeconds} 秒`;
 }
 
 export function byteLengthLabel(byteLength: number) {
   if (byteLength < 1024) {
-    return `${byteLength} B`;
+    return `${byteLength} 字节`;
   }
 
   if (byteLength < 1024 * 1024) {

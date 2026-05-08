@@ -13,6 +13,7 @@
 
 然后只读取与改动范围匹配的 current 真源：
 
+- 产品定位、路线图、核心体验：`current/product.md`、`current/roadmap.md`
 - Electron surface：`current/electron.md`
 - 数据与状态归属：`current/data.md`
 - 流程与时序：`current/flow.md`
@@ -26,6 +27,7 @@ docs/
   archive/     已收口任务记录
   current/     当前实现与设计真源
     design-system/ 当前设计系统源文件
+    wireframes/ 当前产品结构线框图
   decisions/   长期架构决策
   initiatives/ 跨 session 长期任务
   specs/       当前任务工作区

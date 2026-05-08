@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateWorkspaceForm } from './CreateWorkspaceForm';
-import { WorkspaceEntryDialog } from './WorkspaceEntryDialog';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -50,18 +49,18 @@ describe('CreateWorkspaceForm', () => {
     );
   }
 
-  function renderWorkspaceEntryDialog() {
-    render(<WorkspaceEntryDialog open onOpenChange={vi.fn()} onWorkspaceReady={vi.fn()} />);
-  }
-
-  it('starts with title, description, folder picker, submit, and title focus', () => {
+  it('starts with Chinese compact fields, folder picker, submit, and title focus', () => {
     renderCreateWorkspaceForm();
 
-    expect(screen.getByRole('form', { name: 'Workspace details' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Workspace title')).toHaveFocus();
-    expect(screen.getByLabelText('Description')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Choose folder' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create workspace' })).toBeEnabled();
+    expect(screen.getByRole('form', { name: '创建本地工作区' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '创建本地工作区' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('工作区名称')).toHaveFocus();
+    expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('描述')).toHaveClass('min-h-72', 'rounded-inputs', 'text-ui-sm');
+    expect(screen.getByText('补充这个工作区的用途，可选')).toHaveClass('text-ui-xs');
+    expect(screen.getByText('给新工作区起一个名字')).toHaveClass('text-ui-xs');
+    expect(screen.getByRole('button', { name: '浏览' })).toHaveClass('min-h-32');
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
   });
 
   it('keeps form values and returns focus to the folder picker after OS dialog cancel', async () => {
@@ -70,16 +69,12 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
-    await user.type(screen.getByLabelText('Description'), 'Private notes');
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
 
-    expect(screen.getByLabelText('Workspace title')).toHaveValue('Daily memory');
-    expect(screen.getByLabelText('Description')).toHaveValue('Private notes');
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Choose folder' })).toHaveFocus()
-    );
-    expect(screen.getByRole('button', { name: 'Create workspace' })).toBeEnabled();
+    expect(screen.getByLabelText('工作区名称')).toHaveValue('Daily memory');
+    await waitFor(() => expect(screen.getByRole('button', { name: '浏览' })).toHaveFocus());
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
   });
 
   it('ignores repeated folder picker clicks while the OS dialog is pending', async () => {
@@ -89,7 +84,7 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.dblClick(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.dblClick(screen.getByRole('button', { name: '浏览' }));
 
     expect(reoWorkspace.chooseDirectory).toHaveBeenCalledTimes(1);
 
@@ -117,15 +112,15 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm(onWorkspaceReady);
 
-    await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
-    await user.type(screen.getByLabelText('Description'), 'Private notes');
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('描述'), 'Private notes');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('already contains AGENTS.md');
-    expect(screen.getByLabelText('Workspace title')).toHaveValue('Daily memory');
-    expect(screen.getByLabelText('Description')).toHaveValue('Private notes');
+    expect(await screen.findByRole('alert')).toHaveTextContent('AGENTS.md');
+    expect(screen.getByLabelText('工作区名称')).toHaveValue('Daily memory');
+    expect(screen.getByLabelText('描述')).toHaveValue('Private notes');
     expect(screen.queryByText('Memory')).not.toBeInTheDocument();
     expect(onWorkspaceReady).not.toHaveBeenCalled();
   });
@@ -150,45 +145,27 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('Workspace title'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByRole('alert');
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Choose a workspace folder')).toBeInTheDocument();
+    expect(await screen.findByText('请选择工作区文件夹')).toBeInTheDocument();
   });
 
   it('validates on submit instead of trapping users in a disabled button', async () => {
     const user = userEvent.setup();
 
-    renderWorkspaceEntryDialog();
+    renderCreateWorkspaceForm();
 
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByText('Workspace title is required')).toBeInTheDocument();
-    expect(screen.getByText('Choose a workspace folder')).toBeInTheDocument();
-    expect(screen.getByLabelText('Workspace title')).toHaveFocus();
-  });
-
-  it('keeps create draft values while opening an existing workspace', async () => {
-    const user = userEvent.setup();
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'canceled',
-      },
-    });
-
-    renderWorkspaceEntryDialog();
-
-    await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
-    await user.click(screen.getByRole('button', { name: 'Open workspace' }));
-
-    expect(screen.getByDisplayValue('Family memories')).toBeInTheDocument();
-    expect(screen.queryByText(/already contains AGENTS.md/i)).not.toBeInTheDocument();
+    expect(await screen.findByText('请输入工作区名称')).toBeInTheDocument();
+    expect(screen.getByText('请选择工作区文件夹')).toBeInTheDocument();
+    expect(screen.getByLabelText('工作区名称')).toHaveFocus();
   });
 
   it('submits the folder selection token instead of a raw filesystem path', async () => {
@@ -216,17 +193,18 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    renderWorkspaceEntryDialog();
+    renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.type(screen.getByLabelText('工作区名称'), 'Family memories');
+    await user.type(screen.getByLabelText('描述'), 'Private notes for family');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memories');
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledWith({
       selectionToken: 'folder_token_1',
       title: 'Family memories',
-      description: '',
+      description: 'Private notes for family',
     });
     expect(reoWorkspace.initializeWorkspace).not.toHaveBeenCalledWith(
       expect.objectContaining({ displayPath: expect.any(String) })
@@ -234,49 +212,6 @@ describe('CreateWorkspaceForm', () => {
     expect(reoWorkspace.initializeWorkspace).not.toHaveBeenCalledWith(
       expect.objectContaining({ folderPath: expect.any(String) })
     );
-  });
-
-  it('shows open errors separately from the create form draft', async () => {
-    const user = userEvent.setup();
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'folder_token_2',
-        displayPath: 'Existing workspace',
-      },
-    });
-    reoWorkspace.openWorkspace.mockResolvedValue({
-      ok: false,
-      error: {
-        code: 'ERR_WORKSPACE_LOCKED',
-        message: 'Workspace is already open in another Reo window',
-      },
-    });
-
-    renderWorkspaceEntryDialog();
-
-    await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
-    await user.click(screen.getByRole('button', { name: 'Open workspace' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('already open');
-    expect(screen.getByDisplayValue('Family memories')).toBeInTheDocument();
-    expect(screen.queryByText(/already contains AGENTS.md/i)).not.toBeInTheDocument();
-    expect(reoWorkspace.openWorkspace).toHaveBeenCalledWith({ selectionToken: 'folder_token_2' });
-  });
-
-  it('ignores repeated open clicks while the OS dialog is pending', async () => {
-    const user = userEvent.setup();
-    const selection = deferred<Awaited<ReturnType<(typeof reoWorkspace)['chooseDirectory']>>>();
-    reoWorkspace.chooseDirectory.mockReturnValue(selection.promise);
-
-    renderWorkspaceEntryDialog();
-
-    await user.dblClick(screen.getByRole('button', { name: 'Open workspace' }));
-
-    expect(reoWorkspace.chooseDirectory).toHaveBeenCalledTimes(1);
-
-    selection.resolve({ ok: true, value: { status: 'canceled' } });
   });
 
   it('rejects folder display names that contain path separators', async () => {
@@ -290,67 +225,11 @@ describe('CreateWorkspaceForm', () => {
       },
     });
 
-    renderWorkspaceEntryDialog();
+    renderCreateWorkspaceForm();
 
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
+    await user.click(screen.getByRole('button', { name: '浏览' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a workspace folder');
+    expect(await screen.findByRole('alert')).toHaveTextContent('请选择工作区文件夹');
     expect(screen.queryByText('/Users/yck/Memories')).not.toBeInTheDocument();
-  });
-
-  it('locks open and close while create is submitting', async () => {
-    const user = userEvent.setup();
-    const response = deferred<Awaited<ReturnType<(typeof reoWorkspace)['initializeWorkspace']>>>();
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'folder_token_4',
-        displayPath: 'Memories',
-      },
-    });
-    reoWorkspace.initializeWorkspace.mockReturnValue(response.promise);
-
-    renderWorkspaceEntryDialog();
-
-    await user.type(screen.getByLabelText('Workspace title'), 'Family memories');
-    await user.click(screen.getByRole('button', { name: 'Choose folder' }));
-    await screen.findByText('Memories');
-    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
-
-    expect(screen.getByRole('button', { name: 'Open workspace' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-
-    response.resolve({
-      ok: false,
-      error: {
-        code: 'ERR_WORKSPACE_AGENTS_CONFLICT',
-        message: 'Folder already contains AGENTS.md',
-      },
-    });
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('already contains AGENTS.md');
-    expect(screen.getByRole('button', { name: 'Open workspace' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
-  });
-
-  it('locks create and close while open is choosing a folder', async () => {
-    const user = userEvent.setup();
-    const selection = deferred<Awaited<ReturnType<(typeof reoWorkspace)['chooseDirectory']>>>();
-    reoWorkspace.chooseDirectory.mockReturnValue(selection.promise);
-
-    renderWorkspaceEntryDialog();
-
-    await user.click(screen.getByRole('button', { name: 'Open workspace' }));
-
-    expect(screen.getByRole('button', { name: 'Create workspace' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-
-    selection.resolve({ ok: true, value: { status: 'canceled' } });
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Create workspace' })).toBeEnabled()
-    );
-    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
   });
 });

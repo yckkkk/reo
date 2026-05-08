@@ -204,8 +204,8 @@ describe('MediaRecorder adapter', () => {
       onStop: () => {},
     });
 
-    await expect(controller.stop()).rejects.toThrow('Microphone recording failed');
-    expect(onError).toHaveBeenCalledWith('Microphone recording failed');
+    await expect(controller.stop()).rejects.toThrow('麦克风录音失败。');
+    expect(onError).toHaveBeenCalledWith('麦克风录音失败。');
     expect(track.stop).toHaveBeenCalledTimes(1);
   });
 

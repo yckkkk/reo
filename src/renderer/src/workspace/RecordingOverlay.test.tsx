@@ -84,7 +84,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           hasTranscript: false,
           memoryId: 'mem_1',
           recordingCount: 1,
-          title: 'Daily memory recording',
+          title: 'Daily memory 录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
         recording: {
@@ -92,7 +92,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           durationMs: 0,
           memoryId: 'mem_1',
           recordingId: 'rec_1',
-          title: 'Daily memory recording',
+          title: 'Daily memory 录音',
         },
       },
     })),
@@ -184,26 +184,26 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Audio waveform')).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
+    expect(screen.getByLabelText('音频波形')).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
     expect(window.reoWorkspace.appendRecordingAudioChunk).toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expect(screen.getByText(/已录制：1 秒/)).toBeInTheDocument();
     expectNoMockTranscript();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expect(screen.getByText(/已录制：1 秒/)).toBeInTheDocument();
     expectNoMockTranscript();
     expect(media.controller.pause).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Resume recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续录音' }));
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Elapsed: 2s/)).toBeInTheDocument();
+    expect(screen.getByText(/已录制：2 秒/)).toBeInTheDocument();
     expectNoMockTranscript();
     expect(media.controller.resume).toHaveBeenCalledTimes(1);
   });
@@ -225,18 +225,18 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     append.resolve({ ok: true, value: { nextSequence: 1 } });
     await flushPromises();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('heading', { name: 'Edit recording' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '编辑录音' })).toBeInTheDocument();
   });
 
   it('passes the elapsed recording duration to finalize', async () => {
@@ -253,18 +253,18 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
     act(() => vi.advanceTimersByTime(2000));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 2000,
       recordingId: 'rec_1',
-      title: 'Daily memory recording',
+      title: 'Daily memory 录音',
       workspaceHandle: 'workspace-handle-secret',
     });
   });
@@ -284,11 +284,11 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith(
@@ -314,18 +314,18 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
     act(() => vi.advanceTimersByTime(750));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 750,
       recordingId: 'rec_1',
-      title: 'Daily memory recording',
+      title: 'Daily memory 录音',
       workspaceHandle: 'workspace-handle-secret',
     });
   });
@@ -352,17 +352,17 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
 
-    expect(screen.getByText(/Preparing microphone access/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Stop recording' })).not.toBeInTheDocument();
+    expect(screen.getByText(/正在准备麦克风权限/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '停止录音' })).not.toBeInTheDocument();
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
 
     start.resolve(controller);
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Stop recording' })).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '停止录音' })).toBeInTheDocument();
   });
 
   it('opens a microphone intent before media acquisition starts', async () => {
@@ -404,7 +404,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
 
     expect(order).toEqual(['begin-intent', 'create-draft', 'media-start']);
@@ -436,13 +436,13 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
 
     expect(media.adapter.start).not.toHaveBeenCalled();
     expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
     expect(bridge.discardRecordingDraft).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Microphone intent already active');
+    expect(screen.getByRole('alert')).toHaveTextContent('麦克风正在被另一个录音流程使用。');
   });
 
   it('clears microphone intent when draft creation fails after intent registration', async () => {
@@ -464,7 +464,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
 
     expect(media.adapter.start).not.toHaveBeenCalled();
@@ -472,7 +472,7 @@ describe('RecordingOverlay', () => {
       drawerSessionId: 'recording-1',
       workspaceHandle: 'workspace-handle-secret',
     });
-    expect(screen.getByRole('alert')).toHaveTextContent('Workspace lock was lost');
+    expect(screen.getByRole('alert')).toHaveTextContent('工作区锁已失效。');
   });
 
   it('clears microphone intent when begin resolves after unmount', async () => {
@@ -493,7 +493,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     unmount();
     begin.resolve({ ok: true, value: { registered: true } });
@@ -525,7 +525,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     unmount();
 
@@ -565,7 +565,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     unmount();
 
@@ -611,7 +611,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     rerender(
       <RecordingOverlayForTest
@@ -657,15 +657,15 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Append failed');
-    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('录音片段顺序不正确。');
+    expect(screen.getByText(/录音没有保存/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
   });
 
@@ -687,15 +687,15 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     act(() => media.emitChunk(new Uint8Array([1])));
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Append rejected');
-    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('音频写入失败。');
+    expect(screen.getByText(/录音没有保存/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
   });
 
@@ -713,9 +713,9 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    const staleStop = screen.getByRole('button', { name: 'Stop recording' });
+    const staleStop = screen.getByRole('button', { name: '停止录音' });
     act(() => media.emitError('Microphone failed', 0));
     fireEvent.click(staleStop);
     await flushPromises();
@@ -725,7 +725,7 @@ describe('RecordingOverlay', () => {
       recordingId: 'rec_1',
       workspaceHandle: 'workspace-handle-secret',
     });
-    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
+    expect(screen.getByText(/录音没有保存/)).toBeInTheDocument();
   });
 
   it('discards the draft when media acquisition fails after draft creation', async () => {
@@ -746,7 +746,7 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
 
     expect(bridge.discardRecordingDraft).toHaveBeenCalledWith({
@@ -758,7 +758,7 @@ describe('RecordingOverlay', () => {
       workspaceHandle: 'workspace-handle-secret',
     });
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Microphone unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('无法使用麦克风。');
   });
 
   it('cleans up a failed recorder before retry and ignores stale chunks', async () => {
@@ -786,20 +786,20 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText(/Elapsed: 1s/)).toBeInTheDocument();
+    expect(screen.getByText(/已录制：1 秒/)).toBeInTheDocument();
     expectNoMockTranscript();
     act(() => media.emitError('Microphone failed', 0));
     await flushPromises();
-    expect(screen.getByText(/Recording did not save/)).toBeInTheDocument();
+    expect(screen.getByText(/录音没有保存/)).toBeInTheDocument();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     expectNoMockTranscript();
     act(() => media.emitChunk(new Uint8Array([1]), 0));
     act(() => media.emitChunk(new Uint8Array([2]), 1));
@@ -839,21 +839,21 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    const staleStop = screen.getByRole('button', { name: 'Stop recording' });
+    const staleStop = screen.getByRole('button', { name: '停止录音' });
     act(() => media.emitError('Microphone failed', 0));
     await flushPromises();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
     fireEvent.click(staleStop);
     await flushPromises();
 
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(media.controller.stop).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
   });
 
   it('keeps transcript draft when autosave fails', async () => {
@@ -875,19 +875,19 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    const transcript = screen.getByRole('textbox', { name: 'Transcript' });
+    const transcript = screen.getByRole('textbox', { name: '转写' });
     expect(transcript).toHaveValue('');
 
     fireEvent.change(transcript, { target: { value: 'Edited local transcript' } });
     act(() => vi.advanceTimersByTime(500));
     await flushPromises();
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
+    expect(screen.getByRole('alert')).toHaveTextContent('找不到这段录音。');
     expect(bridge.saveTranscript).toHaveBeenCalledWith({
       markdown: 'Edited local transcript',
       memoryId: 'mem_1',
@@ -911,11 +911,11 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Reflections' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '反思' }), {
       target: { value: 'Local reflection' },
     });
     act(() => vi.advanceTimersByTime(500));
@@ -947,17 +947,17 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Transcript' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '转写' }), {
       target: { value: 'Edited local transcript' },
     });
     act(() => vi.advanceTimersByTime(500));
     await flushPromises();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     rerender(
       <RecordingOverlayForTest
         mediaAdapter={media.adapter}
@@ -983,7 +983,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(screen.getByText(/Ready to record local audio/)).toBeInTheDocument();
+    expect(screen.getByText(/可以开始录制本地音频/)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -1002,12 +1002,12 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    expect(screen.getByText(/Recording local audio/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    expect(screen.getByText(/正在录制本地音频/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
 
     const manifestCallOrder = vi.mocked(bridge.readRecordingAudioManifest).mock
@@ -1053,20 +1053,20 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Transcript' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '转写' }), {
       target: { value: 'Edited local transcript' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
 
-    expect(screen.getByRole('region', { name: 'Transcript preview' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: '转写预览' })).toHaveTextContent(
       'Edited local transcript'
     );
-    expect(screen.getByRole('region', { name: 'Local recording' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '本地录音' })).toBeInTheDocument();
     expect(screen.getByTestId('audio-player-audio')).toHaveAttribute('src', 'blob:recording');
   });
 
@@ -1086,15 +1086,15 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
     expect(screen.getByTestId('audio-player-audio')).toHaveAttribute('src', 'blob:recording');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     await flushPromises();
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -1116,13 +1116,13 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    expect(screen.getByRole('heading', { name: 'Edit recording' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '编辑录音' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     await flushPromises();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     rerender(
@@ -1144,10 +1144,10 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: 'Recording' })).toBeInTheDocument();
-    expect(screen.getByText(/Ready to record local audio/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Transcript' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '录音' })).toBeInTheDocument();
+    expect(screen.getByText(/可以开始录制本地音频/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始录音' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '转写' })).not.toBeInTheDocument();
   });
 
   it('does not create a Blob URL when playback finishes after closing the recording panel', async () => {
@@ -1169,13 +1169,13 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     pending.resolve({ ok: true, value: { chunk: new Uint8Array([1, 2, 3]) } });
     await flushPromises();
 
@@ -1204,13 +1204,13 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     pending.resolve({
       error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Manifest failed' },
       ok: false,
@@ -1240,11 +1240,11 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
     unmount();
     pending.resolve({ ok: true, value: { chunk: new Uint8Array([1, 2, 3]) } });
@@ -1282,11 +1282,11 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
 
     expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
@@ -1331,15 +1331,15 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
     expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close recording panel' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭录音面板' }));
     act(() => pending.shift()?.());
     await flushPromises();
 
@@ -1370,11 +1370,11 @@ describe('RecordingOverlay', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
     await flushPromises();
     expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
 
@@ -1388,7 +1388,7 @@ describe('RecordingOverlay', () => {
     act(() => pending.shift()?.({ ok: true, value: { chunk: new Uint8Array([1]) } }));
     await flushPromises();
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Chunk failed');
+    expect(screen.getByRole('alert')).toHaveTextContent('找不到这段录音。');
     expect(bridge.readRecordingAudioChunk).toHaveBeenCalledTimes(4);
   });
 });

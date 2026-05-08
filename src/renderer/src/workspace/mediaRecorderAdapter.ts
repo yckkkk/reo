@@ -46,7 +46,7 @@ export function createBrowserMediaRecorderAdapter({
       let stopPromise: Promise<void> | null = null;
 
       function failRecording() {
-        recordingFailure ??= new Error('Microphone recording failed');
+        recordingFailure ??= new Error('麦克风录音失败。');
         onError(recordingFailure.message);
         return recordingFailure;
       }

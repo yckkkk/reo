@@ -8,17 +8,17 @@ describe('RecordingPlayback', () => {
 
     render(<RecordingPlayback playbackUrl={null} onLoad={onLoad} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load recording' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载录音' }));
 
     expect(onLoad).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('region', { name: 'Local recording' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '本地录音' })).not.toBeInTheDocument();
   });
 
   it('renders only the local playback surface when audio is loaded', () => {
     render(<RecordingPlayback playbackUrl="blob:recording" onLoad={() => {}} />);
 
-    expect(screen.queryByRole('button', { name: 'Load recording' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Local recording' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '加载录音' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '本地录音' })).toBeInTheDocument();
     expect(screen.getByTestId('audio-player-audio')).toHaveAttribute('src', 'blob:recording');
   });
 });
