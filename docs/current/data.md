@@ -5,11 +5,12 @@
 ## 当前事实
 
 - 当前没有 database schema。
-- 当前 durable data contract 是 workspace folder 文件。
+- 当前 durable data contract 是 workspace folder 文件和 main-owned workspace project registry。
 - 当前没有 Drizzle config。
 - 当前没有 Better Auth tables。
 - 当前没有 auth session persistence owner。
 - 当前 TanStack Query key 覆盖 workspace snapshot：`['workspace', 'snapshot', workspaceId]`。
+- 当前 TanStack Query key 覆盖 workspace project list：`['workspace', 'projects']`。
 - 当前 TanStack Query key 覆盖 memory detail：`['workspace', 'memory-detail', workspaceId, memoryId]`。
 - 当前没有 Zustand stores。
 - 当前 React Hook Form form owner 覆盖 create workspace submit 前的 title、description、selection token 和 displayPath draft。
@@ -45,6 +46,7 @@
 
 - 用户记忆内容的 durable artifact source 属于 workspace files。
 - `.reo` metadata 和 rebuildable index 属于 workspace folder，由 Reo 管理。
+- Workspace project registry 属于 main-owned app state，只保存已导入项目列表和 main-only root path，不是用户内容真源。
 - SQLite 只有在引入后才拥有明确的 app index、relationship、query、session 或 processing state；不得替代 workspace files 成为用户内容真源。
 - Main/server-backed async data 属于 TanStack Query。
 - Ephemeral UI state 属于 component state 或 Zustand。
@@ -54,23 +56,26 @@
 ## 第一产品切片数据决策
 
 - First product slice 的用户内容真源是 workspace folder；不引入 Drizzle schema、SQLite file、migration directory 或 DB-backed content truth。
+- Workspace project registry 是 Reo app state，用于跨 app restart 保留已导入项目。Registry entry 包含 `workspaceId`、title、description、root path、addedAt 和 lastOpenedAt；root path 只在 main-owned registry file 和 main process 内部存在。Renderer 只能通过 `workspace:listProjects` 读取不含 root path 的项目元数据，通过 `workspace:openProject(workspaceId)` 打开项目，并通过 `workspace:removeProject(workspaceId)` 从列表移除项目。Registry 最多保留最近 100 个项目，title/description 有 display text 长度上限；root path 超出上限时 registry write 失败。
+- Workspace project registry 不是 workspace content truth；workspace title、description、memory summary 和 recording truth 仍来自 workspace files。Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空项目列表处理；不可读 IO 错误返回 typed error envelope。Registry upsert 在单 registry 实例内串行化，避免并发导入覆盖既有项目。
+- 用户直接删除 workspace folder 后，registry entry 可以继续显示在 sidebar。点击该项目时 main 返回 `ERR_WORKSPACE_ROOT_MISSING`；renderer 显示文件夹已不存在的 alert，不自动移除 registry entry，不切换 active session。用户可用 sidebar 项目更多菜单把该 entry 从 Reo 列表移除；该动作不删除本地文件夹。
 - Workspace stable files 包括 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json`、`memories/<memoryId>/memory.json`、`memories/<memoryId>/recordings/<recordingId>/recording.json`、`audio.webm`、`transcript.md` 和 `reflections.md`。
 - `.reo/index.json` 是可重建 UI index，不是用户内容真源。
 - `.reo/index.json` 当前保存 `memories[]` 投影；每个 summary 包含 `memoryId`、title、created/updated time、recording count、duration、audio bytes、非空 transcript/reflections presence。
 - `.reo/workspace.lock` 和 `.reo/workspace.lock.lock` 是 volatile runtime lock artifacts，不进入 Codex read-only validation 的稳定 hash 范围；`.reo/workspace.lock.lock/owner.json` 只记录当前 main process pid，用于识别 stale lock，不是用户内容。缺失、损坏或 symlinked owner file 代表未完成或无效 lock，可在下一次 acquire 时替换。
-- Query keys 使用 stable `workspaceId`、`memoryId` 和 `recordingId`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
-- TanStack Query 只拥有 main-backed workspace snapshot 和 memory detail cache；active recording lifecycle、drawer close protection、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
+- Query keys 使用 stable `workspaceId`、`memoryId` 和 `recordingId`；workspace project list 使用 `['workspace', 'projects']`；`workspaceHandle` 是 main memory capability，不进入 query key、不写入文件、不跨 app restart 持久化。
+- TanStack Query 拥有 main-backed workspace project list、workspace snapshot 和 memory detail cache；active recording lifecycle、drawer close protection、chunk sequence、editor draft 和 Blob URL 不进入 query cache。
 - React Hook Form 只拥有 create workspace submit 前的 form draft，包括 title、description、selection token 和 displayPath。
 - Workspace Home 本地搜索只使用当前 loaded workspace snapshot 的 `memories` 投影和 renderer component state；搜索词不进入 Query key、Zustand、IPC、DB、workspace files 或 `.reo/index.json`。
 - Memory detail 使用 `['workspace', 'memory-detail', workspaceId, memoryId]` 读取当前 memory detail projection；`workspaceHandle` 只作为 `getMemoryDetail` request capability 进入 preload/main 边界，不进入 Query key、DOM、URL、workspace files、`.reo/index.json` 或持久化缓存身份。
 - Recording finalize 后 renderer seed 当前 workspace snapshot cache，并按 `['workspace', 'memory-detail', workspaceId, memoryId]` invalidate 受影响的 active memory detail query；detail 重新从 main/workspace files 读取，不做 optimistic update。
 - Memory detail response 读取 `memory.json` 作为 detail identity 真源，使用 `.reo/index.json` 中同一 memory summary 的 `recordingCount`、`hasTranscript` 和 `hasReflections` 投影，并只返回前 24 条 recording summary 作为当前首屏 preview；`recordingsTruncated` 标明还有未展示的 recordings，避免 detail navigation 对长 memory 做无界 recording 文件读取或 DOM 渲染。
-- 创建工作区 folder selection token 和 displayPath 属于当前 RHF form lifecycle；sidebar `打开本地工作区` 的 selection token 只存在于该当前事件流。Create selection token 只用于一次 initialize request；open-local selection token 只用于一次 open request；selection token 不进入 Query cache 或 durable files。
+- 创建工作区 folder selection token 和 displayPath 属于当前 RHF form lifecycle；create selection token 指向用户选择的父目录，workspace title 同时是将要创建的 child folder name；sidebar `打开本地工作区` 的 selection token 只存在于该当前事件流。Create selection token 只用于一次 initialize request；open-local selection token 只用于一次 open request；selection token 不进入 Query cache 或 durable files。
 - Recording overlay/drawer component state 拥有 active recording lifecycle、drawer close protection、elapsed timer、transcript draft、reflections draft、autosave status 和 active playback Blob URL。Transcript draft 初始为空，只来自用户编辑或已保存文件，不生成本地 mock transcript，也不作为 STT 真源。
 - Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须同时更新当前 workspace session 的 `memories` 投影和临时 `recordings` 兼容视图。durable truth 仍是 workspace files 和 `.reo/index.json` 的 memory summary。后续 Home/Memory detail slice 会改为直接消费 `memories`。
 - Zod 当前用于 workspace IPC request/response、workspace metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
-- Workspace 初始化写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json`、`memories/` 和 `.reo/drafts/recordings/`；open 现有 workspace 时会在返回 ready session 前补齐缺失的 `memories/` 和 `.reo/drafts/recordings/` 托管目录，仍拒绝 symlink 或非目录。initialize/open 获取 lock 后，托管目录创建、metadata revalidation、recovery、index reconciliation 和 session 返回前都必须消费当前 lock/root/`.reo` usability；中途失去 ownership 时返回 lock lost，不能继续写入新的 `.reo` 或 workspace files。如果已有 `AGENTS.md`，main 必须在获取 lock 前返回 conflict，不得创建 `.reo/workspace.lock` 或任何 workspace 文件。`AGENTS.md` 使用 no-replace atomic write，不能覆盖用户已有文件。
+- Workspace initialize 在所选父目录下 no-replace 创建 title 同名 child folder，再在 child root 写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json`、`memories/` 和 `.reo/drafts/recordings/`；同名 child 已存在时返回 `ERR_WORKSPACE_ALREADY_EXISTS`。open 现有 workspace 时会在返回 ready session 前补齐缺失的 `memories/` 和 `.reo/drafts/recordings/` 托管目录；open 空文件夹时会在该文件夹内原地初始化 Reo 文件；open 非空非 Reo 文件夹返回 metadata invalid。initialize/open 获取 lock 后，托管目录创建、metadata revalidation、recovery、index reconciliation 和 session 返回前都必须消费当前 lock/root/`.reo` usability；中途失去 ownership 时返回 lock lost，不能继续写入新的 `.reo` 或 workspace files。`AGENTS.md` 使用 no-replace atomic write，不能覆盖用户已有文件。
 - `.reo` metadata directory、`.reo/drafts`、`.reo/drafts/recordings` 和 `memories/` 必须是缺失或真实目录；如果任一层是 symlink 或非目录，initialize/open/lock/draft 初始化都必须拒绝，不能跟随 symlink 写入 workspace 外。`.reo/workspace.json` 和 `.reo/index.json` 读取必须使用 no-follow file handle，symlink leaf 不作为 workspace metadata 或 index 输入。托管 child directory 必须在已验证 parent identity 内相对创建，创建前后复核 parent，不能在 ancestor swap 后复用缓存 absolute path。Workspace lock 必须绑定当前 workspace root identity、`.reo` directory identity 和 lock directory identity，在当前 `.reo` directory identity 内打开 no-follow `workspace.lock` leaf 并创建同目录 `workspace.lock.lock`；owner file 必须在已绑定 lock directory identity 内 no-follow 创建、写入 pid 并 fsync，owner 进程已不存在或 owner file 无效的 stale lock 可被替换，symlink leaf、root swap、parent swap 或 lock directory replacement 必须让 lock 不可用于后续 handle 授权。
 - Recording draft 写入 `.reo/drafts/recordings/<recordingId>/recording.json` 和 `audio.webm`；draft path 的 `.reo`、`.reo/drafts`、`.reo/drafts/recordings` 和 leaf recording directory 任一层是 symlink 时必须拒绝写入。Draft create 在 parent identity 改变后必须清理自己刚创建的空 draft directory；当前进程创建的 active draft 在 append hot path 不重复扫描 finalized recordings，但 workspace close、window teardown 或 root runtime state 清理后必须移除该进程态，后续 append 重新检查 finalized truth。Append metadata 写失败时必须将 audio 截回 append 前 size，返回 `ERR_RECORDING_APPEND_FAILED` 与 `dataRetention: "draft-preserved"`，且不得推进 sequence 或 byte count。Finalize request 必须带显式 `durationMs`，不得由 IPC 默认写 0；new memory finalize 的 `memoryId` 必须由 IPC owner 或 caller 显式提供，不允许从 `recordingId` 隐式派生。Finalize 后只允许复制 `recording.json`、`audio.webm`、`transcript.md` 和 `reflections.md` 到对应 `memories/<memoryId>/recordings/<recordingId>/`；未知普通文件、symlink 或非文件必须让 finalize 失败并保留 draft。Durable `recording.json` 标记为 `finalized`，写入 `memoryId`、`recordingId`、title、duration、`finalizedAt` 和实际 `audio.webm` 字节数，创建缺失的 `transcript.md` 与 `reflections.md`，并更新 `.reo/index.json`。
 - Finalize 在写 durable `recording.json` 前必须把复制后的 draft metadata 作为不可信文件重新按 draft schema 校验，并确认 `workspaceId`、`recordingId` 和 `audioByteLength` 与当前 finalize 请求及实际 `audio.webm` 一致；校验失败必须在暴露 durable recording truth 前失败并保留 draft。

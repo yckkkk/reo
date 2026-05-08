@@ -17,7 +17,7 @@ type WorkspaceCreateDialogProps = {
   readonly onCreateFinish: () => void;
   readonly onCreateStart: () => boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => void;
+  readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => boolean | Promise<boolean>;
   readonly open: boolean;
 };
 

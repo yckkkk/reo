@@ -1,11 +1,24 @@
-import { Folder, FolderPlus, Home, Menu, Mic2, Moon, PanelLeftClose, Sun } from 'lucide-react';
+import {
+  Folder,
+  FolderPlus,
+  Home,
+  Library,
+  Menu,
+  MoreHorizontal,
+  Moon,
+  PanelLeftClose,
+  Sun,
+  Trash2,
+} from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { MenuItemButton, MenuSurface } from '@/components/ui/menu';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 export type AppShellState = 'expanded' | 'covered';
+export type AppShellActiveSection = 'home' | 'library' | 'workspace';
 export type ThemeMode = 'light' | 'dark';
 
 export const MIN_SIDEBAR_WIDTH = 240;
@@ -15,14 +28,22 @@ export const PANEL_RADIUS = 12;
 export const TITLEBAR_HEIGHT = 48;
 const PANEL_MOTION_CLASS =
   'transition-[left,border-radius] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none';
+const SIDEBAR_NAV_BUTTON_CLASS =
+  'w-full justify-start border-transparent px-8 text-cinder hover:border-chalk hover:bg-powder';
+const HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS =
+  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
+const HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS =
+  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover/project:pointer-events-auto group-hover/project:opacity-100 group-focus-within/project:pointer-events-auto group-focus-within/project:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 
 type AppShellProps = {
+  readonly activeSection?: AppShellActiveSection | undefined;
   readonly activeWorkspaceId?: string | undefined;
   readonly children: React.ReactNode;
   readonly onCreateWorkspace?: (() => void) | undefined;
   readonly onHome: () => void;
-  readonly onNewMemory?: (() => void) | undefined;
+  readonly onLibrary: () => void;
   readonly onOpenLocalWorkspace?: (() => void) | undefined;
+  readonly onRemoveWorkspaceProject?: ((project: WorkspaceProject) => void) | undefined;
   readonly onSelectWorkspace?: ((workspaceId: string) => void) | undefined;
   readonly onToggleTheme: () => void;
   readonly themeMode: ThemeMode;
@@ -44,13 +65,19 @@ export function clampSidebarWidth(width: number) {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 }
 
+function sidebarNavButtonClass(current: boolean) {
+  return cn(SIDEBAR_NAV_BUTTON_CLASS, current ? 'bg-powder' : 'bg-transparent');
+}
+
 export function AppShell({
+  activeSection,
   activeWorkspaceId,
   children,
   onCreateWorkspace,
   onHome,
-  onNewMemory,
+  onLibrary,
   onOpenLocalWorkspace,
+  onRemoveWorkspaceProject,
   onSelectWorkspace,
   onToggleTheme,
   themeMode,
@@ -60,6 +87,9 @@ export function AppShell({
   const [sidebarWidth, setSidebarWidth] = React.useState(MIN_SIDEBAR_WIDTH);
   const [dragState, setDragState] = React.useState<DragState | null>(null);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false);
+  const [workspaceProjectMenuOpen, setWorkspaceProjectMenuOpen] = React.useState<string | null>(
+    null
+  );
   const safeSidebarWidth = clampSidebarWidth(sidebarWidth);
 
   function handleResizePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -106,25 +136,51 @@ export function AppShell({
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
   const ThemeToggleIcon = themeMode === 'dark' ? Sun : Moon;
   const themeToggleLabel = themeMode === 'dark' ? '切换到浅色模式' : '切换到深色模式';
+  const currentSection = activeSection ?? (activeWorkspaceId ? 'workspace' : 'home');
+  const homeCurrent = currentSection === 'home';
+  const libraryCurrent = currentSection === 'library';
+  const anySidebarMenuOpen = workspaceMenuOpen || workspaceProjectMenuOpen !== null;
+
+  function closeSidebarMenus() {
+    setWorkspaceMenuOpen(false);
+    setWorkspaceProjectMenuOpen(null);
+  }
 
   function handleCreateWorkspace() {
-    setWorkspaceMenuOpen(false);
+    closeSidebarMenus();
     onCreateWorkspace?.();
   }
 
   function handleHome() {
-    setWorkspaceMenuOpen(false);
+    closeSidebarMenus();
     onHome();
   }
 
+  function handleLibrary() {
+    closeSidebarMenus();
+    onLibrary();
+  }
+
   function handleOpenLocalWorkspace() {
-    setWorkspaceMenuOpen(false);
+    closeSidebarMenus();
     onOpenLocalWorkspace?.();
   }
 
   function handleSelectWorkspace(workspaceId: string) {
-    setWorkspaceMenuOpen(false);
+    closeSidebarMenus();
     onSelectWorkspace?.(workspaceId);
+  }
+
+  function handleToggleProjectMenu(workspaceId: string) {
+    setWorkspaceMenuOpen(false);
+    setWorkspaceProjectMenuOpen((openWorkspaceId) =>
+      openWorkspaceId === workspaceId ? null : workspaceId
+    );
+  }
+
+  function handleRemoveWorkspaceProject(project: WorkspaceProject) {
+    setWorkspaceProjectMenuOpen(null);
+    onRemoveWorkspaceProject?.(project);
   }
 
   return (
@@ -158,7 +214,7 @@ export function AppShell({
               size="icon"
               aria-label={sidebarToggleLabel}
               onClick={() => {
-                setWorkspaceMenuOpen(false);
+                closeSidebarMenus();
                 setSidebarState(sidebarState === 'expanded' ? 'covered' : 'expanded');
               }}
             >
@@ -170,32 +226,31 @@ export function AppShell({
         <aside
           aria-label="工作区侧边栏"
           className="absolute inset-y-0 left-0 flex flex-col bg-eggshell px-12 pb-16 pt-sidebar-content-top"
-          style={{ width: `${safeSidebarWidth}px`, zIndex: workspaceMenuOpen ? 4 : 1 }}
+          style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
         >
           <nav className="flex flex-col gap-4" aria-label="工作区">
             <Button
               type="button"
               variant="secondary"
               size="compact"
-              aria-current="page"
-              className="w-full justify-start border-transparent bg-powder px-8 text-cinder hover:border-chalk hover:bg-powder"
+              aria-current={homeCurrent ? 'page' : undefined}
+              className={sidebarNavButtonClass(homeCurrent)}
               onClick={handleHome}
             >
               <Home className="size-16" aria-hidden="true" />
               首页
             </Button>
-            {onNewMemory ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="compact"
-                className="w-full justify-start border-transparent bg-transparent px-8 text-cinder hover:border-chalk hover:bg-powder"
-                onClick={onNewMemory}
-              >
-                <Mic2 className="size-16" aria-hidden="true" />
-                新记忆
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              size="compact"
+              aria-current={libraryCurrent ? 'page' : undefined}
+              className={sidebarNavButtonClass(libraryCurrent)}
+              onClick={handleLibrary}
+            >
+              <Library className="size-16" aria-hidden="true" />
+              资料库
+            </Button>
           </nav>
 
           <section className="relative mt-28" aria-labelledby="workspace-projects-heading">
@@ -220,8 +275,11 @@ export function AppShell({
                     aria-haspopup="menu"
                     aria-label="添加工作区"
                     data-state={workspaceMenuOpen ? 'open' : 'closed'}
-                    className="pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
-                    onClick={() => setWorkspaceMenuOpen((open) => !open)}
+                    className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
+                    onClick={() => {
+                      setWorkspaceProjectMenuOpen(null);
+                      setWorkspaceMenuOpen((open) => !open);
+                    }}
                   >
                     <FolderPlus className="size-16" aria-hidden="true" />
                   </Button>
@@ -250,23 +308,65 @@ export function AppShell({
             </div>
 
             <div className="flex flex-col gap-4">
-              {workspaceProjects.map((project) => (
-                <Button
-                  key={project.workspaceId}
-                  type="button"
-                  variant="secondary"
-                  size="compact"
-                  aria-current={project.workspaceId === activeWorkspaceId ? 'page' : undefined}
-                  className="w-full justify-start border-transparent bg-transparent px-8 text-cinder hover:border-chalk hover:bg-powder aria-[current=page]:bg-powder"
-                  onClick={() => handleSelectWorkspace(project.workspaceId)}
-                >
-                  <Folder className="size-16" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate text-left">{project.title}</span>
-                  {project.workspaceId === activeWorkspaceId ? (
-                    <span className="size-4 rounded-full bg-signal-blue" aria-hidden="true" />
-                  ) : null}
-                </Button>
-              ))}
+              {workspaceProjects.map((project) => {
+                const projectCurrent =
+                  currentSection === 'workspace' && project.workspaceId === activeWorkspaceId;
+                const projectMenuOpen = workspaceProjectMenuOpen === project.workspaceId;
+
+                return (
+                  <div
+                    key={project.workspaceId}
+                    data-slot="workspace-project-item"
+                    className={cn(
+                      'group/project relative flex min-h-32 items-center gap-4 rounded-buttons border border-transparent bg-transparent pr-4 transition-colors hover:border-chalk hover:bg-powder focus-within:border-chalk focus-within:bg-powder',
+                      projectCurrent ? 'border-chalk bg-powder' : null
+                    )}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghostIcon"
+                      size="compact"
+                      aria-current={projectCurrent ? 'page' : undefined}
+                      className="min-w-0 flex-1 shrink justify-start border-0 bg-transparent px-8 text-cinder hover:text-cinder"
+                      onClick={() => handleSelectWorkspace(project.workspaceId)}
+                    >
+                      <Folder className="size-16" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-left">{project.title}</span>
+                      {projectCurrent ? (
+                        <span className="size-4 rounded-full bg-signal-blue" aria-hidden="true" />
+                      ) : null}
+                    </Button>
+                    {onRemoveWorkspaceProject ? (
+                      <Button
+                        type="button"
+                        variant="ghostIcon"
+                        size="icon"
+                        aria-expanded={projectMenuOpen}
+                        aria-haspopup="menu"
+                        aria-label={`${project.title} 更多操作`}
+                        data-state={projectMenuOpen ? 'open' : 'closed'}
+                        className={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
+                        onClick={() => handleToggleProjectMenu(project.workspaceId)}
+                      >
+                        <MoreHorizontal className="size-16" aria-hidden="true" />
+                      </Button>
+                    ) : null}
+                    {projectMenuOpen ? (
+                      <MenuSurface
+                        aria-label={`${project.title} 工作区操作`}
+                        className="absolute right-0 top-36 z-10"
+                      >
+                        <MenuItemButton
+                          icon={<Trash2 className="size-16" aria-hidden="true" />}
+                          onClick={() => handleRemoveWorkspaceProject(project)}
+                        >
+                          移除工作区
+                        </MenuItemButton>
+                      </MenuSurface>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </section>
 

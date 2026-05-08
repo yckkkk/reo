@@ -1,5 +1,4 @@
-import { constants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
+import { lstat, opendir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -15,13 +14,10 @@ import {
   type MemorySummary,
 } from './memoryFiles.js';
 import {
-  assertSameDirectoryIdentity as assertSameDirectory,
-  readSafeDirectoryIdentity as readDirectoryIdentity,
-} from './directoryIdentity.js';
-import {
   checkWorkspaceDraftsDirectory,
   checkWorkspaceMemoriesDirectory,
   checkWorkspaceReoDirectory,
+  createNewWorkspaceRootDirectory,
   ensureWorkspaceDraftsDirectory,
   ensureWorkspaceMemoriesDirectory,
   getWorkspaceIndexPath,
@@ -34,9 +30,12 @@ import {
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
 } from './workspaceContract.js';
+import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
 
 const WORKSPACE_SCHEMA_VERSION = 1;
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
+const EMPTY_WORKSPACE_IGNORED_ENTRIES = new Set(['.DS_Store']);
+const EMPTY_WORKSPACE_LOCK_REO_ENTRIES = new Set(['workspace.lock', 'workspace.lock.lock']);
 
 const workspaceMetadataSchema = z
   .object({
@@ -102,6 +101,14 @@ type WorkspaceFilesResult =
 export type WorkspaceInitializeTarget =
   | {
       readonly ok: true;
+      readonly canonicalRoot: string;
+    }
+  | WorkspaceErrorEnvelope;
+
+export type WorkspaceOpenTarget =
+  | {
+      readonly ok: true;
+      readonly kind: 'existing' | 'empty';
       readonly canonicalRoot: string;
     }
   | WorkspaceErrorEnvelope;
@@ -203,6 +210,23 @@ export async function validateWorkspaceInitializeTarget(
   return { ok: true, canonicalRoot };
 }
 
+export async function createWorkspaceInitializeTargetInParent(
+  parentPath: string,
+  folderName: string
+): Promise<WorkspaceInitializeTarget> {
+  const canonicalParent = await resolveWorkspaceRoot(parentPath);
+  if (typeof canonicalParent !== 'string') {
+    return canonicalParent;
+  }
+
+  const createdRoot = await createNewWorkspaceRootDirectory(canonicalParent, folderName);
+  if (typeof createdRoot !== 'string') {
+    return createdRoot;
+  }
+
+  return { ok: true, canonicalRoot: createdRoot };
+}
+
 async function readMetadata(
   canonicalRoot: string
 ): Promise<z.infer<typeof workspaceMetadataSchema> | null> {
@@ -212,14 +236,9 @@ async function readMetadata(
   );
 }
 
-export async function validateWorkspaceOpenTarget(
-  rootPath: string
+async function validateWorkspaceOpenCanonicalTarget(
+  canonicalRoot: string
 ): Promise<WorkspaceInitializeTarget> {
-  const canonicalRoot = await resolveWorkspaceRoot(rootPath);
-  if (typeof canonicalRoot !== 'string') {
-    return canonicalRoot;
-  }
-
   const reoDirectory = await checkWorkspaceReoDirectory(canonicalRoot);
   if (typeof reoDirectory !== 'string') {
     return reoDirectory;
@@ -243,6 +262,125 @@ export async function validateWorkspaceOpenTarget(
   }
 
   return { ok: true, canonicalRoot };
+}
+
+export async function validateWorkspaceOpenTarget(
+  rootPath: string
+): Promise<WorkspaceInitializeTarget> {
+  const canonicalRoot = await resolveWorkspaceRoot(rootPath);
+  if (typeof canonicalRoot !== 'string') {
+    return canonicalRoot;
+  }
+
+  return validateWorkspaceOpenCanonicalTarget(canonicalRoot);
+}
+
+export async function validateEmptyWorkspaceOpenCanonicalTarget(
+  canonicalRoot: string
+): Promise<WorkspaceInitializeTarget> {
+  try {
+    const directory = await opendir(canonicalRoot);
+    for await (const entry of directory) {
+      if (!EMPTY_WORKSPACE_IGNORED_ENTRIES.has(entry.name)) {
+        return workspaceError(
+          'ERR_WORKSPACE_METADATA_INVALID',
+          'Workspace metadata is invalid',
+          'none-written'
+        );
+      }
+    }
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Workspace metadata is invalid',
+      'none-written'
+    );
+  }
+
+  return { ok: true, canonicalRoot };
+}
+
+async function isLockOnlyReoDirectory(reoDirectoryPath: string): Promise<boolean> {
+  const stats = await lstat(reoDirectoryPath);
+  if (!stats.isDirectory()) {
+    return false;
+  }
+
+  const directory = await opendir(reoDirectoryPath);
+  let hasWorkspaceLock = false;
+  for await (const entry of directory) {
+    if (!EMPTY_WORKSPACE_LOCK_REO_ENTRIES.has(entry.name)) {
+      return false;
+    }
+    if (entry.name === 'workspace.lock' && !entry.isFile()) {
+      return false;
+    }
+    if (entry.name === 'workspace.lock.lock' && !entry.isDirectory()) {
+      return false;
+    }
+    hasWorkspaceLock ||= entry.name === 'workspace.lock';
+  }
+
+  return hasWorkspaceLock;
+}
+
+export async function validateEmptyWorkspaceOpenCanonicalTargetAfterLock(
+  canonicalRoot: string
+): Promise<WorkspaceInitializeTarget> {
+  try {
+    const directory = await opendir(canonicalRoot);
+    for await (const entry of directory) {
+      if (EMPTY_WORKSPACE_IGNORED_ENTRIES.has(entry.name)) {
+        continue;
+      }
+      if (
+        entry.name === '.reo' &&
+        (await isLockOnlyReoDirectory(path.join(canonicalRoot, entry.name)))
+      ) {
+        continue;
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'none-written'
+      );
+    }
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Workspace metadata is invalid',
+      'none-written'
+    );
+  }
+
+  return { ok: true, canonicalRoot };
+}
+
+export async function removeLockOnlyReoDirectory(canonicalRoot: string): Promise<void> {
+  const reoDirectoryPath = path.join(canonicalRoot, '.reo');
+  const lockOnly = await isLockOnlyReoDirectory(reoDirectoryPath).catch(() => false);
+  if (lockOnly) {
+    await rm(reoDirectoryPath, { force: true, recursive: true });
+  }
+}
+
+export async function classifyWorkspaceOpenTarget(rootPath: string): Promise<WorkspaceOpenTarget> {
+  const canonicalRoot = await resolveWorkspaceRoot(rootPath);
+  if (typeof canonicalRoot !== 'string') {
+    return canonicalRoot;
+  }
+
+  const existingTarget = await validateWorkspaceOpenCanonicalTarget(canonicalRoot);
+  if (existingTarget.ok) {
+    return { ...existingTarget, kind: 'existing' };
+  }
+
+  const emptyTarget = await validateEmptyWorkspaceOpenCanonicalTarget(canonicalRoot);
+  if (emptyTarget.ok) {
+    return { ...emptyTarget, kind: 'empty' };
+  }
+
+  return existingTarget;
 }
 
 async function readOrRebuildIndex(
@@ -437,30 +575,13 @@ async function readWorkspaceJsonNoFollow<T>(
   filePath: string,
   schema: z.ZodType<T>
 ): Promise<T | null> {
-  let file: Awaited<ReturnType<typeof open>> | null = null;
-  const directory = path.dirname(filePath);
-  const directoryIdentity = await readDirectoryIdentity(directory).catch(() => null);
-  if (!directoryIdentity) {
-    return null;
-  }
-  try {
-    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const metadata = await file.stat();
-    if (!metadata.isFile()) {
-      return null;
-    }
-    if (metadata.size > MAX_WORKSPACE_JSON_BYTES) {
-      return null;
-    }
-    const parsed = schema.parse(JSON.parse(await file.readFile('utf8')));
-    await beforeWorkspaceJsonNoFollowFinalAssertForTest?.(filePath);
-    await assertSameDirectory(directory, directoryIdentity);
-    return parsed;
-  } catch {
-    return null;
-  } finally {
-    await file?.close().catch(() => {});
-  }
+  const result = await readBoundedJsonNoFollow({
+    beforeFinalAssert: () => beforeWorkspaceJsonNoFollowFinalAssertForTest?.(filePath),
+    filePath,
+    maxBytes: MAX_WORKSPACE_JSON_BYTES,
+    schema,
+  });
+  return result.status === 'ok' ? result.value : null;
 }
 
 export async function updateWorkspaceIndex(

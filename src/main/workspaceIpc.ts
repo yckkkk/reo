@@ -16,7 +16,10 @@ import {
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_PROJECTS_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_PROJECT_CHANNEL,
+  WORKSPACE_REMOVE_PROJECT_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
   WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
@@ -26,12 +29,15 @@ import {
   workspaceError,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListProjectsResponseSchema,
   workspaceMemoryDetailResponseSchema,
   workspaceMemoryIdRequestSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
+  workspaceOpenProjectRequestSchema,
+  workspaceRemoveProjectRequestSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAudioChunkRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
@@ -41,8 +47,14 @@ import {
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
   type WorkspaceErrorEnvelope,
+  type WorkspaceSnapshot,
 } from './workspaceContract.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
+import {
+  createWorkspaceProjectRegistry,
+  WorkspaceProjectRegistryReadError,
+  type WorkspaceProjectRegistry,
+} from './workspaceProjectRegistry.js';
 import { acquireWorkspaceLock } from './workspaceLock.js';
 import {
   createWorkspaceSelectionTokenStore,
@@ -73,15 +85,20 @@ import {
   createMicrophoneIntent,
 } from './security.js';
 import {
+  classifyWorkspaceOpenTarget,
+  createWorkspaceInitializeTargetInParent,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
-  validateWorkspaceInitializeTarget,
+  removeLockOnlyReoDirectory,
+  validateEmptyWorkspaceOpenCanonicalTargetAfterLock,
   validateWorkspaceOpenTarget,
+  type WorkspaceInitializeTarget,
 } from './workspaceFiles.js';
 
 const nodeRequire = createRequire(import.meta.url);
-const { dialog, ipcMain } = nodeRequire('electron') as typeof import('electron');
+const { app, dialog, ipcMain } = nodeRequire('electron') as Partial<typeof import('electron')>;
 const defaultHandleStore = createWorkspaceHandleStore();
+let defaultProjectRegistry: WorkspaceProjectRegistry | null = null;
 
 interface ShowOpenDirectoryDialogResult {
   readonly canceled: boolean;
@@ -97,17 +114,29 @@ export interface RegisterWorkspaceIpcOptions {
   readonly isTrustedUrl: (url: string) => boolean;
   readonly tokenStore?: WorkspaceSelectionTokenStore;
   readonly handleStore?: WorkspaceHandleStore;
+  readonly projectRegistry?: WorkspaceProjectRegistry;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
 }
 
-export interface HandleChooseWorkspaceDirectoryOptions extends RegisterWorkspaceIpcOptions {
-  readonly event: TrustedSenderEventAdapter;
-  readonly input: unknown;
+interface WorkspaceIpcBaseOptions {
+  readonly expectedSession: Session | object;
+  readonly expectedSessionKey: string;
+  readonly isTrustedUrl: (url: string) => boolean;
 }
 
-export interface HandleInitializeWorkspaceOptions extends RegisterWorkspaceIpcOptions {
+export interface HandleChooseWorkspaceDirectoryOptions extends WorkspaceIpcBaseOptions {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
+  readonly tokenStore?: WorkspaceSelectionTokenStore;
+  readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
+}
+
+export interface HandleInitializeWorkspaceOptions extends WorkspaceIpcBaseOptions {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly tokenStore?: WorkspaceSelectionTokenStore;
+  readonly handleStore?: WorkspaceHandleStore;
+  readonly projectRegistry?: WorkspaceProjectRegistry;
   readonly createWorkspaceId?: () => string;
   readonly createHandle?: () => string;
   readonly now?: () => string;
@@ -130,6 +159,32 @@ type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions 
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
 };
 
+type HandleListWorkspaceProjectsOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly projectRegistry?: WorkspaceProjectRegistry;
+};
+
+type HandleRemoveWorkspaceProjectOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly projectRegistry?: WorkspaceProjectRegistry;
+};
+
+type HandleOpenWorkspaceProjectOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly handleStore?: WorkspaceHandleStore;
+  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly createHandle?: () => string;
+  readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
+};
+
+type AcquiredWorkspaceLock = Extract<
+  Awaited<ReturnType<typeof acquireWorkspaceLock>>,
+  { readonly ok: true }
+>;
+
 type TrustedResult =
   | {
       readonly ok: true;
@@ -138,9 +193,16 @@ type TrustedResult =
   | ReturnType<typeof workspaceError>;
 
 async function showSystemOpenDirectoryDialog(): Promise<ShowOpenDirectoryDialogResult> {
-  return dialog.showOpenDialog({
+  return requireElectronMainApi().dialog.showOpenDialog({
     properties: ['openDirectory'],
   });
+}
+
+function requireElectronMainApi(): Pick<typeof import('electron'), 'dialog' | 'ipcMain'> {
+  if (!dialog || !ipcMain) {
+    throw new Error('Electron main API is unavailable');
+  }
+  return { dialog, ipcMain };
 }
 
 export async function handleChooseWorkspaceDirectory({
@@ -197,6 +259,105 @@ export async function handleChooseWorkspaceDirectory({
   }
 }
 
+async function handleListWorkspaceProjectsCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  projectRegistry = getDefaultProjectRegistry(),
+}: HandleListWorkspaceProjectsOptions): Promise<
+  z.infer<typeof workspaceListProjectsResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_LIST_PROJECTS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceNoInputSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'listProjects accepts no payload');
+  }
+
+  try {
+    const projects = await projectRegistry.listProjects();
+    return workspaceListProjectsResponseSchema.parse({
+      ok: true,
+      value: { projects },
+    });
+  } catch (error) {
+    return workspaceProjectRegistryReadError(error);
+  }
+}
+
+export async function handleListWorkspaceProjects(
+  options: HandleListWorkspaceProjectsOptions
+): Promise<z.infer<typeof workspaceListProjectsResponseSchema>> {
+  return handleListWorkspaceProjectsCore(options);
+}
+
+export async function handleListWorkspaceProjectsForTest(
+  options: HandleListWorkspaceProjectsOptions
+): Promise<z.infer<typeof workspaceListProjectsResponseSchema>> {
+  return handleListWorkspaceProjectsCore(options);
+}
+
+async function handleRemoveWorkspaceProjectCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  projectRegistry = getDefaultProjectRegistry(),
+}: HandleRemoveWorkspaceProjectOptions): Promise<
+  WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_REMOVE_PROJECT_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceRemoveProjectRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'removeProject request is invalid');
+  }
+
+  try {
+    await projectRegistry.removeProject(request.data.workspaceId);
+    return { ok: true, value: { removed: true } };
+  } catch {
+    return workspaceProjectRegistryWriteError();
+  }
+}
+
+export async function handleRemoveWorkspaceProject(
+  options: HandleRemoveWorkspaceProjectOptions
+): Promise<
+  WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
+> {
+  return handleRemoveWorkspaceProjectCore(options);
+}
+
+export async function handleRemoveWorkspaceProjectForTest(
+  options: HandleRemoveWorkspaceProjectOptions
+): Promise<
+  WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
+> {
+  return handleRemoveWorkspaceProjectCore(options);
+}
+
 export async function closeAllWorkspaceHandles(): Promise<void> {
   clearAllMicrophoneIntents();
   await defaultHandleStore.closeAllHandles();
@@ -227,6 +388,32 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function getDefaultProjectRegistry(): WorkspaceProjectRegistry {
+  const userDataPath =
+    app?.getPath('userData') ??
+    path.join(process.cwd(), '.tmp', 'workspace-registry', `${process.pid}`);
+  defaultProjectRegistry ??= createWorkspaceProjectRegistry({
+    registryPath: path.join(userDataPath, 'workspace-registry.json'),
+  });
+  return defaultProjectRegistry;
+}
+
+function workspaceProjectRegistryReadError(error: unknown): WorkspaceErrorEnvelope {
+  const message =
+    error instanceof WorkspaceProjectRegistryReadError
+      ? error.message
+      : 'Workspace project registry could not be read';
+  return workspaceError('ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED', message, 'unknown');
+}
+
+function workspaceProjectRegistryWriteError(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
+    'Workspace project registry could not be written',
+    'unknown'
+  );
+}
+
 async function releaseWorkspaceLockAfterFailure(
   lock: Awaited<ReturnType<typeof acquireWorkspaceLock>>
 ): Promise<void> {
@@ -241,7 +428,7 @@ async function releaseWorkspaceRegistrationAfterFailure({
   registered,
   sender,
 }: {
-  readonly lock: Awaited<ReturnType<typeof acquireWorkspaceLock>>;
+  readonly lock: AcquiredWorkspaceLock;
   readonly store: WorkspaceHandleStore;
   readonly registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
   readonly sender: TrustedSenderIdentity;
@@ -262,6 +449,155 @@ async function releaseWorkspaceRegistrationAfterFailure({
   await releaseWorkspaceLockAfterFailure(lock);
 }
 
+async function persistAndRegisterWorkspaceSession({
+  canonicalRoot,
+  snapshot,
+  trustedSender,
+  lock,
+  handleStore,
+  createHandle,
+  projectRegistry,
+  failureCode,
+  failureMessage,
+}: {
+  readonly canonicalRoot: string;
+  readonly snapshot: WorkspaceSnapshot;
+  readonly trustedSender: TrustedSenderIdentity;
+  readonly lock: AcquiredWorkspaceLock;
+  readonly handleStore: WorkspaceHandleStore;
+  readonly createHandle?: (() => string) | undefined;
+  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly failureCode: 'ERR_WORKSPACE_INIT_FAILED' | 'ERR_WORKSPACE_OPEN_FAILED';
+  readonly failureMessage: string;
+}): Promise<WorkspaceInitializeResponse> {
+  try {
+    await projectRegistry.upsertProject({ canonicalRoot, snapshot });
+  } catch {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
+      'Workspace project registry could not be updated',
+      'previous-file-preserved'
+    );
+  }
+
+  const store =
+    createHandle === undefined ? handleStore : createWorkspaceHandleStore({ createHandle });
+  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
+  try {
+    registered = store.register({
+      canonicalRoot,
+      workspaceId: snapshot.workspaceId,
+      sender: trustedSender,
+      lock: lock.lock,
+    });
+
+    return workspaceInitializeResponseSchema.parse({
+      ok: true,
+      value: {
+        ...registered,
+        snapshot,
+      },
+    });
+  } catch {
+    await releaseWorkspaceRegistrationAfterFailure({
+      lock,
+      store,
+      registered,
+      sender: trustedSender,
+    });
+    return workspaceError(failureCode, failureMessage, 'unknown');
+  }
+}
+
+async function initializeWorkspaceRoot({
+  canonicalRoot,
+  title,
+  description,
+  trustedSender,
+  handleStore,
+  createWorkspaceId: createWorkspaceIdOption,
+  createHandle,
+  now,
+  projectRegistry,
+  validateBeforeInitialize,
+  afterWorkspaceLockAcquiredForTest,
+}: {
+  readonly canonicalRoot: string;
+  readonly title: string;
+  readonly description: string;
+  readonly trustedSender: TrustedSenderIdentity;
+  readonly handleStore: WorkspaceHandleStore;
+  readonly createWorkspaceId: () => string;
+  readonly createHandle?: (() => string) | undefined;
+  readonly now: () => string;
+  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly validateBeforeInitialize?: (() => MaybePromise<WorkspaceInitializeTarget>) | undefined;
+  readonly afterWorkspaceLockAcquiredForTest?: (() => MaybePromise<void>) | undefined;
+}): Promise<WorkspaceInitializeResponse> {
+  const lock = await acquireWorkspaceLock({ canonicalRoot });
+  if (!lock.ok) {
+    return lock;
+  }
+  await afterWorkspaceLockAcquiredForTest?.();
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
+  const beforeInitialize = await validateBeforeInitialize?.();
+  if (beforeInitialize && !beforeInitialize.ok) {
+    const wasHeld = lock.lock.isHeld();
+    await releaseWorkspaceLockAfterFailure(lock);
+    if (wasHeld && !lock.lock.isHeld()) {
+      await removeLockOnlyReoDirectory(canonicalRoot).catch(() => {});
+    }
+    return beforeInitialize;
+  }
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
+
+  let initialized: Awaited<ReturnType<typeof initializeWorkspaceFiles>>;
+  try {
+    initialized = await initializeWorkspaceFiles({
+      rootPath: canonicalRoot,
+      title,
+      description,
+      createWorkspaceId: createWorkspaceIdOption,
+      now,
+      assertWorkspaceUsable: () =>
+        lock.lock.isUsable()
+          ? { ok: true as const }
+          : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
+    });
+  } catch {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_INIT_FAILED',
+      'Workspace could not be initialized',
+      'unknown'
+    );
+  }
+
+  if (!initialized.ok) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return initialized;
+  }
+
+  return persistAndRegisterWorkspaceSession({
+    canonicalRoot,
+    snapshot: initialized.snapshot,
+    trustedSender,
+    lock,
+    handleStore,
+    createHandle,
+    projectRegistry,
+    failureCode: 'ERR_WORKSPACE_INIT_FAILED',
+    failureMessage: 'Workspace could not be initialized',
+  });
+}
+
 async function handleInitializeWorkspaceCore({
   event,
   input,
@@ -273,6 +609,7 @@ async function handleInitializeWorkspaceCore({
   createWorkspaceId: createWorkspaceIdOption = createWorkspaceId,
   createHandle,
   now = nowIso,
+  projectRegistry = getDefaultProjectRegistry(),
   afterWorkspaceLockAcquiredForTest,
 }: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateTrustedWorkspaceSender({
@@ -304,80 +641,26 @@ async function handleInitializeWorkspaceCore({
     return consumed;
   }
 
-  const target = await validateWorkspaceInitializeTarget(consumed.rootPath);
+  const target = await createWorkspaceInitializeTargetInParent(
+    consumed.rootPath,
+    request.data.title
+  );
   if (!target.ok) {
     return target;
   }
-  const { canonicalRoot } = target;
 
-  const lock = await acquireWorkspaceLock({ canonicalRoot });
-  if (!lock.ok) {
-    return lock;
-  }
-  await afterWorkspaceLockAcquiredForTest?.();
-  if (!lock.lock.isUsable()) {
-    await releaseWorkspaceLockAfterFailure(lock);
-    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
-  }
-
-  let initialized: Awaited<ReturnType<typeof initializeWorkspaceFiles>>;
-  try {
-    initialized = await initializeWorkspaceFiles({
-      rootPath: canonicalRoot,
-      title: request.data.title,
-      description: request.data.description,
-      createWorkspaceId: createWorkspaceIdOption,
-      now,
-      assertWorkspaceUsable: () =>
-        lock.lock.isUsable()
-          ? { ok: true as const }
-          : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
-    });
-  } catch {
-    await releaseWorkspaceLockAfterFailure(lock);
-    return workspaceError(
-      'ERR_WORKSPACE_INIT_FAILED',
-      'Workspace could not be initialized',
-      'unknown'
-    );
-  }
-
-  if (!initialized.ok) {
-    await releaseWorkspaceLockAfterFailure(lock);
-    return initialized;
-  }
-
-  const store =
-    createHandle === undefined ? handleStore : createWorkspaceHandleStore({ createHandle });
-  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
-  try {
-    registered = store.register({
-      canonicalRoot,
-      workspaceId: initialized.snapshot.workspaceId,
-      sender: trusted.sender,
-      lock: lock.lock,
-    });
-
-    return workspaceInitializeResponseSchema.parse({
-      ok: true,
-      value: {
-        ...registered,
-        snapshot: initialized.snapshot,
-      },
-    });
-  } catch {
-    await releaseWorkspaceRegistrationAfterFailure({
-      lock,
-      store,
-      registered,
-      sender: trusted.sender,
-    });
-    return workspaceError(
-      'ERR_WORKSPACE_INIT_FAILED',
-      'Workspace could not be initialized',
-      'unknown'
-    );
-  }
+  return initializeWorkspaceRoot({
+    canonicalRoot: target.canonicalRoot,
+    title: request.data.title,
+    description: request.data.description,
+    trustedSender: trusted.sender,
+    handleStore,
+    createWorkspaceId: createWorkspaceIdOption,
+    createHandle,
+    projectRegistry,
+    now,
+    afterWorkspaceLockAcquiredForTest,
+  });
 }
 
 export async function handleInitializeWorkspace(
@@ -496,46 +779,21 @@ async function withWorkspaceHandleRequest<
   return run(request.data as z.infer<Schema>, required.handle, required.handle.assertUsable);
 }
 
-async function handleOpenWorkspaceCore({
-  event,
-  input,
-  expectedSession,
-  expectedSessionKey,
-  isTrustedUrl,
-  tokenStore = createWorkspaceSelectionTokenStore(),
-  handleStore = createWorkspaceHandleStore(),
+async function openWorkspaceRoot({
+  canonicalRoot,
+  trustedSender,
+  handleStore,
+  createHandle,
+  projectRegistry,
   afterWorkspaceLockAcquiredForTest,
-}: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
-  const trusted = validateWorkspaceSender({
-    event,
-    channel: WORKSPACE_OPEN_CHANNEL,
-    expectedSession,
-    expectedSessionKey,
-    isTrustedUrl,
-  });
-  if (!trusted.ok) {
-    return trusted;
-  }
-
-  const request = workspaceOpenRequestSchema.safeParse(input);
-  if (!request.success) {
-    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'openWorkspace request is invalid');
-  }
-
-  const consumed = tokenStore.consumeSelection({
-    selectionToken: request.data.selectionToken,
-    sender: trusted.sender,
-  });
-  if (!consumed.ok) {
-    return consumed;
-  }
-
-  const target = await validateWorkspaceOpenTarget(consumed.rootPath);
-  if (!target.ok) {
-    return target;
-  }
-  const { canonicalRoot } = target;
-
+}: {
+  readonly canonicalRoot: string;
+  readonly trustedSender: TrustedSenderIdentity;
+  readonly handleStore: WorkspaceHandleStore;
+  readonly createHandle?: (() => string) | undefined;
+  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly afterWorkspaceLockAcquiredForTest?: (() => MaybePromise<void>) | undefined;
+}): Promise<WorkspaceInitializeResponse> {
   const lock = await acquireWorkspaceLock({ canonicalRoot });
   if (!lock.ok) {
     return lock;
@@ -568,31 +826,88 @@ async function handleOpenWorkspaceCore({
     return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
   }
 
-  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
-  try {
-    registered = handleStore.register({
-      canonicalRoot,
-      workspaceId: opened.snapshot.workspaceId,
-      sender: trusted.sender,
-      lock: lock.lock,
-    });
+  return persistAndRegisterWorkspaceSession({
+    canonicalRoot,
+    snapshot: opened.snapshot,
+    trustedSender,
+    lock,
+    handleStore,
+    createHandle,
+    projectRegistry,
+    failureCode: 'ERR_WORKSPACE_OPEN_FAILED',
+    failureMessage: 'Workspace could not be opened',
+  });
+}
 
-    return workspaceInitializeResponseSchema.parse({
-      ok: true,
-      value: {
-        ...registered,
-        snapshot: opened.snapshot,
-      },
-    });
-  } catch {
-    await releaseWorkspaceRegistrationAfterFailure({
-      lock,
-      store: handleStore,
-      registered,
-      sender: trusted.sender,
-    });
-    return workspaceError('ERR_WORKSPACE_OPEN_FAILED', 'Workspace could not be opened', 'unknown');
+async function handleOpenWorkspaceCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  tokenStore = createWorkspaceSelectionTokenStore(),
+  handleStore = createWorkspaceHandleStore(),
+  createWorkspaceId: createWorkspaceIdOption = createWorkspaceId,
+  createHandle,
+  now = nowIso,
+  projectRegistry = getDefaultProjectRegistry(),
+  afterWorkspaceLockAcquiredForTest,
+}: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
   }
+
+  const request = workspaceOpenRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'openWorkspace request is invalid');
+  }
+
+  const consumed = tokenStore.consumeSelection({
+    selectionToken: request.data.selectionToken,
+    sender: trusted.sender,
+  });
+  if (!consumed.ok) {
+    return consumed;
+  }
+
+  const target = await classifyWorkspaceOpenTarget(consumed.rootPath);
+  if (!target.ok) {
+    return target;
+  }
+
+  if (target.kind === 'empty') {
+    return initializeWorkspaceRoot({
+      canonicalRoot: target.canonicalRoot,
+      title: path.basename(target.canonicalRoot),
+      description: '',
+      trustedSender: trusted.sender,
+      handleStore,
+      createWorkspaceId: createWorkspaceIdOption,
+      createHandle,
+      projectRegistry,
+      now,
+      validateBeforeInitialize: () =>
+        validateEmptyWorkspaceOpenCanonicalTargetAfterLock(target.canonicalRoot),
+      afterWorkspaceLockAcquiredForTest,
+    });
+  }
+  const { canonicalRoot } = target;
+
+  return openWorkspaceRoot({
+    canonicalRoot,
+    trustedSender: trusted.sender,
+    handleStore,
+    createHandle,
+    projectRegistry,
+    afterWorkspaceLockAcquiredForTest,
+  });
 }
 
 export async function handleOpenWorkspace(
@@ -605,6 +920,74 @@ export async function handleOpenWorkspaceForTest(
   options: HandleInitializeWorkspaceForTestOptions
 ): Promise<WorkspaceInitializeResponse> {
   return handleOpenWorkspaceCore(options);
+}
+
+async function handleOpenWorkspaceProjectCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  createHandle,
+  projectRegistry = getDefaultProjectRegistry(),
+  afterWorkspaceLockAcquiredForTest,
+}: HandleOpenWorkspaceProjectOptions): Promise<WorkspaceInitializeResponse> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_PROJECT_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceOpenProjectRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'openProject request is invalid');
+  }
+
+  let rootPath: string | null;
+  try {
+    rootPath = await projectRegistry.resolveProjectRoot(request.data.workspaceId);
+  } catch (error) {
+    return workspaceProjectRegistryReadError(error);
+  }
+  if (!rootPath) {
+    return workspaceError(
+      'ERR_WORKSPACE_PROJECT_NOT_FOUND',
+      'Workspace project is not registered',
+      'none-written'
+    );
+  }
+
+  const target = await validateWorkspaceOpenTarget(rootPath);
+  if (!target.ok) {
+    return target;
+  }
+
+  return openWorkspaceRoot({
+    canonicalRoot: target.canonicalRoot,
+    trustedSender: trusted.sender,
+    handleStore,
+    createHandle,
+    projectRegistry,
+    afterWorkspaceLockAcquiredForTest,
+  });
+}
+
+export async function handleOpenWorkspaceProject(
+  options: HandleOpenWorkspaceProjectOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleOpenWorkspaceProjectCore(options);
+}
+
+export async function handleOpenWorkspaceProjectForTest(
+  options: HandleOpenWorkspaceProjectOptions
+): Promise<WorkspaceInitializeResponse> {
+  return handleOpenWorkspaceProjectCore(options);
 }
 
 async function handleBeginMicrophoneIntentCore({
@@ -840,9 +1223,12 @@ export function registerWorkspaceIpc({
   isTrustedUrl,
   tokenStore = createWorkspaceSelectionTokenStore(),
   handleStore = defaultHandleStore,
+  projectRegistry = getDefaultProjectRegistry(),
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
 }: RegisterWorkspaceIpcOptions): void {
-  ipcMain.handle(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
+  const electronMain = requireElectronMainApi();
+
+  electronMain.ipcMain.handle(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
       event,
       input,
@@ -853,7 +1239,17 @@ export function registerWorkspaceIpc({
       showOpenDirectoryDialog,
     })
   );
-  ipcMain.handle(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_LIST_PROJECTS_CHANNEL, (event, input) =>
+    handleListWorkspaceProjects({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      projectRegistry,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
     handleInitializeWorkspace({
       event,
       input,
@@ -862,9 +1258,10 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       tokenStore,
       handleStore,
+      projectRegistry,
     })
   );
-  ipcMain.handle(WORKSPACE_OPEN_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_OPEN_CHANNEL, (event, input) =>
     handleOpenWorkspace({
       event,
       input,
@@ -873,9 +1270,31 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       tokenStore,
       handleStore,
+      projectRegistry,
     })
   );
-  ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_OPEN_PROJECT_CHANNEL, (event, input) =>
+    handleOpenWorkspaceProject({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      projectRegistry,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_REMOVE_PROJECT_CHANNEL, (event, input) =>
+    handleRemoveWorkspaceProject({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      projectRegistry,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
     handleBeginMicrophoneIntent({
       event,
       input,
@@ -885,7 +1304,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  ipcMain.handle(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
     handleClearMicrophoneIntent({
       event,
       input,
@@ -895,7 +1314,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  ipcMain.handle(WORKSPACE_GET_MEMORY_DETAIL_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_GET_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleGetMemoryDetail({
       event,
       input,
@@ -905,7 +1324,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
+  electronMain.ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
     handleCloseWorkspace({
       event,
       input,
@@ -929,7 +1348,7 @@ export function registerWorkspaceIpc({
       assertUsable: AssertWorkspaceHandleUsable
     ) => MaybePromise<Result | WorkspaceErrorEnvelope>
   ): void {
-    ipcMain.handle(channel, (event, input) =>
+    electronMain.ipcMain.handle(channel, (event, input) =>
       withWorkspaceHandleRequest({
         event,
         input,

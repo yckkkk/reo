@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { memoryDetailQueryKey, workspaceSnapshotQueryKey } from './workspaceQueries';
+import {
+  memoryDetailQueryKey,
+  workspaceProjectsQueryKey,
+  workspaceSnapshotQueryKey,
+} from './workspaceQueries';
 
 describe('workspace queries', () => {
   it('does not include workspaceHandle in the workspace snapshot query key', () => {
@@ -18,5 +22,9 @@ describe('workspace queries', () => {
     expect(memoryDetailQueryKey({ memoryId: 'mem_birthday', workspaceId: 'ws_1' })).not.toContain(
       'workspace-handle-secret'
     );
+  });
+
+  it('uses a stable workspace projects query key', () => {
+    expect(workspaceProjectsQueryKey()).toEqual(['workspace', 'projects']);
   });
 });

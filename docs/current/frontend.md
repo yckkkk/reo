@@ -13,12 +13,13 @@
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
 - shadcn/ui 已按 source-owned 模式初始化配置：`components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx`、`components/ui/menu.tsx` 和 `lib/utils.ts`。
 - Vaul 已作为 shadcn Drawer 的 bottom drawer mechanics dependency 引入。
+- Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
 - ElevenLabs UI source-derived `Waveform` 与 `VoiceButton` 已作为 Reo audio UI primitive 引入，并已裁剪掉 agent runtime、network/API key、demo feedback 和未实现文案。
 - 当前 `AudioPlayer` 是 Reo local playback primitive：已评估 ElevenLabs Audio Player source，当前采纳 HTML5 audio underlay、Reo play/pause control、Radix Slider playback position、time labels、playback surface 信息层级和 Reo token；完整 provider、playlist、speed 和 global progress 等到出现真实 consumer 时再引入。
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-slider`。
-- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace create dialog、workspace entry form、workspace home、memory detail、recording overlay 和 recording drawer control shell。
+- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace create dialog、workspace entry form、workspace home、memory detail、recording overlay、recording drawer control shell 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
-- 当前 renderer route state 覆盖无 workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
+- 当前 renderer route state 覆盖无 active workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
 - 当前无 workspace state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 项目区。
 - 当前 loaded workspace state 使用 `AppShell` 包裹 workspace home 或当前 memory detail；创建工作区通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
 - 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 使用 `--spacing-titlebar`，视觉上不画分隔线，窗口控制和 sidebar hide/show control 属于该层。sidebar hide/show control 使用 80px 的 `--spacing-titlebar-control-left` 和 2px 的 `--spacing-titlebar-control-top` 定位，对齐原生 macOS traffic-light 行，不再用 48px titlebar 垂直居中；主内容 panel 同步保留 48px panel titlebar slot，页面内容从该 slot 下方开始。
@@ -27,8 +28,9 @@
 - 当前 memory detail 的 `语音录音` 是有界首屏 preview：meta 显示总 recording count，列表最多展示 main detail response 返回的前 24 条 recording summary；当 `recordingsTruncated` 为 true 时显示当前只展示前 N 段录音的提示，不创建分页、virtualization 或后续加载 action。
 - 当前 memory detail 的 `转写`/`反思` section 使用 file-backed summary flags 显示已保存/空状态；不在未知文件真源时硬编码文件内容。
 - 当前 recording overlay 使用 shadcn Drawer/Vaul source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
-- 当前 `AppShell` 项目区显示当前 runtime workspace，并提供添加工作区菜单：`新建空白项目` 打开 `WorkspaceCreateDialog`，`打开本地工作区` 直接选择现有 Reo 工作区并打开；点击当前 workspace 项目项返回该 workspace 的 Home surface。
+- 当前 `AppShell` 项目区显示 main-backed workspace project list；无 active workspace session 时也显示已导入项目。`新建空白项目` 打开 `WorkspaceCreateDialog`，`打开本地工作区` 直接选择现有 Reo 工作区或空文件夹并打开；空文件夹会原地初始化为 Reo workspace；打开失败在当前内容区显示 alert，创建弹层保持关闭，当前 workspace 保留；点击已导入项目只发送 `workspaceId` 并打开该 workspace；已导入项目的 root folder 被删除时，该项目仍显示在 sidebar，点击后显示“工作区文件夹已不存在。”；点击当前 workspace 项目项返回该 workspace 的 Home surface；点击 sidebar `首页` 会关闭 active workspace handle 并回到 starter Home shell。
 - 当前 `AppShell` 添加工作区菜单打开时，sidebar stacking level 临时提升到主内容 panel 之上，避免菜单被 panel 裁切或遮挡；菜单左边缘锚定到添加工作区 icon button 左边缘；添加工作区 icon button 只在项目标题行 hover、focus-within 或菜单 open 时显示；折叠/展开 sidebar 时会先关闭该菜单。
+- 当前非阻断 toast 通过 `ReoToaster` 统一挂载在 App root；业务动作只调用共享 `toast` export，不在 feature 内自建 toast host 或临时通知 UI。
 - 当前 `CreateWorkspaceForm` 使用 React Hook Form + Zod resolver、Button/Input/Textarea/Label/Field primitives，并作为可嵌入表单由 `WorkspaceCreateDialog` 承载。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
 - Zustand 已选型，但当前未安装。
@@ -42,6 +44,7 @@
 - Tailwind token 优先写在 `src/renderer/src/theme.css` 的 `@theme static` 中。
 - 组件和页面设计必须先核对 Reo 设计系统真源。
 - 组件和交互设计必须先评估 shadcn/ui、Radix、ElevenLabs UI、Vaul、wavesurfer.js 和其他成熟开源组件；符合 Reo 边界时优先复用或适配。
+- 技术栈相关 UI 能力进入设计或实现前必须先查询 Context7 官方当前文档；采用、裁剪或拒绝第三方方案时在当前 spec 记录依据。
 - 有真实 reusable component consumer 时，使用 shadcn/ui source、Radix primitives 和 Tailwind utilities 建立 reusable components。
 - 当前 Button/Input/Label primitive 已 retokenize 到 Reo design system；Button/Input 默认使用 8px radius、compact UI typography、Reo focus-visible ring 和 disabled state。
 - 当前 Field primitive 承载字段组、字段行、label、hint、control 和 error spacing；divider 只出现在 rows 之间，不压到文字或 control。
@@ -50,6 +53,7 @@
 - 当前 Drawer source 基于 shadcn/ui Drawer + Vaul，retokenize 到 Reo bottom drawer surface；controlled `open/onOpenChange`、`dismissible={false}` 和 `data-vaul-no-drag` 用于录音忙碌态关闭保护与 waveform/control 交互区。
 - 当前 Button source 的 filled primary 使用 Obsidian 和 8px radius；Signal Blue 只用于 Button `accentCircle` variant 的显式圆形 icon-only control；naked icon-only controls 使用 Button `ghostIcon` variant。
 - 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
+- 当前 `ReoToaster` 使用 Sonner 官方 `Toaster`/`toast` API，retokenize 到 Reo design system；toast host 只在 root 挂载一次，业务组件不得重复挂载。
 - 当前 Waveform/VoiceButton source 来自 ElevenLabs UI registry 的逐组件评估；Reo 只保留 canvas waveform bar renderer、recording/error/processing control visual 和 Button semantics，不在 renderer component 内申请 microphone stream、调用网络、创建 agent runtime 或显示 API key/model 文案。
 - ElevenLabs Transcript Viewer 已评估但当前不引入为 shared primitive；它需要 alignment/STT 数据和 scrubber runtime，当前 slice 只有用户本地 draft，因此 transcript preview 保持在 `TranscriptReflectionsEditor` feature-local 边界内，并使用有界 live preview。
 - 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
@@ -57,8 +61,8 @@
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
-- 来自 main/server boundary 的 async data 使用 TanStack Query。
-- 当前 QueryClient provider 只服务 workspace snapshot cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
+- 来自 main/server boundary 的 async data 使用 TanStack Query；workspace project list、workspace snapshot 和 memory detail 属于当前 Query consumer。
+- 当前 QueryClient provider 服务 workspace project list、workspace snapshot cache 和 memory detail cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
 - 没有跨 component subtree state owner 前，不创建 Zustand store。
 
@@ -104,12 +108,14 @@
 - Workspace starter Home 使用 App shell 承载无 workspace 状态；Home 主内容区不显示独立 `+` 创建按钮，创建工作区入口在 sidebar 项目区的添加菜单中。
 - Workspace create Dialog 使用 feature-local `WorkspaceCreateDialog` 和可嵌入 `CreateWorkspaceForm`，只覆盖“新建空白项目”创建表单；旧“添加工作区”选择弹层和 `OpenWorkspaceAction` 不属于当前 build。
 - App 拥有 workspace entry action lock；创建弹层 submit、打开本地工作区选择和打开期间不得重复触发同一工作区 action，创建弹层关闭在 pending 时被阻止，branch 结束必须释放 action lock。
+- App 使用 `['workspace', 'projects']` Query 读取 sidebar 项目列表；创建、打开本地工作区或点击已导入项目成功后 invalidate 该 Query。项目列表读取失败在当前内容区显示 alert，不把 sidebar 静默清空当作成功状态。
 - 创建工作区表单当前使用 Button/Input/Textarea/Label/Field primitives、React Hook Form、Zod 和 submit-time validation；表单字段顺序是工作区名称、描述、工作区位置；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
-- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`。`打开本地工作区` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
+- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，main 把所选 folder 作为 parent location 并在其下创建 title 同名 workspace folder。Create title 必须是安全 folder name，不能是 `.`、`..` 或包含路径分隔符。`打开本地工作区` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path；现有 Reo workspace 会打开，空文件夹会原地初始化。点击已导入项目只调用 `openWorkspaceProject(workspaceId)`，不发送 selection token、displayPath 或 raw path。Create/open-local/open-project 成功切换 workspace 前会释放旧 active handle，释放失败时不切换 UI 并显示错误。Open failure 或 promise reject 显示 `WorkspaceErrorBanner`，不复用创建表单错误位。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
 - 当前 App shell 已实现 48px 无边框 titlebar shell、底层可拖拽 sidebar 和上层悬浮内容 panel；titlebar 自身是 Electron drag region，窗口/sidebar 控件是 no-drag control region；sidebar 默认 240px、最小 240px、最大 520px，resize separator 有 8px 真实命中区和 hover affordance；panel 顶/右/底贴合窗口，内部先保留 48px panel titlebar slot，再渲染页面内容；展开态以 `left` 等于 sidebar 宽度并只保留左侧 12px radius，covered 态 `left` 归零且 radius 归零。折叠/展开时右边缘固定，只让左边界移动。
 - 当前 App shell 的 hide/show sidebar icon-only control 位于左上原生窗口控制区右侧，不创建 rail sidebar；该 control 的 titlebar slot 保持稳定，折叠和展开切换只替换图标，不移动 slot。
 - 当前 App shell 的浅色/深色主题切换是 sidebar 左下角工具按钮，使用 lucide Moon/Sun icon-only control 和 Tooltip accessible name；它不创建 settings 页面、系统主题跟随或持久化。
-- 当前 App shell navigation 在 starter shell 只显示 `首页`；loaded shell 显示 `首页` 和 `新记忆`；`首页` 和 workspace 项目项都是真实导航入口，触发导航前会关闭已打开的添加工作区菜单；Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
+- 当前 App shell navigation 显示 `首页` 和 `资料库`；sidebar 不显示 `新记忆`。`首页`、`资料库` 和 workspace 项目项都是真实导航入口，触发导航前会关闭已打开的 sidebar 菜单；离开 loaded workspace 到 `首页` 或 `资料库` 前会释放当前 workspace handle。starter shell 中 `首页` 是当前页，`资料库` 打开空白 Library page；loaded workspace 中当前页由 active workspace 项目项表达，`首页` 不保持当前页高亮。Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
+- Workspace 项目列表项容器内右侧有 icon-only 更多操作按钮；项目行容器承载 hover/current surface，workspace primary button 和 more button 都位于同一个项目行容器内。More button 默认隐藏，只在对应项目行 hover、keyboard focus-within 或菜单已打开时显示。当前只提供 `移除工作区`。确认弹层说明只从 Reo 工作区列表移除，本地文件夹不会被删除。移除反馈只使用 root `ReoToaster`，确认弹层内不渲染第二套错误提示。移除 inactive 项目只刷新项目列表；移除 active 项目先移除 registry entry，再回到 starter shell，并尽力释放当前 workspace handle；handle 释放失败时不阻断列表移除，只显示 toast。
 - 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上，菜单 surface、菜单项和项目操作组都必须有明确 accessible name。
 - 当前 Workspace home 是 loaded workspace 的 Home surface：主标题是 `全部记忆`，workspace title 作为上方标签；`搜索记忆` 只过滤当前 snapshot 中已加载的 memory summary；内容按 `createdAt` 月份倒序分组，同月内 memory 倒序；memory card 只展示 title、创建日期、recording count、duration、`转写`/`反思` presence。
 - 当前 Workspace home 的本地搜索使用 component state；它不创建 global search、full-text search、semantic search、tag/entity filter、Zustand store、TanStack Query key、IPC 或 DB surface。

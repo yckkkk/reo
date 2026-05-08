@@ -22,8 +22,16 @@ import {
 import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from './workspaceApi';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
+const workspaceNameErrorMessage = '工作区名称不能是 . 或 ..，也不能包含路径分隔符';
+
+function isSafeWorkspaceName(value: string) {
+  return value !== '.' && value !== '..' && !/[\\/\0]/.test(value);
+}
+
 const createWorkspaceSchema = z.object({
-  title: z.string().trim().min(1, '请输入工作区名称'),
+  title: z.string().trim().min(1, '请输入工作区名称').refine(isSafeWorkspaceName, {
+    message: workspaceNameErrorMessage,
+  }),
   description: z.string(),
   selectionToken: z.string().trim().min(1, workspaceFolderErrorMessage),
   displayPath: z
@@ -39,7 +47,7 @@ type CreateWorkspaceFormProps = {
   readonly disabled?: boolean;
   readonly onCreateFinish: () => void;
   readonly onCreateStart: () => boolean;
-  readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => void;
+  readonly onWorkspaceReady: (workspaceSession: WorkspaceSession) => boolean | Promise<boolean>;
 };
 
 function workspaceErrorMessage(error: WorkspaceError) {
@@ -106,7 +114,7 @@ export function CreateWorkspaceForm({
         return;
       }
 
-      onWorkspaceReady(response.value);
+      await onWorkspaceReady(response.value);
     } finally {
       onCreateFinish();
     }
@@ -154,7 +162,7 @@ export function CreateWorkspaceForm({
         <FieldRow>
           <div>
             <FieldLabel>工作区位置</FieldLabel>
-            <FieldHint>新工作区将存放于</FieldHint>
+            <FieldHint>将在所选位置下创建同名文件夹</FieldHint>
           </div>
           <FieldControl>
             <FolderPickerField

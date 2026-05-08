@@ -9,6 +9,7 @@ import {
 } from './directoryIdentity.js';
 import type { WorkspaceErrorEnvelope } from './workspaceContract.js';
 import { workspaceError } from './workspaceContract.js';
+import { isSafeWorkspaceDirectoryName } from './workspaceName.js';
 
 const RECORDING_ID_PATTERN = /^rec_[A-Za-z0-9_-]+$/;
 type MaybePromise<T> = T | Promise<T>;
@@ -50,13 +51,28 @@ export async function resolveWorkspaceRoot(
     }
 
     return canonicalRoot;
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return workspaceError(
+        'ERR_WORKSPACE_ROOT_MISSING',
+        'Workspace folder is missing',
+        'none-written'
+      );
+    }
     return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace root is unsafe');
   }
 }
 
 function unsafeWorkspacePath(): WorkspaceErrorEnvelope {
   return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace root is unsafe', 'none-written');
+}
+
+function workspaceAlreadyExists(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_ALREADY_EXISTS',
+    'Workspace directory already exists',
+    'none-written'
+  );
 }
 
 function workspacePathError(error: unknown): WorkspaceErrorEnvelope {
@@ -70,11 +86,23 @@ function assertWorkspacePathUsable(assertUsable: AssertWorkspacePathUsable | und
   }
 }
 
-function ensureWorkspaceChildDirectory(
-  parentDirectory: string,
-  directoryName: string,
-  assertUsable?: AssertWorkspacePathUsable
-): string | WorkspaceErrorEnvelope {
+function resolveExistingDirectoryError(
+  existing: 'allow' | 'reject'
+): WorkspaceErrorEnvelope | null {
+  return existing === 'reject' ? workspaceAlreadyExists() : null;
+}
+
+function createOrEnsureWorkspaceChildDirectory({
+  parentDirectory,
+  directoryName,
+  assertUsable,
+  existing,
+}: {
+  readonly parentDirectory: string;
+  readonly directoryName: string;
+  readonly assertUsable: AssertWorkspacePathUsable | undefined;
+  readonly existing: 'allow' | 'reject';
+}): string | WorkspaceErrorEnvelope {
   const previousCwd = process.cwd();
   try {
     const parentIdentity = readDirectoryIdentitySync(parentDirectory);
@@ -84,7 +112,12 @@ function ensureWorkspaceChildDirectory(
     try {
       mkdirSync(directoryName);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        const existingError = resolveExistingDirectoryError(existing);
+        if (existingError) {
+          return existingError;
+        }
+      } else {
         throw error;
       }
     }
@@ -99,6 +132,32 @@ function ensureWorkspaceChildDirectory(
   } finally {
     process.chdir(previousCwd);
   }
+}
+
+function ensureWorkspaceChildDirectory(
+  parentDirectory: string,
+  directoryName: string,
+  assertUsable?: AssertWorkspacePathUsable
+): string | WorkspaceErrorEnvelope {
+  return createOrEnsureWorkspaceChildDirectory({
+    parentDirectory,
+    directoryName,
+    assertUsable,
+    existing: 'allow',
+  });
+}
+
+function createWorkspaceChildDirectory(
+  parentDirectory: string,
+  directoryName: string,
+  assertUsable?: AssertWorkspacePathUsable
+): string | WorkspaceErrorEnvelope {
+  return createOrEnsureWorkspaceChildDirectory({
+    parentDirectory,
+    directoryName,
+    assertUsable,
+    existing: 'reject',
+  });
 }
 
 async function ensureWorkspaceRootChildDirectory(
@@ -116,6 +175,24 @@ async function ensureWorkspaceRootChildDirectory(
     await beforeWorkspaceRootChildDirectoryCreateForTest?.(directoryName);
     assertSameDirectoryPath(canonicalRoot, rootIdentity);
     return ensureWorkspaceChildDirectory(canonicalRoot, directoryName, assertUsable);
+  } catch (error) {
+    return workspacePathError(error);
+  }
+}
+
+export async function createNewWorkspaceRootDirectory(
+  canonicalParent: string,
+  directoryName: string,
+  assertUsable?: AssertWorkspacePathUsable
+): Promise<string | WorkspaceErrorEnvelope> {
+  if (!isSafeWorkspaceDirectoryName(directoryName)) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Workspace folder name is invalid');
+  }
+
+  try {
+    const parentIdentity = readDirectoryIdentitySync(canonicalParent);
+    assertSameDirectoryPath(canonicalParent, parentIdentity);
+    return createWorkspaceChildDirectory(canonicalParent, directoryName, assertUsable);
   } catch (error) {
     return workspacePathError(error);
   }

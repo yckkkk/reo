@@ -7,9 +7,12 @@ import {
   workspaceGenericOkResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListProjectsResponseSchema,
   workspaceMemoryDetailResponseSchema,
   workspaceMicrophoneIntentResponseSchema,
   workspaceOpenRequestSchema,
+  workspaceOpenProjectRequestSchema,
+  workspaceRemoveProjectRequestSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAudioChunkRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
@@ -25,8 +28,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
+    'workspace:listProjects',
     'workspace:initialize',
     'workspace:open',
+    'workspace:openProject',
+    'workspace:removeProject',
     'workspace:close',
     'workspace:createRecordingDraft',
     'workspace:appendRecordingAudioChunk',
@@ -42,6 +48,74 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:clearMicrophoneIntent',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
+});
+
+test('workspace project registry contract exposes project metadata but never rootPath', () => {
+  const response = workspaceListProjectsResponseSchema.parse({
+    ok: true,
+    value: {
+      projects: [
+        {
+          workspaceId: 'ws_1',
+          title: 'Runtime validated memory',
+          description: 'Final runtime validation workspace.',
+          addedAt: '2026-05-08T07:48:00.000Z',
+          lastOpenedAt: '2026-05-08T07:49:00.000Z',
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(response, {
+    ok: true,
+    value: {
+      projects: [
+        {
+          workspaceId: 'ws_1',
+          title: 'Runtime validated memory',
+          description: 'Final runtime validation workspace.',
+          addedAt: '2026-05-08T07:48:00.000Z',
+          lastOpenedAt: '2026-05-08T07:49:00.000Z',
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(workspaceOpenProjectRequestSchema.parse({ workspaceId: 'ws_1' }), {
+    workspaceId: 'ws_1',
+  });
+  assert.deepEqual(workspaceRemoveProjectRequestSchema.parse({ workspaceId: 'ws_1' }), {
+    workspaceId: 'ws_1',
+  });
+  assert.throws(() =>
+    workspaceListProjectsResponseSchema.parse({
+      ok: true,
+      value: {
+        projects: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Runtime validated memory',
+            description: 'Final runtime validation workspace.',
+            rootPath: '/Users/example/Runtime validated memory',
+            addedAt: '2026-05-08T07:48:00.000Z',
+            lastOpenedAt: '2026-05-08T07:49:00.000Z',
+          },
+        ],
+      },
+    })
+  );
+  assert.throws(() =>
+    workspaceOpenProjectRequestSchema.parse({
+      workspaceId: 'ws_1',
+      rootPath: '/Users/example/Runtime validated memory',
+    })
+  );
+  assert.throws(() =>
+    workspaceRemoveProjectRequestSchema.parse({
+      workspaceId: 'ws_1',
+      rootPath: '/Users/example/Runtime validated memory',
+    })
+  );
 });
 
 test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot, and no rootPath', () => {
@@ -88,6 +162,34 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
       },
     },
   });
+});
+
+test('initializeWorkspace contract rejects unsafe workspace folder names and reports same-name folders', () => {
+  assert.throws(() =>
+    workspaceInitializeRequestSchema.parse({
+      selectionToken: 'selection-token-1',
+      title: 'nested/workspace',
+      description: '',
+    })
+  );
+  assert.deepEqual(
+    workspaceErrorEnvelopeSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_ALREADY_EXISTS',
+        message: 'Workspace directory already exists',
+        dataRetention: 'none-written',
+      },
+    }),
+    {
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_ALREADY_EXISTS',
+        message: 'Workspace directory already exists',
+        dataRetention: 'none-written',
+      },
+    }
+  );
 });
 
 test('open and close contracts use token or handle but never rootPath', () => {

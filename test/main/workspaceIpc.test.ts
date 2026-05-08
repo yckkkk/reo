@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -12,8 +22,11 @@ import {
   handleGetMemoryDetailForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
+  handleListWorkspaceProjectsForTest,
   handleOpenWorkspace,
+  handleOpenWorkspaceProjectForTest,
   handleOpenWorkspaceForTest,
+  handleRemoveWorkspaceProjectForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
@@ -28,6 +41,7 @@ import {
 } from '../../src/main/security.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
+import { createWorkspaceProjectRegistry } from '../../src/main/workspaceProjectRegistry.js';
 import type {
   TrustedSenderEventAdapter,
   TrustedSenderIdentity,
@@ -191,6 +205,87 @@ test('initializeWorkspace consumes selection token and never exposes rootPath', 
   if (!replay.ok) {
     assert.equal('rootPath' in replay.error, false);
   }
+});
+
+test('initializeWorkspace creates a named workspace directory under the selected parent', async () => {
+  const parentPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-parent-'));
+  const workspaceRoot = path.join(parentPath, '你好');
+  const tokenStore = createWorkspaceSelectionTokenStore({
+    createToken: () => 'selection-token-named-child',
+    now: () => 1_000,
+    ttlMs: 5_000,
+  });
+  tokenStore.issueSelection({
+    rootPath: parentPath,
+    displayPath: path.basename(parentPath),
+    sender,
+  });
+
+  const result = await handleInitializeWorkspaceForTest({
+    event,
+    input: {
+      selectionToken: 'selection-token-named-child',
+      title: '你好',
+      description: 'named child workspace',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    tokenStore,
+    createWorkspaceId: () => 'ws_named_child',
+    createHandle: () => 'wh_named_child',
+    now: () => '2026-05-08T13:08:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual((await readdir(parentPath)).sort(), ['你好']);
+  assert.equal(
+    await readFile(path.join(workspaceRoot, 'AGENTS.md'), 'utf8'),
+    '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n'
+  );
+  await assert.rejects(stat(path.join(parentPath, '.reo')));
+  await assert.rejects(stat(path.join(parentPath, 'AGENTS.md')));
+});
+
+test('initializeWorkspace rejects an existing same-name workspace directory', async () => {
+  const parentPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-existing-parent-'));
+  const workspaceRoot = path.join(parentPath, '你好');
+  await mkdir(workspaceRoot);
+  const tokenStore = createWorkspaceSelectionTokenStore({
+    createToken: () => 'selection-token-existing-child',
+    now: () => 1_000,
+    ttlMs: 5_000,
+  });
+  tokenStore.issueSelection({
+    rootPath: parentPath,
+    displayPath: path.basename(parentPath),
+    sender,
+  });
+
+  const result = await handleInitializeWorkspaceForTest({
+    event,
+    input: {
+      selectionToken: 'selection-token-existing-child',
+      title: '你好',
+      description: '',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    tokenStore,
+    createWorkspaceId: () => 'ws_existing_child',
+    createHandle: () => 'wh_existing_child',
+    now: () => '2026-05-08T13:08:00.000Z',
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_ALREADY_EXISTS');
+    assert.equal(result.error.dataRetention, 'none-written');
+  }
+  assert.deepEqual(await readdir(parentPath), ['你好']);
+  await assert.rejects(stat(path.join(workspaceRoot, '.reo')));
+  await assert.rejects(stat(path.join(parentPath, '.reo')));
 });
 
 test('chooseDirectory response does not expose rootPath or equivalent absolute displayPath', async () => {
@@ -579,113 +674,9 @@ test('getMemoryDetail stops when the workspace lock is lost during detail read',
   }
 });
 
-test('initializeWorkspace rejects symlinked .reo before writing workspace files', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-symlink-'));
-  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-outside-'));
-  await symlink(outside, path.join(rootPath, '.reo'));
-  const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-symlink',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
-
-  const result = await handleInitializeWorkspaceForTest({
-    event,
-    input: {
-      selectionToken: 'selection-token-symlink',
-      title: '不安全工作区',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore,
-    createWorkspaceId: () => 'ws_symlink',
-    createHandle: () => 'wh_symlink',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-  }
-  await assert.rejects(stat(path.join(outside, 'workspace.lock')));
-  await assert.rejects(stat(path.join(outside, 'workspace.json')));
-});
-
-test('initializeWorkspace returns AGENTS conflict without leaving a workspace lock', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-conflict-'));
-  await writeFile(path.join(rootPath, 'AGENTS.md'), '用户已有规则\n');
-  const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-conflict',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
-
-  const result = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-conflict',
-      title: '冲突工作区',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore,
-    createWorkspaceId: () => 'ws_conflict',
-    createHandle: () => 'wh_conflict',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_AGENTS_CONFLICT');
-    assert.equal(result.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(rootPath, '.reo')));
-});
-
-test('initializeWorkspace treats dangling AGENTS.md symlink as conflict before lock', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-dangling-conflict-'));
-  await symlink(path.join(rootPath, 'missing-user-agents.md'), path.join(rootPath, 'AGENTS.md'));
-  const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-dangling-conflict',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
-
-  const result = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-dangling-conflict',
-      title: '冲突工作区',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore,
-    createWorkspaceId: () => 'ws_conflict',
-    createHandle: () => 'wh_conflict',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_AGENTS_CONFLICT');
-    assert.equal(result.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(rootPath, '.reo')));
-  await assert.rejects(stat(path.join(rootPath, 'memories')));
-});
-
 test('initializeWorkspace releases the lock when post-lock file writes throw', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-throw-'));
-  await mkdir(path.join(rootPath, '.reo', 'workspace.json'), { recursive: true });
+  const workspaceRoot = path.join(rootPath, '写入失败工作区');
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-init-throw',
     now: () => 1_000,
@@ -693,7 +684,7 @@ test('initializeWorkspace releases the lock when post-lock file writes throw', a
   });
   tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
 
-  const result = await handleInitializeWorkspace({
+  const result = await handleInitializeWorkspaceForTest({
     event,
     input: {
       selectionToken: 'selection-token-init-throw',
@@ -707,14 +698,18 @@ test('initializeWorkspace releases the lock when post-lock file writes throw', a
     createWorkspaceId: () => 'ws_init_throw',
     createHandle: () => 'wh_init_throw',
     now: () => '2026-05-06T13:08:00.000Z',
+    afterWorkspaceLockAcquiredForTest: async () => {
+      await mkdir(path.join(workspaceRoot, '.reo', 'workspace.json'), { recursive: true });
+    },
   });
 
   assert.equal(result.ok, false);
-  await assertWorkspaceLockCanBeReacquired(rootPath);
+  await assertWorkspaceLockCanBeReacquired(workspaceRoot);
 });
 
 test('initializeWorkspace rejects lock identity loss before workspace files are written', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-lock-lost-'));
+  const workspaceRoot = path.join(rootPath, 'Lock lost');
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-init-lock-lost',
     now: () => 1_000,
@@ -737,8 +732,8 @@ test('initializeWorkspace rejects lock identity loss before workspace files are 
     createHandle: () => 'wh_init_lock_lost',
     now: () => '2026-05-06T13:08:00.000Z',
     afterWorkspaceLockAcquiredForTest: async () => {
-      await rename(path.join(rootPath, '.reo'), path.join(rootPath, '.reo-preserved'));
-      await mkdir(path.join(rootPath, '.reo'));
+      await rename(path.join(workspaceRoot, '.reo'), path.join(workspaceRoot, '.reo-preserved'));
+      await mkdir(path.join(workspaceRoot, '.reo'));
     },
   });
 
@@ -746,12 +741,13 @@ test('initializeWorkspace rejects lock identity loss before workspace files are 
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
   }
-  await assert.rejects(stat(path.join(rootPath, 'AGENTS.md')));
-  await assert.rejects(stat(path.join(rootPath, '.reo', 'workspace.json')));
+  await assert.rejects(stat(path.join(workspaceRoot, 'AGENTS.md')));
+  await assert.rejects(stat(path.join(workspaceRoot, '.reo', 'workspace.json')));
 });
 
 test('initializeWorkspace rejects lock identity loss during managed directory creation', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-mid-lock-lost-'));
+  const workspaceRoot = path.join(rootPath, 'Lock lost');
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-init-mid-lock-lost',
     now: () => 1_000,
@@ -760,8 +756,8 @@ test('initializeWorkspace rejects lock identity loss during managed directory cr
   tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
   setAfterWorkspaceReoDirectoryCheckForTest(async () => {
     setAfterWorkspaceReoDirectoryCheckForTest(null);
-    await rename(path.join(rootPath, '.reo'), path.join(rootPath, '.reo-preserved'));
-    await mkdir(path.join(rootPath, '.reo'));
+    await rename(path.join(workspaceRoot, '.reo'), path.join(workspaceRoot, '.reo-preserved'));
+    await mkdir(path.join(workspaceRoot, '.reo'));
   });
 
   try {
@@ -788,13 +784,14 @@ test('initializeWorkspace rejects lock identity loss during managed directory cr
   } finally {
     setAfterWorkspaceReoDirectoryCheckForTest(null);
   }
-  await assert.rejects(stat(path.join(rootPath, 'AGENTS.md')));
-  await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts')));
-  await assert.rejects(stat(path.join(rootPath, '.reo', 'workspace.json')));
+  await assert.rejects(stat(path.join(workspaceRoot, 'AGENTS.md')));
+  await assert.rejects(stat(path.join(workspaceRoot, '.reo', 'drafts')));
+  await assert.rejects(stat(path.join(workspaceRoot, '.reo', 'workspace.json')));
 });
 
 test('initializeWorkspace releases the lock when handle registration throws', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-handle-throw-'));
+  const workspaceRoot = path.join(rootPath, 'handle 注册失败工作区');
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-init-handle-throw',
     now: () => 1_000,
@@ -824,39 +821,10 @@ test('initializeWorkspace releases the lock when handle registration throws', as
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_WORKSPACE_INIT_FAILED');
   }
-  await assertWorkspaceLockCanBeReacquired(rootPath);
+  await assertWorkspaceLockCanBeReacquired(workspaceRoot);
 });
 
-test('initializeWorkspace returns an error envelope when the lock file target cannot be written', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-lock-target-'));
-  await mkdir(path.join(rootPath, '.reo', 'workspace.lock'), { recursive: true });
-  const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-init-lock-target',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
-
-  const result = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-init-lock-target',
-      title: 'Lock target failure',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_FAILED');
-  }
-});
-
-test('openWorkspace rejects non-Reo directories before writing a workspace lock', async () => {
+test('openWorkspace initializes an empty selected folder as a new workspace', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-open-empty-'));
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-open-empty',
@@ -874,6 +842,43 @@ test('openWorkspace rejects non-Reo directories before writing a workspace lock'
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     tokenStore,
+    createWorkspaceId: () => 'ws_open_empty',
+    createHandle: () => 'wh_open_empty',
+    now: () => '2026-05-08T13:09:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.workspaceHandle, 'wh_open_empty');
+    assert.equal(result.value.workspaceId, 'ws_open_empty');
+    assert.equal(result.value.snapshot.title, path.basename(rootPath));
+  }
+  assert.equal(
+    await readFile(path.join(rootPath, 'AGENTS.md'), 'utf8'),
+    '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n'
+  );
+  await stat(path.join(rootPath, '.reo', 'workspace.json'));
+});
+
+test('openWorkspace rejects non-empty non-Reo directories before writing a workspace lock', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-open-non-empty-'));
+  await writeFile(path.join(rootPath, 'notes.md'), 'not a Reo workspace\n');
+  const tokenStore = createWorkspaceSelectionTokenStore({
+    createToken: () => 'selection-token-open-non-empty',
+    now: () => 1_000,
+    ttlMs: 5_000,
+  });
+  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
+
+  const result = await handleOpenWorkspaceForTest({
+    event,
+    input: {
+      selectionToken: 'selection-token-open-non-empty',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    tokenStore,
   });
 
   assert.equal(result.ok, false);
@@ -882,6 +887,273 @@ test('openWorkspace rejects non-Reo directories before writing a workspace lock'
     assert.equal(result.error.dataRetention, 'none-written');
   }
   await assert.rejects(stat(path.join(rootPath, '.reo')));
+});
+
+test('openWorkspace rejects a folder that becomes non-empty after the empty check', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-open-empty-race-'));
+  const tokenStore = createWorkspaceSelectionTokenStore({
+    createToken: () => 'selection-token-open-empty-race',
+    now: () => 1_000,
+    ttlMs: 5_000,
+  });
+  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
+
+  const result = await handleOpenWorkspaceForTest({
+    event,
+    input: {
+      selectionToken: 'selection-token-open-empty-race',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    tokenStore,
+    createWorkspaceId: () => 'ws_open_empty_race',
+    createHandle: () => 'wh_open_empty_race',
+    now: () => '2026-05-08T13:09:00.000Z',
+    afterWorkspaceLockAcquiredForTest: async () => {
+      await writeFile(path.join(rootPath, 'notes.md'), 'not a Reo workspace\n');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_METADATA_INVALID');
+    assert.equal(result.error.dataRetention, 'none-written');
+  }
+  await assert.rejects(stat(path.join(rootPath, '.reo')));
+  await assertWorkspaceLockCanBeReacquired(rootPath);
+});
+
+test('openWorkspace registers imported projects and listProjects never exposes rootPath', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-register-'));
+  const projectRegistry = createWorkspaceProjectRegistry({
+    registryPath: path.join(
+      await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-')),
+      'registry.json'
+    ),
+    now: () => '2026-05-08T07:48:00.000Z',
+  });
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'Runtime validated memory',
+    description: 'Final runtime validation workspace.',
+    createWorkspaceId: () => 'ws_runtime_validated',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+  const tokenStore = createWorkspaceSelectionTokenStore({
+    createToken: () => 'selection-token-project-register',
+    now: () => 1_000,
+    ttlMs: 5_000,
+  });
+  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
+
+  const openResult = await handleOpenWorkspaceForTest({
+    event,
+    input: {
+      selectionToken: 'selection-token-project-register',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    tokenStore,
+    projectRegistry,
+  });
+
+  assert.equal(openResult.ok, true);
+  const listResult = await handleListWorkspaceProjectsForTest({
+    event,
+    input: undefined,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    projectRegistry,
+  });
+
+  assert.deepEqual(listResult, {
+    ok: true,
+    value: {
+      projects: [
+        {
+          workspaceId: 'ws_runtime_validated',
+          title: 'Runtime validated memory',
+          description: 'Final runtime validation workspace.',
+          addedAt: '2026-05-08T07:48:00.000Z',
+          lastOpenedAt: '2026-05-08T07:48:00.000Z',
+        },
+      ],
+    },
+  });
+  assert.equal(JSON.stringify(listResult).includes(rootPath), false);
+});
+
+test('listProjects returns an error envelope when the project registry cannot be read', async () => {
+  const result = await handleListWorkspaceProjectsForTest({
+    event,
+    input: undefined,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    projectRegistry: {
+      listProjects: async () => {
+        throw new Error('registry unreadable');
+      },
+      resolveProjectRoot: async () => null,
+      removeProject: async () => {},
+      upsertProject: async () => {
+        throw new Error('unused');
+      },
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED');
+  }
+});
+
+test('openWorkspaceProject opens a persisted project without a selection token', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-open-'));
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-project-open-registry-')),
+    'registry.json'
+  );
+  const projectRegistry = createWorkspaceProjectRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:49:00.000Z',
+  });
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'Runtime validated memory',
+    description: 'Final runtime validation workspace.',
+    createWorkspaceId: () => 'ws_runtime_validated',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+  await projectRegistry.upsertProject({
+    canonicalRoot: rootPath,
+    snapshot: {
+      workspaceId: 'ws_runtime_validated',
+      title: 'Runtime validated memory',
+      description: 'Final runtime validation workspace.',
+      memories: [],
+      recordings: [],
+    },
+  });
+  const restartedProjectRegistry = createWorkspaceProjectRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:50:00.000Z',
+  });
+
+  const result = await handleOpenWorkspaceProjectForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    createHandle: () => 'wh_project_open',
+    projectRegistry: restartedProjectRegistry,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, {
+      workspaceHandle: 'wh_project_open',
+      workspaceId: 'ws_runtime_validated',
+      snapshot: {
+        workspaceId: 'ws_runtime_validated',
+        title: 'Runtime validated memory',
+        description: 'Final runtime validation workspace.',
+        memories: [],
+        recordings: [],
+      },
+    });
+    assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('openWorkspaceProject reports a missing persisted workspace folder', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-missing-'));
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-project-missing-registry-')),
+    'registry.json'
+  );
+  const projectRegistry = createWorkspaceProjectRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:49:00.000Z',
+  });
+  await projectRegistry.upsertProject({
+    canonicalRoot: rootPath,
+    snapshot: {
+      workspaceId: 'ws_deleted',
+      title: 'Deleted workspace',
+      description: '',
+      memories: [],
+      recordings: [],
+    },
+  });
+  await rm(rootPath, { recursive: true, force: true });
+
+  const result = await handleOpenWorkspaceProjectForTest({
+    event,
+    input: {
+      workspaceId: 'ws_deleted',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    projectRegistry,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_ROOT_MISSING');
+    assert.equal(result.error.dataRetention, 'none-written');
+  }
+});
+
+test('removeWorkspaceProject removes a persisted project without resolving or deleting its folder', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-remove-'));
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-project-remove-registry-')),
+    'registry.json'
+  );
+  const projectRegistry = createWorkspaceProjectRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:49:00.000Z',
+  });
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: '测试1',
+    description: '',
+    createWorkspaceId: () => 'ws_test_1',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+  await projectRegistry.upsertProject({
+    canonicalRoot: rootPath,
+    snapshot: {
+      workspaceId: 'ws_test_1',
+      title: '测试1',
+      description: '',
+      memories: [],
+      recordings: [],
+    },
+  });
+
+  const result = await handleRemoveWorkspaceProjectForTest({
+    event,
+    input: {
+      workspaceId: 'ws_test_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    projectRegistry,
+  });
+
+  assert.deepEqual(result, { ok: true, value: { removed: true } });
+  assert.deepEqual(await projectRegistry.listProjects(), []);
+  assert.equal((await stat(path.join(rootPath, '.reo'))).isDirectory(), true);
 });
 
 test('openWorkspace releases the lock when post-lock recovery or index writes throw', async () => {
@@ -1125,116 +1397,4 @@ test('openWorkspace rejects unsafe child directories before writing a workspace 
   }
   await assert.rejects(stat(path.join(draftsRoot, '.reo', 'workspace.lock')));
   await assert.rejects(stat(path.join(outsideDrafts, 'recordings')));
-});
-
-test('initializeWorkspace rejects unsafe memories targets before writing workspace files', async () => {
-  const fileRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memories-file-'));
-  await writeFile(path.join(fileRoot, 'memories'), 'not a directory\n');
-  const fileTokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-memories-file',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  fileTokenStore.issueSelection({
-    rootPath: fileRoot,
-    displayPath: path.basename(fileRoot),
-    sender,
-  });
-
-  const fileResult = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-memories-file',
-      title: '非法 memories',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore: fileTokenStore,
-    createWorkspaceId: () => 'ws_memories_file',
-    createHandle: () => 'wh_memories_file',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(fileResult.ok, false);
-  if (!fileResult.ok) {
-    assert.equal(fileResult.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-    assert.equal(fileResult.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(fileRoot, '.reo')));
-
-  const symlinkRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memories-link-'));
-  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memories-outside-'));
-  await symlink(outside, path.join(symlinkRoot, 'memories'));
-  const symlinkTokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-memories-link',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  symlinkTokenStore.issueSelection({
-    rootPath: symlinkRoot,
-    displayPath: path.basename(symlinkRoot),
-    sender,
-  });
-
-  const symlinkResult = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-memories-link',
-      title: '非法 memories 链接',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore: symlinkTokenStore,
-    createWorkspaceId: () => 'ws_memories_link',
-    createHandle: () => 'wh_memories_link',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(symlinkResult.ok, false);
-  if (!symlinkResult.ok) {
-    assert.equal(symlinkResult.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-    assert.equal(symlinkResult.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(symlinkRoot, '.reo')));
-});
-
-test('initializeWorkspace rejects symlinked .reo draft ancestors before writing outside workspace', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-drafts-link-'));
-  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-drafts-outside-'));
-  await mkdir(path.join(rootPath, '.reo'));
-  await symlink(outside, path.join(rootPath, '.reo', 'drafts'));
-  const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-drafts-link',
-    now: () => 1_000,
-    ttlMs: 5_000,
-  });
-  tokenStore.issueSelection({ rootPath, displayPath: path.basename(rootPath), sender });
-
-  const result = await handleInitializeWorkspace({
-    event,
-    input: {
-      selectionToken: 'selection-token-drafts-link',
-      title: '非法 drafts 链接',
-      description: '',
-    },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    tokenStore,
-    createWorkspaceId: () => 'ws_drafts_link',
-    createHandle: () => 'wh_drafts_link',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-    assert.equal(result.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(outside, 'recordings')));
-  await assert.rejects(stat(path.join(rootPath, 'AGENTS.md')));
 });

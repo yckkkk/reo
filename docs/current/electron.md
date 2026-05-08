@@ -10,6 +10,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前 preload 只暴露 `window.reoWorkspace` 下的显式 workspace 方法。
 - 当前 preload bundle 输出为 `out/preload/index.cjs`；sandbox preload source 不引入 Zod-backed contract 或普通 Node package。
 - 当前 IPC API 只有显式 workspace channels，不存在 generic `invoke/send` bridge。
+- 当前 main process 持有 workspace project registry，真实 workspace root 只存放在 main-owned app state file 中，不进入 renderer、preload DTO、DOM、URL 或 Query key。
 - 当前没有 renderer error capture、preload logging bridge 或 IPC logging channel。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
@@ -72,7 +73,10 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 ## 第一产品切片 Electron 决策
 
 - First product slice 的 renderer 特权能力必须通过窄 preload 暴露为 `window.reoWorkspace` 产品方法。
-- Workspace IPC channels 覆盖 choose、initialize、open、close、memory detail、recording draft、audio manifest/chunk read、transcript/reflections save、microphone intent begin/clear。
+- Workspace IPC channels 覆盖 choose、list projects、initialize、open、open project、remove project、close、memory detail、recording draft、audio manifest/chunk read、transcript/reflections save、microphone intent begin/clear。
+- `workspace:listProjects` request 不接受 payload；response 只返回 `workspaceId`、title、description、addedAt 和 lastOpenedAt，不返回 raw path。Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空列表处理；不可读 IO 错误返回 `ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED`。
+- `workspace:openProject` request 只接受 `workspaceId`；main process 从 registry 解析真实 root，复用 workspace open 的 target validation、single-writer lock、workspace file recovery/index reconciliation 和 handle registration，并返回新的 opaque `workspaceHandle`。Registry 中的 root folder 已被用户删除时返回 `ERR_WORKSPACE_ROOT_MISSING`，不暴露 raw path。
+- `workspace:removeProject` request 只接受 `workspaceId`；main process 只从 workspace project registry 移除该 entry，不解析 root path、不删除本地 workspace folder，也不需要 selection token。Registry 写入失败返回 `ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED`。
 - `workspace:getMemoryDetail` request 只接受 `workspaceHandle` 和 `memoryId`；response 不返回 raw path，只返回 memory identity、title、created/updated time、full `recordingIds` identity list、总 `recordingCount`、`recordingsTruncated`、`hasTranscript`、`hasReflections` 和有界 recording summary preview。
 - `workspace:getRecordingDetail`、`workspace:readRecordingAudioManifest`、`workspace:readRecordingAudioChunk`、`workspace:saveTranscript` 和 `workspace:saveReflections` 只接受 finalized recording identity：`workspaceHandle`、`memoryId` 和 `recordingId`。Draft create/append/finalize/discard 仍使用 draft `recordingId` transaction identity。
 - `chooseDirectory` 只返回 `selectionToken` 和 `displayPath` 或 canceled 结果，不返回裸 `rootPath`，也不提前返回 conflict 或 permission 判断。
@@ -80,9 +84,9 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - Selection token 由 main process 保存真实路径，单次消费、短 TTL、绑定 sender identity；过期 token 会删除，错误 sender 不烧掉 token，错误结果不得泄露真实路径。
 - Preload 只导入无 Zod、无普通包依赖的 channel 常量；DTO 校验和错误信封属于 main process contract。
 - Renderer 后续读写 workspace 不传裸 `rootPath`；main process 在 choose/open 后 canonicalize 路径，并返回 opaque `workspaceHandle`。
-- `workspaceHandle` 绑定 canonical realpath、workspace root identity、`.reo` directory identity、lock directory identity、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；workspace close、BrowserWindow closed、renderer process gone、`uncaughtException` teardown、lock lost、root identity changed 或 schema mismatch 时撤销。Teardown close-all 只能删除 release 成功的 handle；release 失败的 handle 保留但不可继续授权写入，用于后续 close-all 重试。每个 handler 在 delayed filesystem operation 前必须能重新断言 handle lock usability，不能只依赖最初的 `requireHandle` 返回值。
-- Workspace initialize 在 lock 前做 no-write target preflight；已有 `AGENTS.md`、dangling `AGENTS.md` symlink 或任何 `AGENTS.md` symlink 条目都返回 conflict 且不得留下 `.reo/workspace.lock*`。新建 `AGENTS.md` 使用 no-replace atomic write，不允许覆盖用户文件。`.reo`、`.reo/drafts`、`.reo/drafts/recordings` 或 `memories/` 为 symlink 或非目录时返回 unsafe path，不得跟随到 workspace 外；lock 必须绑定当前 `.reo` directory identity，`.reo/workspace.lock` leaf 用 no-follow 打开，`.reo/workspace.lock.lock` 只在同一目录内创建并绑定 identity，owner file 在该目录内 no-follow 创建并 fsync。
-- Workspace open 在 lock 前确认 `.reo/workspace.json` 是合法 Reo metadata，并拒绝 unsafe `.reo`、`.reo/drafts`、`.reo/drafts/recordings` 或 `memories/`；非 Reo 目录、缺失 metadata 或 corrupt metadata 返回 metadata invalid，且不得创建 `.reo/workspace.lock*`。Lock target leaf symlink 或 lock 前 `.reo` parent swap 必须拒绝，不能写入 workspace 外。
+- `workspaceHandle` 绑定 canonical realpath、workspace root identity、`.reo` directory identity、lock directory identity、workspaceId、owning sender、session/partition、lock ownership 和 app lifecycle；workspace close、BrowserWindow closed、renderer process gone、renderer navigation/reload、`uncaughtException` teardown、lock lost、root identity changed 或 schema mismatch 时撤销。Teardown close-all 只能删除 release 成功的 handle；release 失败的 handle 保留但不可继续授权写入，用于后续 close-all 重试。每个 handler 在 delayed filesystem operation 前必须能重新断言 handle lock usability，不能只依赖最初的 `requireHandle` 返回值。
+- Workspace initialize 把 selection token 指向的目录视为父目录，workspace title 必须是安全文件夹名；main process 在父目录下用 no-replace `mkdir` 创建同名 child workspace root，child 已存在返回 `ERR_WORKSPACE_ALREADY_EXISTS`，然后只在新 child root 内获取 lock 和写入 Reo 文件。新建 `AGENTS.md` 使用 no-replace atomic write，不允许覆盖用户文件。`.reo`、`.reo/drafts`、`.reo/drafts/recordings` 或 `memories/` 为 symlink 或非目录时返回 unsafe path，不得跟随到 workspace 外；lock 必须绑定当前 `.reo` directory identity，`.reo/workspace.lock` leaf 用 no-follow 打开，`.reo/workspace.lock.lock` 只在同一目录内创建并绑定 identity，owner file 在该目录内 no-follow 创建并 fsync。
+- Workspace open 在 lock 前确认 `.reo/workspace.json` 是合法 Reo metadata；空目录作为新 Reo workspace 原地初始化，使用所选目录 basename 作为 title 和空 description；空目录判断必须迭代到首个非忽略 entry 即停止，不能无界读取大型目录；空目录分支获取 lock 后、写入 workspace 文件前必须再次确认 root 除 lock-only `.reo` artifacts 外仍为空；若期间出现非 Reo 文件，返回 metadata invalid 并清理 lock-only `.reo`。非空非 Reo 目录、corrupt metadata、missing root、unsafe `.reo`、unsafe `.reo/drafts`、unsafe `.reo/drafts/recordings` 或 unsafe `memories/` 返回 typed error，且 lock 前失败不得创建 `.reo/workspace.lock*`。Lock target leaf symlink 或 lock 前 `.reo` parent swap 必须拒绝，不能写入 workspace 外。
 - IPC sender validation 必须校验 main frame、trusted production origin `reo-app://renderer/index.html`、loopback dev origin、session/partition、channel allowlist 和 handle ownership。
 - Custom protocol 只服务 renderer build assets，不服务用户 workspace 文件；host 只允许 `renderer`，路径必须 containment 到 renderer output。
 - Audio append 每个 chunk 最多 1 MiB，每个 recording 只允许 1 个 append 在途。

@@ -59,6 +59,13 @@ function createWindow(): void {
     void closeAllWorkspaceHandles();
   });
 
+  mainWindow.webContents.on('will-navigate', (event) => {
+    if (!isTrustedAppUrl(event.url)) {
+      return;
+    }
+    void closeAllWorkspaceHandles();
+  });
+
   mainWindow.on('closed', () => {
     void closeAllWorkspaceHandles();
     mainWindow = null;

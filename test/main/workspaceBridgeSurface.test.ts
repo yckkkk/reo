@@ -4,8 +4,11 @@ import { createWorkspaceBridge } from '../../src/preload/workspaceBridge.js';
 
 const workspaceBridgeKeys = [
   'chooseDirectory',
+  'listWorkspaceProjects',
   'initializeWorkspace',
   'openWorkspace',
+  'openWorkspaceProject',
+  'removeWorkspaceProject',
   'closeWorkspace',
   'createRecordingDraft',
   'appendRecordingAudioChunk',
@@ -38,7 +41,15 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     ok: true,
     value: { status: 'canceled' },
   });
-  assert.deepEqual(calls, ['workspace:chooseDirectory']);
+  await bridge.listWorkspaceProjects();
+  await bridge.openWorkspaceProject({ workspaceId: 'ws_1' });
+  await bridge.removeWorkspaceProject({ workspaceId: 'ws_1' });
+  assert.deepEqual(calls, [
+    'workspace:chooseDirectory',
+    'workspace:listProjects',
+    'workspace:openProject',
+    'workspace:removeProject',
+  ]);
 });
 
 test('workspace preload bridge maps memory detail and microphone methods to explicit channels', async () => {

@@ -11,7 +11,10 @@ import {
   getMemoryDetail,
   getRecordingDetail,
   initializeWorkspace,
+  listWorkspaceProjects,
   openWorkspace,
+  openWorkspaceProject,
+  removeWorkspaceProject,
   readRecordingAudioChunk,
   readRecordingAudioManifest,
   saveReflections,
@@ -21,8 +24,11 @@ import {
 describe('workspace renderer API wrapper', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
+    listWorkspaceProjects: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
+    openWorkspaceProject: vi.fn(),
+    removeWorkspaceProject: vi.fn(),
     closeWorkspace: vi.fn(),
     createRecordingDraft: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
@@ -52,7 +58,29 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { workspaceId: 'ws_1' },
     });
+    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+      ok: true,
+      value: {
+        projects: [
+          {
+            workspaceId: 'ws_1',
+            title: '记忆',
+            description: '',
+            addedAt: '2026-05-08T07:48:00.000Z',
+            lastOpenedAt: '2026-05-08T07:48:00.000Z',
+          },
+        ],
+      },
+    });
     reoWorkspace.openWorkspace.mockResolvedValue({ ok: true, value: { workspaceId: 'ws_1' } });
+    reoWorkspace.openWorkspaceProject.mockResolvedValue({
+      ok: true,
+      value: { workspaceId: 'ws_1' },
+    });
+    reoWorkspace.removeWorkspaceProject.mockResolvedValue({
+      ok: true,
+      value: { removed: true },
+    });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
       ok: true,
@@ -128,7 +156,10 @@ describe('workspace renderer API wrapper', () => {
       title: '记忆',
       description: '',
     });
+    await listWorkspaceProjects();
     await openWorkspace({ selectionToken: 'selection-token-2' });
+    await openWorkspaceProject({ workspaceId: 'ws_1' });
+    await removeWorkspaceProject({ workspaceId: 'ws_1' });
     await closeWorkspace({ workspaceHandle: 'wh_1' });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await appendRecordingAudioChunk({
@@ -179,6 +210,9 @@ describe('workspace renderer API wrapper', () => {
       title: '记忆',
       description: '',
     });
+    expect(reoWorkspace.listWorkspaceProjects).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.openWorkspaceProject).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+    expect(reoWorkspace.removeWorkspaceProject).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.readRecordingAudioChunk).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',

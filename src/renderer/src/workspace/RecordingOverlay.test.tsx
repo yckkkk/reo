@@ -62,8 +62,11 @@ async function flushPromises() {
 function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {}) {
   const bridge: Window['reoWorkspace'] = {
     chooseDirectory: vi.fn(),
+    listWorkspaceProjects: vi.fn(async () => ({ ok: true as const, value: { projects: [] } })),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
+    openWorkspaceProject: vi.fn(),
+    removeWorkspaceProject: vi.fn(),
     closeWorkspace: vi.fn(),
     createRecordingDraft: vi.fn(async () => ({
       ok: true as const,

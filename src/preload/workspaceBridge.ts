@@ -10,7 +10,10 @@ import {
   WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
+  WORKSPACE_LIST_PROJECTS_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_PROJECT_CHANNEL,
+  WORKSPACE_REMOVE_PROJECT_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
   WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
@@ -45,8 +48,11 @@ export interface WorkspaceBridgeInvoker {
 
 export interface ReoWorkspaceBridge {
   readonly chooseDirectory: () => Promise<WorkspaceChooseDirectoryResponse>;
+  readonly listWorkspaceProjects: () => Promise<unknown>;
   readonly initializeWorkspace: (payload: unknown) => Promise<unknown>;
   readonly openWorkspace: (payload: unknown) => Promise<unknown>;
+  readonly openWorkspaceProject: (payload: unknown) => Promise<unknown>;
+  readonly removeWorkspaceProject: (payload: unknown) => Promise<unknown>;
   readonly closeWorkspace: (payload: unknown) => Promise<unknown>;
   readonly createRecordingDraft: (payload: unknown) => Promise<unknown>;
   readonly appendRecordingAudioChunk: (payload: unknown) => Promise<unknown>;
@@ -69,9 +75,14 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_CHOOSE_DIRECTORY_CHANNEL
       )) as WorkspaceChooseDirectoryResponse;
     },
+    listWorkspaceProjects: () => invoker.invoke(WORKSPACE_LIST_PROJECTS_CHANNEL),
     initializeWorkspace: (payload: unknown) =>
       invoker.invoke(WORKSPACE_INITIALIZE_CHANNEL, payload),
     openWorkspace: (payload: unknown) => invoker.invoke(WORKSPACE_OPEN_CHANNEL, payload),
+    openWorkspaceProject: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_OPEN_PROJECT_CHANNEL, payload),
+    removeWorkspaceProject: (payload: unknown) =>
+      invoker.invoke(WORKSPACE_REMOVE_PROJECT_CHANNEL, payload),
     closeWorkspace: (payload: unknown) => invoker.invoke(WORKSPACE_CLOSE_CHANNEL, payload),
     createRecordingDraft: (payload: unknown) =>
       invoker.invoke(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, payload),

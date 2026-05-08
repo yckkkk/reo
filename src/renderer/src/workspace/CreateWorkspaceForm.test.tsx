@@ -168,6 +168,30 @@ describe('CreateWorkspaceForm', () => {
     expect(screen.getByLabelText('工作区名称')).toHaveFocus();
   });
 
+  it('rejects workspace names that contain path separators', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'folder_token_unsafe_name',
+        displayPath: 'Memories',
+      },
+    });
+
+    renderCreateWorkspaceForm();
+
+    await user.type(screen.getByLabelText('工作区名称'), 'Family/memories');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memories');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    expect(
+      await screen.findByText('工作区名称不能是 . 或 ..，也不能包含路径分隔符')
+    ).toBeInTheDocument();
+    expect(reoWorkspace.initializeWorkspace).not.toHaveBeenCalled();
+  });
+
   it('submits the folder selection token instead of a raw filesystem path', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({

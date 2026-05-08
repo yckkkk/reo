@@ -6,12 +6,14 @@ import { AppShell, TITLEBAR_HEIGHT, type ThemeMode } from './AppShell';
 
 describe('AppShell', () => {
   function TestAppShell({
-    activeWorkspaceId = 'ws_reo',
+    activeWorkspaceId,
+    activeSection,
     children,
     onCreateWorkspace = vi.fn(),
     onHome,
-    onNewMemory,
+    onLibrary = vi.fn(),
     onOpenLocalWorkspace = vi.fn(),
+    onRemoveWorkspaceProject = vi.fn(),
     onSelectWorkspace,
     workspaceProjects = [
       { title: 'reo', workspaceId: 'ws_reo' },
@@ -19,11 +21,16 @@ describe('AppShell', () => {
     ],
   }: {
     readonly activeWorkspaceId?: string;
+    readonly activeSection?: 'home' | 'library' | 'workspace';
     readonly children: ReactNode;
     readonly onCreateWorkspace?: () => void;
     readonly onHome?: () => void;
-    readonly onNewMemory?: () => void;
+    readonly onLibrary?: () => void;
     readonly onOpenLocalWorkspace?: () => void;
+    readonly onRemoveWorkspaceProject?: (project: {
+      readonly title: string;
+      readonly workspaceId: string;
+    }) => void;
     readonly onSelectWorkspace?: (workspaceId: string) => void;
     readonly workspaceProjects?: ReadonlyArray<{
       readonly title: string;
@@ -35,6 +42,7 @@ describe('AppShell', () => {
     return (
       <AppShell
         activeWorkspaceId={activeWorkspaceId}
+        activeSection={activeSection}
         themeMode={themeMode}
         workspaceProjects={workspaceProjects}
         onCreateWorkspace={onCreateWorkspace}
@@ -42,8 +50,9 @@ describe('AppShell', () => {
           setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'))
         }
         onHome={onHome ?? (() => {})}
-        onNewMemory={onNewMemory}
+        onLibrary={onLibrary}
         onOpenLocalWorkspace={onOpenLocalWorkspace}
+        onRemoveWorkspaceProject={onRemoveWorkspaceProject}
         onSelectWorkspace={onSelectWorkspace}
       >
         {children}
@@ -53,7 +62,7 @@ describe('AppShell', () => {
 
   it('renders a compact Chinese workspace sidebar and project section', () => {
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell activeWorkspaceId="ws_reo" activeSection="workspace">
         <div>Home content</div>
       </TestAppShell>
     );
@@ -89,10 +98,27 @@ describe('AppShell', () => {
     expect(panelContent).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(sidebar).toHaveClass('pt-sidebar-content-top');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: '新记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
     expect(screen.getByText('项目')).toHaveClass('text-ui-sm', 'font-regular');
-    expect(screen.getByRole('button', { name: 'reo' })).toHaveAttribute('aria-current', 'page');
+    const activeWorkspaceButton = screen.getByRole('button', { name: 'reo' });
+    const activeWorkspaceMoreButton = screen.getByRole('button', { name: 'reo 更多操作' });
+    const activeWorkspaceItem = activeWorkspaceButton.closest(
+      '[data-slot="workspace-project-item"]'
+    );
+    expect(activeWorkspaceButton).toHaveAttribute('aria-current', 'page');
+    expect(activeWorkspaceItem).toContainElement(activeWorkspaceButton);
+    expect(activeWorkspaceItem).toContainElement(activeWorkspaceMoreButton);
+    expect(activeWorkspaceItem).toHaveClass('rounded-buttons', 'border', 'border-chalk');
+    expect(activeWorkspaceMoreButton).toHaveClass(
+      'opacity-0',
+      'pointer-events-none',
+      'group-hover/project:opacity-100',
+      'group-hover/project:pointer-events-auto',
+      'group-focus-within/project:opacity-100',
+      'group-focus-within/project:pointer-events-auto'
+    );
     expect(screen.getByRole('button', { name: 'MemoryOS_V1' })).toBeInTheDocument();
     const windowControls = screen.getByRole('group', { name: '窗口控制' });
     expect(windowControls).toHaveAttribute('data-slot', 'app-shell-titlebar-controls');
@@ -181,7 +207,7 @@ describe('AppShell', () => {
     const user = userEvent.setup();
 
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell>
         <div>Starter home</div>
       </TestAppShell>
     );
@@ -210,16 +236,18 @@ describe('AppShell', () => {
     fireEvent.click(homeButton);
     expect(onHome).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '资料库' })).toBeInTheDocument();
     expect(screen.getByText('项目')).toBeInTheDocument();
   });
 
   it('wires named sidebar navigation items and closes the add menu before navigation', async () => {
     const user = userEvent.setup();
     const onHome = vi.fn();
+    const onLibrary = vi.fn();
     const onSelectWorkspace = vi.fn();
 
     render(
-      <TestAppShell onHome={onHome} onSelectWorkspace={onSelectWorkspace}>
+      <TestAppShell onHome={onHome} onLibrary={onLibrary} onSelectWorkspace={onSelectWorkspace}>
         <div>Detail content</div>
       </TestAppShell>
     );
@@ -233,10 +261,50 @@ describe('AppShell', () => {
     expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加工作区' }));
+    await user.click(screen.getByRole('button', { name: '资料库' }));
+
+    expect(onLibrary).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '添加工作区' }));
     await user.click(screen.getByRole('button', { name: 'MemoryOS_V1' }));
 
     expect(onSelectWorkspace).toHaveBeenCalledWith('ws_memory');
     expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
+  });
+
+  it('opens a workspace item more menu and requests removal from the project list', async () => {
+    const user = userEvent.setup();
+    const onRemoveWorkspaceProject = vi.fn();
+
+    render(
+      <TestAppShell
+        activeWorkspaceId="ws_reo"
+        activeSection="workspace"
+        onRemoveWorkspaceProject={onRemoveWorkspaceProject}
+      >
+        <div>Home content</div>
+      </TestAppShell>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'reo 更多操作' }));
+
+    expect(screen.getByRole('menu', { name: 'reo 工作区操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'reo 更多操作' })).toHaveClass(
+      'data-[state=open]:pointer-events-auto',
+      'data-[state=open]:opacity-100'
+    );
+    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+      zIndex: '4',
+    });
+
+    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+
+    expect(onRemoveWorkspaceProject).toHaveBeenCalledWith({
+      title: 'reo',
+      workspaceId: 'ws_reo',
+    });
+    expect(screen.queryByRole('menu', { name: 'reo 工作区操作' })).not.toBeInTheDocument();
   });
 
   it('toggles the app theme from the sidebar tool area', () => {
@@ -257,7 +325,7 @@ describe('AppShell', () => {
 
   it('anchors the panel right edge and expands left when collapsed', () => {
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell>
         <div>Home content</div>
       </TestAppShell>
     );
@@ -294,7 +362,7 @@ describe('AppShell', () => {
 
   it('clamps direct sidebar resizing between 240 and 520 pixels', () => {
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell>
         <div>Home content</div>
       </TestAppShell>
     );
@@ -337,7 +405,7 @@ describe('AppShell', () => {
 
   it('supports keyboard sidebar resizing through the separator', () => {
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell>
         <div>Home content</div>
       </TestAppShell>
     );
@@ -360,7 +428,7 @@ describe('AppShell', () => {
 
   it('stops resizing after pointer cancellation', () => {
     render(
-      <TestAppShell onNewMemory={vi.fn()}>
+      <TestAppShell>
         <div>Home content</div>
       </TestAppShell>
     );

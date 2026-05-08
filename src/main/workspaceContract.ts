@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MEMORY_ID_PATTERN, RECORDING_ID_PATTERN } from './recordingMetadata.js';
+import { isSafeWorkspaceDirectoryName } from './workspaceName.js';
 export {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
@@ -13,7 +14,10 @@ export {
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_PROJECTS_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_PROJECT_CHANNEL,
+  WORKSPACE_REMOVE_PROJECT_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
   WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
@@ -44,7 +48,12 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_SELECTION_EXPIRED',
   'ERR_WORKSPACE_SELECTION_SENDER_MISMATCH',
   'ERR_WORKSPACE_CHOOSE_FAILED',
+  'ERR_WORKSPACE_PROJECT_NOT_FOUND',
+  'ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED',
+  'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
+  'ERR_WORKSPACE_ROOT_MISSING',
   'ERR_WORKSPACE_UNSAFE_PATH',
+  'ERR_WORKSPACE_ALREADY_EXISTS',
   'ERR_WORKSPACE_AGENTS_CONFLICT',
   'ERR_WORKSPACE_METADATA_INVALID',
   'ERR_WORKSPACE_LOCKED',
@@ -127,7 +136,11 @@ export const workspaceSnapshotSchema = z.object({
 export const workspaceInitializeRequestSchema = z
   .object({
     selectionToken: z.string().min(1),
-    title: z.string().trim().min(1),
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(isSafeWorkspaceDirectoryName, 'Workspace title must be a safe folder name'),
     description: z.string(),
   })
   .strict();
@@ -137,6 +150,16 @@ export const workspaceOpenRequestSchema = z
     selectionToken: z.string().min(1),
   })
   .strict();
+
+export const workspaceProjectIdRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+  })
+  .strict();
+
+export const workspaceOpenProjectRequestSchema = workspaceProjectIdRequestSchema;
+
+export const workspaceRemoveProjectRequestSchema = workspaceProjectIdRequestSchema;
 
 export const workspaceCloseRequestSchema = z
   .object({
@@ -151,6 +174,26 @@ export const workspaceInitializeResponseSchema = z.discriminatedUnion('ok', [
       workspaceHandle: z.string().min(1),
       workspaceId: z.string().min(1),
       snapshot: workspaceSnapshotSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceProjectSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    title: z.string(),
+    description: z.string(),
+    addedAt: z.string(),
+    lastOpenedAt: z.string(),
+  })
+  .strict();
+
+export const workspaceListProjectsResponseSchema = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      projects: z.array(workspaceProjectSchema),
     }),
   }),
   workspaceErrorEnvelopeSchema,
