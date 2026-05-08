@@ -91,6 +91,7 @@ npm run verify:quick
 - Recording transaction identity 由 renderer 和 main tests 覆盖：finalize 后 editing state 保存 `memoryId`，transcript/reflections autosave、audio manifest 和 audio chunk request 都传 `memoryId + recordingId`；workspace contract 拒绝缺少 `memoryId` 的 finalized read/save/detail request；main finalized read/save 直接解析 nested recording directory，并保留 duplicate finalized `recordingId` guard。
 - Recording CSP 由 main tests 覆盖：production policy 必须包含 `media-src 'self' blob:`，且不允许 wildcard media source。
 - 操作验证必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
+- Task 12 runtime QA 的操作验证证据覆盖 Electron dev runtime：OS folder picker、create/open workspace、light/dark theme、sidebar expanded/covered、Home empty/memory card、recording drawer ready/recording/paused/editing/playback、save failure/recovery、Memory detail、existing-memory append、workspace file truth、reference frame mapping 和未实现能力负向边界。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
 
 ## 打包与更新验证
