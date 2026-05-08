@@ -6,11 +6,11 @@ import { FieldControl, FieldGroup, FieldHint, FieldLabel, FieldRow } from './fie
 describe('Field primitives', () => {
   it('keeps form dividers outside label text and controls', () => {
     render(
-      <FieldGroup aria-label="工作区设置">
+      <FieldGroup aria-label="记忆空间设置">
         <FieldRow>
           <div>
-            <FieldLabel htmlFor="workspace-title">工作区名称</FieldLabel>
-            <FieldHint>给新工作区起一个名字</FieldHint>
+            <FieldLabel htmlFor="workspace-title">记忆空间名称</FieldLabel>
+            <FieldHint>给新的记忆空间起一个名字</FieldHint>
           </div>
           <FieldControl>
             <Input id="workspace-title" />
@@ -19,10 +19,10 @@ describe('Field primitives', () => {
       </FieldGroup>
     );
 
-    const group = screen.getByRole('group', { name: '工作区设置' });
+    const group = screen.getByRole('group', { name: '记忆空间设置' });
     expect(group).toHaveClass('divide-y', 'divide-chalk');
-    expect(screen.getByText('工作区名称')).toHaveClass('text-ui-sm', 'font-medium');
-    expect(screen.getByText('给新工作区起一个名字')).toHaveClass('text-ui-xs', 'font-regular');
-    expect(screen.getByLabelText('工作区名称')).toBeInTheDocument();
+    expect(screen.getByText('记忆空间名称')).toHaveClass('text-ui-sm', 'font-medium');
+    expect(screen.getByText('给新的记忆空间起一个名字')).toHaveClass('text-ui-xs', 'font-regular');
+    expect(screen.getByLabelText('记忆空间名称')).toBeInTheDocument();
   });
 });

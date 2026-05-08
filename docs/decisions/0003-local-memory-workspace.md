@@ -1,15 +1,15 @@
-# 0003 Local Memory Workspace
+# 0003 Local Memory Space Folder
 
 时间：2026-05-06 01:00 America/Los_Angeles
 状态：已接受
 
 ## 决策
 
-Reo 的 memory workspace 是用户选择的本地文件夹。
+Reo 的记忆空间是用户选择的本地文件夹。
 
-Workspace 文件夹是真实产物源。用户记忆内容以普通文件保存，供用户、文件系统工具、Codex CLI 和未来 Reo 内置 AI 直接读取。Reo 可以使用 DB 作为索引、关系、查询和处理状态层，但 DB 不替代 workspace 文件夹作为用户记忆内容真源。
+记忆空间文件夹是真实产物源。用户记忆内容以普通文件保存，供用户、文件系统工具、Codex CLI 和未来 Reo 内置 AI 直接读取。Reo 可以使用 DB 作为索引、关系、查询和处理状态层，但 DB 不替代记忆空间文件夹作为用户记忆内容真源。
 
-每个 workspace root 必须包含 `AGENTS.md`，用于说明 workspace 目的、文件结构、Reo 管理路径和 AI 协作规则。Reo 不覆盖已有 `AGENTS.md`。
+每个记忆空间 root 必须包含 `AGENTS.md`，用于说明记忆空间目的、文件结构、Reo 管理路径和 AI 协作规则。Reo 不覆盖已有 `AGENTS.md`。
 
 Reo 自己的 workspace metadata 放在隐藏目录：
 
@@ -20,24 +20,34 @@ Reo 自己的 workspace metadata 放在隐藏目录：
 Recording 产物使用普通文件：
 
 ```text
-recordings/<recording-id>/audio.webm
-recordings/<recording-id>/transcript.md
-recordings/<recording-id>/reflections.md
-recordings/<recording-id>/recording.json
+memories/<memoryId>/recordings/<recordingId>/audio.webm
+memories/<memoryId>/recordings/<recordingId>/transcript.md
+memories/<memoryId>/recordings/<recordingId>/reflections.md
+memories/<memoryId>/recordings/<recordingId>/recording.json
+```
+
+Draft recording 产物保存在 Reo 管理路径：
+
+```text
+.reo/drafts/recordings/<recordingId>/audio.webm
+.reo/drafts/recordings/<recordingId>/transcript.md
+.reo/drafts/recordings/<recordingId>/reflections.md
+.reo/drafts/recordings/<recordingId>/recording.json
 ```
 
 ## 原因
 
 - 用户拥有本地文件夹和普通文件，能用 Finder、Git、备份工具和编辑器管理。
-- Codex CLI 这类 AI 可以直接进入 workspace folder 工作，不依赖 Reo 私有数据库上下文。
+- Codex CLI 这类 AI 可以直接进入记忆空间 folder 工作，不依赖 Reo 私有数据库上下文。
 - Obsidian 的 vault 模型证明了本地文件夹、隐藏配置目录和普通附件文件是可维护的用户数据边界。
-- Zettlr 的 project folder 模型证明项目可以作为文件夹属性存在，文件夹内可保留比当前产品 UI 更多的文件。
-- Reo 是 Electron 一等宿主，应该显式管理本地 workspace，而不是退化为只读 UI shell。
+- Zettlr 的 project folder 模型证明本地文件夹可以承载比当前产品 UI 更多的文件。
+- Reo 是 Electron 一等宿主，应该显式管理本地记忆空间，而不是退化为只读 UI shell。
 
 ## 影响
 
 - First product slice 必须设计窄 preload/IPC 文件能力，renderer 不得直接访问 Node 或 Electron API。
-- Workspace 初始化必须处理非空文件夹、已有 `AGENTS.md`、已有 `.reo/workspace.json`、权限失败和 schema version。
+- 记忆空间创建必须在用户选择的父目录下创建 title 同名 child folder；同名 child 已存在时失败。打开本地记忆空间时，现有 Reo 记忆空间直接打开，空文件夹原地初始化，非空非 Reo 文件夹失败。
+- 记忆空间初始化必须处理已有 `AGENTS.md`、已有 `.reo/workspace.json`、权限失败、schema version 和 unsafe managed path。
 - 文件路径使用稳定 id，不依赖用户可改标题。
 - DB 引入必须证明真实查询、索引、恢复或性能需求，且不能成为唯一用户内容真源。
 - `AGENTS.md` 是产品契约，不是附属文档。

@@ -4,8 +4,8 @@ Reo 是一个未发布的 Electron 应用，当前正在从干净基础重新建
 
 ## 当前事实
 
-- 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier、Tailwind CSS、Vitest、Testing Library、Zod、React Hook Form、TanStack Query、Radix Dialog/Label/Slot、Vaul、shadcn/ui source 所需工具包。
-- 当前已建立：Reo 设计系统源文件、Tailwind CSS v4 styling foundation、renderer 测试基础、workspace preload/IPC 边界、workspace 文件事务基础、React Hook Form workspace 表单、TanStack Query workspace snapshot cache、shadcn/ui Button/Label/Dialog/Drawer/Textarea source、ElevenLabs UI source-derived Waveform/VoiceButton。
+- 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier、Tailwind CSS、Vitest、Testing Library、Zod、React Hook Form、TanStack Query、Radix Dialog/Label/Slot/Tooltip/Separator/Slider、Vaul、Sonner、date-fns、lucide-react、shadcn/ui source 所需工具包。
+- 当前已建立：Reo 设计系统源文件、Tailwind CSS v4 styling foundation、renderer 测试基础、记忆空间 preload/IPC 边界、记忆空间文件事务基础、main-owned memory space registry、React Hook Form 记忆空间表单、TanStack Query memory space list/snapshot/memory detail cache、shadcn/ui Button/Input/Label/Dialog/Drawer/Textarea/Tooltip/Separator/Field/Menu source、Sonner root toast host、ElevenLabs UI source-derived Waveform/VoiceButton、Reo local AudioPlayer。
 - 当前未建立：auth、database、updater、packaging、Sentry、logging、Zustand store、wavesurfer integration。
 - 当前构建权威是 `electron-vite`。
 

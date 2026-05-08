@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   memoryDetailQueryKey,
-  workspaceProjectsQueryKey,
+  memorySpacesQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 
@@ -24,7 +24,7 @@ describe('workspace queries', () => {
     );
   });
 
-  it('uses a stable workspace projects query key', () => {
-    expect(workspaceProjectsQueryKey()).toEqual(['workspace', 'projects']);
+  it('uses a stable 记忆空间 query key', () => {
+    expect(memorySpacesQueryKey()).toEqual(['workspace', 'memory-spaces']);
   });
 });

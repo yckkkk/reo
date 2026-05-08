@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   AppShell,
   type ThemeMode,
-  type WorkspaceProject as SidebarWorkspaceProject,
+  type WorkspaceMemorySpace as SidebarWorkspaceMemorySpace,
 } from './app-shell/AppShell';
 import { ReoToaster, toast } from './components/ui/toaster';
 import { MemoryDetailPage } from './workspace/MemoryDetailPage';
@@ -12,13 +12,13 @@ import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
 import { WorkspaceErrorBanner } from './workspace/WorkspaceErrorBanner';
 import { WorkspaceHome } from './workspace/WorkspaceHome';
 import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
-import { WorkspaceRemoveDialog } from './workspace/WorkspaceRemoveDialog';
+import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
 import {
   closeWorkspace,
   openWorkspace,
-  openWorkspaceProject,
-  removeWorkspaceProject,
+  openMemorySpace,
+  removeMemorySpace,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
 import {
@@ -29,8 +29,8 @@ import { chooseSafeWorkspaceFolder } from './workspace/workspaceFolderSelection'
 import {
   memoryDetailQueryKey,
   seedWorkspaceSnapshot,
-  workspaceProjectsQueryKey,
-  workspaceProjectsQueryOptions,
+  memorySpacesQueryKey,
+  memorySpacesQueryOptions,
 } from './workspace/workspaceQueries';
 
 type FinalizedRecording = {
@@ -47,10 +47,13 @@ type WorkspaceView =
   | { readonly name: 'memory-detail'; readonly memoryId: string };
 
 type TopLevelWorkspaceView = Extract<WorkspaceView, { readonly name: 'home' | 'library' }>;
-type WorkspaceProjectListItem = SidebarWorkspaceProject;
+type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
 
 const HOME_VIEW: TopLevelWorkspaceView = { name: 'home' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
+const OPEN_MEMORY_SPACE_ERROR = '无法打开记忆空间。';
+const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
+const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
 
 function WorkspaceContentWithEntryError({
   children,
@@ -101,14 +104,14 @@ export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
-  const [workspaceRemoveTarget, setWorkspaceRemoveTarget] =
-    useState<WorkspaceProjectListItem | null>(null);
+  const [memorySpaceRemoveTarget, setMemorySpaceRemoveTarget] =
+    useState<WorkspaceMemorySpaceListItem | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ name: 'home' });
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
-  const workspaceProjectsQuery = useQuery(workspaceProjectsQueryOptions());
+  const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
 
   useEffect(() => {
     return () => {
@@ -130,7 +133,7 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
     setWorkspaceSession(nextWorkspaceSession);
-    void queryClient.invalidateQueries({ queryKey: workspaceProjectsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
   }
 
   function setTopLevelWorkspaceView(nextView: TopLevelWorkspaceView) {
@@ -145,7 +148,7 @@ export function App() {
 
   async function acceptWorkspaceSession(
     nextWorkspaceSession: WorkspaceSession,
-    failureFallback = '无法打开工作区。'
+    failureFallback = OPEN_MEMORY_SPACE_ERROR
   ) {
     if (
       workspaceSession &&
@@ -189,7 +192,7 @@ export function App() {
 
   function openWorkspaceCreateDialog() {
     setWorkspaceEntryError(null);
-    setWorkspaceRemoveTarget(null);
+    setMemorySpaceRemoveTarget(null);
     setWorkspaceCreateOpen(true);
   }
 
@@ -206,7 +209,7 @@ export function App() {
 
   async function navigateTopLevel(nextView: TopLevelWorkspaceView, failureFallback: string) {
     handleWorkspaceCreateOpenChange(false);
-    handleWorkspaceRemoveOpenChange(false);
+    handleMemorySpaceRemoveOpenChange(false);
 
     if (!workspaceSession) {
       setTopLevelWorkspaceView(nextView);
@@ -246,50 +249,52 @@ export function App() {
     await navigateTopLevel(LIBRARY_VIEW, '无法打开资料库。');
   }
 
-  function openWorkspaceRemoveDialog(project: WorkspaceProjectListItem) {
+  function openMemorySpaceRemoveDialog(memorySpace: WorkspaceMemorySpaceListItem) {
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
-    setWorkspaceRemoveTarget(project);
+    setMemorySpaceRemoveTarget(memorySpace);
   }
 
-  function setWorkspaceRemoveFailure(message: string) {
-    toast.error('无法移除工作区', {
+  function setMemorySpaceRemoveFailure(message: string) {
+    toast.error('无法移除记忆空间', {
       description: message,
     });
   }
 
-  function handleWorkspaceRemoveOpenChange(nextOpen: boolean) {
+  function handleMemorySpaceRemoveOpenChange(nextOpen: boolean) {
     if (!nextOpen && workspaceActionPending) {
       return;
     }
 
     if (!nextOpen) {
-      setWorkspaceRemoveTarget(null);
+      setMemorySpaceRemoveTarget(null);
     }
   }
 
-  async function confirmRemoveWorkspaceProject() {
-    if (!workspaceRemoveTarget || !beginWorkspaceAction()) {
+  async function confirmRemoveMemorySpace() {
+    if (!memorySpaceRemoveTarget || !beginWorkspaceAction()) {
       return;
     }
 
     setWorkspaceEntryError(null);
-    const target = workspaceRemoveTarget;
+    const target = memorySpaceRemoveTarget;
     const activeSession =
       workspaceSession?.workspaceId === target.workspaceId ? workspaceSession : null;
 
     try {
-      const response = await removeWorkspaceProject({
+      const response = await removeMemorySpace({
         workspaceId: target.workspaceId,
       });
 
       if (!response.ok) {
-        setWorkspaceRemoveFailure(workspaceErrorDisplayMessage(response.error, '无法移除工作区。'));
+        setMemorySpaceRemoveFailure(
+          workspaceErrorDisplayMessage(response.error, REMOVE_MEMORY_SPACE_ERROR)
+        );
         return;
       }
 
-      setWorkspaceRemoveTarget(null);
-      void queryClient.invalidateQueries({ queryKey: workspaceProjectsQueryKey() });
+      setMemorySpaceRemoveTarget(null);
+      void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
 
       let closeFailureMessage: string | null = null;
       if (activeSession) {
@@ -304,25 +309,25 @@ export function App() {
           if (!closeResponse.ok) {
             closeFailureMessage = workspaceErrorDisplayMessage(
               closeResponse.error,
-              '当前工作区会话未能释放。'
+              RELEASE_MEMORY_SPACE_ERROR
             );
           }
         } catch (error) {
-          closeFailureMessage = unknownErrorDisplayMessage(error, '当前工作区会话未能释放。');
+          closeFailureMessage = unknownErrorDisplayMessage(error, RELEASE_MEMORY_SPACE_ERROR);
         }
       }
 
-      toast.success('已移除工作区', {
+      toast.success('已移除记忆空间', {
         description: closeFailureMessage ?? '本地文件夹不会被删除。',
       });
     } catch (error) {
-      setWorkspaceRemoveFailure(unknownErrorDisplayMessage(error, '无法移除工作区。'));
+      setMemorySpaceRemoveFailure(unknownErrorDisplayMessage(error, REMOVE_MEMORY_SPACE_ERROR));
     } finally {
       finishWorkspaceAction();
     }
   }
 
-  async function selectWorkspaceFromSidebar(workspaceId: string) {
+  async function selectMemorySpaceFromSidebar(workspaceId: string) {
     if (workspaceSession?.workspaceId === workspaceId) {
       handleWorkspaceCreateOpenChange(false);
       setTopLevelWorkspaceView(HOME_VIEW);
@@ -335,14 +340,16 @@ export function App() {
 
     setWorkspaceEntryError(null);
     try {
-      const response = await openWorkspaceProject({ workspaceId });
+      const response = await openMemorySpace({ workspaceId });
       if (!response.ok) {
-        setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, '无法打开工作区。'));
+        setWorkspaceEntryError(
+          workspaceErrorDisplayMessage(response.error, OPEN_MEMORY_SPACE_ERROR)
+        );
         return;
       }
       await acceptWorkspaceSession(response.value);
     } catch (error) {
-      setWorkspaceEntryError(unknownErrorDisplayMessage(error, '无法打开工作区。'));
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, OPEN_MEMORY_SPACE_ERROR));
     } finally {
       finishWorkspaceAction();
     }
@@ -371,38 +378,40 @@ export function App() {
       });
 
       if (!response.ok) {
-        setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, '无法打开工作区。'));
+        setWorkspaceEntryError(
+          workspaceErrorDisplayMessage(response.error, OPEN_MEMORY_SPACE_ERROR)
+        );
         return;
       }
 
       await acceptWorkspaceSession(response.value);
     } catch (error) {
-      setWorkspaceEntryError(unknownErrorDisplayMessage(error, '无法打开工作区。'));
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, OPEN_MEMORY_SPACE_ERROR));
     } finally {
       finishWorkspaceAction();
     }
   }
 
-  const workspaceProjects = workspaceProjectsQuery.data ?? [];
-  const workspaceProjectsError =
-    workspaceProjectsQuery.error === null
+  const memorySpaces = memorySpacesQuery.data ?? [];
+  const memorySpacesError =
+    memorySpacesQuery.error === null
       ? null
-      : unknownErrorDisplayMessage(workspaceProjectsQuery.error, '无法加载工作区列表。');
-  const visibleWorkspaceEntryError = workspaceEntryError ?? workspaceProjectsError;
-  const visibleWorkspaceProjects: readonly WorkspaceProjectListItem[] =
+      : unknownErrorDisplayMessage(memorySpacesQuery.error, '无法加载记忆空间列表。');
+  const visibleWorkspaceEntryError = workspaceEntryError ?? memorySpacesError;
+  const visibleWorkspaceMemorySpaces: readonly WorkspaceMemorySpaceListItem[] =
     workspaceSession &&
-    !workspaceProjects.some((project) => project.workspaceId === workspaceSession.workspaceId)
+    !memorySpaces.some((memorySpace) => memorySpace.workspaceId === workspaceSession.workspaceId)
       ? [
           {
             workspaceId: workspaceSession.workspaceId,
             title: workspaceSession.snapshot.title,
           },
-          ...workspaceProjects,
+          ...memorySpaces,
         ]
-      : workspaceProjects;
+      : memorySpaces;
   const shellProps = {
     themeMode,
-    workspaceProjects: visibleWorkspaceProjects,
+    memorySpaces: visibleWorkspaceMemorySpaces,
     onCreateWorkspace: openWorkspaceCreateDialog,
     onHome: () => {
       void navigateHome();
@@ -414,9 +423,9 @@ export function App() {
     onOpenLocalWorkspace: () => {
       void handleOpenLocalWorkspace();
     },
-    onRemoveWorkspaceProject: openWorkspaceRemoveDialog,
-    onSelectWorkspace: (workspaceId: string) => {
-      void selectWorkspaceFromSidebar(workspaceId);
+    onRemoveMemorySpace: openMemorySpaceRemoveDialog,
+    onSelectMemorySpace: (workspaceId: string) => {
+      void selectMemorySpaceFromSidebar(workspaceId);
     },
   };
   const workspaceDialogs = (
@@ -428,18 +437,18 @@ export function App() {
         onCreateStart={beginWorkspaceAction}
         onOpenChange={handleWorkspaceCreateOpenChange}
         onWorkspaceReady={(nextWorkspaceSession) =>
-          acceptWorkspaceSession(nextWorkspaceSession, '无法创建工作区。')
+          acceptWorkspaceSession(nextWorkspaceSession, '无法创建记忆空间。')
         }
         open={workspaceCreateOpen}
       />
-      <WorkspaceRemoveDialog
+      <MemorySpaceRemoveDialog
         disabled={workspaceActionPending}
         onConfirm={() => {
-          void confirmRemoveWorkspaceProject();
+          void confirmRemoveMemorySpace();
         }}
-        onOpenChange={handleWorkspaceRemoveOpenChange}
-        open={workspaceRemoveTarget !== null}
-        workspaceTitle={workspaceRemoveTarget?.title}
+        onOpenChange={handleMemorySpaceRemoveOpenChange}
+        open={memorySpaceRemoveTarget !== null}
+        workspaceTitle={memorySpaceRemoveTarget?.title}
       />
     </>
   );

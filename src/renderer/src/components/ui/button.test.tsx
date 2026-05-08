@@ -39,12 +39,12 @@ describe('Button primitive', () => {
 
   it('supports the accent icon action shape', () => {
     render(
-      <Button variant="accentCircle" size="iconLarge" aria-label="创建工作区">
+      <Button variant="accentCircle" size="iconLarge" aria-label="创建记忆空间">
         +
       </Button>
     );
 
-    const button = screen.getByRole('button', { name: '创建工作区' });
+    const button = screen.getByRole('button', { name: '创建记忆空间' });
     expect(button).toHaveClass('size-56', 'rounded-full', 'bg-signal-blue', 'hover:bg-obsidian');
   });
 

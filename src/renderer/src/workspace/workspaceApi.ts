@@ -8,24 +8,22 @@ export function initializeWorkspace(
   return window.reoWorkspace.initializeWorkspace(payload);
 }
 
-export function listWorkspaceProjects() {
-  return window.reoWorkspace.listWorkspaceProjects();
+export function listMemorySpaces() {
+  return window.reoWorkspace.listMemorySpaces();
 }
 
 export function openWorkspace(payload: Parameters<Window['reoWorkspace']['openWorkspace']>[0]) {
   return window.reoWorkspace.openWorkspace(payload);
 }
 
-export function openWorkspaceProject(
-  payload: Parameters<Window['reoWorkspace']['openWorkspaceProject']>[0]
-) {
-  return window.reoWorkspace.openWorkspaceProject(payload);
+export function openMemorySpace(payload: Parameters<Window['reoWorkspace']['openMemorySpace']>[0]) {
+  return window.reoWorkspace.openMemorySpace(payload);
 }
 
-export function removeWorkspaceProject(
-  payload: Parameters<Window['reoWorkspace']['removeWorkspaceProject']>[0]
+export function removeMemorySpace(
+  payload: Parameters<Window['reoWorkspace']['removeMemorySpace']>[0]
 ) {
-  return window.reoWorkspace.removeWorkspaceProject(payload);
+  return window.reoWorkspace.removeMemorySpace(payload);
 }
 
 export function closeWorkspace(payload: Parameters<Window['reoWorkspace']['closeWorkspace']>[0]) {
@@ -102,10 +100,10 @@ export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWo
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
-export type WorkspaceProject = Extract<
-  Awaited<ReturnType<typeof listWorkspaceProjects>>,
+export type WorkspaceMemorySpace = Extract<
+  Awaited<ReturnType<typeof listMemorySpaces>>,
   { readonly ok: true }
->['value']['projects'][number];
+>['value']['memorySpaces'][number];
 export type MemoryDetailResponse = Awaited<ReturnType<typeof getMemoryDetail>>;
 export type WorkspaceMemoryDetail = Extract<MemoryDetailResponse, { readonly ok: true }>['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;

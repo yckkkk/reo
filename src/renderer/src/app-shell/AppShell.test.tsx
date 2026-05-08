@@ -13,9 +13,9 @@ describe('AppShell', () => {
     onHome,
     onLibrary = vi.fn(),
     onOpenLocalWorkspace = vi.fn(),
-    onRemoveWorkspaceProject = vi.fn(),
-    onSelectWorkspace,
-    workspaceProjects = [
+    onRemoveMemorySpace = vi.fn(),
+    onSelectMemorySpace,
+    memorySpaces = [
       { title: 'reo', workspaceId: 'ws_reo' },
       { title: 'MemoryOS_V1', workspaceId: 'ws_memory' },
     ],
@@ -27,12 +27,12 @@ describe('AppShell', () => {
     readonly onHome?: () => void;
     readonly onLibrary?: () => void;
     readonly onOpenLocalWorkspace?: () => void;
-    readonly onRemoveWorkspaceProject?: (project: {
+    readonly onRemoveMemorySpace?: (memorySpace: {
       readonly title: string;
       readonly workspaceId: string;
     }) => void;
-    readonly onSelectWorkspace?: (workspaceId: string) => void;
-    readonly workspaceProjects?: ReadonlyArray<{
+    readonly onSelectMemorySpace?: (workspaceId: string) => void;
+    readonly memorySpaces?: ReadonlyArray<{
       readonly title: string;
       readonly workspaceId: string;
     }>;
@@ -44,7 +44,7 @@ describe('AppShell', () => {
         activeWorkspaceId={activeWorkspaceId}
         activeSection={activeSection}
         themeMode={themeMode}
-        workspaceProjects={workspaceProjects}
+        memorySpaces={memorySpaces}
         onCreateWorkspace={onCreateWorkspace}
         onToggleTheme={() =>
           setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'))
@@ -52,25 +52,25 @@ describe('AppShell', () => {
         onHome={onHome ?? (() => {})}
         onLibrary={onLibrary}
         onOpenLocalWorkspace={onOpenLocalWorkspace}
-        onRemoveWorkspaceProject={onRemoveWorkspaceProject}
-        onSelectWorkspace={onSelectWorkspace}
+        onRemoveMemorySpace={onRemoveMemorySpace}
+        onSelectMemorySpace={onSelectMemorySpace}
       >
         {children}
       </AppShell>
     );
   }
 
-  it('renders a compact Chinese workspace sidebar and project section', () => {
+  it('renders a compact Chinese memory space sidebar', () => {
     render(
       <TestAppShell activeWorkspaceId="ws_reo" activeSection="workspace">
         <div>Home content</div>
       </TestAppShell>
     );
 
-    expect(screen.getByRole('navigation', { name: '工作区' })).toBeInTheDocument();
-    const sidebar = screen.getByRole('complementary', { name: '工作区侧边栏' });
+    expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: '记忆空间侧边栏' });
     expect(sidebar).toHaveStyle({ zIndex: '1', width: '240px' });
-    const panel = screen.getByRole('main', { name: '工作区内容' });
+    const panel = screen.getByRole('main', { name: '记忆空间内容' });
     expect(panel).toHaveStyle({
       bottom: '0px',
       left: '240px',
@@ -101,11 +101,11 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
-    expect(screen.getByText('项目')).toHaveClass('text-ui-sm', 'font-regular');
+    expect(screen.getByText('记忆空间')).toHaveClass('text-ui-sm', 'font-regular');
     const activeWorkspaceButton = screen.getByRole('button', { name: 'reo' });
     const activeWorkspaceMoreButton = screen.getByRole('button', { name: 'reo 更多操作' });
     const activeWorkspaceItem = activeWorkspaceButton.closest(
-      '[data-slot="workspace-project-item"]'
+      '[data-slot="workspace-memory-space-item"]'
     );
     expect(activeWorkspaceButton).toHaveAttribute('aria-current', 'page');
     expect(activeWorkspaceItem).toContainElement(activeWorkspaceButton);
@@ -114,10 +114,10 @@ describe('AppShell', () => {
     expect(activeWorkspaceMoreButton).toHaveClass(
       'opacity-0',
       'pointer-events-none',
-      'group-hover/project:opacity-100',
-      'group-hover/project:pointer-events-auto',
-      'group-focus-within/project:opacity-100',
-      'group-focus-within/project:pointer-events-auto'
+      'group-hover/memorySpace:opacity-100',
+      'group-hover/memorySpace:pointer-events-auto',
+      'group-focus-within/memorySpace:opacity-100',
+      'group-focus-within/memorySpace:pointer-events-auto'
     );
     expect(screen.getByRole('button', { name: 'MemoryOS_V1' })).toBeInTheDocument();
     const windowControls = screen.getByRole('group', { name: '窗口控制' });
@@ -132,7 +132,7 @@ describe('AppShell', () => {
     expect(screen.queryByText(/films|photos|videos|files/i)).not.toBeInTheDocument();
   });
 
-  it('opens the compact add workspace menu from the project header', async () => {
+  it('opens the compact add workspace menu from the workspace header', async () => {
     const user = userEvent.setup();
     const onCreateWorkspace = vi.fn();
     const onOpenLocalWorkspace = vi.fn();
@@ -146,32 +146,32 @@ describe('AppShell', () => {
       </TestAppShell>
     );
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
-    const menu = screen.getByRole('menu', { name: '添加工作区菜单' });
+    const menu = screen.getByRole('menu', { name: '添加记忆空间菜单' });
     expect(menu).toHaveClass('rounded-xl', 'bg-card-white');
     expect(menu).toHaveClass('absolute', 'left-0', 'top-36');
     expect(menu).not.toHaveClass('left-full', 'ml-8');
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       zIndex: '4',
     });
-    expect(screen.getByRole('main', { name: '工作区内容' })).toHaveStyle({
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toHaveStyle({
       zIndex: '2',
     });
-    const createItem = screen.getByRole('menuitem', { name: '新建空白项目' });
-    const openLocalWorkspaceItem = screen.getByRole('menuitem', { name: '打开本地工作区' });
+    const createItem = screen.getByRole('menuitem', { name: '创建本地记忆空间' });
+    const openLocalWorkspaceItem = screen.getByRole('menuitem', { name: '打开本地记忆空间' });
     expect(createItem).toHaveClass('min-h-32', 'text-ui-xs', 'font-regular');
     expect(openLocalWorkspaceItem).toHaveClass('min-h-32', 'text-ui-xs', 'font-regular');
 
     await user.click(createItem);
     expect(onCreateWorkspace).toHaveBeenCalledOnce();
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '打开本地工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
     expect(onOpenLocalWorkspace).toHaveBeenCalledOnce();
   });
 
-  it('reveals the add workspace icon only from the named project header row', async () => {
+  it('reveals the add workspace icon only from the named workspace header row', async () => {
     const user = userEvent.setup();
 
     render(
@@ -180,11 +180,11 @@ describe('AppShell', () => {
       </TestAppShell>
     );
 
-    const projectActions = screen.getByRole('group', { name: '项目操作' });
-    expect(projectActions).toHaveClass('group');
+    const memorySpaceActions = screen.getByRole('group', { name: '记忆空间操作' });
+    expect(memorySpaceActions).toHaveClass('group');
 
-    const addButton = screen.getByRole('button', { name: '添加工作区' });
-    expect(addButton).toHaveAccessibleName('添加工作区');
+    const addButton = screen.getByRole('button', { name: '添加记忆空间' });
+    expect(addButton).toHaveAccessibleName('添加记忆空间');
     expect(addButton).toHaveClass(
       'opacity-0',
       'pointer-events-none',
@@ -212,7 +212,7 @@ describe('AppShell', () => {
       </TestAppShell>
     );
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
     for (const button of screen.getAllByRole('button')) {
       expect(button).toHaveAccessibleName();
@@ -226,7 +226,7 @@ describe('AppShell', () => {
     const onHome = vi.fn();
 
     render(
-      <TestAppShell onHome={onHome} workspaceProjects={[]}>
+      <TestAppShell onHome={onHome} memorySpaces={[]}>
         <div>Starter home</div>
       </TestAppShell>
     );
@@ -237,51 +237,51 @@ describe('AppShell', () => {
     expect(onHome).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '资料库' })).toBeInTheDocument();
-    expect(screen.getByText('项目')).toBeInTheDocument();
+    expect(screen.getByText('记忆空间')).toBeInTheDocument();
   });
 
   it('wires named sidebar navigation items and closes the add menu before navigation', async () => {
     const user = userEvent.setup();
     const onHome = vi.fn();
     const onLibrary = vi.fn();
-    const onSelectWorkspace = vi.fn();
+    const onSelectMemorySpace = vi.fn();
 
     render(
-      <TestAppShell onHome={onHome} onLibrary={onLibrary} onSelectWorkspace={onSelectWorkspace}>
+      <TestAppShell onHome={onHome} onLibrary={onLibrary} onSelectMemorySpace={onSelectMemorySpace}>
         <div>Detail content</div>
       </TestAppShell>
     );
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    expect(screen.getByRole('menu', { name: '添加工作区菜单' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    expect(screen.getByRole('menu', { name: '添加记忆空间菜单' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '首页' }));
 
     expect(onHome).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('button', { name: '资料库' }));
 
     expect(onLibrary).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('button', { name: 'MemoryOS_V1' }));
 
-    expect(onSelectWorkspace).toHaveBeenCalledWith('ws_memory');
-    expect(screen.queryByRole('menu', { name: '添加工作区菜单' })).not.toBeInTheDocument();
+    expect(onSelectMemorySpace).toHaveBeenCalledWith('ws_memory');
+    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
   });
 
-  it('opens a workspace item more menu and requests removal from the project list', async () => {
+  it('opens a workspace item more menu and requests removal from the workspace list', async () => {
     const user = userEvent.setup();
-    const onRemoveWorkspaceProject = vi.fn();
+    const onRemoveMemorySpace = vi.fn();
 
     render(
       <TestAppShell
         activeWorkspaceId="ws_reo"
         activeSection="workspace"
-        onRemoveWorkspaceProject={onRemoveWorkspaceProject}
+        onRemoveMemorySpace={onRemoveMemorySpace}
       >
         <div>Home content</div>
       </TestAppShell>
@@ -289,22 +289,22 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('button', { name: 'reo 更多操作' }));
 
-    expect(screen.getByRole('menu', { name: 'reo 工作区操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: 'reo 记忆空间操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'reo 更多操作' })).toHaveClass(
       'data-[state=open]:pointer-events-auto',
       'data-[state=open]:opacity-100'
     );
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       zIndex: '4',
     });
 
-    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
 
-    expect(onRemoveWorkspaceProject).toHaveBeenCalledWith({
+    expect(onRemoveMemorySpace).toHaveBeenCalledWith({
       title: 'reo',
       workspaceId: 'ws_reo',
     });
-    expect(screen.queryByRole('menu', { name: 'reo 工作区操作' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'reo 记忆空间操作' })).not.toBeInTheDocument();
   });
 
   it('toggles the app theme from the sidebar tool area', () => {
@@ -314,7 +314,7 @@ describe('AppShell', () => {
       </TestAppShell>
     );
 
-    const shell = screen.getByRole('main', { name: '工作区内容' }).closest('[data-theme]');
+    const shell = screen.getByRole('main', { name: '记忆空间内容' }).closest('[data-theme]');
     expect(shell).toHaveAttribute('data-theme', 'light');
 
     fireEvent.click(screen.getByRole('button', { name: '切换到深色模式' }));
@@ -348,7 +348,7 @@ describe('AppShell', () => {
       top: 'var(--spacing-titlebar-control-top)',
     });
     expect(screen.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page');
-    const panel = screen.getByRole('main', { name: '工作区内容' });
+    const panel = screen.getByRole('main', { name: '记忆空间内容' });
     expect(panel).toHaveStyle({
       bottom: '0px',
       left: '0px',
@@ -376,16 +376,16 @@ describe('AppShell', () => {
     expect(handle).not.toHaveClass('focus-visible:bg-chalk/60');
 
     fireEvent.pointerDown(handle, { clientX: 240, pointerId: 1 });
-    expect(screen.getByRole('main', { name: '工作区内容' }).className).not.toContain(
+    expect(screen.getByRole('main', { name: '记忆空间内容' }).className).not.toContain(
       'duration-[280ms]'
     );
     fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
     fireEvent.pointerUp(handle, { pointerId: 1 });
 
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       width: '520px',
     });
-    expect(screen.getByRole('main', { name: '工作区内容' })).toHaveStyle({
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toHaveStyle({
       left: '520px',
       right: '0px',
     });
@@ -394,10 +394,10 @@ describe('AppShell', () => {
     fireEvent.pointerMove(handle, { clientX: 100, pointerId: 2 });
     fireEvent.pointerUp(handle, { pointerId: 2 });
 
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       width: '240px',
     });
-    expect(screen.getByRole('main', { name: '工作区内容' })).toHaveStyle({
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toHaveStyle({
       left: '240px',
       right: '0px',
     });
@@ -414,14 +414,14 @@ describe('AppShell', () => {
     fireEvent.keyDown(handle, { key: 'ArrowRight' });
 
     expect(handle).toHaveAttribute('aria-valuenow', '260');
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       width: '260px',
     });
 
     fireEvent.keyDown(handle, { key: 'ArrowLeft' });
 
     expect(handle).toHaveAttribute('aria-valuenow', '240');
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       width: '240px',
     });
   });
@@ -439,7 +439,7 @@ describe('AppShell', () => {
     fireEvent.pointerCancel(handle, { pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: 520, pointerId: 1 });
 
-    expect(screen.getByRole('complementary', { name: '工作区侧边栏' })).toHaveStyle({
+    expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       width: '320px',
     });
   });

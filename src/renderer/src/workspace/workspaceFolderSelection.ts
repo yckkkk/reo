@@ -2,7 +2,7 @@ import type { WorkspaceDirectorySelection } from './workspaceApi';
 import { chooseWorkspaceDirectory } from './workspaceApi';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
-export const workspaceFolderErrorMessage = '请选择工作区文件夹';
+export const workspaceFolderErrorMessage = '请选择记忆空间文件夹';
 
 export function isSafeWorkspaceDisplayPath(displayPath: string) {
   return displayPath.trim().length > 0 && !/[\\/]/.test(displayPath);
@@ -27,7 +27,7 @@ export async function chooseSafeWorkspaceFolder(): Promise<SafeWorkspaceFolderSe
   if (!response.ok) {
     return {
       status: 'error',
-      message: workspaceErrorDisplayMessage(response.error, '无法选择工作区文件夹。'),
+      message: workspaceErrorDisplayMessage(response.error, '无法选择记忆空间文件夹。'),
     };
   }
 

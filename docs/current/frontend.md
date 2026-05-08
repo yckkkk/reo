@@ -17,22 +17,22 @@
 - ElevenLabs UI source-derived `Waveform` 与 `VoiceButton` 已作为 Reo audio UI primitive 引入，并已裁剪掉 agent runtime、network/API key、demo feedback 和未实现文案。
 - 当前 `AudioPlayer` 是 Reo local playback primitive：已评估 ElevenLabs Audio Player source，当前采纳 HTML5 audio underlay、Reo play/pause control、Radix Slider playback position、time labels、playback surface 信息层级和 Reo token；完整 provider、playlist、speed 和 global progress 等到出现真实 consumer 时再引入。
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-slider`。
-- 当前真实 reusable component consumer 是 app shell、workspace starter home、workspace create dialog、workspace entry form、workspace home、memory detail、recording overlay、recording drawer control shell 和 root toast host。
+- 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、记忆空间 home、memory detail、recording overlay、recording drawer control shell 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
-- 当前 renderer route state 覆盖无 active workspace 的 starter Home shell 和已初始化或已打开 workspace 的 loaded shell。
-- 当前无 workspace state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 项目区。
-- 当前 loaded workspace state 使用 `AppShell` 包裹 workspace home 或当前 memory detail；创建工作区通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
-- 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 使用 `--spacing-titlebar`，视觉上不画分隔线，窗口控制和 sidebar hide/show control 属于该层。sidebar hide/show control 使用 80px 的 `--spacing-titlebar-control-left` 和 2px 的 `--spacing-titlebar-control-top` 定位，对齐原生 macOS traffic-light 行，不再用 48px titlebar 垂直居中；主内容 panel 同步保留 48px panel titlebar slot，页面内容从该 slot 下方开始。
-- 当前 workspace home 展示 `全部记忆`、workspace title 标签、workspace description、本地 `搜索记忆` 输入、memory count、月份分组、memory card、空 workspace 状态、search 空结果状态和单一 `记录记忆` action。
+- 当前 renderer route state 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell。
+- 当前无 memory space state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 记忆空间列表。
+- 当前 loaded memory space state 使用 `AppShell` 包裹记忆空间 home 或当前 memory detail；创建记忆空间通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
+- 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 使用 `--spacing-titlebar`，视觉上不画分隔线，窗口控制和 sidebar hide/show control 属于该层。sidebar hide/show control 使用 80px 的 `--spacing-titlebar-control-left` 和 2px 的 `--spacing-titlebar-control-top` 定位，对齐原生 macOS traffic-light 行；主内容 panel 同步保留 48px panel titlebar slot，页面内容从该 slot 下方开始。
+- 当前记忆空间 home 展示 `全部记忆`、记忆空间 title 标签、记忆空间 description、本地 `搜索记忆` 输入、memory count、月份分组、memory card、空记忆空间状态、search 空结果状态和单一 `记录记忆` action。
 - 当前 memory detail 展示 memory title、创建日期、单一 `继续记录` action、`语音录音`、`转写`、`反思` 和 `记忆内容` section；录音卡展示 recording title、`时长` 和 `音频` byte size。
 - 当前 memory detail 的 `语音录音` 是有界首屏 preview：meta 显示总 recording count，列表最多展示 main detail response 返回的前 24 条 recording summary；当 `recordingsTruncated` 为 true 时显示当前只展示前 N 段录音的提示，不创建分页、virtualization 或后续加载 action。
 - 当前 memory detail 的 `转写`/`反思` section 使用 file-backed summary flags 显示已保存/空状态；不在未知文件真源时硬编码文件内容。
 - 当前 recording overlay 使用 shadcn Drawer/Vaul source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
-- 当前 `AppShell` 项目区显示 main-backed workspace project list；无 active workspace session 时也显示已导入项目。`新建空白项目` 打开 `WorkspaceCreateDialog`，`打开本地工作区` 直接选择现有 Reo 工作区或空文件夹并打开；空文件夹会原地初始化为 Reo workspace；打开失败在当前内容区显示 alert，创建弹层保持关闭，当前 workspace 保留；点击已导入项目只发送 `workspaceId` 并打开该 workspace；已导入项目的 root folder 被删除时，该项目仍显示在 sidebar，点击后显示“工作区文件夹已不存在。”；点击当前 workspace 项目项返回该 workspace 的 Home surface；点击 sidebar `首页` 会关闭 active workspace handle 并回到 starter Home shell。
-- 当前 `AppShell` 添加工作区菜单打开时，sidebar stacking level 临时提升到主内容 panel 之上，避免菜单被 panel 裁切或遮挡；菜单左边缘锚定到添加工作区 icon button 左边缘；添加工作区 icon button 只在项目标题行 hover、focus-within 或菜单 open 时显示；折叠/展开 sidebar 时会先关闭该菜单。
+- 当前 `AppShell` 记忆空间列表显示 main-backed memory space registry；无 active 记忆空间 session 时也显示已导入记忆空间。`创建本地记忆空间` 打开 `WorkspaceCreateDialog`，`打开本地记忆空间` 直接选择现有 Reo 记忆空间或空文件夹并打开；空文件夹会原地初始化为 Reo 记忆空间；打开失败在当前内容区显示 alert，创建弹层保持关闭，当前记忆空间保留；点击已导入记忆空间只发送 `workspaceId` 并打开该记忆空间；已导入记忆空间的 root folder 被删除时，该记忆空间仍显示在 sidebar，点击后显示“记忆空间文件夹已不存在。”；点击当前记忆空间列表项返回该记忆空间的 Home surface；点击 sidebar `首页` 会关闭 active memory space handle 并回到 starter Home shell。
+- 当前 `AppShell` 添加记忆空间菜单打开时，sidebar stacking level 临时提升到主内容 panel 之上，避免菜单被 panel 裁切或遮挡；菜单左边缘锚定到添加记忆空间 icon button 左边缘；添加记忆空间 icon button 只在记忆空间列表标题行 hover、focus-within 或菜单 open 时显示；折叠/展开 sidebar 时会先关闭该菜单。
 - 当前非阻断 toast 通过 `ReoToaster` 统一挂载在 App root；业务动作只调用共享 `toast` export，不在 feature 内自建 toast host 或临时通知 UI。
 - 当前 `CreateWorkspaceForm` 使用 React Hook Form + Zod resolver、Button/Input/Textarea/Label/Field primitives，并作为可嵌入表单由 `WorkspaceCreateDialog` 承载。
-- TanStack Query 和 React Hook Form 已安装，并已有真实 workspace creation consumer。
+- TanStack Query 和 React Hook Form 已安装，并已有真实 memory space creation consumer。
 - Zustand 已选型，但当前未安装。
 - 当前没有跨 subtree client state consumer。
 
@@ -61,10 +61,21 @@
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
-- 来自 main/server boundary 的 async data 使用 TanStack Query；workspace project list、workspace snapshot 和 memory detail 属于当前 Query consumer。
-- 当前 QueryClient provider 服务 workspace project list、workspace snapshot cache 和 memory detail cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
+- 来自 main/server boundary 的 async data 使用 TanStack Query；memory space list、记忆空间 snapshot 和 memory detail 属于当前 Query consumer。
+- 当前 QueryClient provider 服务 memory space list、记忆空间 snapshot cache 和 memory detail cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
 - 没有跨 component subtree state owner 前，不创建 Zustand store。
+
+## 产品气质与 UI 方向
+
+- Reo UI 的第一印象是安静、克制、温柔、有时间感的表达空间，不是管理台、协作工具、数据库前端、项目推进面板或效率压迫界面。
+- UI 判断优先保护表达意愿：降低开始记录的压力，强调内容安全、可恢复、可稍后整理，避免用任务化、打卡化、文件管理化的结构抢走表达中心。
+- 视觉质量接近 iPhone 和 Mac 用户熟悉的高级感：留白充足、层级清晰、边界轻盈、交互有节奏，所有按钮和状态都必须像被认真放置过。
+- Reo 美感来自对注意力的尊重，不来自装饰堆叠，也不来自极端简化。页面应保持呼吸感和时间感，避免空洞的大面积留白、装饰性背景、营销式 hero 或过度 dashboard 化。
+- 记忆空间的中间区域承担主要体验；左侧 memory 列表可以折叠为 tab，只在需要时进入记忆导航；右侧记忆概览、回顾和未来 AI 结构位也以可折叠 tab 作为辅助理解，不抢夺表达本身。
+- Memory Studio 必须表现为“记忆正在生长”的现场。当前录音、转写草稿和反思笔记不显示为附件堆叠，而显示为一段时间里留下的声音、文字和想法之间的关系；后续视频和图片进入后再扩展为画面关系。
+- 录音组件是最需要投入 UI 工艺的核心体验。动态波形、时间轴、实时转写位置、暂停、停止、本地保存、失败恢复、回放和归入 memory 的流程，都必须让用户感到内容安全、表达自由、整理可以稍后发生。
+- Review 和回顾入口的语气是重新遇见过去自己的邀请，不是任务、打卡或学习软件。
 
 ## 组件规则
 
@@ -82,10 +93,10 @@
 进入 UI 实现前必须定义：
 
 - Open-source component evaluation：每个 page-level、overlay、audio/media、form、editor、list/grid、state feedback 和 accessibility primitive 都必须先列出候选开源组件或官方方案。
-- 页面结构：workspace management、workspace home、recording overlay 的 page/component tree。
+- 页面结构：memory space management、记忆空间 home、recording overlay 的 page/component tree。
 - Layout primitives：first-run shell、sidebar、main shell、header、content region、overlay shell、scroll region、grid/list 的排版责任。
 - UI primitives：button、icon button、textarea、label、dialog、tooltip、card/panel 的来源、token 映射和 accessibility invariant。
-- Feature components：create workspace form、folder picker row、workspace card、recording card、recording controls、waveform/progress visualization、transcript editor、reflections editor、autosave status 的数据输入和事件输出。
+- Feature components：create memory space form、folder picker row、memory space card、recording card、recording controls、waveform/progress visualization、transcript editor、reflections editor、autosave status 的数据输入和事件输出。
 - Reuse decision：哪些组件复用，哪些保持 feature-local；复用必须来自真实 consumer 或共享 invariant。
 - Reference mapping：参考图只约束结构、层级和 micro-interactions；视觉 token、spacing、radius、surface 和 icon 必须服从 Reo design system。
 - Accessibility matrix：每个 page/state/component 必须定义 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
@@ -105,21 +116,21 @@
 
 当前实现事实：
 
-- Workspace starter Home 使用 App shell 承载无 workspace 状态；Home 主内容区不显示独立 `+` 创建按钮，创建工作区入口在 sidebar 项目区的添加菜单中。
-- Workspace create Dialog 使用 feature-local `WorkspaceCreateDialog` 和可嵌入 `CreateWorkspaceForm`，只覆盖“新建空白项目”创建表单；旧“添加工作区”选择弹层和 `OpenWorkspaceAction` 不属于当前 build。
-- App 拥有 workspace entry action lock；创建弹层 submit、打开本地工作区选择和打开期间不得重复触发同一工作区 action，创建弹层关闭在 pending 时被阻止，branch 结束必须释放 action lock。
-- App 使用 `['workspace', 'projects']` Query 读取 sidebar 项目列表；创建、打开本地工作区或点击已导入项目成功后 invalidate 该 Query。项目列表读取失败在当前内容区显示 alert，不把 sidebar 静默清空当作成功状态。
-- 创建工作区表单当前使用 Button/Input/Textarea/Label/Field primitives、React Hook Form、Zod 和 submit-time validation；表单字段顺序是工作区名称、描述、工作区位置；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
-- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，main 把所选 folder 作为 parent location 并在其下创建 title 同名 workspace folder。Create title 必须是安全 folder name，不能是 `.`、`..` 或包含路径分隔符。`打开本地工作区` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path；现有 Reo workspace 会打开，空文件夹会原地初始化。点击已导入项目只调用 `openWorkspaceProject(workspaceId)`，不发送 selection token、displayPath 或 raw path。Create/open-local/open-project 成功切换 workspace 前会释放旧 active handle，释放失败时不切换 UI 并显示错误。Open failure 或 promise reject 显示 `WorkspaceErrorBanner`，不复用创建表单错误位。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
+- Starter Home 使用 App shell 承载无 active memory space 状态；Home 主内容区不显示独立 `+` 创建按钮，创建记忆空间入口在 sidebar 记忆空间列表的添加菜单中。
+- 记忆空间创建 Dialog 使用 feature-local `WorkspaceCreateDialog` 和可嵌入 `CreateWorkspaceForm`，只覆盖“新建空白记忆空间”创建表单；`打开本地记忆空间` 由 sidebar 菜单直接触发 folder picker，不进入创建弹层。
+- App 拥有 memory space entry action lock；创建弹层 submit、打开本地记忆空间选择和打开期间不得重复触发同一记忆空间 action，创建弹层关闭在 pending 时被阻止，branch 结束必须释放 action lock。
+- App 使用 `['workspace', 'memory-spaces']` Query 读取 sidebar 记忆空间列表；创建、打开本地记忆空间或点击已导入记忆空间成功后 invalidate 该 Query。记忆空间列表读取失败在当前内容区显示 alert，不把 sidebar 静默清空当作成功状态。
+- 创建记忆空间表单当前使用 Button/Input/Textarea/Label/Field primitives、React Hook Form、Zod 和 submit-time validation；表单字段顺序是记忆空间名称、描述、记忆空间位置；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
+- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，main 把所选 folder 作为 parent location 并在其下创建 title 同名记忆空间文件夹。Create title 必须是安全 folder name，不能是 `.`、`..` 或包含路径分隔符。`打开本地记忆空间` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path；现有 Reo 记忆空间会打开，空文件夹会原地初始化。点击已导入记忆空间只调用 `openMemorySpace(workspaceId)`，不发送 selection token、displayPath 或 raw path。Create/open-local/open-memory-space 成功切换记忆空间前会释放既有 active handle，释放失败时不切换 UI 并显示错误。Open failure 或 promise reject 显示 `WorkspaceErrorBanner`，不复用创建表单错误位。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
 - 当前 App shell 已实现 48px 无边框 titlebar shell、底层可拖拽 sidebar 和上层悬浮内容 panel；titlebar 自身是 Electron drag region，窗口/sidebar 控件是 no-drag control region；sidebar 默认 240px、最小 240px、最大 520px，resize separator 有 8px 真实命中区和 hover affordance；panel 顶/右/底贴合窗口，内部先保留 48px panel titlebar slot，再渲染页面内容；展开态以 `left` 等于 sidebar 宽度并只保留左侧 12px radius，covered 态 `left` 归零且 radius 归零。折叠/展开时右边缘固定，只让左边界移动。
 - 当前 App shell 的 hide/show sidebar icon-only control 位于左上原生窗口控制区右侧，不创建 rail sidebar；该 control 的 titlebar slot 保持稳定，折叠和展开切换只替换图标，不移动 slot。
 - 当前 App shell 的浅色/深色主题切换是 sidebar 左下角工具按钮，使用 lucide Moon/Sun icon-only control 和 Tooltip accessible name；它不创建 settings 页面、系统主题跟随或持久化。
-- 当前 App shell navigation 显示 `首页` 和 `资料库`；sidebar 不显示 `新记忆`。`首页`、`资料库` 和 workspace 项目项都是真实导航入口，触发导航前会关闭已打开的 sidebar 菜单；离开 loaded workspace 到 `首页` 或 `资料库` 前会释放当前 workspace handle。starter shell 中 `首页` 是当前页，`资料库` 打开空白 Library page；loaded workspace 中当前页由 active workspace 项目项表达，`首页` 不保持当前页高亮。Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
-- Workspace 项目列表项容器内右侧有 icon-only 更多操作按钮；项目行容器承载 hover/current surface，workspace primary button 和 more button 都位于同一个项目行容器内。More button 默认隐藏，只在对应项目行 hover、keyboard focus-within 或菜单已打开时显示。当前只提供 `移除工作区`。确认弹层说明只从 Reo 工作区列表移除，本地文件夹不会被删除。移除反馈只使用 root `ReoToaster`，确认弹层内不渲染第二套错误提示。移除 inactive 项目只刷新项目列表；移除 active 项目先移除 registry entry，再回到 starter shell，并尽力释放当前 workspace handle；handle 释放失败时不阻断列表移除，只显示 toast。
-- 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上，菜单 surface、菜单项和项目操作组都必须有明确 accessible name。
-- 当前 Workspace home 是 loaded workspace 的 Home surface：主标题是 `全部记忆`，workspace title 作为上方标签；`搜索记忆` 只过滤当前 snapshot 中已加载的 memory summary；内容按 `createdAt` 月份倒序分组，同月内 memory 倒序；memory card 只展示 title、创建日期、recording count、duration、`转写`/`反思` presence。
-- 当前 Workspace home 的本地搜索使用 component state；它不创建 global search、full-text search、semantic search、tag/entity filter、Zustand store、TanStack Query key、IPC 或 DB surface。
-- 当前 Workspace home 直接使用 `Input` primitive 承载 searchbox，使用 `Separator` primitive 承载 header/month 的装饰性分隔；memory card 使用 `article`、`time`、`dl` 表达条目、日期和元数据，并用覆盖按钮提供打开当前 memory detail 的 command。`MemorySection` 和 `MemoryCard` 是 feature-local components，只服务 loaded workspace Home，不是 design-system primitive。
+- 当前 App shell navigation 显示 `首页` 和 `资料库`；sidebar 不显示 `新记忆`。`首页`、`资料库` 和记忆空间列表项都是真实导航入口，触发导航前会关闭已打开的 sidebar 菜单；离开 loaded memory space 到 `首页` 或 `资料库` 前会释放当前记忆空间 handle。starter shell 中 `首页` 是当前页，`资料库` 打开空白 Library page；loaded memory space 中当前页由 active 记忆空间列表项表达，`首页` 不保持当前页高亮。Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
+- 记忆空间列表项容器内右侧有 icon-only 更多操作按钮；记忆空间行容器承载 hover/current surface，primary button 和 more button 都位于同一个记忆空间行容器内。More button 默认隐藏，只在对应记忆空间行 hover、keyboard focus-within 或菜单已打开时显示。当前只提供 `移除记忆空间`。确认弹层说明只从 Reo记忆空间列表移除，本地文件夹不会被删除。移除反馈只使用 root `ReoToaster`，确认弹层内不渲染第二套错误提示。移除 inactive 记忆空间只刷新记忆空间列表；移除 active 记忆空间先移除 registry entry，再回到 starter shell，并尽力释放当前记忆空间 handle；handle 释放失败时不阻断列表移除，只显示 toast。
+- 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上，菜单 surface、菜单项和记忆空间操作组都必须有明确 accessible name。
+- 当前记忆空间 Home 是 loaded memory space 的 Home surface：主标题是 `全部记忆`，记忆空间 title 作为上方标签；`搜索记忆` 只过滤当前 snapshot 中已加载的 memory summary；内容按 `createdAt` 月份倒序分组，同月内 memory 倒序；memory card 只展示 title、创建日期、recording count、duration、`转写`/`反思` presence。
+- 当前记忆空间 Home 的本地搜索使用 component state；它不创建 global search、full-text search、semantic search、tag/entity filter、Zustand store、TanStack Query key、IPC 或 DB surface。
+- 当前记忆空间 Home 直接使用 `Input` primitive 承载 searchbox，使用 `Separator` primitive 承载 header/month 的装饰性分隔；memory card 使用 `article`、`time`、`dl` 表达条目、日期和元数据，并用覆盖按钮提供打开当前 memory detail 的 command。`MemorySection` 和 `MemoryCard` 是 feature-local components，只服务 loaded 记忆空间 Home，不是 design-system primitive。
 - 当前 Memory detail 使用最小 in-memory route 从 Home 进入和返回，不引入 router dependency、page registry、generic route service 或额外 provider。
 - 当前 Memory detail 通过 TanStack Query 读取 main-backed detail projection；`workspaceHandle` 只在 query function 闭包中作为 request capability 使用，不进入 DOM、URL、query key 或持久化状态。
 - 当前 Memory detail 的 `继续记录` 打开现有 recording overlay，并把当前 `memoryId` 作为 existing memory recording target 传入 finalize request。
@@ -138,8 +149,8 @@ First product slice 交付约束：
 - Sidebar 展开/covered 动效使用 280ms ease-out，只过渡 panel 的 `left` 与 border radius；reduced motion 下关闭 transition；拖拽 resize 时关闭 motion，只直接更新 left。
 - macOS 红黄绿窗口按钮保持原生控件；Reo 只绘制无边框 AppShell titlebar layout slot 和 sidebar hide/show control，不伪造红黄绿窗口按钮。
 - Sidebar 中的 Search 只能作为聚焦 Home 本地搜索的入口；若 Home 本地搜索尚未实现，Search control 不得出现在 current build。
-- Home 本地搜索只过滤当前 workspace snapshot 中已加载的 recording/memory title、日期和状态；full-text、跨 workspace、entity、tag、semantic search 属于后续 DB/index foundation。
-- Workspace home 完成形态使用 `全部记忆` header、本地搜索/filter、日期分组、recording card、empty/error/loading states 和 `记录记忆` action；`记录记忆` 打开 recording drawer。
+- Home 本地搜索只过滤当前记忆空间 snapshot 中已加载的 recording/memory title、日期和状态；full-text、跨记忆空间、entity、tag、semantic search 属于后续 DB/index foundation。
+- 记忆空间 Home 完成形态使用 `全部记忆` header、本地搜索/filter、日期分组、recording card、empty/error/loading states 和 `记录记忆` action；`记录记忆` 打开 recording drawer。
 - 未实现的 photo、video、file、film、sharing、sync、auth user、camera、AI generation、global search 能力不得显示为 disabled control、placeholder section 或 future action。
 - Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
 - 当前 recording overlay 不生成 transcript 文本；停止后只进入可编辑 transcript/reflections draft。
@@ -183,7 +194,7 @@ First product slice 交付约束：
 - 大多数按钮和输入控件使用 8px 方圆 radius；只有 tags 和显式圆形 icon control 使用 fully rounded 形状。
 - Card 使用 16-20px radius，并保持轻量边界或 hairline shadow；App 主内容悬浮面板展开态只在左侧使用 12px radius，covered 态归零以贴满窗口。
 - Geist Mono 只用于代码、技术注记和机器生成标记。
-- 所有产品界面必须保持标准软件工程产品气质：清晰、克制、可维护、可验证，不做玩具化视觉或交互。
+- 所有产品界面必须保持安静、克制、温柔、有时间感的表达软件气质：清晰、可维护、可验证，但不冰冷、不任务化、不玩具化。
 
 ## 变更门禁
 

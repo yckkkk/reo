@@ -3,7 +3,7 @@ import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createWorkspaceProjectRegistry } from '../../src/main/workspaceProjectRegistry.js';
+import { createWorkspaceMemorySpaceRegistry } from '../../src/main/workspaceMemorySpaceRegistry.js';
 
 const snapshot = {
   workspaceId: 'ws_runtime_validated',
@@ -13,27 +13,27 @@ const snapshot = {
   recordings: [],
 };
 
-test('workspace project registry persists projects across registry instances without exposing rootPath', async () => {
+test('workspace memory space registry persists memorySpaces across registry instances without exposing rootPath', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-persist-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-persist-')),
     'registry.json'
   );
-  const firstRegistry = createWorkspaceProjectRegistry({
+  const firstRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:48:00.000Z',
   });
 
-  await firstRegistry.upsertProject({
+  await firstRegistry.upsertMemorySpace({
     canonicalRoot: '/Users/example/Runtime validated memory',
     snapshot,
   });
 
-  const secondRegistry = createWorkspaceProjectRegistry({
+  const secondRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:49:00.000Z',
   });
 
-  assert.deepEqual(await secondRegistry.listProjects(), [
+  assert.deepEqual(await secondRegistry.listMemorySpaces(), [
     {
       workspaceId: 'ws_runtime_validated',
       title: 'Runtime validated memory',
@@ -43,31 +43,31 @@ test('workspace project registry persists projects across registry instances wit
     },
   ]);
   assert.equal(
-    await secondRegistry.resolveProjectRoot('ws_runtime_validated'),
+    await secondRegistry.resolveMemorySpaceRoot('ws_runtime_validated'),
     '/Users/example/Runtime validated memory'
   );
   assert.equal(
-    JSON.stringify(await secondRegistry.listProjects()).includes('/Users/example'),
+    JSON.stringify(await secondRegistry.listMemorySpaces()).includes('/Users/example'),
     false
   );
 });
 
-test('workspace project registry serializes concurrent upserts without dropping projects', async () => {
+test('workspace memory space registry serializes concurrent upserts without dropping memorySpaces', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-concurrent-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-concurrent-')),
     'registry.json'
   );
-  const registry = createWorkspaceProjectRegistry({
+  const registry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:48:00.000Z',
   });
 
   await Promise.all([
-    registry.upsertProject({
+    registry.upsertMemorySpace({
       canonicalRoot: '/Users/example/Runtime validated memory',
       snapshot,
     }),
-    registry.upsertProject({
+    registry.upsertMemorySpace({
       canonicalRoot: '/Users/example/Product research',
       snapshot: {
         ...snapshot,
@@ -78,27 +78,27 @@ test('workspace project registry serializes concurrent upserts without dropping 
     }),
   ]);
 
-  assert.deepEqual((await registry.listProjects()).map((project) => project.workspaceId).sort(), [
-    'ws_product_research',
-    'ws_runtime_validated',
-  ]);
+  assert.deepEqual(
+    (await registry.listMemorySpaces()).map((memorySpace) => memorySpace.workspaceId).sort(),
+    ['ws_product_research', 'ws_runtime_validated']
+  );
 });
 
-test('workspace project registry removes a project entry without touching other projects', async () => {
+test('workspace memory space registry removes a memory space entry without touching other memorySpaces', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-remove-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-remove-')),
     'registry.json'
   );
-  const registry = createWorkspaceProjectRegistry({
+  const registry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:48:00.000Z',
   });
 
-  await registry.upsertProject({
+  await registry.upsertMemorySpace({
     canonicalRoot: '/Users/example/Runtime validated memory',
     snapshot,
   });
-  await registry.upsertProject({
+  await registry.upsertMemorySpace({
     canonicalRoot: '/Users/example/Product research',
     snapshot: {
       ...snapshot,
@@ -108,11 +108,11 @@ test('workspace project registry removes a project entry without touching other 
     },
   });
 
-  await registry.removeProject('ws_runtime_validated');
-  await registry.removeProject('ws_missing');
+  await registry.removeMemorySpace('ws_runtime_validated');
+  await registry.removeMemorySpace('ws_missing');
 
-  assert.equal(await registry.resolveProjectRoot('ws_runtime_validated'), null);
-  assert.deepEqual(await registry.listProjects(), [
+  assert.equal(await registry.resolveMemorySpaceRoot('ws_runtime_validated'), null);
+  assert.deepEqual(await registry.listMemorySpaces(), [
     {
       workspaceId: 'ws_product_research',
       title: 'Product research',
@@ -123,27 +123,29 @@ test('workspace project registry removes a project entry without touching other 
   ]);
 });
 
-test('workspace project registry does not write when removing a missing project', async () => {
-  const registryDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-noop-'));
+test('workspace memory space registry does not write when removing a missing memorySpace', async () => {
+  const registryDirectory = await mkdtemp(
+    path.join(os.tmpdir(), 'reo-memory-space-registry-noop-')
+  );
   const registryPath = path.join(registryDirectory, 'registry.json');
-  const registry = createWorkspaceProjectRegistry({
+  const registry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:48:00.000Z',
   });
 
-  await registry.upsertProject({
+  await registry.upsertMemorySpace({
     canonicalRoot: '/Users/example/Runtime validated memory',
     snapshot,
   });
 
   await chmod(registryDirectory, 0o500);
   try {
-    await registry.removeProject('ws_missing');
+    await registry.removeMemorySpace('ws_missing');
   } finally {
     await chmod(registryDirectory, 0o700);
   }
 
-  assert.deepEqual(await registry.listProjects(), [
+  assert.deepEqual(await registry.listMemorySpaces(), [
     {
       workspaceId: 'ws_runtime_validated',
       title: 'Runtime validated memory',
@@ -154,28 +156,28 @@ test('workspace project registry does not write when removing a missing project'
   ]);
 });
 
-test('workspace project registry treats corrupt registry JSON as an empty project list', async () => {
+test('workspace memory space registry treats corrupt registry JSON as an empty memorySpace list', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-corrupt-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-corrupt-')),
     'registry.json'
   );
   await writeFile(registryPath, '{not-json');
 
-  const registry = createWorkspaceProjectRegistry({ registryPath });
+  const registry = createWorkspaceMemorySpaceRegistry({ registryPath });
 
-  assert.deepEqual(await registry.listProjects(), []);
+  assert.deepEqual(await registry.listMemorySpaces(), []);
 });
 
-test('workspace project registry treats relative root paths as corrupt registry data', async () => {
+test('workspace memory space registry treats relative root paths as corrupt registry data', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-relative-root-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-relative-root-')),
     'registry.json'
   );
   await writeFile(
     registryPath,
     `${JSON.stringify({
       schemaVersion: 1,
-      projects: [
+      memorySpaces: [
         {
           workspaceId: 'ws_relative',
           title: 'Relative',
@@ -188,24 +190,24 @@ test('workspace project registry treats relative root paths as corrupt registry 
     })}\n`
   );
 
-  const registry = createWorkspaceProjectRegistry({ registryPath });
+  const registry = createWorkspaceMemorySpaceRegistry({ registryPath });
 
-  assert.deepEqual(await registry.listProjects(), []);
-  assert.equal(await registry.resolveProjectRoot('ws_relative'), null);
+  assert.deepEqual(await registry.listMemorySpaces(), []);
+  assert.equal(await registry.resolveMemorySpaceRoot('ws_relative'), null);
 });
 
-test('workspace project registry bounds stored project count and display text length', async () => {
+test('workspace memory space registry bounds stored memorySpace count and display text length', async () => {
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-bounds-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-bounds-')),
     'registry.json'
   );
-  const registry = createWorkspaceProjectRegistry({
+  const registry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:48:00.000Z',
   });
 
   for (let index = 0; index < 105; index += 1) {
-    await registry.upsertProject({
+    await registry.upsertMemorySpace({
       canonicalRoot: `/Users/example/workspace-${index}`,
       snapshot: {
         ...snapshot,
@@ -216,9 +218,9 @@ test('workspace project registry bounds stored project count and display text le
     });
   }
 
-  const projects = await registry.listProjects();
-  assert.equal(projects.length, 100);
-  assert.equal(projects[0]?.workspaceId, 'ws_104');
-  assert.equal(projects[0]?.description.length, 4096);
-  assert.equal(await registry.resolveProjectRoot('ws_0'), null);
+  const memorySpaces = await registry.listMemorySpaces();
+  assert.equal(memorySpaces.length, 100);
+  assert.equal(memorySpaces[0]?.workspaceId, 'ws_104');
+  assert.equal(memorySpaces[0]?.description.length, 4096);
+  assert.equal(await registry.resolveMemorySpaceRoot('ws_0'), null);
 });

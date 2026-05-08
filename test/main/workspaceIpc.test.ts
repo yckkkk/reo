@@ -22,11 +22,11 @@ import {
   handleGetMemoryDetailForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
-  handleListWorkspaceProjectsForTest,
+  handleListWorkspaceMemorySpacesForTest,
   handleOpenWorkspace,
-  handleOpenWorkspaceProjectForTest,
+  handleOpenWorkspaceMemorySpaceForTest,
   handleOpenWorkspaceForTest,
-  handleRemoveWorkspaceProjectForTest,
+  handleRemoveMemorySpaceForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
@@ -41,7 +41,7 @@ import {
 } from '../../src/main/security.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
-import { createWorkspaceProjectRegistry } from '../../src/main/workspaceProjectRegistry.js';
+import { createWorkspaceMemorySpaceRegistry } from '../../src/main/workspaceMemorySpaceRegistry.js';
 import type {
   TrustedSenderEventAdapter,
   TrustedSenderIdentity,
@@ -924,11 +924,11 @@ test('openWorkspace rejects a folder that becomes non-empty after the empty chec
   await assertWorkspaceLockCanBeReacquired(rootPath);
 });
 
-test('openWorkspace registers imported projects and listProjects never exposes rootPath', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-register-'));
-  const projectRegistry = createWorkspaceProjectRegistry({
+test('openWorkspace registers imported memory spaces and listMemorySpaces never exposes rootPath', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-register-'));
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath: path.join(
-      await mkdtemp(path.join(os.tmpdir(), 'reo-project-registry-')),
+      await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-')),
       'registry.json'
     ),
     now: () => '2026-05-08T07:48:00.000Z',
@@ -941,7 +941,7 @@ test('openWorkspace registers imported projects and listProjects never exposes r
     now: () => '2026-05-08T07:47:00.000Z',
   });
   const tokenStore = createWorkspaceSelectionTokenStore({
-    createToken: () => 'selection-token-project-register',
+    createToken: () => 'selection-token-memory-space-register',
     now: () => 1_000,
     ttlMs: 5_000,
   });
@@ -950,29 +950,29 @@ test('openWorkspace registers imported projects and listProjects never exposes r
   const openResult = await handleOpenWorkspaceForTest({
     event,
     input: {
-      selectionToken: 'selection-token-project-register',
+      selectionToken: 'selection-token-memory-space-register',
     },
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     tokenStore,
-    projectRegistry,
+    memorySpaceRegistry,
   });
 
   assert.equal(openResult.ok, true);
-  const listResult = await handleListWorkspaceProjectsForTest({
+  const listResult = await handleListWorkspaceMemorySpacesForTest({
     event,
     input: undefined,
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    projectRegistry,
+    memorySpaceRegistry,
   });
 
   assert.deepEqual(listResult, {
     ok: true,
     value: {
-      projects: [
+      memorySpaces: [
         {
           workspaceId: 'ws_runtime_validated',
           title: 'Runtime validated memory',
@@ -986,20 +986,20 @@ test('openWorkspace registers imported projects and listProjects never exposes r
   assert.equal(JSON.stringify(listResult).includes(rootPath), false);
 });
 
-test('listProjects returns an error envelope when the project registry cannot be read', async () => {
-  const result = await handleListWorkspaceProjectsForTest({
+test('listMemorySpaces returns an error envelope when the memory space registry cannot be read', async () => {
+  const result = await handleListWorkspaceMemorySpacesForTest({
     event,
     input: undefined,
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    projectRegistry: {
-      listProjects: async () => {
+    memorySpaceRegistry: {
+      listMemorySpaces: async () => {
         throw new Error('registry unreadable');
       },
-      resolveProjectRoot: async () => null,
-      removeProject: async () => {},
-      upsertProject: async () => {
+      resolveMemorySpaceRoot: async () => null,
+      removeMemorySpace: async () => {},
+      upsertMemorySpace: async () => {
         throw new Error('unused');
       },
     },
@@ -1007,17 +1007,17 @@ test('listProjects returns an error envelope when the project registry cannot be
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED');
+    assert.equal(result.error.code, 'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_READ_FAILED');
   }
 });
 
-test('openWorkspaceProject opens a persisted project without a selection token', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-open-'));
+test('openMemorySpace opens a persisted memory space without a selection token', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-open-'));
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-open-registry-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-open-registry-')),
     'registry.json'
   );
-  const projectRegistry = createWorkspaceProjectRegistry({
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:49:00.000Z',
   });
@@ -1028,7 +1028,7 @@ test('openWorkspaceProject opens a persisted project without a selection token',
     createWorkspaceId: () => 'ws_runtime_validated',
     now: () => '2026-05-08T07:47:00.000Z',
   });
-  await projectRegistry.upsertProject({
+  await memorySpaceRegistry.upsertMemorySpace({
     canonicalRoot: rootPath,
     snapshot: {
       workspaceId: 'ws_runtime_validated',
@@ -1038,12 +1038,12 @@ test('openWorkspaceProject opens a persisted project without a selection token',
       recordings: [],
     },
   });
-  const restartedProjectRegistry = createWorkspaceProjectRegistry({
+  const restartedMemorySpacesRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:50:00.000Z',
   });
 
-  const result = await handleOpenWorkspaceProjectForTest({
+  const result = await handleOpenWorkspaceMemorySpaceForTest({
     event,
     input: {
       workspaceId: 'ws_runtime_validated',
@@ -1051,14 +1051,14 @@ test('openWorkspaceProject opens a persisted project without a selection token',
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    createHandle: () => 'wh_project_open',
-    projectRegistry: restartedProjectRegistry,
+    createHandle: () => 'wh_memory_space_open',
+    memorySpaceRegistry: restartedMemorySpacesRegistry,
   });
 
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.value, {
-      workspaceHandle: 'wh_project_open',
+      workspaceHandle: 'wh_memory_space_open',
       workspaceId: 'ws_runtime_validated',
       snapshot: {
         workspaceId: 'ws_runtime_validated',
@@ -1072,17 +1072,17 @@ test('openWorkspaceProject opens a persisted project without a selection token',
   }
 });
 
-test('openWorkspaceProject reports a missing persisted workspace folder', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-missing-'));
+test('openMemorySpace reports a missing persisted workspace folder', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-missing-'));
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-missing-registry-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-missing-registry-')),
     'registry.json'
   );
-  const projectRegistry = createWorkspaceProjectRegistry({
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:49:00.000Z',
   });
-  await projectRegistry.upsertProject({
+  await memorySpaceRegistry.upsertMemorySpace({
     canonicalRoot: rootPath,
     snapshot: {
       workspaceId: 'ws_deleted',
@@ -1094,7 +1094,7 @@ test('openWorkspaceProject reports a missing persisted workspace folder', async 
   });
   await rm(rootPath, { recursive: true, force: true });
 
-  const result = await handleOpenWorkspaceProjectForTest({
+  const result = await handleOpenWorkspaceMemorySpaceForTest({
     event,
     input: {
       workspaceId: 'ws_deleted',
@@ -1102,7 +1102,7 @@ test('openWorkspaceProject reports a missing persisted workspace folder', async 
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    projectRegistry,
+    memorySpaceRegistry,
   });
 
   assert.equal(result.ok, false);
@@ -1112,13 +1112,13 @@ test('openWorkspaceProject reports a missing persisted workspace folder', async 
   }
 });
 
-test('removeWorkspaceProject removes a persisted project without resolving or deleting its folder', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-project-remove-'));
+test('removeMemorySpace removes a persisted memory space without resolving or deleting its folder', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-remove-'));
   const registryPath = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-project-remove-registry-')),
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-remove-registry-')),
     'registry.json'
   );
-  const projectRegistry = createWorkspaceProjectRegistry({
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
     registryPath,
     now: () => '2026-05-08T07:49:00.000Z',
   });
@@ -1129,7 +1129,7 @@ test('removeWorkspaceProject removes a persisted project without resolving or de
     createWorkspaceId: () => 'ws_test_1',
     now: () => '2026-05-08T07:47:00.000Z',
   });
-  await projectRegistry.upsertProject({
+  await memorySpaceRegistry.upsertMemorySpace({
     canonicalRoot: rootPath,
     snapshot: {
       workspaceId: 'ws_test_1',
@@ -1140,7 +1140,7 @@ test('removeWorkspaceProject removes a persisted project without resolving or de
     },
   });
 
-  const result = await handleRemoveWorkspaceProjectForTest({
+  const result = await handleRemoveMemorySpaceForTest({
     event,
     input: {
       workspaceId: 'ws_test_1',
@@ -1148,11 +1148,11 @@ test('removeWorkspaceProject removes a persisted project without resolving or de
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    projectRegistry,
+    memorySpaceRegistry,
   });
 
   assert.deepEqual(result, { ok: true, value: { removed: true } });
-  assert.deepEqual(await projectRegistry.listProjects(), []);
+  assert.deepEqual(await memorySpaceRegistry.listMemorySpaces(), []);
   assert.equal((await stat(path.join(rootPath, '.reo'))).isDirectory(), true);
 });
 

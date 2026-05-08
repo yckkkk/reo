@@ -1,9 +1,9 @@
 export const WORKSPACE_CHOOSE_DIRECTORY_CHANNEL = 'workspace:chooseDirectory' as const;
-export const WORKSPACE_LIST_PROJECTS_CHANNEL = 'workspace:listProjects' as const;
+export const WORKSPACE_LIST_MEMORY_SPACES_CHANNEL = 'workspace:listMemorySpaces' as const;
 export const WORKSPACE_INITIALIZE_CHANNEL = 'workspace:initialize' as const;
 export const WORKSPACE_OPEN_CHANNEL = 'workspace:open' as const;
-export const WORKSPACE_OPEN_PROJECT_CHANNEL = 'workspace:openProject' as const;
-export const WORKSPACE_REMOVE_PROJECT_CHANNEL = 'workspace:removeProject' as const;
+export const WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL = 'workspace:openMemorySpace' as const;
+export const WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL = 'workspace:removeMemorySpace' as const;
 export const WORKSPACE_CLOSE_CHANNEL = 'workspace:close' as const;
 export const WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL = 'workspace:createRecordingDraft' as const;
 export const WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL =
@@ -24,11 +24,11 @@ export const WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL = 'workspace:clearMicroph
 
 export const WORKSPACE_IPC_CHANNELS = [
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
-  WORKSPACE_LIST_PROJECTS_CHANNEL,
+  WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
-  WORKSPACE_OPEN_PROJECT_CHANNEL,
-  WORKSPACE_REMOVE_PROJECT_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,

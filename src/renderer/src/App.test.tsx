@@ -7,11 +7,11 @@ import { ReoQueryProvider } from './queryClient';
 describe('App', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
-    listWorkspaceProjects: vi.fn(),
+    listMemorySpaces: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
-    openWorkspaceProject: vi.fn(),
-    removeWorkspaceProject: vi.fn(),
+    openMemorySpace: vi.fn(),
+    removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
     createRecordingDraft: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
@@ -69,8 +69,8 @@ describe('App', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({ ok: true, value: { projects: [] } });
-    reoWorkspace.removeWorkspaceProject.mockResolvedValue({ ok: true, value: { removed: true } });
+    reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
+    reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
@@ -79,8 +79,8 @@ describe('App', () => {
   });
 
   async function openCreateWorkspaceDialog(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '新建空白项目' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
   it('renders starter home without a page plus and opens creation from the sidebar entry', async () => {
@@ -91,21 +91,21 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    expect(screen.getByRole('navigation', { name: '工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
     expect(
       screen.queryByText('Create a local workspace to start collecting memories.')
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '创建本地工作区' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '创建工作区' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '创建本地记忆空间' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建记忆空间' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '资料库' })).toBeInTheDocument();
     await openCreateWorkspaceDialog(user);
 
-    expect(screen.getByRole('dialog', { name: '创建本地工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '创建本地记忆空间' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '添加工作区' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('工作区名称')).toHaveFocus();
+    expect(screen.queryByRole('heading', { name: '添加记忆空间' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('记忆空间名称')).toHaveFocus();
     expect(screen.queryByText(/photo/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/video/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/file/i)).not.toBeInTheDocument();
@@ -159,24 +159,24 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '切换到深色模式' }));
     expect(
-      screen.getByRole('main', { name: '工作区内容' }).closest('[data-theme]')
+      screen.getByRole('main', { name: '记忆空间内容' }).closest('[data-theme]')
     ).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
     expect(
-      screen.getByRole('main', { name: '工作区内容' }).closest('[data-theme]')
+      screen.getByRole('main', { name: '记忆空间内容' }).closest('[data-theme]')
     ).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(screen.getAllByText('Daily memory').length).toBeGreaterThan(0);
-    expect(screen.getByRole('navigation', { name: '工作区' })).toBeInTheDocument();
-    expect(screen.getByRole('main', { name: '工作区内容' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索记忆' })).toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
   });
@@ -213,7 +213,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -232,8 +232,8 @@ describe('App', () => {
 
     await openCreateWorkspaceDialog(user);
 
-    expect(screen.getByRole('dialog', { name: '创建本地工作区' })).toBeInTheDocument();
-    expect(screen.getByRole('form', { name: '创建本地工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '创建本地记忆空间' })).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: '创建本地记忆空间' })).toBeInTheDocument();
   });
 
   it('opens a local workspace from the sidebar add menu without initializing it', async () => {
@@ -267,8 +267,8 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '打开本地工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
     expect(screen.getAllByText('Existing memory').length).toBeGreaterThan(0);
@@ -281,11 +281,11 @@ describe('App', () => {
     );
   });
 
-  it('keeps imported workspace projects visible after an app restart before opening one', async () => {
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+  it('keeps imported 记忆空间 visible after an app restart before opening one', async () => {
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_imported',
             title: 'Runtime validated memory',
@@ -312,11 +312,11 @@ describe('App', () => {
 
   it('removes a persisted workspace from the sidebar list after confirmation without deleting its folder', async () => {
     const user = userEvent.setup();
-    reoWorkspace.listWorkspaceProjects
+    reoWorkspace.listMemorySpaces
       .mockResolvedValueOnce({
         ok: true,
         value: {
-          projects: [
+          memorySpaces: [
             {
               workspaceId: 'ws_test_1',
               title: '测试1',
@@ -327,7 +327,7 @@ describe('App', () => {
           ],
         },
       })
-      .mockResolvedValueOnce({ ok: true, value: { projects: [] } });
+      .mockResolvedValueOnce({ ok: true, value: { memorySpaces: [] } });
 
     render(
       <ReoQueryProvider>
@@ -338,30 +338,30 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: '测试1' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
 
-    expect(screen.getByRole('dialog', { name: '移除工作区' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '移除记忆空间' })).toBeInTheDocument();
     expect(screen.getByText('本地文件夹不会被删除。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     await waitFor(() => {
-      expect(reoWorkspace.removeWorkspaceProject).toHaveBeenCalledWith({
+      expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({
         workspaceId: 'ws_test_1',
       });
     });
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '测试1' })).not.toBeInTheDocument();
     });
-    expect(await screen.findByText('已移除工作区')).toBeInTheDocument();
+    expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
   });
 
   it('shows only toast feedback when removing a persisted workspace fails', async () => {
     const user = userEvent.setup();
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_test_1',
             title: '测试1',
@@ -372,11 +372,11 @@ describe('App', () => {
         ],
       },
     });
-    reoWorkspace.removeWorkspaceProject.mockResolvedValueOnce({
+    reoWorkspace.removeMemorySpace.mockResolvedValueOnce({
       ok: false,
       error: {
-        code: 'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
-        message: 'Workspace project registry could not be written',
+        code: 'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
+        message: 'Workspace memory space registry could not be written',
       },
     });
 
@@ -389,21 +389,21 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: '测试1' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
-    expect(await screen.findByText('无法移除工作区')).toBeInTheDocument();
-    const dialog = screen.getByRole('dialog', { name: '移除工作区' });
+    expect(await screen.findByText('无法移除记忆空间')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: '移除记忆空间' });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).queryByText('无法保存工作区列表。')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('无法保存记忆空间列表。')).not.toBeInTheDocument();
   });
 
-  it('opens a persisted workspace project from the sidebar without exposing a raw path', async () => {
+  it('opens a persisted 记忆空间 from the sidebar without exposing a raw path', async () => {
     const user = userEvent.setup();
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_imported',
             title: 'Runtime validated memory',
@@ -414,7 +414,7 @@ describe('App', () => {
         ],
       },
     });
-    reoWorkspace.openWorkspaceProject.mockResolvedValue({
+    reoWorkspace.openMemorySpace.mockResolvedValue({
       ok: true,
       value: {
         workspaceHandle: 'workspace-handle-imported',
@@ -438,15 +438,15 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Runtime validated memory' }));
 
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
-    expect(reoWorkspace.openWorkspaceProject).toHaveBeenCalledWith({
+    expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({
       workspaceId: 'ws_imported',
     });
-    expect(reoWorkspace.openWorkspaceProject).not.toHaveBeenCalledWith(
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalledWith(
       expect.objectContaining({ rootPath: expect.any(String) })
     );
   });
 
-  it('removes the current workspace project entry and then closes the active workspace', async () => {
+  it('removes the current workspace memory space entry and then closes the active workspace', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -478,14 +478,14 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     await waitFor(() => {
@@ -493,14 +493,14 @@ describe('App', () => {
         workspaceHandle: 'workspace-handle-1',
       });
     });
-    expect(reoWorkspace.removeWorkspaceProject).toHaveBeenCalledWith({
+    expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({
       workspaceId: 'ws_1',
     });
     expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
-    expect(await screen.findByText('已移除工作区')).toBeInTheDocument();
+    expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
   });
 
-  it('removes the current workspace project entry even when closing the active workspace fails', async () => {
+  it('removes the current workspace memory space entry even when closing the active workspace fails', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -539,25 +539,25 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除工作区' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
-    expect(reoWorkspace.removeWorkspaceProject).toHaveBeenCalledWith({
+    expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({
       workspaceId: 'ws_1',
     });
-    expect(await screen.findByText('已移除工作区')).toBeInTheDocument();
-    expect(screen.getByText('无法获取工作区锁。')).toBeInTheDocument();
+    expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
+    expect(screen.getByText('无法获取记忆空间锁。')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
   });
 
-  it('releases the previous workspace handle when switching to a persisted project', async () => {
+  it('releases the previous workspace handle when switching to a persisted memory space', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -567,13 +567,13 @@ describe('App', () => {
         displayPath: 'Memory',
       },
     });
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
-            workspaceId: 'ws_project_two',
-            title: 'Project two',
+            workspaceId: 'ws_memory_space_two',
+            title: 'Memory Space two',
             description: '',
             addedAt: '2026-05-08T07:48:00.000Z',
             lastOpenedAt: '2026-05-08T07:48:00.000Z',
@@ -595,14 +595,14 @@ describe('App', () => {
         },
       },
     });
-    reoWorkspace.openWorkspaceProject.mockResolvedValue({
+    reoWorkspace.openMemorySpace.mockResolvedValue({
       ok: true,
       value: {
         workspaceHandle: 'workspace-handle-2',
-        workspaceId: 'ws_project_two',
+        workspaceId: 'ws_memory_space_two',
         snapshot: {
-          workspaceId: 'ws_project_two',
-          title: 'Project two',
+          workspaceId: 'ws_memory_space_two',
+          title: 'Memory Space two',
           description: '',
           memories: [],
           recordings: [],
@@ -617,28 +617,28 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
 
-    await user.click(await screen.findByRole('button', { name: 'Project two' }));
+    await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
 
     await waitFor(() => {
       expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
       });
     });
-    expect(screen.getAllByText('Project two').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Memory Space two').length).toBeGreaterThan(0);
   });
 
-  it('shows a visible error when opening a persisted project rejects', async () => {
+  it('shows a visible error when opening a persisted memory space rejects', async () => {
     const user = userEvent.setup();
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_imported',
             title: 'Runtime validated memory',
@@ -649,7 +649,7 @@ describe('App', () => {
         ],
       },
     });
-    reoWorkspace.openWorkspaceProject.mockRejectedValue(new Error('IPC failed'));
+    reoWorkspace.openMemorySpace.mockRejectedValue(new Error('IPC failed'));
 
     render(
       <ReoQueryProvider>
@@ -659,15 +659,15 @@ describe('App', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Runtime validated memory' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('无法打开工作区。');
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法打开记忆空间。');
   });
 
-  it('shows a missing-folder error when a deleted persisted project is opened', async () => {
+  it('shows a missing-folder error when a deleted persisted memory space is opened', async () => {
     const user = userEvent.setup();
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_deleted',
             title: 'Deleted workspace',
@@ -678,7 +678,7 @@ describe('App', () => {
         ],
       },
     });
-    reoWorkspace.openWorkspaceProject.mockResolvedValue({
+    reoWorkspace.openMemorySpace.mockResolvedValue({
       ok: false,
       error: {
         code: 'ERR_WORKSPACE_ROOT_MISSING',
@@ -695,7 +695,7 @@ describe('App', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Deleted workspace' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('工作区文件夹已不存在。');
+    expect(await screen.findByRole('alert')).toHaveTextContent('记忆空间文件夹已不存在。');
     expect(screen.getByRole('button', { name: 'Deleted workspace' })).toBeInTheDocument();
   });
 
@@ -724,11 +724,11 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '打开本地工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('该文件夹不是有效的 Reo 工作区。');
-    expect(screen.queryByRole('dialog', { name: '创建本地工作区' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('该文件夹不是有效的 Reo 记忆空间。');
+    expect(screen.queryByRole('dialog', { name: '创建本地记忆空间' })).not.toBeInTheDocument();
   });
 
   it('shows open-local workspace errors from the loaded shell without losing the current workspace', async () => {
@@ -780,16 +780,16 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '打开本地工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('该工作区已在其他窗口打开。');
+    expect(await screen.findByRole('alert')).toHaveTextContent('该记忆空间已在其他窗口打开。');
     expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
     expect(screen.getAllByText('Daily memory').length).toBeGreaterThan(0);
   });
@@ -849,14 +849,14 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '添加工作区' }));
-    await user.click(screen.getByRole('menuitem', { name: '打开本地工作区' }));
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
     await waitFor(() => {
       expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
@@ -933,7 +933,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -982,7 +982,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -1039,7 +1039,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -1047,7 +1047,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '资料库' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('无法获取工作区锁。');
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法获取记忆空间锁。');
     expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '资料库' })).not.toBeInTheDocument();
   });
@@ -1119,7 +1119,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -1260,7 +1260,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -1342,7 +1342,7 @@ describe('App', () => {
     );
 
     await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -1353,7 +1353,7 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
   });
 
-  it('keeps memory and recording projections fresh after finalize', () => {
+  it('keeps memory and recording memorySpaceions fresh after finalize', () => {
     const session = {
       workspaceHandle: 'workspace-handle-1',
       workspaceId: 'ws_1',

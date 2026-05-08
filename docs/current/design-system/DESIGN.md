@@ -11,11 +11,16 @@
 
 ## 基调
 
+- Product temperament：安静、克制、温柔、有时间感的私人表达工作室。
+- 第一视觉印象应让用户愿意慢慢说话、慢慢回想、慢慢沉淀；不得像管理后台、项目协作工具、数据库前端、学习打卡软件或效率压迫界面。
 - Theme：light 为默认主题，dark 通过同名 token 覆盖实现。
 - 页面基底使用 Eggshell，保持接近白色但带轻微暖调。
 - 主要文字使用 Obsidian，边界使用 Chalk，辅助文字使用 Gravel 或 Slate。
 - 高饱和颜色只作为小型 avatar、圆点或状态指示使用，不作为正文、按钮或大面积背景色。
 - 视觉层级主要由字号、字重、间距、hairline shadow 和低饱和 surface 建立。
+- 视觉质量接近 iPhone 和 Mac 用户熟悉的高级感：留白充足、层级清晰、边界轻盈、交互有节奏，按钮和状态都像被认真放置过。
+- 美感来自对注意力的尊重，不来自装饰，也不来自极端简化。允许留白，但留白必须服务表达、回看和继续补充。
+- 时间线、多模态片段、声音波形和回顾提示用于呈现 memory 的生命感；不得把录音、图片、视频和笔记表现为普通附件堆叠。
 - Dark theme 不是简单反色：背景避免纯黑，面板使用逐级抬升的暖中性色，scrim 不复用文字 token。
 
 ## Tokens — Colors
@@ -306,7 +311,7 @@ Base unit：4px。
 
 ### Compact Menu
 
-- Role：sidebar/project action menu。
+- Role：sidebar 记忆空间 action menu。
 - Surface：Card White，1px Chalk border，subtle shadow。
 - Radius：12px。
 - Item：32px min-height，Inter 400 11px，icon 16px。

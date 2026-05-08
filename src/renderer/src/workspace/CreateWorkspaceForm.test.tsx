@@ -52,13 +52,13 @@ describe('CreateWorkspaceForm', () => {
   it('starts with Chinese compact fields, folder picker, submit, and title focus', () => {
     renderCreateWorkspaceForm();
 
-    expect(screen.getByRole('form', { name: '创建本地工作区' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '创建本地工作区' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('工作区名称')).toHaveFocus();
+    expect(screen.getByRole('form', { name: '创建本地记忆空间' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '创建本地记忆空间' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('记忆空间名称')).toHaveFocus();
     expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
     expect(screen.getByLabelText('描述')).toHaveClass('min-h-72', 'rounded-inputs', 'text-ui-sm');
-    expect(screen.getByText('补充这个工作区的用途，可选')).toHaveClass('text-ui-xs');
-    expect(screen.getByText('给新工作区起一个名字')).toHaveClass('text-ui-xs');
+    expect(screen.getByText('补充这个记忆空间的用途，可选')).toHaveClass('text-ui-xs');
+    expect(screen.getByText('给新的记忆空间起一个名字')).toHaveClass('text-ui-xs');
     expect(screen.getByRole('button', { name: '浏览' })).toHaveClass('min-h-32');
     expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
   });
@@ -69,10 +69,10 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
 
-    expect(screen.getByLabelText('工作区名称')).toHaveValue('Daily memory');
+    expect(screen.getByLabelText('记忆空间名称')).toHaveValue('Daily memory');
     await waitFor(() => expect(screen.getByRole('button', { name: '浏览' })).toHaveFocus());
     expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
   });
@@ -112,14 +112,14 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm(onWorkspaceReady);
 
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.type(screen.getByLabelText('描述'), 'Private notes');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('AGENTS.md');
-    expect(screen.getByLabelText('工作区名称')).toHaveValue('Daily memory');
+    expect(screen.getByLabelText('记忆空间名称')).toHaveValue('Daily memory');
     expect(screen.getByLabelText('描述')).toHaveValue('Private notes');
     expect(screen.queryByText('Memory')).not.toBeInTheDocument();
     expect(onWorkspaceReady).not.toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('工作区名称'), 'Daily memory');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
@@ -153,7 +153,7 @@ describe('CreateWorkspaceForm', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('请选择工作区文件夹')).toBeInTheDocument();
+    expect(await screen.findByText('请选择记忆空间文件夹')).toBeInTheDocument();
   });
 
   it('validates on submit instead of trapping users in a disabled button', async () => {
@@ -163,9 +163,9 @@ describe('CreateWorkspaceForm', () => {
 
     await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByText('请输入工作区名称')).toBeInTheDocument();
-    expect(screen.getByText('请选择工作区文件夹')).toBeInTheDocument();
-    expect(screen.getByLabelText('工作区名称')).toHaveFocus();
+    expect(await screen.findByText('请输入记忆空间名称')).toBeInTheDocument();
+    expect(screen.getByText('请选择记忆空间文件夹')).toBeInTheDocument();
+    expect(screen.getByLabelText('记忆空间名称')).toHaveFocus();
   });
 
   it('rejects workspace names that contain path separators', async () => {
@@ -181,13 +181,13 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('工作区名称'), 'Family/memories');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Family/memories');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memories');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(
-      await screen.findByText('工作区名称不能是 . 或 ..，也不能包含路径分隔符')
+      await screen.findByText('记忆空间名称不能是 . 或 ..，也不能包含路径分隔符')
     ).toBeInTheDocument();
     expect(reoWorkspace.initializeWorkspace).not.toHaveBeenCalled();
   });
@@ -219,7 +219,7 @@ describe('CreateWorkspaceForm', () => {
 
     renderCreateWorkspaceForm();
 
-    await user.type(screen.getByLabelText('工作区名称'), 'Family memories');
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Family memories');
     await user.type(screen.getByLabelText('描述'), 'Private notes for family');
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memories');
@@ -253,7 +253,7 @@ describe('CreateWorkspaceForm', () => {
 
     await user.click(screen.getByRole('button', { name: '浏览' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('请选择工作区文件夹');
+    expect(await screen.findByRole('alert')).toHaveTextContent('请选择记忆空间文件夹');
     expect(screen.queryByText('/Users/yck/Memories')).not.toBeInTheDocument();
   });
 });

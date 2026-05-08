@@ -14,10 +14,10 @@ export {
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
-  WORKSPACE_LIST_PROJECTS_CHANNEL,
+  WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
-  WORKSPACE_OPEN_PROJECT_CHANNEL,
-  WORKSPACE_REMOVE_PROJECT_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
   WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
@@ -48,9 +48,9 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_SELECTION_EXPIRED',
   'ERR_WORKSPACE_SELECTION_SENDER_MISMATCH',
   'ERR_WORKSPACE_CHOOSE_FAILED',
-  'ERR_WORKSPACE_PROJECT_NOT_FOUND',
-  'ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED',
-  'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
+  'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+  'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_READ_FAILED',
+  'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
   'ERR_WORKSPACE_ROOT_MISSING',
   'ERR_WORKSPACE_UNSAFE_PATH',
   'ERR_WORKSPACE_ALREADY_EXISTS',
@@ -151,15 +151,15 @@ export const workspaceOpenRequestSchema = z
   })
   .strict();
 
-export const workspaceProjectIdRequestSchema = z
+export const workspaceMemorySpaceIdRequestSchema = z
   .object({
     workspaceId: z.string().min(1),
   })
   .strict();
 
-export const workspaceOpenProjectRequestSchema = workspaceProjectIdRequestSchema;
+export const workspaceOpenMemorySpaceRequestSchema = workspaceMemorySpaceIdRequestSchema;
 
-export const workspaceRemoveProjectRequestSchema = workspaceProjectIdRequestSchema;
+export const workspaceRemoveMemorySpaceRequestSchema = workspaceMemorySpaceIdRequestSchema;
 
 export const workspaceCloseRequestSchema = z
   .object({
@@ -179,7 +179,7 @@ export const workspaceInitializeResponseSchema = z.discriminatedUnion('ok', [
   workspaceErrorEnvelopeSchema,
 ]);
 
-export const workspaceProjectSchema = z
+export const workspaceMemorySpaceSchema = z
   .object({
     workspaceId: z.string().min(1),
     title: z.string(),
@@ -189,11 +189,11 @@ export const workspaceProjectSchema = z
   })
   .strict();
 
-export const workspaceListProjectsResponseSchema = z.discriminatedUnion('ok', [
+export const workspaceListMemorySpacesResponseSchema = z.discriminatedUnion('ok', [
   z.object({
     ok: z.literal(true),
     value: z.object({
-      projects: z.array(workspaceProjectSchema),
+      memorySpaces: z.array(workspaceMemorySpaceSchema),
     }),
   }),
   workspaceErrorEnvelopeSchema,

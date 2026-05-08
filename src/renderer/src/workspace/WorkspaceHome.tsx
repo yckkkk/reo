@@ -150,7 +150,7 @@ export function WorkspaceHome({
                 {isSearching ? '没有匹配的记忆。' : '还没有记忆。'}
               </p>
               <p className="mt-8 text-body leading-body text-gravel">
-                {isSearching ? '清空搜索即可返回此工作区。' : '保存后的记忆会显示在这里。'}
+                {isSearching ? '清空搜索即可返回此记忆空间。' : '保存后的记忆会显示在这里。'}
               </p>
             </div>
           ) : (

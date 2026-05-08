@@ -4,11 +4,11 @@ import { createWorkspaceBridge } from '../../src/preload/workspaceBridge.js';
 
 const workspaceBridgeKeys = [
   'chooseDirectory',
-  'listWorkspaceProjects',
+  'listMemorySpaces',
   'initializeWorkspace',
   'openWorkspace',
-  'openWorkspaceProject',
-  'removeWorkspaceProject',
+  'openMemorySpace',
+  'removeMemorySpace',
   'closeWorkspace',
   'createRecordingDraft',
   'appendRecordingAudioChunk',
@@ -41,14 +41,14 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     ok: true,
     value: { status: 'canceled' },
   });
-  await bridge.listWorkspaceProjects();
-  await bridge.openWorkspaceProject({ workspaceId: 'ws_1' });
-  await bridge.removeWorkspaceProject({ workspaceId: 'ws_1' });
+  await bridge.listMemorySpaces();
+  await bridge.openMemorySpace({ workspaceId: 'ws_1' });
+  await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
-    'workspace:listProjects',
-    'workspace:openProject',
-    'workspace:removeProject',
+    'workspace:listMemorySpaces',
+    'workspace:openMemorySpace',
+    'workspace:removeMemorySpace',
   ]);
 });
 

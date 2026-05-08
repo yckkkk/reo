@@ -8,18 +8,18 @@ describe('Menu primitives', () => {
     const onSelect = vi.fn();
 
     render(
-      <MenuSurface aria-label="添加工作区菜单">
+      <MenuSurface aria-label="添加记忆空间菜单">
         <MenuItemButton
           icon={<FolderPlus className="size-14" aria-hidden="true" />}
           onClick={onSelect}
         >
-          新建空白项目
+          创建本地记忆空间
         </MenuItemButton>
       </MenuSurface>
     );
 
-    const menu = screen.getByRole('menu', { name: '添加工作区菜单' });
-    const item = screen.getByRole('menuitem', { name: '新建空白项目' });
+    const menu = screen.getByRole('menu', { name: '添加记忆空间菜单' });
+    const item = screen.getByRole('menuitem', { name: '创建本地记忆空间' });
     expect(menu).toHaveClass('rounded-xl', 'border-chalk', 'bg-card-white');
     expect(item).toHaveClass('min-h-32', 'text-ui-xs', 'font-regular');
   });

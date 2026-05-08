@@ -108,7 +108,7 @@ describe('WorkspaceHome', () => {
     await user.clear(search);
     await user.type(search, 'not in this workspace');
     expect(screen.getByText('没有匹配的记忆。')).toBeInTheDocument();
-    expect(screen.getByText('清空搜索即可返回此工作区。')).toBeInTheDocument();
+    expect(screen.getByText('清空搜索即可返回此记忆空间。')).toBeInTheDocument();
     expect(screen.queryByText(/global search/i)).not.toBeInTheDocument();
   });
 

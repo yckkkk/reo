@@ -1,8 +1,8 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   getMemoryDetail,
-  listWorkspaceProjects,
-  type WorkspaceProject,
+  listMemorySpaces,
+  type WorkspaceMemorySpace,
   type WorkspaceMemoryDetail,
   type WorkspaceSession,
   type WorkspaceSnapshot,
@@ -31,21 +31,21 @@ export function seedWorkspaceSnapshot(queryClient: QueryClient, session: Workspa
   queryClient.setQueryData<WorkspaceSnapshot>(workspaceSnapshotQueryKey(session), session.snapshot);
 }
 
-export function workspaceProjectsQueryKey() {
-  return ['workspace', 'projects'] as const;
+export function memorySpacesQueryKey() {
+  return ['workspace', 'memory-spaces'] as const;
 }
 
-export function workspaceProjectsQueryOptions() {
+export function memorySpacesQueryOptions() {
   return queryOptions({
-    queryKey: workspaceProjectsQueryKey(),
-    queryFn: async (): Promise<readonly WorkspaceProject[]> => {
-      const result = await listWorkspaceProjects();
+    queryKey: memorySpacesQueryKey(),
+    queryFn: async (): Promise<readonly WorkspaceMemorySpace[]> => {
+      const result = await listMemorySpaces();
 
       if (!result.ok) {
-        throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载工作区列表。'));
+        throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载记忆空间列表。'));
       }
 
-      return result.value.projects;
+      return result.value.memorySpaces;
     },
     retry: false,
     staleTime: Infinity,

@@ -9,8 +9,9 @@
 
 1. `../AGENTS.md`
 2. `../README.md`
-3. `current/foundation.md`
-4. `current/architecture.md`
+3. `README.md`
+4. `current/foundation.md`
+5. `current/architecture.md`
 
 然后只读取与改动范围匹配的 current 真源：
 

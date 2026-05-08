@@ -33,7 +33,7 @@ const SIDEBAR_NAV_BUTTON_CLASS =
 const HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS =
   'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 const HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS =
-  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover/project:pointer-events-auto group-hover/project:opacity-100 group-focus-within/project:pointer-events-auto group-focus-within/project:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
+  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover/memorySpace:pointer-events-auto group-hover/memorySpace:opacity-100 group-focus-within/memorySpace:pointer-events-auto group-focus-within/memorySpace:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 
 type AppShellProps = {
   readonly activeSection?: AppShellActiveSection | undefined;
@@ -43,14 +43,14 @@ type AppShellProps = {
   readonly onHome: () => void;
   readonly onLibrary: () => void;
   readonly onOpenLocalWorkspace?: (() => void) | undefined;
-  readonly onRemoveWorkspaceProject?: ((project: WorkspaceProject) => void) | undefined;
-  readonly onSelectWorkspace?: ((workspaceId: string) => void) | undefined;
+  readonly onRemoveMemorySpace?: ((memorySpace: WorkspaceMemorySpace) => void) | undefined;
+  readonly onSelectMemorySpace?: ((workspaceId: string) => void) | undefined;
   readonly onToggleTheme: () => void;
   readonly themeMode: ThemeMode;
-  readonly workspaceProjects?: readonly WorkspaceProject[] | undefined;
+  readonly memorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
 };
 
-export type WorkspaceProject = {
+export type WorkspaceMemorySpace = {
   readonly title: string;
   readonly workspaceId: string;
 };
@@ -77,19 +77,19 @@ export function AppShell({
   onHome,
   onLibrary,
   onOpenLocalWorkspace,
-  onRemoveWorkspaceProject,
-  onSelectWorkspace,
+  onRemoveMemorySpace,
+  onSelectMemorySpace,
   onToggleTheme,
   themeMode,
-  workspaceProjects = [],
+  memorySpaces = [],
 }: AppShellProps) {
   const [sidebarState, setSidebarState] = React.useState<AppShellState>('expanded');
   const [sidebarWidth, setSidebarWidth] = React.useState(MIN_SIDEBAR_WIDTH);
   const [dragState, setDragState] = React.useState<DragState | null>(null);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false);
-  const [workspaceProjectMenuOpen, setWorkspaceProjectMenuOpen] = React.useState<string | null>(
-    null
-  );
+  const [workspaceMemorySpaceMenuOpen, setWorkspaceMemorySpaceMenuOpen] = React.useState<
+    string | null
+  >(null);
   const safeSidebarWidth = clampSidebarWidth(sidebarWidth);
 
   function handleResizePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -139,11 +139,11 @@ export function AppShell({
   const currentSection = activeSection ?? (activeWorkspaceId ? 'workspace' : 'home');
   const homeCurrent = currentSection === 'home';
   const libraryCurrent = currentSection === 'library';
-  const anySidebarMenuOpen = workspaceMenuOpen || workspaceProjectMenuOpen !== null;
+  const anySidebarMenuOpen = workspaceMenuOpen || workspaceMemorySpaceMenuOpen !== null;
 
   function closeSidebarMenus() {
     setWorkspaceMenuOpen(false);
-    setWorkspaceProjectMenuOpen(null);
+    setWorkspaceMemorySpaceMenuOpen(null);
   }
 
   function handleCreateWorkspace() {
@@ -166,21 +166,21 @@ export function AppShell({
     onOpenLocalWorkspace?.();
   }
 
-  function handleSelectWorkspace(workspaceId: string) {
+  function handleSelectMemorySpace(workspaceId: string) {
     closeSidebarMenus();
-    onSelectWorkspace?.(workspaceId);
+    onSelectMemorySpace?.(workspaceId);
   }
 
-  function handleToggleProjectMenu(workspaceId: string) {
+  function handleToggleMemorySpaceMenu(workspaceId: string) {
     setWorkspaceMenuOpen(false);
-    setWorkspaceProjectMenuOpen((openWorkspaceId) =>
+    setWorkspaceMemorySpaceMenuOpen((openWorkspaceId) =>
       openWorkspaceId === workspaceId ? null : workspaceId
     );
   }
 
-  function handleRemoveWorkspaceProject(project: WorkspaceProject) {
-    setWorkspaceProjectMenuOpen(null);
-    onRemoveWorkspaceProject?.(project);
+  function handleRemoveMemorySpace(memorySpace: WorkspaceMemorySpace) {
+    setWorkspaceMemorySpaceMenuOpen(null);
+    onRemoveMemorySpace?.(memorySpace);
   }
 
   return (
@@ -224,11 +224,11 @@ export function AppShell({
         </div>
 
         <aside
-          aria-label="工作区侧边栏"
+          aria-label="记忆空间侧边栏"
           className="absolute inset-y-0 left-0 flex flex-col bg-eggshell px-12 pb-16 pt-sidebar-content-top"
           style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
         >
-          <nav className="flex flex-col gap-4" aria-label="工作区">
+          <nav className="flex flex-col gap-4" aria-label="记忆空间">
             <Button
               type="button"
               variant="secondary"
@@ -253,17 +253,17 @@ export function AppShell({
             </Button>
           </nav>
 
-          <section className="relative mt-28" aria-labelledby="workspace-projects-heading">
+          <section className="relative mt-28" aria-labelledby="workspace-memory-spaces-heading">
             <div
               role="group"
-              aria-label="项目操作"
+              aria-label="记忆空间操作"
               className="group mb-8 flex items-center justify-between gap-8"
             >
               <h2
-                id="workspace-projects-heading"
+                id="workspace-memory-spaces-heading"
                 className="px-8 text-ui-sm font-regular leading-ui-sm text-slate"
               >
-                项目
+                记忆空间
               </h2>
               {onCreateWorkspace || onOpenLocalWorkspace ? (
                 <div className="relative shrink-0">
@@ -273,11 +273,11 @@ export function AppShell({
                     size="icon"
                     aria-expanded={workspaceMenuOpen}
                     aria-haspopup="menu"
-                    aria-label="添加工作区"
+                    aria-label="添加记忆空间"
                     data-state={workspaceMenuOpen ? 'open' : 'closed'}
                     className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
                     onClick={() => {
-                      setWorkspaceProjectMenuOpen(null);
+                      setWorkspaceMemorySpaceMenuOpen(null);
                       setWorkspaceMenuOpen((open) => !open);
                     }}
                   >
@@ -286,20 +286,20 @@ export function AppShell({
 
                   {workspaceMenuOpen ? (
                     <MenuSurface
-                      aria-label="添加工作区菜单"
+                      aria-label="添加记忆空间菜单"
                       className="absolute left-0 top-36 z-10"
                     >
                       <MenuItemButton
                         icon={<FolderPlus className="size-16" aria-hidden="true" />}
                         onClick={handleCreateWorkspace}
                       >
-                        新建空白项目
+                        创建本地记忆空间
                       </MenuItemButton>
                       <MenuItemButton
                         icon={<Folder className="size-16" aria-hidden="true" />}
                         onClick={handleOpenLocalWorkspace}
                       >
-                        打开本地工作区
+                        打开本地记忆空间
                       </MenuItemButton>
                     </MenuSurface>
                   ) : null}
@@ -308,59 +308,60 @@ export function AppShell({
             </div>
 
             <div className="flex flex-col gap-4">
-              {workspaceProjects.map((project) => {
-                const projectCurrent =
-                  currentSection === 'workspace' && project.workspaceId === activeWorkspaceId;
-                const projectMenuOpen = workspaceProjectMenuOpen === project.workspaceId;
+              {memorySpaces.map((memorySpace) => {
+                const memorySpaceCurrent =
+                  currentSection === 'workspace' && memorySpace.workspaceId === activeWorkspaceId;
+                const memorySpaceMenuOpen =
+                  workspaceMemorySpaceMenuOpen === memorySpace.workspaceId;
 
                 return (
                   <div
-                    key={project.workspaceId}
-                    data-slot="workspace-project-item"
+                    key={memorySpace.workspaceId}
+                    data-slot="workspace-memory-space-item"
                     className={cn(
-                      'group/project relative flex min-h-32 items-center gap-4 rounded-buttons border border-transparent bg-transparent pr-4 transition-colors hover:border-chalk hover:bg-powder focus-within:border-chalk focus-within:bg-powder',
-                      projectCurrent ? 'border-chalk bg-powder' : null
+                      'group/memorySpace relative flex min-h-32 items-center gap-4 rounded-buttons border border-transparent bg-transparent pr-4 transition-colors hover:border-chalk hover:bg-powder focus-within:border-chalk focus-within:bg-powder',
+                      memorySpaceCurrent ? 'border-chalk bg-powder' : null
                     )}
                   >
                     <Button
                       type="button"
                       variant="ghostIcon"
                       size="compact"
-                      aria-current={projectCurrent ? 'page' : undefined}
+                      aria-current={memorySpaceCurrent ? 'page' : undefined}
                       className="min-w-0 flex-1 shrink justify-start border-0 bg-transparent px-8 text-cinder hover:text-cinder"
-                      onClick={() => handleSelectWorkspace(project.workspaceId)}
+                      onClick={() => handleSelectMemorySpace(memorySpace.workspaceId)}
                     >
                       <Folder className="size-16" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-left">{project.title}</span>
-                      {projectCurrent ? (
+                      <span className="min-w-0 flex-1 truncate text-left">{memorySpace.title}</span>
+                      {memorySpaceCurrent ? (
                         <span className="size-4 rounded-full bg-signal-blue" aria-hidden="true" />
                       ) : null}
                     </Button>
-                    {onRemoveWorkspaceProject ? (
+                    {onRemoveMemorySpace ? (
                       <Button
                         type="button"
                         variant="ghostIcon"
                         size="icon"
-                        aria-expanded={projectMenuOpen}
+                        aria-expanded={memorySpaceMenuOpen}
                         aria-haspopup="menu"
-                        aria-label={`${project.title} 更多操作`}
-                        data-state={projectMenuOpen ? 'open' : 'closed'}
+                        aria-label={`${memorySpace.title} 更多操作`}
+                        data-state={memorySpaceMenuOpen ? 'open' : 'closed'}
                         className={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
-                        onClick={() => handleToggleProjectMenu(project.workspaceId)}
+                        onClick={() => handleToggleMemorySpaceMenu(memorySpace.workspaceId)}
                       >
                         <MoreHorizontal className="size-16" aria-hidden="true" />
                       </Button>
                     ) : null}
-                    {projectMenuOpen ? (
+                    {memorySpaceMenuOpen ? (
                       <MenuSurface
-                        aria-label={`${project.title} 工作区操作`}
+                        aria-label={`${memorySpace.title} 记忆空间操作`}
                         className="absolute right-0 top-36 z-10"
                       >
                         <MenuItemButton
                           icon={<Trash2 className="size-16" aria-hidden="true" />}
-                          onClick={() => handleRemoveWorkspaceProject(project)}
+                          onClick={() => handleRemoveMemorySpace(memorySpace)}
                         >
-                          移除工作区
+                          移除记忆空间
                         </MenuItemButton>
                       </MenuSurface>
                     ) : null}
@@ -401,7 +402,7 @@ export function AppShell({
         </aside>
 
         <main
-          aria-label="工作区内容"
+          aria-label="记忆空间内容"
           className={`absolute flex flex-col overflow-hidden border border-chalk bg-card-white shadow-subtle ${panelMotionClass}`}
           style={{
             borderRadius: panelRadius,

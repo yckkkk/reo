@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-type WorkspaceRemoveDialogProps = {
+type MemorySpaceRemoveDialogProps = {
   readonly disabled?: boolean;
   readonly onConfirm: () => void;
   readonly onOpenChange: (open: boolean) => void;
@@ -15,21 +15,21 @@ type WorkspaceRemoveDialogProps = {
   readonly workspaceTitle?: string | undefined;
 };
 
-export function WorkspaceRemoveDialog({
+export function MemorySpaceRemoveDialog({
   disabled = false,
   onConfirm,
   onOpenChange,
   open,
   workspaceTitle,
-}: WorkspaceRemoveDialogProps) {
+}: MemorySpaceRemoveDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>移除工作区</DialogTitle>
+          <DialogTitle>移除记忆空间</DialogTitle>
           <DialogDescription>
-            是否从 Reo 的工作区列表中移除
-            {workspaceTitle ? `「${workspaceTitle}」` : '这个工作区'}？
+            是否从 Reo 的记忆空间列表中移除
+            {workspaceTitle ? `「${workspaceTitle}」` : '这个记忆空间'}？
           </DialogDescription>
         </DialogHeader>
 

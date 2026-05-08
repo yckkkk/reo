@@ -7,12 +7,12 @@ import {
   workspaceGenericOkResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
-  workspaceListProjectsResponseSchema,
+  workspaceListMemorySpacesResponseSchema,
   workspaceMemoryDetailResponseSchema,
   workspaceMicrophoneIntentResponseSchema,
   workspaceOpenRequestSchema,
-  workspaceOpenProjectRequestSchema,
-  workspaceRemoveProjectRequestSchema,
+  workspaceOpenMemorySpaceRequestSchema,
+  workspaceRemoveMemorySpaceRequestSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAudioChunkRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
@@ -28,11 +28,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
-    'workspace:listProjects',
+    'workspace:listMemorySpaces',
     'workspace:initialize',
     'workspace:open',
-    'workspace:openProject',
-    'workspace:removeProject',
+    'workspace:openMemorySpace',
+    'workspace:removeMemorySpace',
     'workspace:close',
     'workspace:createRecordingDraft',
     'workspace:appendRecordingAudioChunk',
@@ -50,11 +50,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
 });
 
-test('workspace project registry contract exposes project metadata but never rootPath', () => {
-  const response = workspaceListProjectsResponseSchema.parse({
+test('workspace memory space registry contract exposes memory space metadata but never rootPath', () => {
+  const response = workspaceListMemorySpacesResponseSchema.parse({
     ok: true,
     value: {
-      projects: [
+      memorySpaces: [
         {
           workspaceId: 'ws_1',
           title: 'Runtime validated memory',
@@ -69,7 +69,7 @@ test('workspace project registry contract exposes project metadata but never roo
   assert.deepEqual(response, {
     ok: true,
     value: {
-      projects: [
+      memorySpaces: [
         {
           workspaceId: 'ws_1',
           title: 'Runtime validated memory',
@@ -81,17 +81,17 @@ test('workspace project registry contract exposes project metadata but never roo
     },
   });
 
-  assert.deepEqual(workspaceOpenProjectRequestSchema.parse({ workspaceId: 'ws_1' }), {
+  assert.deepEqual(workspaceOpenMemorySpaceRequestSchema.parse({ workspaceId: 'ws_1' }), {
     workspaceId: 'ws_1',
   });
-  assert.deepEqual(workspaceRemoveProjectRequestSchema.parse({ workspaceId: 'ws_1' }), {
+  assert.deepEqual(workspaceRemoveMemorySpaceRequestSchema.parse({ workspaceId: 'ws_1' }), {
     workspaceId: 'ws_1',
   });
   assert.throws(() =>
-    workspaceListProjectsResponseSchema.parse({
+    workspaceListMemorySpacesResponseSchema.parse({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_1',
             title: 'Runtime validated memory',
@@ -105,13 +105,13 @@ test('workspace project registry contract exposes project metadata but never roo
     })
   );
   assert.throws(() =>
-    workspaceOpenProjectRequestSchema.parse({
+    workspaceOpenMemorySpaceRequestSchema.parse({
       workspaceId: 'ws_1',
       rootPath: '/Users/example/Runtime validated memory',
     })
   );
   assert.throws(() =>
-    workspaceRemoveProjectRequestSchema.parse({
+    workspaceRemoveMemorySpaceRequestSchema.parse({
       workspaceId: 'ws_1',
       rootPath: '/Users/example/Runtime validated memory',
     })

@@ -11,9 +11,9 @@
 当前结构包含：
 
 - Home dashboard。
-- Library workspace 管理。
-- Workspace Stage 默认态。
-- Workspace Stage focus 态。
+- Library 记忆空间管理。
+- 记忆空间舞台默认态。
+- 记忆空间舞台 focus 态。
 - Memory Studio。
 - Recording flow overlay。
 
@@ -23,4 +23,4 @@
 - 最终视觉必须服从 `docs/current/design-system/`。
 - 文案必须以当前中文产品文案为准。
 - 录音组件可以参考长 waveform、居中 recording surface、timer、pause/stop、transcript 和 reflections 的交互心智。
-- Workspace 中间面板必须是工作区或 studio，不得退化为文件预览器。
+- 记忆空间中间面板必须是表达舞台或 studio，不得退化为文件预览器。

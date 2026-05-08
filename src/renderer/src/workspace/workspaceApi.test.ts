@@ -11,10 +11,10 @@ import {
   getMemoryDetail,
   getRecordingDetail,
   initializeWorkspace,
-  listWorkspaceProjects,
+  listMemorySpaces,
   openWorkspace,
-  openWorkspaceProject,
-  removeWorkspaceProject,
+  openMemorySpace,
+  removeMemorySpace,
   readRecordingAudioChunk,
   readRecordingAudioManifest,
   saveReflections,
@@ -24,11 +24,11 @@ import {
 describe('workspace renderer API wrapper', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
-    listWorkspaceProjects: vi.fn(),
+    listMemorySpaces: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
-    openWorkspaceProject: vi.fn(),
-    removeWorkspaceProject: vi.fn(),
+    openMemorySpace: vi.fn(),
+    removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
     createRecordingDraft: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
@@ -58,10 +58,10 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { workspaceId: 'ws_1' },
     });
-    reoWorkspace.listWorkspaceProjects.mockResolvedValue({
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        projects: [
+        memorySpaces: [
           {
             workspaceId: 'ws_1',
             title: '记忆',
@@ -73,11 +73,11 @@ describe('workspace renderer API wrapper', () => {
       },
     });
     reoWorkspace.openWorkspace.mockResolvedValue({ ok: true, value: { workspaceId: 'ws_1' } });
-    reoWorkspace.openWorkspaceProject.mockResolvedValue({
+    reoWorkspace.openMemorySpace.mockResolvedValue({
       ok: true,
       value: { workspaceId: 'ws_1' },
     });
-    reoWorkspace.removeWorkspaceProject.mockResolvedValue({
+    reoWorkspace.removeMemorySpace.mockResolvedValue({
       ok: true,
       value: { removed: true },
     });
@@ -156,10 +156,10 @@ describe('workspace renderer API wrapper', () => {
       title: '记忆',
       description: '',
     });
-    await listWorkspaceProjects();
+    await listMemorySpaces();
     await openWorkspace({ selectionToken: 'selection-token-2' });
-    await openWorkspaceProject({ workspaceId: 'ws_1' });
-    await removeWorkspaceProject({ workspaceId: 'ws_1' });
+    await openMemorySpace({ workspaceId: 'ws_1' });
+    await removeMemorySpace({ workspaceId: 'ws_1' });
     await closeWorkspace({ workspaceHandle: 'wh_1' });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await appendRecordingAudioChunk({
@@ -210,9 +210,9 @@ describe('workspace renderer API wrapper', () => {
       title: '记忆',
       description: '',
     });
-    expect(reoWorkspace.listWorkspaceProjects).toHaveBeenCalledTimes(1);
-    expect(reoWorkspace.openWorkspaceProject).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
-    expect(reoWorkspace.removeWorkspaceProject).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+    expect(reoWorkspace.listMemorySpaces).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+    expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.readRecordingAudioChunk).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',

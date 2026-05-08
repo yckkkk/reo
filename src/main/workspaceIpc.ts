@@ -16,10 +16,10 @@ import {
   WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
-  WORKSPACE_LIST_PROJECTS_CHANNEL,
+  WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
-  WORKSPACE_OPEN_PROJECT_CHANNEL,
-  WORKSPACE_REMOVE_PROJECT_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
   WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
@@ -29,15 +29,15 @@ import {
   workspaceError,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
-  workspaceListProjectsResponseSchema,
+  workspaceListMemorySpacesResponseSchema,
   workspaceMemoryDetailResponseSchema,
   workspaceMemoryIdRequestSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
-  workspaceOpenProjectRequestSchema,
-  workspaceRemoveProjectRequestSchema,
+  workspaceOpenMemorySpaceRequestSchema,
+  workspaceRemoveMemorySpaceRequestSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAudioChunkRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
@@ -51,10 +51,10 @@ import {
 } from './workspaceContract.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import {
-  createWorkspaceProjectRegistry,
-  WorkspaceProjectRegistryReadError,
-  type WorkspaceProjectRegistry,
-} from './workspaceProjectRegistry.js';
+  createWorkspaceMemorySpaceRegistry,
+  WorkspaceMemorySpaceRegistryReadError,
+  type WorkspaceMemorySpaceRegistry,
+} from './workspaceMemorySpaceRegistry.js';
 import { acquireWorkspaceLock } from './workspaceLock.js';
 import {
   createWorkspaceSelectionTokenStore,
@@ -98,7 +98,7 @@ import {
 const nodeRequire = createRequire(import.meta.url);
 const { app, dialog, ipcMain } = nodeRequire('electron') as Partial<typeof import('electron')>;
 const defaultHandleStore = createWorkspaceHandleStore();
-let defaultProjectRegistry: WorkspaceProjectRegistry | null = null;
+let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
 
 interface ShowOpenDirectoryDialogResult {
   readonly canceled: boolean;
@@ -114,7 +114,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly isTrustedUrl: (url: string) => boolean;
   readonly tokenStore?: WorkspaceSelectionTokenStore;
   readonly handleStore?: WorkspaceHandleStore;
-  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
 }
 
@@ -136,7 +136,7 @@ export interface HandleInitializeWorkspaceOptions extends WorkspaceIpcBaseOption
   readonly input: unknown;
   readonly tokenStore?: WorkspaceSelectionTokenStore;
   readonly handleStore?: WorkspaceHandleStore;
-  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly createWorkspaceId?: () => string;
   readonly createHandle?: () => string;
   readonly now?: () => string;
@@ -159,23 +159,23 @@ type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions 
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
 };
 
-type HandleListWorkspaceProjectsOptions = WorkspaceIpcBaseOptions & {
+type HandleListWorkspaceMemorySpacesOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
-  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
 };
 
-type HandleRemoveWorkspaceProjectOptions = WorkspaceIpcBaseOptions & {
+type HandleRemoveWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
-  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
 };
 
-type HandleOpenWorkspaceProjectOptions = WorkspaceIpcBaseOptions & {
+type HandleOpenWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
   readonly handleStore?: WorkspaceHandleStore;
-  readonly projectRegistry?: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly createHandle?: () => string;
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
 };
@@ -259,19 +259,19 @@ export async function handleChooseWorkspaceDirectory({
   }
 }
 
-async function handleListWorkspaceProjectsCore({
+async function handleListWorkspaceMemorySpacesCore({
   event,
   input,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
-  projectRegistry = getDefaultProjectRegistry(),
-}: HandleListWorkspaceProjectsOptions): Promise<
-  z.infer<typeof workspaceListProjectsResponseSchema>
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+}: HandleListWorkspaceMemorySpacesOptions): Promise<
+  z.infer<typeof workspaceListMemorySpacesResponseSchema>
 > {
   const trusted = validateWorkspaceSender({
     event,
-    channel: WORKSPACE_LIST_PROJECTS_CHANNEL,
+    channel: WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
     expectedSession,
     expectedSessionKey,
     isTrustedUrl,
@@ -282,45 +282,45 @@ async function handleListWorkspaceProjectsCore({
 
   const request = workspaceNoInputSchema.safeParse(input);
   if (!request.success) {
-    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'listProjects accepts no payload');
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'listMemorySpaces accepts no payload');
   }
 
   try {
-    const projects = await projectRegistry.listProjects();
-    return workspaceListProjectsResponseSchema.parse({
+    const memorySpaces = await memorySpaceRegistry.listMemorySpaces();
+    return workspaceListMemorySpacesResponseSchema.parse({
       ok: true,
-      value: { projects },
+      value: { memorySpaces },
     });
   } catch (error) {
-    return workspaceProjectRegistryReadError(error);
+    return workspaceMemorySpaceRegistryReadError(error);
   }
 }
 
-export async function handleListWorkspaceProjects(
-  options: HandleListWorkspaceProjectsOptions
-): Promise<z.infer<typeof workspaceListProjectsResponseSchema>> {
-  return handleListWorkspaceProjectsCore(options);
+export async function handleListWorkspaceMemorySpaces(
+  options: HandleListWorkspaceMemorySpacesOptions
+): Promise<z.infer<typeof workspaceListMemorySpacesResponseSchema>> {
+  return handleListWorkspaceMemorySpacesCore(options);
 }
 
-export async function handleListWorkspaceProjectsForTest(
-  options: HandleListWorkspaceProjectsOptions
-): Promise<z.infer<typeof workspaceListProjectsResponseSchema>> {
-  return handleListWorkspaceProjectsCore(options);
+export async function handleListWorkspaceMemorySpacesForTest(
+  options: HandleListWorkspaceMemorySpacesOptions
+): Promise<z.infer<typeof workspaceListMemorySpacesResponseSchema>> {
+  return handleListWorkspaceMemorySpacesCore(options);
 }
 
-async function handleRemoveWorkspaceProjectCore({
+async function handleRemoveMemorySpaceCore({
   event,
   input,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
-  projectRegistry = getDefaultProjectRegistry(),
-}: HandleRemoveWorkspaceProjectOptions): Promise<
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+}: HandleRemoveWorkspaceMemorySpaceOptions): Promise<
   WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
 > {
   const trusted = validateWorkspaceSender({
     event,
-    channel: WORKSPACE_REMOVE_PROJECT_CHANNEL,
+    channel: WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
     expectedSession,
     expectedSessionKey,
     isTrustedUrl,
@@ -329,33 +329,33 @@ async function handleRemoveWorkspaceProjectCore({
     return trusted;
   }
 
-  const request = workspaceRemoveProjectRequestSchema.safeParse(input);
+  const request = workspaceRemoveMemorySpaceRequestSchema.safeParse(input);
   if (!request.success) {
-    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'removeProject request is invalid');
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'removeMemorySpace request is invalid');
   }
 
   try {
-    await projectRegistry.removeProject(request.data.workspaceId);
+    await memorySpaceRegistry.removeMemorySpace(request.data.workspaceId);
     return { ok: true, value: { removed: true } };
   } catch {
-    return workspaceProjectRegistryWriteError();
+    return workspaceMemorySpaceRegistryWriteError();
   }
 }
 
-export async function handleRemoveWorkspaceProject(
-  options: HandleRemoveWorkspaceProjectOptions
+export async function handleRemoveMemorySpace(
+  options: HandleRemoveWorkspaceMemorySpaceOptions
 ): Promise<
   WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
 > {
-  return handleRemoveWorkspaceProjectCore(options);
+  return handleRemoveMemorySpaceCore(options);
 }
 
-export async function handleRemoveWorkspaceProjectForTest(
-  options: HandleRemoveWorkspaceProjectOptions
+export async function handleRemoveMemorySpaceForTest(
+  options: HandleRemoveWorkspaceMemorySpaceOptions
 ): Promise<
   WorkspaceErrorEnvelope | { readonly ok: true; readonly value: { readonly removed: true } }
 > {
-  return handleRemoveWorkspaceProjectCore(options);
+  return handleRemoveMemorySpaceCore(options);
 }
 
 export async function closeAllWorkspaceHandles(): Promise<void> {
@@ -388,28 +388,28 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function getDefaultProjectRegistry(): WorkspaceProjectRegistry {
+function getDefaultMemorySpaceRegistry(): WorkspaceMemorySpaceRegistry {
   const userDataPath =
     app?.getPath('userData') ??
     path.join(process.cwd(), '.tmp', 'workspace-registry', `${process.pid}`);
-  defaultProjectRegistry ??= createWorkspaceProjectRegistry({
+  defaultMemorySpaceRegistry ??= createWorkspaceMemorySpaceRegistry({
     registryPath: path.join(userDataPath, 'workspace-registry.json'),
   });
-  return defaultProjectRegistry;
+  return defaultMemorySpaceRegistry;
 }
 
-function workspaceProjectRegistryReadError(error: unknown): WorkspaceErrorEnvelope {
+function workspaceMemorySpaceRegistryReadError(error: unknown): WorkspaceErrorEnvelope {
   const message =
-    error instanceof WorkspaceProjectRegistryReadError
+    error instanceof WorkspaceMemorySpaceRegistryReadError
       ? error.message
-      : 'Workspace project registry could not be read';
-  return workspaceError('ERR_WORKSPACE_PROJECT_REGISTRY_READ_FAILED', message, 'unknown');
+      : 'Workspace memory space registry could not be read';
+  return workspaceError('ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_READ_FAILED', message, 'unknown');
 }
 
-function workspaceProjectRegistryWriteError(): WorkspaceErrorEnvelope {
+function workspaceMemorySpaceRegistryWriteError(): WorkspaceErrorEnvelope {
   return workspaceError(
-    'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
-    'Workspace project registry could not be written',
+    'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
+    'Workspace memory space registry could not be written',
     'unknown'
   );
 }
@@ -456,7 +456,7 @@ async function persistAndRegisterWorkspaceSession({
   lock,
   handleStore,
   createHandle,
-  projectRegistry,
+  memorySpaceRegistry,
   failureCode,
   failureMessage,
 }: {
@@ -466,17 +466,17 @@ async function persistAndRegisterWorkspaceSession({
   readonly lock: AcquiredWorkspaceLock;
   readonly handleStore: WorkspaceHandleStore;
   readonly createHandle?: (() => string) | undefined;
-  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
   readonly failureCode: 'ERR_WORKSPACE_INIT_FAILED' | 'ERR_WORKSPACE_OPEN_FAILED';
   readonly failureMessage: string;
 }): Promise<WorkspaceInitializeResponse> {
   try {
-    await projectRegistry.upsertProject({ canonicalRoot, snapshot });
+    await memorySpaceRegistry.upsertMemorySpace({ canonicalRoot, snapshot });
   } catch {
     await releaseWorkspaceLockAfterFailure(lock);
     return workspaceError(
-      'ERR_WORKSPACE_PROJECT_REGISTRY_WRITE_FAILED',
-      'Workspace project registry could not be updated',
+      'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
+      'Workspace memory space registry could not be updated',
       'previous-file-preserved'
     );
   }
@@ -519,7 +519,7 @@ async function initializeWorkspaceRoot({
   createWorkspaceId: createWorkspaceIdOption,
   createHandle,
   now,
-  projectRegistry,
+  memorySpaceRegistry,
   validateBeforeInitialize,
   afterWorkspaceLockAcquiredForTest,
 }: {
@@ -531,7 +531,7 @@ async function initializeWorkspaceRoot({
   readonly createWorkspaceId: () => string;
   readonly createHandle?: (() => string) | undefined;
   readonly now: () => string;
-  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
   readonly validateBeforeInitialize?: (() => MaybePromise<WorkspaceInitializeTarget>) | undefined;
   readonly afterWorkspaceLockAcquiredForTest?: (() => MaybePromise<void>) | undefined;
 }): Promise<WorkspaceInitializeResponse> {
@@ -592,7 +592,7 @@ async function initializeWorkspaceRoot({
     lock,
     handleStore,
     createHandle,
-    projectRegistry,
+    memorySpaceRegistry,
     failureCode: 'ERR_WORKSPACE_INIT_FAILED',
     failureMessage: 'Workspace could not be initialized',
   });
@@ -609,7 +609,7 @@ async function handleInitializeWorkspaceCore({
   createWorkspaceId: createWorkspaceIdOption = createWorkspaceId,
   createHandle,
   now = nowIso,
-  projectRegistry = getDefaultProjectRegistry(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   afterWorkspaceLockAcquiredForTest,
 }: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateTrustedWorkspaceSender({
@@ -657,7 +657,7 @@ async function handleInitializeWorkspaceCore({
     handleStore,
     createWorkspaceId: createWorkspaceIdOption,
     createHandle,
-    projectRegistry,
+    memorySpaceRegistry,
     now,
     afterWorkspaceLockAcquiredForTest,
   });
@@ -784,14 +784,14 @@ async function openWorkspaceRoot({
   trustedSender,
   handleStore,
   createHandle,
-  projectRegistry,
+  memorySpaceRegistry,
   afterWorkspaceLockAcquiredForTest,
 }: {
   readonly canonicalRoot: string;
   readonly trustedSender: TrustedSenderIdentity;
   readonly handleStore: WorkspaceHandleStore;
   readonly createHandle?: (() => string) | undefined;
-  readonly projectRegistry: WorkspaceProjectRegistry;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
   readonly afterWorkspaceLockAcquiredForTest?: (() => MaybePromise<void>) | undefined;
 }): Promise<WorkspaceInitializeResponse> {
   const lock = await acquireWorkspaceLock({ canonicalRoot });
@@ -833,7 +833,7 @@ async function openWorkspaceRoot({
     lock,
     handleStore,
     createHandle,
-    projectRegistry,
+    memorySpaceRegistry,
     failureCode: 'ERR_WORKSPACE_OPEN_FAILED',
     failureMessage: 'Workspace could not be opened',
   });
@@ -850,7 +850,7 @@ async function handleOpenWorkspaceCore({
   createWorkspaceId: createWorkspaceIdOption = createWorkspaceId,
   createHandle,
   now = nowIso,
-  projectRegistry = getDefaultProjectRegistry(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   afterWorkspaceLockAcquiredForTest,
 }: HandleInitializeWorkspaceForTestOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateWorkspaceSender({
@@ -891,7 +891,7 @@ async function handleOpenWorkspaceCore({
       handleStore,
       createWorkspaceId: createWorkspaceIdOption,
       createHandle,
-      projectRegistry,
+      memorySpaceRegistry,
       now,
       validateBeforeInitialize: () =>
         validateEmptyWorkspaceOpenCanonicalTargetAfterLock(target.canonicalRoot),
@@ -905,7 +905,7 @@ async function handleOpenWorkspaceCore({
     trustedSender: trusted.sender,
     handleStore,
     createHandle,
-    projectRegistry,
+    memorySpaceRegistry,
     afterWorkspaceLockAcquiredForTest,
   });
 }
@@ -922,7 +922,7 @@ export async function handleOpenWorkspaceForTest(
   return handleOpenWorkspaceCore(options);
 }
 
-async function handleOpenWorkspaceProjectCore({
+async function handleOpenWorkspaceMemorySpaceCore({
   event,
   input,
   expectedSession,
@@ -930,12 +930,12 @@ async function handleOpenWorkspaceProjectCore({
   isTrustedUrl,
   handleStore = createWorkspaceHandleStore(),
   createHandle,
-  projectRegistry = getDefaultProjectRegistry(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   afterWorkspaceLockAcquiredForTest,
-}: HandleOpenWorkspaceProjectOptions): Promise<WorkspaceInitializeResponse> {
+}: HandleOpenWorkspaceMemorySpaceOptions): Promise<WorkspaceInitializeResponse> {
   const trusted = validateWorkspaceSender({
     event,
-    channel: WORKSPACE_OPEN_PROJECT_CHANNEL,
+    channel: WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
     expectedSession,
     expectedSessionKey,
     isTrustedUrl,
@@ -944,21 +944,21 @@ async function handleOpenWorkspaceProjectCore({
     return trusted;
   }
 
-  const request = workspaceOpenProjectRequestSchema.safeParse(input);
+  const request = workspaceOpenMemorySpaceRequestSchema.safeParse(input);
   if (!request.success) {
-    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'openProject request is invalid');
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'openMemorySpace request is invalid');
   }
 
   let rootPath: string | null;
   try {
-    rootPath = await projectRegistry.resolveProjectRoot(request.data.workspaceId);
+    rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(request.data.workspaceId);
   } catch (error) {
-    return workspaceProjectRegistryReadError(error);
+    return workspaceMemorySpaceRegistryReadError(error);
   }
   if (!rootPath) {
     return workspaceError(
-      'ERR_WORKSPACE_PROJECT_NOT_FOUND',
-      'Workspace project is not registered',
+      'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+      'Workspace memorySpace is not registered',
       'none-written'
     );
   }
@@ -973,21 +973,21 @@ async function handleOpenWorkspaceProjectCore({
     trustedSender: trusted.sender,
     handleStore,
     createHandle,
-    projectRegistry,
+    memorySpaceRegistry,
     afterWorkspaceLockAcquiredForTest,
   });
 }
 
-export async function handleOpenWorkspaceProject(
-  options: HandleOpenWorkspaceProjectOptions
+export async function handleOpenWorkspaceMemorySpace(
+  options: HandleOpenWorkspaceMemorySpaceOptions
 ): Promise<WorkspaceInitializeResponse> {
-  return handleOpenWorkspaceProjectCore(options);
+  return handleOpenWorkspaceMemorySpaceCore(options);
 }
 
-export async function handleOpenWorkspaceProjectForTest(
-  options: HandleOpenWorkspaceProjectOptions
+export async function handleOpenWorkspaceMemorySpaceForTest(
+  options: HandleOpenWorkspaceMemorySpaceOptions
 ): Promise<WorkspaceInitializeResponse> {
-  return handleOpenWorkspaceProjectCore(options);
+  return handleOpenWorkspaceMemorySpaceCore(options);
 }
 
 async function handleBeginMicrophoneIntentCore({
@@ -1223,7 +1223,7 @@ export function registerWorkspaceIpc({
   isTrustedUrl,
   tokenStore = createWorkspaceSelectionTokenStore(),
   handleStore = defaultHandleStore,
-  projectRegistry = getDefaultProjectRegistry(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
 }: RegisterWorkspaceIpcOptions): void {
   const electronMain = requireElectronMainApi();
@@ -1239,14 +1239,14 @@ export function registerWorkspaceIpc({
       showOpenDirectoryDialog,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_LIST_PROJECTS_CHANNEL, (event, input) =>
-    handleListWorkspaceProjects({
+  electronMain.ipcMain.handle(WORKSPACE_LIST_MEMORY_SPACES_CHANNEL, (event, input) =>
+    handleListWorkspaceMemorySpaces({
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
-      projectRegistry,
+      memorySpaceRegistry,
     })
   );
   electronMain.ipcMain.handle(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
@@ -1258,7 +1258,7 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       tokenStore,
       handleStore,
-      projectRegistry,
+      memorySpaceRegistry,
     })
   );
   electronMain.ipcMain.handle(WORKSPACE_OPEN_CHANNEL, (event, input) =>
@@ -1270,28 +1270,28 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       tokenStore,
       handleStore,
-      projectRegistry,
+      memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_OPEN_PROJECT_CHANNEL, (event, input) =>
-    handleOpenWorkspaceProject({
+  electronMain.ipcMain.handle(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, (event, input) =>
+    handleOpenWorkspaceMemorySpace({
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
-      projectRegistry,
+      memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_REMOVE_PROJECT_CHANNEL, (event, input) =>
-    handleRemoveWorkspaceProject({
+  electronMain.ipcMain.handle(WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL, (event, input) =>
+    handleRemoveMemorySpace({
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
-      projectRegistry,
+      memorySpaceRegistry,
     })
   );
   electronMain.ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>

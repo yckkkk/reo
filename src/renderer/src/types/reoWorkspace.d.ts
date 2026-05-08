@@ -77,7 +77,7 @@ type WorkspaceSnapshot = {
   readonly recordings: ReadonlyArray<WorkspaceRecordingSummary>;
 };
 
-type WorkspaceProject = {
+type WorkspaceMemorySpace = {
   readonly workspaceId: string;
   readonly title: string;
   readonly description: string;
@@ -101,8 +101,8 @@ type ReoWorkspaceBridge = {
   readonly chooseDirectory: () => Promise<
     WorkspaceResponse<WorkspaceChooseDirectoryResult> | WorkspaceErrorEnvelope
   >;
-  readonly listWorkspaceProjects: () => Promise<
-    WorkspaceResponse<{ readonly projects: ReadonlyArray<WorkspaceProject> }>
+  readonly listMemorySpaces: () => Promise<
+    WorkspaceResponse<{ readonly memorySpaces: ReadonlyArray<WorkspaceMemorySpace> }>
   >;
   readonly initializeWorkspace: (payload: {
     readonly selectionToken: string;
@@ -122,14 +122,14 @@ type ReoWorkspaceBridge = {
       readonly snapshot: WorkspaceSnapshot;
     }>
   >;
-  readonly openWorkspaceProject: (payload: { readonly workspaceId: string }) => Promise<
+  readonly openMemorySpace: (payload: { readonly workspaceId: string }) => Promise<
     WorkspaceResponse<{
       readonly workspaceHandle: string;
       readonly workspaceId: string;
       readonly snapshot: WorkspaceSnapshot;
     }>
   >;
-  readonly removeWorkspaceProject: (payload: {
+  readonly removeMemorySpace: (payload: {
     readonly workspaceId: string;
   }) => Promise<WorkspaceResponse<{ readonly removed: true }>>;
   readonly closeWorkspace: (

@@ -22,14 +22,14 @@ import {
 import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from './workspaceApi';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
-const workspaceNameErrorMessage = '工作区名称不能是 . 或 ..，也不能包含路径分隔符';
+const workspaceNameErrorMessage = '记忆空间名称不能是 . 或 ..，也不能包含路径分隔符';
 
 function isSafeWorkspaceName(value: string) {
   return value !== '.' && value !== '..' && !/[\\/\0]/.test(value);
 }
 
 const createWorkspaceSchema = z.object({
-  title: z.string().trim().min(1, '请输入工作区名称').refine(isSafeWorkspaceName, {
+  title: z.string().trim().min(1, '请输入记忆空间名称').refine(isSafeWorkspaceName, {
     message: workspaceNameErrorMessage,
   }),
   description: z.string(),
@@ -51,7 +51,7 @@ type CreateWorkspaceFormProps = {
 };
 
 function workspaceErrorMessage(error: WorkspaceError) {
-  return workspaceErrorDisplayMessage(error, '无法创建工作区。');
+  return workspaceErrorDisplayMessage(error, '无法创建记忆空间。');
 }
 
 export function CreateWorkspaceForm({
@@ -121,18 +121,18 @@ export function CreateWorkspaceForm({
   });
 
   return (
-    <form className="flex flex-col gap-24" aria-label="创建本地工作区" onSubmit={submit}>
-      <FieldGroup aria-label="工作区设置">
+    <form className="flex flex-col gap-24" aria-label="创建本地记忆空间" onSubmit={submit}>
+      <FieldGroup aria-label="记忆空间设置">
         <FieldRow>
           <div>
-            <FieldLabel htmlFor="workspace-title">工作区名称</FieldLabel>
-            <FieldHint>给新工作区起一个名字</FieldHint>
+            <FieldLabel htmlFor="workspace-title">记忆空间名称</FieldLabel>
+            <FieldHint>给新的记忆空间起一个名字</FieldHint>
           </div>
           <FieldControl>
             <Input
               id="workspace-title"
               size="compact"
-              placeholder="工作区名称"
+              placeholder="记忆空间名称"
               {...titleRegistration}
               ref={(element) => {
                 titleRegistration.ref(element);
@@ -148,7 +148,7 @@ export function CreateWorkspaceForm({
         <FieldRow>
           <div>
             <FieldLabel htmlFor="workspace-description">描述</FieldLabel>
-            <FieldHint>补充这个工作区的用途，可选</FieldHint>
+            <FieldHint>补充这个记忆空间的用途，可选</FieldHint>
           </div>
           <FieldControl>
             <Textarea
@@ -161,7 +161,7 @@ export function CreateWorkspaceForm({
         </FieldRow>
         <FieldRow>
           <div>
-            <FieldLabel>工作区位置</FieldLabel>
+            <FieldLabel>记忆空间位置</FieldLabel>
             <FieldHint>将在所选位置下创建同名文件夹</FieldHint>
           </div>
           <FieldControl>
