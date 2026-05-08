@@ -63,18 +63,11 @@ type WorkspaceMemoryDetail = {
   }>;
 };
 
-type WorkspaceRecordingSummary = {
-  readonly recordingId: string;
-  readonly title: string;
-  readonly audioByteLength: number;
-};
-
 type WorkspaceSnapshot = {
   readonly workspaceId: string;
   readonly title: string;
   readonly description: string;
   readonly memories: ReadonlyArray<WorkspaceMemorySummary>;
-  readonly recordings: ReadonlyArray<WorkspaceRecordingSummary>;
 };
 
 type WorkspaceMemorySpace = {
@@ -153,7 +146,10 @@ type ReoWorkspaceBridge = {
   ) => Promise<
     WorkspaceResponse<{
       readonly memory: WorkspaceMemorySummary;
-      readonly recording: WorkspaceRecordingSummary & {
+      readonly recording: {
+        readonly recordingId: string;
+        readonly title: string;
+        readonly audioByteLength: number;
         readonly memoryId: string;
         readonly durationMs: number;
       };

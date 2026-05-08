@@ -100,6 +100,10 @@ export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWo
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
+export type FinalizedRecording = Extract<
+  Awaited<ReturnType<typeof finalizeRecordingDraft>>,
+  { readonly ok: true }
+>['value'];
 export type WorkspaceMemorySpace = Extract<
   Awaited<ReturnType<typeof listMemorySpaces>>,
   { readonly ok: true }

@@ -19,6 +19,7 @@ import {
   openWorkspace,
   openMemorySpace,
   removeMemorySpace,
+  type FinalizedRecording,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
 import {
@@ -32,14 +33,6 @@ import {
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
 } from './workspace/workspaceQueries';
-
-type FinalizedRecording = {
-  readonly memory: WorkspaceSession['snapshot']['memories'][number];
-  readonly recording: WorkspaceSession['snapshot']['recordings'][number] & {
-    readonly memoryId: string;
-    readonly durationMs: number;
-  };
-};
 
 type WorkspaceView =
   | { readonly name: 'home' }
@@ -89,12 +82,6 @@ export function mergeFinalizedRecordingIntoSession(
         ...current.snapshot.memories.filter(
           (memory) => memory.memoryId !== finalized.memory.memoryId
         ),
-      ],
-      recordings: [
-        ...current.snapshot.recordings.filter(
-          (recording) => recording.recordingId !== finalized.recording.recordingId
-        ),
-        finalized.recording,
       ],
     },
   };

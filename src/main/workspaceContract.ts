@@ -107,12 +107,6 @@ export const workspaceChooseDirectoryResponseSchema = z.discriminatedUnion('ok',
   workspaceErrorEnvelopeSchema,
 ]);
 
-export const workspaceRecordingSummarySchema = z.object({
-  recordingId: z.string().min(1),
-  title: z.string(),
-  audioByteLength: z.number().int().nonnegative(),
-});
-
 export const workspaceMemorySummarySchema = z.object({
   memoryId: z.string().min(1),
   title: z.string(),
@@ -125,12 +119,11 @@ export const workspaceMemorySummarySchema = z.object({
   hasReflections: z.boolean(),
 });
 
-export const workspaceSnapshotSchema = z.object({
+export const workspaceSnapshotSchema = z.strictObject({
   workspaceId: z.string().min(1),
   title: z.string(),
   description: z.string(),
   memories: z.array(workspaceMemorySummarySchema),
-  recordings: z.array(workspaceRecordingSummarySchema),
 });
 
 export const workspaceInitializeRequestSchema = z

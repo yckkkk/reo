@@ -13,7 +13,6 @@ function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}):
       title: 'Daily memory',
       description: 'Private notes',
       memories: [],
-      recordings: [],
       ...snapshot,
     },
   };

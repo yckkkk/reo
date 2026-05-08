@@ -10,7 +10,6 @@ const snapshot = {
   title: 'Runtime validated memory',
   description: 'Final runtime validation workspace.',
   memories: [],
-  recordings: [],
 };
 
 test('workspace memory space registry persists memorySpaces across registry instances without exposing rootPath', async () => {

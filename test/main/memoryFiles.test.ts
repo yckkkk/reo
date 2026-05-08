@@ -36,7 +36,6 @@ import {
   findRecordingDirectoryById,
   fsyncWorkspaceDirectoryForTest,
   rebuildMemoryIndex,
-  rebuildRecordingCompatibilitySummaries,
   readMemoryDetail,
   recoverRecordingFinalizeTransactions,
   setAfterReadModelReplaceReadForTest,
@@ -494,7 +493,6 @@ test('rebuild skips finalized recording metadata with invalid projected fields',
       hasReflections: false,
     },
   ]);
-  assert.deepEqual(await rebuildRecordingCompatibilitySummaries(rootPath), []);
 });
 
 test('rebuild preserves the existing index when memories root changes before scan', async () => {
@@ -626,13 +624,8 @@ test('rebuild index rejects symlinked recording metadata leaf files', async () =
   await symlink(outsideMetadata, path.join(recordingDirectory, 'recording.json'));
 
   const memories = await rebuildMemoryIndex(rootPath, { persist: false });
-  const recordings = await rebuildRecordingCompatibilitySummaries(rootPath);
 
   assert.equal(memories.find((memory) => memory.memoryId === memoryId)?.recordingCount, 0);
-  assert.equal(
-    recordings.some((recording) => recording.recordingId === recordingId),
-    false
-  );
 });
 
 test('title update succeeds from file truth when index refresh fails', async () => {

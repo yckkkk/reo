@@ -146,7 +146,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: 'Private notes',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -201,7 +200,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -256,7 +254,6 @@ describe('App', () => {
           title: 'Existing memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -424,7 +421,6 @@ describe('App', () => {
           title: 'Runtime validated memory',
           description: 'Final runtime validation workspace.',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -466,7 +462,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -520,7 +515,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -591,7 +585,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -605,7 +598,6 @@ describe('App', () => {
           title: 'Memory Space two',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -760,7 +752,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -823,7 +814,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -837,7 +827,6 @@ describe('App', () => {
           title: 'Other memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -898,7 +887,6 @@ describe('App', () => {
               hasReflections: false,
             },
           ],
-          recordings: [],
         },
       },
     });
@@ -970,7 +958,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -1019,7 +1006,6 @@ describe('App', () => {
           title: 'Daily memory',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });
@@ -1084,7 +1070,6 @@ describe('App', () => {
               hasReflections: false,
             },
           ],
-          recordings: [],
         },
       },
     });
@@ -1165,7 +1150,6 @@ describe('App', () => {
               hasReflections: false,
             },
           ],
-          recordings: [],
         },
       },
     });
@@ -1314,7 +1298,6 @@ describe('App', () => {
               hasReflections: false,
             },
           ],
-          recordings: [],
         },
       },
     });
@@ -1353,7 +1336,7 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
   });
 
-  it('keeps memory and recording memorySpaceions fresh after finalize', () => {
+  it('keeps memory projection fresh after finalize', () => {
     const session = {
       workspaceHandle: 'workspace-handle-1',
       workspaceId: 'ws_1',
@@ -1362,7 +1345,6 @@ describe('App', () => {
         title: 'Daily memory',
         description: '',
         memories: [],
-        recordings: [],
       },
     };
 
@@ -1389,7 +1371,6 @@ describe('App', () => {
       }).snapshot
     ).toMatchObject({
       memories: [{ memoryId: 'mem_1', recordingCount: 1 }],
-      recordings: [{ recordingId: 'rec_1' }],
     });
   });
 });

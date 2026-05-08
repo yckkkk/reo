@@ -141,15 +141,13 @@ async function exists(filePath: string): Promise<boolean> {
 
 function snapshotFrom(
   metadata: z.infer<typeof workspaceMetadataSchema>,
-  index: z.infer<typeof workspaceIndexSchema>,
-  recordings: WorkspaceSnapshot['recordings']
+  index: z.infer<typeof workspaceIndexSchema>
 ): WorkspaceSnapshot {
   return {
     workspaceId: metadata.workspaceId,
     title: metadata.title,
     description: metadata.description,
     memories: index.memories,
-    recordings,
   };
 }
 
@@ -500,7 +498,7 @@ export async function initializeWorkspaceFiles({
 
   return {
     ok: true,
-    snapshot: snapshotFrom(metadata, index, []),
+    snapshot: snapshotFrom(metadata, index),
   };
 }
 
@@ -509,7 +507,6 @@ export async function openWorkspaceFiles({
   assertWorkspaceUsable: assertUsable,
 }: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
   let index: z.infer<typeof workspaceIndexSchema>;
-  let recordings: WorkspaceSnapshot['recordings'];
   let metadata: z.infer<typeof workspaceMetadataSchema>;
   try {
     assertWorkspaceUsable(assertUsable);
@@ -554,7 +551,6 @@ export async function openWorkspaceFiles({
       rebuiltMemories: readModel.memories,
     });
     assertWorkspaceUsable(assertUsable);
-    recordings = readModel.recordings;
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
       return error.envelope;
@@ -567,7 +563,7 @@ export async function openWorkspaceFiles({
   }
   return {
     ok: true,
-    snapshot: snapshotFrom(metadata, index, recordings),
+    snapshot: snapshotFrom(metadata, index),
   };
 }
 

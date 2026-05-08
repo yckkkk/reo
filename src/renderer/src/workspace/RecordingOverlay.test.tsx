@@ -17,7 +17,6 @@ const workspaceSession: WorkspaceSession = {
     title: 'Daily memory',
     description: '',
     memories: [],
-    recordings: [],
   },
 };
 

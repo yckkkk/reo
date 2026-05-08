@@ -149,7 +149,7 @@ First product slice 交付约束：
 - Sidebar 展开/covered 动效使用 280ms ease-out，只过渡 panel 的 `left` 与 border radius；reduced motion 下关闭 transition；拖拽 resize 时关闭 motion，只直接更新 left。
 - macOS 红黄绿窗口按钮保持原生控件；Reo 只绘制无边框 AppShell titlebar layout slot 和 sidebar hide/show control，不伪造红黄绿窗口按钮。
 - Sidebar 中的 Search 只能作为聚焦 Home 本地搜索的入口；若 Home 本地搜索尚未实现，Search control 不得出现在 current build。
-- Home 本地搜索只过滤当前记忆空间 snapshot 中已加载的 recording/memory title、日期和状态；full-text、跨记忆空间、entity、tag、semantic search 属于后续 DB/index foundation。
+- Home 本地搜索只过滤当前记忆空间 snapshot 中已加载的 memory title、日期和 summary 状态；recording-level、full-text、跨记忆空间、entity、tag、semantic search 属于后续 DB/index foundation。
 - 记忆空间 Home 完成形态使用 `全部记忆` header、本地搜索/filter、日期分组、recording card、empty/error/loading states 和 `记录记忆` action；`记录记忆` 打开 recording drawer。
 - 未实现的 photo、video、file、film、sharing、sync、auth user、camera、AI generation、global search 能力不得显示为 disabled control、placeholder section 或 future action。
 - Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。

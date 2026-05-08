@@ -16,6 +16,18 @@
 - 当前 React Hook Form form owner 覆盖 create memory space submit 前的 title、description、selection token 和 displayPath draft。
 - 当前 Zod runtime schema owner 是 workspace IPC contract 和错误信封。
 
+## 当前实体与字段归属
+
+- 记忆空间是用户选择的本地文件夹；用户内容真源是该文件夹内的普通文件。
+- `.reo/workspace.json` 保存 `schemaVersion`、`workspaceId`、title、description 和 createdAt；它定义记忆空间身份，不保存 UI 状态、root path、handle 或查询缓存。
+- Workspace snapshot 是 IPC response 和 TanStack Query cache 投影，只包含 `workspaceId`、title、description 和 `memories[]`；不包含顶层 `recordings[]`、root path、selection token 或 `workspaceHandle`。
+- Memory 由 `memories/<memoryId>/memory.json` 定义，字段包含 memoryId、title、sourceKind、createdAt、updatedAt 和 recordingIds。
+- Memory summary 由 `.reo/index.json` 的 `memories[]` 提供，字段包含 `memoryId`、title、createdAt、updatedAt、recordingCount、durationMs、audioByteLength、hasTranscript 和 hasReflections。
+- Recording draft 属于 `.reo/drafts/recordings/<recordingId>/`；finalized recording 属于 `memories/<memoryId>/recordings/<recordingId>/`，并通过 `recording.json`、`audio.webm`、`transcript.md` 和 `reflections.md` 表达该段记忆资产。
+- Finalized recording 的 `recording.json` 必须与所在 memory directory 和 recording directory 一致；`memoryId` 与 `recordingId` 不通过全局 lookup 推断。
+- Memory space registry entry 属于 main-owned app state，字段包含 `workspaceId`、title、description、rootPath、addedAt 和 lastOpenedAt；renderer 只能读取不含 rootPath 的列表投影。
+- `workspaceHandle` 是 main process runtime capability，只用于当前窗口授权 IPC 操作，不进入 query key、DOM、URL、记忆空间文件或 registry。
+
 ## 技术方向
 
 - 本地 SQLite 使用 Drizzle ORM + `better-sqlite3`。
@@ -68,11 +80,11 @@
 - React Hook Form 只拥有 create memory space submit 前的 form draft，包括 title、description、selection token 和 displayPath。
 - 记忆空间 Home 本地搜索只使用当前 loaded 记忆空间 snapshot 的 `memories` 投影和 renderer component state；搜索词不进入 Query key、Zustand、IPC、DB、记忆空间文件或 `.reo/index.json`。
 - Memory detail 使用 `['workspace', 'memory-detail', workspaceId, memoryId]` 读取当前 memory detail projection；`workspaceHandle` 只作为 `getMemoryDetail` request capability 进入 preload/main 边界，不进入 Query key、DOM、URL、记忆空间文件、`.reo/index.json` 或持久化缓存身份。
-- Recording finalize 后 renderer seed 当前记忆空间 snapshot cache，并按 `['workspace', 'memory-detail', workspaceId, memoryId]` invalidate 受影响的 active memory detail query；detail 重新从 main/记忆空间文件读取，不做 optimistic update。
+- Recording finalize 后 renderer seed 当前记忆空间 snapshot cache 的 `memories[]` 投影，并按 `['workspace', 'memory-detail', workspaceId, memoryId]` invalidate 受影响的 active memory detail query；detail 重新从 main/记忆空间文件读取，不做 optimistic update。
 - Memory detail response 读取 `memory.json` 作为 detail identity 真源，使用 `.reo/index.json` 中同一 memory summary 的 `recordingCount`、`hasTranscript` 和 `hasReflections` 投影，并只返回前 24 条 recording summary 作为当前首屏 preview；`recordingsTruncated` 标明还有未展示的 recordings，避免 detail navigation 对长 memory 做无界 recording 文件读取或 DOM 渲染。
 - 创建记忆空间 folder selection token 和 displayPath 属于当前 RHF form lifecycle；create selection token 指向用户选择的父目录，记忆空间 title 同时是将要创建的 child folder name；sidebar `打开本地记忆空间` 的 selection token 只存在于该当前事件流。Create selection token 只用于一次 initialize request；open-local selection token 只用于一次 open request；selection token 不进入 Query cache 或 durable files。
 - Recording overlay/drawer component state 拥有 active recording lifecycle、drawer close protection、elapsed timer、transcript draft、reflections draft、autosave status 和 active playback Blob URL。Transcript draft 初始为空，只来自用户编辑或已保存文件，不生成本地 mock transcript，也不作为 STT 真源。
-- Finalize response 返回当前 memory summary 和单条 recording summary；renderer 必须更新当前记忆空间 session 的 `memories` 投影。durable truth 仍是记忆空间文件和 `.reo/index.json` 的 memory summary。
+- Finalize response 返回当前 memory summary 和单条 recording summary；renderer 只把 memory summary 合并进当前记忆空间 session 的 `memories` 投影，单条 recording summary 只作为本次完成结果、detail invalidation 和播放目标身份使用。durable truth 仍是记忆空间文件和 `.reo/index.json` 的 memory summary。
 - Zod 当前用于 workspace IPC request/response、记忆空间 metadata、recording metadata、audio read request 和错误信封。
 - `chooseDirectory` 阶段不产生 durable data contract；真实路径只暂存在 main process selection token store，不写入文件、不进入 renderer、不进入 query key。
 - Memory space initialize 在所选父目录下 no-replace 创建 title 同名 child folder，再在 child root 写入 `AGENTS.md`、`.reo/workspace.json`、`.reo/index.json`、`memories/` 和 `.reo/drafts/recordings/`；同名 child 已存在时返回 `ERR_WORKSPACE_ALREADY_EXISTS`。open 现有记忆空间时会在返回 ready session 前补齐缺失的 `memories/` 和 `.reo/drafts/recordings/` 托管目录；open 空文件夹时会在该文件夹内原地初始化 Reo 文件；open 非空非 Reo 文件夹返回 metadata invalid。initialize/open 获取 lock 后，托管目录创建、metadata revalidation、recovery、index reconciliation 和 session 返回前都必须消费当前 lock/root/`.reo` usability；中途失去 ownership 时返回 lock lost，不能继续写入新的 `.reo` 或记忆空间文件。`AGENTS.md` 使用 no-replace atomic write，不能覆盖用户已有文件。
@@ -96,7 +108,7 @@
 
 - 每个 feature 必须先写 conceptual model，再决定是否需要 physical DB schema。
 - 数据流必须写清 write owner、read owner、durable source、cache owner、mutation owner、invalidation 和 recovery。
-- Workspace file、`.reo` metadata、rebuildable index、TanStack Query cache、component state 和 form state 不能存储同一事实的不同版本。
+- Workspace file、`.reo` metadata、rebuildable index、TanStack Query cache、component state 和 form state 不能存储同一事实的不同版本；recording 只在 memory detail、finalize response 和 finalized recording 文件中出现，不在 Workspace snapshot 中重复投影。
 - 如果同一事实需要出现在多个位置，必须说明 source of truth、同步方向、冲突处理和丢失恢复。
 - 不得因为未来可能查询就提前建表；也不得因为第一版小就省略实体、关系和字段语义设计。
 - Durable file write 必须定义 atomic rename 边界、file fsync、parent directory fsync、跨平台差异、失败时 `.part` 状态和恢复策略。

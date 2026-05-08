@@ -48,7 +48,6 @@ import {
   workspaceMemorySummarySchema,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
-  type WorkspaceSnapshot,
 } from './workspaceContract.js';
 
 const FINALIZE_STAGING_PREFIX = '.reo-finalizing-';
@@ -67,7 +66,6 @@ const readDescriptor = promisify(readCallback);
 const writeDescriptor = promisify(writeCallback);
 const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
-type WorkspaceRecordingSummary = WorkspaceSnapshot['recordings'][number];
 type MaybePromise<T> = T | Promise<T>;
 
 class FinalizeTransactionFailure extends Error {
@@ -958,19 +956,12 @@ async function readFinalizedRecordingMetadata(
   );
 }
 
-async function summarizeMemoryWithRecordings(
-  rootPath: string,
-  memory: MemoryJson
-): Promise<{
-  readonly memory: MemorySummary;
-  readonly recordings: WorkspaceRecordingSummary[];
-}> {
+async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
   let recordingCount = 0;
   let durationMs = 0;
   let audioByteLength = 0;
   let hasTranscript = false;
   let hasReflections = false;
-  const recordings: WorkspaceRecordingSummary[] = [];
 
   for (const recordingId of memory.recordingIds) {
     try {
@@ -984,11 +975,6 @@ async function summarizeMemoryWithRecordings(
       recordingCount += 1;
       durationMs += recording.durationMs;
       audioByteLength += recording.audioByteLength;
-      recordings.push({
-        recordingId: recording.recordingId,
-        title: recording.title,
-        audioByteLength: recording.audioByteLength,
-      });
       hasTranscript =
         hasTranscript ||
         hasNonEmptyFileInKnownDirectory(
@@ -1009,23 +995,16 @@ async function summarizeMemoryWithRecordings(
   }
 
   return {
-    memory: {
-      memoryId: memory.memoryId,
-      title: memory.title,
-      createdAt: memory.createdAt,
-      updatedAt: memory.updatedAt,
-      recordingCount,
-      durationMs,
-      audioByteLength,
-      hasTranscript,
-      hasReflections,
-    },
-    recordings,
+    memoryId: memory.memoryId,
+    title: memory.title,
+    createdAt: memory.createdAt,
+    updatedAt: memory.updatedAt,
+    recordingCount,
+    durationMs,
+    audioByteLength,
+    hasTranscript,
+    hasReflections,
   };
-}
-
-async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
-  return (await summarizeMemoryWithRecordings(rootPath, memory)).memory;
 }
 
 async function readMemorySummaryFromIndex(
@@ -1046,7 +1025,6 @@ export async function rebuildWorkspaceReadModel(
   }: { readonly persist?: boolean; readonly assertWorkspaceUsable?: AssertWorkspaceUsable } = {}
 ): Promise<{
   readonly memories: MemorySummary[];
-  readonly recordings: WorkspaceRecordingSummary[];
   readonly assertMemoriesRootCurrent: () => Promise<void>;
 }> {
   const memoriesDirectory = await resolveSafeWorkspaceChild(
@@ -1058,31 +1036,26 @@ export async function rebuildWorkspaceReadModel(
   await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
   const entries = await readExistingDirectoryEntries(memoriesDirectory);
   await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
-  const models: Array<{
-    readonly memory: MemorySummary;
-    readonly recordings: WorkspaceRecordingSummary[];
-  }> = [];
+  const memories: MemorySummary[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
     try {
       await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
-      models.push(
-        await summarizeMemoryWithRecordings(rootPath, await readMemoryJson(rootPath, entry.name))
-      );
+      memories.push(await summarizeMemory(rootPath, await readMemoryJson(rootPath, entry.name)));
     } catch {
       continue;
     }
   }
   await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
 
-  models.sort((first, second) => second.memory.updatedAt.localeCompare(first.memory.updatedAt));
-  let memories = models.map((model) => model.memory);
-  const recordings = models.flatMap((model) => model.recordings);
+  let sortedMemories = memories.sort((first, second) =>
+    second.updatedAt.localeCompare(first.updatedAt)
+  );
   if (persist) {
     await beforeReadModelReplaceForTest?.();
-    memories = [
+    sortedMemories = [
       ...(await replaceWorkspaceIndex(
         rootPath,
         async () => {
@@ -1100,8 +1073,7 @@ export async function rebuildWorkspaceReadModel(
     ];
   }
   return {
-    memories,
-    recordings,
+    memories: sortedMemories,
     assertMemoriesRootCurrent: () =>
       assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity),
   };
@@ -1194,12 +1166,6 @@ export async function readFinalizedRecordingSummary(
   recordingId: string
 ): Promise<MemoryRecordingSummary> {
   return summarizeRecording(rootPath, memoryId, recordingId);
-}
-
-export async function rebuildRecordingCompatibilitySummaries(
-  rootPath: string
-): Promise<WorkspaceRecordingSummary[]> {
-  return (await rebuildWorkspaceReadModel(rootPath)).recordings;
 }
 
 async function isValidFinalizedRecordingDirectory(

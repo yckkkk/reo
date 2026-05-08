@@ -212,7 +212,6 @@ describe('CreateWorkspaceForm', () => {
           title: 'Family memories',
           description: '',
           memories: [],
-          recordings: [],
         },
       },
     });

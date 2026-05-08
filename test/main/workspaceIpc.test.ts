@@ -180,7 +180,6 @@ test('initializeWorkspace consumes selection token and never exposes rootPath', 
         title: 'IPC 初始化',
         description: '',
         memories: [],
-        recordings: [],
       },
     });
     assert.equal('rootPath' in result.value, false);
@@ -1035,7 +1034,6 @@ test('openMemorySpace opens a persisted memory space without a selection token',
       title: 'Runtime validated memory',
       description: 'Final runtime validation workspace.',
       memories: [],
-      recordings: [],
     },
   });
   const restartedMemorySpacesRegistry = createWorkspaceMemorySpaceRegistry({
@@ -1065,7 +1063,6 @@ test('openMemorySpace opens a persisted memory space without a selection token',
         title: 'Runtime validated memory',
         description: 'Final runtime validation workspace.',
         memories: [],
-        recordings: [],
       },
     });
     assert.equal('rootPath' in result.value, false);
@@ -1089,7 +1086,6 @@ test('openMemorySpace reports a missing persisted workspace folder', async () =>
       title: 'Deleted workspace',
       description: '',
       memories: [],
-      recordings: [],
     },
   });
   await rm(rootPath, { recursive: true, force: true });
@@ -1136,7 +1132,6 @@ test('removeMemorySpace removes a persisted memory space without resolving or de
       title: '测试1',
       description: '',
       memories: [],
-      recordings: [],
     },
   });
 

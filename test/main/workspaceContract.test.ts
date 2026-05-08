@@ -22,6 +22,7 @@ import {
   workspaceChooseDirectoryResultSchema,
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
+  workspaceSnapshotSchema,
 } from '../../src/main/workspaceContract.js';
 
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
@@ -143,7 +144,6 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
         title: '新的 workspace',
         description: '',
         memories: [],
-        recordings: [],
       },
     },
   });
@@ -158,10 +158,21 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
         title: '新的 workspace',
         description: '',
         memories: [],
-        recordings: [],
       },
     },
   });
+});
+
+test('workspace snapshot contract rejects top-level recordings projection', () => {
+  assert.throws(() =>
+    workspaceSnapshotSchema.parse({
+      workspaceId: 'ws_1',
+      title: '新的 workspace',
+      description: '',
+      memories: [],
+      recordings: [],
+    })
+  );
 });
 
 test('initializeWorkspace contract rejects unsafe workspace folder names and reports same-name folders', () => {

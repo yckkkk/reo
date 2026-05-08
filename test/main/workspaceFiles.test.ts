@@ -155,7 +155,6 @@ test('workspace init creates only stable first-slice files and no future capabil
       title: '记忆录音',
       description: '第一产品切片',
       memories: [],
-      recordings: [],
     },
   });
   assert.deepEqual((await readdir(root)).sort(), ['.reo', 'AGENTS.md', 'memories']);
@@ -188,7 +187,6 @@ test('corrupt index rebuilds while corrupt workspace metadata blocks writes', as
       title: '可重建索引',
       description: '',
       memories: [],
-      recordings: [],
     },
   });
 
@@ -332,11 +330,6 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     hasTranscript: false,
     hasReflections: false,
   };
-  const expectedRecording = {
-    recordingId: 'rec_20260506_000001',
-    title: '重建录音',
-    audioByteLength: 3,
-  };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
     snapshot: {
@@ -344,7 +337,6 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
       title: '录音索引',
       description: '',
       memories: [expectedMemory],
-      recordings: [expectedRecording],
     },
   });
   assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {
@@ -423,11 +415,6 @@ test('valid but stale index is reconciled from finalized workspace files', async
     hasTranscript: false,
     hasReflections: false,
   };
-  const expectedRecording = {
-    recordingId: 'rec_20260506_000002',
-    title: '崩溃后录音',
-    audioByteLength: 4,
-  };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
     snapshot: {
@@ -435,7 +422,6 @@ test('valid but stale index is reconciled from finalized workspace files', async
       title: '合法但陈旧索引',
       description: '',
       memories: [expectedMemory],
-      recordings: [expectedRecording],
     },
   });
   assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {

@@ -12,7 +12,7 @@ import {
   saveReflections,
   saveTranscript,
 } from './workspaceApi';
-import type { WorkspaceSession } from './workspaceApi';
+import type { FinalizedRecording, WorkspaceSession } from './workspaceApi';
 import {
   createBrowserMediaRecorderAdapter,
   type RecordingMediaAdapter,
@@ -30,11 +30,6 @@ import {
   type RecordingState,
 } from './recordingMachine';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
-
-type FinalizedRecording = Extract<
-  Awaited<ReturnType<typeof finalizeRecordingDraft>>,
-  { readonly ok: true }
->['value'];
 
 type RecordingOverlayProps = {
   readonly mediaAdapter?: RecordingMediaAdapter;
