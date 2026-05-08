@@ -6,15 +6,15 @@
 - [x] Reconciled implementation plan
 - [x] Plan engineering review
 - [x] Plan handoff into active initiative
-- [ ] TDD implementation slices
+- [x] TDD implementation slices
 - [x] QA and reference verification
 - [x] Independent review
-- [ ] Final verification
-- [ ] Commit
+- [x] Final verification
+- [x] Commit
 
-## 当前下一步
+## 当前状态
 
-Task 13 下一步执行：Docs/current 压缩、initiative 收口、最终 review、verification 和 commit。
+First product slice 长任务已完成。
 
 ## 实施任务
 
@@ -31,4 +31,4 @@ Task 13 下一步执行：Docs/current 压缩、initiative 收口、最终 revie
 - [x] Task 10：本地 playback、transcript/reflections 编辑和文件优先保存。
 - [x] Task 11：App integration、routing、query/cache ownership、forbidden capability audit。
 - [x] Task 12：Runtime QA、reference comparison、accessibility、security 和 release verification。
-- [ ] Task 13：Docs/current 压缩、initiative 收口、最终 review、verification 和 commit。
+- [x] Task 13：Docs/current 压缩、initiative 收口、最终 review、verification 和 commit。

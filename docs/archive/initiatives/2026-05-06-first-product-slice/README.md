@@ -8,10 +8,10 @@
 
 - Design-hardening gate 已通过独立复审，无 unresolved BLOCKER/MAJOR。
 - Reconciled implementation plan 已通过 `$writing-plans` 和 `$plan-eng-review` 对抗审查，无 unresolved BLOCKER/MAJOR。
-- 当前 implementation 阶段执行权威是本 initiative、`implementation-plan.md`、当前唯一 active 任务 spec、`docs/current/*` 和源码事实。
+- 当前实现结果的长期真源是 `docs/current/*` 和源码事实。
 - Design-hardening spec 在 plan handoff 完成后归档到 `docs/archive/specs/2026-05-06-0912-first-product-slice-product-grade-design-hardening/`，归档后只作为背景证据。
-- 当前已完成 Task 1 到 Task 12 的实现、QA、审查和提交准备。
-- 当前下一步是 Task 13：Docs/current 压缩、initiative 收口、最终 review、verification 和 commit。
+- 当前已完成 Task 1 到 Task 13 的实现、QA、审查、验证和提交收口。
+- 当前 first product slice 长任务已完成。
 - 不得把计划写入 `docs/superpowers/*`。
 - 不得编辑 archived implementation plan。
 

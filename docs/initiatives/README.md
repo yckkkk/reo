@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-当前 active initiative：`2026-05-06-first-product-slice`。
+当前 active initiative：无。
 
 ## 使用规则
 

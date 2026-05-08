@@ -119,9 +119,9 @@
 - 当前 recording overlay 停止录音后展示空白 transcript/reflections draft、Transcript preview 和 `Load recording` 本地加载 command；加载成功后隐藏加载 command 并展示本地 playback surface。内容只来自用户编辑或未来明确引入的真实转写 foundation。
 - 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC；单个 chunk read 失败后不得继续调度后续 chunk IPC。
 
-已接受但尚未全部实现的 first-slice 交付约束：
+First product slice 交付约束：
 
-- First product slice 的完成形态必须继续在当前 app shell 上完成 Home local search、memory cards 和 recording drawer，而不是另建 page shell。
+- First product slice 在当前 app shell 上承载 Home local search、memory cards 和 recording drawer，不另建 page shell。
 - Sidebar 使用分层 overlay shell：sidebar 是底层 `z-index: 1`，紧贴窗口左边缘并铺满高度；主内容是上层悬浮面板 `z-index: 2`，顶/右/底与窗口边缘重叠，展开态只在左侧边界显示 12px radius，不设置独立 top bar。
 - Sidebar 宽度可拖拽，最小 240px，最大 520px；covered 状态是主内容面板用 transform 向左滑动并覆盖在 sidebar 上方。
 - Sidebar 展开/covered 动效使用 280ms ease-out，同步过渡 panel 的 transform 和 width；reduced motion 下关闭 transition；拖拽 resize 时关闭 motion，只直接更新 width。
@@ -133,7 +133,7 @@
 - Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
 - 当前 recording overlay 不生成 transcript 文本；停止后只进入可编辑 transcript/reflections draft。
 - ElevenLabs UI 逐组件 source-owned 采纳，优先范围是 Waveform、Live Waveform、Voice Button、Audio Player、Transcript Viewer；不得执行 `add all`。
-- Waveform 不能用与官方/成熟源码无关的自研 lightweight bars 作为最终形态；当前 Task 8 采用 ElevenLabs UI waveform registry 的 canvas/bar rendering pattern 并裁剪到 Reo local-first 边界。引入 long waveform、live microphone waveform、peaks、regions 或 playback scrubber 时，必须重新评估 ElevenLabs UI、wavesurfer.js 或成熟开源实现。
+- Waveform 不能用与官方/成熟源码无关的自研 lightweight bars 作为最终形态；当前采用 ElevenLabs UI waveform registry 的 canvas/bar rendering pattern 并裁剪到 Reo local-first 边界。引入 long waveform、live microphone waveform、peaks、regions 或 playback scrubber 时，必须重新评估 ElevenLabs UI、wavesurfer.js 或成熟开源实现。
 - wavesurfer.js 不负责 current durable capture；若实现 long waveform、peaks、regions、visual scrubber 或第二个 waveform consumer，必须重新作为优先候选并记录采用、fork 或拒绝证据。
 - shadcn/ui source 变更必须与 exact primitives、business consumers、shared invariants、tests 和同 slice commit 同批完成。
 
