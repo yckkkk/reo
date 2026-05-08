@@ -11,6 +11,8 @@ export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
 export const SIDEBAR_RESIZE_STEP = 20;
 export const PANEL_RADIUS = 12;
+const WINDOW_CONTROL_BUTTON_LEFT = 80;
+const WINDOW_CONTROL_BUTTON_TOP = 2;
 const PANEL_MOTION_CLASS =
   'transition-[transform,width] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none';
 
@@ -93,23 +95,22 @@ export function AppShell({ children, onNewMemory, onToggleTheme, themeMode }: Ap
         <div
           role="group"
           aria-label="Window controls"
-          className="absolute left-96 top-12 flex items-center gap-8"
-          style={{ zIndex: 3 }}
+          className="absolute flex items-center gap-8"
+          style={{
+            left: WINDOW_CONTROL_BUTTON_LEFT,
+            top: WINDOW_CONTROL_BUTTON_TOP,
+            zIndex: 3,
+          }}
         >
-          <Tooltip>
-            <Button asChild variant="ghostIcon" size="icon">
-              <TooltipTrigger
-                type="button"
-                aria-label={sidebarToggleLabel}
-                onClick={() =>
-                  setSidebarState(sidebarState === 'expanded' ? 'covered' : 'expanded')
-                }
-              >
-                <SidebarToggleIcon className="size-16" aria-hidden="true" />
-              </TooltipTrigger>
-            </Button>
-            <TooltipContent side="right">{sidebarToggleLabel}</TooltipContent>
-          </Tooltip>
+          <Button
+            type="button"
+            variant="ghostIcon"
+            size="icon"
+            aria-label={sidebarToggleLabel}
+            onClick={() => setSidebarState(sidebarState === 'expanded' ? 'covered' : 'expanded')}
+          >
+            <SidebarToggleIcon className="size-16" aria-hidden="true" />
+          </Button>
         </div>
 
         <aside

@@ -46,7 +46,11 @@ describe('AppShell', () => {
     expect(panel.style.zIndex).toBe('2');
     expect(screen.getByText('Home')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'New memory' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Window controls' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Window controls' })).toHaveStyle({
+      left: '80px',
+      top: '2px',
+    });
+    expect(screen.queryByText('Hide sidebar')).not.toBeInTheDocument();
     expect(screen.queryByText(/films|photos|videos|files/i)).not.toBeInTheDocument();
   });
 
