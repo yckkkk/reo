@@ -2,7 +2,10 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
-import { workspaceMemorySpaceSchema, type WorkspaceSnapshot } from './workspaceContract.js';
+import {
+  workspaceMemorySpaceSchema,
+  type WorkspaceSnapshot,
+} from '../workspace-contract/workspace-contract.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
 
 const MEMORY_SPACE_REGISTRY_VERSION = 1;

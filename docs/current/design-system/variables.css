@@ -106,6 +106,9 @@
   --spacing-titlebar: 48px;
   --spacing-titlebar-control-left: 80px;
   --spacing-titlebar-control-top: 2px;
+  --spacing-titlebar-control-size: 32px;
+  --spacing-titlebar-control-gap: 4px;
+  --spacing-panel-titlebar-x: 28px;
   --spacing-sidebar-content-top: 56px;
 
   /* Layout */

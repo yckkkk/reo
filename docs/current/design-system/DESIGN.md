@@ -146,16 +146,22 @@ Base unit：4px。
 | titlebar              | 48px  | `--spacing-titlebar`              |
 | titlebar-control-left | 80px  | `--spacing-titlebar-control-left` |
 | titlebar-control-top  | 2px   | `--spacing-titlebar-control-top`  |
+| titlebar-control-size | 32px  | `--spacing-titlebar-control-size` |
+| titlebar-control-gap  | 4px   | `--spacing-titlebar-control-gap`  |
+| panel-titlebar-x      | 28px  | `--spacing-panel-titlebar-x`      |
 | sidebar-content-top   | 56px  | `--spacing-sidebar-content-top`   |
 
 ### Layout Tokens
 
-| Name                  | Value | Token                                                              | Role                                                                                 |
-| --------------------- | ----- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| App Titlebar Height   | 48px  | `--spacing-titlebar` / `layout.titlebar-height`                    | Borderless app titlebar height; app content may visually continue underneath it.     |
-| Titlebar Control Left | 80px  | `--spacing-titlebar-control-left` / `layout.titlebar-control-left` | Left edge for the sidebar hide/show control after the native traffic-light cluster.  |
-| Titlebar Control Top  | 2px   | `--spacing-titlebar-control-top` / `layout.titlebar-control-top`   | Top edge for titlebar controls, aligned to the native traffic-light vertical center. |
-| Sidebar Content Top   | 56px  | `--spacing-sidebar-content-top`                                    | 48px titlebar plus 8px breathing room before sidebar navigation starts.              |
+| Name                   | Value | Token                                                              | Role                                                                                                                   |
+| ---------------------- | ----- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| App Titlebar Height    | 48px  | `--spacing-titlebar` / `layout.titlebar-height`                    | Borderless app titlebar height; app content may visually continue underneath it.                                       |
+| Titlebar Control Left  | 80px  | `--spacing-titlebar-control-left` / `layout.titlebar-control-left` | Left edge for the sidebar hide/show control after the native traffic-light cluster.                                    |
+| Titlebar Control Top   | 2px   | `--spacing-titlebar-control-top` / `layout.titlebar-control-top`   | Top edge for titlebar controls, aligned to the native traffic-light vertical center.                                   |
+| Titlebar Control Size  | 32px  | `--spacing-titlebar-control-size`                                  | Hit target size for AppShell titlebar icon controls.                                                                   |
+| Titlebar Control Gap   | 4px   | `--spacing-titlebar-control-gap`                                   | Horizontal gap from the sidebar hide/show control box to the workspace panel titlebar content when sidebar is covered. |
+| Panel Titlebar Padding | 28px  | `--spacing-panel-titlebar-x`                                       | Horizontal inset inside workspace panel titlebar content.                                                              |
+| Sidebar Content Top    | 56px  | `--spacing-sidebar-content-top`                                    | 48px titlebar plus 8px breathing room before sidebar navigation starts.                                                |
 
 ### Border Radius
 
@@ -268,9 +274,11 @@ Base unit：4px。
 - The titlebar is a named AppShell layout slot, not an unstructured floating button layer。
 - Main content panels reserve a matching 48px titlebar slot before page content starts。
 - The titlebar drag region uses Electron `-webkit-app-region: drag`; interactive controls inside it use `no-drag`。
-- Window/sidebar controls are vertically centered by the titlebar height。
+- Sidebar hide/show controls align to the native traffic-light row via explicit control top and size tokens。
+- Workspace title text and the right MemoryRail collapse control use the left sidebar hide/show icon center as their vertical alignment baseline。
 - Sidebar content starts below titlebar height plus 8px spacing。
 - Sidebar hide/show control sits in the 48px titlebar layer, uses the 80px titlebar control-left token and 2px titlebar control-top token, and aligns to the native traffic-light row instead of centering itself in the full 48px titlebar height。
+- When sidebar is covered, workspace panel titlebar content uses titlebar control left, control size, control gap and panel titlebar x padding to place the workspace title to the right of the sidebar hide/show icon。
 - Titlebar must not introduce a visible separator line between the sidebar/page and the content panel。
 
 ### Section Divider Label

@@ -1,7 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { App, mergeFinalizedRecordingIntoSession } from './App';
+import {
+  App,
+  mergeFinalizedRecordingIntoSession,
+  mergeSavedRecordingContentIntoDetail,
+} from './App';
 import { ReoQueryProvider } from './queryClient';
 
 describe('App', () => {
@@ -13,11 +17,13 @@ describe('App', () => {
     openMemorySpace: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    createMemory: vi.fn(),
     createRecordingDraft: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
     getMemoryDetail: vi.fn(),
+    updateMemoryTitle: vi.fn(),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(),
     readRecordingAudioChunk: vi.fn(),
@@ -72,6 +78,14 @@ describe('App', () => {
     reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_CREATE_FAILED', message: 'Memory could not be created' },
+    });
+    reoWorkspace.updateMemoryTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
+    });
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
       value: reoWorkspace,
@@ -92,7 +106,7 @@ describe('App', () => {
     );
 
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
     expect(
       screen.queryByText('Create a local workspace to start collecting memories.')
     ).not.toBeInTheDocument();
@@ -123,7 +137,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '资料库' }));
 
     expect(screen.getByRole('heading', { name: '资料库' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
   });
 
   it('moves to a loaded workspace state after successful initialization', async () => {
@@ -168,20 +182,388 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
     expect(
       screen.getByRole('main', { name: '记忆空间内容' }).closest('[data-theme]')
     ).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
-    expect(screen.getAllByText('Daily memory').length).toBeGreaterThan(0);
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    expect(within(titlebar).getByText('Daily memory')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '记忆空间栏' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     expect(screen.getByRole('main', { name: '记忆空间内容' })).toBeInTheDocument();
-    expect(screen.getByRole('searchbox', { name: '搜索记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '表达入口' })).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox', { name: '搜索记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
   });
 
-  it('opens the recording drawer from Home to create a new memory', async () => {
+  it('uses the titlebar Memory control to collapse and expand the workspace Memory list', async () => {
     const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('heading', { name: '今天想记录些什么？' });
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    const collapseButton = within(titlebar).getByRole('button', { name: '折叠记忆列表' });
+    const sidebarToggleControls = within(titlebar).getByRole('group', { name: '窗口控制' });
+    const titlebarContent = titlebar.querySelector(
+      '[data-slot="app-shell-panel-titlebar-content"]'
+    );
+    expect(titlebarContent).toHaveStyle({ left: '240px' });
+    expect(titlebarContent).toHaveStyle({
+      top: 'calc(var(--spacing-titlebar-control-top) + ((var(--spacing-titlebar-control-size) - var(--spacing-titlebar)) / 2))',
+    });
+    expect(collapseButton).toHaveAttribute('aria-controls', 'workspace-memory-rail');
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
+
+    await user.click(within(titlebar).getByRole('button', { name: '隐藏侧边栏' }));
+    expect(sidebarToggleControls).toHaveStyle({
+      left: 'var(--spacing-titlebar-control-left)',
+    });
+    expect(titlebarContent).toHaveStyle({
+      left: 'calc(var(--spacing-titlebar-control-left) + var(--spacing-titlebar-control-size) + var(--spacing-titlebar-control-gap) - var(--spacing-panel-titlebar-x))',
+    });
+
+    await user.click(collapseButton);
+
+    expect(screen.queryByRole('navigation', { name: '记忆列表' })).not.toBeInTheDocument();
+    const expandButton = within(titlebar).getByRole('button', { name: '展开记忆列表' });
+    expect(expandButton).toHaveAttribute('aria-controls', 'workspace-memory-rail');
+    expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(expandButton);
+
+    expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
+  });
+
+  it('renames a Memory container from the right rail menu', async () => {
+    const user = userEvent.setup();
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      assetCount: 2,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      hasReflections: false,
+    };
+    const renamedMemory = {
+      ...originalMemory,
+      title: '产品灵感与思考',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.updateMemoryTitle.mockResolvedValue({
+      ok: true,
+      value: renamedMemory,
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '打开记忆 My seventh birthday' });
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名记忆' });
+    const titleInput = within(dialog).getByLabelText('记忆名称');
+    expect(titleInput).toHaveValue('My seventh birthday');
+    await user.clear(titleInput);
+    await user.type(titleInput, '产品灵感与思考');
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateMemoryTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_birthday',
+        title: '产品灵感与思考',
+      })
+    );
+    expect(screen.getByRole('button', { name: '打开记忆 产品灵感与思考' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '重命名记忆' })).not.toBeInTheDocument();
+  });
+
+  it('creates a named Memory from the titlebar plus control and opens it', async () => {
+    const user = userEvent.setup();
+    const createdMemory = {
+      memoryId: 'mem_created',
+      title: '产品灵感与思考',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      assetCount: 0,
+      durationMs: 0,
+      audioByteLength: 0,
+      hasTranscript: false,
+      hasReflections: false,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [],
+        },
+      },
+    });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: createdMemory,
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await user.click(within(titlebar).getByRole('button', { name: '新建记忆' }));
+
+    const dialog = screen.getByRole('dialog', { name: '新建记忆' });
+    const titleInput = within(dialog).getByLabelText('记忆名称');
+    expect(titleInput).toHaveFocus();
+    await user.type(titleInput, '产品灵感与思考');
+    await user.click(within(dialog).getByRole('button', { name: '创建' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '产品灵感与思考',
+      })
+    );
+    expect(screen.getByRole('button', { name: '打开记忆 产品灵感与思考' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
+    expect(reoWorkspace.getMemoryDetail).not.toHaveBeenCalled();
+  });
+
+  it('requires a named Memory before recording from the loaded workspace frame', async () => {
+    const user = userEvent.setup();
+    installRecordingBrowserMocks();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [
+            {
+              memoryId: 'mem_existing',
+              title: 'Existing memory',
+              createdAt: '2026-05-07T14:30:00.000Z',
+              updatedAt: '2026-05-07T14:30:00.000Z',
+              assetCount: 1,
+              durationMs: 1,
+              audioByteLength: 1,
+              hasTranscript: false,
+              hasReflections: false,
+            },
+          ],
+        },
+      },
+    });
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.clearMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { cleared: true },
+    });
+    reoWorkspace.createRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 0, recordingId: 'rec_1' },
+    });
+    reoWorkspace.appendRecordingAudioChunk.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 1 },
+    });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: {
+        audioByteLength: 0,
+        createdAt: '2026-05-08T14:30:00.000Z',
+        durationMs: 0,
+        hasReflections: false,
+        hasTranscript: false,
+        memoryId: 'mem_new',
+        assetCount: 0,
+        title: 'New recording memory',
+        updatedAt: '2026-05-08T14:30:00.000Z',
+      },
+    });
+    reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          audioByteLength: 1,
+          createdAt: '2026-05-08T14:30:00.000Z',
+          durationMs: 1,
+          hasReflections: false,
+          hasTranscript: false,
+          memoryId: 'mem_new',
+          assetCount: 1,
+          title: 'Daily memory 录音',
+          updatedAt: '2026-05-08T14:30:01.000Z',
+        },
+        recording: {
+          audioByteLength: 1,
+          durationMs: 1,
+          memoryId: 'mem_new',
+          recordingId: 'rec_1',
+          title: 'Daily memory 录音',
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await user.click(await screen.findByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '录音' }));
+
+    expect(screen.queryByRole('dialog', { name: '录音' })).not.toBeInTheDocument();
+    const createDialog = screen.getByRole('dialog', { name: '新建记忆' });
+    await user.type(within(createDialog).getByLabelText('记忆名称'), 'New recording memory');
+    await user.click(within(createDialog).getByRole('button', { name: '开始录音' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: 'New recording memory',
+      })
+    );
+    expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '开始录音' }));
+    await user.click(screen.getByRole('button', { name: '停止录音' }));
+
+    await waitFor(() => expect(reoWorkspace.finalizeRecordingDraft).toHaveBeenCalledOnce());
+    const finalizePayload = reoWorkspace.finalizeRecordingDraft.mock.calls[0]?.[0];
+    expect(finalizePayload).toMatchObject({
+      recordingId: 'rec_1',
+      title: 'Daily memory 录音',
+      workspaceHandle: 'workspace-handle-1',
+      memoryId: 'mem_new',
+    });
+  });
+
+  it('requires a named Memory before recording when the workspace has no memories', async () => {
+    const user = userEvent.setup();
+    installRecordingBrowserMocks();
+    const createdMemory = {
+      memoryId: 'mem_recording_target',
+      title: '第一条记忆',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      assetCount: 0,
+      durationMs: 0,
+      audioByteLength: 0,
+      hasTranscript: false,
+      hasReflections: false,
+    };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
       value: {
@@ -203,6 +585,45 @@ describe('App', () => {
         },
       },
     });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: createdMemory,
+    });
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.clearMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { cleared: true },
+    });
+    reoWorkspace.createRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 0, recordingId: 'rec_1' },
+    });
+    reoWorkspace.appendRecordingAudioChunk.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 1 },
+    });
+    reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...createdMemory,
+          audioByteLength: 1,
+          durationMs: 1,
+          assetCount: 1,
+          updatedAt: '2026-05-08T14:42:01.000Z',
+        },
+        recording: {
+          audioByteLength: 1,
+          durationMs: 1,
+          memoryId: 'mem_recording_target',
+          recordingId: 'rec_1',
+          title: 'Daily memory 录音',
+        },
+      },
+    });
 
     render(
       <ReoQueryProvider>
@@ -215,9 +636,32 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('button', { name: '记录记忆' }));
+    await user.click(await screen.findByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '录音' }));
 
-    expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '录音' })).not.toBeInTheDocument();
+    const createDialog = screen.getByRole('dialog', { name: '新建记忆' });
+    await user.type(within(createDialog).getByLabelText('记忆名称'), '第一条记忆');
+    await user.click(within(createDialog).getByRole('button', { name: '开始录音' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '第一条记忆',
+      })
+    );
+    expect(await screen.findByRole('dialog', { name: '录音' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '开始录音' }));
+    await user.click(screen.getByRole('button', { name: '停止录音' }));
+
+    await waitFor(() => expect(reoWorkspace.finalizeRecordingDraft).toHaveBeenCalledOnce());
+    expect(reoWorkspace.finalizeRecordingDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryId: 'mem_recording_target',
+        recordingId: 'rec_1',
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
   });
 
   it('opens workspace creation from the sidebar add menu', async () => {
@@ -267,7 +711,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
     expect(screen.getAllByText('Existing memory').length).toBeGreaterThan(0);
     expect(reoWorkspace.openWorkspace).toHaveBeenCalledWith({
       selectionToken: 'selection-token-open',
@@ -303,7 +747,7 @@ describe('App', () => {
     expect(
       await screen.findByRole('button', { name: 'Runtime validated memory' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
     expect(reoWorkspace.openWorkspace).not.toHaveBeenCalled();
   });
 
@@ -433,7 +877,7 @@ describe('App', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Runtime validated memory' }));
 
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
     expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({
       workspaceId: 'ws_imported',
     });
@@ -477,7 +921,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
@@ -491,7 +935,7 @@ describe('App', () => {
     expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({
       workspaceId: 'ws_1',
     });
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
     expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
   });
 
@@ -537,7 +981,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
@@ -548,7 +992,7 @@ describe('App', () => {
     });
     expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
     expect(screen.getByText('无法获取记忆空间锁。')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
   });
 
   it('releases the previous workspace handle when switching to a persisted memory space', async () => {
@@ -613,7 +1057,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
 
@@ -775,13 +1219,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('该记忆空间已在其他窗口打开。');
-    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
     expect(screen.getAllByText('Daily memory').length).toBeGreaterThan(0);
   });
 
@@ -842,7 +1286,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('menuitem', { name: '打开本地记忆空间' }));
@@ -855,7 +1299,7 @@ describe('App', () => {
     expect(screen.getAllByText('Other memory').length).toBeGreaterThan(0);
   });
 
-  it('opens a saved memory detail from Home and returns to the workspace Home with the back button', async () => {
+  it('opens a saved memory detail from MemoryRail and returns to the workspace stage', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -880,7 +1324,7 @@ describe('App', () => {
               title: 'My seventh birthday',
               createdAt: '2026-04-12T09:00:00.000Z',
               updatedAt: '2026-04-12T09:10:00.000Z',
-              recordingCount: 1,
+              assetCount: 1,
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
@@ -895,11 +1339,10 @@ describe('App', () => {
       value: {
         memoryId: 'mem_birthday',
         title: 'My seventh birthday',
-        sourceKind: 'recording',
         createdAt: '2026-04-12T09:00:00.000Z',
         updatedAt: '2026-04-12T09:10:00.000Z',
-        recordingIds: ['rec_1'],
-        recordingCount: 1,
+        assetIds: ['rec_1'],
+        assetCount: 1,
         recordingsTruncated: false,
         hasTranscript: true,
         hasReflections: false,
@@ -925,7 +1368,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('button', { name: '打开 My seventh birthday' }));
+    await user.click(await screen.findByRole('button', { name: '打开记忆 My seventh birthday' }));
 
     expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
     expect(screen.getByText('Birthday_summary_01')).toBeInTheDocument();
@@ -935,7 +1378,7 @@ describe('App', () => {
     });
 
     await user.click(screen.getByRole('button', { name: '返回' }));
-    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
   });
 
   it('returns from a loaded workspace to the starter home and releases the workspace handle', async () => {
@@ -973,7 +1416,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '首页' }));
 
@@ -982,7 +1425,7 @@ describe('App', () => {
         workspaceHandle: 'workspace-handle-1',
       });
     });
-    expect(screen.queryByRole('heading', { name: '全部记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
   });
 
@@ -1029,12 +1472,12 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '资料库' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('无法获取记忆空间锁。');
-    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '资料库' })).not.toBeInTheDocument();
   });
 
@@ -1063,7 +1506,7 @@ describe('App', () => {
               title: 'My seventh birthday',
               createdAt: '2026-04-12T09:00:00.000Z',
               updatedAt: '2026-04-12T09:10:00.000Z',
-              recordingCount: 1,
+              assetCount: 1,
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
@@ -1078,11 +1521,10 @@ describe('App', () => {
       value: {
         memoryId: 'mem_birthday',
         title: 'My seventh birthday',
-        sourceKind: 'recording',
         createdAt: '2026-04-12T09:00:00.000Z',
         updatedAt: '2026-04-12T09:10:00.000Z',
-        recordingIds: ['rec_1'],
-        recordingCount: 1,
+        assetIds: ['rec_1'],
+        assetCount: 1,
         recordingsTruncated: false,
         hasTranscript: true,
         hasReflections: false,
@@ -1108,13 +1550,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('button', { name: '打开 My seventh birthday' }));
+    await user.click(await screen.findByRole('button', { name: '打开记忆 My seventh birthday' }));
 
     expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory' }));
 
-    expect(screen.getByRole('heading', { name: '全部记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
   });
 
   it('finalizes a recording from memory detail against the current memory', async () => {
@@ -1143,7 +1585,7 @@ describe('App', () => {
               title: 'My seventh birthday',
               createdAt: '2026-04-12T09:00:00.000Z',
               updatedAt: '2026-04-12T09:10:00.000Z',
-              recordingCount: 1,
+              assetCount: 1,
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
@@ -1159,11 +1601,10 @@ describe('App', () => {
         value: {
           memoryId: 'mem_birthday',
           title: 'My seventh birthday',
-          sourceKind: 'recording',
           createdAt: '2026-04-12T09:00:00.000Z',
           updatedAt: '2026-04-12T09:10:00.000Z',
-          recordingIds: ['rec_1'],
-          recordingCount: 1,
+          assetIds: ['rec_1'],
+          assetCount: 1,
           recordingsTruncated: false,
           hasTranscript: true,
           hasReflections: false,
@@ -1175,11 +1616,10 @@ describe('App', () => {
         value: {
           memoryId: 'mem_birthday',
           title: 'My seventh birthday',
-          sourceKind: 'recording',
           createdAt: '2026-04-12T09:00:00.000Z',
           updatedAt: '2026-04-12T09:15:00.000Z',
-          recordingIds: ['rec_1', 'rec_2'],
-          recordingCount: 2,
+          assetIds: ['rec_1', 'rec_2'],
+          assetCount: 2,
           recordingsTruncated: false,
           hasTranscript: true,
           hasReflections: false,
@@ -1213,7 +1653,7 @@ describe('App', () => {
           title: 'My seventh birthday',
           createdAt: '2026-04-12T09:00:00.000Z',
           updatedAt: '2026-04-12T09:15:00.000Z',
-          recordingCount: 2,
+          assetCount: 2,
           durationMs: 136_200,
           audioByteLength: 4097,
           hasTranscript: true,
@@ -1248,7 +1688,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('button', { name: '打开 My seventh birthday' }));
+    await user.click(await screen.findByRole('button', { name: '打开记忆 My seventh birthday' }));
     await screen.findByRole('heading', { name: 'My seventh birthday' });
     await user.click(screen.getByRole('button', { name: '继续记录' }));
     await user.click(screen.getByRole('button', { name: '开始录音' }));
@@ -1291,7 +1731,7 @@ describe('App', () => {
               title: 'My seventh birthday',
               createdAt: '2026-04-12T09:00:00.000Z',
               updatedAt: '2026-04-12T09:10:00.000Z',
-              recordingCount: 1,
+              assetCount: 1,
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
@@ -1306,11 +1746,10 @@ describe('App', () => {
       value: {
         memoryId: 'mem_birthday',
         title: 'My seventh birthday',
-        sourceKind: 'recording',
         createdAt: '2026-04-12T09:00:00.000Z',
         updatedAt: '2026-04-12T09:10:00.000Z',
-        recordingIds: ['rec_1'],
-        recordingCount: 1,
+        assetIds: ['rec_1'],
+        assetCount: 1,
         recordingsTruncated: false,
         hasTranscript: true,
         hasReflections: false,
@@ -1329,7 +1768,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('button', { name: '打开 My seventh birthday' }));
+    await user.click(await screen.findByRole('button', { name: '打开记忆 My seventh birthday' }));
     await screen.findByRole('heading', { name: 'My seventh birthday' });
     await user.click(screen.getByRole('button', { name: '继续记录' }));
 
@@ -1357,7 +1796,7 @@ describe('App', () => {
           hasReflections: false,
           hasTranscript: false,
           memoryId: 'mem_1',
-          recordingCount: 1,
+          assetCount: 1,
           title: 'Daily memory recording',
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
@@ -1370,7 +1809,43 @@ describe('App', () => {
         },
       }).snapshot
     ).toMatchObject({
-      memories: [{ memoryId: 'mem_1', recordingCount: 1 }],
+      memories: [{ memoryId: 'mem_1', assetCount: 1 }],
+    });
+  });
+
+  it('merges recording text save summaries into the memory detail cache', () => {
+    const memory = {
+      audioByteLength: 3,
+      createdAt: '2026-05-06T13:08:00.000Z',
+      durationMs: 2000,
+      hasReflections: true,
+      hasTranscript: false,
+      memoryId: 'mem_1',
+      assetCount: 1,
+      title: 'Daily memory recording',
+      updatedAt: '2026-05-06T13:09:30.000Z',
+    };
+
+    expect(
+      mergeSavedRecordingContentIntoDetail(
+        {
+          assetCount: 1,
+          assetIds: ['rec_1'],
+          createdAt: '2026-05-06T13:08:00.000Z',
+          hasReflections: false,
+          hasTranscript: false,
+          memoryId: 'mem_1',
+          recordings: [],
+          recordingsTruncated: false,
+          title: 'Daily memory recording',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+        },
+        memory
+      )
+    ).toMatchObject({
+      hasReflections: true,
+      hasTranscript: false,
+      updatedAt: '2026-05-06T13:09:30.000Z',
     });
   });
 });

@@ -1,5 +1,6 @@
-export function countLabel(count: number, unit: string) {
-  return `${count} ${unit}`;
+export function countLabel(count: number | null | undefined, unit: string) {
+  const safeCount = typeof count === 'number' && Number.isFinite(count) && count >= 0 ? count : 0;
+  return `${safeCount} ${unit}`;
 }
 
 export function durationLabel(durationMs: number) {

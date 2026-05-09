@@ -3,7 +3,10 @@ import type { MediaAccessPermissionRequest } from 'electron';
 import { APP_SHELL_HOST, APP_SHELL_SCHEME } from './appShellConstants.js';
 import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.js';
 import { createContentSecurityPolicy } from './securityPolicy.js';
-import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
+import {
+  workspaceError,
+  type WorkspaceErrorEnvelope,
+} from '../workspace-contract/workspace-contract.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const MICROPHONE_INTENT_TTL_MS = 15_000;

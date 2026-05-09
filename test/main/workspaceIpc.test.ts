@@ -19,6 +19,8 @@ import {
   handleBeginMicrophoneIntentForTest,
   handleClearMicrophoneIntentForTest,
   handleCloseWorkspaceForTest,
+  handleCreateRecordingDraftForTest,
+  handleCreateMemoryForTest,
   handleGetMemoryDetailForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
@@ -27,6 +29,7 @@ import {
   handleOpenWorkspaceMemorySpaceForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
+  handleUpdateMemoryTitleForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
@@ -97,10 +100,9 @@ async function writeFinalizedMemoryRecording({
     `${JSON.stringify({
       memoryId,
       title,
-      sourceKind: 'recording',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      recordingIds: [recordingId],
+      assetIds: [recordingId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2, 3]));
@@ -634,6 +636,170 @@ test('getMemoryDetail returns finalized memory detail through a workspace handle
     assert.equal(result.value.recordings[0]?.recordingId, 'rec_ipc');
     assert.equal('rootPath' in result.value, false);
   }
+});
+
+test('createMemory creates an empty Memory container through file truth', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-create-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleCreateMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: '产品灵感与思考',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createMemoryId: () => 'mem_ipc_created',
+    now: () => '2026-05-08T14:42:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, {
+      memoryId: 'mem_ipc_created',
+      title: '产品灵感与思考',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      assetCount: 0,
+      durationMs: 0,
+      audioByteLength: 0,
+      hasTranscript: false,
+      hasReflections: false,
+    });
+  }
+  assert.deepEqual(
+    JSON.parse(
+      await readFile(path.join(rootPath, 'memories', 'mem_ipc_created', 'memory.json'), 'utf8')
+    ),
+    {
+      memoryId: 'mem_ipc_created',
+      title: '产品灵感与思考',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      assetIds: [],
+    }
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8')).memories,
+    [
+      {
+        memoryId: 'mem_ipc_created',
+        title: '产品灵感与思考',
+        createdAt: '2026-05-08T14:42:00.000Z',
+        updatedAt: '2026-05-08T14:42:00.000Z',
+        assetCount: 0,
+        durationMs: 0,
+        audioByteLength: 0,
+        hasTranscript: false,
+        hasReflections: false,
+      },
+    ]
+  );
+});
+
+test('createRecordingDraft returns a flat IPC response value', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-recording-draft-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 录音',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleCreateRecordingDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createRecordingId: () => 'rec_ipc_draft',
+    now: () => '2026-05-08T14:42:00.000Z',
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    value: {
+      recordingId: 'rec_ipc_draft',
+      nextSequence: 0,
+    },
+  });
+});
+
+test('updateMemoryTitle updates only the memory container through file truth', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-title-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc',
+    recordingId: 'rec_ipc',
+    title: '旧标题',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleUpdateMemoryTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_ipc',
+      title: '产品灵感与思考',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-08T14:42:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.memoryId, 'mem_ipc');
+    assert.equal(result.value.title, '产品灵感与思考');
+    assert.equal(result.value.assetCount, 1);
+    assert.equal(result.value.updatedAt, '2026-05-08T14:42:00.000Z');
+    assert.equal('rootPath' in result.value, false);
+    assert.equal('assetIds' in result.value, false);
+  }
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(rootPath, 'memories', 'mem_ipc', 'memory.json'), 'utf8')),
+    {
+      memoryId: 'mem_ipc',
+      title: '产品灵感与思考',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      assetIds: ['rec_ipc'],
+    }
+  );
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        path.join(rootPath, 'memories', 'mem_ipc', 'recordings', 'rec_ipc', 'recording.json'),
+        'utf8'
+      )
+    ).title,
+    '旧标题'
+  );
 });
 
 test('getMemoryDetail stops when the workspace lock is lost during detail read', async () => {

@@ -80,7 +80,7 @@ export function MemoryDetailPage({
         <MemoryDetailSection
           id="voice-recordings"
           title="语音录音"
-          meta={countLabel(memory.recordingCount, '段录音')}
+          meta={countLabel(memory.assetCount, '段录音')}
         >
           {memory.recordings.length === 0 ? (
             <p className="text-body-lg leading-body-lg text-gravel">还没有保存录音。</p>

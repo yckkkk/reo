@@ -12,7 +12,7 @@ import {
   saveReflections,
   saveTranscript,
 } from './workspaceApi';
-import type { FinalizedRecording, WorkspaceSession } from './workspaceApi';
+import type { FinalizedRecording, WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
 import {
   createBrowserMediaRecorderAdapter,
   type RecordingMediaAdapter,
@@ -34,15 +34,17 @@ import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './work
 type RecordingOverlayProps = {
   readonly mediaAdapter?: RecordingMediaAdapter;
   readonly onOpenChange: (open: boolean) => void;
+  readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
   readonly onRecordingFinalized: (recording: FinalizedRecording) => void;
   readonly open: boolean;
   readonly recordingTarget: RecordingTarget;
   readonly workspaceSession: WorkspaceSession;
 };
 
-export type RecordingTarget =
-  | { readonly kind: 'new-memory' }
-  | { readonly kind: 'existing-memory'; readonly memoryId: string };
+export type RecordingTarget = { readonly kind: 'existing-memory'; readonly memoryId: string };
+export type SavedRecordingContent = {
+  readonly memory: WorkspaceMemorySummary;
+};
 
 const AUTOSAVE_DELAY_MS = 300;
 const PLAYBACK_CHUNK_CONCURRENCY = 4;
@@ -72,6 +74,7 @@ function statusTextFor(state: RecordingState): string {
 export function RecordingOverlay({
   mediaAdapter,
   onOpenChange,
+  onRecordingContentSaved,
   onRecordingFinalized,
   open,
   recordingTarget,
@@ -136,6 +139,7 @@ export function RecordingOverlay({
         if (response.ok) {
           lastSavedTranscriptRef.current = transcriptDraft;
           setError(null);
+          onRecordingContentSaved?.({ memory: response.value.memory });
         } else {
           setError(workspaceErrorDisplayMessage(response.error, '无法保存转写。'));
         }
@@ -143,7 +147,7 @@ export function RecordingOverlay({
     }, AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [state, transcriptDraft, workspaceSession.workspaceHandle]);
+  }, [onRecordingContentSaved, state, transcriptDraft, workspaceSession.workspaceHandle]);
 
   useEffect(() => {
     if (state.status !== 'editing' || reflectionsDraft === lastSavedReflectionsRef.current) {
@@ -164,6 +168,7 @@ export function RecordingOverlay({
         if (response.ok) {
           lastSavedReflectionsRef.current = reflectionsDraft;
           setError(null);
+          onRecordingContentSaved?.({ memory: response.value.memory });
         } else {
           setError(workspaceErrorDisplayMessage(response.error, '无法保存反思。'));
         }
@@ -171,7 +176,7 @@ export function RecordingOverlay({
     }, AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [reflectionsDraft, state, workspaceSession.workspaceHandle]);
+  }, [onRecordingContentSaved, reflectionsDraft, state, workspaceSession.workspaceHandle]);
 
   useEffect(() => {
     return () => {
@@ -475,9 +480,7 @@ export function RecordingOverlay({
     try {
       finalized = await finalizeRecordingDraft({
         durationMs,
-        ...(recordingTarget.kind === 'existing-memory'
-          ? { memoryId: recordingTarget.memoryId }
-          : {}),
+        memoryId: recordingTarget.memoryId,
         recordingId,
         title,
         workspaceHandle: workspaceSession.workspaceHandle,

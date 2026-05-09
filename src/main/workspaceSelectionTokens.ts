@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { WorkspaceErrorEnvelope } from './workspaceContract.js';
-import { workspaceError } from './workspaceContract.js';
+import type { WorkspaceErrorEnvelope } from '../workspace-contract/workspace-contract.js';
+import { workspaceError } from '../workspace-contract/workspace-contract.js';
 import type { TrustedSenderIdentity } from './trustedSender.js';
 
 const DEFAULT_TTL_MS = 60_000;

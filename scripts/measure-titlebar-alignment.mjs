@@ -5,8 +5,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const defaultCrop = '420x120+0+0';
+const defaultCrop = 'x140+0+0';
 const defaultMaxDelta = 1;
+const defaultTitleGap = 16;
+const defaultMaxTitleGapDelta = 2;
+const defaultMaxTitleCenterDelta = 1;
+const defaultMaxRightIconCenterDelta = 1;
 
 function printHelp() {
   console.log(`Usage:
@@ -20,6 +24,15 @@ Options:
   --output <path>       Screenshot output path when using --capture.
   --crop <geometry>     ImageMagick crop geometry. Default: ${defaultCrop}
   --max-delta <px>      Allowed vertical delta in physical pixels. Default: ${defaultMaxDelta}
+  --title-gap <px>      Expected CSS px between sidebar toggle icon and workspace title. Default: ${defaultTitleGap}
+  --max-title-gap-delta <px>
+                       Allowed title gap delta in CSS px. Default: ${defaultMaxTitleGapDelta}
+  --max-title-center-delta <px>
+                       Allowed title center vertical delta against sidebar toggle icon in CSS px.
+                       Default: ${defaultMaxTitleCenterDelta}
+  --max-right-icon-center-delta <px>
+                       Allowed right MemoryRail toggle icon center delta against sidebar toggle icon in CSS px.
+                       Default: ${defaultMaxRightIconCenterDelta}
   --json                Print machine-readable JSON.
   --self-test           Generate and measure a synthetic fixture.
 `);
@@ -45,6 +58,10 @@ function parseArgs(argv) {
   const options = {
     crop: defaultCrop,
     maxDelta: defaultMaxDelta,
+    titleGap: defaultTitleGap,
+    maxTitleGapDelta: defaultMaxTitleGapDelta,
+    maxTitleCenterDelta: defaultMaxTitleCenterDelta,
+    maxRightIconCenterDelta: defaultMaxRightIconCenterDelta,
     json: false,
     selfTest: false,
   };
@@ -78,6 +95,22 @@ function parseArgs(argv) {
         options.maxDelta = Number(next);
         index += 1;
         break;
+      case '--title-gap':
+        options.titleGap = Number(next);
+        index += 1;
+        break;
+      case '--max-title-gap-delta':
+        options.maxTitleGapDelta = Number(next);
+        index += 1;
+        break;
+      case '--max-title-center-delta':
+        options.maxTitleCenterDelta = Number(next);
+        index += 1;
+        break;
+      case '--max-right-icon-center-delta':
+        options.maxRightIconCenterDelta = Number(next);
+        index += 1;
+        break;
       case '--json':
         options.json = true;
         break;
@@ -91,6 +124,18 @@ function parseArgs(argv) {
 
   if (!Number.isFinite(options.maxDelta) || options.maxDelta < 0) {
     fail('--max-delta must be a non-negative number.');
+  }
+  if (!Number.isFinite(options.titleGap) || options.titleGap < 0) {
+    fail('--title-gap must be a non-negative number.');
+  }
+  if (!Number.isFinite(options.maxTitleGapDelta) || options.maxTitleGapDelta < 0) {
+    fail('--max-title-gap-delta must be a non-negative number.');
+  }
+  if (!Number.isFinite(options.maxTitleCenterDelta) || options.maxTitleCenterDelta < 0) {
+    fail('--max-title-center-delta must be a non-negative number.');
+  }
+  if (!Number.isFinite(options.maxRightIconCenterDelta) || options.maxRightIconCenterDelta < 0) {
+    fail('--max-right-icon-center-delta must be a non-negative number.');
   }
 
   return options;
@@ -223,7 +268,59 @@ function unionComponents(components) {
   };
 }
 
-function measure(image, crop, maxDelta) {
+function colorDistance(left, right) {
+  return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
+}
+
+function pixelAt(pixels, x, y) {
+  return pixels.find((pixel) => pixel.x === x && pixel.y === y);
+}
+
+function foregroundClusters({ pixels, width, trafficCenterY, trafficRight }) {
+  const background =
+    pixelAt(pixels, Math.max(0, width - 24), 10) ??
+    pixelAt(pixels, Math.floor(width / 2), 10) ??
+    pixels[0];
+  const components = findComponents(
+    pixels,
+    width,
+    (pixel) =>
+      pixel.a > 0 &&
+      pixel.x > trafficRight + 20 &&
+      Math.abs(pixel.y - trafficCenterY) <= 40 &&
+      colorDistance(pixel, background) > 80
+  )
+    .filter(
+      (component) =>
+        component.count >= 8 &&
+        component.maxY >= 16 &&
+        component.minY <= 72 &&
+        component.maxX < width - 12
+    )
+    .sort((left, right) => left.minX - right.minX);
+
+  const clusters = [];
+  for (const component of components) {
+    const previous = clusters.at(-1);
+    if (previous && component.minX <= previous.maxX + 12) {
+      clusters[clusters.length - 1] = unionComponents([previous, component]);
+    } else {
+      clusters.push(component);
+    }
+  }
+
+  return { background, clusters };
+}
+
+function measure(
+  image,
+  crop,
+  maxDelta,
+  expectedTitleGap,
+  maxTitleGapDelta,
+  maxTitleCenterDelta,
+  maxRightIconCenterDelta
+) {
   const text = run('magick', [image, '-crop', crop, 'txt:-']);
   const { pixels, width } = parsePixels(text);
 
@@ -259,41 +356,74 @@ function measure(image, crop, maxDelta) {
   const trafficCenterY =
     traffic.reduce((sum, component) => sum + component.centerY, 0) / traffic.length;
   const trafficRight = Math.max(...traffic.map((component) => component.maxX));
+  const scale = Math.max(1, (red.maxX - red.minX + 1) / 14);
 
-  const darkComponents = findComponents(
+  const { background, clusters } = foregroundClusters({
     pixels,
     width,
-    (pixel) => pixel.a > 0 && pixel.r < 125 && pixel.g < 125 && pixel.b < 125
-  ).filter(
-    (component) =>
-      component.count >= 8 &&
-      component.minX > trafficRight + 20 &&
-      Math.abs(component.centerY - trafficCenterY) <= 32
+    trafficCenterY,
+    trafficRight,
+  });
+  const icon = clusters[0];
+  const title = clusters.find(
+    (cluster, index) => index > 0 && cluster.count >= 20 && cluster.maxX - cluster.minX >= 20
   );
 
-  if (darkComponents.length === 0) {
-    fail('Could not find a dark titlebar icon component to the right of the traffic lights.');
+  if (!icon) {
+    fail('Could not find the sidebar toggle icon to the right of the traffic lights.');
+  }
+  if (!title) {
+    fail('Could not find the workspace title to the right of the sidebar toggle icon.');
+  }
+  const rightIcon = clusters
+    .slice()
+    .reverse()
+    .find((cluster) => cluster.minX > title.maxX + 40 && cluster.count >= 8);
+  if (!rightIcon) {
+    fail('Could not find the right MemoryRail toggle icon.');
   }
 
-  const iconLeft = Math.min(...darkComponents.map((component) => component.minX));
-  const icon = unionComponents(
-    darkComponents.filter((component) => component.minX <= iconLeft + 72)
-  );
   const deltaY = icon.centerY - trafficCenterY;
-  const passed = Math.abs(deltaY) <= maxDelta;
+  const titleGap = (title.minX - icon.maxX) / scale;
+  const titleGapDelta = titleGap - expectedTitleGap;
+  const iconVisualCenterY = (icon.minY + icon.maxY) / 2;
+  const titleVisualCenterY = (title.minY + title.maxY) / 2;
+  const rightIconVisualCenterY = (rightIcon.minY + rightIcon.maxY) / 2;
+  const titleCenterDelta = (titleVisualCenterY - iconVisualCenterY) / scale;
+  const rightIconCenterDelta = (rightIconVisualCenterY - iconVisualCenterY) / scale;
+  const passed =
+    Math.abs(deltaY) <= maxDelta &&
+    Math.abs(titleGapDelta) <= maxTitleGapDelta &&
+    Math.abs(titleCenterDelta) <= maxTitleCenterDelta &&
+    Math.abs(rightIconCenterDelta) <= maxRightIconCenterDelta;
 
   return {
     image,
     crop,
     maxDelta,
+    expectedTitleGap,
+    maxTitleGapDelta,
+    maxTitleCenterDelta,
+    maxRightIconCenterDelta,
     passed,
     deltaY,
+    titleGap,
+    titleGapDelta,
+    titleCenterDelta,
+    rightIconCenterDelta,
+    iconVisualCenterY,
+    titleVisualCenterY,
+    rightIconVisualCenterY,
+    scale,
+    background,
     traffic: {
       centerY: trafficCenterY,
       right: trafficRight,
       components: { red, yellow, green },
     },
     icon,
+    title,
+    rightIcon,
   };
 }
 
@@ -306,6 +436,10 @@ function printResult(result, json) {
   console.log(`traffic center y: ${result.traffic.centerY.toFixed(2)}px`);
   console.log(`icon center y: ${result.icon.centerY.toFixed(2)}px`);
   console.log(`delta y: ${result.deltaY.toFixed(2)}px`);
+  console.log(`title gap: ${result.titleGap.toFixed(2)}css px`);
+  console.log(`title gap delta: ${result.titleGapDelta.toFixed(2)}css px`);
+  console.log(`title center delta: ${result.titleCenterDelta.toFixed(2)}css px`);
+  console.log(`right icon center delta: ${result.rightIconCenterDelta.toFixed(2)}css px`);
   console.log(result.passed ? 'PASS titlebar alignment' : 'FAIL titlebar alignment');
 }
 
@@ -316,7 +450,7 @@ function runSelfTest(maxDelta) {
   try {
     run('magick', [
       '-size',
-      '260x96',
+      '380x96',
       'xc:white',
       '-fill',
       'rgb(255,95,87)',
@@ -334,10 +468,26 @@ function runSelfTest(maxDelta) {
       'rgb(74,72,68)',
       '-draw',
       'rectangle 150,24 172,48',
+      '-fill',
+      'rgb(74,72,68)',
+      '-draw',
+      'rectangle 201,24 246,48',
+      '-fill',
+      'rgb(74,72,68)',
+      '-draw',
+      'rectangle 320,24 342,48',
       image,
     ]);
 
-    return measure(image, '260x96+0+0', maxDelta);
+    return measure(
+      image,
+      '380x96+0+0',
+      maxDelta,
+      defaultTitleGap,
+      defaultMaxTitleGapDelta,
+      defaultMaxTitleCenterDelta,
+      defaultMaxRightIconCenterDelta
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -362,7 +512,15 @@ if (!options.selfTest && !image) {
 
 const result = options.selfTest
   ? runSelfTest(options.maxDelta)
-  : measure(image, options.crop, options.maxDelta);
+  : measure(
+      image,
+      options.crop,
+      options.maxDelta,
+      options.titleGap,
+      options.maxTitleGapDelta,
+      options.maxTitleCenterDelta,
+      options.maxRightIconCenterDelta
+    );
 
 printResult(result, options.json);
 

@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppShell } from '../app-shell/AppShell';
-import { WorkspaceHome } from './WorkspaceHome';
+import { ReoQueryProvider } from '../queryClient';
+import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
 import type { WorkspaceSession } from './workspaceApi';
 
 const forbiddenRuntimeCapability =
@@ -21,13 +22,16 @@ const workspaceSession: WorkspaceSession = {
 describe('forbidden first-slice capabilities', () => {
   it('does not show future media, AI, auth, or global search capabilities', () => {
     render(
-      <AppShell themeMode="light" onHome={() => {}} onLibrary={() => {}} onToggleTheme={() => {}}>
-        <WorkspaceHome
-          workspaceSession={workspaceSession}
-          onOpenMemory={() => {}}
-          onStartRecording={() => {}}
-        />
-      </AppShell>
+      <ReoQueryProvider>
+        <AppShell themeMode="light" onHome={() => {}} onLibrary={() => {}} onToggleTheme={() => {}}>
+          <LoadedWorkspaceFrame
+            workspaceSession={workspaceSession}
+            onOpenMemory={() => {}}
+            onRenameMemory={() => {}}
+            onStartRecording={() => {}}
+          />
+        </AppShell>
+      </ReoQueryProvider>
     );
 
     expect(screen.queryByText(forbiddenRuntimeCapability)).not.toBeInTheDocument();

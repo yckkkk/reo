@@ -20,7 +20,21 @@ const workspaceSession: WorkspaceSession = {
   },
 };
 
-const newMemoryTarget = { kind: 'new-memory' } satisfies RecordingTarget;
+const existingMemoryTarget = {
+  kind: 'existing-memory',
+  memoryId: 'mem_1',
+} satisfies RecordingTarget;
+const savedMemorySummary = {
+  audioByteLength: 3,
+  createdAt: '2026-05-06T13:08:00.000Z',
+  durationMs: 0,
+  hasReflections: false,
+  hasTranscript: true,
+  memoryId: 'mem_1',
+  assetCount: 1,
+  title: 'Daily memory 录音',
+  updatedAt: '2026-05-06T13:09:00.000Z',
+};
 
 type RecordingOverlayForTestProps = Omit<
   ComponentProps<typeof RecordingOverlay>,
@@ -30,7 +44,7 @@ type RecordingOverlayForTestProps = Omit<
 };
 
 function RecordingOverlayForTest({
-  recordingTarget = newMemoryTarget,
+  recordingTarget = existingMemoryTarget,
   ...props
 }: RecordingOverlayForTestProps) {
   return <RecordingOverlay recordingTarget={recordingTarget} {...props} />;
@@ -67,6 +81,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     openMemorySpace: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    createMemory: vi.fn(),
     createRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 0, recordingId: 'rec_1' },
@@ -85,7 +100,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           hasReflections: false,
           hasTranscript: false,
           memoryId: 'mem_1',
-          recordingCount: 1,
+          assetCount: 1,
           title: 'Daily memory 录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
@@ -103,6 +118,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       value: { discarded: true as const },
     })),
     getMemoryDetail: vi.fn(),
+    updateMemoryTitle: vi.fn(),
     getRecordingDetail: vi.fn(),
     readRecordingAudioManifest: vi.fn(async () => ({
       ok: true as const,
@@ -114,9 +130,12 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       .mockResolvedValueOnce({ ok: true as const, value: { chunk: new Uint8Array([3]) } }),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,
-      value: { saved: true as const },
+      value: { memory: savedMemorySummary, saved: true as const },
     })),
-    saveReflections: vi.fn(async () => ({ ok: true as const, value: { saved: true as const } })),
+    saveReflections: vi.fn(async () => ({
+      ok: true as const,
+      value: { memory: { ...savedMemorySummary, hasReflections: true }, saved: true as const },
+    })),
     beginMicrophoneIntent: vi.fn(async () => ({
       ok: true as const,
       value: { registered: true as const },
@@ -265,6 +284,7 @@ describe('RecordingOverlay', () => {
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 2000,
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       title: 'Daily memory 录音',
       workspaceHandle: 'workspace-handle-secret',
@@ -326,6 +346,7 @@ describe('RecordingOverlay', () => {
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 750,
+      memoryId: 'mem_1',
       recordingId: 'rec_1',
       title: 'Daily memory 录音',
       workspaceHandle: 'workspace-handle-secret',
@@ -420,7 +441,7 @@ describe('RecordingOverlay', () => {
     const bridge = installWorkspaceBridge({
       beginMicrophoneIntent: vi.fn(async () => ({
         error: {
-          code: 'ERR_MIC_INTENT_ALREADY_ACTIVE',
+          code: 'ERR_MIC_INTENT_ALREADY_ACTIVE' as const,
           message: 'Microphone intent already active',
         },
         ok: false as const,
@@ -450,7 +471,7 @@ describe('RecordingOverlay', () => {
   it('clears microphone intent when draft creation fails after intent registration', async () => {
     const bridge = installWorkspaceBridge({
       createRecordingDraft: vi.fn(async () => ({
-        error: { code: 'ERR_WORKSPACE_LOCK_LOST', message: 'Workspace lock was lost' },
+        error: { code: 'ERR_WORKSPACE_LOCK_LOST' as const, message: 'Workspace lock was lost' },
         ok: false as const,
       })),
     });
@@ -643,7 +664,7 @@ describe('RecordingOverlay', () => {
   it('does not finalize when audio append returns an error envelope', async () => {
     const bridge = installWorkspaceBridge({
       appendRecordingAudioChunk: vi.fn(async () => ({
-        error: { code: 'ERR_RECORDING_SEQUENCE', message: 'Append failed' },
+        error: { code: 'ERR_RECORDING_SEQUENCE' as const, message: 'Append failed' },
         ok: false as const,
       })),
     });
@@ -861,7 +882,7 @@ describe('RecordingOverlay', () => {
   it('keeps transcript draft when autosave fails', async () => {
     const bridge = installWorkspaceBridge({
       saveTranscript: vi.fn(async () => ({
-        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Save failed' },
+        error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Save failed' },
         ok: false as const,
       })),
     });
@@ -928,6 +949,37 @@ describe('RecordingOverlay', () => {
       memoryId: 'mem_1',
       recordingId: 'rec_1',
       workspaceHandle: 'workspace-handle-secret',
+    });
+  });
+
+  it('notifies the active memory after autosave succeeds', async () => {
+    installWorkspaceBridge();
+    const media = createMediaAdapter();
+    const onRecordingContentSaved = vi.fn();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onRecordingContentSaved={onRecordingContentSaved}
+        onRecordingFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+    fireEvent.change(screen.getByRole('textbox', { name: '转写' }), {
+      target: { value: 'Saved transcript' },
+    });
+    act(() => vi.advanceTimersByTime(500));
+    await flushPromises();
+
+    expect(onRecordingContentSaved).toHaveBeenCalledWith({
+      memory: savedMemorySummary,
     });
   });
 

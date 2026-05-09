@@ -34,7 +34,13 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'test/**/*.ts', 'electron.vite.config.ts'],
+    files: [
+      'src/main/**/*.ts',
+      'src/preload/**/*.ts',
+      'src/workspace-contract/**/*.ts',
+      'test/**/*.ts',
+      'electron.vite.config.ts',
+    ],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,

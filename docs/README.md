@@ -24,6 +24,8 @@
 
 ## 结构
 
+Reo 仓库只能有一套活跃真源。`current/*` 写当前事实，`decisions/*` 写长期架构决策，`initiatives/*` 写跨 session 执行入口，`specs/*` 写当前任务证据。只有 `archive/*` 可以保留历史日志式解释。
+
 ```text
 docs/
   archive/     已收口任务记录
@@ -53,7 +55,7 @@ Initiative 必须有明确完成条件。完成、取消或失效后移入：
 docs/archive/initiatives/YYYY-MM-DD-slug/
 ```
 
-Initiative 不能覆盖 `current/*` 或 `decisions/*`，也不能替代当前 slice spec。
+Initiative 不能覆盖 `current/*` 或 `decisions/*`，也不能替代当前 spec。
 
 长期任务的完成条件或范围不再匹配当前任务时，创建新的 initiative。
 
@@ -95,4 +97,4 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 6. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
 7. 除非用户明确要求，不创建额外顶层 docs 目录。
 
-写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单和临时 TODO 留在 spec 或 archive。
+写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单、临时 TODO、历史日志和迁移解释留在 spec 或 archive。

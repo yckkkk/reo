@@ -31,8 +31,6 @@ import {
   appendRecordingToMemory,
   appendRecordingToMemoryForTest,
   assertNoDuplicateRecordingDirectoryById,
-  createMemoryForRecording,
-  createMemoryForRecordingForTest,
   lookupRecordingDirectoryById,
   memoryRecordingDirectory,
   readFinalizedRecordingSummary,
@@ -43,11 +41,12 @@ import {
 } from './memoryFiles.js';
 import {
   recordingMetadataSchema,
+  workspaceError,
   type FinalizedRecordingMetadata,
   type RecordingMetadata,
-} from './recordingMetadata.js';
+  type WorkspaceErrorEnvelope,
+} from '../workspace-contract/workspace-contract.js';
 import { createSafeRecordingId, ensureWorkspaceDraftsDirectory } from './workspacePaths.js';
-import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
 
 const MAX_AUDIO_CHUNK_BYTES = 1_048_576;
 const MAX_RECORDING_METADATA_BYTES = 1_048_576;
@@ -749,8 +748,7 @@ interface FinalizeRecordingDraftInput {
   readonly rootPath: string;
   readonly workspaceId?: string;
   readonly recordingId: string;
-  readonly memoryId?: string;
-  readonly createMemoryId?: () => string;
+  readonly memoryId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly now: () => string;
@@ -782,7 +780,6 @@ async function finalizeRecordingDraftWithHooks(
     workspaceId,
     recordingId,
     memoryId,
-    createMemoryId,
     title,
     durationMs,
     now,
@@ -813,74 +810,40 @@ async function finalizeRecordingDraftWithHooks(
       return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
     }
 
-    const nextMemoryId = memoryId ?? createMemoryId?.();
-    if (!nextMemoryId) {
-      return workspaceError(
-        'ERR_RECORDING_FINALIZE_FAILED',
-        'Recording draft could not be finalized',
-        'draft-preserved'
-      );
-    }
-    const finalized =
-      memoryId === undefined
-        ? transactionHooks
-          ? await createMemoryForRecordingForTest({
-              rootPath,
-              workspaceId: workspaceId ?? metadata.workspaceId,
-              memoryId: nextMemoryId,
-              recordingId,
-              title,
-              durationMs,
-              now,
-              ...(rebuildIndex ? { rebuildIndex } : {}),
-              ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-              transactionHooks,
-            })
-          : await createMemoryForRecording({
-              rootPath,
-              workspaceId: workspaceId ?? metadata.workspaceId,
-              memoryId: nextMemoryId,
-              recordingId,
-              title,
-              durationMs,
-              now,
-              ...(rebuildIndex ? { rebuildIndex } : {}),
-              ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-            })
-        : transactionHooks
-          ? await appendRecordingToMemoryForTest({
-              rootPath,
-              workspaceId: workspaceId ?? metadata.workspaceId,
-              memoryId,
-              recordingId,
-              title,
-              durationMs,
-              now,
-              ...(rebuildIndex ? { rebuildIndex } : {}),
-              ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-              transactionHooks,
-            })
-          : await appendRecordingToMemory({
-              rootPath,
-              workspaceId: workspaceId ?? metadata.workspaceId,
-              memoryId,
-              recordingId,
-              title,
-              durationMs,
-              now,
-              ...(rebuildIndex ? { rebuildIndex } : {}),
-              ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-            });
+    const finalized = transactionHooks
+      ? await appendRecordingToMemoryForTest({
+          rootPath,
+          workspaceId: workspaceId ?? metadata.workspaceId,
+          memoryId,
+          recordingId,
+          title,
+          durationMs,
+          now,
+          ...(rebuildIndex ? { rebuildIndex } : {}),
+          ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+          transactionHooks,
+        })
+      : await appendRecordingToMemory({
+          rootPath,
+          workspaceId: workspaceId ?? metadata.workspaceId,
+          memoryId,
+          recordingId,
+          title,
+          durationMs,
+          now,
+          ...(rebuildIndex ? { rebuildIndex } : {}),
+          ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+        });
 
     if (!finalized.ok) {
       return finalized;
     }
 
-    const recording = await readFinalizedRecordingSummary(rootPath, nextMemoryId, recordingId);
+    const recording = await readFinalizedRecordingSummary(rootPath, memoryId, recordingId);
     return {
       ok: true,
       recording: {
-        memoryId: nextMemoryId,
+        memoryId,
         recordingId,
         title,
         durationMs,
@@ -1159,7 +1122,10 @@ async function saveRecordingDraftMarkdownNow({
 
 export async function saveRecordingMarkdown(
   input: FinalizedRecordingMarkdownSaveInput
-): Promise<{ readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope> {
+): Promise<
+  | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
+  | WorkspaceErrorEnvelope
+> {
   return withMarkdownSaveQueue(
     recordingKey(input.rootPath, `${input.memoryId}:${input.recordingId}:${input.fileName}`),
     () => saveRecordingMarkdownNow(input)
@@ -1174,7 +1140,8 @@ async function saveRecordingMarkdownNow({
   markdown,
   assertWorkspaceUsable,
 }: FinalizedRecordingMarkdownSaveInput): Promise<
-  { readonly ok: true; readonly saved: true } | WorkspaceErrorEnvelope
+  | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
+  | WorkspaceErrorEnvelope
 > {
   const usable = checkWorkspaceUsable(assertWorkspaceUsable);
   if (usable) {
@@ -1205,7 +1172,8 @@ async function saveRecordingMarkdownNow({
   }
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-    await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    return { ok: true, memory, saved: true };
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
     if (workspaceErrorEnvelope) {
@@ -1217,5 +1185,4 @@ async function saveRecordingMarkdownNow({
       'file-written-index-stale'
     );
   }
-  return { ok: true, saved: true };
 }

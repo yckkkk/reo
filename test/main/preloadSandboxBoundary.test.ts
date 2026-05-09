@@ -8,7 +8,18 @@ test('preload source does not import Zod-backed contracts or regular Node packag
   for (const filePath of PRELOAD_SOURCE_FILES) {
     const source = readFileSync(filePath, 'utf8');
 
-    assert.equal(source.includes('workspaceContract'), false, filePath);
-    assert.equal(source.includes('zod'), false, filePath);
+    assert.equal(
+      /from ['"][^'"]*workspace-contract\/workspace-contract/.test(source),
+      false,
+      filePath
+    );
+    assert.equal(/from ['"]zod['"]/.test(source), false, filePath);
+    for (const line of source.split('\n')) {
+      assert.equal(
+        /^import\s+(?!type).*from ['"][^'"]*workspace-contract/.test(line.trim()),
+        false,
+        filePath
+      );
+    }
   }
 });

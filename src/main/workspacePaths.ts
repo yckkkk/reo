@@ -7,11 +7,13 @@ import {
   readSafeDirectoryIdentitySync as readDirectoryIdentitySync,
   sameDirectoryIdentity,
 } from './directoryIdentity.js';
-import type { WorkspaceErrorEnvelope } from './workspaceContract.js';
-import { workspaceError } from './workspaceContract.js';
-import { isSafeWorkspaceDirectoryName } from './workspaceName.js';
+import {
+  RECORDING_ID_PATTERN,
+  workspaceError,
+  type WorkspaceErrorEnvelope,
+} from '../workspace-contract/workspace-contract.js';
+import { isSafeWorkspaceDirectoryName } from '../workspace-contract/workspace-name.js';
 
-const RECORDING_ID_PATTERN = /^rec_[A-Za-z0-9_-]+$/;
 type MaybePromise<T> = T | Promise<T>;
 type AssertWorkspacePathUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
 

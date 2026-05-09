@@ -30,6 +30,10 @@ export function closeWorkspace(payload: Parameters<Window['reoWorkspace']['close
   return window.reoWorkspace.closeWorkspace(payload);
 }
 
+export function createMemory(payload: Parameters<Window['reoWorkspace']['createMemory']>[0]) {
+  return window.reoWorkspace.createMemory(payload);
+}
+
 export function createRecordingDraft(
   payload: Parameters<Window['reoWorkspace']['createRecordingDraft']>[0]
 ) {
@@ -56,6 +60,12 @@ export function discardRecordingDraft(
 
 export function getMemoryDetail(payload: Parameters<Window['reoWorkspace']['getMemoryDetail']>[0]) {
   return window.reoWorkspace.getMemoryDetail(payload);
+}
+
+export function updateMemoryTitle(
+  payload: Parameters<Window['reoWorkspace']['updateMemoryTitle']>[0]
+) {
+  return window.reoWorkspace.updateMemoryTitle(payload);
 }
 
 export function getRecordingDetail(
@@ -110,6 +120,7 @@ export type WorkspaceMemorySpace = Extract<
 >['value']['memorySpaces'][number];
 export type MemoryDetailResponse = Awaited<ReturnType<typeof getMemoryDetail>>;
 export type WorkspaceMemoryDetail = Extract<MemoryDetailResponse, { readonly ok: true }>['value'];
+export type WorkspaceMemorySummary = WorkspaceSnapshot['memories'][number];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;
 export type WorkspaceDirectorySelection = Extract<
   Extract<WorkspaceChooseDirectoryResponse, { readonly ok: true }>['value'],

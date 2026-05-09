@@ -28,13 +28,6 @@ import {
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
 import {
-  draftRecordingMetadataSchema,
-  finalizedRecordingMetadataSchema,
-  MEMORY_ID_PATTERN,
-  RECORDING_ID_PATTERN,
-  type FinalizedRecordingMetadata,
-} from './recordingMetadata.js';
-import {
   assertSameCurrentDirectoryIdentity as assertSameCurrentDirectory,
   assertSameDirectoryIdentity as assertSameDirectoryPathAsync,
   assertSameDirectoryIdentitySync as assertSameDirectoryPath,
@@ -44,11 +37,17 @@ import {
 } from './directoryIdentity.js';
 import { getWorkspaceIndexPath } from './workspacePaths.js';
 import {
+  draftRecordingMetadataSchema,
+  finalizedRecordingMetadataSchema,
+  MEMORY_ID_PATTERN,
+  RECORDING_ASSET_ID_PATTERN,
+  RECORDING_ID_PATTERN,
   workspaceError,
   workspaceMemorySummarySchema,
+  type FinalizedRecordingMetadata,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
-} from './workspaceContract.js';
+} from '../workspace-contract/workspace-contract.js';
 
 const FINALIZE_STAGING_PREFIX = '.reo-finalizing-';
 const FINALIZE_TRANSACTION_MARKER = '.reo-finalize-transaction.json';
@@ -86,10 +85,9 @@ function finalizeFailureRetention(error: unknown): WorkspaceError['dataRetention
 export interface MemoryJson {
   readonly memoryId: string;
   readonly title: string;
-  readonly sourceKind: 'recording';
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly recordingIds: readonly string[];
+  readonly assetIds: readonly string[];
 }
 
 export interface MemorySummary {
@@ -97,7 +95,7 @@ export interface MemorySummary {
   readonly title: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly recordingCount: number;
+  readonly assetCount: number;
   readonly durationMs: number;
   readonly audioByteLength: number;
   readonly hasTranscript: boolean;
@@ -112,7 +110,7 @@ export interface MemoryRecordingSummary {
 }
 
 export type MemoryDetail = MemoryJson & {
-  readonly recordingCount: number;
+  readonly assetCount: number;
   readonly recordingsTruncated: boolean;
   readonly hasTranscript: boolean;
   readonly hasReflections: boolean;
@@ -181,6 +179,15 @@ export interface CreateMemoryForRecordingInput {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
+export interface CreateMemoryInput {
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly title: string;
+  readonly now: () => string;
+  readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}
+
 export type AppendRecordingToMemoryInput = CreateMemoryForRecordingInput;
 
 export type CreateMemoryForRecordingForTestInput = CreateMemoryForRecordingInput & {
@@ -239,14 +246,56 @@ function memoryFilesError(
     : workspaceError(code, message, dataRetention);
 }
 
+function isMissingFileError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+function isUnsafeWorkspacePathError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes('symlink') ||
+    error.message.includes('escapes workspace') ||
+    error.message.includes('unsafe')
+  );
+}
+
+function updateMemoryTitleError(error: unknown): WorkspaceErrorEnvelope {
+  if (error instanceof WorkspaceHandleLost) {
+    return error.envelope;
+  }
+
+  if (
+    isMissingFileError(error) ||
+    (error instanceof Error && error.message === 'Invalid memory id')
+  ) {
+    return workspaceError('ERR_MEMORY_NOT_FOUND', 'Memory not found', 'none-written');
+  }
+
+  if (isUnsafeWorkspacePathError(error)) {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Memory path is unsafe',
+      'previous-file-preserved'
+    );
+  }
+
+  return workspaceError(
+    'ERR_MEMORY_UPDATE_FAILED',
+    'Memory title could not be updated',
+    'previous-file-preserved'
+  );
+}
+
 const memoryJsonSchema = z
   .object({
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
     title: z.string(),
-    sourceKind: z.literal('recording'),
     createdAt: z.string(),
     updatedAt: z.string(),
-    recordingIds: z.array(z.string().regex(RECORDING_ID_PATTERN)),
+    assetIds: z.array(z.string().regex(RECORDING_ASSET_ID_PATTERN)),
   })
   .strict();
 
@@ -659,10 +708,12 @@ function createWorkspaceDirectoryWithinParent({
   parentDirectory,
   directoryName,
   allowExisting = false,
+  beforeCommit,
 }: {
   readonly parentDirectory: string;
   readonly directoryName: string;
   readonly allowExisting?: boolean;
+  readonly beforeCommit?: () => void;
 }): void {
   const parentIdentity = readDirectoryIdentitySync(parentDirectory);
   const previousCwd = process.cwd();
@@ -670,6 +721,7 @@ function createWorkspaceDirectoryWithinParent({
   try {
     process.chdir(parentDirectory);
     assertSameCurrentDirectory(parentIdentity);
+    beforeCommit?.();
     try {
       mkdirSync(directoryName);
       directoryCreated = true;
@@ -957,13 +1009,13 @@ async function readFinalizedRecordingMetadata(
 }
 
 async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
-  let recordingCount = 0;
+  let assetCount = 0;
   let durationMs = 0;
   let audioByteLength = 0;
   let hasTranscript = false;
   let hasReflections = false;
 
-  for (const recordingId of memory.recordingIds) {
+  for (const recordingId of memory.assetIds) {
     try {
       const recordingDirectory = await memoryRecordingDirectory(
         rootPath,
@@ -972,7 +1024,7 @@ async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<Me
       );
       const recording = await summarizeRecording(rootPath, memory.memoryId, recordingId);
       const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-      recordingCount += 1;
+      assetCount += 1;
       durationMs += recording.durationMs;
       audioByteLength += recording.audioByteLength;
       hasTranscript =
@@ -999,7 +1051,7 @@ async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<Me
     title: memory.title,
     createdAt: memory.createdAt,
     updatedAt: memory.updatedAt,
-    recordingCount,
+    assetCount,
     durationMs,
     audioByteLength,
     hasTranscript,
@@ -1280,7 +1332,7 @@ export async function recoverRecordingFinalizeTransactions(
         );
         continue;
       }
-      const memoryReferencesRecording = memory.recordingIds.includes(recordingEntry.name);
+      const memoryReferencesRecording = memory.assetIds.includes(recordingEntry.name);
       if (memoryReferencesRecording) {
         if (!validFinalizedRecording) {
           validRecordingIds.add(recordingEntry.name);
@@ -1332,7 +1384,7 @@ export async function recoverRecordingFinalizeTransactions(
       );
       continue;
     }
-    for (const recordingId of memory.recordingIds) {
+    for (const recordingId of memory.assetIds) {
       if (!recordingsDirectory) {
         continue;
       }
@@ -1341,16 +1393,16 @@ export async function recoverRecordingFinalizeTransactions(
         validRecordingIds.add(recordingId);
       }
     }
-    const repairedRecordingIds = memory.recordingIds.filter((recordingId) =>
+    const repairedRecordingIds = memory.assetIds.filter((recordingId) =>
       validRecordingIds.has(recordingId)
     );
-    if (repairedRecordingIds.length !== memory.recordingIds.length) {
+    if (repairedRecordingIds.length !== memory.assetIds.length) {
       try {
         await assertRecoveryWorkspaceUsable?.();
         const currentMemoryDirectory = await memoryDirectory(rootPath, memoryId);
         await writeWorkspaceJsonAtomic(path.join(currentMemoryDirectory, 'memory.json'), {
           ...memory,
-          recordingIds: repairedRecordingIds,
+          assetIds: repairedRecordingIds,
         });
       } catch {
         continue;
@@ -2103,7 +2155,7 @@ async function finishFinalizeTransaction({
   }
 }
 
-async function createMemoryForRecordingWithHooks(
+async function createMemoryWithRecordingForTestFixture(
   input: CreateMemoryForRecordingInput,
   transactionHooks?: FinalizeTransactionHooks
 ): Promise<MemoryFilesResult<MemorySummary>> {
@@ -2117,10 +2169,9 @@ async function createMemoryForRecordingWithHooks(
       const memory: MemoryJson = {
         memoryId: input.memoryId,
         title: input.title,
-        sourceKind: 'recording',
         createdAt,
         updatedAt: createdAt,
-        recordingIds: [input.recordingId],
+        assetIds: [input.recordingId],
       };
       const { stagingRecordingDirectory, targetRecordingDirectory } =
         await copyDraftRecordingIntoMemory({
@@ -2165,17 +2216,95 @@ async function createMemoryForRecordingWithHooks(
   }
 }
 
-export async function createMemoryForRecording(
-  input: CreateMemoryForRecordingInput
-): Promise<MemoryFilesResult<MemorySummary>> {
-  return createMemoryForRecordingWithHooks(input);
-}
-
-export async function createMemoryForRecordingForTest(
+export async function createMemoryWithRecordingForTest(
   input: CreateMemoryForRecordingForTestInput
 ): Promise<MemoryFilesResult<MemorySummary>> {
   const { transactionHooks, ...productionInput } = input;
-  return createMemoryForRecordingWithHooks(productionInput, transactionHooks);
+  return createMemoryWithRecordingForTestFixture(productionInput, transactionHooks);
+}
+
+export async function createMemoryFromFileTruth(
+  input: CreateMemoryInput
+): Promise<MemoryFilesResult<MemorySummary>> {
+  let createdDirectory: string | null = null;
+  let memoryFileWritten = false;
+
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memoriesDirectory = await resolveSafeWorkspaceChild(
+        input.rootPath,
+        path.join(input.rootPath, 'memories')
+      );
+      await assertSafeExistingDirectory(
+        memoriesDirectory,
+        'Workspace memories directory is not safe'
+      );
+      createWorkspaceDirectoryWithinParent({
+        parentDirectory: memoriesDirectory,
+        directoryName: input.memoryId,
+        ...(input.assertWorkspaceUsable
+          ? { beforeCommit: () => assertWorkspaceUsable(input.assertWorkspaceUsable) }
+          : {}),
+      });
+      createdDirectory = await memoryDirectory(input.rootPath, input.memoryId);
+      await assertSafeExistingDirectory(createdDirectory, 'Workspace memory directory is not safe');
+
+      const createdAt = input.now();
+      const memory: MemoryJson = {
+        memoryId: input.memoryId,
+        title: input.title,
+        createdAt,
+        updatedAt: createdAt,
+        assetIds: [],
+      };
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      await writeWorkspaceJsonAtomic(
+        path.join(createdDirectory, 'memory.json'),
+        memory,
+        input.assertWorkspaceUsable
+          ? () => assertWorkspaceUsable(input.assertWorkspaceUsable)
+          : undefined
+      );
+      memoryFileWritten = true;
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      if (input.rebuildIndex) {
+        await input.rebuildIndex(input.rootPath);
+      } else {
+        await refreshMemoryIndexEntry(input.rootPath, input.memoryId, input.assertWorkspaceUsable);
+      }
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      return { ok: true, value: await summarizeMemory(input.rootPath, memory) };
+    });
+  } catch (error) {
+    let cleanupSucceeded = true;
+    if (createdDirectory && (!memoryFileWritten || !(error instanceof WorkspaceHandleLost))) {
+      cleanupSucceeded = await removeSafeWorkspaceDirectory(input.rootPath, createdDirectory, {
+        allowMissing: true,
+      }).catch(() => false);
+    }
+    if (memoryFileWritten && !(error instanceof WorkspaceHandleLost)) {
+      cleanupSucceeded =
+        (await rebuildMemoryIndex(input.rootPath).then(
+          () => true,
+          () => false
+        )) && cleanupSucceeded;
+    }
+    if (error instanceof WorkspaceHandleLost) {
+      return memoryFilesError(
+        error,
+        'ERR_MEMORY_CREATE_FAILED',
+        'Memory could not be created',
+        cleanupSucceeded ? 'none-written' : 'unknown'
+      );
+    }
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_CREATE_FAILED',
+      'Memory could not be created',
+      cleanupSucceeded ? 'none-written' : 'unknown'
+    );
+  }
 }
 
 async function appendRecordingToMemoryWithHooks(
@@ -2190,8 +2319,8 @@ async function appendRecordingToMemoryWithHooks(
       const next: MemoryJson = {
         ...current,
         updatedAt,
-        recordingIds: [
-          ...current.recordingIds.filter((recordingId) => recordingId !== input.recordingId),
+        assetIds: [
+          ...current.assetIds.filter((recordingId) => recordingId !== input.recordingId),
           input.recordingId,
         ],
       };
@@ -2260,19 +2389,25 @@ export async function readMemoryDetail(
     const summary = await readMemorySummaryFromIndex(input.rootPath, memory.memoryId);
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const recordings: MemoryRecordingSummary[] = [];
-    for (const recordingId of memory.recordingIds.slice(0, MEMORY_DETAIL_RECORDING_LIMIT)) {
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const recording = await summarizeRecording(input.rootPath, memory.memoryId, recordingId);
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      recordings.push(recording);
+    for (const recordingId of memory.assetIds.slice(0, MEMORY_DETAIL_RECORDING_LIMIT)) {
+      try {
+        assertWorkspaceUsable(input.assertWorkspaceUsable);
+        const recording = await summarizeRecording(input.rootPath, memory.memoryId, recordingId);
+        assertWorkspaceUsable(input.assertWorkspaceUsable);
+        recordings.push(recording);
+      } catch (error) {
+        if (error instanceof WorkspaceHandleLost) {
+          throw error;
+        }
+      }
     }
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     return {
       ok: true,
       value: {
         ...memory,
-        recordingCount: summary?.recordingCount ?? memory.recordingIds.length,
-        recordingsTruncated: memory.recordingIds.length > MEMORY_DETAIL_RECORDING_LIMIT,
+        assetCount: summary?.assetCount ?? memory.assetIds.length,
+        recordingsTruncated: memory.assetIds.length > MEMORY_DETAIL_RECORDING_LIMIT,
         hasTranscript: summary?.hasTranscript ?? false,
         hasReflections: summary?.hasReflections ?? false,
         recordings,
@@ -2287,16 +2422,26 @@ export async function updateMemoryTitleFromFileTruth(
   input: UpdateMemoryTitleInput
 ): Promise<MemoryFilesResult<MemorySummary>> {
   try {
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
       const current = await readMemoryJson(input.rootPath, input.memoryId);
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
       const next = { ...current, title: input.title, updatedAt: input.now() };
       const directory = await memoryDirectory(input.rootPath, input.memoryId);
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
       await writeWorkspaceJsonAtomic(path.join(directory, 'memory.json'), next);
-      await rebuildMemoryIndex(input.rootPath).catch(() => {});
-      return { ok: true, value: await summarizeMemory(input.rootPath, next) };
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const summary = await refreshMemoryIndexEntry(
+        input.rootPath,
+        input.memoryId,
+        input.assertWorkspaceUsable
+      ).catch(() => summarizeMemory(input.rootPath, next));
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      return { ok: true, value: summary };
     });
-  } catch {
-    return workspaceError('ERR_MEMORY_NOT_FOUND', 'Memory not found', 'previous-file-preserved');
+  } catch (error) {
+    return updateMemoryTitleError(error);
   }
 }
 

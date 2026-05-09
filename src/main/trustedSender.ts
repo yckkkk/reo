@@ -1,5 +1,8 @@
-import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
-import type { WorkspaceIpcChannel } from './workspaceChannels.js';
+import {
+  workspaceError,
+  type WorkspaceErrorEnvelope,
+} from '../workspace-contract/workspace-contract.js';
+import type { WorkspaceIpcChannel } from '../workspace-contract/workspace-channels.js';
 
 export interface TrustedSenderIdentity {
   readonly processId: number;

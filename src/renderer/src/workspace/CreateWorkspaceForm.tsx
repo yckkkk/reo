@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { isSafeWorkspaceDirectoryName } from '../../../workspace-contract/workspace-name';
 import { FolderPickerField } from './FolderPickerField';
 import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 import {
@@ -23,13 +24,10 @@ import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from 
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 const workspaceNameErrorMessage = '记忆空间名称不能是 . 或 ..，也不能包含路径分隔符';
-
-function isSafeWorkspaceName(value: string) {
-  return value !== '.' && value !== '..' && !/[\\/\0]/.test(value);
-}
+export const CREATE_WORKSPACE_TITLE_INPUT_ID = 'workspace-title';
 
 const createWorkspaceSchema = z.object({
-  title: z.string().trim().min(1, '请输入记忆空间名称').refine(isSafeWorkspaceName, {
+  title: z.string().trim().min(1, '请输入记忆空间名称').refine(isSafeWorkspaceDirectoryName, {
     message: workspaceNameErrorMessage,
   }),
   description: z.string(),
@@ -125,12 +123,12 @@ export function CreateWorkspaceForm({
       <FieldGroup aria-label="记忆空间设置">
         <FieldRow>
           <div>
-            <FieldLabel htmlFor="workspace-title">记忆空间名称</FieldLabel>
+            <FieldLabel htmlFor={CREATE_WORKSPACE_TITLE_INPUT_ID}>记忆空间名称</FieldLabel>
             <FieldHint>给新的记忆空间起一个名字</FieldHint>
           </div>
           <FieldControl>
             <Input
-              id="workspace-title"
+              id={CREATE_WORKSPACE_TITLE_INPUT_ID}
               size="compact"
               placeholder="记忆空间名称"
               {...titleRegistration}

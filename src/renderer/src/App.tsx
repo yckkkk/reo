@@ -6,20 +6,31 @@ import {
   type WorkspaceMemorySpace as SidebarWorkspaceMemorySpace,
 } from './app-shell/AppShell';
 import { ReoToaster, toast } from './components/ui/toaster';
+import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
+import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDetailPage } from './workspace/MemoryDetailPage';
-import { RecordingOverlay, type RecordingTarget } from './workspace/RecordingOverlay';
+import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
+import {
+  RecordingOverlay,
+  type RecordingTarget,
+  type SavedRecordingContent,
+} from './workspace/RecordingOverlay';
 import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
 import { WorkspaceErrorBanner } from './workspace/WorkspaceErrorBanner';
-import { WorkspaceHome } from './workspace/WorkspaceHome';
 import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
 import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
+import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
 import {
   closeWorkspace,
+  createMemory,
   openWorkspace,
   openMemorySpace,
   removeMemorySpace,
+  updateMemoryTitle,
   type FinalizedRecording,
+  type WorkspaceMemoryDetail,
+  type WorkspaceMemorySummary,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
 import {
@@ -32,17 +43,24 @@ import {
   seedWorkspaceSnapshot,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
 type WorkspaceView =
-  | { readonly name: 'home' }
+  | { readonly name: 'workspace-stage' }
   | { readonly name: 'library' }
   | { readonly name: 'memory-detail'; readonly memoryId: string };
 
-type TopLevelWorkspaceView = Extract<WorkspaceView, { readonly name: 'home' | 'library' }>;
+type TopLevelWorkspaceView = Extract<
+  WorkspaceView,
+  { readonly name: 'workspace-stage' | 'library' }
+>;
 type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
+type MemoryCreateIntent =
+  | { readonly afterCreate: 'stay-on-stage' }
+  | { readonly afterCreate: 'record-memory' };
 
-const HOME_VIEW: TopLevelWorkspaceView = { name: 'home' };
+const WORKSPACE_STAGE_VIEW: TopLevelWorkspaceView = { name: 'workspace-stage' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
 const OPEN_MEMORY_SPACE_ERROR = '无法打开记忆空间。';
 const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
@@ -87,16 +105,53 @@ export function mergeFinalizedRecordingIntoSession(
   };
 }
 
+export function mergeUpdatedMemoryIntoSession(
+  current: WorkspaceSession,
+  updatedMemory: WorkspaceMemorySummary
+): WorkspaceSession {
+  return {
+    ...current,
+    snapshot: {
+      ...current.snapshot,
+      memories: [
+        updatedMemory,
+        ...current.snapshot.memories.filter((memory) => memory.memoryId !== updatedMemory.memoryId),
+      ],
+    },
+  };
+}
+
+export function mergeSavedRecordingContentIntoDetail(
+  current: WorkspaceMemoryDetail | undefined,
+  memory: WorkspaceMemorySummary
+): WorkspaceMemoryDetail | undefined {
+  if (!current || current.memoryId !== memory.memoryId) {
+    return current;
+  }
+
+  return {
+    ...current,
+    assetCount: memory.assetCount,
+    hasReflections: memory.hasReflections,
+    hasTranscript: memory.hasTranscript,
+    title: memory.title,
+    updatedAt: memory.updatedAt,
+  };
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
   const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
   const [memorySpaceRemoveTarget, setMemorySpaceRemoveTarget] =
     useState<WorkspaceMemorySpaceListItem | null>(null);
+  const [memoryCreateIntent, setMemoryCreateIntent] = useState<MemoryCreateIntent | null>(null);
+  const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ name: 'home' });
+  const [memoryRailOpen, setMemoryRailOpen] = useState(true);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
 
@@ -116,9 +171,11 @@ export function App() {
 
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
-    setTopLevelWorkspaceView(HOME_VIEW);
+    setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
+    setMemoryCreateIntent(null);
+    setMemoryRenameTarget(null);
     setWorkspaceSession(nextWorkspaceSession);
     void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
   }
@@ -160,6 +217,8 @@ export function App() {
     }
 
     setRecordingTarget(null);
+    setMemoryCreateIntent(null);
+    setMemoryRenameTarget(null);
     setReadyWorkspaceSession(nextWorkspaceSession);
     return true;
   }
@@ -179,7 +238,9 @@ export function App() {
 
   function openWorkspaceCreateDialog() {
     setWorkspaceEntryError(null);
+    setMemoryCreateIntent(null);
     setMemorySpaceRemoveTarget(null);
+    setMemoryRenameTarget(null);
     setWorkspaceCreateOpen(true);
   }
 
@@ -219,6 +280,8 @@ export function App() {
       }
 
       setRecordingTarget(null);
+      setMemoryCreateIntent(null);
+      setMemoryRenameTarget(null);
       setWorkspaceSession(null);
       setTopLevelWorkspaceView(nextView);
     } catch (error) {
@@ -229,7 +292,7 @@ export function App() {
   }
 
   async function navigateHome() {
-    await navigateTopLevel(HOME_VIEW, '无法返回首页。');
+    await navigateTopLevel(WORKSPACE_STAGE_VIEW, '无法返回首页。');
   }
 
   async function navigateLibrary() {
@@ -239,6 +302,7 @@ export function App() {
   function openMemorySpaceRemoveDialog(memorySpace: WorkspaceMemorySpaceListItem) {
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
+    setMemoryCreateIntent(null);
     setMemorySpaceRemoveTarget(memorySpace);
   }
 
@@ -286,8 +350,10 @@ export function App() {
       let closeFailureMessage: string | null = null;
       if (activeSession) {
         setRecordingTarget(null);
+        setMemoryCreateIntent(null);
+        setMemoryRenameTarget(null);
         setWorkspaceSession(null);
-        setTopLevelWorkspaceView(HOME_VIEW);
+        setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
 
         try {
           const closeResponse = await closeWorkspace({
@@ -317,7 +383,7 @@ export function App() {
   async function selectMemorySpaceFromSidebar(workspaceId: string) {
     if (workspaceSession?.workspaceId === workspaceId) {
       handleWorkspaceCreateOpenChange(false);
-      setTopLevelWorkspaceView(HOME_VIEW);
+      setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
       return;
     }
 
@@ -459,19 +525,196 @@ export function App() {
   const activeWorkspaceSession = workspaceSession;
 
   function handleRecordingFinalized(finalized: FinalizedRecording) {
-    const nextSession = mergeFinalizedRecordingIntoSession(activeWorkspaceSession, finalized);
-    seedWorkspaceSnapshot(queryClient, nextSession);
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeFinalizedRecordingIntoSession(
+          {
+            ...activeWorkspaceSession,
+            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+          },
+          finalized
+        ).snapshot
+    );
     void queryClient.invalidateQueries({
       queryKey: memoryDetailQueryKey({
         memoryId: finalized.recording.memoryId,
         workspaceId: activeWorkspaceSession.workspaceId,
       }),
     });
-    setWorkspaceSession(nextSession);
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeFinalizedRecordingIntoSession(currentSession, finalized)
+        : currentSession
+    );
+  }
+
+  function seedEmptyMemoryDetail(memory: WorkspaceMemorySummary) {
+    queryClient.setQueryData<WorkspaceMemoryDetail>(
+      memoryDetailQueryKey({
+        memoryId: memory.memoryId,
+        workspaceId: activeWorkspaceSession.workspaceId,
+      }),
+      {
+        memoryId: memory.memoryId,
+        title: memory.title,
+        createdAt: memory.createdAt,
+        updatedAt: memory.updatedAt,
+        assetIds: [],
+        assetCount: memory.assetCount,
+        recordingsTruncated: false,
+        hasTranscript: memory.hasTranscript,
+        hasReflections: memory.hasReflections,
+        recordings: [],
+      }
+    );
+  }
+
+  function openMemoryCreateDialog(intent: MemoryCreateIntent) {
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemorySpaceRemoveTarget(null);
+    setMemoryRenameTarget(null);
+    setMemoryCreateIntent(intent);
+  }
+
+  function handleMemoryCreateOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setMemoryCreateIntent(null);
+    }
+  }
+
+  async function saveCreatedMemory(title: string) {
+    try {
+      const response = await createMemory({
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        title,
+      });
+
+      if (!response.ok) {
+        return workspaceErrorDisplayMessage(response.error, '无法新建记忆。');
+      }
+
+      const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+        snapshotQueryKey,
+        (currentSnapshot) =>
+          mergeUpdatedMemoryIntoSession(
+            {
+              ...activeWorkspaceSession,
+              snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+            },
+            response.value
+          ).snapshot
+      );
+      seedEmptyMemoryDetail(response.value);
+      setWorkspaceSession((currentSession) =>
+        currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+          ? mergeUpdatedMemoryIntoSession(currentSession, response.value)
+          : currentSession
+      );
+
+      if (memoryCreateIntent?.afterCreate === 'record-memory') {
+        openRecording({ kind: 'existing-memory', memoryId: response.value.memoryId });
+      } else {
+        setWorkspaceView(WORKSPACE_STAGE_VIEW);
+        toast.success('已新建记忆');
+      }
+
+      return null;
+    } catch (error) {
+      return unknownErrorDisplayMessage(error, '无法新建记忆。');
+    }
+  }
+
+  async function saveRenamedMemory(memory: WorkspaceMemorySummary, title: string) {
+    if (title === memory.title.trim()) {
+      return null;
+    }
+
+    try {
+      const response = await updateMemoryTitle({
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        memoryId: memory.memoryId,
+        title,
+      });
+
+      if (!response.ok) {
+        return workspaceErrorDisplayMessage(response.error, '无法重命名记忆。');
+      }
+
+      const detailQueryKey = memoryDetailQueryKey({
+        memoryId: response.value.memoryId,
+        workspaceId: activeWorkspaceSession.workspaceId,
+      });
+      const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+
+      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+        snapshotQueryKey,
+        (currentSnapshot) =>
+          mergeUpdatedMemoryIntoSession(
+            {
+              ...activeWorkspaceSession,
+              snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+            },
+            response.value
+          ).snapshot
+      );
+      queryClient.setQueryData<WorkspaceMemoryDetail | undefined>(detailQueryKey, (current) =>
+        mergeSavedRecordingContentIntoDetail(current, response.value)
+      );
+      void queryClient.invalidateQueries({ queryKey: detailQueryKey });
+      setWorkspaceSession((currentSession) =>
+        currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+          ? mergeUpdatedMemoryIntoSession(currentSession, response.value)
+          : currentSession
+      );
+      setMemoryRenameTarget(null);
+      toast.success('已重命名记忆');
+      return null;
+    } catch (error) {
+      return unknownErrorDisplayMessage(error, '无法重命名记忆。');
+    }
   }
 
   function openRecording(target: RecordingTarget) {
     setRecordingTarget(target);
+  }
+
+  function requestStartRecording() {
+    openMemoryCreateDialog({ afterCreate: 'record-memory' });
+  }
+
+  function handleRecordingContentSaved({ memory }: SavedRecordingContent) {
+    const detailQueryKey = memoryDetailQueryKey({
+      memoryId: memory.memoryId,
+      workspaceId: activeWorkspaceSession.workspaceId,
+    });
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeUpdatedMemoryIntoSession(
+          {
+            ...activeWorkspaceSession,
+            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+          },
+          memory
+        ).snapshot
+    );
+    queryClient.setQueryData<WorkspaceMemoryDetail | undefined>(detailQueryKey, (current) =>
+      mergeSavedRecordingContentIntoDetail(current, memory)
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeUpdatedMemoryIntoSession(currentSession, memory)
+        : currentSession
+    );
+  }
+
+  function toggleMemoryRail() {
+    setMemoryRailOpen((open) => !open);
   }
 
   function handleRecordingOpenChange(nextOpen: boolean) {
@@ -487,22 +730,34 @@ export function App() {
         {...shellProps}
         activeWorkspaceId={activeWorkspaceSession.workspaceId}
         activeSection={workspaceView.name === 'library' ? 'library' : 'workspace'}
+        panelTitlebar={
+          workspaceView.name === 'workspace-stage' ? (
+            <WorkspaceTitlebar
+              memoryRailOpen={memoryRailOpen}
+              onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
+              onToggleMemoryRail={toggleMemoryRail}
+              title={activeWorkspaceSession.snapshot.title}
+            />
+          ) : null
+        }
       >
         <WorkspaceContentWithEntryError error={visibleWorkspaceEntryError}>
           {workspaceView.name === 'library' ? (
             <WorkspaceLibraryPage />
-          ) : workspaceView.name === 'home' ? (
-            <WorkspaceHome
+          ) : workspaceView.name === 'workspace-stage' ? (
+            <LoadedWorkspaceFrame
               workspaceSession={activeWorkspaceSession}
+              memoryRailOpen={memoryRailOpen}
               onOpenMemory={(memoryId) => setWorkspaceView({ name: 'memory-detail', memoryId })}
-              onStartRecording={() => openRecording({ kind: 'new-memory' })}
+              onRenameMemory={setMemoryRenameTarget}
+              onStartRecording={requestStartRecording}
             />
           ) : (
             <MemoryDetailPage
               memoryId={workspaceView.memoryId}
               workspaceHandle={activeWorkspaceSession.workspaceHandle}
               workspaceId={activeWorkspaceSession.workspaceId}
-              onBack={() => setWorkspaceView({ name: 'home' })}
+              onBack={() => setWorkspaceView(WORKSPACE_STAGE_VIEW)}
               onRecordMemory={() =>
                 openRecording({ kind: 'existing-memory', memoryId: workspaceView.memoryId })
               }
@@ -512,6 +767,7 @@ export function App() {
       </AppShell>
       {recordingTarget ? (
         <RecordingOverlay
+          onRecordingContentSaved={handleRecordingContentSaved}
           onOpenChange={handleRecordingOpenChange}
           onRecordingFinalized={handleRecordingFinalized}
           open
@@ -519,6 +775,27 @@ export function App() {
           workspaceSession={activeWorkspaceSession}
         />
       ) : null}
+      <MemoryRenameDialog
+        memory={memoryRenameTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMemoryRenameTarget(null);
+          }
+        }}
+        onSave={saveRenamedMemory}
+        open={memoryRenameTarget !== null}
+      />
+      <MemoryCreateDialog
+        description={
+          memoryCreateIntent?.afterCreate === 'record-memory'
+            ? '创建记忆并开始录音'
+            : '保持简短且易识别'
+        }
+        onCreate={saveCreatedMemory}
+        onOpenChange={handleMemoryCreateOpenChange}
+        open={memoryCreateIntent !== null}
+        submitLabel={memoryCreateIntent?.afterCreate === 'record-memory' ? '开始录音' : '创建'}
+      />
       {workspaceDialogs}
     </>
   );

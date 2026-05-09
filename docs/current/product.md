@@ -4,125 +4,62 @@
 
 ## 定位
 
-Reo 是本地优先的 AI-ready 记忆空间。
+Reo 是本地优先的 AI-ready 记忆空间。它不是单纯录音工具，也不是文件管理器；录音、笔记、照片、视频和上传素材都应进入同一个 Workspace -> Memory -> Asset 模型。
 
-一个记忆空间是用户自定义主题的本地表达空间。用户可以在其中沉淀当前已实现的录音、转写草稿、反思笔记，以及后续进入同一 memory 模型的图片和视频等记忆材料。Reo 的核心目标是降低表达阻力，让用户更愿意记录和说话，并让这些记忆可以被回看、整理、迁移、重温和未来 AI 协作读取。
+一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是可持续生长的记忆。一个 Asset 是 Memory 内的表达片段。当前已实现的 Asset 类型是 recording；note、photo、video 和 upload 进入 runtime 前必须先定义 Asset 文件合同、IPC contract、查询更新和恢复路径。
 
-Reo 不限定用户用途。一个记忆空间可以是一门课、一本书、一次生活经历、一个生日派对、零碎灵感或任何用户定义的记忆主题。
-
-## 产品主线
-
-第一阶段只服务一条主线：让用户更愿意表达，并把表达沉淀成可移动、可重温、AI-readable 的 memory。
-
-第一阶段不是文件管理器、录音工具或 AI chat。Reo 的文件结构服务用户拥有和 AI 可读，产品体验服务表达、继续补充和重温。
+Reo 的核心目标是降低表达阻力，让用户更愿意记录、回看、继续补充，并让这些记忆保持用户拥有、可迁移、AI-readable。
 
 ## 产品气质
 
 Reo 是安静、克制、温柔、有时间感的私人表达工作室。用户打开 Reo 的第一印象不应是管理、协作、数据库、项目推进或效率压迫，而应是一个可以慢慢说话、慢慢回想、慢慢沉淀自己的空间。
 
-Reo 的北极星体验是降低表达阻力，让用户更愿意留下声音和笔记；照片、视频和图片等多模态表达进入后续 asset 能力时，也必须服务同一条 memory 主线，让这些表达可以被回看、整理、迁移、重温和未来 AI 协作读取。
+Reo 的美感来自对注意力的尊重：本地优先带来安全感，AI-ready 带来未来感，留白带来呼吸感，Memory 与 Asset 的生长关系带来生命感。
 
-进入 Reo 的内容不以“文件”姿态出现，而以 memory fragment 被接住。当前产品化的是录音、转写草稿和反思笔记；后续视频和图片进入时，也必须作为一条 memory 在一段时间里留下的资产和关系，最终汇聚成可继续生长、可重温、AI-readable 的 memory。
-
-Reo 的美感不来自装饰，也不来自极端简化，而来自对注意力的尊重。它本地优先带来安全感，AI-ready 带来未来感，留白带来呼吸感，时间线和多模态片段带来生命感。用户在这里不是为了完成事项，而是为了把某个瞬间留下来，把一次说话变成记忆，把一次回看变成新的表达，把零散灵感慢慢养成可以陪伴自己的内在资产。
-
-## 体验原则
-
-- 流程优先于页面。Home 开始表达、保存到草稿、补充成 memory、归入记忆空间、后续重温，这条链路必须顺。
-- 组件体验是产品核心。录音、暂停、继续、停止、保存、回放、笔记编辑、移动 memory、加入 review 都必须作为高质量交互组件设计。
-- 已有组件不自动代表完成。录音 drawer、audio player、记忆空间列表项、memory detail、form、sidebar 和 menu 都必须按完整用户流程重新审视。
-- 所有页面和状态都必须保护用户的表达意愿，避免把 Reo 做成任务、打卡、项目管理、文件管理或学习软件。
-- 不做复杂状态机。产品心智保持简单，必要复杂度留在文件事务、权限和恢复边界内。
-- 遵守雅各布定律。Home 使用 dashboard 心智，Library 使用空间管理心智，记忆空间使用 macOS split-view 和三面板心智。
-- 使用奥卡姆剃刀。不引入 inbox、folder、tag、collection、project、task、session 等额外实体，除非它们解决当前真实阻塞。
-
-## 核心实体
-
-- 记忆空间：用户自定义主题的本地记忆容器，包括系统草稿记忆空间。
-- `Memory`：一条可被保留、继续补充、移动、重温的记忆。
-- `Asset`：Memory 内的记忆材料。当前产品化录音、转写草稿和反思笔记；视频和图片属于后续 asset 能力。
-- `Review`：可选的 SRS 和记忆程度记录。
-
-## 信息架构
+## 当前页面模型
 
 ### Home
 
-Home 是全局 dashboard。它展示即时表达入口、草稿状态、最近记忆空间、今日重温摘要、表达和记忆概览。
-
-Home 不承担记忆空间文件管理。Home 的即时表达入口默认保存到草稿记忆空间。
+Home 当前是全局入口 shell。它提供进入记忆空间、资料库和创建或打开 Workspace 的入口，不承载 Workspace 内的 Memory 导航。
 
 ### Library
 
-Library 管理所有记忆空间。系统草稿记忆空间在 Library 中可见，并标记为系统空间。普通记忆空间可以创建、打开和进入。
+Library 当前是资料库占位入口。它只显示资料库页面标题，不展示 Memory、Asset 或 Workspace 管理内容。Workspace 创建、打开、切换和移除当前由 AppShell sidebar 的记忆空间列表承担。
 
-Library 是空间管理界面，不是文件浏览器。
+### Loaded Workspace
 
-### 记忆空间
+Loaded Workspace 使用三面板结构：
 
-记忆空间使用三面板结构：
+- 左侧 AppShell sidebar：全局导航和 Workspace 列表，保持当前入口，不承载当前 Workspace 内的 Memory 导航。
+- 中间 Workspace Stage：默认表达舞台。未选中 Memory 时只表达“今天想记录些什么？”，不显示 workspace feed、全局时间线或文件流。
+- 右侧 Memory rail：当前 Workspace 的全部 Memory 容器列表。它用于在 Memory 之间切换，不展示单个 Asset 详情。
 
-- 左面板：当前记忆空间的 memory 列表，可折叠为 tab。
-- 中间面板：主要体验区。
-- 右面板：未来 AI agent 结构位，可折叠为 tab；第一阶段不实现 AI runtime。
+当前 Workspace 标题显示在 AppShell panel titlebar。右上角 icon-only control 控制 Memory rail 折叠和展开；`新建记忆` icon-only control 先打开命名弹层，创建成功后才产生 Memory。
 
-中间面板有三个产品形态：
+## 核心层级
 
-- 记忆空间舞台：默认态。用户不需要先选择 memory 就能开始表达、继续最近内容或进入重温。
-- `Memory Studio`：选中 memory 后的详情态。聚合 assets、笔记、继续表达、回放、移动和 review 入口。
-- `Guided Recall`：后续嵌入模块。用于 SRS、复述、回看和记忆程度反馈。
+- Workspace 层级：当前本地记忆空间，右侧 Memory rail 展示这个空间里的所有 Memory。
+- Memory 层级：一条可持续生长的记忆。选中 Memory 后进入现有 memory detail route。
+- Asset 层级：Memory 内的表达片段。当前 runtime 只实现 recording asset；`assetIds` 是 Memory 的核心关系，当前只接受已实现的 recording asset id。
 
-### 草稿记忆空间
+中间面板的横向片段时间线只属于当前选中的 Memory。它不能表示整个 Workspace 的全部内容，也不能演变成 workspace feed、日志流、文件流或社交动态流。
 
-草稿记忆空间是 Reo 管理的系统记忆空间。它和普通记忆空间使用同一套数据模型；差别只是 root directory 由 Reo 确定。
+## 当前表达入口
 
-Home 的即时表达默认进入草稿记忆空间。草稿记忆空间第一阶段在 Library 里可见。后续 Home 可以增加草稿 panel，用于展示未归属 memory 数量和整理入口。
+底部 Floating Action Button Speed Dial 是 Workspace Stage 的表达入口。当前唯一可执行 action 是录音。note、photo、video 和 upload 只保留不可用的 icon-only action 位置，用于表达已接受的信息架构，不触发 runtime surface。
 
-第一阶段只支持移动整条 memory 到目标记忆空间，不支持单个 asset 跨记忆空间拆分移动。
+录音流程使用浏览器 `MediaRecorder` 和 `getUserMedia` 的薄 adapter。Renderer 先通过 IPC 获得一次性 microphone intent，再请求 audio-only media stream。音频 chunk 通过 IPC 串行写入 main process 的 durable draft；stop 必须等待 MediaRecorder 最后的 `dataavailable` chunk 完成后再 finalize。
+
+点击 Workspace Stage 的录音始终先进入新建 Memory 命名流程，创建成功后再进入录音流程。录音 finalize 必须显式归属到这个 Memory。在 Memory detail 中点击继续记录会追加到当前 Memory。
+
+## 当前 Memory Detail
+
+当前 Memory detail route 展示一条 Memory 的基础信息、recording summary、继续记录入口，以及 finalized recording 的本地回放、转写草稿和反思草稿编辑能力。
+
+当前 detail 不是完整 Memory Studio。片段时间线、多模态 Asset 聚合、独立笔记 Asset、图片 Asset、视频 Asset 和 upload Asset 进入前必须先补齐文件合同、IPC、查询更新、错误恢复和视觉验证。
 
 ## AI 边界
 
-第一阶段不实现 Reo runtime 内的 AI agent、chat、tool use、自动整理或 AI side effects。
+当前不实现 Reo runtime 内的 AI agent、chat、tool use、自动整理或 AI side effects。
 
-当前 AI-ready 的验证方式是 Codex CLI 能直接读取记忆空间文件、`AGENTS.md`、memory、asset 和 review 文件，并理解记忆空间目的和协作规则。
-
-右侧 AI 面板第一阶段只是结构位。它不能展示伪聊天、假输出或未实现能力。
-
-## 关键体验组件
-
-### 录音表达组件
-
-录音表达组件是第一阶段最高优先级组件，也是产品中最有辨识度和情绪价值的核心体验。它必须覆盖：
-
-- 开始前降低表达压力。
-- 麦克风权限说明清楚。
-- 录音中提供稳定的动态 waveform、timer、时间轴、暂停和停止反馈。
-- 暂停后可以继续或放弃。
-- 停止后可以回放、改标题、补充笔记和保存草稿。
-- 失败时保留可恢复内容，不让用户误以为内容丢失。
-- 保存后进入 Memory Studio 或草稿整理路径。
-
-录音流程必须让用户感到内容安全、表达自由，整理可以稍后发生。
-
-### Memory Studio
-
-Memory Studio 是一条 memory 的记忆生长现场。当前展示录音回放、转写草稿、反思笔记、继续表达、归入记忆空间、加入 review；后续 asset 能力进入后再展示多模态聚合。
-
-Memory Studio 不是文件详情页。它表达的是“这条记忆如何继续生长”。
-
-Memory Studio 中的 asset 不应表现为附件堆叠，而应表现为声音、文字和想法在一段时间里的关系；后续图片和视频进入后再扩展为画面关系。
-
-### Move Memory
-
-Move Memory 组件负责把整条 memory 从草稿记忆空间移动到目标记忆空间。
-
-第一阶段不支持移动单个 asset。移动交互应表现为“归入某个记忆空间”，不能把文件事务复杂性暴露给用户。
-
-### Review
-
-Review 是可选 SRS 入口。第一阶段只做轻量记忆程度、下次重温和复述入口，不引入复杂学习算法或完整学习软件模型。
-
-Review 的语气是重新遇见过去自己的邀请，而不是任务、打卡或学习软件。回顾提示可以表达为“今日适合回看”“这段内容与你最近的想法有关”“回看后继续表达”。
-
-### Library 记忆空间
-
-Library 记忆空间组件展示草稿记忆空间、普通记忆空间、最近使用、创建和打开。它必须让用户理解草稿记忆空间是真实记忆空间，而不是第二套 inbox。
+AI-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、recording asset 和用户编辑文本可以被外部 AI 工具读取并理解。

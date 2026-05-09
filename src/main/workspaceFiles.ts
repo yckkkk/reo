@@ -29,7 +29,7 @@ import {
   workspaceMemorySummarySchema,
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
-} from './workspaceContract.js';
+} from '../workspace-contract/workspace-contract.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
 
 const WORKSPACE_SCHEMA_VERSION = 1;
@@ -167,7 +167,7 @@ function sameMemorySummaries(
       memory.title === other.title &&
       memory.createdAt === other.createdAt &&
       memory.updatedAt === other.updatedAt &&
-      memory.recordingCount === other.recordingCount &&
+      memory.assetCount === other.assetCount &&
       memory.durationMs === other.durationMs &&
       memory.audioByteLength === other.audioByteLength &&
       memory.hasTranscript === other.hasTranscript &&

@@ -100,6 +100,8 @@ describe('AppShell', () => {
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('button', { name: '记忆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
     expect(screen.getByText('记忆空间')).toHaveClass('text-ui-sm', 'font-regular');
     const activeWorkspaceButton = screen.getByRole('button', { name: 'reo' });
@@ -148,9 +150,9 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
-    const menu = screen.getByRole('menu', { name: '添加记忆空间菜单' });
+    const menu = screen.getByRole('menu', { name: '添加记忆空间' });
     expect(menu).toHaveClass('rounded-xl', 'bg-card-white');
-    expect(menu).toHaveClass('absolute', 'left-0', 'top-36');
+    expect(menu).toHaveAttribute('data-slot', 'dropdown-menu-content');
     expect(menu).not.toHaveClass('left-full', 'ml-8');
     expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
       zIndex: '4',
@@ -203,6 +205,24 @@ describe('AppShell', () => {
     expect(addButton).toHaveAttribute('data-state', 'open');
   });
 
+  it('restores focus to the add workspace trigger when its menu closes without launching a flow', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TestAppShell>
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    const addButton = screen.getByRole('button', { name: '添加记忆空间' });
+
+    await user.click(addButton);
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
+    expect(addButton).toHaveFocus();
+  });
+
   it('gives each interactive component an accessible name instead of positional names', async () => {
     const user = userEvent.setup();
 
@@ -214,7 +234,7 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
-    for (const button of screen.getAllByRole('button')) {
+    for (const button of screen.queryAllByRole('button')) {
       expect(button).toHaveAccessibleName();
     }
     for (const menuItem of screen.getAllByRole('menuitem')) {
@@ -253,24 +273,24 @@ describe('AppShell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
-    expect(screen.getByRole('menu', { name: '添加记忆空间菜单' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: '添加记忆空间' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '首页' }));
 
     expect(onHome).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('button', { name: '资料库' }));
 
     expect(onLibrary).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('button', { name: 'MemoryOS_V1' }));
 
     expect(onSelectMemorySpace).toHaveBeenCalledWith('ws_memory');
-    expect(screen.queryByRole('menu', { name: '添加记忆空间菜单' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
   });
 
   it('opens a workspace item more menu and requests removal from the workspace list', async () => {
@@ -289,7 +309,7 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('button', { name: 'reo 更多操作' }));
 
-    expect(screen.getByRole('menu', { name: 'reo 记忆空间操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: 'reo 更多操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'reo 更多操作' })).toHaveClass(
       'data-[state=open]:pointer-events-auto',
       'data-[state=open]:opacity-100'
@@ -304,7 +324,7 @@ describe('AppShell', () => {
       title: 'reo',
       workspaceId: 'ws_reo',
     });
-    expect(screen.queryByRole('menu', { name: 'reo 记忆空间操作' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: 'reo 更多操作' })).not.toBeInTheDocument();
   });
 
   it('toggles the app theme from the sidebar tool area', () => {

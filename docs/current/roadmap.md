@@ -33,7 +33,7 @@
 - 草稿记忆空间作为默认保存目标。
 - 录音表达组件完整交互。
 - 录音保存后形成 memory 和 audio asset。
-- 保存后进入 Memory Studio 或明确的草稿结果状态。
+- 保存后形成 memory；后续进入 Memory Studio 或明确的草稿结果状态。
 
 质量门槛：
 

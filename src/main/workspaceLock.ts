@@ -20,7 +20,10 @@ import {
   type DirectoryIdentity,
 } from './directoryIdentity.js';
 import { ensureWorkspaceReoDirectory } from './workspacePaths.js';
-import { workspaceError, type WorkspaceErrorEnvelope } from './workspaceContract.js';
+import {
+  workspaceError,
+  type WorkspaceErrorEnvelope,
+} from '../workspace-contract/workspace-contract.js';
 
 let afterWorkspaceLockDirectoryCreateForTest: (() => void) | null = null;
 

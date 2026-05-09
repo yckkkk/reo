@@ -20,7 +20,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 ## 技术路线
 
-以下是已确认技术路线，不代表当前全部已安装、已配置或已被当前 slice 激活：
+以下是当前技术路线，不代表当前全部已安装、已配置或已被当前能力激活：
 
 - React 19 + TypeScript
 - Vite through `electron-vite`
@@ -38,7 +38,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 ## 实施规则
 
-只在实现对应 foundation slice 时安装或配置相关包。不得加入空闲依赖、占位目录或未来架构壳。
+只在实现对应基础能力时安装或配置相关包。不得加入空闲依赖、占位目录或未来架构壳。
 
 技术路线不是激活许可。任何 package、provider、schema、IPC、component source、store、query client、auth、DB、logging、packaging 或 updater 能力，都必须先有当前 feature 的 exact consumer、capability contract、测试路径和 `docs/current/*` 更新。
 

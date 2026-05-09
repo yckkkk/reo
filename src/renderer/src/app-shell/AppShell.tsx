@@ -12,7 +12,12 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
-import { MenuItemButton, MenuSurface } from '@/components/ui/menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -48,6 +53,7 @@ type AppShellProps = {
   readonly onToggleTheme: () => void;
   readonly themeMode: ThemeMode;
   readonly memorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
+  readonly panelTitlebar?: React.ReactNode;
 };
 
 export type WorkspaceMemorySpace = {
@@ -80,6 +86,7 @@ export function AppShell({
   onRemoveMemorySpace,
   onSelectMemorySpace,
   onToggleTheme,
+  panelTitlebar,
   themeMode,
   memorySpaces = [],
 }: AppShellProps) {
@@ -90,6 +97,7 @@ export function AppShell({
   const [workspaceMemorySpaceMenuOpen, setWorkspaceMemorySpaceMenuOpen] = React.useState<
     string | null
   >(null);
+  const suppressWorkspaceMenuCloseAutoFocusRef = React.useRef(false);
   const safeSidebarWidth = clampSidebarWidth(sidebarWidth);
 
   function handleResizePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -129,6 +137,10 @@ export function AppShell({
   }
 
   const panelLeft = sidebarState === 'expanded' ? `${safeSidebarWidth}px` : '0px';
+  const panelTitlebarLeft =
+    sidebarState === 'expanded'
+      ? panelLeft
+      : 'calc(var(--spacing-titlebar-control-left) + var(--spacing-titlebar-control-size) + var(--spacing-titlebar-control-gap) - var(--spacing-panel-titlebar-x))';
   const panelRadius =
     sidebarState === 'expanded' ? `${PANEL_RADIUS}px 0 0 ${PANEL_RADIUS}px` : '0px';
   const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
@@ -147,6 +159,7 @@ export function AppShell({
   }
 
   function handleCreateWorkspace() {
+    suppressWorkspaceMenuCloseAutoFocusRef.current = true;
     closeSidebarMenus();
     onCreateWorkspace?.();
   }
@@ -162,6 +175,7 @@ export function AppShell({
   }
 
   function handleOpenLocalWorkspace() {
+    suppressWorkspaceMenuCloseAutoFocusRef.current = true;
     closeSidebarMenus();
     onOpenLocalWorkspace?.();
   }
@@ -169,13 +183,6 @@ export function AppShell({
   function handleSelectMemorySpace(workspaceId: string) {
     closeSidebarMenus();
     onSelectMemorySpace?.(workspaceId);
-  }
-
-  function handleToggleMemorySpaceMenu(workspaceId: string) {
-    setWorkspaceMenuOpen(false);
-    setWorkspaceMemorySpaceMenuOpen((openWorkspaceId) =>
-      openWorkspaceId === workspaceId ? null : workspaceId
-    );
   }
 
   function handleRemoveMemorySpace(memorySpace: WorkspaceMemorySpace) {
@@ -221,6 +228,19 @@ export function AppShell({
               <SidebarToggleIcon className="size-16" aria-hidden="true" />
             </Button>
           </div>
+          {panelTitlebar ? (
+            <div
+              data-slot="app-shell-panel-titlebar-content"
+              className={`pointer-events-none absolute flex h-titlebar items-center ${panelMotionClass}`}
+              style={{
+                left: panelTitlebarLeft,
+                right: 0,
+                top: 'calc(var(--spacing-titlebar-control-top) + ((var(--spacing-titlebar-control-size) - var(--spacing-titlebar)) / 2))',
+              }}
+            >
+              {panelTitlebar}
+            </div>
+          ) : null}
         </div>
 
         <aside
@@ -267,42 +287,48 @@ export function AppShell({
               </h2>
               {onCreateWorkspace || onOpenLocalWorkspace ? (
                 <div className="relative shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghostIcon"
-                    size="icon"
-                    aria-expanded={workspaceMenuOpen}
-                    aria-haspopup="menu"
-                    aria-label="添加记忆空间"
-                    data-state={workspaceMenuOpen ? 'open' : 'closed'}
-                    className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
-                    onClick={() => {
-                      setWorkspaceMemorySpaceMenuOpen(null);
-                      setWorkspaceMenuOpen((open) => !open);
+                  <DropdownMenu
+                    open={workspaceMenuOpen}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        suppressWorkspaceMenuCloseAutoFocusRef.current = false;
+                        setWorkspaceMemorySpaceMenuOpen(null);
+                      }
+                      setWorkspaceMenuOpen(open);
                     }}
                   >
-                    <FolderPlus className="size-16" aria-hidden="true" />
-                  </Button>
-
-                  {workspaceMenuOpen ? (
-                    <MenuSurface
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghostIcon"
+                        size="icon"
+                        aria-label="添加记忆空间"
+                        className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
+                      >
+                        <FolderPlus className="size-16" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      side="bottom"
                       aria-label="添加记忆空间菜单"
-                      className="absolute left-0 top-36 z-10"
+                      onCloseAutoFocus={(event) => {
+                        if (suppressWorkspaceMenuCloseAutoFocusRef.current) {
+                          event.preventDefault();
+                          suppressWorkspaceMenuCloseAutoFocusRef.current = false;
+                        }
+                      }}
                     >
-                      <MenuItemButton
-                        icon={<FolderPlus className="size-16" aria-hidden="true" />}
-                        onClick={handleCreateWorkspace}
-                      >
+                      <DropdownMenuItem onSelect={handleCreateWorkspace}>
+                        <FolderPlus className="size-16 text-slate" aria-hidden="true" />
                         创建本地记忆空间
-                      </MenuItemButton>
-                      <MenuItemButton
-                        icon={<Folder className="size-16" aria-hidden="true" />}
-                        onClick={handleOpenLocalWorkspace}
-                      >
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleOpenLocalWorkspace}>
+                        <Folder className="size-16 text-slate" aria-hidden="true" />
                         打开本地记忆空间
-                      </MenuItemButton>
-                    </MenuSurface>
-                  ) : null}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               ) : null}
             </div>
@@ -338,32 +364,35 @@ export function AppShell({
                       ) : null}
                     </Button>
                     {onRemoveMemorySpace ? (
-                      <Button
-                        type="button"
-                        variant="ghostIcon"
-                        size="icon"
-                        aria-expanded={memorySpaceMenuOpen}
-                        aria-haspopup="menu"
-                        aria-label={`${memorySpace.title} 更多操作`}
-                        data-state={memorySpaceMenuOpen ? 'open' : 'closed'}
-                        className={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
-                        onClick={() => handleToggleMemorySpaceMenu(memorySpace.workspaceId)}
+                      <DropdownMenu
+                        open={memorySpaceMenuOpen}
+                        onOpenChange={(open) => {
+                          setWorkspaceMenuOpen(false);
+                          setWorkspaceMemorySpaceMenuOpen(open ? memorySpace.workspaceId : null);
+                        }}
                       >
-                        <MoreHorizontal className="size-16" aria-hidden="true" />
-                      </Button>
-                    ) : null}
-                    {memorySpaceMenuOpen ? (
-                      <MenuSurface
-                        aria-label={`${memorySpace.title} 记忆空间操作`}
-                        className="absolute right-0 top-36 z-10"
-                      >
-                        <MenuItemButton
-                          icon={<Trash2 className="size-16" aria-hidden="true" />}
-                          onClick={() => handleRemoveMemorySpace(memorySpace)}
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghostIcon"
+                            size="icon"
+                            aria-label={`${memorySpace.title} 更多操作`}
+                            className={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
+                          >
+                            <MoreHorizontal className="size-16" aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          side="bottom"
+                          aria-label={`${memorySpace.title} 记忆空间操作`}
                         >
-                          移除记忆空间
-                        </MenuItemButton>
-                      </MenuSurface>
+                          <DropdownMenuItem onSelect={() => handleRemoveMemorySpace(memorySpace)}>
+                            <Trash2 className="size-16 text-slate" aria-hidden="true" />
+                            移除记忆空间
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     ) : null}
                   </div>
                 );

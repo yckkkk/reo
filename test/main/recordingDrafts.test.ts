@@ -27,6 +27,7 @@ import {
   setBeforeDraftDirectoryCreateForTest,
   setBeforeMarkdownWriteForTest,
 } from '../../src/main/recordingDrafts.js';
+import { createMemoryFromFileTruth } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 
 async function writeFinalizedRecordingForTest(
@@ -41,10 +42,9 @@ async function writeFinalizedRecordingForTest(
     `${JSON.stringify({
       memoryId: 'mem_active_draft_clear',
       title: 'Active draft clear',
-      sourceKind: 'recording',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      recordingIds: [recordingId],
+      assetIds: [recordingId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1]));
@@ -91,6 +91,26 @@ function workspaceLockLost() {
       message: 'Workspace lock was lost',
     },
   } as const;
+}
+
+async function createMemoryForDraftFinalize({
+  rootPath,
+  memoryId,
+  title,
+  now,
+}: {
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly title: string;
+  readonly now: string;
+}) {
+  const created = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title,
+    now: () => now,
+  });
+  assert.equal(created.ok, true);
 }
 
 test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits for append idle', async () => {
@@ -141,12 +161,19 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     assert.equal(tooLarge.error.code, 'ERR_RECORDING_CHUNK_TOO_LARGE');
   }
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_000001',
+    title: '第一段录音',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+
   assert.deepEqual(
     await finalizeRecordingDraft({
       durationMs: 0,
       rootPath,
       recordingId: 'rec_20260506_000001',
-      createMemoryId: () => 'mem_20260506_000001',
+      memoryId: 'mem_20260506_000001',
       title: '第一段录音',
       now: () => '2026-05-06T13:09:00.000Z',
     }),
@@ -164,7 +191,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         title: '第一段录音',
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
-        recordingCount: 1,
+        assetCount: 1,
         durationMs: 0,
         audioByteLength: 3,
         hasTranscript: false,
@@ -208,7 +235,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       title: '第一段录音',
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      recordingCount: 1,
+      assetCount: 1,
       durationMs: 0,
       audioByteLength: 3,
       hasTranscript: false,
@@ -280,11 +307,18 @@ test('recording finalize preserves draft transcript and reflections markdown', a
     true
   );
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_markdown_preserve',
+    title: '保留草稿',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+
   const finalized = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
     recordingId: 'rec_20260506_markdown_preserve',
-    createMemoryId: () => 'mem_20260506_markdown_preserve',
+    memoryId: 'mem_20260506_markdown_preserve',
     title: '保留草稿',
     now: () => '2026-05-06T13:09:00.000Z',
   });
@@ -334,11 +368,18 @@ test('recording finalize rejects unknown draft files before durable expose', asy
     'unexpected'
   );
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_unknown_draft_file',
+    title: 'Unknown draft file',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+
   const finalized = await finalizeRecordingDraft({
     durationMs: 1000,
     rootPath,
     recordingId,
-    createMemoryId: () => 'mem_unknown_draft_file',
+    memoryId: 'mem_unknown_draft_file',
     title: 'Unknown draft file',
     now: () => '2026-05-06T13:09:00.000Z',
   });
@@ -484,11 +525,18 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
   await rm(draftAudioPath);
   await mkdir(draftAudioPath);
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_audio_directory',
+    title: '非法音频',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+
   const finalized = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
     recordingId: 'rec_20260506_audio_directory',
-    createMemoryId: () => 'mem_20260506_audio_directory',
+    memoryId: 'mem_20260506_audio_directory',
     title: '非法音频',
     now: () => '2026-05-06T13:09:00.000Z',
   });
@@ -511,7 +559,19 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
   );
   assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8')), {
     schemaVersion: 1,
-    memories: [],
+    memories: [
+      {
+        memoryId: 'mem_20260506_audio_directory',
+        title: '非法音频',
+        createdAt: '2026-05-06T13:09:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        assetCount: 0,
+        durationMs: 0,
+        audioByteLength: 0,
+        hasTranscript: false,
+        hasReflections: false,
+      },
+    ],
   });
 });
 
@@ -953,11 +1013,18 @@ test('recording finalize blocks late append while finalization is active', async
     chunk: new Uint8Array([1, 2, 3]),
   });
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_000002',
+    title: '并发录音',
+    now: '2026-05-06T13:11:00.000Z',
+  });
+
   const finalize = finalizeRecordingDraft({
     durationMs: 0,
     rootPath,
     recordingId: 'rec_20260506_000002',
-    createMemoryId: () => 'mem_20260506_000002',
+    memoryId: 'mem_20260506_000002',
     title: '并发录音',
     now: () => '2026-05-06T13:11:00.000Z',
   });
@@ -1000,11 +1067,18 @@ test('recording append rejects stale draft when a finalized recording already ex
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_stale_draft',
+    title: '已完成录音',
+    now: '2026-05-06T13:11:00.000Z',
+  });
+
   const finalized = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
     recordingId: 'rec_20260506_stale_draft',
-    createMemoryId: () => 'mem_20260506_stale_draft',
+    memoryId: 'mem_20260506_stale_draft',
     title: '已完成录音',
     now: () => '2026-05-06T13:11:00.000Z',
   });
@@ -1103,11 +1177,18 @@ test('recording finalize returns error envelope when durable audio is missing', 
     path.join(rootPath, '.reo', 'drafts', 'recordings', 'rec_20260506_000003', 'audio.webm')
   );
 
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_000003',
+    title: '缺失音频',
+    now: '2026-05-06T13:13:00.000Z',
+  });
+
   const finalized = await finalizeRecordingDraft({
     durationMs: 0,
     rootPath,
     recordingId: 'rec_20260506_000003',
-    createMemoryId: () => 'mem_20260506_000003',
+    memoryId: 'mem_20260506_000003',
     title: '缺失音频',
     now: () => '2026-05-06T13:13:00.000Z',
   });
@@ -1133,6 +1214,12 @@ test('recording finalize preserves draft metadata when index update fails', asyn
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_20260506_000004',
+    title: '索引失败录音',
+    now: '2026-05-06T13:15:00.000Z',
+  });
   const indexPath = path.join(rootPath, '.reo', 'index.json');
   await rm(indexPath);
   await mkdir(indexPath);
@@ -1141,7 +1228,7 @@ test('recording finalize preserves draft metadata when index update fails', asyn
     durationMs: 0,
     rootPath,
     recordingId: 'rec_20260506_000004',
-    createMemoryId: () => 'mem_20260506_000004',
+    memoryId: 'mem_20260506_000004',
     title: '索引失败录音',
     now: () => '2026-05-06T13:15:00.000Z',
   });
@@ -1176,13 +1263,20 @@ test('recording finalize returns only the appended recording byte length for exi
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3, 4, 5]),
   });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_existing_size',
+    title: 'Seed',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+
   assert.equal(
     (
       await finalizeRecordingDraft({
         rootPath,
         workspaceId: 'ws_draft',
         recordingId: 'rec_seed',
-        createMemoryId: () => 'mem_existing_size',
+        memoryId: 'mem_existing_size',
         title: 'Seed',
         durationMs: 1000,
         now: () => '2026-05-06T13:09:00.000Z',
@@ -1228,7 +1322,7 @@ test('recording finalize returns only the appended recording byte length for exi
         title: 'Seed',
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:11:00.000Z',
-        recordingCount: 2,
+        assetCount: 2,
         durationMs: 3000,
         audioByteLength: 7,
         hasTranscript: false,

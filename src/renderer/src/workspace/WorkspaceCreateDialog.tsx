@@ -1,13 +1,15 @@
 import { X } from 'lucide-react';
+import { useLayoutEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { CreateWorkspaceForm } from './CreateWorkspaceForm';
+import { CREATE_WORKSPACE_TITLE_INPUT_ID, CreateWorkspaceForm } from './CreateWorkspaceForm';
 import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 import type { WorkspaceSession } from './workspaceApi';
 
@@ -30,12 +32,27 @@ export function WorkspaceCreateDialog({
   onWorkspaceReady,
   open,
 }: WorkspaceCreateDialogProps) {
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    document.getElementById(CREATE_WORKSPACE_TITLE_INPUT_ID)?.focus();
+  }, [open]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-(var(--spacing-40)*2))] overflow-y-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))]">
+      <DialogContent
+        className="max-h-[calc(100vh-(var(--spacing-40)*2))] overflow-y-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))]"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          document.getElementById(CREATE_WORKSPACE_TITLE_INPUT_ID)?.focus();
+        }}
+      >
         <div className="flex items-start justify-between gap-24">
           <DialogHeader className="gap-0">
             <DialogTitle>创建本地记忆空间</DialogTitle>
+            <DialogDescription className="sr-only">选择位置并创建本地记忆空间。</DialogDescription>
           </DialogHeader>
           <DialogClose asChild>
             <Button

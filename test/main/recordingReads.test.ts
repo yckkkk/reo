@@ -17,6 +17,7 @@ import {
   setBeforeMarkdownWriteForTest,
 } from '../../src/main/recordingDrafts.js';
 import {
+  createMemoryFromFileTruth,
   rebuildMemoryIndex,
   setBeforeDuplicateRecordingCheckForTest,
   setBeforeMemoryIndexEntryReadForTest,
@@ -52,11 +53,18 @@ async function finalizedWorkspace(): Promise<string> {
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3, 4]),
   });
+  const memory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_20260506_000001',
+    title: '读取',
+    now: () => '2026-05-06T13:09:00.000Z',
+  });
+  assert.equal(memory.ok, true);
   await finalizeRecordingDraft({
     durationMs: 1000,
     rootPath,
     recordingId: 'rec_20260506_000001',
-    createMemoryId: () => 'mem_20260506_000001',
+    memoryId: 'mem_20260506_000001',
     title: '读取',
     now: () => '2026-05-06T13:09:00.000Z',
   });
@@ -291,10 +299,9 @@ test('finalized audio symlinks are rejected before manifest or chunk reads', asy
     JSON.stringify({
       memoryId: 'mem_audio_link',
       title: 'Audio link',
-      sourceKind: 'recording',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
-      recordingIds: ['rec_audio_link'],
+      assetIds: ['rec_audio_link'],
     })
   );
   await symlink(outsideAudio, path.join(recordingDirectory, 'audio.webm'));
@@ -1044,11 +1051,18 @@ test('concurrent markdown saves preserve both memory index entry refreshes', asy
     sequence: 0,
     chunk: new Uint8Array([5, 6]),
   });
+  const createdSecondMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_20260506_000002',
+    title: '第二段',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(createdSecondMemory.ok, true);
   const second = await finalizeRecordingDraft({
     durationMs: 2000,
     rootPath,
     recordingId: 'rec_20260506_000002',
-    createMemoryId: () => 'mem_20260506_000002',
+    memoryId: 'mem_20260506_000002',
     title: '第二段',
     now: () => '2026-05-06T13:11:00.000Z',
   });

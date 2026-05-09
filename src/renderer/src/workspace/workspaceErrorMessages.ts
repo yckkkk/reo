@@ -1,10 +1,14 @@
+import type { WorkspaceErrorCode } from '../../../workspace-contract/workspace-contract';
+
 type WorkspaceErrorLike = {
   readonly code?: string;
   readonly message?: string;
 };
 
-const workspaceErrorMessages: Record<string, string> = {
+const workspaceErrorMessages = {
+  ERR_MEMORY_CREATE_FAILED: '无法新建记忆。',
   ERR_MEMORY_NOT_FOUND: '找不到这条记忆。',
+  ERR_MEMORY_UPDATE_FAILED: '无法更新这条记忆。',
   ERR_MIC_INTENT_ALREADY_ACTIVE: '麦克风正在被另一个录音流程使用。',
   ERR_RECORDING_APPEND_FAILED: '无法保存录音音频。',
   ERR_RECORDING_APPEND_IN_FLIGHT: '正在保存上一段录音音频。',
@@ -39,7 +43,11 @@ const workspaceErrorMessages: Record<string, string> = {
   ERR_WORKSPACE_SELECTION_SENDER_MISMATCH: '文件夹选择来自其他窗口，请重新选择。',
   ERR_WORKSPACE_UNSAFE_PATH: '该文件夹不适合作为记忆空间。',
   ERR_WORKSPACE_UNTRUSTED_SENDER: '当前窗口没有权限执行此操作。',
-};
+} satisfies Partial<Record<WorkspaceErrorCode, string>>;
+
+function isMappedWorkspaceErrorCode(code: string): code is keyof typeof workspaceErrorMessages {
+  return code in workspaceErrorMessages;
+}
 
 function isEnglishMessage(message: string) {
   return /[A-Za-z]/.test(message);
@@ -53,7 +61,10 @@ export function workspaceErrorDisplayMessage(
     return fallback;
   }
 
-  const mappedMessage = error.code ? workspaceErrorMessages[error.code] : undefined;
+  const mappedMessage =
+    error.code && isMappedWorkspaceErrorCode(error.code)
+      ? workspaceErrorMessages[error.code]
+      : undefined;
   if (mappedMessage) {
     return mappedMessage;
   }

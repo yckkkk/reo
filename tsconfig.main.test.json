@@ -6,5 +6,10 @@
     "rootDir": ".",
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.main.test.tsbuildinfo"
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "test/main/**/*.ts"]
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/workspace-contract/**/*.ts",
+    "test/main/**/*.ts"
+  ]
 }
