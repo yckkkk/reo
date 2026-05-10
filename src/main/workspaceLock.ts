@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   closeSync,
   constants,
@@ -26,6 +27,16 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 
 let afterWorkspaceLockDirectoryCreateForTest: (() => void) | null = null;
+
+const LOCK_OWNER_SCHEMA_VERSION = 2;
+const LOCK_OWNER_MAX_BYTES = 512;
+const PROCESS_START_TIME_TOLERANCE_MS = 5_000;
+
+interface LockOwner {
+  readonly pid: number;
+  readonly processStartTimeMs: number | null;
+  readonly ownerFileMtimeMs: number;
+}
 
 function unsafeWorkspacePath(): WorkspaceErrorEnvelope {
   return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace root is unsafe', 'none-written');
@@ -61,6 +72,38 @@ function fsyncCurrentDirectoryBestEffort(): void {
   }
 }
 
+function readApproximateOwnProcessStartTimeMs(): number {
+  return Math.round(Date.now() - process.uptime() * 1000);
+}
+
+function readProcessStartTimeMsFromPs(pid: number): number | null {
+  try {
+    const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1_000,
+    }).trim();
+    if (output.length === 0) {
+      return null;
+    }
+    const parsed = Date.parse(output);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readProcessStartTimeMs(pid: number): number | null {
+  if (pid === process.pid) {
+    return readOwnProcessStartTimeMs();
+  }
+  return readProcessStartTimeMsFromPs(pid);
+}
+
+function readOwnProcessStartTimeMs(): number {
+  return readProcessStartTimeMsFromPs(process.pid) ?? readApproximateOwnProcessStartTimeMs();
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -70,16 +113,44 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function readLockOwnerPid(): number | null {
+function isSameProcessStartTime(left: number, right: number): boolean {
+  return Math.abs(left - right) <= PROCESS_START_TIME_TOLERANCE_MS;
+}
+
+function readLockOwner(): LockOwner | null {
   let ownerFd: number | null = null;
   try {
     ownerFd = openSync('workspace.lock.lock/owner.json', constants.O_RDONLY | constants.O_NOFOLLOW);
     const ownerFile = fstatSync(ownerFd);
-    if (!ownerFile.isFile() || ownerFile.size > 256) {
+    if (!ownerFile.isFile() || ownerFile.size > LOCK_OWNER_MAX_BYTES) {
       return null;
     }
-    const owner = JSON.parse(readFileSync(ownerFd, 'utf8')) as { readonly pid?: unknown };
-    return typeof owner.pid === 'number' && Number.isInteger(owner.pid) ? owner.pid : null;
+    const owner = JSON.parse(readFileSync(ownerFd, 'utf8')) as {
+      readonly pid?: unknown;
+      readonly processStartTimeMs?: unknown;
+      readonly schemaVersion?: unknown;
+    };
+    if (typeof owner.pid !== 'number' || !Number.isInteger(owner.pid) || owner.pid <= 0) {
+      return null;
+    }
+    if (owner.schemaVersion === undefined) {
+      return { ownerFileMtimeMs: ownerFile.mtimeMs, pid: owner.pid, processStartTimeMs: null };
+    }
+    if (owner.schemaVersion !== LOCK_OWNER_SCHEMA_VERSION) {
+      return null;
+    }
+    if (
+      typeof owner.processStartTimeMs !== 'number' ||
+      !Number.isFinite(owner.processStartTimeMs) ||
+      owner.processStartTimeMs <= 0
+    ) {
+      return null;
+    }
+    return {
+      ownerFileMtimeMs: ownerFile.mtimeMs,
+      pid: owner.pid,
+      processStartTimeMs: owner.processStartTimeMs,
+    };
   } catch {
     return null;
   } finally {
@@ -89,13 +160,32 @@ function readLockOwnerPid(): number | null {
   }
 }
 
+function isLockOwnerAlive(owner: LockOwner): boolean {
+  if (!isProcessAlive(owner.pid)) {
+    return false;
+  }
+  const currentProcessStartTimeMs = readProcessStartTimeMs(owner.pid);
+  if (owner.processStartTimeMs !== null) {
+    return currentProcessStartTimeMs === null
+      ? true
+      : isSameProcessStartTime(owner.processStartTimeMs, currentProcessStartTimeMs);
+  }
+  if (
+    currentProcessStartTimeMs !== null &&
+    owner.ownerFileMtimeMs + PROCESS_START_TIME_TOLERANCE_MS < currentProcessStartTimeMs
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function removeStaleLockDirectory(): boolean {
   const lockEntry = lstatSync('workspace.lock.lock');
   if (!lockEntry.isDirectory() || lockEntry.isSymbolicLink()) {
     throw new Error('Workspace lock path is unsafe');
   }
-  const ownerPid = readLockOwnerPid();
-  if (ownerPid !== null && isProcessAlive(ownerPid)) {
+  const owner = readLockOwner();
+  if (owner !== null && isLockOwnerAlive(owner)) {
     return false;
   }
   rmSync('workspace.lock.lock', { recursive: true });
@@ -112,7 +202,14 @@ function writeLockOwnerFile(lockDirectoryIdentity: DirectoryIdentity): void {
       'owner.json',
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
     );
-    writeSync(ownerFd, `${JSON.stringify({ pid: process.pid })}\n`);
+    writeSync(
+      ownerFd,
+      `${JSON.stringify({
+        pid: process.pid,
+        processStartTimeMs: readOwnProcessStartTimeMs(),
+        schemaVersion: LOCK_OWNER_SCHEMA_VERSION,
+      })}\n`
+    );
     fsyncSync(ownerFd);
     closeSync(ownerFd);
     ownerFd = null;

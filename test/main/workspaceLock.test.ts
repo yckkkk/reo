@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { renameSync, symlinkSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -47,6 +57,50 @@ test('workspace lock replaces stale lock directories owned by dead processes', a
   }
   const owner = JSON.parse(await readFile(path.join(staleLockDirectory, 'owner.json'), 'utf8'));
   assert.equal(owner.pid, process.pid);
+  await acquired.lock.release();
+});
+
+test('workspace lock replaces stale lock directories when the owner process fingerprint mismatches', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-lock-stale-fingerprint-'));
+  const staleLockDirectory = path.join(root, '.reo', 'workspace.lock.lock');
+  await mkdir(staleLockDirectory, { recursive: true });
+  await writeFile(
+    path.join(staleLockDirectory, 'owner.json'),
+    JSON.stringify({ schemaVersion: 2, pid: process.pid, processStartTimeMs: 0 })
+  );
+
+  const acquired = await acquireWorkspaceLock({ canonicalRoot: root });
+
+  assert.equal(acquired.ok, true);
+  if (!acquired.ok) {
+    return;
+  }
+  const owner = JSON.parse(await readFile(path.join(staleLockDirectory, 'owner.json'), 'utf8'));
+  assert.equal(owner.pid, process.pid);
+  assert.equal(owner.schemaVersion, 2);
+  assert.equal(typeof owner.processStartTimeMs, 'number');
+  assert.notEqual(owner.processStartTimeMs, 0);
+  await acquired.lock.release();
+});
+
+test('workspace lock replaces legacy pid-only locks when the owner file predates the live pid', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-lock-stale-legacy-pid-reuse-'));
+  const staleLockDirectory = path.join(root, '.reo', 'workspace.lock.lock');
+  const ownerPath = path.join(staleLockDirectory, 'owner.json');
+  await mkdir(staleLockDirectory, { recursive: true });
+  await writeFile(ownerPath, JSON.stringify({ pid: process.pid }));
+  await utimes(ownerPath, new Date(0), new Date(0));
+
+  const acquired = await acquireWorkspaceLock({ canonicalRoot: root });
+
+  assert.equal(acquired.ok, true);
+  if (!acquired.ok) {
+    return;
+  }
+  const owner = JSON.parse(await readFile(ownerPath, 'utf8'));
+  assert.equal(owner.pid, process.pid);
+  assert.equal(owner.schemaVersion, 2);
+  assert.equal(typeof owner.processStartTimeMs, 'number');
   await acquired.lock.release();
 });
 
