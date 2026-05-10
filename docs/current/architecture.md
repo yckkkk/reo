@@ -35,7 +35,7 @@ docs/
 - 先用第一性原理定义正确模型，再落文件、模块和分支；不得在错误模型上叠加兼容、兜底或状态管理。
 - 保持目录浅，只有真实压力出现时才增加结构。
 - 不得无明确边界创建 `services/`、`lib/`、`shared/`、`core/` 等桶。
-- 文件夹和文件名必须表达产品实体、能力边界或真实复用层级；Workspace、Memory、Asset 等核心实体不得被错误层级名称承载。
+- 文件夹和文件名必须表达产品实体、能力边界或真实复用层级；Workspace、Memory、Segment 等核心实体不得被错误层级名称承载。
 - Feature-local components 留在业务目录内；只有跨 feature 复用和稳定不变量成立时，才提升到共享 UI 或共享 runtime 模块。
 - 优先采用包和框架的目录约定，不自创架构。
 - 新 capability 先评估官方方案和成熟开源包；复用、适配、fork 或自研的判断必须记录 current feature 的 consumer、约束、风险和测试路径。
@@ -56,7 +56,7 @@ docs/
 
 Reo 的记忆空间是用户选择的本地文件夹。记忆空间 folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 
-记忆空间 root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock` 与同目录 `.reo/workspace.lock.lock`，并绑定当前记忆空间 root 和 `.reo` directory identity；lock directory 写入当前 owner pid，死进程 owner 的 stale lock 只允许在重新获取 lock 时被替换。用户内容使用普通文件保存：memory 元数据位于 `memories/<memoryId>/memory.json`，finalized recording 位于 `memories/<memoryId>/recordings/<recordingId>/`，draft recording 位于 `.reo/drafts/recordings/<recordingId>/`。Memory title 是可变显示 metadata，不参与 durable directory identity；`memoryId` 是 `memories/<memoryId>/` 的稳定文件身份。
+记忆空间 root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock` 与同目录 `.reo/workspace.lock.lock`，并绑定当前记忆空间 root 和 `.reo` directory identity；lock directory 写入当前 owner pid，死进程 owner 的 stale lock 只允许在重新获取 lock 时被替换。用户内容使用普通文件保存：memory 元数据位于 `memories/<memoryId>/memory.json`，finalized audio segment 位于 `memories/<memoryId>/segments/<segmentId>/`，draft audio segment 位于 `.reo/drafts/segments/<segmentId>/`。Memory title 是可变显示 metadata，不参与 durable directory identity；`memoryId` 是 `memories/<memoryId>/` 的稳定文件身份。
 
 当前没有 DB-backed persistence layer。
 

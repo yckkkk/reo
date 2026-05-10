@@ -22,5 +22,5 @@
 - wireframe 是结构参考，不是视觉真源。
 - 最终视觉必须服从 `docs/current/design-system/`。
 - 文案必须以当前中文产品文案为准。
-- 录音组件可以参考长 waveform、居中 recording surface、timer、pause/stop、transcript 和 reflections 的交互心智。
+- 录音组件可以参考长 waveform、居中 recording surface、timer、pause/stop 和 transcript 的交互心智。
 - 记忆空间中间面板必须是表达舞台或 studio，不得退化为文件预览器。

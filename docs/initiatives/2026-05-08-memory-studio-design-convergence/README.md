@@ -17,10 +17,10 @@
 
 - 目标设计的内容和信息架构是产品目标；视觉系统必须使用 Reo tokens、Tailwind CSS v4、shadcn/ui source 和 Radix primitives。
 - 现有 AppShell sidebar 保持不变；本 initiative 不重画 sidebar、不新增“记忆”或“收藏”等 sidebar 顶层入口。
-- 右侧记忆列表属于 Workspace 层级，只展示当前 workspace 的 Memory；中间横向片段时间线属于 Memory 层级，只展示当前选中 Memory 内的 Asset。
+- 右侧记忆列表属于 Workspace 层级，只展示当前 workspace 的 Memory；中间横向片段时间线属于 Memory 层级，只展示当前选中 Memory 内的 Segment。
 - 默认进入 workspace 时，中间是 Workspace Stage，不出现片段时间线；片段时间线只在用户进入某条 Memory 后出现。
 - 底部 SpeedDial 可以渲染不可用的 action-shaped 位置来表达展开态布局；不可用 action 必须 `aria-disabled`、阻止选择，并且不能触发 IPC、DB、Query、Zustand 或文件写入。
-- 拍照、视频、上传和独立笔记必须先有 asset 数据合同、文件事务、错误恢复、测试和 current 文档更新，才能成为可执行 runtime surface。
+- 拍照、视频、imported_file 和独立笔记必须先有 Segment 数据合同、文件事务、错误恢复、测试和 current 文档更新，才能成为可执行 runtime surface。
 - 第一阶段不引入 DB、auth、AI runtime、同步、分享、全局搜索或自动整理。
 - 允许每个 slice 在实现前审查是否缺少表、字段、依赖、Query key、状态 owner、Electron、打包、更新、日志、错误上报或测试基础设施；审查结果只能服务当前 slice，不得因为技术路线存在就一次性安装或配置全部技术栈。
 - 每个 session 只推进一个可验证 slice；每个代码 slice 必须先有行为成功标准、真实 TDD、current 文档更新和 `npm run verify:quick`。
@@ -28,10 +28,10 @@
 ## 完成条件
 
 - AppShell 和 loaded memory space 使用目标三面板结构，且在 Reo 设计系统中成立。
-- 空态、选中 memory、录音中、录音回放、文本编辑和已实现 asset 状态都有真实 runtime 行为。
+- 空态、选中 memory、录音中、录音回放、transcript 查看和已实现 Segment 状态都有真实 runtime 行为。
 - 底部表达 dock 只让已经有真实能力和验证路径的入口可执行。
 - 右侧切换 Memory，中间理解和继续当前 Memory，底部开始新的表达；三者职责不混淆。
-- Memory Studio 以 memory 和 asset 的关系组织内容，不把录音、转写、反思、图片或视频表现为普通附件堆叠。
+- Memory Studio 以 Memory、Segment 和 SegmentAttachment 的关系组织内容，不把录音、转写、图片或视频表现为普通附件堆叠。
 - 右侧面板只展示来自当前文件真源或明确 cache owner 的数据，不展示伪 AI 或伪推荐。
 - 每个完成 slice 都同步 `docs/current/*`，保留验证证据，并通过用户验收。
 

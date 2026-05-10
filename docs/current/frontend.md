@@ -13,25 +13,23 @@
 - Reo UI 技术框架已确认为 Tailwind CSS v4 + shadcn/ui + Radix primitives。
 - shadcn/ui 当前 source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
-- Vaul 已作为 shadcn Drawer 的 bottom drawer mechanics dependency 引入。
+- Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
-- `Waveform` 与 `VoiceButton` 是当前 Reo audio UI primitive；它们不包含 agent runtime、network/API key、demo feedback 或未实现文案。
-- 当前 `AudioPlayer` 是 Reo local playback primitive：采用 HTML5 audio underlay、Reo play/pause control、Radix Slider playback position、time labels、playback surface 信息层级和 Reo token；完整 provider、playlist、speed 和 global progress 等到出现真实 consumer 时再引入。
-- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-slider`。
-- 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、memory detail、recording overlay、recording drawer control shell 和 root toast host。
+- `Waveform` 是当前 Reo audio UI primitive；它不包含 agent runtime、network/API key、demo feedback 或未实现文案。
+- 当前没有 shared local playback primitive；暂停态回听由 recording overlay 内部的隐藏 HTMLAudioElement 和 feature-local controls 承担。
+- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
+- 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell。
 - 当前无 memory space state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 记忆空间列表。
-- 当前 loaded memory space state 使用 `AppShell` 包裹 loaded workspace frame 或当前 memory detail；创建记忆空间通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
+- 当前 loaded memory space state 使用 `AppShell` 包裹 loaded workspace frame；创建记忆空间通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
 - 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 使用 `--spacing-titlebar`，视觉上不画分隔线，窗口控制和 sidebar hide/show control 属于该层。sidebar hide/show control 使用 80px 的 `--spacing-titlebar-control-left` 和 2px 的 `--spacing-titlebar-control-top` 定位，对齐原生 macOS traffic-light 行；主内容 panel 同步保留 48px panel titlebar slot，页面内容从该 slot 下方开始。workspace panel titlebar content 的垂直位置必须由 sidebar hide/show control 的 top、size 和 titlebar height 推导，确保 workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心都以左侧 sidebar hide/show icon 的视觉中心为基准。
 - 当前 loaded workspace frame 使用 AppShell panel titlebar、中央 Workspace Stage、右侧可折叠 MemoryRail 和底部 ExpressionDock；右侧 MemoryRail 读取当前 workspace snapshot 的 Memory 容器，卡片只展示 title、最近更新时间和片段数，并通过 DropdownMenu More 操作打开 memory rename Dialog；底部 ExpressionDock 使用 Floating Action Button Speed Dial，录音是唯一可执行 action，其他 action-shaped 位置只表达展开态布局。
-- 当前 memory detail 展示 memory title、创建日期、单一 `继续记录` action、`语音录音`、`转写`、`反思` 和 `记忆内容` section；录音卡展示 recording title、`时长` 和 `音频` byte size。
-- 当前 memory detail 的 `语音录音` 是有界首屏 preview：meta 使用当前 `assetCount` 投影；当前已实现 Asset 只有 recording，因此显示为录音段数。列表最多展示 main detail response 返回的前 24 条 recording summary；当 `recordingsTruncated` 为 true 时显示当前只展示前 N 段录音的提示，不创建分页、virtualization 或后续加载 action。
-- 当前 memory detail 的 `转写`/`反思` section 使用 file-backed summary flags 显示已保存/空状态；不在未知文件真源时硬编码文件内容。
-- 当前 recording overlay 使用 shadcn Drawer/Vaul source、Textarea source、feature-local recording machine 和 browser MediaRecorder adapter。
-- 当前 `AppShell` 记忆空间列表显示 main-backed memory space registry；无 active 记忆空间 session 时也显示已导入记忆空间。`创建本地记忆空间` 打开 `WorkspaceCreateDialog`，`打开本地记忆空间` 直接选择现有 Reo 记忆空间或空文件夹并打开；空文件夹会原地初始化为 Reo 记忆空间；打开失败在当前内容区显示 alert，创建弹层保持关闭，当前记忆空间保留；点击已导入记忆空间只发送 `workspaceId` 并打开该记忆空间；已导入记忆空间的 root folder 被删除时，该记忆空间仍显示在 sidebar，点击后显示“记忆空间文件夹已不存在。”；点击当前记忆空间列表项返回 loaded workspace frame；点击 sidebar `首页` 会关闭 active memory space handle 并回到 starter Home shell。
+- 当前点击右侧 MemoryRail 只切换 loaded workspace frame 的当前 Memory context；Workspace Stage 显示当前 Memory title 和片段数摘要，不进入详情页、不读取单条详情 query、不渲染 audio segment summary、本地回放、转写编辑或反思编辑。
+- 当前 recording overlay 使用 shadcn Drawer/Vaul source、feature-local recording machine、recording timeline helper 和 browser MediaRecorder adapter。录音前、录音中和暂停态使用沉浸式 full-window recording surface：Vaul 只提供 dialog/dismiss mechanics，背景由 overlay 统一虚化、去饱和并弱化，sidebar、panel titlebar 和 Workspace Stage 仍保留可辨轮廓，前景录音控件保持清晰；录音三态不另建底部控制面板，播放定位、暂停/继续/替换和完成按钮只作为同一录音层上的轻量 action surface。完成录音后不弹出强制描述、转写编辑或反思编辑窗口；非空实时转写会在 finalize 后保存为 transcript。
+- 当前 `AppShell` 记忆空间列表显示 main-backed memory space registry；无 active 记忆空间 session 时也显示已导入记忆空间。`创建本地记忆空间` 打开 `WorkspaceCreateDialog`，`打开本地记忆空间` 直接选择现有 Reo 记忆空间或空文件夹并打开；空文件夹会原地初始化为 Reo 记忆空间；打开失败使用 root toast 反馈，创建弹层保持关闭，当前记忆空间保留；点击已导入记忆空间只发送 `workspaceId` 并打开该记忆空间；已导入记忆空间的 root folder 被删除时，该记忆空间仍显示在 sidebar，点击后使用 root toast 显示“记忆空间文件夹已不存在。”；点击当前记忆空间列表项返回 loaded workspace frame；点击 sidebar `首页` 会关闭 active memory space handle 并回到 starter Home shell。录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context，并使用 root toast 提示先完成或关闭录音。
 - 当前 `AppShell` 添加记忆空间菜单打开时，sidebar stacking level 临时提升到主内容 panel 之上，避免菜单被 panel 裁切或遮挡；菜单左边缘锚定到添加记忆空间 icon button 左边缘；添加记忆空间 icon button 只在记忆空间列表标题行 hover、focus-within 或菜单 open 时显示；折叠/展开 sidebar 时会先关闭该菜单。
-- 当前非阻断 toast 通过 `ReoToaster` 统一挂载在 App root；业务动作只调用共享 `toast` export，不在 feature 内自建 toast host 或临时通知 UI。
+- 当前非阻断 toast 通过 `ReoToaster` 统一挂载在 App root；业务动作和跨边界失败只调用共享 `toast` export，不在 feature 内自建 toast host、临时通知 UI 或红色 inline error surface。表单字段验证可以使用 `FieldError` 就地提示，但视觉为中性色，不使用 Ember/red/destructive 文本。
 - 当前 `CreateWorkspaceForm` 使用 React Hook Form + Zod resolver、Button/Input/Textarea/Label/Field primitives，并作为可嵌入表单由 `WorkspaceCreateDialog` 承载。当前 `MemoryCreateDialog` 和 `MemoryRenameDialog` 使用 React Hook Form + Zod resolver、Dialog/Input/Button/Field primitives，并只编辑 Memory 容器 title。
 - TanStack Query 和 React Hook Form 已安装，并已有真实 memory space creation consumer。
 - Zustand 已选型，但当前未安装。
@@ -51,19 +49,19 @@
 - 当前 Field primitive 承载字段组、字段行、label、hint、control 和 error spacing；divider 只出现在 rows 之间，不压到文字或 control。
 - 当前 DropdownMenu primitive 是唯一 compact menu surface，基于 Radix DropdownMenu mechanics，承载 AppShell、MemoryRail 和所有业务 More menu。它使用 Card White、Chalk border、12px radius、11px UI text、32px item height、portal positioning 和 Radix focus semantics，默认 `modal={false}`。
 - 当前 Dialog/DropdownMenu/Textarea source 已 retokenize 到 Reo design system；Dialog 使用 overlay surface、18px title、small description 和 token 化宽度，DropdownMenu 使用统一 compact menu density，Textarea 使用输入框 radius token、compact UI typography、72px minimum height 和 Reo focus/disabled states。
-- 当前 Drawer source 基于 shadcn/ui Drawer + Vaul，retokenize 到 Reo bottom drawer surface；controlled `open/onOpenChange`、`dismissible={false}` 和 `data-vaul-no-drag` 用于录音忙碌态关闭保护与 waveform/control 交互区。
+- 当前 Drawer source 基于 shadcn/ui Drawer + Vaul，retokenize 到 Reo overlay mechanics；controlled `open/onOpenChange`、`dismissible={false}` 和 `data-vaul-no-drag` 用于录音忙碌态关闭保护与 waveform/control 交互区。Drawer content 支持普通编辑 surface 和录音沉浸式 full-window content 两种 Reo-owned visual shell，mechanics 仍由 Vaul 控制。
 - 当前 Button source 的 filled primary 使用 Obsidian 和 8px radius；Signal Blue 只用于 Button `accentCircle` variant 的显式圆形 icon-only control；naked icon-only controls 使用 Button `ghostIcon` variant。
 - 当前 Tooltip/Separator source 已 retokenize 到 Reo design system；Tooltip 使用 Reo small surface，Separator 使用 Chalk hairline，也用于 sidebar resize 的可访问 separator 语义。
 - 当前 `ReoToaster` 使用 Sonner 官方 `Toaster`/`toast` API，retokenize 到 Reo design system；toast host 只在 root 挂载一次，业务组件不得重复挂载。
-- 当前 Waveform/VoiceButton 只保留 canvas waveform bar renderer、recording/error/processing control visual 和 Button semantics，不在 renderer component 内申请 microphone stream、调用网络、创建 agent runtime 或显示 API key/model 文案。
-- 当前不引入 ElevenLabs Transcript Viewer 作为 shared primitive；transcript preview 保持在 `TranscriptReflectionsEditor` feature-local 边界内，并只使用用户本地 draft 和有界 live preview。
+- 当前 Waveform 只保留 canvas waveform renderer、静态点状线、动态 bar 和暂停播放头，不在 renderer component 内申请 microphone stream、调用网络、创建 agent runtime 或显示 API key/model 文案。
+- 当前不引入 ElevenLabs Transcript Viewer 作为 shared primitive；transcript preview 保持在 `RecordingTranscriptPreview` feature-local 边界内，并只消费真实 ASR 片段和有界 live preview。
 - 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
 - 当前深色主题由 `src/renderer/src/theme.css` 的 Reo token 覆盖实现：背景避免纯黑，面板使用抬升暖中性色，文字、弱文字、描边、阴影、scrim、Signal Blue、Ember 和 Voice Spectrum 都有暗色 token。
 - 界面不使用 emoji 表达图标、状态、装饰或情绪。
 - 有现成 lucide icon 时使用 lucide；没有合适图标时优先使用文字、状态点或 Reo token 图形，不临时改用 emoji。
 - 表单使用 React Hook Form + Zod。
-- 来自 main/server boundary 的 async data 使用 TanStack Query；memory space list、记忆空间 snapshot 和 memory detail 属于当前 Query consumer。
-- 当前 QueryClient provider 服务 memory space list、记忆空间 snapshot cache 和 memory detail cache；active recording lifecycle、drawer close protection 和 recording controls 不进入 Query。
+- 来自 main/server boundary 的 async data 使用 TanStack Query；memory space list 和记忆空间 snapshot 属于当前 Query consumer。
+- 当前 QueryClient provider 服务 memory space list 和记忆空间 snapshot cache；active recording lifecycle、overlay close protection 和 recording controls 不进入 Query。
 - Zustand 只用于需要跨 component subtree 保留的本地 client state。
 - 没有跨 component subtree state owner 前，不创建 Zustand store。
 
@@ -74,10 +72,10 @@
 - 视觉质量接近 iPhone 和 Mac 用户熟悉的高级感：留白充足、层级清晰、边界轻盈、交互有节奏，所有按钮和状态都必须像被认真放置过。
 - Reo 美感来自对注意力的尊重，不来自装饰堆叠，也不来自极端简化。页面应保持呼吸感和时间感，避免空洞的大面积留白、装饰性背景、营销式 hero 或过度 dashboard 化。
 - 记忆空间的中间区域承担主要体验；右侧 MemoryRail 承担当前 workspace 内的 Memory 导航；左侧 AppShell sidebar 只保持全局导航和记忆空间列表。当前 workspace 标题属于 AppShell panel titlebar，不属于页面内容区 header。
-- Memory Studio 必须表现为“记忆正在生长”的现场。当前录音、转写草稿和反思笔记不显示为附件堆叠，而显示为一段时间里留下的声音、文字和想法之间的关系；后续视频和图片进入后再扩展为画面关系。
-- Loaded workspace 的右侧记忆列表是 Workspace 层级导航，只展示当前记忆空间中的 Memory 容器。它不展示单个 Asset 详情。
-- Memory Studio 的横向片段时间线是 Memory 层级结构，只展示当前选中 Memory 内部的 Asset 顺序。它不能用作整个 workspace 的 feed、日志流或文件流。
-- 默认进入 workspace 时，中间区域是 Workspace Stage，不显示片段时间线；选择右侧某条 Memory 后，当前 runtime 进入现有 Memory detail route，不展示 Memory Studio 片段时间线。
+- Memory Studio 必须表现为“记忆正在生长”的现场。当前录音和转写草稿不显示为附件堆叠，而显示为一段时间里留下的声音与文字之间的关系；后续片段补充内容进入后再扩展为更丰富的上下文关系。
+- Loaded workspace 的右侧记忆列表是 Workspace 层级导航，只展示当前记忆空间中的 Memory 容器。它不展示单个 Segment 详情。
+- Memory Studio 的横向片段时间线是 Memory 层级结构，只展示当前选中 Memory 内部的 Segment 顺序。它不能用作整个 workspace 的 feed、日志流或文件流。
+- 默认进入 workspace 时，中间区域是 Workspace Stage，不显示片段时间线；选择右侧某条 Memory 后，当前 runtime 只切换 Stage 的当前 Memory context，不进入单独详情 route。
 - 录音组件是最需要投入 UI 工艺的核心体验。动态波形、时间轴、实时转写位置、暂停、停止、本地保存、失败恢复、回放和归入 memory 的流程，都必须让用户感到内容安全、表达自由、整理可以稍后发生。
 - Review 和回顾入口的语气是重新遇见过去自己的邀请，不是任务、打卡或学习软件。
 
@@ -97,10 +95,10 @@
 进入 UI 实现前必须定义：
 
 - Open-source component evaluation：每个 page-level、overlay、audio/media、form、editor、list/grid、state feedback 和 accessibility primitive 都必须先列出候选开源组件或官方方案。
-- 页面结构：memory space management、loaded workspace frame、memory detail、recording overlay 的 page/component tree。
+- 页面结构：memory space management、loaded workspace frame、recording overlay 的 page/component tree。
 - Layout primitives：first-run shell、sidebar、main shell、header、content region、overlay shell、scroll region、grid/list 的排版责任。
 - UI primitives：button、icon button、textarea、label、dialog、tooltip、card/panel 的实现基础、token 映射和 accessibility invariant。
-- Feature components：create memory space form、folder picker row、memory space card、recording card、recording controls、waveform/progress visualization、transcript editor、reflections editor、autosave status 的数据输入和事件输出。
+- Feature components：create memory space form、folder picker row、memory space card、recording controls、waveform/progress visualization、transcript preview 和 recording status 的数据输入和事件输出。
 - Reuse decision：哪些组件复用，哪些保持 feature-local；复用必须来自真实 consumer 或共享 invariant。
 - Reference mapping：参考图只约束结构、层级和 micro-interactions；视觉 token、spacing、radius、surface 和 icon 必须服从 Reo design system。
 - Accessibility matrix：每个 page/state/component 必须定义 role、name、keyboard path、focus behavior、announcement behavior、reduced-motion fallback、hit target、contrast/focus token 和 test/manual evidence。
@@ -111,7 +109,7 @@
 - ElevenLabs UI 是 Reo audio/agent UI 的默认优先评估来源。
 - ElevenLabs UI 组件是基于 shadcn/ui 的 open-code registry；只能逐组件引入，不得一次性安装全部组件。
 - 需要优先评估的 ElevenLabs UI 组件包括 Audio Player、Live Waveform、Waveform、Speech Input、Transcript Viewer、Voice Button。
-- Bottom drawer / large overlay 必须优先评估 Vaul 或 shadcn drawer，而不是自写 modal mechanics。
+- Full-window overlay / large overlay 必须优先评估 Vaul 或 shadcn drawer，而不是自写 modal mechanics。
 - Audio recording、waveform recording/playback 和 scrubber 必须同时评估 wavesurfer.js、ElevenLabs UI 和其他成熟开源方案。
 - 采纳的组件实现必须 retokenize 到 Reo design system，并删去不符合 Reo 边界的 demo、agent runtime、network/token、未实现能力和 decorative behavior。
 - 若开源组件不完全适配，必须先评估裁剪、retokenize、组合、薄适配或 fork。拒绝开源组件并自研前，必须记录这些适配路径仍不满足的边界：Electron 安全、local-first 文件真源、无网络依赖、设计系统、可访问性、测试可控性、bundle/依赖成本或代码复杂度。
@@ -123,43 +121,40 @@
 - Starter Home 使用 App shell 承载无 active memory space 状态；Home 主内容区不显示独立 `+` 创建按钮，创建记忆空间入口在 sidebar 记忆空间列表的添加菜单中。
 - 记忆空间创建 Dialog 使用 feature-local `WorkspaceCreateDialog` 和可嵌入 `CreateWorkspaceForm`，只覆盖“新建空白记忆空间”创建表单；`打开本地记忆空间` 由 sidebar 菜单直接触发 folder picker，不进入创建弹层。
 - App 拥有 memory space entry action lock；创建弹层 submit、打开本地记忆空间选择和打开期间不得重复触发同一记忆空间 action，创建弹层关闭在 pending 时被阻止，branch 结束必须释放 action lock。
-- App 使用 `['workspace', 'memory-spaces']` Query 读取 sidebar 记忆空间列表；创建、打开本地记忆空间或点击已导入记忆空间成功后 invalidate 该 Query。记忆空间列表读取失败在当前内容区显示 alert，不把 sidebar 静默清空当作成功状态。
+- App 使用 `['workspace', 'memory-spaces']` Query 读取 sidebar 记忆空间列表；创建、打开本地记忆空间或点击已导入记忆空间成功后 invalidate 该 Query。记忆空间列表读取失败使用 root toast 显示，不把 sidebar 静默清空当作成功状态。
 - 创建记忆空间表单当前使用 Button/Input/Textarea/Label/Field primitives、React Hook Form、Zod 和 submit-time validation；表单字段顺序是记忆空间名称、描述、记忆空间位置；submit button 默认可点击，空 title 或未选 folder 时提交后显示字段错误并把焦点回到 title。
-- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，main 把所选 folder 作为 parent location 并在其下创建 title 同名记忆空间文件夹。Create title 必须是安全 folder name，不能是 `.`、`..` 或包含路径分隔符。`打开本地记忆空间` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path；现有 Reo 记忆空间会打开，空文件夹会原地初始化。点击已导入记忆空间只调用 `openMemorySpace(workspaceId)`，不发送 selection token、displayPath 或 raw path。Create/open-local/open-memory-space 成功切换记忆空间前会释放既有 active handle，释放失败时不切换 UI 并显示错误。Open failure 或 promise reject 显示 `WorkspaceErrorBanner`，不复用创建表单错误位。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
+- Folder picker 只显示 main process 返回的安全 `displayPath` basename，并把 `selectionToken/displayPath` 写入当前 RHF form lifecycle；create submit 只发送 `selectionToken/title/description`，main 把所选 folder 作为 parent location 并在其下创建 title 同名记忆空间文件夹。Create title 必须是安全 folder name，不能是 `.`、`..` 或包含路径分隔符。`打开本地记忆空间` 是 sidebar 菜单动作，选择文件夹后直接调用 `openWorkspace(selectionToken)`，不发送 title、description、displayPath 或 raw path；现有 Reo 记忆空间会打开，空文件夹会原地初始化。点击已导入记忆空间只调用 `openMemorySpace(workspaceId)`，不发送 selection token、displayPath 或 raw path。Create/open-local/open-memory-space 成功切换记忆空间前会释放既有 active handle，释放失败时不切换 UI 并使用 root toast 显示错误。Open failure 或 promise reject 使用 root toast，不复用创建表单字段错误位。Initialize 失败后清除已消费的 folder token 和 display name，要求用户重新选择 folder。
 - 当前 App shell 已实现 48px 无边框 titlebar shell、底层可拖拽 sidebar 和上层悬浮内容 panel；titlebar 自身是 Electron drag region，窗口/sidebar 控件是 no-drag control region；sidebar 默认 240px、最小 240px、最大 520px，resize separator 有 8px 真实命中区和 hover affordance；panel 顶/右/底贴合窗口，内部先保留 48px panel titlebar slot，再渲染页面内容；展开态以 `left` 等于 sidebar 宽度并只保留左侧 12px radius，covered 态 `left` 归零且 radius 归零。折叠/展开时右边缘固定，只让左边界移动。covered 状态下 panel titlebar content 的 left 必须从 sidebar hide/show control 的 `--spacing-titlebar-control-left`、`--spacing-titlebar-control-size`、`--spacing-titlebar-control-gap` 和 `--spacing-panel-titlebar-x` 推导，确保 workspace 标题以左上 sidebar 折叠 icon 为基准定位；panel titlebar content 的 top 必须从 `--spacing-titlebar-control-top`、`--spacing-titlebar-control-size` 和 `--spacing-titlebar` 推导，确保 workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心与左上 sidebar 折叠 icon 视觉中心对齐。
 - 当前 App shell 的 hide/show sidebar icon-only control 位于左上原生窗口控制区右侧，不创建 rail sidebar；该 control 的 titlebar slot 保持稳定，折叠和展开切换只替换图标，不移动 slot。
 - 当前 App shell 的浅色/深色主题切换是 sidebar 左下角工具按钮，使用 lucide Moon/Sun icon-only control 和 Tooltip accessible name；它不创建 settings 页面、系统主题跟随或持久化。
-- 当前 App shell navigation 显示 `首页` 和 `资料库`；sidebar 不显示 `新记忆`。`首页`、`资料库` 和记忆空间列表项都是真实导航入口，触发导航前会关闭已打开的 sidebar 菜单；离开 loaded memory space 到 `首页` 或 `资料库` 前会释放当前记忆空间 handle。starter shell 中 `首页` 是当前页，`资料库` 打开空白 Library page；loaded memory space 中当前页由 active 记忆空间列表项表达，`首页` 不保持当前页高亮。Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
+- 当前 App shell navigation 显示 `首页` 和 `资料库`；sidebar 不显示 `新记忆`。`首页`、`资料库` 和记忆空间列表项都是真实导航入口，触发导航前会关闭已打开的 sidebar 菜单；离开 loaded memory space 到 `首页` 或 `资料库` 前会释放当前记忆空间 handle。录音流程打开时，离开当前 loaded memory space、切换记忆空间和切换当前 Memory context 都被阻止，避免录音 target、draft、ASR session 或当前 transcript 被路由变化打断；录音进入忙碌态后，App 还会通过 `beforeunload` 阻止原生窗口关闭或 reload。starter shell 中 `首页` 是当前页，`资料库` 打开空白 Library page；loaded memory space 中当前页由 active 记忆空间列表项表达，`首页` 不保持当前页高亮。Home search、future media/file route、auth、sync、share、AI 和 global search 不显示。
 - 记忆空间列表项容器内右侧有 icon-only 更多操作按钮；记忆空间行容器承载 hover/current surface，primary button 和 more button 都位于同一个记忆空间行容器内。More button 默认隐藏，只在对应记忆空间行 hover、keyboard focus-within 或菜单已打开时显示。当前只提供 `移除记忆空间`。确认弹层说明只从 Reo记忆空间列表移除，本地文件夹不会被删除。移除反馈只使用 root `ReoToaster`，确认弹层内不渲染第二套错误提示。移除 inactive 记忆空间只刷新记忆空间列表；移除 active 记忆空间先移除 registry entry，再回到 starter shell，并尽力释放当前记忆空间 handle；handle 释放失败时不阻断列表移除，只显示 toast。
 - 当前 App shell 使用 lucide icon-only controls 和 icon+text nav；icon-only controls 的 accessible name 放在 button 上，菜单 surface、菜单项和记忆空间操作组都必须有明确 accessible name。
-- 当前 loaded workspace frame 是 loaded memory space 的默认 surface：AppShell panel titlebar 显示当前 workspace 标题、`新建记忆` icon-only control 和右侧 MemoryRail 折叠/展开 icon-only control；内容区不再单独渲染标题栏或横向 header 分割线。sidebar covered 时，workspace 标题随 panel titlebar 滑到左上 sidebar 折叠控件右侧，workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心都与左上 sidebar 折叠 icon 视觉中心对齐。中央标题是 `今天想记录些什么？`，使用 `--font-memory-serif`，标题上方不显示 icon，不显示横向片段时间线；右侧 MemoryRail 按更新时间展示当前 snapshot 中已加载的 Memory 容器，只显示每条 memory 的 title、最近更新时间和片段数量摘要，不显示 Asset 详情、document icon、rail 级标题或总数，背景使用主页面 surface，不使用 sidebar surface，也不绘制左侧竖向分割线；右侧空态只显示 MemoryRail empty card，不显示 rail 级标题或总数；每张 Memory 卡片有独立 open button 和 More icon button，More 菜单当前只提供 `重命名记忆`，打开 `MemoryRenameDialog`；MemoryRail 折叠/展开使用固定 340px rail 组件整体从右侧滑出/滑入，不压缩内部内容，并在折叠态退出可访问树和指针交互；MemoryRail 宽度、舞台右侧避让和 FAB 右侧避让共享 `WorkspaceFrame` 内的 layout variables；底部表达入口是浮动 SpeedDial，不参与内容流排版，并随 MemoryRail 展开宽度保持在中央舞台区域内。
-- 当前底部表达入口通过 `components/ui/floating-action-button-speed-dial.tsx` 使用 PrimeReact SpeedDial 的 `semi-circle`/`radius` mechanics，并 retokenize 为 Reo CTA、focus ring、shadow 和 motion。SpeedDial shell 是 320px × 184px，center button 是 56px circle，action button 是 40px circle，semi-circle radius 是 92px，展开态从左到右是 `录音`、`笔记`、`拍照`、`视频`、`上传`。唯一可执行 action 是 `录音`；Workspace Stage 的 `录音` 始终先打开 `MemoryCreateDialog`，创建 Memory 后再以 existing-memory target 进入 recording drawer；Memory detail 的 `继续记录` 直接以当前 Memory 作为 recording target；`笔记`、`拍照`、`视频`、`上传` 是不可用的 action-shaped 展开位置，必须显式提供 `disabled` 和 `disabledLabel`，必须 `aria-disabled`、阻止选择、不得触发 IPC、DB、Query、Zustand 或文件写入。
+- 当前 loaded workspace frame 是 loaded memory space 的默认 surface：AppShell panel titlebar 显示当前 workspace 标题、`新建记忆` icon-only control 和右侧 MemoryRail 折叠/展开 icon-only control；内容区不再单独渲染标题栏或横向 header 分割线。sidebar covered 时，workspace 标题随 panel titlebar 滑到左上 sidebar 折叠控件右侧，workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心都与左上 sidebar 折叠 icon 视觉中心对齐。未选中 Memory 时中央标题是 `今天想记录些什么？`，使用 `--font-memory-serif`，标题上方不显示 icon，不显示横向片段时间线；选中 Memory 后 Stage 只切换为当前 Memory context，显示该 Memory title 和片段数摘要，不进入详情页。右侧 MemoryRail 按更新时间展示当前 snapshot 中已加载的 Memory 容器，只显示每条 memory 的 title、最近更新时间和片段数量摘要，不显示 Segment 详情、document icon、rail 级标题或总数，背景使用主页面 surface，不使用 sidebar surface，也不绘制左侧竖向分割线；右侧空态只显示 MemoryRail empty card，不显示 rail 级标题或总数；每张 Memory 卡片有独立 select button 和 More icon button，More 菜单当前只提供 `重命名记忆`，打开 `MemoryRenameDialog`；MemoryRail 折叠/展开使用固定 340px rail 组件整体从右侧滑出/滑入，不压缩内部内容，并在折叠态退出可访问树和指针交互；MemoryRail 宽度、舞台右侧避让和 FAB 右侧避让共享 `WorkspaceFrame` 内的 layout variables；底部表达入口是浮动 SpeedDial，不参与内容流排版，并随 MemoryRail 展开宽度保持在中央舞台区域内。
+- 当前底部表达入口通过 `components/ui/floating-action-button-speed-dial.tsx` 使用 PrimeReact SpeedDial 的 `semi-circle`/`radius` mechanics，并 retokenize 为 Reo CTA、focus ring、shadow 和 motion。SpeedDial shell 是 320px × 184px，center button 是 56px circle，action button 是 40px circle，semi-circle radius 是 92px，展开态从左到右是 `录音`、`笔记`、`拍照`、`视频`、`上传`。唯一可执行 action 是 `录音`；Workspace Stage 的 `录音` 优先使用当前 Memory context 作为 recording target，只有当前 workspace 没有 Memory 时才先打开 `MemoryCreateDialog`，创建 Memory 后再以 existing-memory target 进入 recording overlay；`笔记`、`拍照`、`视频`、`上传` 是不可用的 action-shaped 展开位置，必须显式提供 `disabled` 和 `disabledLabel`，必须 `aria-disabled`、阻止选择、不得触发 IPC、DB、Query、Zustand 或文件写入。
 - 当前 loaded workspace frame 不提供本地搜索、global search、full-text search、semantic search、tag/entity filter、Zustand store、TanStack Query key、IPC 或 DB surface。
 - 当前 loaded workspace frame 使用 feature-local `WorkspaceFrame`、`WorkspaceTitlebar`、`WorkspaceStage`、`MemoryRail` 和 `ExpressionDock`；它们不是 design-system primitive。`ExpressionDock` 只负责把当前业务 action 映射给 shared Floating Action Button Speed Dial primitive。
-- 当前 Memory detail 使用最小 in-memory route 从 loaded workspace frame 进入和返回，不引入 router dependency、page registry、generic route service 或额外 provider。
-- 当前 Memory detail 通过 TanStack Query 读取 main-backed detail projection；`workspaceHandle` 只在 query function 闭包中作为 request capability 使用，不进入 DOM、URL、query key 或持久化状态。
-- 当前 Memory detail 的 `继续记录` 打开现有 recording overlay，并把当前 `memoryId` 作为 existing memory recording target 传入 finalize request。
-- 当前 Memory detail 不渲染 More、Rename、Delete、Show in folder、Export、Films、photo、video、file、AI、entity、contact 或 global search command。
-- 当前 Memory detail 使用 `MemoryDetailPage` 和 file-local `MemoryDetailSection`；它们是 feature-local components，不是 design-system primitive。
-- 当前 loaded workspace frame 的 `录音` 和 Memory detail 的 `继续记录` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 仍持有当前 durable recording transaction，并复用 feature-local `RecordAudioDrawer` shell、`RecordingWaveform`、`RecordingControls`、`RecordingPlayback` 和 `TranscriptReflectionsEditor`。Drawer 使用固定 header/footer 和中间滚动区，保证编辑态长内容不挤出关闭 command；非忙碌关闭后再次打开回到 ready recording state。
-- Recording 使用官方 browser MediaRecorder API 的薄 adapter 负责 durable capture，不引入 agent runtime、网络 STT 或本地 mock transcript。
-- 当前 recording overlay 停止录音后展示空白 transcript/reflections draft、`转写预览` 和 `加载录音` 本地加载 command；加载成功后隐藏加载 command 并展示本地 playback surface。内容只来自用户编辑或未来明确引入的真实转写 foundation。
-- 当前 recording transcript/reflections autosave 成功 response 返回当前 Memory summary。Overlay 只向 App 汇报该 summary；App 通过 functional updater 合并 Workspace snapshot cache、当前 session state 和已存在 memory detail cache，避免并发 autosave 互相覆盖。
-- 当前 audio playback 使用 main finalized-only chunked audio read + renderer Blob URL；renderer 最多并发读取 4 个 chunk，Blob 直接从 chunk array 创建，不二次复制 chunk；Blob URL 只在 active playback 创建，并在 close/switch/unmount 时 revoke，close 后完成的过期 playback request 不得创建新的 Blob URL，也不得继续调度后续 chunk IPC；单个 chunk read 失败后不得继续调度后续 chunk IPC。
+- 当前不提供单独详情 route；MemoryRail selection 是 loaded workspace frame 内的 current-memory state，不引入 router dependency、page registry、generic route service、detail query 或额外 provider。
+- 当前 loaded workspace frame 的 `录音` 打开 shadcn Drawer/Vaul recording surface；`RecordingOverlay` 持有当前 durable recording transaction，并复用 feature-local `RecordingSurface` shell、`RecordingWaveform`、`RecordingTranscriptPreview`、`RecordingControls` 和 `recordingTimeline`。录音前只显示静态点状波形、温和引导文案和 Ember 圆形开始按钮；录音中显示动态波形、实时转写区域、`MM:SS.hh` 计时器、暂停按钮、弱化播放定位控件和完成按钮；暂停态显示已录波形、蓝色播放头、cursor time、可用播放定位控件和继续/替换主按钮。录音中和暂停态 controls 不作为独立 absolute footer，也不使用独立背板、重阴影或多层胶囊容器；waveform、转写、时间和 actions 属于同一个 recording surface，视觉层级主要靠位置、透明度、状态色和 hover/focus 反馈表达。`RecordingTranscriptPreview` 不使用背景填充；有转写片段时只对文本滚动容器使用透明 mask，不在录音层里制造独立白色区域。录音中实时转写默认柔和跟随最新内容向下滚动，文本变长时视觉上持续向上流动；用户在转写区域手动滚动离开底部后停止自动跟随，用户滚回底部后恢复自动跟随。暂停态播放按钮使用当前 renderer 持有的有效 MediaRecorder chunk 前缀创建 draft playback Blob，并用 audio `timeupdate`、ended、波形拖动和前进/后退 15 秒共同驱动同一个 `cursorTimeMs`。播放头、拖动和前进/后退改变同一个 focus time，`RecordingTranscriptPreview` 用 transcript segment 时间范围高亮并滚动到对应文本。播放头在末尾时继续恢复当前 MediaRecorder controller 采集；播放头在中间且 cursor 大于 0 时替换会先把可见播放头对齐到实际可保留的 durable chunk 边界，再保留 cursor 前的有效 MediaRecorder chunk 前缀、截断 waveform、PCM 和 transcript timeline、生成新 `revisionId`、创建新 draft，并复用当前已暂停的 MediaRecorder controller 从该位置继续采集；播放头在录音起点时替换必须创建新的 recording session、revision 和 MediaRecorder controller，不克隆旧 WebM 后段，避免生成缺少初始化 header 的音频。完成录音后不进入强制描述、转写编辑或反思编辑；非忙碌关闭后再次打开回到 ready recording state。
+- 当前 recording overlay 的边界提示使用 root toast 或中性 status 文案，不使用红色 inline error。小于 2 秒的录音首次完成会保留录音并提示录音较短，再次完成可保存；持续 15 秒低音量输入只提示一次且不打断采集；单次录音 55 分钟提示接近上限，60 分钟自动暂停并保留当前有效录音；播放头位于中间时首次点击替换只提示覆盖影响，同一 cursor 的再次点击才创建 replacement draft；replacement 不创建新的 microphone intent，draft 创建或 retained chunk copy 失败必须保留原录音。
+- 当前 recording recovery UI 使用 `RecordingRecoveryDialog`。重新打开 workspace 后如果存在匹配当前 workspace 和 Memory 的 recovery marker，App 在 Workspace Stage 上方显示“未完成录音”对话框，提供“继续检查”“保存录音”和“放弃”三个明确动作；保存会 finalize 原 draft 并合并 Memory summary，若 transcript 保存失败会把已 finalized audio summary 写回 marker，后续重试只补 transcript，不把 draft missing 当作成功；放弃会 discard 原 draft；继续检查会打开该 Memory 的 recording overlay 并恢复为暂停检查态。恢复检查态使用 marker 中的 waveform、transcript segments 或 transcript sidecar markdown、cursor、session/revision 和 draft audio chunk map，还原回听检查；如果 marker 因预算移除了 transcript segments，但 sidecar markdown 仍存在，完成保存必须写入该 markdown。由于没有原 MediaRecorder controller，继续录制和中段替换不会跨会话拼接 WebM，触发时使用 root toast 提示并保留 marker。draft audio 读取按 marker byte map 传入读取上限；读取失败时只使用 root toast，仍允许保存未完成 draft。该对话框不重新创建 Memory、不显示红色 inline error。
+- Recording 使用官方 browser MediaRecorder API + `getUserMedia` 薄 adapter 负责 durable WebM/Opus capture；adapter 从同一麦克风 stream 额外读取 Web Audio analyser level samples 供 waveform 渲染，并通过 AudioWorklet 可选输出 16 kHz 16-bit mono little-endian PCM chunks 供 ASR session 使用。pause 会停止 level pump、暂停 PCM 输入并关闭麦克风音轨，resume 再恢复。adapter 不引入 agent runtime、网络 STT 或本地 mock transcript。豆包流式语音识别接入经过 main process 安全边界：renderer 只调用 `startRecordingTranscription`、`sendRecordingTranscriptionAudio`、`finishRecordingTranscription`、`closeRecordingTranscription` 和 `onRecordingTranscriptionEvent`，不保存、不显示、不发送 API key、Access Token 或火山鉴权 header。`RecordingOverlay` 把 accepted ASR session 的 segment event 应用到 feature-local `recordingTimeline`，并用 `recordingSessionId` / `revisionId` 丢弃旧结果。实时 PCM send 使用有界串行队列，queue overflow、send failure、`accepted:false`、ASR start 未 accepted 或 live ASR 关闭只触发 root toast 和 completion backfill，不阻断 durable capture。停止录音会先等待 MediaRecorder 和 append queue flush，再 drain live PCM queue，并等待 main ASR session 返回最终包；最终转写失败时只显示 root toast，仍保留并完成 durable audio。Renderer 同步保留当前有效 PCM chunks，替换或补转写发送 PCM 时会按 cursor 裁剪首个重叠 PCM chunk，避免把 cursor 前音频写入新 revision；若 durable finalize 后 transcript 为空，或当前 revision 已收到 ASR error / finish failure，会用缓存 PCM 发起一次 completion backfill ASR session，并在最终包返回后保存 transcript；补转写失败不回滚已保存音频。若补转写成功但 transcript save 失败，recovery marker 必须保留 finalized audio summary 和补转写 transcript，后续恢复只补 transcript。
+- 当前 recording overlay 完成后会关闭沉浸式录音层。录音中的转写区域只消费真实 ASR 片段，不生成本地 mock transcript；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment。替换必须同时更新 audio draft、waveform、PCM cursor、cursor time、draft playback source、transcript timeline 和 `revisionId`；cursor 大于 0 时只保留有效前缀，cursor 为 0 时创建全新 capture session；旧 session/revision 的异步转写结果不得写回当前文本。
+- 当前 recording transcript save 成功 response 返回当前 Memory summary。Overlay 只向 App 汇报该 summary；App 通过 functional updater 合并 Workspace snapshot cache 和当前 session state，避免并发保存互相覆盖。
 
 当前交付约束：
 
-- 当前 app shell 承载 loaded workspace frame 和 recording drawer，不另建 page shell。
+- 当前 app shell 承载 loaded workspace frame 和 recording overlay，不另建 page shell。
 - Sidebar 使用分层 overlay shell：sidebar 是底层 `z-index: 1`，紧贴窗口左边缘并铺满高度；主内容是上层悬浮面板 `z-index: 2`，顶/右/底与窗口边缘重叠，展开态只在左侧边界显示 12px radius，并在内部保留 48px panel titlebar slot；titlebar 是 48px 无边框透明 shell slot，`z-index: 5`；sidebar action menu 打开时 sidebar 临时提升到 `z-index: 4`，窗口控制保持在更高层；sidebar action menu 必须以 trigger 左边缘为锚点，不从 sidebar 外侧重新起算。
 - Sidebar 宽度可拖拽，最小 240px，最大 520px；covered 状态是主内容面板的 `left` 归零并覆盖 sidebar。
 - Sidebar 展开/covered 动效使用 280ms ease-out，只过渡 panel 的 `left` 与 border radius；reduced motion 下关闭 transition；拖拽 resize 时关闭 motion，只直接更新 left。
 - macOS 红黄绿窗口按钮保持原生控件；Reo 只绘制无边框 AppShell titlebar layout slot 和 sidebar hide/show control，不伪造红黄绿窗口按钮。
 - Sidebar 中的 Search 不出现在 current build。
 - Workspace-level search、recording-level、full-text、跨记忆空间、entity、tag、semantic search 属于后续 DB/index foundation。
-- Loaded workspace frame 完成形态使用 AppShell panel titlebar、中央 Workspace Stage、右侧可折叠 MemoryRail、底部浮动 ExpressionDock 和 empty/error/loading states；`录音` 打开 recording drawer。
+- Loaded workspace frame 完成形态使用 AppShell panel titlebar、中央 Workspace Stage、右侧可折叠 MemoryRail、底部浮动 ExpressionDock 和 empty/error/loading states；`录音` 打开 recording overlay。
 - 未实现的 photo、video、file、film、sharing、sync、auth user、camera、AI generation、global search 能力不得触发 runtime surface、IPC、DB、Query、Zustand、文件事务或错误模型。底部表达 SpeedDial 中的不可用 action-shaped 位置只表达当前展开态布局，不代表已接入能力。
-- Recording 的最终产品形态使用 shadcn Drawer/Vaul bottom drawer。
-- 当前 recording overlay 不生成 transcript 文本；停止后只进入可编辑 transcript/reflections draft。
+- Recording 的最终产品形态使用 shadcn Drawer/Vaul mechanics 承载沉浸式 full-window recording surface。
+- 当前 recording overlay 不生成 mock transcript 文本；完成录音后不进入强制转写、描述或反思编辑窗口。真实流式转写进入时必须携带时间范围、`recordingSessionId` 和 `revisionId`，用于暂停定位、文本同步滚动和替换后丢弃旧异步结果。
 - ElevenLabs UI 逐组件评估范围是 Waveform、Live Waveform、Voice Button、Audio Player、Transcript Viewer；不得执行 `add all`。
 - Waveform 不能用与官方/成熟源码无关的自研 lightweight bars 作为最终形态；当前使用 canvas/bar rendering pattern 并保持 Reo local-first 边界。引入 long waveform、live microphone waveform、peaks、regions 或 playback scrubber 时，必须重新评估 ElevenLabs UI、wavesurfer.js 或成熟开源实现。
 - wavesurfer.js 不负责 current durable capture；若实现 long waveform、peaks、regions、visual scrubber 或第二个 waveform consumer，必须重新作为优先候选并记录采用、fork 或拒绝证据。

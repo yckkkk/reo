@@ -13,10 +13,10 @@
 - 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
 - 当前有 `verify:titlebar` 本地视觉测量脚本，用于从截图像素中计算 macOS traffic-light 行、左侧 sidebar hide/show icon、workspace 标题文字和右侧 MemoryRail 折叠 icon 的视觉中心与标题间距；该脚本依赖本机截图和 ImageMagick，不属于 `verify:quick`。
 - Better Auth 已选型，但当前未安装。
-- Zod 已安装，当前服务 workspace IPC contract、DTO、记忆空间 metadata、recording metadata 和错误信封。
+- Zod 已安装，当前服务 workspace IPC contract、DTO、记忆空间 metadata、segment metadata 和错误信封。
 - 当前错误码真源是 `src/workspace-contract/workspace-contract.ts` 的 `workspaceErrorCodeSchema` 和 `workspaceErrorEnvelopeSchema`；renderer 用户可见文案映射位于 `workspaceErrorMessages.ts`。
-- TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 memory space creation form、memory rename form、memory space list、记忆空间 snapshot cache 和 memory detail cache。
-- `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`@radix-ui/react-slider`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、AudioPlayer、App shell、recording audio controls 和 icon controls。
+- TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 memory space creation form、memory rename form、memory space list 和记忆空间 snapshot cache。
+- `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、App shell、recording audio controls 和 icon controls。
 - Workspace single-writer lock 使用 `.reo/workspace.lock` no-follow leaf file 和同目录 `.reo/workspace.lock.lock` 目录锁，不依赖通用 lock service。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
@@ -54,6 +54,7 @@ npm run verify:quick
 
 当前命令边界：
 
+- `dev`：运行 `scripts/run-dev.mjs`，加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
 - `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers、pointer capture 与 `ResizeObserver` 测试替身，并在每个测试后执行 DOM cleanup。
@@ -76,7 +77,7 @@ npm run verify:titlebar:self-test
 
 - 需要真实桌面操作、OS dialog、Electron runtime、录音、播放、保存、重开或视觉对比的任务，必须使用 Computer Use 验证。
 - 操作验证不能替代 TDD、typecheck、lint 或 format。
-- 如果 spec 指定 reference assets，验证证据必须说明哪些结构、状态和交互已对照 reference，哪些视觉由 Reo design system 替换。
+- 如果 spec 指定 reference segments，验证证据必须说明哪些结构、状态和交互已对照 reference，哪些视觉由 Reo design system 替换。
 
 ## 当前质量决策
 
@@ -86,8 +87,8 @@ npm run verify:titlebar:self-test
 - Codex CLI read-only validation 必须在 Reo quiescent 或记忆空间 closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
 - Renderer source 禁止直接 import Node/Electron API；restricted import 规则必须由测试覆盖。
 - Preload source 不得引入 Zod-backed contract 或普通 Node package；preload path 必须指向 `out/preload/index.cjs`。
-- Main tests 必须覆盖 workspace file truth、IPC contract、trusted sender、selection token、single-writer lock、filesystem containment、atomic write、metadata schema、index rebuild/recovery、recording draft/finalize、audio read、markdown save、error envelope 和 lock-lost 行为。
-- Renderer tests 必须覆盖 App shell、workspace entry、loaded workspace frame、MemoryRail、Memory detail、recording drawer、recording lifecycle、audio playback、accessibility names、negative capability boundaries 和 Query key ownership。
+- Main tests 必须覆盖 workspace file truth、IPC contract、trusted sender、selection token、single-writer lock、filesystem containment、atomic write、metadata schema、index rebuild/recovery、recording draft/finalize、unfinished draft audio read 与读取上限、draft audio read/append/finalize 互斥、markdown save、error envelope、lock-lost 行为、豆包 ASR live session、协议 frame、response 解析、错误脱敏、非预期 close 断线报告、初始连接重试、pending start close、录音中断线重连、PCM replay buffer、录音转写 session registry、timestamp offset 和 stale revision 丢弃。
+- Renderer tests 必须覆盖 App shell、workspace entry、loaded workspace frame、MemoryRail current-memory selection、FAB current-memory recording target、recording-flow workspace switch guard、busy recording `beforeunload` guard、recording recovery marker save/clear、workspace reopen recovery dialog save/discard/review path、recovered paused review continue/replace path、recording overlay、recording lifecycle、recording pre/active/paused state distinction、paused draft playback cursor sync、cursor/timeline replacement flow、PCM 转写发包、有界 live PCM send queue、live send `accepted:false` backfill、pause 时停止 PCM/level 输入、completion backfill transcript save for empty and failed-final transcripts、backfilled transcript recovery after save failure、recovered draft preview without chunk map、transcript segment focus/scroll sync、no forced post-recording editor、accessibility names、negative capability boundaries 和 Query key ownership。
 - Operation validation 必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 设计变更的操作验证必须覆盖运行时视觉证据；布局、尺寸、折叠位移、展开态、浅色/深色和交互状态不能只由 class 或单元测试证明。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。

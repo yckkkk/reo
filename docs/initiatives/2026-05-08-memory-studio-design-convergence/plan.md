@@ -6,9 +6,9 @@
 
 - 左侧 sidebar 保持当前 Reo AppShell sidebar，不作为本轮设计重构对象。
 - 主内容区是 loaded workspace frame：AppShell panel titlebar、中央 stage、右侧 memory rail、底部 expression dock。
-- 右侧 memory rail 是 Workspace 层级导航，展示当前 workspace 中的全部 Memory；它不展示单个 Asset 详情。
+- 右侧 memory rail 是 Workspace 层级导航，展示当前 workspace 中的全部 Memory；它不展示单个 Segment 详情。
 - 中央 stage 承载两种核心形态：未选中 Memory 时的 Workspace Stage，以及选中 Memory 后的 Memory Studio。
-- Memory Studio 使用片段时间线表达当前选中 Memory 的生长关系；时间线里的小卡片是这一条 Memory 内的 Asset。
+- Memory Studio 使用片段时间线表达当前选中 Memory 的生长关系；时间线里的小卡片是这一条 Memory 内的 Segment。
 - 中间片段时间线不能表示整个 workspace 的全部内容，不能做成 workspace feed、日志流、文件流或社交动态流。
 - 底部 dock 是表达入口，不是全局工具栏；只有真实行为可以执行，不可用 action-shaped 位置只用于表达 SpeedDial 展开态布局。
 
@@ -18,23 +18,23 @@
 
 - `AppShell`：保留窗口 titlebar、sidebar、resize、theme 和顶层导航责任。
 - `WorkspaceFrame`：loaded workspace 的三面板布局、右侧 rail 和 dock 插槽；workspace 标题和右侧 rail 折叠 control 由 AppShell panel titlebar 承载。
-- `MemoryRail`：当前 workspace 的 Memory 列表、选中态、空态和打开 Memory 事件；不拥有 Asset 详情。
+- `MemoryRail`：当前 workspace 的 Memory 列表、选中态、空态和打开 Memory 事件；不拥有 Segment 详情。
 - `WorkspaceStage`：无选中 memory 时的表达舞台。
-- `MemoryStudio`：选中 Memory 后的标题、meta、当前 Memory 的 Asset timeline、fragment strip、fragment content 和 action row。
+- `MemoryStudio`：选中 Memory 后的标题、meta、当前 Memory 的 Segment timeline、fragment strip、fragment content 和 action row。
 - `ExpressionDock`：把当前业务 action 映射给 Floating Action Button Speed Dial；录音是可执行 action，其它 action-shaped 位置保持不可用且不触发 runtime。
-- `RecordingComposer`：录音准备、录音中、暂停、完成、失败恢复和保存后的编辑入口。
-- `AudioFragmentPlayer`：finalized recording 的本地播放、waveform/scrubber 和时间信息。
+- `RecordingComposer`：录音准备、录音中、暂停、完成和失败恢复入口。
+- `AudioFragmentPlayer`：finalized audio segment 的本地播放、waveform/scrubber 和时间信息。
 
 ## 状态与数据归属
 
 - App 继续拥有 active workspace session、顶层 view、选中 memory 和 recording target。
-- Main-backed data 继续通过 TanStack Query：memory space list、workspace snapshot、memory detail。
+- Main-backed data 继续通过 TanStack Query：memory space list 和 workspace snapshot。
 - Memory rail 使用当前 workspace snapshot 的 `memories[]` 投影。
-- Memory Studio 使用 `['workspace', 'memory-detail', workspaceId, memoryId]` detail projection。
-- Asset timeline 数据必须来自当前 Memory detail，不从 workspace snapshot 或跨 Memory 聚合中推导。
+- 当前 Memory context 只使用 workspace snapshot 的 `memories[]` 投影。Memory Studio 进入 runtime 前必须先定义 detail projection、query key、文件合同和恢复路径。
+- Segment timeline 进入 runtime 前必须来自当前 Memory 的明确 detail projection，不从 workspace snapshot 或跨 Memory 聚合中推导。
 - Expression dock 的当前模式属于局部 UI state；没有跨 subtree 压力前不引入 Zustand。
 - 录音 lifecycle、Blob URL、autosave draft、elapsed timer 和 close protection 继续属于 recording feature-local state。
-- 图片、视频、上传和独立笔记在实现前必须先定义 `Asset` 文件合同、main IPC、Query invalidation 和恢复路径。
+- 图片、视频、imported_file 和独立笔记在实现前必须先定义 `Segment` 文件合同、main IPC、Query invalidation 和恢复路径。
 
 ## 基础设施审查门
 
@@ -104,14 +104,14 @@
 
 ### 3. Memory Studio 基础态
 
-目标：点击右侧 Memory 后进入 Memory Studio，使用目标图中的标题、meta、片段时间线、片段条和内容区结构。
+目标：为 Memory Studio 定义进入 runtime 所需的 detail projection、标题、meta、片段时间线、片段条和内容区结构。
 
 范围：
 
-- 复用现有 memory detail query。
+- 定义 Memory detail query 的文件真源、query key、IPC contract、恢复路径和 renderer owner。
 - 标题和 meta 只描述当前 Memory，例如片段数量、开始时间和最近更新时间。
-- 片段条先只承载当前 Memory 内的 finalized recordings。
-- fragment content 先支持录音摘要、转写/反思存在状态和继续记录 action。
+- 片段条先只承载当前 Memory 内的 finalized audio segments。
+- fragment content 先支持 audio segment 摘要、转写存在状态和继续记录 action。
 - 右 rail 表达当前 memory 选中态。
 
 验证：
@@ -132,7 +132,7 @@
 
 验证：
 
-- RED/GREEN 覆盖 dock 触发、忙碌态阻止关闭、失败恢复、finalize 后刷新 snapshot 和 memory detail。
+- RED/GREEN 覆盖 dock 触发、忙碌态阻止关闭、失败恢复和 finalize 后刷新 snapshot。
 - 录音事务 current 文档同步。
 
 ### 5. 录音中态工艺
@@ -158,23 +158,23 @@
 
 - 继续使用 finalized audio manifest/chunk read。
 - 引入 long waveform/scrubber 前重新评估 wavesurfer.js 和 ElevenLabs Audio Player source。
-- 转写和反思仍只来自用户编辑或已保存文件；不生成假 STT。
+- 转写只来自真实 ASR 或已保存文件；不生成假 STT。
 
 验证：
 
 - Blob URL 生命周期、chunk 并发、关闭后过期请求、autosave 失败保留 draft。
 - 内容不丢失的错误恢复证据。
 
-### 7. 独立笔记 Asset
+### 7. 独立笔记 Segment
 
-目标：让 dock 中的笔记成为真实 asset，而不是复用录音转写字段。
+目标：让 dock 中的笔记成为真实 segment，而不是复用录音转写字段。
 
 进入条件：
 
-- 定义 `Asset` 文件合同、memory relationship、main write/read owner、Query invalidation 和 recovery。
+- 定义 `Segment` 文件合同、memory relationship、main write/read owner、Query invalidation 和 recovery。
 - 更新 `docs/current/data.md`、`flow.md`、`frontend.md` 和 `quality.md`。
 
-### 8. 图片 Asset
+### 8. 图片 Segment
 
 目标：实现目标图中的图片 fragment、上传入口和图片查看 surface。
 
@@ -182,7 +182,7 @@
 
 - 文件复制、类型校验、大小上限、缩略图策略、错误恢复和安全路径验证完成。
 
-### 9. 视频 Asset
+### 9. 视频 Segment
 
 目标：实现目标图中的视频 fragment、视频查看和播放 surface。
 

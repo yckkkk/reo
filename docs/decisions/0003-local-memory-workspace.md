@@ -17,22 +17,20 @@ Reo 自己的 workspace metadata 放在隐藏目录：
 .reo/workspace.json
 ```
 
-Recording 产物使用普通文件：
+用户内容使用 Workspace、Memory、Segment 和 SegmentAttachment 四层结构。当前 runtime 已实现的主体记录是 audio segment。Audio segment 产物使用普通文件：
 
 ```text
-memories/<memoryId>/recordings/<recordingId>/audio.webm
-memories/<memoryId>/recordings/<recordingId>/transcript.md
-memories/<memoryId>/recordings/<recordingId>/reflections.md
-memories/<memoryId>/recordings/<recordingId>/recording.json
+memories/<memoryId>/segments/<segmentId>/audio.webm
+memories/<memoryId>/segments/<segmentId>/transcript.md
+memories/<memoryId>/segments/<segmentId>/segment.json
 ```
 
-Draft recording 产物保存在 Reo 管理路径：
+Draft audio segment 产物保存在 Reo 管理路径：
 
 ```text
-.reo/drafts/recordings/<recordingId>/audio.webm
-.reo/drafts/recordings/<recordingId>/transcript.md
-.reo/drafts/recordings/<recordingId>/reflections.md
-.reo/drafts/recordings/<recordingId>/recording.json
+.reo/drafts/segments/<segmentId>/audio.webm
+.reo/drafts/segments/<segmentId>/transcript.md
+.reo/drafts/segments/<segmentId>/segment.json
 ```
 
 ## 原因

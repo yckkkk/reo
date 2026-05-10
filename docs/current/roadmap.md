@@ -17,7 +17,7 @@
 完成标准：
 
 - Reo 定位为本地优先的 AI-ready 记忆空间。
-- 核心实体只有记忆空间、`Memory`、`Asset`、`Review`。
+- 核心实体只有记忆空间、`Memory`、`Segment`、`Review`。
 - Home、Library、记忆空间、草稿记忆空间的职责清楚。
 - 记忆空间三面板结构确定。
 - 记忆空间舞台、`Memory Studio`、`Guided Recall` 的关系确定。
@@ -32,7 +32,7 @@
 - Home dashboard 的即时表达入口。
 - 草稿记忆空间作为默认保存目标。
 - 录音表达组件完整交互。
-- 录音保存后形成 memory 和 audio asset。
+- 录音保存后形成 memory 和 audio segment。
 - 保存后形成 memory；后续进入 Memory Studio 或明确的草稿结果状态。
 
 质量门槛：
@@ -74,7 +74,7 @@
 
 - 中间面板承担主要体验。
 - 记忆空间舞台支持表达、继续、重温摘要。
-- `Memory Studio` 支持 asset 聚合、回放、笔记、继续表达和 review 入口。
+- `Memory Studio` 支持 segment 聚合、回放、笔记、继续表达和 review 入口。
 - 未来 AI 结构位不展示伪聊天、假输出或未实现能力。
 
 ## P4 Move Memory
@@ -91,7 +91,7 @@
 质量门槛：
 
 - 第一阶段只移动整条 memory。
-- 不支持单个 asset 跨记忆空间拆分移动。
+- 不支持单个 segment 跨记忆空间拆分移动。
 - 用户交互表现为“归入记忆空间”，不暴露事务状态。
 - 文件移动必须有明确失败保留和恢复路径。
 
@@ -121,7 +121,7 @@
 范围：
 
 - 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、结构和协作规则。
-- Memory、asset、review 文件结构清楚。
+- Memory、segment、review 文件结构清楚。
 - Codex CLI 可以进入记忆空间读取、解释和整理当前文件。
 - 验证不依赖 Reo runtime 内 AI。
 
@@ -135,11 +135,11 @@
 
 后续方向必须在第一阶段主链稳定后再进入：
 
-- 视频 asset。
-- 图片 asset。
+- 视频 segment。
+- 图片 segment。
 - 笔记和 editor 深化。
 - Home 草稿 panel。
-- 单个 asset 级移动。
+- 单个 segment 级移动。
 - 更完整的 SRS。
 - Reo runtime 内 AI agent。
 - 数据库、auth、同步、分享和发布能力。

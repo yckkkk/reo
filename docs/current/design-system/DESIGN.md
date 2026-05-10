@@ -36,7 +36,7 @@
 | Cinder                  | `#57534f`             | `--color-cinder`            | Mid-tone text、light surface 上的 secondary heading                                          |
 | Obsidian                | `#000000`             | `--color-obsidian`          | Primary text、filled action background、logo mark                                            |
 | Signal Blue             | `#0447ff`             | `--color-signal-blue`       | Reo accent，仅用于小型圆形 UI 元素，不用于正文或 pill button                                 |
-| Ember                   | `#ff4704`             | `--color-ember`             | Secondary Reo avatar accent，仅用于小型圆形 UI 元素                                          |
+| Ember                   | `#ff4704`             | `--color-ember`             | Secondary Reo avatar accent；可用于录音主圆形按钮和小型圆形 UI 元素                          |
 | Voice Spectrum          | `#3d75d8`             | `--color-voice-spectrum`    | Reo voice spectrum mark 的基础色                                                             |
 | Voice Spectrum Gradient | `conic-gradient(...)` | `--gradient-voice-spectrum` | Reo voice spectrum mark gradient；完整值位于 `variables.css` 和 `src/renderer/src/theme.css` |
 | Card White              | `#ffffff`             | `--color-card-white`        | 需要从 Eggshell 基底中分离出来的 card 和 contained form surface                              |
@@ -222,12 +222,12 @@ Base unit：4px。
 ### Accent Circle Button
 
 - Role：explicit circular icon-only accent action。
-- Background：Signal Blue。
+- Background：Signal Blue；recording primary circle may use Ember。
 - Text/Icon：`#ffffff`。
 - Shape：circle。
 - Minimum size：40px。
 - Hover：background and border switch to Obsidian，保持 icon/text 为 Card White。
-- Usage：only when a product flow explicitly needs a circular accent control；most buttons and sidebar icon buttons use 8px radius.
+- Usage：only when a product flow explicitly needs a circular accent control；recording primary start button is the only current large Ember circle；most buttons and sidebar icon buttons use 8px radius.
 
 ### Segmented Control
 
@@ -341,7 +341,7 @@ Base unit：4px。
 - Use 8px radius for most buttons and inputs; only tags and explicit circular icon controls use 9999px.
 - Use 16-20px radius for card and panel surfaces.
 - Keep text, surface, border, and button colors near monochrome.
-- Use Signal Blue and Ember only for small avatar dots, status indicators, focus rings, or explicit circular accent controls.
+- Use Signal Blue and Ember only for avatar dots, status indicators, focus rings, or explicit circular accent controls. Ember may be used by the recording primary circle, but not by page backgrounds, cards, body text, or pill buttons.
 - Scrim 只用于 overlay 遮罩；不得把 Obsidian 当遮罩色，因为 Obsidian 在深色模式中是文字色。
 - Use Geist Mono only for code, technical annotation, and machine-style markers.
 - Use hairline elevation only; avoid heavy shadows.

@@ -13,7 +13,7 @@
 - [ ] Slice 3：Memory Studio 基础态。
 - [ ] Slice 4：Expression Dock 与录音入口整合。
 - [ ] Slice 5：录音中态工艺。
-- [ ] Slice 6：回放与文本编辑态。
-- [ ] Slice 7：独立笔记 Asset。
-- [ ] Slice 8：图片 Asset。
-- [ ] Slice 9：视频 Asset。
+- [ ] Slice 6：回放与 transcript 查看态。
+- [ ] Slice 7：独立笔记 Segment。
+- [ ] Slice 8：图片 Segment。
+- [ ] Slice 9：视频 Segment。
