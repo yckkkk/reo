@@ -78,7 +78,7 @@
 - 记忆空间的中间区域承担主要体验；右侧 MemoryRail 承担当前 workspace 内的 Memory 导航；左侧 AppShell sidebar 只保持全局导航和记忆空间列表。当前 workspace 标题属于 AppShell panel titlebar，不属于页面内容区 header。
 - Memory Studio 必须表现为“记忆正在生长”的现场。当前录音和转写草稿不显示为附件堆叠，而显示为一段时间里留下的声音与文字之间的关系；录音 Segment card、timeline、playback waveform 和 transcript 必须在同一首屏 studio surface 内组成完整体验，不靠滚动才能看完主内容。
 - Loaded workspace 的右侧记忆列表是 Workspace 层级导航，只展示当前记忆空间中的 Memory 容器。它不展示单个 Segment 详情。
-- Memory Studio 的横向片段时间线是 Memory 层级结构，只展示当前选中 Memory 内部的 Segment 顺序。它不能用作整个 workspace 的 feed、日志流或文件流。
+- Memory Studio 的横向片段时间线是 Memory 层级结构，只展示当前选中 Memory 内部的 Segment 顺序。每个 Segment 预览 item 同时包含录音卡片、卡片下方居中的 timeline 圆点和时间标签；Segment strip 横向滚动时三者作为同一个 scroll item 一起移动，不使用独立兄弟 timeline 容器。它不能用作整个 workspace 的 feed、日志流或文件流。
 - 默认进入 workspace 时，中间区域是 Workspace Stage，不显示片段时间线；选择右侧某条 Memory 后，当前 runtime 只切换 Stage 的当前 Memory context，不进入单独详情 route。
 - 录音组件是最需要投入 UI 工艺的核心体验。动态波形、时间轴、实时转写位置、暂停、停止、本地保存、失败恢复、回放和归入 memory 的流程，都必须让用户感到内容安全、表达自由、整理可以稍后发生。
 - Review 和回顾入口的语气是重新遇见过去自己的邀请，不是任务、打卡或学习软件。

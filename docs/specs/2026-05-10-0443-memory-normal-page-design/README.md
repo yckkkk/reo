@@ -964,6 +964,16 @@ type SegmentAttachmentProjection = {
 - Electron runtime 视觉验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`，CDP viewport `1600x1000`。浅色截图：`artifacts/memory-studio-design-system-audit-light-2026-05-10T122640.png`；深色截图：`artifacts/memory-studio-design-system-audit-dark-2026-05-10T122640.png`。测量结果：document/body height 均为 `1000`、`scrollY=0`、Segment card count `4`、active card rect `216x216`、title class 为 `text-subheading font-bold leading-subheading`、duration class 为 `font-geist-mono text-body-lg font-bold tracking-wide`、tabs 只有 `转录/补充` 且 `补充` selected、主播放和补充播放都使用 `grid-cols-[40px_minmax(0,1fr)_auto]` + `gap-14`、两条 waveform source 都是 `decoded-audio`、无未命名 button、无 transcript 占位、无 `笔记/视频/图片` 常驻 tab。
 - Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 293 tests、renderer 215 tests、lint 和 format check。
 
+### 2026-05-10 12:52 America/Los_Angeles
+
+- 自我质疑 1：如果 timeline 圆点和时间仍是独立兄弟容器，横向滚动时只能靠视觉巧合对齐，无法证明它们属于对应 Segment。修复：Segment strip 的直接子项改为 `memory-studio-segment-item`，该 item 是唯一 button/focus target，内部同时包含 `memory-studio-segment-card`、`memory-studio-segment-timeline-dot` 和 `memory-studio-segment-timeline-time`；删除独立 `Memory 片段时间轴` navigation。
+- 自我质疑 2：如果只用截图判断，对齐问题以后会回归。修复：新增 `verify:memory-studio-layout` runtime telemetry，连接 Electron remote debugging 端口，用 CDP 输入事件点击第二个 Segment item、执行横向 wheel 滚动，并测量 scroll owner、selected item、card/dot/time 中心和页面高度。
+- 自我质疑 3：如果只验证浅色主题，暗色 surface 的边界、中心和滚动状态可能漂移。修复：同一 telemetry 在浅色和深色 runtime 各跑一次，并保存 screenshot/metrics。
+- RED：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "keeps timeline marker"` 先失败，失败点是 `选择片段` button 仍为 `data-slot="memory-studio-segment-card"`，而不是新的 `memory-studio-segment-item`。
+- GREEN targeted：实现单 scroll item 后，`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "keeps timeline marker"` 通过；随后 `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx` 通过 22 tests；`npm run typecheck` 通过；`npm run lint` 通过。
+- Electron runtime 操作验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`。当前会话未暴露可调用的 Computer Use MCP action 工具；本轮用同一 Electron runtime 的 CDP `Input.dispatchMouseEvent` 执行用户式点击、主题切换和横向滚动，并把该流程固化为 `verify:memory-studio-layout`。浅色 telemetry：`artifacts/memory-studio-timeline-item-telemetry-2026-05-10T1249.png` / `.json`；深色 telemetry：`artifacts/memory-studio-timeline-item-telemetry-dark-2026-05-10T1250.png` / `.json`。
+- Runtime 测量结果：浅色 viewport `1200x800`，document/body height 均为 `800`，`windowScrollY=0`，`standaloneTimelineExists=false`，`stripScrollOwnerCount=1`，`itemCount=4`，`selectedItemCount=1`，CDP 横向 wheel 后 `scrollLeft=180.5`；4 个 Segment item 的 `dotToCardCenterDelta=0`、`timeToCardCenterDelta=0` 且 `timelineBelowCard=true`。深色同项通过，CDP 横向 wheel 后 `scrollLeft=236`，全部 delta 为 `0`。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。

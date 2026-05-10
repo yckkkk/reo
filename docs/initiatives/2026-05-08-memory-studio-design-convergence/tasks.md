@@ -17,6 +17,7 @@
 - [x] Slice 3A：Segment strip + timeline。
   - [x] Segment 横向预览流只展示当前 Memory 内 Segment。
   - [x] Segment card、时间轴、内容区和 selectedSegmentId 同步。
+  - [x] Segment card、timeline 圆点和时间标签属于同一个横向 scroll item，圆点和时间随 Segment strip 滚动并保持在对应卡片下方居中。
 - [x] Slice 3B：CarouselArrowButton 横向浏览控制。
   - [x] `CarouselArrowButton direction="left"` 只向左滚动 Segment 横向预览流。
   - [x] `CarouselArrowButton direction="right"` 只向右滚动 Segment 横向预览流。
@@ -54,6 +55,7 @@
   - [x] Runtime a11y 快检确认 Memory Studio 无可见未命名 button/link，slider 绑定 decoded-audio playback source。
 - [x] Slice 11：Electron runtime 视觉验证和 docs/current 全量同步。
   - [x] Electron runtime 浅色/深色视觉证据已记录：首屏无页面纵向滚动、无重复 summary、只显示真实 `转录` tab、playback waveform 来源为 decoded finalized audio。
+  - [x] `verify:memory-studio-layout` 已作为 Memory Studio layout telemetry 入口记录，覆盖 Segment item 点击、横向滚动、card/dot/time 中心测量和独立 timeline 容器消失。
   - [x] `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/quality.md` 和 `docs/current/design-system/*` 已同步当前实现。
 - [x] Slice 12：最终 `verify:quick` 和 initiative 收口。
   - [x] `npm run verify:quick` 通过：typecheck、main tests、renderer tests、lint 和 format check 均为 exit 0。
