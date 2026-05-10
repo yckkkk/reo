@@ -730,9 +730,17 @@ export function MemoryStudio({
           </div>
         ) : detail && segments.length > 0 && selectedSegment ? (
           <>
-            <section aria-label="片段预览流" className="relative mt-20 min-w-0 shrink-0">
+            <section
+              aria-label="片段预览流"
+              className="relative mt-20 min-w-0 shrink-0"
+              style={
+                {
+                  '--memory-studio-segment-card-size': 'clamp(188px, 24%, 216px)',
+                } as CSSProperties
+              }
+            >
               {stripScrollState.canScrollLeft ? (
-                <div className="pointer-events-none absolute left-0 top-[calc(50%-20px)] z-10">
+                <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
                   <div className="pointer-events-auto">
                     <CarouselArrowButton
                       direction="left"
@@ -746,11 +754,6 @@ export function MemoryStudio({
                 ref={stripScrollRef}
                 data-slot="memory-studio-segment-strip-scroll"
                 className="flex snap-x gap-12 overflow-x-auto px-0 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                style={
-                  {
-                    '--memory-studio-segment-card-size': 'clamp(188px, 24%, 216px)',
-                  } as CSSProperties
-                }
               >
                 {segments.map((segment) => {
                   const isSelected = segment.segmentId === selectedSegment.segmentId;
@@ -758,28 +761,54 @@ export function MemoryStudio({
                     <button
                       key={segment.segmentId}
                       type="button"
-                      data-slot="memory-studio-segment-card"
+                      data-slot="memory-studio-segment-item"
                       aria-current={isSelected ? 'true' : undefined}
                       aria-label={`选择片段 ${segment.title}`}
                       className={[
-                        'group box-border flex aspect-square min-w-0 flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col justify-between overflow-hidden rounded-panels border-2 bg-card-glass px-16 py-16 text-left shadow-subtle backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-powder focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
-                        isSelected ? 'border-signal-blue shadow-glass' : 'border-glass-border',
+                        'group flex min-w-0 flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-panels text-left outline-none',
                       ].join(' ')}
                       onClick={() => setSelectedSegmentId(segment.segmentId)}
                     >
-                      <span className="block min-w-0">
-                        <span className="block line-clamp-2 text-subheading font-bold leading-subheading text-obsidian">
-                          {segment.title}
+                      <span
+                        data-slot="memory-studio-segment-card"
+                        className={[
+                          'box-border flex aspect-square w-full min-w-0 flex-col justify-between overflow-hidden rounded-panels border-2 bg-card-glass px-16 py-16 shadow-subtle backdrop-blur-glass-sm transition-colors duration-150 group-hover:border-obsidian group-hover:bg-powder group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
+                          isSelected ? 'border-signal-blue shadow-glass' : 'border-glass-border',
+                        ].join(' ')}
+                      >
+                        <span className="block min-w-0">
+                          <span className="block line-clamp-2 text-subheading font-bold leading-subheading text-obsidian">
+                            {segment.title}
+                          </span>
+                          <span className="mt-8 block truncate text-ui-md font-medium leading-ui-md text-gravel">
+                            {segmentStateLabel(segment)}
+                          </span>
                         </span>
-                        <span className="mt-8 block truncate text-ui-md font-medium leading-ui-md text-gravel">
-                          {segmentStateLabel(segment)}
+                        <span className="flex min-w-0 items-center justify-between gap-8">
+                          <SegmentPreviewSpectrum active={isSelected} />
+                          <span
+                            data-slot="memory-studio-segment-card-duration"
+                            className="shrink-0 font-geist-mono text-body-lg font-bold leading-none tracking-wide text-obsidian"
+                          >
+                            {durationLabel(segment.durationMs)}
+                          </span>
                         </span>
                       </span>
-                      <span className="flex min-w-0 items-center justify-between gap-8">
-                        <SegmentPreviewSpectrum active={isSelected} />
+                      <span
+                        aria-hidden="true"
+                        data-slot="memory-studio-segment-timeline-anchor"
+                        className="relative mt-12 flex h-56 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-4 before:h-px before:bg-chalk"
+                      >
                         <span
-                          data-slot="memory-studio-segment-card-duration"
-                          className="shrink-0 font-geist-mono text-body-lg font-bold leading-none tracking-wide text-obsidian"
+                          data-slot="memory-studio-segment-timeline-dot"
+                          className={[
+                            'relative z-[1] size-8 rounded-full border bg-card-glass',
+                            isSelected ? 'border-signal-blue bg-signal-blue' : 'border-slate',
+                          ].join(' ')}
+                        />
+                        <span
+                          data-slot="memory-studio-segment-timeline-time"
+                          className="mt-16 font-geist-mono text-ui-sm leading-ui-sm tracking-wide text-gravel"
                         >
                           {durationLabel(segment.durationMs)}
                         </span>
@@ -789,7 +818,7 @@ export function MemoryStudio({
                 })}
               </div>
               {stripScrollState.canScrollRight ? (
-                <div className="pointer-events-none absolute right-0 top-[calc(50%-20px)] z-10">
+                <div className="pointer-events-none absolute right-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
                   <div className="pointer-events-auto">
                     <CarouselArrowButton
                       direction="right"
@@ -800,40 +829,6 @@ export function MemoryStudio({
                 </div>
               ) : null}
             </section>
-
-            <nav
-              aria-label="Memory 片段时间轴"
-              className="relative mt-12 grid shrink-0 px-20 py-4 before:absolute before:left-20 before:right-20 before:top-12 before:h-px before:bg-chalk"
-              style={{ gridTemplateColumns: `repeat(${segments.length}, minmax(0, 1fr))` }}
-            >
-              {segments.map((segment) => {
-                const isSelected = segment.segmentId === selectedSegment.segmentId;
-                return (
-                  <button
-                    key={segment.segmentId}
-                    type="button"
-                    aria-current={isSelected ? 'step' : undefined}
-                    aria-label={`定位片段 ${segment.title}`}
-                    className={[
-                      'relative flex min-w-0 flex-col items-center gap-7 rounded-buttons px-2 py-2 text-ui-sm leading-ui-sm text-gravel outline-none transition-colors duration-150 hover:text-obsidian focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
-                      isSelected ? 'text-obsidian' : '',
-                    ].join(' ')}
-                    onClick={() => setSelectedSegmentId(segment.segmentId)}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={[
-                        'relative z-[1] size-8 rounded-full border bg-card-glass',
-                        isSelected ? 'border-signal-blue bg-signal-blue' : 'border-slate',
-                      ].join(' ')}
-                    />
-                    <span className="font-geist-mono tracking-wide">
-                      {durationLabel(segment.durationMs)}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
 
             <section
               aria-label="片段内容"

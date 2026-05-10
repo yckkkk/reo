@@ -408,6 +408,8 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const stageContent = document.querySelector('[data-slot="workspace-stage-content"]');
     const studioLayout = studio.querySelector('[data-slot="memory-studio-layout"]');
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const segmentItems = studio.querySelectorAll('[data-slot="memory-studio-segment-item"]');
     const segmentCards = studio.querySelectorAll('[data-slot="memory-studio-segment-card"]');
     const stripScroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
@@ -416,9 +418,15 @@ describe('LoadedWorkspaceFrame', () => {
     expect(stageContent).toHaveClass('items-stretch', 'justify-start');
     expect(studio).toHaveClass('overflow-hidden');
     expect(studioLayout).toHaveClass('max-w-[1120px]');
+    expect(segmentItems).toHaveLength(2);
     expect(segmentCards).toHaveLength(2);
-    expect(segmentCards[0]).toHaveClass(
+    expect(segmentItems[0]).toHaveClass(
       'flex-[0_0_var(--memory-studio-segment-card-size)]',
+      'snap-start',
+      'flex-col',
+      'min-w-0'
+    );
+    expect(segmentCards[0]).toHaveClass(
       'aspect-square',
       'rounded-panels',
       'border-2',
@@ -428,13 +436,52 @@ describe('LoadedWorkspaceFrame', () => {
       'py-16',
       'min-w-0'
     );
-    expect(stripScroll).toHaveAttribute(
+    expect(strip).toHaveAttribute(
       'style',
       expect.stringContaining('--memory-studio-segment-card-size: clamp(188px, 24%, 216px)')
     );
     expect(stripScroll).not.toHaveClass('px-44');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
     expect(transcriptScroll).toHaveClass('min-h-0', 'overflow-y-auto');
+  });
+
+  it('keeps timeline marker and time inside the same horizontal Segment item', async () => {
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_segment_item_timeline',
+      detail: birthdayDetailWithTwoSegments,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const activeItem = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
+    const inactiveItem = within(strip).getByRole('button', { name: '选择片段 Birthday song' });
+
+    expect(activeItem).toHaveAttribute('data-slot', 'memory-studio-segment-item');
+    expect(activeItem).toHaveClass(
+      'flex-[0_0_var(--memory-studio-segment-card-size)]',
+      'snap-start',
+      'flex-col'
+    );
+    expect(activeItem.querySelector('[data-slot="memory-studio-segment-card"]')).toBeTruthy();
+    expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    ).toBeTruthy();
+    expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+    ).toBeTruthy();
+    expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
+    ).toHaveTextContent('02:05');
+    expect(
+      inactiveItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
+    ).toHaveTextContent('01:05');
+    expect(within(studio).queryByRole('navigation', { name: 'Memory 片段时间轴' })).toBeNull();
   });
 
   it('renders Segment recording cards with balanced flat-vector waveform and mono duration', async () => {
@@ -560,20 +607,19 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
-    const timeline = within(studio).getByRole('navigation', { name: 'Memory 片段时间轴' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
+    const birthdayItem = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
+    const birthdaySongItem = within(strip).getByRole('button', { name: '选择片段 Birthday song' });
 
+    expect(birthdayItem).toHaveAttribute('aria-current', 'true');
     expect(
-      within(strip).getByRole('button', { name: '选择片段 Birthday candles' })
-    ).toHaveAttribute('aria-current', 'true');
-    expect(
-      within(timeline).getByRole('button', { name: '定位片段 Birthday candles' })
-    ).toHaveAttribute('aria-current', 'step');
+      birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+    ).toHaveClass('bg-signal-blue');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday candles' })
     ).toBeInTheDocument();
 
-    await user.click(within(strip).getByRole('button', { name: '选择片段 Birthday song' }));
+    await user.click(birthdaySongItem);
 
     expect(within(strip).getByRole('button', { name: '选择片段 Birthday song' })).toHaveAttribute(
       'aria-current',
@@ -583,8 +629,11 @@ describe('LoadedWorkspaceFrame', () => {
       within(strip).getByRole('button', { name: '选择片段 Birthday candles' })
     ).not.toHaveAttribute('aria-current');
     expect(
-      within(timeline).getByRole('button', { name: '定位片段 Birthday song' })
-    ).toHaveAttribute('aria-current', 'step');
+      birthdaySongItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+    ).toHaveClass('bg-signal-blue');
+    expect(
+      birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+    ).not.toHaveClass('bg-signal-blue');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday song' })
     ).toBeInTheDocument();

@@ -1,0 +1,424 @@
+#!/usr/bin/env node
+
+import { writeFileSync } from 'node:fs';
+import WebSocket from 'ws';
+
+const defaultPort = Number(process.env.REMOTE_DEBUGGING_PORT || 9233);
+const defaultTolerance = 1.5;
+
+function printHelp() {
+  console.log(`Usage:
+  REMOTE_DEBUGGING_PORT=9233 npm run dev
+  npm run verify:memory-studio-layout -- --port 9233 --screenshot docs/specs/.../artifacts/memory-studio-layout.png --metrics docs/specs/.../artifacts/memory-studio-layout.json
+
+Options:
+  --port <number>       Electron remote debugging port. Default: ${defaultPort}
+  --host <host>         Remote debugging host. Default: 127.0.0.1
+  --tolerance <px>      Allowed center alignment delta. Default: ${defaultTolerance}
+  --screenshot <path>   Write a viewport screenshot after measurement.
+  --metrics <path>      Write machine-readable metrics JSON.
+  --json                Print metrics JSON to stdout.
+`);
+}
+
+function fail(message, code = 1) {
+  console.error(message);
+  process.exit(code);
+}
+
+function parseArgs(argv) {
+  const options = {
+    host: '127.0.0.1',
+    port: defaultPort,
+    tolerance: defaultTolerance,
+    json: false,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+
+    switch (arg) {
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
+      case '--host':
+        options.host = next;
+        index += 1;
+        break;
+      case '--port':
+        options.port = Number(next);
+        index += 1;
+        break;
+      case '--tolerance':
+        options.tolerance = Number(next);
+        index += 1;
+        break;
+      case '--screenshot':
+        options.screenshot = next;
+        index += 1;
+        break;
+      case '--metrics':
+        options.metrics = next;
+        index += 1;
+        break;
+      case '--json':
+        options.json = true;
+        break;
+      default:
+        fail(`Unknown option: ${arg}`);
+    }
+  }
+
+  if (!Number.isFinite(options.port) || options.port <= 0) {
+    fail('--port must be a positive number.');
+  }
+  if (!Number.isFinite(options.tolerance) || options.tolerance < 0) {
+    fail('--tolerance must be a non-negative number.');
+  }
+
+  return options;
+}
+
+async function fetchJson(url) {
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    fail(
+      `Cannot reach Electron remote debugging endpoint ${url}. Start runtime with REMOTE_DEBUGGING_PORT=<port> npm run dev. ${error.message}`
+    );
+  }
+  if (!response.ok) {
+    fail(`Remote debugging endpoint ${url} returned ${response.status}.`);
+  }
+  return response.json();
+}
+
+async function connectCdp(webSocketDebuggerUrl) {
+  const socket = new WebSocket(webSocketDebuggerUrl);
+  const pending = new Map();
+  let nextId = 1;
+
+  socket.on('message', (data) => {
+    const message = JSON.parse(data.toString());
+    if (!message.id || !pending.has(message.id)) {
+      return;
+    }
+    const { resolve, reject } = pending.get(message.id);
+    pending.delete(message.id);
+    if (message.error) {
+      reject(new Error(message.error.message || JSON.stringify(message.error)));
+      return;
+    }
+    resolve(message.result);
+  });
+
+  await new Promise((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+
+  return {
+    send(method, params = {}) {
+      const id = nextId;
+      nextId += 1;
+      const payload = JSON.stringify({ id, method, params });
+      return new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject });
+        socket.send(payload, (error) => {
+          if (error) {
+            pending.delete(id);
+            reject(error);
+          }
+        });
+      });
+    },
+    close() {
+      socket.close();
+    },
+  };
+}
+
+async function evaluate(client, expression) {
+  const result = await client.send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (result.exceptionDetails) {
+    fail(`Runtime evaluation failed: ${result.exceptionDetails.text}`);
+  }
+  return result.result.value;
+}
+
+function measurementExpression() {
+  return `(() => {
+    const studio = document.querySelector('[aria-label="Memory Studio"]');
+    if (!studio) {
+      return { ok: false, reason: 'Memory Studio region is not visible.' };
+    }
+
+    const scroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+    const items = Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-item"]'));
+    const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
+    if (!scroll || items.length === 0) {
+      return { ok: false, reason: 'Segment strip scroll owner or Segment items are missing.' };
+    }
+
+    const rectOf = (element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        right: rect.right,
+        bottom: rect.bottom,
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+      };
+    };
+
+    const itemMetrics = items.map((item, index) => {
+      const card = item.querySelector('[data-slot="memory-studio-segment-card"]');
+      const dot = item.querySelector('[data-slot="memory-studio-segment-timeline-dot"]');
+      const time = item.querySelector('[data-slot="memory-studio-segment-timeline-time"]');
+      const anchor = item.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]');
+      const itemRect = rectOf(item);
+      const cardRect = card ? rectOf(card) : null;
+      const dotRect = dot ? rectOf(dot) : null;
+      const timeRect = time ? rectOf(time) : null;
+      const anchorRect = anchor ? rectOf(anchor) : null;
+      return {
+        index,
+        label: item.getAttribute('aria-label'),
+        selected: item.getAttribute('aria-current') === 'true',
+        itemRect,
+        cardRect,
+        dotRect,
+        timeRect,
+        anchorRect,
+        dotToCardCenterDelta: cardRect && dotRect ? dotRect.centerX - cardRect.centerX : null,
+        timeToCardCenterDelta: cardRect && timeRect ? timeRect.centerX - cardRect.centerX : null,
+        timelineBelowCard: cardRect && anchorRect ? anchorRect.top >= cardRect.bottom : false,
+      };
+    });
+
+    return {
+      ok: true,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      documentHeight: document.documentElement.scrollHeight,
+      bodyHeight: document.body.scrollHeight,
+      windowScrollY: window.scrollY,
+      standaloneTimelineExists: Boolean(nav),
+      stripScrollOwnerCount: studio.querySelectorAll('[data-slot="memory-studio-segment-strip-scroll"]').length,
+      itemCount: items.length,
+      selectedItemCount: items.filter((item) => item.getAttribute('aria-current') === 'true').length,
+      scroll: {
+        left: scroll.scrollLeft,
+        width: scroll.scrollWidth,
+        clientWidth: scroll.clientWidth,
+        rect: rectOf(scroll),
+      },
+      items: itemMetrics,
+    };
+  })()`;
+}
+
+function centerPointExpression(selector, index = 0) {
+  return `(() => {
+    const elements = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+    const element = elements[${index}];
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`;
+}
+
+function waitExpression() {
+  return `new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+  })`;
+}
+
+function assertMetrics(metrics, tolerance) {
+  const failures = [];
+  if (!metrics.ok) {
+    failures.push(metrics.reason || 'Unknown measurement failure.');
+    return failures;
+  }
+  if (metrics.standaloneTimelineExists) {
+    failures.push('Standalone Memory timeline navigation still exists.');
+  }
+  if (metrics.stripScrollOwnerCount !== 1) {
+    failures.push(
+      `Expected 1 segment strip scroll owner, received ${metrics.stripScrollOwnerCount}.`
+    );
+  }
+  if (metrics.selectedItemCount !== 1) {
+    failures.push(`Expected 1 selected Segment item, received ${metrics.selectedItemCount}.`);
+  }
+  if (metrics.windowScrollY !== 0) {
+    failures.push(`Expected windowScrollY 0, received ${metrics.windowScrollY}.`);
+  }
+  if (metrics.documentHeight > metrics.viewport.height + 2) {
+    failures.push(
+      `Expected Memory Studio to fit the viewport height; document height ${metrics.documentHeight}, viewport ${metrics.viewport.height}.`
+    );
+  }
+
+  for (const item of metrics.items) {
+    if (!item.cardRect || !item.dotRect || !item.timeRect || !item.anchorRect) {
+      failures.push(`Segment item ${item.index} is missing card, dot, time, or anchor.`);
+      continue;
+    }
+    if (Math.abs(item.dotToCardCenterDelta) > tolerance) {
+      failures.push(
+        `Segment item ${item.index} dot is not centered under card: delta ${item.dotToCardCenterDelta.toFixed(2)}px.`
+      );
+    }
+    if (Math.abs(item.timeToCardCenterDelta) > tolerance) {
+      failures.push(
+        `Segment item ${item.index} time is not centered under card: delta ${item.timeToCardCenterDelta.toFixed(2)}px.`
+      );
+    }
+    if (!item.timelineBelowCard) {
+      failures.push(`Segment item ${item.index} timeline anchor is not below the card.`);
+    }
+  }
+
+  return failures;
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    printHelp();
+    return;
+  }
+
+  const targets = await fetchJson(`http://${options.host}:${options.port}/json`);
+  const target = targets.find((entry) => entry.type === 'page' && entry.webSocketDebuggerUrl);
+  if (!target) {
+    fail(`No debuggable Electron page found on ${options.host}:${options.port}.`);
+  }
+
+  const client = await connectCdp(target.webSocketDebuggerUrl);
+  try {
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('Input.setIgnoreInputEvents', { ignore: false }).catch(() => undefined);
+
+    const before = await evaluate(client, measurementExpression());
+    if (!before.ok) {
+      fail(before.reason);
+    }
+
+    let clickedSecondItem = false;
+    if (before.itemCount > 1) {
+      const secondItemCenter = await evaluate(
+        client,
+        centerPointExpression('[data-slot="memory-studio-segment-item"]', 1)
+      );
+      if (secondItemCenter) {
+        await client.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x: secondItemCenter.x,
+          y: secondItemCenter.y,
+          button: 'left',
+          clickCount: 1,
+        });
+        await client.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: secondItemCenter.x,
+          y: secondItemCenter.y,
+          button: 'left',
+          clickCount: 1,
+        });
+        clickedSecondItem = true;
+        await evaluate(client, waitExpression());
+      }
+    }
+
+    const scrollCenter = await evaluate(
+      client,
+      centerPointExpression('[data-slot="memory-studio-segment-strip-scroll"]')
+    );
+    if (scrollCenter && before.scroll.width > before.scroll.clientWidth) {
+      await client.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: scrollCenter.x,
+        y: scrollCenter.y,
+        deltaX: 180,
+        deltaY: 0,
+      });
+      await evaluate(client, waitExpression());
+    }
+
+    let after = await evaluate(client, measurementExpression());
+    let scrollMethod = 'cdp-mouseWheel';
+    if (
+      before.scroll.width > before.scroll.clientWidth &&
+      after.scroll.left === before.scroll.left
+    ) {
+      await evaluate(
+        client,
+        `(() => {
+          const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+          if (scroll) {
+            scroll.scrollTo({ left: Math.min(scroll.scrollLeft + 180, scroll.scrollWidth - scroll.clientWidth), behavior: 'auto' });
+            scroll.dispatchEvent(new Event('scroll', { bubbles: true }));
+          }
+          return true;
+        })()`
+      );
+      await evaluate(client, waitExpression());
+      after = await evaluate(client, measurementExpression());
+      scrollMethod = 'dom-scroll-fallback';
+    }
+
+    const failures = assertMetrics(after, options.tolerance);
+    const metrics = {
+      ok: failures.length === 0,
+      targetUrl: target.url,
+      clickedSecondItem,
+      scrollMethod,
+      tolerance: options.tolerance,
+      before,
+      after,
+      failures,
+    };
+
+    if (options.screenshot) {
+      const screenshot = await client.send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: false,
+      });
+      writeFileSync(options.screenshot, Buffer.from(screenshot.data, 'base64'));
+      metrics.screenshot = options.screenshot;
+    }
+
+    if (options.metrics) {
+      writeFileSync(options.metrics, `${JSON.stringify(metrics, null, 2)}\n`);
+    }
+    if (options.json) {
+      console.log(JSON.stringify(metrics, null, 2));
+    } else {
+      console.log(
+        `Memory Studio layout telemetry: ${metrics.ok ? 'PASS' : 'FAIL'}; items=${after.itemCount}; scrollLeft=${after.scroll.left}; clickedSecondItem=${clickedSecondItem}; scrollMethod=${scrollMethod}`
+      );
+    }
+
+    if (!metrics.ok) {
+      fail(`Memory Studio layout telemetry failed:\n- ${failures.join('\n- ')}`);
+    }
+  } finally {
+    client.close();
+  }
+}
+
+main().catch((error) => {
+  fail(error.stack || error.message);
+});
