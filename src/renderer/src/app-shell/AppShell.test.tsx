@@ -67,6 +67,15 @@ describe('AppShell', () => {
       </TestAppShell>
     );
 
+    const appShellRoot = document.querySelector('[data-slot="app-shell-root"]');
+    expect(appShellRoot).toBeInTheDocument();
+    expect(appShellRoot).toHaveClass(
+      'relative',
+      'h-screen',
+      'min-h-0',
+      'w-screen',
+      'overflow-hidden'
+    );
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     const sidebar = screen.getByRole('complementary', { name: '记忆空间侧边栏' });
     expect(sidebar).toHaveStyle({ zIndex: '1', width: '240px' });
@@ -89,13 +98,13 @@ describe('AppShell', () => {
       '[-webkit-app-region:drag]'
     );
     expect(titlebar).toHaveStyle({ zIndex: '5' });
-    expect(panel).toHaveClass('flex', 'flex-col');
+    expect(panel).toHaveClass('flex', 'min-h-0', 'flex-col', 'overflow-hidden');
     const panelTitlebar = panel.querySelector('[data-slot="app-shell-panel-titlebar"]');
     expect(panelTitlebar).toBeInTheDocument();
     expect(panelTitlebar).toHaveClass('h-titlebar', 'shrink-0');
     const panelContent = panel.querySelector('[data-slot="app-shell-panel-content"]');
     expect(panelContent).toBeInTheDocument();
-    expect(panelContent).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(panelContent).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
     expect(sidebar).toHaveClass('pt-sidebar-content-top');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');

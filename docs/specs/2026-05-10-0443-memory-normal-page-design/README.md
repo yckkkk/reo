@@ -985,6 +985,14 @@ type SegmentAttachmentProjection = {
 - Runtime 测量结果：default/interaction/dark 三次均 `documentWidth=900`、`documentHeight=720`、`windowScrollX=0`、`windowScrollY=0`；Memory Studio region、content panel、audio player 和 audio player time 均在 viewport 内；Segment card width 均为 `124px`，处于 `120px-150px` 验收范围；audio player time `white-space=nowrap`；交互态通过 CDP 输入事件点击第二个 Segment item，并在 Segment strip 内横向 wheel 滚动到 `scrollLeft=180`。
 - Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 293 tests、renderer 217 tests、lint 和 format check。
 
+### 2026-05-10 13:37 America/Los_Angeles
+
+- 自我质疑 7：如果 renderer root 和 AppShell root 只依赖 `min-height`，首次进入 Electron 后绝对定位 panel 可能在初始布局中拿到非确定 containing block，用户需要 resize 才能让右侧和底部重新贴合窗口。修复：renderer 的 `html`、`body` 和 `#root` 使用 `height: 100%`、`min-height: 100%` 和 `overflow: hidden`；AppShell root 改为确定 viewport box；AppShell panel content 改为无 app-level scroll 的 flex clipping boundary。
+- RED/GREEN：`npm run test:renderer -- src/renderer/src/app-shell/AppShell.test.tsx` 先失败于缺少 `app-shell-root` 确定 viewport class 且 panel content 仍是 `overflow-y-auto`；新增 `test/main/rendererViewportCss.test.ts` 覆盖 renderer root CSS 从 `min-height: 100vh` 改为确定高度与 hidden overflow；实现后 targeted renderer 通过 1 file / 13 tests，`npm run test:main` 通过 294 tests，`npm run typecheck` 通过。
+- Electron runtime 首屏验证：`REMOTE_DEBUGGING_PORT=9234 npm run dev`，通过 CDP 输入事件点击 `测试工作区1` 进入 Memory Studio；默认窗口证据写入 `artifacts/memory-studio-first-entry-shell-fixed.png` / `.json`，900x720 证据写入 `artifacts/memory-studio-first-entry-shell-fixed-900x720.png` / `.json`。
+- Runtime 测量结果：默认窗口 `viewport=1200x800`、`documentWidth=1200`、`documentHeight=800`、`windowScrollX=0`、`windowScrollY=0`；AppShell root rect `1200x800`，panel right/bottom 分别为 `1200/800`，panel content bottom 为 `799`，WorkspaceFrame bottom 为 `799`；root/panel/panel content/WorkspaceFrame overflow 均为 `hidden`。900x720 视口同项通过，document/body width/height 等于 viewport，panel right/bottom 为 `900/720`，panel content 和 WorkspaceFrame bottom 为 `719`。
+- Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 294 tests、renderer 217 tests、lint 和 format check。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。

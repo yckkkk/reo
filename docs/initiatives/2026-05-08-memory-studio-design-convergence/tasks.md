@@ -58,6 +58,7 @@
   - [x] Electron runtime 浅色/深色视觉证据已记录：首屏无页面纵向滚动、无重复 summary、只显示真实 `转录` tab、playback waveform 来源为 decoded finalized audio。
   - [x] `verify:memory-studio-layout` 已作为 Memory Studio layout telemetry 入口记录，覆盖 Segment item 点击、横向滚动、card/dot/time 中心测量和独立 timeline 容器消失。
   - [x] `verify:memory-studio-layout` 覆盖 900x720 窄视口、页面横向/纵向滚动为 0、紧凑 card 宽度范围和 audio player 时间不换行。
+  - [x] `verify:memory-studio-layout` 覆盖 AppShell root、panel、panel content、WorkspaceFrame、Workspace stage shell 和 MemoryRail shell 的首屏 viewport 边界，防止首次进入软件后右侧或底部布局依赖 resize 才恢复。
   - [x] `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/quality.md` 和 `docs/current/design-system/*` 已同步当前实现。
 - [x] Slice 12：最终 `verify:quick` 和 initiative 收口。
   - [x] `npm run verify:quick` 通过：typecheck、main tests、renderer tests、lint 和 format check 均为 exit 0。

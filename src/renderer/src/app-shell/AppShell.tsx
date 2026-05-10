@@ -193,8 +193,9 @@ export function AppShell({
   return (
     <TooltipProvider>
       <div
+        data-slot="app-shell-root"
         data-theme={themeMode}
-        className="relative min-h-screen overflow-hidden bg-eggshell text-obsidian"
+        className="relative h-screen min-h-0 w-screen overflow-hidden bg-eggshell text-obsidian"
       >
         <div
           role="banner"
@@ -432,7 +433,7 @@ export function AppShell({
 
         <main
           aria-label="记忆空间内容"
-          className={`absolute flex flex-col overflow-hidden border border-glass-border bg-card-glass shadow-subtle backdrop-blur-glass-lg ${panelMotionClass}`}
+          className={`absolute flex min-h-0 flex-col overflow-hidden border border-glass-border bg-card-glass shadow-subtle backdrop-blur-glass-lg ${panelMotionClass}`}
           style={{
             borderRadius: panelRadius,
             bottom: 0,
@@ -447,7 +448,10 @@ export function AppShell({
             className="h-titlebar shrink-0"
             aria-hidden="true"
           />
-          <div data-slot="app-shell-panel-content" className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            data-slot="app-shell-panel-content"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
             {children}
           </div>
         </main>

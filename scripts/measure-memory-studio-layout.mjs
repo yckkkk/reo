@@ -211,6 +211,12 @@ function measurementExpression() {
       return { ok: false, reason: 'Memory Studio region is not visible.' };
     }
 
+    const appShellRoot = document.querySelector('[data-slot="app-shell-root"]');
+    const appShellPanel = document.querySelector('[aria-label="记忆空间内容"]');
+    const appShellPanelContent = document.querySelector('[data-slot="app-shell-panel-content"]');
+    const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
+    const workspaceStageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const workspaceRailShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
     const scroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const items = Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-item"]'));
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
@@ -271,6 +277,26 @@ function measurementExpression() {
       bodyWidth: document.body.scrollWidth,
       windowScrollX: window.scrollX,
       windowScrollY: window.scrollY,
+      appShell: {
+        rootRect: appShellRoot ? rectOf(appShellRoot) : null,
+        panelRect: appShellPanel ? rectOf(appShellPanel) : null,
+        panelContentRect: appShellPanelContent ? rectOf(appShellPanelContent) : null,
+        rootOverflow: appShellRoot ? getComputedStyle(appShellRoot).overflow : null,
+        panelOverflow: appShellPanel ? getComputedStyle(appShellPanel).overflow : null,
+        panelContentOverflow: appShellPanelContent
+          ? getComputedStyle(appShellPanelContent).overflow
+          : null,
+      },
+      workspace: {
+        frameRect: workspaceFrame ? rectOf(workspaceFrame) : null,
+        stageShellRect: workspaceStageShell ? rectOf(workspaceStageShell) : null,
+        railShellRect: workspaceRailShell ? rectOf(workspaceRailShell) : null,
+        frameOverflow: workspaceFrame ? getComputedStyle(workspaceFrame).overflow : null,
+        stageShellOverflow: workspaceStageShell
+          ? getComputedStyle(workspaceStageShell).overflow
+          : null,
+        railShellOverflow: workspaceRailShell ? getComputedStyle(workspaceRailShell).overflow : null,
+      },
       studioRect: rectOf(studio),
       contentPanelRect: contentPanel ? rectOf(contentPanel) : null,
       standaloneTimelineExists: Boolean(nav),
@@ -362,6 +388,70 @@ function assertMetrics(metrics, options) {
     );
   }
 
+  if (metrics.appShell.rootOverflow !== 'hidden') {
+    failures.push(
+      `Expected AppShell root overflow hidden; received ${metrics.appShell.rootOverflow}.`
+    );
+  }
+  if (metrics.appShell.panelOverflow !== 'hidden') {
+    failures.push(
+      `Expected AppShell panel overflow hidden; received ${metrics.appShell.panelOverflow}.`
+    );
+  }
+  if (metrics.appShell.panelContentOverflow !== 'hidden') {
+    failures.push(
+      `Expected AppShell panel content overflow hidden; received ${metrics.appShell.panelContentOverflow}.`
+    );
+  }
+  if (metrics.workspace.frameOverflow !== 'hidden') {
+    failures.push(
+      `Expected WorkspaceFrame overflow hidden; received ${metrics.workspace.frameOverflow}.`
+    );
+  }
+
+  assertRectInsideViewport(
+    failures,
+    'AppShell root',
+    metrics.appShell.rootRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'AppShell panel',
+    metrics.appShell.panelRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'AppShell panel content',
+    metrics.appShell.panelContentRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'WorkspaceFrame',
+    metrics.workspace.frameRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Workspace stage shell',
+    metrics.workspace.stageShellRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Workspace MemoryRail shell',
+    metrics.workspace.railShellRect,
+    metrics.viewport,
+    tolerance
+  );
+
   assertRectInsideViewport(
     failures,
     'Memory Studio region',
@@ -449,6 +539,8 @@ async function main() {
         deviceScaleFactor: 1,
         mobile: false,
       });
+    } else {
+      await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     }
     await client.send('Input.setIgnoreInputEvents', { ignore: false }).catch(() => undefined);
     await evaluate(
