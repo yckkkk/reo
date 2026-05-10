@@ -455,13 +455,18 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(within(activeCard).queryByText('SEG 01')).toBeNull();
     expect(within(activeCard).getByText('Birthday candles')).toHaveClass(
-      'text-[17px]',
+      'text-subheading',
       'font-bold',
-      'leading-[1.22]'
+      'leading-subheading'
+    );
+    expect(within(activeCard).getByText('已有转录')).toHaveClass(
+      'text-ui-md',
+      'font-medium',
+      'leading-ui-md'
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')
-    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-[15px]', 'font-bold');
+    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-body-lg', 'font-bold', 'tracking-wide');
 
     const activeBars = activeCard.querySelectorAll(
       '[data-slot="memory-studio-segment-card-waveform"] span'
@@ -971,8 +976,10 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
+    const primaryPlayback = content.querySelector('[data-slot="memory-studio-player"]');
     const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
 
+    expect(primaryPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(within(tabs).getByRole('tab', { name: '转录' })).toHaveAttribute(
       'aria-selected',
       'true'
@@ -984,6 +991,16 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(supplements).getByRole('button', { name: '播放补充录音 补充录音' })
     ).toBeInTheDocument();
+    const supplementPlayback = supplements.querySelector(
+      '[data-slot="memory-studio-attachment-player"]'
+    );
+    expect(supplementPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
+    expect(supplementPlayback).toHaveClass(
+      'grid',
+      'grid-cols-[40px_minmax(0,1fr)_auto]',
+      'items-center',
+      'gap-14'
+    );
     expect(within(supplements).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
       'aria-valuetext',
       '00:00 / 00:05'

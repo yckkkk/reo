@@ -93,6 +93,96 @@ function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+type MemoryStudioAudioPlaybackRowProps = {
+  readonly audioAvailable: boolean;
+  readonly durationMs: number;
+  readonly loading: boolean;
+  readonly onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  readonly onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
+  readonly onTogglePlayback: () => Promise<void> | void;
+  readonly playButtonLabel: string;
+  readonly playbackTimeMs: number;
+  readonly playheadProgress: number;
+  readonly playing: boolean;
+  readonly rowSlot: string;
+  readonly waveformData: readonly number[];
+  readonly waveformLabel: string;
+  readonly waveformSlot: string;
+  readonly waveformSource: PlaybackWaveformSource;
+};
+
+function MemoryStudioAudioPlaybackRow({
+  audioAvailable,
+  durationMs,
+  loading,
+  onKeyDown,
+  onPointerDown,
+  onTogglePlayback,
+  playButtonLabel,
+  playbackTimeMs,
+  playheadProgress,
+  playing,
+  rowSlot,
+  waveformData,
+  waveformLabel,
+  waveformSlot,
+  waveformSource,
+}: MemoryStudioAudioPlaybackRowProps) {
+  const disabled = !audioAvailable || loading;
+
+  return (
+    <div
+      data-component="memory-studio-audio-player"
+      data-slot={rowSlot}
+      className="grid shrink-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-14"
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={playButtonLabel}
+        className="grid size-40 shrink-0 place-items-center rounded-full border border-glass-border bg-card-glass text-signal-blue backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent disabled:border-glass-border disabled:bg-card-glass disabled:text-fog"
+        onClick={() => {
+          void onTogglePlayback();
+        }}
+      >
+        {playing ? (
+          <Pause aria-hidden="true" className="size-16" />
+        ) : (
+          <Play aria-hidden="true" className="size-16 fill-current" />
+        )}
+      </button>
+      <Waveform
+        active={playing}
+        aria-disabled={!audioAvailable}
+        aria-label={waveformLabel}
+        aria-orientation="horizontal"
+        aria-valuemax={durationMs}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(playbackTimeMs)}
+        aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
+        barGap={4}
+        barRadius={2}
+        barWidth={2}
+        className="min-w-0 cursor-pointer rounded-buttons focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
+        data={waveformData}
+        data-slot={waveformSlot}
+        data-waveform-source={waveformSource}
+        height={42}
+        label={waveformLabel}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        playheadProgress={playheadProgress}
+        role="slider"
+        tabIndex={audioAvailable ? 0 : -1}
+        tone="voice"
+      />
+      <span className="shrink-0 font-geist-mono text-ui-md font-regular leading-ui-md tracking-wide text-obsidian">
+        {loading ? '载入中' : `${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
+      </span>
+    </div>
+  );
+}
+
 function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   return (
     <span
@@ -280,57 +370,26 @@ function SegmentAttachmentAudioPlayer({
   }
 
   return (
-    <article
-      aria-label={attachment.title}
-      className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-14 border-b border-chalk py-12 last:border-b-0"
-    >
-      <button
-        type="button"
-        disabled={!audioUrl || attachmentContentQuery.isLoading}
-        aria-label={`${playing ? '暂停' : '播放'}补充录音 ${attachment.title}`}
-        className="grid size-40 shrink-0 place-items-center rounded-full border border-glass-border bg-card-glass text-signal-blue backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent disabled:border-glass-border disabled:bg-card-glass disabled:text-fog"
-        onClick={() => {
-          void togglePlayback();
-        }}
-      >
-        {playing ? (
-          <Pause aria-hidden="true" className="size-16" />
-        ) : (
-          <Play aria-hidden="true" className="size-16 fill-current" />
-        )}
-      </button>
-      <Waveform
-        active={playing}
-        aria-disabled={!audioUrl}
-        aria-label="补充录音播放进度"
-        aria-orientation="horizontal"
-        aria-valuemax={attachment.durationMs}
-        aria-valuemin={0}
-        aria-valuenow={Math.round(playbackTimeMs)}
-        aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(attachment.durationMs)}`}
-        barGap={4}
-        barRadius={2}
-        barWidth={2}
-        className="min-w-0 cursor-pointer rounded-buttons focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
-        data={waveformData}
-        data-slot="memory-studio-attachment-waveform"
-        data-waveform-source={waveformSource}
-        height={42}
-        label="补充录音播放进度"
+    <article aria-label={attachment.title} className="border-b border-chalk py-12 last:border-b-0">
+      <MemoryStudioAudioPlaybackRow
+        audioAvailable={audioUrl !== null}
+        durationMs={attachment.durationMs}
+        loading={attachmentContentQuery.isLoading}
         onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
+        onTogglePlayback={togglePlayback}
+        playButtonLabel={`${playing ? '暂停' : '播放'}补充录音 ${attachment.title}`}
+        playbackTimeMs={playbackTimeMs}
         playheadProgress={playbackProgress}
-        role="slider"
-        tabIndex={audioUrl ? 0 : -1}
-        tone="voice"
+        playing={playing}
+        rowSlot="memory-studio-attachment-player"
+        waveformData={waveformData}
+        waveformLabel="补充录音播放进度"
+        waveformSlot="memory-studio-attachment-waveform"
+        waveformSource={waveformSource}
       />
-      <span className="shrink-0 font-geist-mono text-ui-md font-regular leading-ui-md tracking-[0.04em] text-obsidian">
-        {attachmentContentQuery.isLoading
-          ? '载入中'
-          : `${durationLabel(playbackTimeMs)} / ${durationLabel(attachment.durationMs)}`}
-      </span>
       {attachmentContentQuery.isError ? (
-        <p role="status" className="col-start-2 col-span-2 text-ui-xs leading-ui-xs text-gravel">
+        <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-gravel">
           补充录音加载失败。
         </p>
       ) : null}
@@ -709,18 +768,18 @@ export function MemoryStudio({
                       onClick={() => setSelectedSegmentId(segment.segmentId)}
                     >
                       <span className="block min-w-0">
-                        <span className="block line-clamp-2 text-[17px] font-bold leading-[1.22] text-obsidian">
+                        <span className="block line-clamp-2 text-subheading font-bold leading-subheading text-obsidian">
                           {segment.title}
                         </span>
-                        <span className="mt-8 block truncate text-[13px] font-medium leading-[1.35] text-gravel">
+                        <span className="mt-8 block truncate text-ui-md font-medium leading-ui-md text-gravel">
                           {segmentStateLabel(segment)}
                         </span>
                       </span>
-                      <span className="flex min-w-0 items-center justify-between gap-[6px]">
+                      <span className="flex min-w-0 items-center justify-between gap-8">
                         <SegmentPreviewSpectrum active={isSelected} />
                         <span
                           data-slot="memory-studio-segment-card-duration"
-                          className="shrink-0 font-geist-mono text-[15px] font-bold leading-none tracking-[0.04em] text-obsidian"
+                          className="shrink-0 font-geist-mono text-body-lg font-bold leading-none tracking-wide text-obsidian"
                         >
                           {durationLabel(segment.durationMs)}
                         </span>
@@ -768,7 +827,7 @@ export function MemoryStudio({
                         isSelected ? 'border-signal-blue bg-signal-blue' : 'border-slate',
                       ].join(' ')}
                     />
-                    <span className="font-geist-mono tracking-[0.04em]">
+                    <span className="font-geist-mono tracking-wide">
                       {durationLabel(segment.durationMs)}
                     </span>
                   </button>
@@ -781,56 +840,23 @@ export function MemoryStudio({
               data-slot="memory-studio-content-panel"
               className="mt-16 flex min-h-0 flex-1 flex-col border-t border-chalk pt-12"
             >
-              <div
-                data-slot="memory-studio-player"
-                className="grid shrink-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-14"
-              >
-                <button
-                  type="button"
-                  disabled={!segmentAudioUrl || segmentContentQuery.isLoading}
-                  aria-label={`${isSelectedSegmentPlaying ? '暂停' : '播放'}片段 ${selectedSegment.title}`}
-                  className="grid size-40 shrink-0 place-items-center rounded-full border border-glass-border bg-card-glass text-signal-blue backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent disabled:border-glass-border disabled:bg-card-glass disabled:text-fog"
-                  onClick={() => {
-                    void toggleSelectedSegmentPlayback();
-                  }}
-                >
-                  {isSelectedSegmentPlaying ? (
-                    <Pause aria-hidden="true" className="size-16" />
-                  ) : (
-                    <Play aria-hidden="true" className="size-16 fill-current" />
-                  )}
-                </button>
-                <Waveform
-                  active={isSelectedSegmentPlaying}
-                  aria-disabled={!segmentAudioUrl}
-                  aria-label="片段播放进度"
-                  aria-orientation="horizontal"
-                  aria-valuemax={selectedSegment.durationMs}
-                  aria-valuemin={0}
-                  aria-valuenow={Math.round(playbackTimeMs)}
-                  aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(selectedSegment.durationMs)}`}
-                  barGap={4}
-                  barRadius={2}
-                  barWidth={2}
-                  className="min-w-0 cursor-pointer rounded-buttons focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
-                  data={playbackWaveformData}
-                  data-slot="memory-studio-playback-waveform"
-                  data-waveform-source={playbackWaveformSource}
-                  height={42}
-                  label="片段播放进度"
-                  onKeyDown={handlePlaybackKeyDown}
-                  onPointerDown={handlePlaybackPointerDown}
-                  playheadProgress={playbackProgress}
-                  role="slider"
-                  tabIndex={segmentAudioUrl ? 0 : -1}
-                  tone="voice"
-                />
-                <span className="shrink-0 font-geist-mono text-ui-md font-regular leading-ui-md tracking-[0.04em] text-obsidian">
-                  {segmentContentQuery.isLoading
-                    ? '载入中'
-                    : `${durationLabel(playbackTimeMs)} / ${durationLabel(selectedSegment.durationMs)}`}
-                </span>
-              </div>
+              <MemoryStudioAudioPlaybackRow
+                audioAvailable={segmentAudioUrl !== null}
+                durationMs={selectedSegment.durationMs}
+                loading={segmentContentQuery.isLoading}
+                onKeyDown={handlePlaybackKeyDown}
+                onPointerDown={handlePlaybackPointerDown}
+                onTogglePlayback={toggleSelectedSegmentPlayback}
+                playButtonLabel={`${isSelectedSegmentPlaying ? '暂停' : '播放'}片段 ${selectedSegment.title}`}
+                playbackTimeMs={playbackTimeMs}
+                playheadProgress={playbackProgress}
+                playing={isSelectedSegmentPlaying}
+                rowSlot="memory-studio-player"
+                waveformData={playbackWaveformData}
+                waveformLabel="片段播放进度"
+                waveformSlot="memory-studio-playback-waveform"
+                waveformSource={playbackWaveformSource}
+              />
 
               <div className="mt-12 flex shrink-0 items-center justify-between gap-8 border-b border-chalk">
                 <div role="tablist" aria-label="片段内容类型" className="flex min-w-0 items-end">

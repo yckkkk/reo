@@ -956,6 +956,14 @@ type SegmentAttachmentProjection = {
 - `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/electron.md` 和 `docs/current/quality.md` 已同步补充 tab、SegmentAttachment audio content Query、parent-scoped IPC read、第一条新增补充自动进入 `补充` tab、补充录音读取失败可见状态和无 transcript 的补充录音播放器规则。
 - Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 291 tests、renderer 215 tests、lint 和 format check。
 
+### 2026-05-10 12:26 America/Los_Angeles
+
+- 设计系统审计收敛：Memory Studio 主片段播放行和 SegmentAttachment 补充录音播放行收敛为 feature-local `memory-studio-audio-player` pattern；Segment card 的 title/status/duration 从局部 `17px/15px/13px/0.04em` 改回 `text-subheading`、`text-ui-md`、`text-body-lg` 和 `tracking-wide`。这次没有新增页面专用 token，而是删除旧编号 typography steps、未消费 `2xl-2/3xl-2` radius alias 和未消费 `element-gap` root alias。
+- RED/GREEN：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "shows finalized recording supplements"` 先因播放行缺少统一 `data-component="memory-studio-audio-player"` 失败，实现共享播放行后通过；`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "renders Segment recording cards"` 先因卡片仍使用局部字号失败，切回系统字号后通过。
+- Targeted 验证：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx` 通过 21 tests；`npm run typecheck` 通过；`npm run test:renderer` 通过 24 files / 215 tests；`npm run format:check` 通过。
+- Electron runtime 视觉验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`，CDP viewport `1600x1000`。浅色截图：`artifacts/memory-studio-design-system-audit-light-2026-05-10T122640.png`；深色截图：`artifacts/memory-studio-design-system-audit-dark-2026-05-10T122640.png`。测量结果：document/body height 均为 `1000`、`scrollY=0`、Segment card count `4`、active card rect `216x216`、title class 为 `text-subheading font-bold leading-subheading`、duration class 为 `font-geist-mono text-body-lg font-bold tracking-wide`、tabs 只有 `转录/补充` 且 `补充` selected、主播放和补充播放都使用 `grid-cols-[40px_minmax(0,1fr)_auto]` + `gap-14`、两条 waveform source 都是 `decoded-audio`、无未命名 button、无 transcript 占位、无 `笔记/视频/图片` 常驻 tab。
+- Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 293 tests、renderer 215 tests、lint 和 format check。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。
