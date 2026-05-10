@@ -97,15 +97,33 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
     createMemory: vi.fn(),
+    deleteMemory: vi.fn(),
+    restoreDeletedMemory: vi.fn(),
+    readMemoryDetail: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_MEMORY_NOT_FOUND' as const, message: 'Memory not found' },
+    })),
+    readFinalizedAudioSegment: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
+    })),
     createRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 0, segmentId: 'seg_1' },
+    })),
+    createSegmentAttachmentRecordingDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { attachmentId: 'att_1', nextSequence: 0 },
     })),
     readRecordingDraftAudio: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording draft not found' },
     })),
     appendRecordingAudioChunk: vi.fn(async () => ({
+      ok: true as const,
+      value: { nextSequence: 1 },
+    })),
+    appendSegmentAttachmentRecordingAudioChunk: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 1 },
     })),
@@ -137,7 +155,43 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
         },
       },
     })),
+    finalizeSegmentAttachmentRecordingDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        memory: { ...savedMemorySummary, attachmentCount: 1 },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          type: 'audio' as const,
+          title: 'Daily memory 录音',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+          durationMs: 0,
+          audioByteLength: 3,
+          transcript: { exists: true },
+          attachmentCount: 1,
+        },
+        attachment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          attachmentId: 'att_1',
+          type: 'audio' as const,
+          title: '补充录音',
+          createdAt: '2026-05-06T13:09:00.000Z',
+          updatedAt: '2026-05-06T13:10:00.000Z',
+          durationMs: 0,
+          audioByteLength: 1,
+          transcript: { exists: false },
+        },
+      },
+    })),
     discardRecordingDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { discarded: true as const },
+    })),
+    discardSegmentAttachmentRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { discarded: true as const },
     })),
@@ -326,6 +380,76 @@ describe('RecordingOverlay', () => {
       segmentId: 'seg_1',
       workspaceHandle: workspaceSession.workspaceHandle,
     });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('saves segment attachment recording through attachment draft IPC without creating a sibling segment', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    const onSegmentAttachmentFinalized = vi.fn();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onAudioSegmentFinalized={() => {}}
+        onSegmentAttachmentFinalized={onSegmentAttachmentFinalized}
+        open
+        recordingTarget={{
+          kind: 'segment-attachment',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+
+    expect(
+      JSON.parse(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1') ?? '{}')
+    ).toMatchObject({
+      memoryId: 'mem_1',
+      parentSegmentId: 'seg_parent',
+      segmentId: 'att_1',
+      targetKind: 'segment-attachment',
+      title: '补充录音',
+      workspaceId: 'ws_1',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存录音' }));
+    await flushPromises();
+
+    expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
+    expect(bridge.appendRecordingAudioChunk).not.toHaveBeenCalled();
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(bridge.createSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_parent',
+    });
+    expect(bridge.appendSegmentAttachmentRecordingAudioChunk).toHaveBeenCalledWith({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      attachmentId: 'att_1',
+      sequence: 0,
+      chunk: new Uint8Array([1, 2, 3]),
+    });
+    expect(bridge.finalizeSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_parent',
+      attachmentId: 'att_1',
+      title: '补充录音',
+      durationMs: expect.any(Number),
+    });
+    expect(onSegmentAttachmentFinalized).toHaveBeenCalledOnce();
+    expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

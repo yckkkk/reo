@@ -17,14 +17,18 @@ import {
 import { toast } from '@/components/ui/toaster';
 import {
   appendRecordingAudioChunk,
+  appendSegmentAttachmentRecordingAudioChunk,
   beginMicrophoneIntent,
   clearMicrophoneIntent,
   cloneRecordingDraftPrefix,
   closeRecordingTranscription,
   createRecordingDraft,
+  createSegmentAttachmentRecordingDraft,
   discardRecordingDraft,
+  discardSegmentAttachmentRecordingDraft,
   finishRecordingTranscription,
   finalizeRecordingDraft,
+  finalizeSegmentAttachmentRecordingDraft,
   onRecordingTranscriptionEvent,
   readRecordingDraftAudio,
   saveTranscript,
@@ -33,6 +37,7 @@ import {
 } from './workspaceApi';
 import type {
   FinalizedAudioSegment,
+  FinalizedSegmentAttachmentRecording,
   WorkspaceMemorySummary,
   WorkspaceSession,
 } from './workspaceApi';
@@ -77,13 +82,20 @@ type RecordingOverlayProps = {
   readonly onOpenChange: (open: boolean) => void;
   readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
   readonly onAudioSegmentFinalized: (recording: FinalizedAudioSegment) => void;
+  readonly onSegmentAttachmentFinalized?: (recording: FinalizedSegmentAttachmentRecording) => void;
   readonly open: boolean;
   readonly recoveredDraft?: RecordingRecoveryDraft | null;
   readonly recordingTarget: RecordingTarget;
   readonly workspaceSession: WorkspaceSession;
 };
 
-export type RecordingTarget = { readonly kind: 'existing-memory'; readonly memoryId: string };
+export type RecordingTarget =
+  | { readonly kind: 'existing-memory'; readonly memoryId: string }
+  | {
+      readonly kind: 'segment-attachment';
+      readonly memoryId: string;
+      readonly segmentId: string;
+    };
 export type SavedRecordingContent = {
   readonly memory: WorkspaceMemorySummary;
 };
@@ -141,6 +153,10 @@ type TranscriptionAudioQueue = {
 
 function titleForRecording(workspaceTitle: string) {
   return `${workspaceTitle} 录音`;
+}
+
+function titleForRecordingTarget(target: RecordingTarget, workspaceTitle: string) {
+  return target.kind === 'segment-attachment' ? '补充录音' : titleForRecording(workspaceTitle);
 }
 
 const RECORDING_STATUS_TEXT = {
@@ -240,6 +256,7 @@ export function RecordingOverlay({
   onOpenChange,
   onRecordingContentSaved,
   onAudioSegmentFinalized,
+  onSegmentAttachmentFinalized,
   open,
   recoveredDraft = null,
   recordingTarget,
@@ -363,6 +380,9 @@ export function RecordingOverlay({
     if (!open || !recoveredDraft) {
       return;
     }
+    if (recordingTarget.kind !== 'existing-memory') {
+      return;
+    }
     if (
       restoredSegmentIdRef.current === recoveredDraft.segmentId ||
       recoveredDraft.workspaceId !== workspaceSession.workspaceId ||
@@ -436,6 +456,7 @@ export function RecordingOverlay({
   }, [
     open,
     recoveredDraft,
+    recordingTarget.kind,
     recordingTarget.memoryId,
     replaceTranscriptDraft,
     workspaceSession.workspaceId,
@@ -1161,18 +1182,29 @@ export function RecordingOverlay({
       revisionId = activeRevisionIdRef.current,
     }: { readonly recordingSessionId?: string; readonly revisionId?: string } = {}
   ) {
+    const targetFields =
+      recordingTarget.kind === 'segment-attachment'
+        ? {
+            memoryId: recordingTarget.memoryId,
+            parentSegmentId: recordingTarget.segmentId,
+            targetKind: 'segment-attachment' as const,
+          }
+        : {
+            memoryId: recordingTarget.memoryId,
+            targetKind: 'segment' as const,
+          };
     lastRecoveryDurationPersistedMsRef.current = Math.max(0, Math.round(durationMs));
     lastRecoveryAudioChunksPersistedMsRef.current = Math.max(0, Math.round(durationMs));
     lastRecoveryAudioChunkCountPersistedRef.current = recoveryAudioChunksRef.current.length;
     writeRecordingRecoveryDraft({
       audioChunks: recoveryAudioChunksSnapshot(),
       durationMs,
-      memoryId: recordingTarget.memoryId,
+      ...targetFields,
       nextSequence: sequenceRef.current,
       segmentId,
       recordingSessionId,
       revisionId,
-      title: titleForRecording(workspaceSession.snapshot.title),
+      title: titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title),
       workspaceId: workspaceSession.workspaceId,
     });
   }
@@ -1233,10 +1265,16 @@ export function RecordingOverlay({
   }
 
   async function discardDraftAndClearRecoveryOnSuccess(segmentId: string) {
-    const response = await discardRecordingDraft({
-      segmentId,
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
+    const response =
+      recordingTarget.kind === 'segment-attachment'
+        ? await discardSegmentAttachmentRecordingDraft({
+            attachmentId: segmentId,
+            workspaceHandle: workspaceSession.workspaceHandle,
+          })
+        : await discardRecordingDraft({
+            segmentId,
+            workspaceHandle: workspaceSession.workspaceHandle,
+          });
     if (response.ok) {
       clearRecoveryMarker(segmentId);
     }
@@ -1357,12 +1395,20 @@ export function RecordingOverlay({
         if (recordingSessionRef.current !== recordingSession) {
           return;
         }
-        const response = await appendRecordingAudioChunk({
-          chunk,
-          segmentId,
-          sequence: sequenceRef.current,
-          workspaceHandle: workspaceSession.workspaceHandle,
-        });
+        const response =
+          recordingTarget.kind === 'segment-attachment'
+            ? await appendSegmentAttachmentRecordingAudioChunk({
+                attachmentId: segmentId,
+                chunk,
+                sequence: sequenceRef.current,
+                workspaceHandle: workspaceSession.workspaceHandle,
+              })
+            : await appendRecordingAudioChunk({
+                chunk,
+                segmentId,
+                sequence: sequenceRef.current,
+                workspaceHandle: workspaceSession.workspaceHandle,
+              });
         if (recordingSessionRef.current !== recordingSession) {
           return;
         }
@@ -1504,26 +1550,44 @@ export function RecordingOverlay({
       workspaceHandle: workspaceSession.workspaceHandle,
     };
 
-    const draft = await createRecordingDraft({
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
-    if (!draft.ok) {
-      clearPendingMicrophoneIntent(recordingSession);
-      failActiveRecording(
-        workspaceErrorDisplayMessage(draft.error, '无法创建录音。'),
-        recordingSession
-      );
-      return;
+    let nextSegmentId: string;
+    let nextSequence: number;
+    if (recordingTarget.kind === 'segment-attachment') {
+      const draft = await createSegmentAttachmentRecordingDraft({
+        memoryId: recordingTarget.memoryId,
+        segmentId: recordingTarget.segmentId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+        workspaceId: workspaceSession.workspaceId,
+      });
+      if (!draft.ok) {
+        clearPendingMicrophoneIntent(recordingSession);
+        failActiveRecording(
+          workspaceErrorDisplayMessage(draft.error, '无法创建录音。'),
+          recordingSession
+        );
+        return;
+      }
+      nextSegmentId = draft.value.attachmentId;
+      nextSequence = draft.value.nextSequence;
+    } else {
+      const draft = await createRecordingDraft({
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      if (!draft.ok) {
+        clearPendingMicrophoneIntent(recordingSession);
+        failActiveRecording(
+          workspaceErrorDisplayMessage(draft.error, '无法创建录音。'),
+          recordingSession
+        );
+        return;
+      }
+      nextSegmentId = draft.value.segmentId;
+      nextSequence = draft.value.nextSequence;
     }
-
-    sequenceRef.current = draft.value.nextSequence;
-    const nextSegmentId = draft.value.segmentId;
+    sequenceRef.current = nextSequence;
     if (recordingSessionRef.current !== recordingSession) {
       clearPendingMicrophoneIntent(recordingSession);
-      const discard = await discardRecordingDraft({
-        segmentId: nextSegmentId,
-        workspaceHandle: workspaceSession.workspaceHandle,
-      }).catch((error) => ({
+      const discard = await discardDraftAndClearRecoveryOnSuccess(nextSegmentId).catch((error) => ({
         ok: false as const,
         error: {
           code: 'ERR_RECORDING_DISCARD_FAILED' as const,
@@ -1534,11 +1598,17 @@ export function RecordingOverlay({
         writeRecordingRecoveryDraft({
           durationMs: 0,
           memoryId: recordingTarget.memoryId,
-          nextSequence: draft.value.nextSequence,
+          nextSequence,
+          ...(recordingTarget.kind === 'segment-attachment'
+            ? {
+                parentSegmentId: recordingTarget.segmentId,
+                targetKind: 'segment-attachment' as const,
+              }
+            : { targetKind: 'segment' as const }),
           recordingSessionId: recordingFlowSessionId,
           revisionId,
           segmentId: nextSegmentId,
-          title: titleForRecording(workspaceSession.snapshot.title),
+          title: titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title),
           workspaceId: workspaceSession.workspaceId,
         });
         notifyRecordingError(
@@ -1879,6 +1949,10 @@ export function RecordingOverlay({
     stopDraftPlayback();
     clearShortRecordingNotice();
     if (state.status === 'paused' && hasTailAfterCursor(timeline)) {
+      if (recordingTarget.kind === 'segment-attachment') {
+        notifyRecordingError('补充录音暂不支持从中间替换，可以保存后再补充一段。');
+        return;
+      }
       if (snapCursorToReplacementBoundary()) {
         return;
       }
@@ -2189,52 +2263,82 @@ export function RecordingOverlay({
       return;
     }
 
-    const title = titleForRecording(workspaceSession.snapshot.title);
-    let finalized: Awaited<ReturnType<typeof finalizeRecordingDraft>>;
+    const title = titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title);
     try {
-      finalized = await finalizeRecordingDraft({
+      if (recordingTarget.kind === 'segment-attachment') {
+        const finalizedAttachment = await finalizeSegmentAttachmentRecordingDraft({
+          attachmentId: segmentId,
+          durationMs,
+          memoryId: recordingTarget.memoryId,
+          segmentId: recordingTarget.segmentId,
+          title,
+          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceId: workspaceSession.workspaceId,
+        });
+        if (!finalizedAttachment.ok) {
+          failActiveRecording(
+            workspaceErrorDisplayMessage(finalizedAttachment.error, '无法完成补充录音保存。'),
+            recordingSession
+          );
+          return;
+        }
+        controllerRef.current = null;
+        activeDraftRef.current = null;
+        onSegmentAttachmentFinalized?.(finalizedAttachment.value);
+        updateRecordingRecoverySnapshot({
+          patch: { finalizedAttachment: finalizedAttachment.value },
+          segmentId,
+          workspaceId: workspaceSession.workspaceId,
+        });
+        clearRecoveryMarker(segmentId);
+        resetClosedRecordingState();
+        onOpenChange(false);
+        return;
+      }
+
+      const finalized = await finalizeRecordingDraft({
         durationMs,
         memoryId: recordingTarget.memoryId,
         segmentId,
         title,
         workspaceHandle: workspaceSession.workspaceHandle,
       });
+      if (!finalized.ok) {
+        failActiveRecording(
+          workspaceErrorDisplayMessage(finalized.error, '无法完成录音保存。'),
+          recordingSession
+        );
+        return;
+      }
+
+      controllerRef.current = null;
+      activeDraftRef.current = null;
+      onAudioSegmentFinalized(finalized.value);
+      updateRecordingRecoverySnapshot({
+        patch: { finalizedAudio: finalized.value },
+        segmentId,
+        workspaceId: workspaceSession.workspaceId,
+      });
+      await backfillFinalTranscript(recordingSession);
+      persistRecoveryTranscriptSnapshot(segmentId);
+      const transcriptSaved = await saveFinalTranscript({
+        memoryId: finalized.value.segment.memoryId,
+        segmentId,
+        recordingSession,
+      });
+      if (transcriptSaved) {
+        clearRecoveryMarker(segmentId);
+      }
+      if (recordingSessionRef.current !== recordingSession) {
+        return;
+      }
+      resetClosedRecordingState();
+      onOpenChange(false);
     } catch (finalizeError) {
       const message = unknownErrorDisplayMessage(finalizeError, '录音草稿无法完成保存。');
       failActiveRecording(message, recordingSession);
       return;
     }
-    if (!finalized.ok) {
-      failActiveRecording(
-        workspaceErrorDisplayMessage(finalized.error, '无法完成录音保存。'),
-        recordingSession
-      );
-      return;
-    }
-
-    controllerRef.current = null;
-    activeDraftRef.current = null;
-    onAudioSegmentFinalized(finalized.value);
-    updateRecordingRecoverySnapshot({
-      patch: { finalizedAudio: finalized.value },
-      segmentId,
-      workspaceId: workspaceSession.workspaceId,
-    });
-    await backfillFinalTranscript(recordingSession);
-    persistRecoveryTranscriptSnapshot(segmentId);
-    const transcriptSaved = await saveFinalTranscript({
-      memoryId: finalized.value.segment.memoryId,
-      segmentId,
-      recordingSession,
-    });
-    if (transcriptSaved) {
-      clearRecoveryMarker(segmentId);
-    }
-    if (recordingSessionRef.current !== recordingSession) {
-      return;
-    }
-    resetClosedRecordingState();
-    onOpenChange(false);
   }
 
   function handleReturn() {
@@ -2293,10 +2397,16 @@ export function RecordingOverlay({
     if (activeDraft?.recordingSession === recordingSession) {
       activeDraftRef.current = null;
       try {
-        const discarded = await discardRecordingDraft({
-          segmentId: activeDraft.segmentId,
-          workspaceHandle: workspaceSession.workspaceHandle,
-        });
+        const discarded =
+          recordingTarget.kind === 'segment-attachment'
+            ? await discardSegmentAttachmentRecordingDraft({
+                attachmentId: activeDraft.segmentId,
+                workspaceHandle: workspaceSession.workspaceHandle,
+              })
+            : await discardRecordingDraft({
+                segmentId: activeDraft.segmentId,
+                workspaceHandle: workspaceSession.workspaceHandle,
+              });
         if (discarded.ok) {
           clearRecoveryMarker(activeDraft.segmentId);
         } else {
@@ -2415,7 +2525,7 @@ export function RecordingOverlay({
     >
       <Button
         aria-label="返回"
-        className="absolute left-24 top-40 z-10 h-[40px] w-[40px] rounded-full border-transparent bg-transparent p-0 text-cinder shadow-none hover:bg-powder/70 hover:text-obsidian disabled:bg-transparent disabled:text-fog disabled:opacity-100 sm:left-32"
+        className="absolute left-24 top-40 z-10 h-[40px] w-[40px] rounded-full border-transparent bg-transparent p-0 text-cinder shadow-none hover:bg-[var(--glass-control-hover)] hover:text-obsidian disabled:bg-transparent disabled:text-fog disabled:opacity-100 sm:left-32"
         data-vaul-no-drag
         disabled={
           exitActionPending ||

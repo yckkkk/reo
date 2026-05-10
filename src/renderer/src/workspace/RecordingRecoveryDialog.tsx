@@ -9,6 +9,7 @@ import {
 import type { RecordingRecoveryDraft } from './recordingRecovery';
 
 type RecordingRecoveryDialogProps = {
+  readonly canReview?: boolean;
   readonly disabled?: boolean;
   readonly draft: RecordingRecoveryDraft | null;
   readonly onDiscard: () => void;
@@ -17,42 +18,48 @@ type RecordingRecoveryDialogProps = {
 };
 
 export function RecordingRecoveryDialog({
+  canReview = true,
   disabled = false,
   draft,
   onDiscard,
   onReview,
   onSave,
 }: RecordingRecoveryDialogProps) {
-  const finalizedAudioSaved = Boolean(draft?.finalizedAudio);
+  const finalizedRecordingSaved = Boolean(draft?.finalizedAudio || draft?.finalizedAttachment);
+  const saveLabel = draft?.finalizedAttachment
+    ? '完成恢复'
+    : finalizedRecordingSaved
+      ? '重试保存转写'
+      : '保存录音';
   return (
     <Dialog open={draft !== null}>
       <DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>{finalizedAudioSaved ? '录音已保存' : '未完成录音'}</DialogTitle>
+          <DialogTitle>{finalizedRecordingSaved ? '录音已保存' : '未完成录音'}</DialogTitle>
           <DialogDescription>
-            {finalizedAudioSaved
+            {finalizedRecordingSaved
               ? '录音音频已保存，转写尚未完成保存。'
               : '检测到一段未完成的录音。'}
           </DialogDescription>
         </DialogHeader>
 
         <p className="text-ui-sm leading-ui-sm text-gravel">
-          {finalizedAudioSaved
+          {finalizedRecordingSaved
             ? '可以重试保存转写，或只关闭这个恢复提示。'
             : '可以先保存到当前记忆，或放弃这段未完成内容。'}
         </p>
 
         <div className="flex justify-end gap-8">
           <Button type="button" variant="secondary" disabled={disabled} onClick={onDiscard}>
-            {finalizedAudioSaved ? '关闭提示' : '放弃'}
+            {finalizedRecordingSaved ? '关闭提示' : '放弃'}
           </Button>
-          {finalizedAudioSaved ? null : (
+          {finalizedRecordingSaved || !canReview ? null : (
             <Button type="button" variant="secondary" disabled={disabled} onClick={onReview}>
               继续检查
             </Button>
           )}
           <Button type="button" disabled={disabled} onClick={onSave}>
-            {finalizedAudioSaved ? '重试保存转写' : '保存录音'}
+            {saveLabel}
           </Button>
         </div>
       </DialogContent>

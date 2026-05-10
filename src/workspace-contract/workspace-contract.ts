@@ -7,9 +7,11 @@ export * from './workspace-channels.js';
 
 export const MEMORY_ID_PATTERN = /^mem_[A-Za-z0-9_-]+$/;
 export const SEGMENT_ID_PATTERN = /^seg_[A-Za-z0-9_-]+$/;
+export const ATTACHMENT_ID_PATTERN = /^att_[A-Za-z0-9_-]+$/;
 
 const memoryIdSchema = z.string().regex(MEMORY_ID_PATTERN);
 const segmentIdSchema = z.string().regex(SEGMENT_ID_PATTERN);
+const attachmentIdSchema = z.string().regex(ATTACHMENT_ID_PATTERN);
 const workspaceTitleTextSchema = z.string().trim().min(1).max(WORKSPACE_TITLE_MAX_LENGTH);
 
 export const workspaceNoInputSchema = z.undefined();
@@ -67,6 +69,8 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_MEMORY_NOT_FOUND',
   'ERR_MEMORY_CREATE_FAILED',
   'ERR_MEMORY_UPDATE_FAILED',
+  'ERR_MEMORY_DELETE_FAILED',
+  'ERR_MEMORY_RESTORE_FAILED',
   'ERR_MIC_INTENT_ALREADY_ACTIVE',
 ]);
 
@@ -108,6 +112,43 @@ export const workspaceMemorySummarySchema = z.strictObject({
   audioByteLength: z.number().int().nonnegative(),
   hasTranscript: z.boolean(),
   attachmentCount: z.number().int().nonnegative(),
+});
+
+export const workspaceSegmentProjectionSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  type: z.literal('audio'),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  transcript: z.strictObject({
+    exists: z.boolean(),
+  }),
+  attachmentCount: z.number().int().nonnegative(),
+});
+
+export const workspaceSegmentAttachmentProjectionSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  attachmentId: attachmentIdSchema,
+  type: z.literal('audio'),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  transcript: z.strictObject({
+    exists: z.boolean(),
+  }),
+});
+
+export const workspaceMemoryDetailProjectionSchema = workspaceMemorySummarySchema.extend({
+  workspaceId: z.string().min(1),
+  segments: z.array(workspaceSegmentProjectionSchema),
 });
 
 export const workspaceSnapshotSchema = z.strictObject({
@@ -235,6 +276,42 @@ export const segmentMetadataSchema = z.discriminatedUnion('status', [
   finalizedSegmentMetadataSchema,
 ]);
 
+export const draftSegmentAttachmentMetadataSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  attachmentId: attachmentIdSchema,
+  type: z.literal('audio'),
+  status: z.literal('draft'),
+  title: z.string(),
+  createdAt: z.string(),
+  nextSequence: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+});
+
+export const finalizedSegmentAttachmentMetadataSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  attachmentId: attachmentIdSchema,
+  type: z.literal('audio'),
+  status: z.literal('finalized'),
+  title: z.string(),
+  createdAt: z.string(),
+  finalizedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  nextSequence: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  transcriptPath: z.literal('transcript.md'),
+});
+
+export const segmentAttachmentMetadataSchema = z.discriminatedUnion('status', [
+  draftSegmentAttachmentMetadataSchema,
+  finalizedSegmentAttachmentMetadataSchema,
+]);
+
 export const workspaceHandleRequestSchema = z.strictObject({
   workspaceHandle: z.string().min(1),
 });
@@ -246,6 +323,22 @@ export const workspaceRecordingTitleSchema = workspaceTitleTextSchema;
 export const workspaceRecordingAppendRequestSchema = workspaceHandleSchema
   .extend({
     segmentId: segmentIdSchema,
+    sequence: z.number().int().nonnegative(),
+    chunk: z.instanceof(Uint8Array).refine((chunk) => chunk.byteLength <= 1_048_576),
+  })
+  .strict();
+
+export const workspaceCreateSegmentAttachmentRecordingDraftRequestSchema = workspaceHandleSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    memoryId: memoryIdSchema,
+    segmentId: segmentIdSchema,
+  })
+  .strict();
+
+export const workspaceAppendSegmentAttachmentRecordingAudioRequestSchema = workspaceHandleSchema
+  .extend({
+    attachmentId: attachmentIdSchema,
     sequence: z.number().int().nonnegative(),
     chunk: z.instanceof(Uint8Array).refine((chunk) => chunk.byteLength <= 1_048_576),
   })
@@ -266,6 +359,12 @@ export const workspaceRecordingDraftPrefixCloneRequestSchema = workspaceHandleSc
 export const workspaceSegmentIdRequestSchema = workspaceHandleSchema
   .extend({
     segmentId: segmentIdSchema,
+  })
+  .strict();
+
+export const workspaceSegmentAttachmentIdRequestSchema = workspaceHandleSchema
+  .extend({
+    attachmentId: attachmentIdSchema,
   })
   .strict();
 
@@ -299,6 +398,40 @@ export const workspaceCreateMemoryRequestSchema = workspaceHandleSchema
   })
   .strict();
 
+export const workspaceDeleteMemoryRequestSchema = workspaceMemoryIdRequestSchema;
+
+export const workspaceRestoreDeletedMemoryRequestSchema = workspaceHandleSchema
+  .extend({
+    restoreToken: memoryIdSchema,
+  })
+  .strict();
+
+export const workspaceReadMemoryDetailRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    requestId: z.string().min(1),
+  })
+  .strict();
+
+export const workspaceReadFinalizedAudioSegmentRequestSchema = workspaceRecordingReadRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    requestId: z.string().min(1),
+    maxBytes: z.number().int().positive().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES).optional(),
+  })
+  .strict();
+
+export const workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema = workspaceHandleSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    memoryId: memoryIdSchema,
+    segmentId: segmentIdSchema,
+    attachmentId: attachmentIdSchema,
+    title: workspaceRecordingTitleSchema,
+    durationMs: z.number().int().nonnegative(),
+  })
+  .strict();
+
 export const workspaceUpdateMemoryTitleResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -315,6 +448,59 @@ export const workspaceCreateMemoryResponseSchema = z.discriminatedUnion('ok', [
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceDeleteMemoryResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memoryId: memoryIdSchema,
+      restoreToken: memoryIdSchema,
+      memories: z.array(workspaceMemorySummarySchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceRestoreDeletedMemoryResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      memories: z.array(workspaceMemorySummarySchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadMemoryDetailResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      requestId: z.string().min(1),
+      detail: workspaceMemoryDetailProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadFinalizedAudioSegmentResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      requestId: z.string().min(1),
+      workspaceId: z.string().min(1),
+      memoryId: memoryIdSchema,
+      segmentId: segmentIdSchema,
+      audio: z.instanceof(Uint8Array),
+      audioByteLength: z.number().int().nonnegative(),
+      transcript: z.strictObject({
+        exists: z.boolean(),
+        text: z.string(),
+      }),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceCreateRecordingDraftResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -325,6 +511,20 @@ export const workspaceCreateRecordingDraftResponseSchema = z.discriminatedUnion(
   }),
   workspaceErrorEnvelopeSchema,
 ]);
+
+export const workspaceCreateSegmentAttachmentRecordingDraftResponseSchema = z.discriminatedUnion(
+  'ok',
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      value: z.strictObject({
+        attachmentId: attachmentIdSchema,
+        nextSequence: z.number().int().nonnegative(),
+      }),
+    }),
+    workspaceErrorEnvelopeSchema,
+  ]
+);
 
 export const workspaceRecordingDraftAudioResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -347,6 +547,9 @@ export const workspaceRecordingAppendResponseSchema = z.discriminatedUnion('ok',
   }),
   workspaceErrorEnvelopeSchema,
 ]);
+
+export const workspaceSegmentAttachmentRecordingAppendResponseSchema =
+  workspaceRecordingAppendResponseSchema;
 
 export const workspaceRecordingDraftPrefixCloneResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -376,6 +579,21 @@ export const workspaceRecordingFinalizeResponseSchema = z.discriminatedUnion('ok
   }),
   workspaceErrorEnvelopeSchema,
 ]);
+
+export const workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema = z.discriminatedUnion(
+  'ok',
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      value: z.strictObject({
+        memory: workspaceMemorySummarySchema,
+        segment: workspaceSegmentProjectionSchema,
+        attachment: workspaceSegmentAttachmentProjectionSchema,
+      }),
+    }),
+    workspaceErrorEnvelopeSchema,
+  ]
+);
 
 export const workspaceDiscardRecordingDraftResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -501,8 +719,18 @@ export type WorkspaceChooseDirectoryResponse = z.infer<
 export type DraftSegmentMetadata = z.infer<typeof draftSegmentMetadataSchema>;
 export type FinalizedSegmentMetadata = z.infer<typeof finalizedSegmentMetadataSchema>;
 export type SegmentMetadata = z.infer<typeof segmentMetadataSchema>;
+export type DraftSegmentAttachmentMetadata = z.infer<typeof draftSegmentAttachmentMetadataSchema>;
+export type FinalizedSegmentAttachmentMetadata = z.infer<
+  typeof finalizedSegmentAttachmentMetadataSchema
+>;
+export type SegmentAttachmentMetadata = z.infer<typeof segmentAttachmentMetadataSchema>;
 export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
+export type WorkspaceSegmentProjection = z.infer<typeof workspaceSegmentProjectionSchema>;
+export type WorkspaceSegmentAttachmentProjection = z.infer<
+  typeof workspaceSegmentAttachmentProjectionSchema
+>;
+export type WorkspaceMemoryDetailProjection = z.infer<typeof workspaceMemoryDetailProjectionSchema>;
 export type WorkspaceMemorySpace = z.infer<typeof workspaceMemorySpaceSchema>;
 export type WorkspaceHandleRequest = z.infer<typeof workspaceHandleRequestSchema>;
 export type WorkspaceInitializeRequest = z.infer<typeof workspaceInitializeRequestSchema>;
@@ -529,10 +757,25 @@ export type WorkspaceRecordingAppendRequest = Omit<
 > & {
   readonly chunk: Uint8Array<ArrayBufferLike>;
 };
+export type WorkspaceCreateSegmentAttachmentRecordingDraftRequest = z.infer<
+  typeof workspaceCreateSegmentAttachmentRecordingDraftRequestSchema
+>;
+type WorkspaceAppendSegmentAttachmentRecordingAudioRequestFromSchema = z.infer<
+  typeof workspaceAppendSegmentAttachmentRecordingAudioRequestSchema
+>;
+export type WorkspaceAppendSegmentAttachmentRecordingAudioRequest = Omit<
+  WorkspaceAppendSegmentAttachmentRecordingAudioRequestFromSchema,
+  'chunk'
+> & {
+  readonly chunk: Uint8Array<ArrayBufferLike>;
+};
 export type WorkspaceRecordingDraftPrefixCloneRequest = z.infer<
   typeof workspaceRecordingDraftPrefixCloneRequestSchema
 >;
 export type WorkspaceSegmentIdRequest = z.infer<typeof workspaceSegmentIdRequestSchema>;
+export type WorkspaceSegmentAttachmentIdRequest = z.infer<
+  typeof workspaceSegmentAttachmentIdRequestSchema
+>;
 export type WorkspaceRecordingDraftAudioRequest = z.infer<
   typeof workspaceRecordingDraftAudioRequestSchema
 >;
@@ -540,12 +783,35 @@ export type WorkspaceUpdateMemoryTitleRequest = z.infer<
   typeof workspaceUpdateMemoryTitleRequestSchema
 >;
 export type WorkspaceCreateMemoryRequest = z.infer<typeof workspaceCreateMemoryRequestSchema>;
+export type WorkspaceDeleteMemoryRequest = z.infer<typeof workspaceDeleteMemoryRequestSchema>;
+export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
+  typeof workspaceRestoreDeletedMemoryRequestSchema
+>;
+export type WorkspaceReadMemoryDetailRequest = z.infer<
+  typeof workspaceReadMemoryDetailRequestSchema
+>;
+export type WorkspaceReadFinalizedAudioSegmentRequest = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentRequestSchema
+>;
 export type WorkspaceUpdateMemoryTitleResponse = z.infer<
   typeof workspaceUpdateMemoryTitleResponseSchema
 >;
 export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemoryResponseSchema>;
+export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;
+export type WorkspaceRestoreDeletedMemoryResponse = z.infer<
+  typeof workspaceRestoreDeletedMemoryResponseSchema
+>;
+export type WorkspaceReadMemoryDetailResponse = z.infer<
+  typeof workspaceReadMemoryDetailResponseSchema
+>;
+export type WorkspaceReadFinalizedAudioSegmentResponse = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentResponseSchema
+>;
 export type WorkspaceCreateRecordingDraftResponse = z.infer<
   typeof workspaceCreateRecordingDraftResponseSchema
+>;
+export type WorkspaceCreateSegmentAttachmentRecordingDraftResponse = z.infer<
+  typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema
 >;
 export type WorkspaceRecordingDraftAudioResponse = z.infer<
   typeof workspaceRecordingDraftAudioResponseSchema
@@ -553,11 +819,17 @@ export type WorkspaceRecordingDraftAudioResponse = z.infer<
 export type WorkspaceRecordingAppendResponse = z.infer<
   typeof workspaceRecordingAppendResponseSchema
 >;
+export type WorkspaceSegmentAttachmentRecordingAppendResponse = z.infer<
+  typeof workspaceSegmentAttachmentRecordingAppendResponseSchema
+>;
 export type WorkspaceRecordingDraftPrefixCloneResponse = z.infer<
   typeof workspaceRecordingDraftPrefixCloneResponseSchema
 >;
 export type WorkspaceRecordingFinalizeResponse = z.infer<
   typeof workspaceRecordingFinalizeResponseSchema
+>;
+export type WorkspaceFinalizeSegmentAttachmentRecordingDraftResponse = z.infer<
+  typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema
 >;
 export type WorkspaceDiscardRecordingDraftResponse = z.infer<
   typeof workspaceDiscardRecordingDraftResponseSchema
@@ -592,6 +864,9 @@ export type WorkspaceRecordingTranscriptionEvent = z.infer<
 >;
 export type WorkspaceRecordingFinalizeRequest = z.infer<
   typeof workspaceRecordingFinalizeRequestSchema
+>;
+export type WorkspaceFinalizeSegmentAttachmentRecordingDraftRequest = z.infer<
+  typeof workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema
 >;
 export type WorkspaceRecordingMarkdownSaveRequest = z.infer<
   typeof workspaceRecordingMarkdownSaveRequestSchema

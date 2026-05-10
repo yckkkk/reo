@@ -1,5 +1,5 @@
 import { format, isSameDay, isSameYear, isYesterday } from 'date-fns';
-import { MoreHorizontal, PencilLine } from 'lucide-react';
+import { MoreHorizontal, PencilLine, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +17,7 @@ type MemoryRailProps = {
   readonly activeMemoryId?: string | null;
   readonly id?: string;
   readonly memories: readonly WorkspaceMemory[];
+  readonly onDeleteMemory: (memory: WorkspaceMemory) => void;
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
   readonly onSelectMemory: (memoryId: string) => void;
 };
@@ -49,6 +50,7 @@ export function MemoryRail({
   activeMemoryId = null,
   id,
   memories,
+  onDeleteMemory,
   onRenameMemory,
   onSelectMemory,
 }: MemoryRailProps) {
@@ -64,10 +66,10 @@ export function MemoryRail({
     <nav
       id={id}
       aria-label="记忆列表"
-      className="flex min-h-0 flex-col border-t border-chalk bg-card-white px-20 py-24 xl:border-t-0"
+      className="flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-20 py-24 backdrop-blur-glass-lg xl:border-t-0"
     >
       {sortedMemories.length === 0 ? (
-        <div className="flex min-h-[128px] flex-col justify-center rounded-cards border border-chalk bg-card-white px-18 py-20 shadow-subtle">
+        <div className="flex min-h-[128px] flex-col justify-center rounded-cards border border-glass-border bg-card-glass px-18 py-20 backdrop-blur-glass-sm">
           <p className="text-body-lg font-medium leading-body-lg text-obsidian">还没有记忆</p>
           <p className="mt-8 text-body leading-body text-gravel">先为这一刻命名。</p>
         </div>
@@ -79,15 +81,15 @@ export function MemoryRail({
               <div
                 key={memory.memoryId}
                 className={[
-                  'group relative overflow-hidden rounded-cards border bg-card-white shadow-subtle transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-slate hover:shadow-subtle-4 focus-within:border-signal-blue',
-                  isActive ? 'border-signal-blue/50 shadow-subtle-4' : 'border-chalk',
+                  'group relative overflow-hidden rounded-cards border bg-card-glass backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-powder focus-within:border-signal-blue',
+                  isActive ? 'border-signal-blue shadow-glass' : 'border-glass-border',
                 ].join(' ')}
               >
                 <button
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={`选择记忆 ${memory.title}`}
-                  className="block min-h-[88px] w-full px-16 py-16 pr-48 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-card-white"
+                  className="block min-h-[88px] w-full px-16 py-16 pr-48 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
                   onClick={() => onSelectMemory(memory.memoryId)}
                 >
                   <span className="block min-w-0 truncate text-body-lg font-medium leading-body-lg text-obsidian">
@@ -117,6 +119,10 @@ export function MemoryRail({
                     <DropdownMenuItem onSelect={() => onRenameMemory(memory)}>
                       <PencilLine className="size-[14px] text-slate" aria-hidden="true" />
                       重命名记忆
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onDeleteMemory(memory)}>
+                      <Trash2 className="size-[14px] text-slate" aria-hidden="true" />
+                      删除记忆
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

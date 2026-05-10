@@ -49,7 +49,8 @@ export function RecordingSurface({
           ? {
               className:
                 'fixed inset-0 flex h-dvh max-h-none w-screen translate-x-0 flex-col overflow-hidden rounded-none border-0 bg-transparent px-0 pb-0 pt-0 shadow-none sm:left-0 sm:right-0 sm:w-screen sm:translate-x-0 sm:px-0 sm:pb-0',
-              overlayClassName: 'bg-eggshell/68 backdrop-blur-[12px] backdrop-saturate-0',
+              overlayClassName:
+                'bg-[var(--glass-recording-overlay)] backdrop-blur-[var(--glass-recording-overlay-blur)] backdrop-saturate-0',
             }
           : {})}
       >

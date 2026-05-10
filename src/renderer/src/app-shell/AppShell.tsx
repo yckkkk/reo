@@ -432,7 +432,7 @@ export function AppShell({
 
         <main
           aria-label="记忆空间内容"
-          className={`absolute flex flex-col overflow-hidden border border-chalk bg-card-white shadow-subtle ${panelMotionClass}`}
+          className={`absolute flex flex-col overflow-hidden border border-glass-border bg-card-glass shadow-subtle backdrop-blur-glass-lg ${panelMotionClass}`}
           style={{
             borderRadius: panelRadius,
             bottom: 0,

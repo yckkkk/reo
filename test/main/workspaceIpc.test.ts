@@ -21,18 +21,25 @@ import {
   handleCloseRecordingTranscriptionForTest,
   handleCloseWorkspaceForTest,
   handleCreateRecordingDraftForTest,
+  handleCreateSegmentAttachmentRecordingDraftForTest,
   handleCreateMemoryForTest,
+  handleDeleteMemoryForTest,
+  handleFinalizeSegmentAttachmentRecordingDraftForTest,
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
   handleListWorkspaceMemorySpacesForTest,
   handleOpenWorkspace,
   handleOpenWorkspaceMemorySpaceForTest,
+  handleReadFinalizedAudioSegmentForTest,
+  handleReadMemoryDetailForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
+  handleRestoreDeletedMemoryForTest,
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemoryTitleForTest,
 } from '../../src/main/workspaceIpc.js';
+import { appendSegmentAttachmentRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
 import {
@@ -812,6 +819,222 @@ test('createMemory creates an empty Memory container through file truth', async 
   );
 });
 
+test('deleteMemory hides a Memory from the read model and restoreDeletedMemory restores it', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-memory-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 删除',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_delete_me',
+    segmentId: 'seg_delete_me',
+    title: 'Delete me',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_keep_me',
+    segmentId: 'seg_keep_me',
+    title: 'Keep me',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const deleted = await handleDeleteMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_delete_me',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(deleted.ok, true);
+  if (deleted.ok) {
+    assert.equal(deleted.value.memoryId, 'mem_delete_me');
+    assert.equal(deleted.value.restoreToken, 'mem_delete_me');
+    assert.deepEqual(
+      deleted.value.memories.map((memory: { readonly memoryId: string }) => memory.memoryId),
+      ['mem_keep_me']
+    );
+    assert.equal('rootPath' in deleted.value, false);
+  }
+
+  const readDeleted = await handleReadMemoryDetailForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_delete_me',
+      requestId: 'request_deleted',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(readDeleted.ok, false);
+
+  const restored = await handleRestoreDeletedMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      restoreToken: 'mem_delete_me',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal(restored.value.memory.memoryId, 'mem_delete_me');
+    assert.deepEqual(
+      restored.value.memories
+        .map((memory: { readonly memoryId: string }) => memory.memoryId)
+        .sort(),
+      ['mem_delete_me', 'mem_keep_me']
+    );
+    assert.equal('rootPath' in restored.value, false);
+  }
+
+  const readRestored = await handleReadMemoryDetailForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_delete_me',
+      requestId: 'request_restored',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(readRestored.ok, true);
+});
+
+test('readMemoryDetail returns current Memory segments without exposing handle or root path', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-detail-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆详情',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_detail',
+    segmentId: 'seg_ipc_detail',
+    title: '生日录音',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleReadMemoryDetailForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_detail',
+      requestId: 'request_mem_ipc_detail',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.requestId, 'request_mem_ipc_detail');
+    assert.equal(result.value.detail.workspaceId, 'ws_ipc');
+    assert.equal(result.value.detail.memoryId, 'mem_ipc_detail');
+    assert.equal(result.value.detail.title, '生日录音');
+    assert.equal(result.value.detail.segmentCount, 1);
+    assert.deepEqual(result.value.detail.segments, [
+      {
+        workspaceId: 'ws_ipc',
+        memoryId: 'mem_ipc_detail',
+        segmentId: 'seg_ipc_detail',
+        type: 'audio',
+        title: '生日录音',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        durationMs: 1000,
+        audioByteLength: 3,
+        transcript: { exists: false },
+        attachmentCount: 0,
+      },
+    ]);
+    assert.equal('workspaceHandle' in result.value.detail, false);
+    assert.equal('rootPath' in result.value.detail, false);
+  }
+});
+
+test('readFinalizedAudioSegment returns audio bytes and transcript without exposing file paths', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-audio-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆播放',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+  });
+  await writeFile(
+    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'transcript.md'),
+    '大家一起唱生日快乐。'
+  );
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleReadFinalizedAudioSegmentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      requestId: 'request_seg_ipc_audio',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.requestId, 'request_seg_ipc_audio');
+    assert.equal(result.value.workspaceId, 'ws_ipc');
+    assert.equal(result.value.memoryId, 'mem_ipc_audio');
+    assert.equal(result.value.segmentId, 'seg_ipc_audio');
+    assert.deepEqual(Array.from(result.value.audio), [1, 2, 3]);
+    assert.equal(result.value.audioByteLength, 3);
+    assert.deepEqual(result.value.transcript, {
+      exists: true,
+      text: '大家一起唱生日快乐。',
+    });
+    assert.equal('workspaceHandle' in result.value, false);
+    assert.equal('rootPath' in result.value, false);
+  }
+});
+
 test('createRecordingDraft returns a flat IPC response value', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-recording-draft-'));
   await initializeWorkspaceFiles({
@@ -843,6 +1066,108 @@ test('createRecordingDraft returns a flat IPC response value', async () => {
       nextSequence: 0,
     },
   });
+});
+
+test('segment attachment recording IPC keeps the finalized audio under the parent segment', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-draft-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补充录音',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_attachment',
+    segmentId: 'seg_ipc_attachment_parent',
+    title: '父级录音',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const created = await handleCreateSegmentAttachmentRecordingDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_attachment',
+      segmentId: 'seg_ipc_attachment_parent',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createAttachmentId: () => 'att_ipc_attachment_child',
+    now: () => '2026-05-08T14:42:00.000Z',
+  });
+
+  assert.deepEqual(created, {
+    ok: true,
+    value: {
+      attachmentId: 'att_ipc_attachment_child',
+      nextSequence: 0,
+    },
+  });
+  await appendSegmentAttachmentRecordingAudioChunk({
+    rootPath,
+    attachmentId: 'att_ipc_attachment_child',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+
+  const finalized = await handleFinalizeSegmentAttachmentRecordingDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_attachment',
+      segmentId: 'seg_ipc_attachment_parent',
+      attachmentId: 'att_ipc_attachment_child',
+      title: '补充录音',
+      durationMs: 500,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-08T14:43:00.000Z',
+  });
+
+  assert.equal(finalized.ok, true);
+  if (finalized.ok) {
+    assert.equal(finalized.value.memory.segmentCount, 1);
+    assert.equal(finalized.value.memory.attachmentCount, 1);
+    assert.equal(finalized.value.segment.segmentId, 'seg_ipc_attachment_parent');
+    assert.equal(finalized.value.segment.attachmentCount, 1);
+    assert.equal(finalized.value.attachment.attachmentId, 'att_ipc_attachment_child');
+    assert.equal(finalized.value.attachment.segmentId, 'seg_ipc_attachment_parent');
+    assert.equal(finalized.value.attachment.audioByteLength, 2);
+    assert.equal('workspaceHandle' in finalized.value.attachment, false);
+    assert.equal('rootPath' in finalized.value.attachment, false);
+  }
+  await assert.rejects(
+    stat(
+      path.join(rootPath, 'memories', 'mem_ipc_attachment', 'segments', 'att_ipc_attachment_child')
+    )
+  );
+  assert.equal(
+    (
+      await stat(
+        path.join(
+          rootPath,
+          'memories',
+          'mem_ipc_attachment',
+          'segments',
+          'seg_ipc_attachment_parent',
+          'attachments',
+          'att_ipc_attachment_child',
+          'audio.webm'
+        )
+      )
+    ).isFile(),
+    true
+  );
 });
 
 test('updateMemoryTitle updates only the memory container through file truth', async () => {

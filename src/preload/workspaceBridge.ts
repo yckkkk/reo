@@ -1,5 +1,6 @@
 import {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
@@ -8,15 +9,22 @@ import {
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -67,9 +75,31 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       invoke<WorkspaceBridgeResponse<'closeWorkspace'>>(WORKSPACE_CLOSE_CHANNEL, payload),
     createMemory: (payload) =>
       invoke<WorkspaceBridgeResponse<'createMemory'>>(WORKSPACE_CREATE_MEMORY_CHANNEL, payload),
+    deleteMemory: (payload) =>
+      invoke<WorkspaceBridgeResponse<'deleteMemory'>>(WORKSPACE_DELETE_MEMORY_CHANNEL, payload),
+    restoreDeletedMemory: (payload) =>
+      invoke<WorkspaceBridgeResponse<'restoreDeletedMemory'>>(
+        WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+        payload
+      ),
+    readMemoryDetail: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readMemoryDetail'>>(
+        WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+        payload
+      ),
+    readFinalizedAudioSegment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readFinalizedAudioSegment'>>(
+        WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+        payload
+      ),
     createRecordingDraft: (payload) =>
       invoke<WorkspaceBridgeResponse<'createRecordingDraft'>>(
         WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+        payload
+      ),
+    createSegmentAttachmentRecordingDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'createSegmentAttachmentRecordingDraft'>>(
+        WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
         payload
       ),
     readRecordingDraftAudio: (payload) =>
@@ -82,6 +112,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
         payload
       ),
+    appendSegmentAttachmentRecordingAudioChunk: (payload) =>
+      invoke<WorkspaceBridgeResponse<'appendSegmentAttachmentRecordingAudioChunk'>>(
+        WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+        payload
+      ),
     cloneRecordingDraftPrefix: (payload) =>
       invoke<WorkspaceBridgeResponse<'cloneRecordingDraftPrefix'>>(
         WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
@@ -92,9 +127,19 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
         payload
       ),
+    finalizeSegmentAttachmentRecordingDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'finalizeSegmentAttachmentRecordingDraft'>>(
+        WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+        payload
+      ),
     discardRecordingDraft: (payload) =>
       invoke<WorkspaceBridgeResponse<'discardRecordingDraft'>>(
         WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+        payload
+      ),
+    discardSegmentAttachmentRecordingDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'discardSegmentAttachmentRecordingDraft'>>(
+        WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
         payload
       ),
     updateMemoryTitle: (payload) =>

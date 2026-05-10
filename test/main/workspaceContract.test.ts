@@ -3,15 +3,37 @@ import test from 'node:test';
 import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_MEMORY_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
+  workspaceDeleteMemoryRequestSchema,
+  workspaceDeleteMemoryResponseSchema,
+  workspaceReadMemoryDetailRequestSchema,
+  workspaceReadMemoryDetailResponseSchema,
+  workspaceRestoreDeletedMemoryRequestSchema,
+  workspaceRestoreDeletedMemoryResponseSchema,
+  workspaceReadFinalizedAudioSegmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
+  workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
+  workspaceCreateSegmentAttachmentRecordingDraftResponseSchema,
+  workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
+  workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
+  workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema,
+  workspaceSegmentAttachmentIdRequestSchema,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
@@ -57,12 +79,20 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:removeMemorySpace',
     'workspace:close',
     'workspace:createMemory',
+    'workspace:deleteMemory',
+    'workspace:restoreDeletedMemory',
+    'workspace:readMemoryDetail',
+    'workspace:readFinalizedAudioSegment',
     'workspace:createRecordingDraft',
+    'workspace:createSegmentAttachmentRecordingDraft',
     'workspace:readRecordingDraftAudio',
     'workspace:appendRecordingAudioChunk',
+    'workspace:appendSegmentAttachmentRecordingAudioChunk',
     'workspace:cloneRecordingDraftPrefix',
     'workspace:finalizeRecordingDraft',
+    'workspace:finalizeSegmentAttachmentRecordingDraft',
     'workspace:discardRecordingDraft',
+    'workspace:discardSegmentAttachmentRecordingDraft',
     'workspace:updateMemoryTitle',
     'workspace:saveTranscript',
     'workspace:beginMicrophoneIntent',
@@ -79,12 +109,286 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:recordingTranscriptionEvent'
   );
   assert.equal(WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory');
+  assert.equal(WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory');
+  assert.equal(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory');
+  assert.equal(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail');
+  assert.equal(
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+    'workspace:readFinalizedAudioSegment'
+  );
   assert.equal(WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio');
   assert.equal(
     WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
     'workspace:cloneRecordingDraftPrefix'
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
+  assert.equal(
+    WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:createSegmentAttachmentRecordingDraft'
+  );
+  assert.equal(
+    WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+    'workspace:appendSegmentAttachmentRecordingAudioChunk'
+  );
+  assert.equal(
+    WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:finalizeSegmentAttachmentRecordingDraft'
+  );
+  assert.equal(
+    WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:discardSegmentAttachmentRecordingDraft'
+  );
+});
+
+test('memory dangerous operation contract keeps delete and restore path explicit', () => {
+  assert.deepEqual(
+    workspaceDeleteMemoryRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceDeleteMemoryResponseSchema.parse({
+      ok: true,
+      value: {
+        memoryId: 'mem_1',
+        restoreToken: 'mem_1',
+        memories: [],
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        memoryId: 'mem_1',
+        restoreToken: 'mem_1',
+        memories: [],
+      },
+    }
+  );
+  assert.deepEqual(
+    workspaceRestoreDeletedMemoryRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      restoreToken: 'mem_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      restoreToken: 'mem_1',
+    }
+  );
+  const restored = workspaceRestoreDeletedMemoryResponseSchema.parse({
+    ok: true,
+    value: {
+      memory: {
+        memoryId: 'mem_1',
+        title: 'Memory',
+        createdAt: '2026-05-10T13:00:00.000Z',
+        updatedAt: '2026-05-10T13:00:00.000Z',
+        segmentCount: 0,
+        durationMs: 0,
+        audioByteLength: 0,
+        hasTranscript: false,
+        attachmentCount: 0,
+      },
+      memories: [
+        {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 0,
+          durationMs: 0,
+          audioByteLength: 0,
+          hasTranscript: false,
+          attachmentCount: 0,
+        },
+      ],
+    },
+  });
+  assert.equal(restored.ok, true);
+});
+
+test('segment attachment recording contract keeps parent identity explicit', () => {
+  assert.deepEqual(
+    workspaceCreateSegmentAttachmentRecordingDraftRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceCreateSegmentAttachmentRecordingDraftResponseSchema.parse({
+      ok: true,
+      value: {
+        attachmentId: 'att_1',
+        nextSequence: 0,
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        attachmentId: 'att_1',
+        nextSequence: 0,
+      },
+    }
+  );
+  assert.deepEqual(
+    workspaceAppendSegmentAttachmentRecordingAudioRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      attachmentId: 'att_1',
+      sequence: 0,
+      chunk: new Uint8Array([1]),
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      attachmentId: 'att_1',
+      sequence: 0,
+      chunk: new Uint8Array([1]),
+    }
+  );
+  const response = workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse({
+    ok: true,
+    value: {
+      memory: {
+        memoryId: 'mem_1',
+        title: 'Memory',
+        createdAt: '2026-05-10T13:13:00.000Z',
+        updatedAt: '2026-05-10T13:14:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: false,
+        attachmentCount: 1,
+      },
+      segment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        type: 'audio',
+        title: 'Segment',
+        createdAt: '2026-05-10T13:13:00.000Z',
+        updatedAt: '2026-05-10T13:14:00.000Z',
+        durationMs: 1000,
+        audioByteLength: 3,
+        transcript: { exists: false },
+        attachmentCount: 1,
+      },
+      attachment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        type: 'audio',
+        title: 'Attachment',
+        createdAt: '2026-05-10T13:14:00.000Z',
+        updatedAt: '2026-05-10T13:15:00.000Z',
+        durationMs: 500,
+        audioByteLength: 2,
+        transcript: { exists: false },
+      },
+    },
+  });
+  assert.equal(response.ok, true);
+  assert.deepEqual(
+    workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      title: 'Attachment',
+      durationMs: 500,
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      title: 'Attachment',
+      durationMs: 500,
+    }
+  );
+  assert.deepEqual(
+    workspaceSegmentAttachmentIdRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      attachmentId: 'att_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      attachmentId: 'att_1',
+    }
+  );
+});
+
+test('workspace memory detail contract keeps handle out of response data', () => {
+  assert.deepEqual(
+    workspaceReadMemoryDetailRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      requestId: 'request_mem_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      requestId: 'request_mem_1',
+    }
+  );
+
+  const response = workspaceReadMemoryDetailResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'request_mem_1',
+      detail: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        title: '产品灵感与思考',
+        createdAt: '2026-05-08T14:42:00.000Z',
+        updatedAt: '2026-05-08T14:42:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: true,
+        attachmentCount: 0,
+        segments: [
+          {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            type: 'audio',
+            title: '第一段录音',
+            createdAt: '2026-05-08T14:42:00.000Z',
+            updatedAt: '2026-05-08T14:43:00.000Z',
+            durationMs: 1000,
+            audioByteLength: 3,
+            transcript: { exists: true },
+            attachmentCount: 0,
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal('workspaceHandle' in response.value.detail, false);
+    assert.equal('rootPath' in response.value.detail, false);
+    const [segment] = response.value.detail.segments;
+    assert.ok(segment);
+    assert.equal('workspaceHandle' in segment, false);
+  }
 });
 
 test('workspace memory space registry contract exposes memory space metadata but never rootPath', () => {
@@ -548,6 +852,57 @@ test('finalized audio segment transcript save contract requires memory id plus s
       markdown: 'note',
       segmentId: 'seg_20260506_000001',
       workspaceHandle: 'wh_1',
+    })
+  );
+});
+
+test('finalized audio segment read contract requires memory and segment identity', () => {
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      requestId: 'request_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      requestId: 'request_1',
+    }
+  );
+  const response = workspaceReadFinalizedAudioSegmentResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'request_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      transcript: { exists: true, text: '正文' },
+    },
+  });
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value, {
+      requestId: 'request_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      transcript: { exists: true, text: '正文' },
+    });
+  }
+  assert.throws(() =>
+    workspaceReadFinalizedAudioSegmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      segmentId: 'seg_20260506_000001',
+      requestId: 'request_1',
     })
   );
 });

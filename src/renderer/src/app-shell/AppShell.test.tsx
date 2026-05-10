@@ -151,7 +151,7 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
     const menu = screen.getByRole('menu', { name: '添加记忆空间' });
-    expect(menu).toHaveClass('rounded-xl', 'bg-card-white');
+    expect(menu).toHaveClass('rounded-xl', 'bg-card-glass', 'backdrop-blur-glass-md');
     expect(menu).toHaveAttribute('data-slot', 'dropdown-menu-content');
     expect(menu).not.toHaveClass('left-full', 'ml-8');
     expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({

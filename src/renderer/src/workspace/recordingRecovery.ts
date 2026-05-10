@@ -1,4 +1,8 @@
-import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
+import type {
+  FinalizedSegmentAttachmentRecording,
+  WorkspaceMemorySummary,
+  WorkspaceSession,
+} from './workspaceApi';
 import {
   transcriptMarkdownFromSegments,
   type TranscriptSegment,
@@ -18,9 +22,12 @@ export type RecordingRecoveryDraft = {
   readonly createdAt: string;
   readonly durationMs: number;
   readonly finalizedAudio?: RecordingRecoveryFinalizedAudio;
+  readonly finalizedAttachment?: FinalizedSegmentAttachmentRecording;
   readonly memoryId: string;
   readonly nextSequence?: number;
+  readonly parentSegmentId?: string;
   readonly segmentId: string;
+  readonly targetKind?: RecordingRecoveryTargetKind;
   readonly recordingSessionId?: string;
   readonly revisionId?: string;
   readonly safeAudioByteLength?: number;
@@ -33,6 +40,8 @@ export type RecordingRecoveryDraft = {
   readonly waveformSamples?: readonly number[];
   readonly workspaceId: string;
 };
+
+export type RecordingRecoveryTargetKind = 'segment' | 'segment-attachment';
 
 export type RecordingRecoveryFinalizedAudio = {
   readonly memory: WorkspaceMemorySummary;
@@ -56,9 +65,12 @@ type WriteRecordingRecoveryDraftInput = {
   readonly audioChunks?: readonly RecordingRecoveryAudioChunk[];
   readonly durationMs: number;
   readonly finalizedAudio?: RecordingRecoveryFinalizedAudio;
+  readonly finalizedAttachment?: FinalizedSegmentAttachmentRecording;
   readonly memoryId: string;
   readonly nextSequence?: number;
+  readonly parentSegmentId?: string;
   readonly segmentId: string;
+  readonly targetKind?: RecordingRecoveryTargetKind;
   readonly recordingSessionId?: string;
   readonly revisionId?: string;
   readonly safeAudioByteLength?: number;
@@ -255,6 +267,18 @@ function isRecoveryDraft(value: unknown): value is RecordingRecoveryDraft {
         memoryId: draft.memoryId,
         segmentId: draft.segmentId,
       })) &&
+    (draft.finalizedAttachment === undefined ||
+      isRecoveryFinalizedAttachment(draft.finalizedAttachment, {
+        attachmentId: draft.segmentId,
+        memoryId: draft.memoryId,
+        ...(draft.parentSegmentId ? { parentSegmentId: draft.parentSegmentId } : {}),
+      })) &&
+    (draft.targetKind === undefined ||
+      draft.targetKind === 'segment' ||
+      draft.targetKind === 'segment-attachment') &&
+    (draft.targetKind !== 'segment-attachment' ||
+      (typeof draft.parentSegmentId === 'string' && draft.parentSegmentId.length > 0)) &&
+    (draft.parentSegmentId === undefined || typeof draft.parentSegmentId === 'string') &&
     (draft.audioChunks === undefined ||
       (Array.isArray(draft.audioChunks) &&
         draft.audioChunks.length <= MAX_RECOVERY_AUDIO_CHUNKS &&
@@ -283,6 +307,40 @@ function isRecoveryDraft(value: unknown): value is RecordingRecoveryDraft {
     (draft.transcriptMarkdown === undefined || typeof draft.transcriptMarkdown === 'string') &&
     typeof draft.createdAt === 'string' &&
     typeof draft.updatedAt === 'string'
+  );
+}
+
+function isRecoveryFinalizedAttachment(
+  value: unknown,
+  draft: {
+    readonly attachmentId: string;
+    readonly memoryId: string;
+    readonly parentSegmentId?: string;
+  }
+): value is FinalizedSegmentAttachmentRecording {
+  if (typeof value !== 'object' || value === null || !draft.parentSegmentId) {
+    return false;
+  }
+  const finalized = value as Partial<FinalizedSegmentAttachmentRecording>;
+  const segment = finalized.segment as Partial<
+    FinalizedSegmentAttachmentRecording['segment']
+  > | null;
+  const attachment = finalized.attachment as Partial<
+    FinalizedSegmentAttachmentRecording['attachment']
+  > | null;
+  return (
+    isWorkspaceMemorySummary(finalized.memory) &&
+    finalized.memory.memoryId === draft.memoryId &&
+    typeof segment === 'object' &&
+    segment !== null &&
+    segment.memoryId === draft.memoryId &&
+    segment.segmentId === draft.parentSegmentId &&
+    typeof attachment === 'object' &&
+    attachment !== null &&
+    attachment.memoryId === draft.memoryId &&
+    attachment.segmentId === draft.parentSegmentId &&
+    attachment.attachmentId === draft.attachmentId &&
+    attachment.type === 'audio'
   );
 }
 
@@ -455,9 +513,12 @@ function writeRecordingRecoveryDraftWithExisting(
     -MAX_RECOVERY_AUDIO_CHUNKS
   );
   const finalizedAudio = input.finalizedAudio ?? existing?.finalizedAudio;
+  const finalizedAttachment = input.finalizedAttachment ?? existing?.finalizedAttachment;
   const nextSequence = input.nextSequence ?? existing?.nextSequence;
+  const parentSegmentId = input.parentSegmentId ?? existing?.parentSegmentId;
   const recordingSessionId = input.recordingSessionId ?? existing?.recordingSessionId;
   const revisionId = input.revisionId ?? existing?.revisionId;
+  const targetKind = input.targetKind ?? existing?.targetKind ?? 'segment';
   const transcriptSegments = (input.transcriptSegments ?? existing?.transcriptSegments)
     ?.slice(-MAX_RECOVERY_TRANSCRIPT_SEGMENTS)
     .map((segment) => ({
@@ -482,13 +543,16 @@ function writeRecordingRecoveryDraftWithExisting(
     ...(audioChunks ? { audioChunks } : {}),
     durationMs: Math.max(0, Math.round(input.durationMs)),
     ...(finalizedAudio ? { finalizedAudio } : {}),
+    ...(finalizedAttachment ? { finalizedAttachment } : {}),
     memoryId: input.memoryId,
     ...(nextSequence !== undefined ? { nextSequence } : {}),
+    ...(parentSegmentId !== undefined ? { parentSegmentId } : {}),
     segmentId: input.segmentId,
     ...(recordingSessionId ? { recordingSessionId } : {}),
     ...(revisionId ? { revisionId } : {}),
     ...(safeAudioByteLength !== undefined ? { safeAudioByteLength } : {}),
     schemaVersion: 1,
+    ...(targetKind !== 'segment' ? { targetKind } : {}),
     title: input.title,
     ...(existing?.transcriptInSidecar && !hasTranscriptInput && !transcriptMarkdown
       ? { transcriptInSidecar: true as const }
@@ -553,8 +617,10 @@ export function updateRecordingRecoveryDuration({
     {
       durationMs,
       memoryId: existing.memoryId,
+      ...(existing.parentSegmentId ? { parentSegmentId: existing.parentSegmentId } : {}),
       segmentId: existing.segmentId,
       title: existing.title,
+      ...(existing.targetKind ? { targetKind: existing.targetKind } : {}),
       workspaceId,
     },
     existing
@@ -571,6 +637,7 @@ export function updateRecordingRecoverySnapshot({
     readonly durationMs?: number;
     readonly audioChunks?: readonly RecordingRecoveryAudioChunk[];
     readonly finalizedAudio?: RecordingRecoveryFinalizedAudio;
+    readonly finalizedAttachment?: FinalizedSegmentAttachmentRecording;
     readonly nextSequence?: number;
     readonly recordingSessionId?: string;
     readonly revisionId?: string;
@@ -591,6 +658,7 @@ export function updateRecordingRecoverySnapshot({
   }
   const nextAudioChunks = patch.audioChunks ?? existing.audioChunks;
   const nextFinalizedAudio = patch.finalizedAudio ?? existing.finalizedAudio;
+  const nextFinalizedAttachment = patch.finalizedAttachment ?? existing.finalizedAttachment;
   const nextSequenceValue = patch.nextSequence ?? existing.nextSequence;
   const nextRecordingSessionId = patch.recordingSessionId ?? existing.recordingSessionId;
   const nextRevisionId = patch.revisionId ?? existing.revisionId;
@@ -603,11 +671,16 @@ export function updateRecordingRecoverySnapshot({
     {
       durationMs: patch.durationMs ?? existing.durationMs,
       memoryId: existing.memoryId,
+      ...(existing.parentSegmentId ? { parentSegmentId: existing.parentSegmentId } : {}),
       segmentId: existing.segmentId,
+      ...(existing.targetKind ? { targetKind: existing.targetKind } : {}),
       title: existing.title,
       workspaceId,
       ...(nextAudioChunks !== undefined ? { audioChunks: nextAudioChunks } : {}),
       ...(nextFinalizedAudio !== undefined ? { finalizedAudio: nextFinalizedAudio } : {}),
+      ...(nextFinalizedAttachment !== undefined
+        ? { finalizedAttachment: nextFinalizedAttachment }
+        : {}),
       ...(nextSequenceValue !== undefined ? { nextSequence: nextSequenceValue } : {}),
       ...(nextRecordingSessionId !== undefined
         ? { recordingSessionId: nextRecordingSessionId }

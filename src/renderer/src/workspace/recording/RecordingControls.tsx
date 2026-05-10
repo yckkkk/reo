@@ -71,7 +71,7 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full border-[3px] border-card-white bg-ember p-0 text-card-white shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-ember)_28%,transparent)] hover:bg-ember disabled:bg-fog"
+        className="size-[88px] rounded-full border-[3px] border-glass-border-highlight bg-ember p-0 text-on-accent shadow-[0_0_0_4px_var(--recording-primary-halo)] hover:bg-ember disabled:bg-fog"
         disabled={disabled}
         onClick={onStart}
         size="iconLarge"
@@ -88,7 +88,7 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full border-card-white bg-fog p-0 text-card-white"
+        className="size-[88px] rounded-full border-glass-border-highlight bg-fog p-0 text-on-accent"
         disabled
         size="iconLarge"
         type="button"
@@ -117,7 +117,7 @@ export function RecordingControls({
               'h-40 w-[108px] rounded-full !border-transparent !bg-transparent px-10 text-ui-md shadow-none',
               cursorAtEnd
                 ? 'text-ember hover:!bg-transparent hover:text-obsidian'
-                : 'text-ember hover:!bg-ember/6'
+                : 'text-ember hover:!bg-[var(--glass-ember-hover)]'
             )}
             onClick={onResume}
             type="button"

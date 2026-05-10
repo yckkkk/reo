@@ -8,6 +8,7 @@ import {
 import { ReoToaster, toast } from './components/ui/toaster';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
+import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import {
   RecordingOverlay,
@@ -23,14 +24,19 @@ import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
 import {
   closeWorkspace,
   createMemory,
+  deleteMemory,
   discardRecordingDraft,
+  discardSegmentAttachmentRecordingDraft,
   finalizeRecordingDraft,
+  finalizeSegmentAttachmentRecordingDraft,
   openWorkspace,
   openMemorySpace,
   removeMemorySpace,
+  restoreDeletedMemory,
   saveTranscript,
   updateMemoryTitle,
   type FinalizedAudioSegment,
+  type FinalizedSegmentAttachmentRecording,
   type WorkspaceMemorySummary,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
@@ -48,6 +54,7 @@ import {
 import { chooseSafeWorkspaceFolder } from './workspace/workspaceFolderSelection';
 import {
   seedWorkspaceSnapshot,
+  memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
   workspaceSnapshotQueryKey,
@@ -69,6 +76,8 @@ const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
 const OPEN_MEMORY_SPACE_ERROR = '无法打开记忆空间。';
 const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
 const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
+const MEMORY_DELETE_ERROR = '无法删除记忆。';
+const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
@@ -89,6 +98,19 @@ export function mergeMemoryIntoSession(
   };
 }
 
+function replaceSessionMemories(
+  current: WorkspaceSession,
+  memories: readonly WorkspaceMemorySummary[]
+): WorkspaceSession {
+  return {
+    ...current,
+    snapshot: {
+      ...current.snapshot,
+      memories: [...memories],
+    },
+  };
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession | null>(null);
@@ -96,6 +118,7 @@ export function App() {
   const [memorySpaceRemoveTarget, setMemorySpaceRemoveTarget] =
     useState<WorkspaceMemorySpaceListItem | null>(null);
   const [memoryCreateIntent, setMemoryCreateIntent] = useState<MemoryCreateIntent | null>(null);
+  const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
@@ -158,6 +181,7 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
     setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
     setSelectedMemoryId(nextWorkspaceSession.snapshot.memories[0]?.memoryId ?? null);
     setWorkspaceSession(nextWorkspaceSession);
@@ -237,6 +261,7 @@ export function App() {
     setWorkspaceEntryError(null);
     setMemoryCreateIntent(null);
     setMemorySpaceRemoveTarget(null);
+    setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
     setWorkspaceCreateOpen(true);
   }
@@ -309,6 +334,7 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
     setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
     setMemorySpaceRemoveTarget(memorySpace);
   }
 
@@ -361,6 +387,7 @@ export function App() {
       if (activeSession) {
         setRecordingTarget(null);
         setMemoryCreateIntent(null);
+        setMemoryDeleteTarget(null);
         setMemoryRenameTarget(null);
         setSelectedMemoryId(null);
         setWorkspaceSession(null);
@@ -585,6 +612,53 @@ export function App() {
     );
   }
 
+  function handleSegmentAttachmentFinalized(finalized: FinalizedSegmentAttachmentRecording) {
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeMemoryIntoSession(
+          {
+            ...activeWorkspaceSession,
+            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+          },
+          finalized.memory
+        ).snapshot
+    );
+    queryClient.setQueryData<
+      | {
+          readonly requestId: string;
+          readonly detail: import('./workspace/workspaceApi').WorkspaceMemoryDetail;
+        }
+      | undefined
+    >(
+      memoryDetailQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId: finalized.memory.memoryId,
+      }),
+      (currentDetail) =>
+        currentDetail
+          ? {
+              ...currentDetail,
+              detail: {
+                ...currentDetail.detail,
+                ...finalized.memory,
+                workspaceId: currentDetail.detail.workspaceId,
+                segments: currentDetail.detail.segments.map((segment) =>
+                  segment.segmentId === finalized.segment.segmentId ? finalized.segment : segment
+                ),
+              },
+            }
+          : currentDetail
+    );
+    setSelectedMemoryId(finalized.memory.memoryId);
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeMemoryIntoSession(currentSession, finalized.memory)
+        : currentSession
+    );
+  }
+
   async function saveRecoveredRecording() {
     const draft = recordingRecoveryDraft;
     if (!draft || recordingRecoveryActionPending) {
@@ -594,6 +668,53 @@ export function App() {
     setRecordingRecoveryActionPending(true);
     try {
       let finalizedAudio = draft.finalizedAudio ?? null;
+      if (draft.targetKind === 'segment-attachment') {
+        let finalizedAttachment = draft.finalizedAttachment ?? null;
+        if (!finalizedAttachment) {
+          if (!draft.parentSegmentId) {
+            toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+              description: '无法确认补充录音所属片段。',
+            });
+            return;
+          }
+          const response = await finalizeSegmentAttachmentRecordingDraft({
+            attachmentId: draft.segmentId,
+            durationMs: draft.durationMs,
+            memoryId: draft.memoryId,
+            segmentId: draft.parentSegmentId,
+            title: draft.title,
+            workspaceHandle: activeWorkspaceSession.workspaceHandle,
+            workspaceId: activeWorkspaceSession.workspaceId,
+          });
+          if (!response.ok) {
+            toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+              description: workspaceErrorDisplayMessage(
+                response.error,
+                RECORDING_RECOVERY_SAVE_ERROR
+              ),
+            });
+            return;
+          }
+          finalizedAttachment = response.value;
+          handleSegmentAttachmentFinalized(finalizedAttachment);
+          updateRecordingRecoverySnapshot({
+            patch: { finalizedAttachment },
+            segmentId: draft.segmentId,
+            workspaceId: activeWorkspaceSession.workspaceId,
+          });
+          setRecordingRecoveryDraft({ ...draft, finalizedAttachment });
+        } else {
+          handleSegmentAttachmentFinalized(finalizedAttachment);
+        }
+        clearRecordingRecoveryDraft({
+          segmentId: draft.segmentId,
+          workspaceId: activeWorkspaceSession.workspaceId,
+        });
+        setRecordingRecoveryDraft(null);
+        toast.success('已保存未完成录音');
+        return;
+      }
+
       if (!finalizedAudio) {
         const response = await finalizeRecordingDraft({
           durationMs: draft.durationMs,
@@ -680,7 +801,7 @@ export function App() {
 
     setRecordingRecoveryActionPending(true);
     try {
-      if (draft.finalizedAudio) {
+      if (draft.finalizedAudio || draft.finalizedAttachment) {
         clearRecordingRecoveryDraft({
           segmentId: draft.segmentId,
           workspaceId: activeWorkspaceSession.workspaceId,
@@ -690,10 +811,16 @@ export function App() {
         return;
       }
 
-      const response = await discardRecordingDraft({
-        segmentId: draft.segmentId,
-        workspaceHandle: activeWorkspaceSession.workspaceHandle,
-      });
+      const response =
+        draft.targetKind === 'segment-attachment'
+          ? await discardSegmentAttachmentRecordingDraft({
+              attachmentId: draft.segmentId,
+              workspaceHandle: activeWorkspaceSession.workspaceHandle,
+            })
+          : await discardRecordingDraft({
+              segmentId: draft.segmentId,
+              workspaceHandle: activeWorkspaceSession.workspaceHandle,
+            });
       if (!response.ok) {
         toast.error(RECORDING_RECOVERY_DISCARD_ERROR, {
           description: workspaceErrorDisplayMessage(
@@ -726,6 +853,7 @@ export function App() {
 
     setWorkspaceEntryError(null);
     setWorkspaceCreateOpen(false);
+    setMemoryDeleteTarget(null);
     setMemorySpaceRemoveTarget(null);
     setMemoryRenameTarget(null);
     setMemoryCreateIntent(intent);
@@ -822,6 +950,127 @@ export function App() {
     }
   }
 
+  function applyMemoryListUpdate(memories: readonly WorkspaceMemorySummary[]) {
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) => ({
+        ...(currentSnapshot ?? activeWorkspaceSession.snapshot),
+        memories: [...memories],
+      })
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+        ? replaceSessionMemories(currentSession, memories)
+        : currentSession
+    );
+  }
+
+  function openMemoryDeleteDialog(memory: WorkspaceMemorySummary) {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+    setMemoryDeleteTarget(memory);
+  }
+
+  function handleMemoryDeleteOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+
+    if (!nextOpen) {
+      setMemoryDeleteTarget(null);
+    }
+  }
+
+  async function restoreDeletedMemoryFromUndo(restoreToken: string) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      const response = await restoreDeletedMemory({
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        restoreToken,
+      });
+
+      if (!response.ok) {
+        toast.error(MEMORY_RESTORE_ERROR, {
+          description: workspaceErrorDisplayMessage(response.error, MEMORY_RESTORE_ERROR),
+        });
+        return;
+      }
+
+      applyMemoryListUpdate(response.value.memories);
+      setSelectedMemoryId(response.value.memory.memoryId);
+      toast.success('已恢复记忆');
+    } catch (error) {
+      toast.error(MEMORY_RESTORE_ERROR, {
+        description: unknownErrorDisplayMessage(error, MEMORY_RESTORE_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function confirmDeleteMemory() {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    const target = memoryDeleteTarget;
+    if (!target || !beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      const response = await deleteMemory({
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        memoryId: target.memoryId,
+      });
+
+      if (!response.ok) {
+        toast.error(MEMORY_DELETE_ERROR, {
+          description: workspaceErrorDisplayMessage(response.error, MEMORY_DELETE_ERROR),
+        });
+        return;
+      }
+
+      applyMemoryListUpdate(response.value.memories);
+      queryClient.removeQueries({
+        queryKey: memoryDetailQueryKey({
+          workspaceId: activeWorkspaceSession.workspaceId,
+          memoryId: target.memoryId,
+        }),
+      });
+      if (currentMemoryId === target.memoryId) {
+        setSelectedMemoryId(response.value.memories[0]?.memoryId ?? null);
+      }
+      setMemoryDeleteTarget(null);
+      toast.success('已删除记忆', {
+        description: '可以从这次提示恢复。',
+        action: {
+          label: '恢复',
+          onClick: () => {
+            void restoreDeletedMemoryFromUndo(response.value.restoreToken);
+          },
+        },
+      });
+    } catch (error) {
+      toast.error(MEMORY_DELETE_ERROR, {
+        description: unknownErrorDisplayMessage(error, MEMORY_DELETE_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   function openRecording(target: RecordingTarget) {
     setRecordingCloseBlocked(false);
     setRecordingTarget(target);
@@ -833,6 +1082,10 @@ export function App() {
       return;
     }
     if (draft.finalizedAudio) {
+      void saveRecoveredRecording();
+      return;
+    }
+    if (draft.targetKind === 'segment-attachment') {
       void saveRecoveredRecording();
       return;
     }
@@ -851,6 +1104,22 @@ export function App() {
     }
 
     openMemoryCreateDialog({ afterCreate: 'record-memory' });
+  }
+
+  function requestStartSegmentAttachmentRecording(target: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    setSelectedMemoryId(target.memoryId);
+    openRecording({
+      kind: 'segment-attachment',
+      memoryId: target.memoryId,
+      segmentId: target.segmentId,
+    });
   }
 
   function handleRecordingContentSaved({ memory }: SavedRecordingContent) {
@@ -920,8 +1189,10 @@ export function App() {
             workspaceSession={activeWorkspaceSession}
             currentMemory={currentMemory}
             memoryRailOpen={memoryRailOpen}
+            onDeleteMemory={openMemoryDeleteDialog}
             onSelectMemory={selectMemory}
             onRenameMemory={setMemoryRenameTarget}
+            onStartSegmentAttachmentRecording={requestStartSegmentAttachmentRecording}
             onStartRecording={requestStartRecording}
           />
         )}
@@ -932,6 +1203,7 @@ export function App() {
           onRecordingContentSaved={handleRecordingContentSaved}
           onOpenChange={handleRecordingOpenChange}
           onAudioSegmentFinalized={handleAudioSegmentFinalized}
+          onSegmentAttachmentFinalized={handleSegmentAttachmentFinalized}
           open
           recoveredDraft={recordingRecoveryReviewDraft}
           recordingTarget={recordingTarget}
@@ -939,6 +1211,7 @@ export function App() {
         />
       ) : null}
       <RecordingRecoveryDialog
+        canReview={recordingRecoveryDraft?.targetKind !== 'segment-attachment'}
         disabled={recordingRecoveryActionPending}
         draft={recordingRecoveryDraft}
         onDiscard={() => {
@@ -958,6 +1231,15 @@ export function App() {
         }}
         onSave={saveRenamedMemory}
         open={memoryRenameTarget !== null}
+      />
+      <MemoryDeleteDialog
+        disabled={workspaceActionPending}
+        memory={memoryDeleteTarget}
+        onConfirm={() => {
+          void confirmDeleteMemory();
+        }}
+        onOpenChange={handleMemoryDeleteOpenChange}
+        open={memoryDeleteTarget !== null}
       />
       <MemoryCreateDialog
         description={

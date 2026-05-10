@@ -23,18 +23,24 @@ export function WorkspaceFrame({ children, dock, memoryRailOpen, rail }: Workspa
   return (
     <section
       data-slot="workspace-frame"
-      className="flex min-h-full flex-col bg-card-white text-obsidian"
+      className="flex min-h-full flex-col bg-card-glass text-obsidian backdrop-blur-glass-lg"
       style={workspaceMemoryRailStyle}
     >
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
+          data-slot="workspace-stage-shell"
           className={`flex min-h-[640px] flex-col py-24 pl-24 transition-[padding-right] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:py-32 sm:pl-40 ${
             memoryRailOpen
               ? 'pr-[var(--workspace-memory-rail-stage-inset)] xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]'
               : 'pr-24 sm:pr-40 xl:pr-40'
           }`}
         >
-          <div className="flex min-h-0 flex-1 items-center justify-center pb-32">{children}</div>
+          <div
+            data-slot="workspace-stage-content"
+            className="flex min-h-0 flex-1 items-stretch justify-start pb-32"
+          >
+            {children}
+          </div>
           <div
             data-slot="workspace-expression-fab-layer"
             className={`pointer-events-none absolute bottom-32 left-24 z-10 transition-[right] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:left-40 ${

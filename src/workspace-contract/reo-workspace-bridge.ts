@@ -5,8 +5,14 @@ import type {
   WorkspaceCloseResponse,
   WorkspaceCreateMemoryRequest,
   WorkspaceCreateMemoryResponse,
+  WorkspaceDeleteMemoryRequest,
+  WorkspaceDeleteMemoryResponse,
   WorkspaceCreateRecordingDraftResponse,
+  WorkspaceCreateSegmentAttachmentRecordingDraftRequest,
+  WorkspaceCreateSegmentAttachmentRecordingDraftResponse,
   WorkspaceDiscardRecordingDraftResponse,
+  WorkspaceFinalizeSegmentAttachmentRecordingDraftRequest,
+  WorkspaceFinalizeSegmentAttachmentRecordingDraftResponse,
   WorkspaceHandleRequest,
   WorkspaceInitializeRequest,
   WorkspaceInitializeResponse,
@@ -15,8 +21,15 @@ import type {
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
   WorkspaceOpenRequest,
+  WorkspaceReadFinalizedAudioSegmentRequest,
+  WorkspaceReadFinalizedAudioSegmentResponse,
+  WorkspaceReadMemoryDetailRequest,
+  WorkspaceReadMemoryDetailResponse,
+  WorkspaceRestoreDeletedMemoryRequest,
+  WorkspaceRestoreDeletedMemoryResponse,
   WorkspaceRecordingAppendRequest,
   WorkspaceRecordingAppendResponse,
+  WorkspaceAppendSegmentAttachmentRecordingAudioRequest,
   WorkspaceRecordingDraftPrefixCloneRequest,
   WorkspaceRecordingDraftPrefixCloneResponse,
   WorkspaceRecordingDraftAudioResponse,
@@ -28,6 +41,8 @@ import type {
   WorkspaceRecordingTranscriptionControlResponse,
   WorkspaceRecordingTranscriptionEvent,
   WorkspaceRecordingTranscriptionStartRequest,
+  WorkspaceSegmentAttachmentIdRequest,
+  WorkspaceSegmentAttachmentRecordingAppendResponse,
   WorkspaceSegmentIdRequest,
   WorkspaceRecordingMarkdownSaveRequest,
   WorkspaceRecordingMarkdownSaveResponse,
@@ -53,23 +68,47 @@ export interface ReoWorkspaceBridge {
   readonly createMemory: (
     payload: WorkspaceCreateMemoryRequest
   ) => Promise<WorkspaceCreateMemoryResponse>;
+  readonly deleteMemory: (
+    payload: WorkspaceDeleteMemoryRequest
+  ) => Promise<WorkspaceDeleteMemoryResponse>;
+  readonly restoreDeletedMemory: (
+    payload: WorkspaceRestoreDeletedMemoryRequest
+  ) => Promise<WorkspaceRestoreDeletedMemoryResponse>;
+  readonly readMemoryDetail: (
+    payload: WorkspaceReadMemoryDetailRequest
+  ) => Promise<WorkspaceReadMemoryDetailResponse>;
+  readonly readFinalizedAudioSegment: (
+    payload: WorkspaceReadFinalizedAudioSegmentRequest
+  ) => Promise<WorkspaceReadFinalizedAudioSegmentResponse>;
   readonly createRecordingDraft: (
     payload: WorkspaceHandleRequest
   ) => Promise<WorkspaceCreateRecordingDraftResponse>;
+  readonly createSegmentAttachmentRecordingDraft: (
+    payload: WorkspaceCreateSegmentAttachmentRecordingDraftRequest
+  ) => Promise<WorkspaceCreateSegmentAttachmentRecordingDraftResponse>;
   readonly readRecordingDraftAudio: (
     payload: WorkspaceRecordingDraftAudioRequest
   ) => Promise<WorkspaceRecordingDraftAudioResponse>;
   readonly appendRecordingAudioChunk: (
     payload: WorkspaceRecordingAppendRequest
   ) => Promise<WorkspaceRecordingAppendResponse>;
+  readonly appendSegmentAttachmentRecordingAudioChunk: (
+    payload: WorkspaceAppendSegmentAttachmentRecordingAudioRequest
+  ) => Promise<WorkspaceSegmentAttachmentRecordingAppendResponse>;
   readonly cloneRecordingDraftPrefix: (
     payload: WorkspaceRecordingDraftPrefixCloneRequest
   ) => Promise<WorkspaceRecordingDraftPrefixCloneResponse>;
   readonly finalizeRecordingDraft: (
     payload: WorkspaceRecordingFinalizeRequest
   ) => Promise<WorkspaceRecordingFinalizeResponse>;
+  readonly finalizeSegmentAttachmentRecordingDraft: (
+    payload: WorkspaceFinalizeSegmentAttachmentRecordingDraftRequest
+  ) => Promise<WorkspaceFinalizeSegmentAttachmentRecordingDraftResponse>;
   readonly discardRecordingDraft: (
     payload: WorkspaceSegmentIdRequest
+  ) => Promise<WorkspaceDiscardRecordingDraftResponse>;
+  readonly discardSegmentAttachmentRecordingDraft: (
+    payload: WorkspaceSegmentAttachmentIdRequest
   ) => Promise<WorkspaceDiscardRecordingDraftResponse>;
   readonly updateMemoryTitle: (
     payload: WorkspaceUpdateMemoryTitleRequest

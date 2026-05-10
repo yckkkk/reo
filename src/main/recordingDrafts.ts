@@ -30,6 +30,7 @@ import {
   type DirectoryIdentity,
 } from './directoryIdentity.js';
 import {
+  appendAudioAttachmentToSegment,
   appendAudioSegmentToMemory,
   appendAudioSegmentToMemoryForTest,
   assertNoDuplicateSegmentDirectoryById,
@@ -42,19 +43,28 @@ import {
   type MemorySummary,
 } from './memoryFiles.js';
 import {
+  draftSegmentAttachmentMetadataSchema,
   segmentMetadataSchema,
+  segmentAttachmentMetadataSchema,
   workspaceError,
+  type SegmentAttachmentMetadata,
   type FinalizedSegmentMetadata,
   type SegmentMetadata,
+  type WorkspaceSegmentAttachmentProjection,
+  type WorkspaceSegmentProjection,
   type WorkspaceErrorEnvelope,
 } from '../workspace-contract/workspace-contract.js';
 import {
+  createSafeAttachmentId,
   createSafeSegmentId,
+  ensureWorkspaceAttachmentDraftsDirectory,
   ensureWorkspaceDraftsDirectory,
+  resolveWorkspaceDraftAttachmentDirectory,
   resolveWorkspaceDraftSegmentDirectory,
 } from './workspacePaths.js';
 
 const MAX_AUDIO_CHUNK_BYTES = 1_048_576;
+const MAX_FINALIZED_TRANSCRIPT_READ_BYTES = 1_048_576;
 const MAX_RECORDING_METADATA_BYTES = 1_048_576;
 type MaybePromise<T> = T | Promise<T>;
 const fsyncDescriptor = promisify(fsyncCallback);
@@ -94,10 +104,13 @@ function caughtWorkspaceError(error: unknown): WorkspaceErrorEnvelope | null {
 }
 
 const inFlightAppends = new Set<string>();
+const inFlightAttachmentAppends = new Set<string>();
 const inFlightDraftPrefixCopies = new Set<string>();
 const inFlightDraftAudioReads = new Set<string>();
 const finalizingRecordings = new Set<string>();
+const finalizingAttachments = new Set<string>();
 const activeDrafts = new Set<string>();
+const activeAttachmentDrafts = new Set<string>();
 const markdownSaveQueues = new Map<string, Promise<void>>();
 const finalizedAudioTargets = new Map<
   string,
@@ -122,10 +135,13 @@ function recordingKey(rootPath: string, segmentId: string): string {
 function clearRecordingRuntimeStateByPrefix(prefix: string): void {
   for (const store of [
     inFlightAppends,
+    inFlightAttachmentAppends,
     inFlightDraftPrefixCopies,
     inFlightDraftAudioReads,
     finalizingRecordings,
+    finalizingAttachments,
     activeDrafts,
+    activeAttachmentDrafts,
   ]) {
     for (const key of store) {
       if (key.startsWith(prefix)) {
@@ -137,10 +153,13 @@ function clearRecordingRuntimeStateByPrefix(prefix: string): void {
 
 export function clearRecordingRuntimeState(): void {
   inFlightAppends.clear();
+  inFlightAttachmentAppends.clear();
   inFlightDraftAudioReads.clear();
   inFlightDraftPrefixCopies.clear();
   finalizingRecordings.clear();
+  finalizingAttachments.clear();
   activeDrafts.clear();
+  activeAttachmentDrafts.clear();
   markdownSaveQueues.clear();
   clearFinalizedAudioTargetCache();
 }
@@ -204,6 +223,7 @@ function createRecordingDirectoryWithinParent({
 }
 
 const resolveDraftRecordingDirectory = resolveWorkspaceDraftSegmentDirectory;
+const resolveDraftAttachmentDirectory = resolveWorkspaceDraftAttachmentDirectory;
 
 async function resolveFinalizedAudioSegmentReadTarget(
   rootPath: string,
@@ -253,6 +273,37 @@ async function readMetadata(rootPath: string, segmentId: string): Promise<Segmen
   try {
     const recordingDirectory = resolveDraftRecordingDirectory(rootPath, segmentId);
     return await readMetadataFromDirectory(recordingDirectory);
+  } catch {
+    return null;
+  }
+}
+
+async function readAttachmentMetadata(
+  rootPath: string,
+  attachmentId: string
+): Promise<SegmentAttachmentMetadata | null> {
+  try {
+    const attachmentDirectory = resolveDraftAttachmentDirectory(rootPath, attachmentId);
+    const directoryIdentity = await readDirectoryIdentity(attachmentDirectory);
+    const fileFd = openFileForReadInDirectory(
+      attachmentDirectory,
+      directoryIdentity,
+      'attachment.json'
+    );
+    try {
+      const metadata = fstatSync(fileFd);
+      if (!metadata.isFile()) {
+        throw new Error('Segment attachment metadata path is unsafe');
+      }
+      if (metadata.size > MAX_RECORDING_METADATA_BYTES) {
+        throw new Error('Segment attachment metadata is too large');
+      }
+      const content = (await readFileDescriptor(fileFd, 'utf8')) as string;
+      await assertSameDirectory(attachmentDirectory, directoryIdentity);
+      return segmentAttachmentMetadataSchema.parse(JSON.parse(content));
+    } finally {
+      closeSync(fileFd);
+    }
   } catch {
     return null;
   }
@@ -342,6 +393,19 @@ async function writeMetadata(
     directory: recordingDirectory,
     directoryIdentity,
     fileName: 'segment.json',
+    value: metadata,
+  });
+}
+
+async function writeAttachmentMetadata(
+  attachmentDirectory: string,
+  directoryIdentity: DirectoryIdentity,
+  metadata: SegmentAttachmentMetadata
+): Promise<void> {
+  await writeWorkspaceJsonAtomicInKnownDirectory({
+    directory: attachmentDirectory,
+    directoryIdentity,
+    fileName: 'attachment.json',
     value: metadata,
   });
 }
@@ -526,6 +590,104 @@ export async function createRecordingDraft({
   }
 }
 
+export async function createSegmentAttachmentRecordingDraft({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  createAttachmentId,
+  now,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly createAttachmentId: () => string;
+  readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly attachmentId: string;
+      readonly nextSequence: number;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  let attachmentDirectory: string | null = null;
+  let attachmentDirectoryIdentity: DirectoryIdentity | null = null;
+  let draftDirectoryCreated = false;
+  try {
+    const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (usable) {
+      return usable;
+    }
+    await readFinalizedSegmentSummary(rootPath, memoryId, segmentId);
+    const attachmentId = createSafeAttachmentId(createAttachmentId());
+    const key = recordingKey(rootPath, attachmentId);
+    const attachmentDraftsDirectory = await ensureWorkspaceAttachmentDraftsDirectory(
+      rootPath,
+      assertWorkspaceUsable
+    );
+    if (typeof attachmentDraftsDirectory !== 'string') {
+      return attachmentDraftsDirectory;
+    }
+    attachmentDirectory = resolveDraftAttachmentDirectory(rootPath, attachmentId);
+    await beforeDraftDirectoryCreateForTest?.();
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    attachmentDirectory = createRecordingDirectoryWithinParent({
+      parentDirectory: path.dirname(attachmentDirectory),
+      directoryName: attachmentId,
+    });
+    draftDirectoryCreated = true;
+    attachmentDirectoryIdentity = await readDirectoryIdentity(attachmentDirectory);
+    await afterDraftDirectoryCreateForTest?.();
+    resolveDraftAttachmentDirectory(rootPath, attachmentId);
+    await assertSameDirectory(attachmentDirectory, attachmentDirectoryIdentity);
+    const metadata: SegmentAttachmentMetadata = {
+      schemaVersion: 1,
+      workspaceId,
+      memoryId,
+      segmentId,
+      attachmentId,
+      type: 'audio',
+      status: 'draft',
+      title: '',
+      createdAt: now(),
+      nextSequence: 0,
+      audioByteLength: 0,
+    };
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    await createEmptyDraftAudioFile(
+      attachmentDirectory,
+      attachmentDirectoryIdentity,
+      assertWorkspaceUsable
+    );
+    await assertSameDirectory(attachmentDirectory, attachmentDirectoryIdentity);
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    await writeAttachmentMetadata(attachmentDirectory, attachmentDirectoryIdentity, metadata);
+    activeAttachmentDrafts.add(key);
+    return { ok: true, attachmentId, nextSequence: 0 };
+  } catch (error) {
+    if (draftDirectoryCreated && attachmentDirectory && attachmentDirectoryIdentity) {
+      try {
+        await assertSameDirectory(attachmentDirectory, attachmentDirectoryIdentity);
+        await rmdir(attachmentDirectory);
+      } catch {
+        // The managed path moved or cleanup is no longer safe.
+      }
+    }
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_INVALID_ID',
+      'Segment attachment recording draft could not be created'
+    );
+  }
+}
+
 export async function appendRecordingAudioChunk({
   rootPath,
   segmentId,
@@ -645,6 +807,116 @@ export async function appendRecordingAudioChunk({
       : workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
   } finally {
     inFlightAppends.delete(key);
+  }
+}
+
+export async function appendSegmentAttachmentRecordingAudioChunk({
+  rootPath,
+  attachmentId,
+  sequence,
+  chunk,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly attachmentId: string;
+  readonly sequence: number;
+  readonly chunk: Uint8Array;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<{ readonly ok: true; readonly nextSequence: number } | WorkspaceErrorEnvelope> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+  if (chunk.byteLength > MAX_AUDIO_CHUNK_BYTES) {
+    return workspaceError('ERR_RECORDING_CHUNK_TOO_LARGE', 'Recording audio chunk is too large');
+  }
+
+  const key = recordingKey(rootPath, attachmentId);
+  if (finalizingAttachments.has(key)) {
+    return workspaceError('ERR_RECORDING_FINALIZED', 'Segment attachment is already finalized');
+  }
+  if (inFlightAttachmentAppends.has(key)) {
+    return workspaceError(
+      'ERR_RECORDING_APPEND_IN_FLIGHT',
+      'Segment attachment append already in flight'
+    );
+  }
+
+  inFlightAttachmentAppends.add(key);
+  let draftKnown = false;
+  try {
+    if (!activeAttachmentDrafts.has(key)) {
+      const safeAttachmentId = createSafeAttachmentId(attachmentId);
+      if (safeAttachmentId !== attachmentId) {
+        throw new Error('Invalid attachment id');
+      }
+    }
+
+    const attachmentDirectory = resolveDraftAttachmentDirectory(rootPath, attachmentId);
+    const attachmentDirectoryIdentity = await readDirectoryIdentity(attachmentDirectory);
+    const metadata = await readAttachmentMetadata(rootPath, attachmentId);
+    if (!metadata) {
+      return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment attachment draft not found');
+    }
+    draftKnown = true;
+    if (metadata.status !== 'draft') {
+      return workspaceError('ERR_RECORDING_FINALIZED', 'Segment attachment is already finalized');
+    }
+    if (metadata.nextSequence !== sequence) {
+      return workspaceError('ERR_RECORDING_SEQUENCE', 'Recording audio chunk sequence mismatch');
+    }
+
+    const audioAppend = await openAudioFileForAppend(
+      attachmentDirectory,
+      attachmentDirectoryIdentity,
+      metadata.audioByteLength
+    );
+    if (!audioAppend) {
+      return workspaceError(
+        'ERR_WORKSPACE_UNSAFE_PATH',
+        'Segment attachment audio path is unsafe',
+        'draft-preserved'
+      );
+    }
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    try {
+      writeSync(audioAppend.fd, chunk);
+      fsyncSync(audioAppend.fd);
+      const nextMetadata = {
+        ...metadata,
+        nextSequence: metadata.nextSequence + 1,
+        audioByteLength: metadata.audioByteLength + chunk.byteLength,
+      };
+      try {
+        assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+        await writeAttachmentMetadata(
+          attachmentDirectory,
+          attachmentDirectoryIdentity,
+          nextMetadata
+        );
+      } catch (error) {
+        ftruncateSync(audioAppend.fd, audioAppend.previousSize);
+        fsyncSync(audioAppend.fd);
+        throw error;
+      }
+      return { ok: true, nextSequence: nextMetadata.nextSequence };
+    } finally {
+      closeSync(audioAppend.fd);
+    }
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return draftKnown
+      ? workspaceError(
+          'ERR_RECORDING_APPEND_FAILED',
+          'Segment attachment audio chunk could not be appended',
+          'draft-preserved'
+        )
+      : workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment attachment draft not found');
+  } finally {
+    inFlightAttachmentAppends.delete(key);
   }
 }
 
@@ -960,6 +1232,132 @@ export async function readRecordingDraftAudio({
   }
 }
 
+async function readOptionalFinalizedTranscript(
+  recordingDirectory: string,
+  recordingDirectoryIdentity: DirectoryIdentity
+): Promise<{ readonly exists: boolean; readonly text: string }> {
+  let transcriptFd: number;
+  try {
+    transcriptFd = openFileForReadInDirectory(
+      recordingDirectory,
+      recordingDirectoryIdentity,
+      'transcript.md'
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { exists: false, text: '' };
+    }
+    throw error;
+  }
+
+  try {
+    const transcript = fstatSync(transcriptFd);
+    if (!transcript.isFile()) {
+      throw new Error('Recording transcript path is unsafe');
+    }
+    if (transcript.size > MAX_FINALIZED_TRANSCRIPT_READ_BYTES) {
+      throw new Error('Recording transcript is too large');
+    }
+    const text = (await readFileDescriptor(transcriptFd, 'utf8')) as string;
+    await assertSameDirectory(recordingDirectory, recordingDirectoryIdentity);
+    return {
+      exists: text.length > 0,
+      text,
+    };
+  } finally {
+    closeSync(transcriptFd);
+  }
+}
+
+export async function readFinalizedAudioSegmentContent({
+  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  rootPath,
+  memoryId,
+  segmentId,
+  assertWorkspaceUsable,
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audio: Uint8Array;
+      readonly audioByteLength: number;
+      readonly transcript: { readonly exists: boolean; readonly text: string };
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentReadTarget(rootPath, memoryId, segmentId);
+    const maxReadableBytes = Math.max(
+      1,
+      Math.min(Math.trunc(maxBytes), MAX_RECORDING_DRAFT_AUDIO_READ_BYTES)
+    );
+    if (target.audioByteLength > maxReadableBytes) {
+      return workspaceError(
+        'ERR_RECORDING_CHUNK_TOO_LARGE',
+        'Finalized audio is too large to read'
+      );
+    }
+
+    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const audioFd = openFileForReadInDirectory(
+      target.directory,
+      recordingDirectoryIdentity,
+      'audio.webm'
+    );
+    try {
+      const audio = fstatSync(audioFd);
+      if (!audio.isFile() || audio.size !== target.audioByteLength) {
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const content = (await readFileDescriptor(audioFd)) as Buffer;
+      if (content.byteLength !== target.audioByteLength || content.byteLength > maxReadableBytes) {
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const transcript = await readOptionalFinalizedTranscript(
+        target.directory,
+        recordingDirectoryIdentity
+      );
+      const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+      if (stillUsable) {
+        return stillUsable;
+      }
+      await assertSameDirectory(target.directory, recordingDirectoryIdentity);
+      return {
+        ok: true,
+        audio: new Uint8Array(content),
+        audioByteLength: target.audioByteLength,
+        transcript,
+      };
+    } finally {
+      closeSync(audioFd);
+    }
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Finalized audio segment not found');
+  }
+}
+
 interface FinalizeRecordingDraftInput {
   readonly rootPath: string;
   readonly workspaceId?: string;
@@ -1103,6 +1501,127 @@ export async function finalizeRecordingDraftForTest({
   return finalizeRecordingDraftWithHooks(input, transactionHooks);
 }
 
+type FinalizeSegmentAttachmentRecordingDraftInput = {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly attachmentId: string;
+  readonly title: string;
+  readonly durationMs: number;
+  readonly now: () => string;
+  readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+};
+
+type FinalizeSegmentAttachmentRecordingDraftResult =
+  | {
+      readonly ok: true;
+      readonly memory: MemorySummary;
+      readonly segment: WorkspaceSegmentProjection;
+      readonly attachment: WorkspaceSegmentAttachmentProjection;
+    }
+  | WorkspaceErrorEnvelope;
+
+export async function finalizeSegmentAttachmentRecordingDraft({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  attachmentId,
+  title,
+  durationMs,
+  now,
+  rebuildIndex,
+  assertWorkspaceUsable,
+}: FinalizeSegmentAttachmentRecordingDraftInput): Promise<FinalizeSegmentAttachmentRecordingDraftResult> {
+  const key = recordingKey(rootPath, attachmentId);
+  const usable = assertWorkspaceUsable?.();
+  if (usable && !usable.ok) {
+    return usable;
+  }
+  if (finalizingAttachments.has(key)) {
+    return workspaceError('ERR_RECORDING_FINALIZED', 'Segment attachment is already finalized');
+  }
+  if (inFlightAttachmentAppends.has(key)) {
+    return workspaceError(
+      'ERR_RECORDING_APPEND_IN_FLIGHT',
+      'Segment attachment append still in flight'
+    );
+  }
+
+  finalizingAttachments.add(key);
+  try {
+    const metadata = await readAttachmentMetadata(rootPath, attachmentId);
+    if (!metadata) {
+      return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment attachment draft not found');
+    }
+    if (metadata.status !== 'draft') {
+      return workspaceError('ERR_RECORDING_FINALIZED', 'Segment attachment is already finalized');
+    }
+    const draft = draftSegmentAttachmentMetadataSchema.parse(metadata);
+    if (
+      draft.workspaceId !== workspaceId ||
+      draft.memoryId !== memoryId ||
+      draft.segmentId !== segmentId ||
+      draft.attachmentId !== attachmentId
+    ) {
+      return workspaceError(
+        'ERR_RECORDING_INVALID_ID',
+        'Segment attachment draft parent does not match'
+      );
+    }
+
+    const finalized = await appendAudioAttachmentToSegment({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      attachmentId,
+      title,
+      durationMs,
+      now,
+      ...(rebuildIndex ? { rebuildIndex } : {}),
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+    });
+    if (!finalized.ok) {
+      return finalized;
+    }
+
+    const draftDirectory = resolveDraftAttachmentDirectory(rootPath, attachmentId);
+    const removed = await removeSafeWorkspaceDirectory(rootPath, draftDirectory, {
+      allowMissing: true,
+    });
+    if (!removed) {
+      return workspaceError(
+        'ERR_WORKSPACE_UNSAFE_PATH',
+        'Segment attachment draft cleanup path is unsafe',
+        'durable-marker-recovery-required'
+      );
+    }
+
+    return {
+      ok: true,
+      memory: finalized.value.memory,
+      segment: finalized.value.segment,
+      attachment: finalized.value.attachment,
+    };
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_FINALIZE_FAILED',
+      'Segment attachment recording could not be finalized',
+      'draft-preserved'
+    );
+  } finally {
+    activeAttachmentDrafts.delete(key);
+    finalizingAttachments.delete(key);
+  }
+}
+
 export async function discardRecordingDraft({
   rootPath,
   segmentId,
@@ -1153,6 +1672,59 @@ export async function discardRecordingDraft({
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
   } finally {
     activeDrafts.delete(recordingKey(rootPath, segmentId));
+  }
+}
+
+export async function discardSegmentAttachmentRecordingDraft({
+  rootPath,
+  attachmentId,
+  beforeDraftDiscardRemove,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly attachmentId: string;
+  readonly beforeDraftDiscardRemove?: () => Promise<void> | void;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<{ readonly ok: true; readonly discarded: true } | WorkspaceErrorEnvelope> {
+  const usable = assertWorkspaceUsable?.();
+  if (usable && !usable.ok) {
+    return usable;
+  }
+  let draftDirectory: string;
+  try {
+    draftDirectory = resolveDraftAttachmentDirectory(rootPath, attachmentId);
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Segment attachment draft path is unsafe',
+      'draft-preserved'
+    );
+  }
+
+  try {
+    const removed = await removeSafeWorkspaceDirectory(rootPath, draftDirectory, {
+      allowMissing: true,
+      beforeSafeCleanupRemove: async () => {
+        await beforeDraftDiscardRemove?.();
+        assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+      },
+    });
+    if (!removed) {
+      return workspaceError(
+        'ERR_WORKSPACE_UNSAFE_PATH',
+        'Segment attachment draft path is unsafe',
+        'draft-preserved'
+      );
+    }
+    return { ok: true, discarded: true };
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment attachment draft not found');
+  } finally {
+    activeAttachmentDrafts.delete(recordingKey(rootPath, attachmentId));
   }
 }
 

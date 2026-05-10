@@ -10,19 +10,27 @@ import {
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -31,9 +39,13 @@ import {
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
+  workspaceDeleteMemoryRequestSchema,
+  workspaceDeleteMemoryResponseSchema,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
+  workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
+  workspaceCreateSegmentAttachmentRecordingDraftResponseSchema,
   workspaceDiscardRecordingDraftResponseSchema,
   workspaceError,
   workspaceInitializeRequestSchema,
@@ -45,22 +57,33 @@ import {
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
+  workspaceReadFinalizedAudioSegmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentResponseSchema,
+  workspaceReadMemoryDetailRequestSchema,
+  workspaceReadMemoryDetailResponseSchema,
   workspaceRemoveMemorySpaceRequestSchema,
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAppendResponseSchema,
+  workspaceRestoreDeletedMemoryRequestSchema,
+  workspaceRestoreDeletedMemoryResponseSchema,
+  workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
+  workspaceSegmentAttachmentRecordingAppendResponseSchema,
   workspaceRecordingDraftPrefixCloneRequestSchema,
   workspaceRecordingDraftPrefixCloneResponseSchema,
   workspaceRecordingDraftAudioResponseSchema,
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeResponseSchema,
   workspaceRecordingFinalizeRequestSchema,
+  workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
+  workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema,
   workspaceRecordingTranscriptionAudioRequestSchema,
   workspaceRecordingTranscriptionCloseRequestSchema,
   workspaceRecordingTranscriptionControlResponseSchema,
   workspaceRecordingTranscriptionEventSchema,
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceSegmentIdRequestSchema,
+  workspaceSegmentAttachmentIdRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
@@ -89,16 +112,27 @@ import {
 } from './trustedSender.js';
 import {
   appendRecordingAudioChunk,
+  appendSegmentAttachmentRecordingAudioChunk,
   cloneRecordingDraftPrefix,
   clearRecordingRuntimeState,
   clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
+  createSegmentAttachmentRecordingDraft,
   discardRecordingDraft,
+  discardSegmentAttachmentRecordingDraft,
   finalizeRecordingDraft,
+  finalizeSegmentAttachmentRecordingDraft,
+  readFinalizedAudioSegmentContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
 } from './recordingDrafts.js';
-import { createMemoryFromFileTruth, updateMemoryTitleFromFileTruth } from './memoryFiles.js';
+import {
+  createMemoryFromFileTruth,
+  deleteMemoryFromFileTruth,
+  readMemoryDetailFromFileTruth,
+  restoreDeletedMemoryFromFileTruth,
+  updateMemoryTitleFromFileTruth,
+} from './memoryFiles.js';
 import {
   clearAllMicrophoneIntents,
   clearMicrophoneIntent,
@@ -194,6 +228,15 @@ export interface HandleCreateMemoryOptions extends HandleWorkspaceRequestOptions
 
 export interface HandleCreateRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly createSegmentId?: () => string;
+  readonly now?: () => string;
+}
+
+export interface HandleCreateSegmentAttachmentRecordingDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly createAttachmentId?: () => string;
+  readonly now?: () => string;
+}
+
+export interface HandleFinalizeSegmentAttachmentRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
 
@@ -415,6 +458,14 @@ function createSegmentId(): string {
     .replace(/[-:TZ.]/g, '')
     .slice(0, 14);
   return `seg_${timestamp}_${randomUUID().slice(0, 8)}`;
+}
+
+function createAttachmentId(): string {
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return `att_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
 function createMemoryId(): string {
@@ -1328,6 +1379,52 @@ function handleCreateMemoryCore({
   });
 }
 
+function handleDeleteMemoryCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteMemoryResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_DELETE_MEMORY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceDeleteMemoryRequestSchema,
+    invalidMessage: 'deleteMemory request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await deleteMemoryFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceDeleteMemoryResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
+function handleRestoreDeletedMemoryCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedMemoryResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRestoreDeletedMemoryRequestSchema,
+    invalidMessage: 'restoreDeletedMemory request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await restoreDeletedMemoryFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          restoreToken: request.restoreToken,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRestoreDeletedMemoryResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
 function handleCreateRecordingDraftCore({
   createSegmentId: createSegmentIdOption = createSegmentId,
   now = nowIso,
@@ -1365,6 +1462,52 @@ function handleCreateRecordingDraftCore({
   });
 }
 
+function handleCreateSegmentAttachmentRecordingDraftCore({
+  createAttachmentId: createAttachmentIdOption = createAttachmentId,
+  now = nowIso,
+  ...options
+}: HandleCreateSegmentAttachmentRecordingDraftOptions): Promise<
+  z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
+    invalidMessage: 'createSegmentAttachmentRecordingDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment attachment draft workspace does not match the active handle'
+          );
+        }
+
+        const result = await createSegmentAttachmentRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          createAttachmentId: createAttachmentIdOption,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceCreateSegmentAttachmentRecordingDraftResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  attachmentId: result.attachmentId,
+                  nextSequence: result.nextSequence,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
 export async function handleCreateRecordingDraft(
   options: HandleCreateRecordingDraftOptions
 ): Promise<z.infer<typeof workspaceCreateRecordingDraftResponseSchema>> {
@@ -1377,6 +1520,18 @@ export async function handleCreateRecordingDraftForTest(
   return handleCreateRecordingDraftCore(options);
 }
 
+export async function handleCreateSegmentAttachmentRecordingDraft(
+  options: HandleCreateSegmentAttachmentRecordingDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>> {
+  return handleCreateSegmentAttachmentRecordingDraftCore(options);
+}
+
+export async function handleCreateSegmentAttachmentRecordingDraftForTest(
+  options: HandleCreateSegmentAttachmentRecordingDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>> {
+  return handleCreateSegmentAttachmentRecordingDraftCore(options);
+}
+
 export async function handleCreateMemory(
   options: HandleCreateMemoryOptions
 ): Promise<z.infer<typeof workspaceCreateMemoryResponseSchema>> {
@@ -1387,6 +1542,198 @@ export async function handleCreateMemoryForTest(
   options: HandleCreateMemoryOptions
 ): Promise<z.infer<typeof workspaceCreateMemoryResponseSchema>> {
   return handleCreateMemoryCore(options);
+}
+
+export async function handleDeleteMemory(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteMemoryResponseSchema>> {
+  return handleDeleteMemoryCore(options);
+}
+
+export async function handleDeleteMemoryForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteMemoryResponseSchema>> {
+  return handleDeleteMemoryCore(options);
+}
+
+export async function handleRestoreDeletedMemory(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedMemoryResponseSchema>> {
+  return handleRestoreDeletedMemoryCore(options);
+}
+
+export async function handleRestoreDeletedMemoryForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedMemoryResponseSchema>> {
+  return handleRestoreDeletedMemoryCore(options);
+}
+
+function handleReadMemoryDetailCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadMemoryDetailRequestSchema,
+    invalidMessage: 'readMemoryDetail request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Memory detail workspace does not match the active handle'
+          );
+        }
+
+        const result = await readMemoryDetailFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadMemoryDetailResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  detail: result.value,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+export async function handleReadMemoryDetail(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
+  return handleReadMemoryDetailCore(options);
+}
+
+export async function handleReadMemoryDetailForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
+  return handleReadMemoryDetailCore(options);
+}
+
+function handleReadFinalizedAudioSegmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadFinalizedAudioSegmentRequestSchema,
+    invalidMessage: 'readFinalizedAudioSegment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Finalized audio workspace does not match the active handle'
+          );
+        }
+
+        const result = await readFinalizedAudioSegmentContent({
+          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+          rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadFinalizedAudioSegmentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                  transcript: result.transcript,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+export async function handleReadFinalizedAudioSegment(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentResponseSchema>> {
+  return handleReadFinalizedAudioSegmentCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentResponseSchema>> {
+  return handleReadFinalizedAudioSegmentCore(options);
+}
+
+function handleFinalizeSegmentAttachmentRecordingDraftCore({
+  now = nowIso,
+  ...options
+}: HandleFinalizeSegmentAttachmentRecordingDraftOptions): Promise<
+  z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
+    invalidMessage: 'finalizeSegmentAttachmentRecordingDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment attachment finalize workspace does not match the active handle'
+          );
+        }
+
+        const result = await finalizeSegmentAttachmentRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          attachmentId: request.attachmentId,
+          title: request.title,
+          durationMs: request.durationMs,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  memory: result.memory,
+                  segment: result.segment,
+                  attachment: result.attachment,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+export async function handleFinalizeSegmentAttachmentRecordingDraft(
+  options: HandleFinalizeSegmentAttachmentRecordingDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>> {
+  return handleFinalizeSegmentAttachmentRecordingDraftCore(options);
+}
+
+export async function handleFinalizeSegmentAttachmentRecordingDraftForTest(
+  options: HandleFinalizeSegmentAttachmentRecordingDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>> {
+  return handleFinalizeSegmentAttachmentRecordingDraftCore(options);
 }
 
 function closeRecordingTranscriptionCore({
@@ -1654,6 +2001,46 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  electronMain.ipcMain.handle(WORKSPACE_DELETE_MEMORY_CHANNEL, (event, input) =>
+    handleDeleteMemory({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
+    handleRestoreDeletedMemory({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
+    handleReadMemoryDetail({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, (event, input) =>
+    handleReadFinalizedAudioSegment({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   electronMain.ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
     handleCloseWorkspace({
       event,
@@ -1705,6 +2092,18 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  electronMain.ipcMain.handle(
+    WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    (event, input) =>
+      handleCreateSegmentAttachmentRecordingDraft({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
   registerWorkspaceHandleRequest(
     WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
     workspaceRecordingDraftAudioRequestSchema,
@@ -1745,6 +2144,24 @@ export function registerWorkspaceIpc({
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceRecordingAppendResponseSchema.parse(
+          result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+    workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
+    'appendSegmentAttachmentRecordingAudioChunk request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await appendSegmentAttachmentRecordingAudioChunk({
+          rootPath: handle.canonicalRoot,
+          attachmentId: request.attachmentId,
+          sequence: request.sequence,
+          chunk: request.chunk,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceSegmentAttachmentRecordingAppendResponseSchema.parse(
           result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result
         );
       })
@@ -1800,6 +2217,44 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
+    WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
+    'finalizeSegmentAttachmentRecordingDraft request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment attachment finalize workspace does not match the active handle'
+          );
+        }
+
+        const result = await finalizeSegmentAttachmentRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          attachmentId: request.attachmentId,
+          title: request.title,
+          durationMs: request.durationMs,
+          now: nowIso,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  memory: result.memory,
+                  segment: result.segment,
+                  attachment: result.attachment,
+                },
+              }
+            : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
     WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
     workspaceSegmentIdRequestSchema,
     'discardRecordingDraft request is invalid',
@@ -1808,6 +2263,22 @@ export function registerWorkspaceIpc({
         const result = await discardRecordingDraft({
           rootPath: handle.canonicalRoot,
           segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceDiscardRecordingDraftResponseSchema.parse(
+          result.ok ? { ok: true, value: { discarded: true } } : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    workspaceSegmentAttachmentIdRequestSchema,
+    'discardSegmentAttachmentRecordingDraft request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await discardSegmentAttachmentRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          attachmentId: request.attachmentId,
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceDiscardRecordingDraftResponseSchema.parse(
