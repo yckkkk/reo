@@ -4,21 +4,18 @@ import {
   beginMicrophoneIntent,
   chooseWorkspaceDirectory,
   clearMicrophoneIntent,
+  cloneRecordingDraftPrefix,
   closeWorkspace,
   createMemory,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
-  getMemoryDetail,
-  getRecordingDetail,
   initializeWorkspace,
   listMemorySpaces,
   openWorkspace,
   openMemorySpace,
+  readRecordingDraftAudio,
   removeMemorySpace,
-  readRecordingAudioChunk,
-  readRecordingAudioManifest,
-  saveReflections,
   saveTranscript,
   updateMemoryTitle,
 } from './workspaceApi';
@@ -34,16 +31,13 @@ describe('workspace renderer API wrapper', () => {
     closeWorkspace: vi.fn(),
     createMemory: vi.fn(),
     createRecordingDraft: vi.fn(),
+    readRecordingDraftAudio: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
+    cloneRecordingDraftPrefix: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
-    getMemoryDetail: vi.fn(),
     updateMemoryTitle: vi.fn(),
-    getRecordingDetail: vi.fn(),
-    readRecordingAudioManifest: vi.fn(),
-    readRecordingAudioChunk: vi.fn(),
     saveTranscript: vi.fn(),
-    saveReflections: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
   };
@@ -93,20 +87,28 @@ describe('workspace renderer API wrapper', () => {
         title: '产品灵感与思考',
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        assetCount: 0,
+        segmentCount: 0,
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
     });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
       ok: true,
-      value: { recordingId: 'rec_1' },
+      value: { segmentId: 'seg_1' },
+    });
+    reoWorkspace.readRecordingDraftAudio.mockResolvedValue({
+      ok: true,
+      value: { audio: new Uint8Array([1]), audioByteLength: 1, nextSequence: 1 },
     });
     reoWorkspace.appendRecordingAudioChunk.mockResolvedValue({
       ok: true,
       value: { nextSequence: 1 },
+    });
+    reoWorkspace.cloneRecordingDraftPrefix.mockResolvedValue({
+      ok: true,
+      value: { audioByteLength: 1, nextSequence: 1 },
     });
     reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
       ok: true,
@@ -115,38 +117,24 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          hasReflections: false,
+          attachmentCount: 0,
           hasTranscript: false,
           memoryId: 'mem_1',
-          assetCount: 1,
+          segmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
-        recording: {
+        segment: {
+          type: 'audio' as const,
           audioByteLength: 1,
           durationMs: 0,
           memoryId: 'mem_1',
-          recordingId: 'rec_1',
+          segmentId: 'seg_1',
           title: '录音',
         },
       },
     });
     reoWorkspace.discardRecordingDraft.mockResolvedValue({ ok: true, value: { discarded: true } });
-    reoWorkspace.getMemoryDetail.mockResolvedValue({
-      ok: true,
-      value: {
-        memoryId: 'mem_1',
-        title: '录音',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:08:00.000Z',
-        assetIds: [],
-        assetCount: 0,
-        recordingsTruncated: false,
-        hasTranscript: false,
-        hasReflections: false,
-        recordings: [],
-      },
-    });
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
       ok: true,
       value: {
@@ -154,24 +142,12 @@ describe('workspace renderer API wrapper', () => {
         title: '产品灵感与思考',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        assetCount: 1,
+        segmentCount: 1,
         durationMs: 0,
         audioByteLength: 1,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
-    });
-    reoWorkspace.getRecordingDetail.mockResolvedValue({
-      ok: true,
-      value: { recordingId: 'rec_1' },
-    });
-    reoWorkspace.readRecordingAudioManifest.mockResolvedValue({
-      ok: true,
-      value: { recordingId: 'rec_1', byteLength: 3, maxChunkBytes: 1_048_576 },
-    });
-    reoWorkspace.readRecordingAudioChunk.mockResolvedValue({
-      ok: true,
-      value: { chunk: new Uint8Array([1]) },
     });
     reoWorkspace.saveTranscript.mockResolvedValue({
       ok: true,
@@ -180,29 +156,12 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          hasReflections: false,
+          attachmentCount: 0,
           hasTranscript: true,
           memoryId: 'mem_1',
-          assetCount: 1,
+          segmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
-        },
-        saved: true,
-      },
-    });
-    reoWorkspace.saveReflections.mockResolvedValue({
-      ok: true,
-      value: {
-        memory: {
-          audioByteLength: 1,
-          createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
-          hasReflections: true,
-          hasTranscript: true,
-          memoryId: 'mem_1',
-          assetCount: 1,
-          title: '录音',
-          updatedAt: '2026-05-06T13:10:00.000Z',
         },
         saved: true,
       },
@@ -226,53 +185,47 @@ describe('workspace renderer API wrapper', () => {
     await closeWorkspace({ workspaceHandle: 'wh_1' });
     await createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
+    await readRecordingDraftAudio({ workspaceHandle: 'wh_1', segmentId: 'seg_1' });
     await appendRecordingAudioChunk({
       workspaceHandle: 'wh_1',
-      recordingId: 'rec_1',
+      segmentId: 'seg_1',
       sequence: 0,
       chunk: new Uint8Array([1]),
+    });
+    await cloneRecordingDraftPrefix({
+      workspaceHandle: 'wh_1',
+      sourceSegmentId: 'seg_1',
+      targetSegmentId: 'seg_2',
+      retainedByteLength: 1,
+      nextSequence: 0,
     });
     await finalizeRecordingDraft({
       durationMs: 1000,
       memoryId: 'mem_1',
-      recordingId: 'rec_1',
+      segmentId: 'seg_1',
       title: '录音',
       workspaceHandle: 'wh_1',
     });
-    await discardRecordingDraft({ workspaceHandle: 'wh_1', recordingId: 'rec_1' });
-    await getMemoryDetail({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
+    await discardRecordingDraft({ workspaceHandle: 'wh_1', segmentId: 'seg_1' });
     await updateMemoryTitle({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
       title: '产品灵感与思考',
     });
-    await getRecordingDetail({ workspaceHandle: 'wh_1', memoryId: 'mem_1', recordingId: 'rec_1' });
-    await readRecordingAudioManifest({
-      workspaceHandle: 'wh_1',
-      memoryId: 'mem_1',
-      recordingId: 'rec_1',
-    });
-    await readRecordingAudioChunk({
-      workspaceHandle: 'wh_1',
-      memoryId: 'mem_1',
-      recordingId: 'rec_1',
-      offset: 0,
-      length: 1,
-    });
     await saveTranscript({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
-      recordingId: 'rec_1',
+      segmentId: 'seg_1',
       markdown: '文字',
     });
-    await saveReflections({
+    await beginMicrophoneIntent({
       workspaceHandle: 'wh_1',
-      memoryId: 'mem_1',
-      recordingId: 'rec_1',
-      markdown: '想法',
+      recordingFlowSessionId: 'recording_flow_1',
     });
-    await beginMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
-    await clearMicrophoneIntent({ workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+    await clearMicrophoneIntent({
+      workspaceHandle: 'wh_1',
+      recordingFlowSessionId: 'recording_flow_1',
+    });
 
     expect(reoWorkspace.chooseDirectory).toHaveBeenCalledTimes(1);
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledWith({
@@ -287,16 +240,16 @@ describe('workspace renderer API wrapper', () => {
       workspaceHandle: 'wh_1',
       title: '产品灵感与思考',
     });
-    expect(reoWorkspace.readRecordingAudioChunk).toHaveBeenCalledWith({
+    expect(reoWorkspace.readRecordingDraftAudio).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      memoryId: 'mem_1',
-      recordingId: 'rec_1',
-      offset: 0,
-      length: 1,
+      segmentId: 'seg_1',
     });
-    expect(reoWorkspace.getMemoryDetail).toHaveBeenCalledWith({
+    expect(reoWorkspace.cloneRecordingDraftPrefix).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      memoryId: 'mem_1',
+      sourceSegmentId: 'seg_1',
+      targetSegmentId: 'seg_2',
+      retainedByteLength: 1,
+      nextSequence: 0,
     });
     expect(reoWorkspace.updateMemoryTitle).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -305,11 +258,11 @@ describe('workspace renderer API wrapper', () => {
     });
     expect(reoWorkspace.beginMicrophoneIntent).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     });
     expect(reoWorkspace.clearMicrophoneIntent).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     });
   });
 });

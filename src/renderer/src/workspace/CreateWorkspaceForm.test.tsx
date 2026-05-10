@@ -1,7 +1,17 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from '@/components/ui/toaster';
 import { CreateWorkspaceForm } from './CreateWorkspaceForm';
+
+vi.mock('@/components/ui/toaster', () => {
+  const toast = Object.assign(vi.fn(), {
+    error: vi.fn(),
+    success: vi.fn(),
+  });
+
+  return { toast };
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -19,14 +29,12 @@ describe('CreateWorkspaceForm', () => {
     openWorkspace: vi.fn(),
     closeWorkspace: vi.fn(),
     createRecordingDraft: vi.fn(),
+    readRecordingDraftAudio: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
+    cloneRecordingDraftPrefix: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
-    getRecordingDetail: vi.fn(),
-    readRecordingAudioManifest: vi.fn(),
-    readRecordingAudioChunk: vi.fn(),
     saveTranscript: vi.fn(),
-    saveReflections: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
   };
@@ -91,7 +99,7 @@ describe('CreateWorkspaceForm', () => {
     selection.resolve({ ok: true, value: { status: 'canceled' } });
   });
 
-  it('shows an alert for existing AGENTS.md conflict without clearing user input', async () => {
+  it('shows a toast for existing AGENTS.md conflict without clearing user input', async () => {
     const user = userEvent.setup();
     const onWorkspaceReady = vi.fn();
     reoWorkspace.chooseDirectory.mockResolvedValue({
@@ -118,7 +126,10 @@ describe('CreateWorkspaceForm', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('AGENTS.md');
+    expect(toast.error).toHaveBeenCalledWith('无法创建记忆空间', {
+      description: expect.stringContaining('AGENTS.md'),
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByLabelText('记忆空间名称')).toHaveValue('Daily memory');
     expect(screen.getByLabelText('描述')).toHaveValue('Private notes');
     expect(screen.queryByText('Memory')).not.toBeInTheDocument();
@@ -149,7 +160,7 @@ describe('CreateWorkspaceForm', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('alert');
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(reoWorkspace.initializeWorkspace).toHaveBeenCalledTimes(1);
@@ -252,7 +263,11 @@ describe('CreateWorkspaceForm', () => {
 
     await user.click(screen.getByRole('button', { name: '浏览' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('请选择记忆空间文件夹');
+    expect(toast.error).toHaveBeenCalledWith('无法创建记忆空间', {
+      description: '请选择记忆空间文件夹',
+    });
+    expect(screen.queryByText('请选择记忆空间文件夹')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/yck/Memories')).not.toBeInTheDocument();
   });
 });

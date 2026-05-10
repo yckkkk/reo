@@ -26,8 +26,8 @@ describe('forbidden first-slice capabilities', () => {
         <AppShell themeMode="light" onHome={() => {}} onLibrary={() => {}} onToggleTheme={() => {}}>
           <LoadedWorkspaceFrame
             workspaceSession={workspaceSession}
-            onOpenMemory={() => {}}
             onRenameMemory={() => {}}
+            onSelectMemory={() => {}}
             onStartRecording={() => {}}
           />
         </AppShell>

@@ -1,42 +1,84 @@
+import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  pcmByteLengthToDurationMs,
+  trimPcmChunkEnd,
+  trimPcmChunkStart,
+} from '../../../workspace-contract/recording-audio';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from '@/components/ui/toaster';
 import {
   appendRecordingAudioChunk,
   beginMicrophoneIntent,
   clearMicrophoneIntent,
+  cloneRecordingDraftPrefix,
+  closeRecordingTranscription,
   createRecordingDraft,
   discardRecordingDraft,
+  finishRecordingTranscription,
   finalizeRecordingDraft,
-  readRecordingAudioChunk,
-  readRecordingAudioManifest,
-  saveReflections,
+  onRecordingTranscriptionEvent,
+  readRecordingDraftAudio,
   saveTranscript,
+  sendRecordingTranscriptionAudio,
+  startRecordingTranscription,
 } from './workspaceApi';
-import type { FinalizedRecording, WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
+import type {
+  FinalizedAudioSegment,
+  WorkspaceMemorySummary,
+  WorkspaceSession,
+} from './workspaceApi';
 import {
   createBrowserMediaRecorderAdapter,
   type RecordingMediaAdapter,
   type RecordingMediaController,
+  type RecordingMediaHandlers,
 } from './mediaRecorderAdapter';
-import { RecordAudioDrawer } from './recording/RecordAudioDrawer';
-import { RecordingPlayback } from './recording/RecordingPlayback';
 import { RecordingControls } from './recording/RecordingControls';
+import { RecordingSurface } from './recording/RecordingSurface';
+import { RecordingTranscriptPreview } from './recording/RecordingTranscriptPreview';
 import { RecordingWaveform } from './recording/RecordingWaveform';
-import { TranscriptReflectionsEditor } from './recording/TranscriptReflectionsEditor';
+import {
+  applyTranscriptResult,
+  createRecordingTimeline,
+  hasTailAfterCursor,
+  moveRecordingCursor,
+  startReplacementAtCursor,
+  transcriptMarkdownFromSegments,
+  type TranscriptSegment,
+} from './recording/recordingTimeline';
 import {
   createInitialRecordingState,
   isRecordingCloseBlocked,
   transitionRecordingState,
   type RecordingState,
 } from './recordingMachine';
+import {
+  clearRecordingRecoveryDraft,
+  type RecordingRecoveryAudioChunk,
+  type RecordingRecoveryDraft,
+  updateRecordingRecoveryDuration,
+  updateRecordingRecoverySnapshot,
+  writeRecordingRecoveryDraft,
+} from './recordingRecovery';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 type RecordingOverlayProps = {
   readonly mediaAdapter?: RecordingMediaAdapter;
+  readonly onCloseBlockedChange?: (blocked: boolean) => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
-  readonly onRecordingFinalized: (recording: FinalizedRecording) => void;
+  readonly onAudioSegmentFinalized: (recording: FinalizedAudioSegment) => void;
   readonly open: boolean;
+  readonly recoveredDraft?: RecordingRecoveryDraft | null;
   readonly recordingTarget: RecordingTarget;
   readonly workspaceSession: WorkspaceSession;
 };
@@ -46,12 +88,56 @@ export type SavedRecordingContent = {
   readonly memory: WorkspaceMemorySummary;
 };
 
-const AUTOSAVE_DELAY_MS = 300;
-const PLAYBACK_CHUNK_CONCURRENCY = 4;
+const MIN_EFFECTIVE_RECORDING_DURATION_MS = 2_000;
+const MAX_RECORDING_DURATION_MS = 60 * 60 * 1000;
+const LONG_RECORDING_WARNING_THRESHOLD_MS = 55 * 60 * 1000;
+const RECORDING_TIMER_INTERVAL_MS = 40;
+const SEEK_STEP_MS = 15_000;
+const SILENCE_NOTICE_THRESHOLD_MS = 15_000;
+const AUDIBLE_LEVEL_THRESHOLD = 0.08;
+const WAVEFORM_SAMPLE_INTERVAL_MS = 80;
+const WAVEFORM_SEEK_EPSILON_MS = 50;
+const MAX_WAVEFORM_SAMPLES = 2400;
+const MAX_COMPLETION_BACKFILL_PCM_DURATION_MS = 10 * 60 * 1000;
+const TRANSCRIPTION_START_BUFFER_MS = 10_000;
+const MAX_TRANSCRIPTION_AUDIO_QUEUE_BYTES = 1024 * 1024;
+const SHORT_RECORDING_NOTICE =
+  '录音时间较短，可能无法生成有效内容。你可以继续录音，或再次点击完成保存。';
+const LONG_RECORDING_WARNING_NOTICE = '录音即将达到时长上限，请尽快完成或分段记录。';
+const MAX_RECORDING_DURATION_NOTICE = '录音已达到时长上限，已自动暂停。';
+const REPLACE_RECORDING_WARNING_NOTICE = '从这里重新录制会替换后面的录音内容。';
+const SILENCE_NOTICE = '暂时没有检测到明显声音，你可以靠近麦克风或继续录音。';
+const COMPLETION_BACKFILL_UNAVAILABLE_NOTICE = '录音已保存，转写暂时不可用，稍后可重新尝试。';
 
-function errorMessage(error: unknown, fallback: string) {
-  return unknownErrorDisplayMessage(error, fallback);
-}
+type CapturedRecordingChunk = {
+  readonly chunk: Uint8Array;
+  readonly endTimeMs: number;
+  readonly startTimeMs: number;
+};
+
+type CapturedPcmChunk = {
+  readonly chunk: Uint8Array;
+  readonly endTimeMs: number;
+  readonly startTimeMs: number;
+};
+
+type ActiveTranscriptionSession = {
+  readonly recordingFlowSessionId: string;
+  readonly recordingSessionId: string;
+  readonly revisionId: string;
+  readonly recordingSession: number;
+  readonly workspaceHandle: string;
+  acceptsAudio: boolean;
+};
+
+type TranscriptionAudioQueue = {
+  readonly recordingFlowSessionId: string;
+  readonly recordingSessionId: string;
+  readonly revisionId: string;
+  readonly recordingSession: number;
+  queuedBytes: number;
+  tail: Promise<void>;
+};
 
 function titleForRecording(workspaceTitle: string) {
   return `${workspaceTitle} 录音`;
@@ -59,54 +145,321 @@ function titleForRecording(workspaceTitle: string) {
 
 const RECORDING_STATUS_TEXT = {
   'acquiring-permission': '正在准备麦克风权限。',
-  editing: '录音已保存。关闭前可以编辑草稿。',
   failed: '录音没有保存。',
   finalizing: '正在保存本地音频。',
   idle: '可以开始录制本地音频。',
   paused: '录音已暂停。',
   recording: '正在录制本地音频。',
+  replacing: '正在替换录音。',
 } satisfies Record<RecordingState['status'], string>;
 
 function statusTextFor(state: RecordingState): string {
   return RECORDING_STATUS_TEXT[state.status];
 }
 
+function formatRecordingTime(durationMs: number) {
+  const safeDurationMs = Math.max(0, Math.round(durationMs));
+  const minutes = Math.floor(safeDurationMs / 60_000);
+  const seconds = Math.floor((safeDurationMs % 60_000) / 1000);
+  const centiseconds = Math.floor((safeDurationMs % 1000) / 10);
+  return `${minutes.toString().padStart(2, '0')}:${seconds
+    .toString()
+    .padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+}
+
+function recordingSessionNumberFrom(recordingSessionId: string) {
+  const match = /^recording-(\d+)$/.exec(recordingSessionId);
+  return match ? Number.parseInt(match[1] ?? '0', 10) : null;
+}
+
+function appendBoundedWaveformSample(samples: readonly number[], sample: number) {
+  const next = [...samples, sample];
+  if (next.length <= MAX_WAVEFORM_SAMPLES) {
+    return next;
+  }
+  const compacted: number[] = [];
+  for (let index = 0; index < next.length; index += 2) {
+    compacted.push(Math.max(next[index] ?? 0, next[index + 1] ?? 0));
+  }
+  return compacted.slice(-MAX_WAVEFORM_SAMPLES);
+}
+
+function resolveReplacementStartMs({
+  chunks,
+  cursorTimeMs,
+  totalDurationMs,
+}: {
+  readonly chunks: readonly CapturedRecordingChunk[];
+  readonly cursorTimeMs: number;
+  readonly totalDurationMs: number;
+}) {
+  const safeCursorTimeMs = Math.min(
+    Math.max(0, Math.round(cursorTimeMs)),
+    Math.max(0, Math.round(totalDurationMs))
+  );
+  if (safeCursorTimeMs <= WAVEFORM_SEEK_EPSILON_MS) {
+    return 0;
+  }
+  const containingOrNextChunk = chunks.find(
+    (chunk) => chunk.endTimeMs >= safeCursorTimeMs - WAVEFORM_SEEK_EPSILON_MS
+  );
+  if (!containingOrNextChunk) {
+    return safeCursorTimeMs;
+  }
+  return Math.min(totalDurationMs, containingOrNextChunk.endTimeMs);
+}
+
+function retainPcmChunksThrough(
+  chunks: readonly CapturedPcmChunk[],
+  cursorTimeMs: number
+): CapturedPcmChunk[] {
+  const retainedChunks: CapturedPcmChunk[] = [];
+  for (const chunk of chunks) {
+    if (chunk.endTimeMs <= cursorTimeMs) {
+      retainedChunks.push(chunk);
+      continue;
+    }
+    if (chunk.startTimeMs >= cursorTimeMs) {
+      continue;
+    }
+    const retainedAudio = trimPcmChunkEnd(chunk.chunk, cursorTimeMs - chunk.startTimeMs);
+    if (retainedAudio) {
+      retainedChunks.push({
+        chunk: new Uint8Array(retainedAudio),
+        endTimeMs: cursorTimeMs,
+        startTimeMs: chunk.startTimeMs,
+      });
+    }
+  }
+  return retainedChunks;
+}
+
 export function RecordingOverlay({
   mediaAdapter,
+  onCloseBlockedChange,
   onOpenChange,
   onRecordingContentSaved,
-  onRecordingFinalized,
+  onAudioSegmentFinalized,
   open,
+  recoveredDraft = null,
   recordingTarget,
   workspaceSession,
 }: RecordingOverlayProps) {
   const [state, setState] = useState<RecordingState>(() => createInitialRecordingState());
-  const [error, setError] = useState<string | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [transcriptDraft, setTranscriptDraft] = useState('');
-  const [reflectionsDraft, setReflectionsDraft] = useState('');
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [timeline, setTimeline] = useState(() =>
+    createRecordingTimeline({ recordingSessionId: 'recording-0', revisionId: 'revision-0' })
+  );
+  const cursorTimeMs = timeline.cursorTimeMs;
+  const [waveformSamples, setWaveformSamples] = useState<readonly number[]>([]);
+  const [draftPlaybackUrl, setDraftPlaybackUrl] = useState<string | null>(null);
+  const [exitConfirmationOpen, setExitConfirmationOpen] = useState(false);
+  const [exitActionPending, setExitActionPending] = useState(false);
+  const [isDraftPlaybackPlaying, setIsDraftPlaybackPlaying] = useState(false);
+  const [shortRecordingNoticeVisible, setShortRecordingNoticeVisible] = useState(false);
   const appendQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const timelineRef = useRef(timeline);
+  const capturedChunksRef = useRef<CapturedRecordingChunk[]>([]);
+  const recoveryAudioChunksRef = useRef<RecordingRecoveryAudioChunk[]>([]);
+  const capturedPcmChunksRef = useRef<CapturedPcmChunk[]>([]);
   const controllerRef = useRef<RecordingMediaController | null>(null);
+  const draftAudioRef = useRef<HTMLAudioElement | null>(null);
+  const draftPlaybackUrlRef = useRef<string | null>(null);
   const activeDraftRef = useRef<{
-    readonly recordingId: string;
+    readonly segmentId: string;
     readonly recordingSession: number;
   } | null>(null);
+  const activeTranscriptionRef = useRef<ActiveTranscriptionSession | null>(null);
+  const activeTranscriptionStartPromiseRef = useRef<Promise<void> | null>(null);
+  const transcriptionAudioQueueRef = useRef<TranscriptionAudioQueue | null>(null);
+  const liveAudioInputActiveRef = useRef(false);
   const pendingMicrophoneIntentRef = useRef<{
-    readonly drawerSessionId: string;
+    readonly recordingFlowSessionId: string;
     readonly recordingSession: number;
     readonly workspaceHandle: string;
   } | null>(null);
   const playbackSessionRef = useRef(0);
-  const lastSavedTranscriptRef = useRef('');
-  const lastSavedReflectionsRef = useRef('');
+  const replacementCopySessionRef = useRef<number | null>(null);
+  const transcriptDraftRef = useRef('');
+  const completionBackfillTooLargeRef = useRef(false);
+  const finalTranscriptionNeedsBackfillRef = useRef(false);
   const appendFailureRef = useRef<string | null>(null);
+  const activeRevisionIdRef = useRef('revision-0');
+  const lastCapturedChunkEndMsRef = useRef(0);
+  const lastCapturedPcmChunkEndMsRef = useRef(0);
+  const lastNoticeableAudioAtMsRef = useRef(0);
+  const lastRecoveryDurationPersistedMsRef = useRef(0);
+  const lastRecoveryAudioChunksPersistedMsRef = useRef(0);
+  const lastRecoveryAudioChunkCountPersistedRef = useRef(0);
+  const lastRecoveryWaveformPersistedMsRef = useRef(0);
+  const lastWaveformSampleAtMsRef = useRef(0);
+  const revisionIndexRef = useRef(0);
   const recordingDurationRef = useRef<{
     accumulatedMs: number;
     startedAtMs: number | null;
   }>({ accumulatedMs: 0, startedAtMs: null });
+  const longRecordingWarningShownRef = useRef(false);
+  const replacementWarningCursorRef = useRef<number | null>(null);
+  const restoredSegmentIdRef = useRef<string | null>(null);
+  const silenceNoticeShownRef = useRef(false);
+  const shortRecordingCompletionArmedRef = useRef(false);
   const recordingSessionRef = useRef(0);
   const sequenceRef = useRef(0);
+  const lastRecordingErrorToastRef = useRef<string | null>(null);
+
+  const notifyRecordingError = useCallback((message: string) => {
+    const displayMessage = message.trim();
+    if (!displayMessage || lastRecordingErrorToastRef.current === displayMessage) {
+      return;
+    }
+
+    toast.error(displayMessage);
+    lastRecordingErrorToastRef.current = displayMessage;
+  }, []);
+
+  const clearRecordingError = useCallback(() => {
+    lastRecordingErrorToastRef.current = null;
+  }, []);
+
+  const replaceTranscriptDraft = useCallback((nextTranscript: string) => {
+    transcriptDraftRef.current = nextTranscript;
+  }, []);
+
+  const applyTranscriptionSegments = useCallback(
+    (segments: readonly TranscriptSegment[]) => {
+      if (segments.length === 0) {
+        return;
+      }
+      const current = timelineRef.current;
+      const next = segments.reduce(applyTranscriptResult, current);
+      if (next === current) {
+        return;
+      }
+      timelineRef.current = next;
+      replaceTranscriptDraft(transcriptMarkdownFromSegments(next.transcriptSegments));
+      const activeDraft = activeDraftRef.current;
+      if (activeDraft) {
+        updateRecordingRecoverySnapshot({
+          patch: {
+            durationMs: next.totalDurationMs,
+            recordingSessionId: next.recordingSessionId,
+            revisionId: next.revisionId,
+            transcriptSegments: next.transcriptSegments,
+          },
+          segmentId: activeDraft.segmentId,
+          workspaceId: workspaceSession.workspaceId,
+        });
+      }
+      setTimeline(next);
+    },
+    [replaceTranscriptDraft, workspaceSession.workspaceId]
+  );
+
+  useEffect(() => {
+    timelineRef.current = timeline;
+  }, [timeline]);
+
+  useEffect(() => {
+    if (!open || !recoveredDraft) {
+      return;
+    }
+    if (
+      restoredSegmentIdRef.current === recoveredDraft.segmentId ||
+      recoveredDraft.workspaceId !== workspaceSession.workspaceId ||
+      recoveredDraft.memoryId !== recordingTarget.memoryId
+    ) {
+      return;
+    }
+
+    const recordingSessionId =
+      recoveredDraft.recordingSessionId ?? `recording-${recordingSessionRef.current + 1}`;
+    const revisionId = recoveredDraft.revisionId ?? `${recordingSessionId}-revision-0`;
+    const recordingSession =
+      recordingSessionNumberFrom(recordingSessionId) ?? recordingSessionRef.current + 1;
+    const durationMs = Math.max(0, Math.round(recoveredDraft.durationMs));
+    const recoveredTranscriptSegments = recoveredDraft.transcriptSegments ?? [];
+    const recoveredTranscriptMarkdown =
+      recoveredTranscriptSegments.length > 0
+        ? transcriptMarkdownFromSegments(recoveredTranscriptSegments)
+        : (recoveredDraft.transcriptMarkdown ?? '');
+    const restoredTimeline = createRecordingTimeline({
+      cursorTimeMs: durationMs,
+      recordingSessionId,
+      revisionId,
+      totalDurationMs: durationMs,
+      transcriptSegments: recoveredTranscriptSegments,
+    });
+
+    restoredSegmentIdRef.current = recoveredDraft.segmentId;
+    recordingSessionRef.current = recordingSession;
+    activeRevisionIdRef.current = revisionId;
+    sequenceRef.current = recoveredDraft.nextSequence ?? 0;
+    activeDraftRef.current = {
+      segmentId: recoveredDraft.segmentId,
+      recordingSession,
+    };
+    appendFailureRef.current = null;
+    appendQueueRef.current = Promise.resolve();
+    setCapturedChunks([]);
+    capturedPcmChunksRef.current = [];
+    controllerRef.current = null;
+    liveAudioInputActiveRef.current = false;
+    completionBackfillTooLargeRef.current = false;
+    finalTranscriptionNeedsBackfillRef.current = false;
+    lastCapturedChunkEndMsRef.current = durationMs;
+    lastCapturedPcmChunkEndMsRef.current = durationMs;
+    lastNoticeableAudioAtMsRef.current = durationMs;
+    lastRecoveryDurationPersistedMsRef.current = durationMs;
+    lastRecoveryAudioChunksPersistedMsRef.current = durationMs;
+    lastRecoveryWaveformPersistedMsRef.current = durationMs;
+    lastWaveformSampleAtMsRef.current = durationMs;
+    recordingDurationRef.current = { accumulatedMs: durationMs, startedAtMs: null };
+
+    setElapsedMs(durationMs);
+    setWaveformSamples([...(recoveredDraft.waveformSamples ?? [])]);
+    timelineRef.current = restoredTimeline;
+    setTimeline(restoredTimeline);
+    replaceTranscriptDraft(recoveredTranscriptMarkdown);
+    setState({ segmentId: recoveredDraft.segmentId, status: 'paused' });
+    void restoreRecoveredDraftAudio({
+      audioChunks: recoveredDraft.audioChunks ?? [],
+      durationMs,
+      segmentId: recoveredDraft.segmentId,
+      restoredSegmentId: recoveredDraft.segmentId,
+    }).catch((error) => {
+      if (restoredSegmentIdRef.current === recoveredDraft.segmentId) {
+        notifyRecordingError(
+          unknownErrorDisplayMessage(error, '无法恢复录音预览，但仍可保存未完成录音。')
+        );
+      }
+    });
+  }, [
+    open,
+    recoveredDraft,
+    recordingTarget.memoryId,
+    replaceTranscriptDraft,
+    workspaceSession.workspaceId,
+  ]);
+
+  useEffect(() => {
+    return onRecordingTranscriptionEvent((event) => {
+      if (event.kind === 'error') {
+        const activeTranscription = activeTranscriptionRef.current;
+        if (
+          activeTranscription?.recordingSessionId === event.recordingSessionId &&
+          activeTranscription.revisionId === event.revisionId
+        ) {
+          finalTranscriptionNeedsBackfillRef.current = true;
+          notifyRecordingError(event.message);
+        }
+        return;
+      }
+      if (event.kind !== 'segments') {
+        return;
+      }
+      applyTranscriptionSegments(event.segments);
+    });
+  }, [applyTranscriptionSegments, notifyRecordingError]);
 
   useEffect(() => {
     if (state.status !== 'recording') {
@@ -114,81 +467,45 @@ export function RecordingOverlay({
     }
 
     const interval = window.setInterval(() => {
-      setElapsedSeconds((current) => current + 1);
-    }, 1000);
+      const nextDurationMs = readRecordingDurationMs();
+      if (nextDurationMs >= MAX_RECORDING_DURATION_MS) {
+        pauseRecordingAt(MAX_RECORDING_DURATION_MS);
+        toast(MAX_RECORDING_DURATION_NOTICE);
+        return;
+      }
+      if (
+        !longRecordingWarningShownRef.current &&
+        nextDurationMs >= LONG_RECORDING_WARNING_THRESHOLD_MS
+      ) {
+        longRecordingWarningShownRef.current = true;
+        toast(LONG_RECORDING_WARNING_NOTICE);
+      }
+      setElapsedMs(nextDurationMs);
+      persistRecoveryDuration(nextDurationMs);
+      if (shortRecordingNoticeVisible && nextDurationMs >= MIN_EFFECTIVE_RECORDING_DURATION_MS) {
+        clearShortRecordingNotice();
+      }
+    }, RECORDING_TIMER_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [state.status]);
-
-  useEffect(() => {
-    if (state.status !== 'editing' || transcriptDraft === lastSavedTranscriptRef.current) {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(() => {
-      const saveSession = recordingSessionRef.current;
-      void saveTranscript({
-        markdown: transcriptDraft,
-        memoryId: state.memoryId,
-        recordingId: state.recordingId,
-        workspaceHandle: workspaceSession.workspaceHandle,
-      }).then((response) => {
-        if (recordingSessionRef.current !== saveSession) {
-          return;
-        }
-        if (response.ok) {
-          lastSavedTranscriptRef.current = transcriptDraft;
-          setError(null);
-          onRecordingContentSaved?.({ memory: response.value.memory });
-        } else {
-          setError(workspaceErrorDisplayMessage(response.error, '无法保存转写。'));
-        }
-      });
-    }, AUTOSAVE_DELAY_MS);
-
-    return () => window.clearTimeout(timeout);
-  }, [onRecordingContentSaved, state, transcriptDraft, workspaceSession.workspaceHandle]);
-
-  useEffect(() => {
-    if (state.status !== 'editing' || reflectionsDraft === lastSavedReflectionsRef.current) {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(() => {
-      const saveSession = recordingSessionRef.current;
-      void saveReflections({
-        markdown: reflectionsDraft,
-        memoryId: state.memoryId,
-        recordingId: state.recordingId,
-        workspaceHandle: workspaceSession.workspaceHandle,
-      }).then((response) => {
-        if (recordingSessionRef.current !== saveSession) {
-          return;
-        }
-        if (response.ok) {
-          lastSavedReflectionsRef.current = reflectionsDraft;
-          setError(null);
-          onRecordingContentSaved?.({ memory: response.value.memory });
-        } else {
-          setError(workspaceErrorDisplayMessage(response.error, '无法保存反思。'));
-        }
-      });
-    }, AUTOSAVE_DELAY_MS);
-
-    return () => window.clearTimeout(timeout);
-  }, [onRecordingContentSaved, reflectionsDraft, state, workspaceSession.workspaceHandle]);
+  }, [shortRecordingNoticeVisible, state.status]);
 
   useEffect(() => {
     return () => {
+      if (draftPlaybackUrlRef.current) {
+        draftAudioRef.current?.pause();
+      }
+      liveAudioInputActiveRef.current = false;
+      draftPlaybackUrlRef.current = null;
       playbackSessionRef.current += 1;
       recordingSessionRef.current += 1;
       const pendingMicrophoneIntent = pendingMicrophoneIntentRef.current;
       pendingMicrophoneIntentRef.current = null;
       if (pendingMicrophoneIntent) {
         void clearMicrophoneIntent({
-          drawerSessionId: pendingMicrophoneIntent.drawerSessionId,
+          recordingFlowSessionId: pendingMicrophoneIntent.recordingFlowSessionId,
           workspaceHandle: pendingMicrophoneIntent.workspaceHandle,
-        });
+        }).catch(() => {});
       }
       const controller = controllerRef.current;
       controllerRef.current = null;
@@ -197,22 +514,47 @@ export function RecordingOverlay({
       }
       const activeDraft = activeDraftRef.current;
       activeDraftRef.current = null;
-      if (activeDraft) {
-        void discardRecordingDraft({
-          recordingId: activeDraft.recordingId,
-          workspaceHandle: workspaceSession.workspaceHandle,
-        });
+      if (activeDraft && replacementCopySessionRef.current === null) {
+        void discardDraftAndClearRecoveryOnSuccess(activeDraft.segmentId).catch(() => {});
+      }
+      replacementCopySessionRef.current = null;
+      const activeTranscription = activeTranscriptionRef.current;
+      activeTranscriptionStartPromiseRef.current = null;
+      activeTranscriptionRef.current = null;
+      transcriptionAudioQueueRef.current = null;
+      if (activeTranscription) {
+        closeTranscriptionSilently(activeTranscription);
       }
     };
   }, [workspaceSession.workspaceHandle]);
 
+  function closeTranscriptionSilently({
+    recordingFlowSessionId,
+    recordingSessionId,
+    revisionId,
+    workspaceHandle,
+  }: {
+    readonly recordingFlowSessionId: string;
+    readonly recordingSessionId: string;
+    readonly revisionId: string;
+    readonly workspaceHandle: string;
+  }) {
+    void closeRecordingTranscription({
+      recordingFlowSessionId,
+      recordingSessionId,
+      revisionId,
+      workspaceHandle,
+    }).catch(() => {});
+  }
+
   useEffect(() => {
+    draftPlaybackUrlRef.current = draftPlaybackUrl;
     return () => {
-      if (playbackUrl) {
-        URL.revokeObjectURL(playbackUrl);
+      if (draftPlaybackUrl) {
+        URL.revokeObjectURL(draftPlaybackUrl);
       }
     };
-  }, [playbackUrl]);
+  }, [draftPlaybackUrl]);
 
   function discardActiveDraft(recordingSession: number) {
     const activeDraft = activeDraftRef.current;
@@ -220,12 +562,7 @@ export function RecordingOverlay({
       return;
     }
     activeDraftRef.current = null;
-    void Promise.resolve(
-      discardRecordingDraft({
-        recordingId: activeDraft.recordingId,
-        workspaceHandle: workspaceSession.workspaceHandle,
-      })
-    ).catch(() => {});
+    void discardDraftAndClearRecoveryOnSuccess(activeDraft.segmentId).catch(() => {});
   }
 
   function clearPendingMicrophoneIntent(recordingSession: number) {
@@ -235,9 +572,9 @@ export function RecordingOverlay({
     }
     pendingMicrophoneIntentRef.current = null;
     void clearMicrophoneIntent({
-      drawerSessionId: pendingMicrophoneIntent.drawerSessionId,
+      recordingFlowSessionId: pendingMicrophoneIntent.recordingFlowSessionId,
       workspaceHandle: pendingMicrophoneIntent.workspaceHandle,
-    });
+    }).catch(() => {});
   }
 
   function forgetPendingMicrophoneIntent(recordingSession: number) {
@@ -246,8 +583,327 @@ export function RecordingOverlay({
     }
   }
 
+  function closeActiveTranscription(recordingSession: number) {
+    const activeTranscription = activeTranscriptionRef.current;
+    if (!activeTranscription) {
+      if (recordingSessionRef.current === recordingSession) {
+        activeTranscriptionStartPromiseRef.current = null;
+      }
+      return;
+    }
+    if (activeTranscription.recordingSession !== recordingSession) {
+      return;
+    }
+    activeTranscriptionStartPromiseRef.current = null;
+    activeTranscriptionRef.current = null;
+    if (transcriptionAudioQueueRef.current?.recordingSession === recordingSession) {
+      transcriptionAudioQueueRef.current = null;
+    }
+    closeTranscriptionSilently(activeTranscription);
+  }
+
+  function transcriptionQueueMatchesActive(
+    queue: TranscriptionAudioQueue,
+    activeTranscription: ActiveTranscriptionSession
+  ) {
+    return (
+      queue.recordingSession === activeTranscription.recordingSession &&
+      queue.recordingFlowSessionId === activeTranscription.recordingFlowSessionId &&
+      queue.recordingSessionId === activeTranscription.recordingSessionId &&
+      queue.revisionId === activeTranscription.revisionId
+    );
+  }
+
+  async function drainActiveTranscriptionQueue(activeTranscription: ActiveTranscriptionSession) {
+    const queue = transcriptionAudioQueueRef.current;
+    if (!queue || !transcriptionQueueMatchesActive(queue, activeTranscription)) {
+      return;
+    }
+    await queue.tail.catch(() => {});
+  }
+
+  async function finishActiveTranscription(recordingSession: number) {
+    const pendingStart = activeTranscriptionStartPromiseRef.current;
+    if (pendingStart) {
+      await pendingStart.catch(() => {});
+    }
+    const activeTranscription = activeTranscriptionRef.current;
+    if (!activeTranscription || activeTranscription.recordingSession !== recordingSession) {
+      if (recordingSessionRef.current === recordingSession) {
+        finalTranscriptionNeedsBackfillRef.current = true;
+      }
+      return;
+    }
+    activeTranscription.acceptsAudio = false;
+    await drainActiveTranscriptionQueue(activeTranscription);
+    if (
+      recordingSessionRef.current !== recordingSession ||
+      activeTranscriptionRef.current !== activeTranscription
+    ) {
+      if (recordingSessionRef.current === recordingSession) {
+        finalTranscriptionNeedsBackfillRef.current = true;
+      }
+      return;
+    }
+    let response: Awaited<ReturnType<typeof finishRecordingTranscription>>;
+    try {
+      response = await finishRecordingTranscription({
+        recordingFlowSessionId: activeTranscription.recordingFlowSessionId,
+        recordingSessionId: activeTranscription.recordingSessionId,
+        revisionId: activeTranscription.revisionId,
+        workspaceHandle: activeTranscription.workspaceHandle,
+      });
+    } catch (error) {
+      if (
+        recordingSessionRef.current === recordingSession &&
+        activeTranscriptionRef.current === activeTranscription
+      ) {
+        activeTranscriptionRef.current = null;
+        finalTranscriptionNeedsBackfillRef.current = true;
+        notifyRecordingError(unknownErrorDisplayMessage(error, '最终转写未返回，录音会继续保存。'));
+      }
+      return;
+    }
+    if (
+      recordingSessionRef.current !== recordingSession ||
+      activeTranscriptionRef.current !== activeTranscription
+    ) {
+      return;
+    }
+    activeTranscriptionRef.current = null;
+    if (!response.ok) {
+      finalTranscriptionNeedsBackfillRef.current = true;
+      notifyRecordingError(
+        workspaceErrorDisplayMessage(response.error, '最终转写未返回，录音会继续保存。')
+      );
+      return;
+    }
+    if (!response.value.accepted) {
+      finalTranscriptionNeedsBackfillRef.current = true;
+      return;
+    }
+    applyTranscriptionSegments(response.value.segments ?? []);
+    finalTranscriptionNeedsBackfillRef.current = false;
+  }
+
+  async function startActiveTranscription({
+    recordingFlowSessionId,
+    recordingSession,
+    revisionId,
+    timeOffsetMs,
+  }: {
+    readonly recordingFlowSessionId: string;
+    readonly recordingSession: number;
+    readonly revisionId: string;
+    readonly timeOffsetMs: number;
+  }) {
+    const response = await startRecordingTranscription({
+      recordingFlowSessionId,
+      recordingSessionId: recordingFlowSessionId,
+      revisionId,
+      timeOffsetMs,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    if (
+      recordingSessionRef.current !== recordingSession ||
+      activeRevisionIdRef.current !== revisionId ||
+      timelineRef.current.recordingSessionId !== recordingFlowSessionId
+    ) {
+      if (response.ok && response.value.accepted) {
+        closeTranscriptionSilently({
+          recordingFlowSessionId,
+          recordingSessionId: recordingFlowSessionId,
+          revisionId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+      }
+      return;
+    }
+    if (!response.ok) {
+      finalTranscriptionNeedsBackfillRef.current = true;
+      notifyRecordingError(workspaceErrorDisplayMessage(response.error, '实时转写暂时不可用。'));
+      return;
+    }
+    if (!response.value.accepted) {
+      finalTranscriptionNeedsBackfillRef.current = true;
+      return;
+    }
+    activeTranscriptionRef.current = {
+      acceptsAudio: true,
+      recordingFlowSessionId,
+      recordingSession,
+      recordingSessionId: recordingFlowSessionId,
+      revisionId,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    };
+    transcriptionAudioQueueRef.current = null;
+    flushBufferedTranscriptionAudio(recordingSession, timeOffsetMs);
+  }
+
+  function queueActiveTranscriptionStart(input: {
+    readonly recordingFlowSessionId: string;
+    readonly recordingSession: number;
+    readonly revisionId: string;
+    readonly timeOffsetMs: number;
+  }) {
+    const startPromise = startActiveTranscription(input).finally(() => {
+      if (activeTranscriptionStartPromiseRef.current === startPromise) {
+        activeTranscriptionStartPromiseRef.current = null;
+      }
+    });
+    activeTranscriptionStartPromiseRef.current = startPromise;
+    void startPromise.catch(() => {});
+  }
+
+  function flushBufferedTranscriptionAudio(recordingSession: number, timeOffsetMs: number) {
+    for (const capturedPcmChunk of capturedPcmChunksRef.current) {
+      if (capturedPcmChunk.endTimeMs <= timeOffsetMs) {
+        continue;
+      }
+      const chunk =
+        capturedPcmChunk.startTimeMs < timeOffsetMs
+          ? trimPcmChunkStart(capturedPcmChunk.chunk, timeOffsetMs - capturedPcmChunk.startTimeMs)
+          : capturedPcmChunk.chunk;
+      if (chunk) {
+        sendActiveTranscriptionAudio(recordingSession, chunk);
+      }
+    }
+  }
+
+  function sendActiveTranscriptionAudio(recordingSession: number, chunk: Uint8Array) {
+    const activeTranscription = activeTranscriptionRef.current;
+    if (
+      !activeTranscription ||
+      !activeTranscription.acceptsAudio ||
+      activeTranscription.recordingSession !== recordingSession
+    ) {
+      return;
+    }
+    const queuedChunk = new Uint8Array(chunk);
+    let queue = transcriptionAudioQueueRef.current;
+    if (!queue || !transcriptionQueueMatchesActive(queue, activeTranscription)) {
+      queue = {
+        recordingFlowSessionId: activeTranscription.recordingFlowSessionId,
+        recordingSessionId: activeTranscription.recordingSessionId,
+        recordingSession,
+        revisionId: activeTranscription.revisionId,
+        queuedBytes: 0,
+        tail: Promise.resolve(),
+      };
+      transcriptionAudioQueueRef.current = queue;
+    }
+    if (queue.queuedBytes + queuedChunk.byteLength > MAX_TRANSCRIPTION_AUDIO_QUEUE_BYTES) {
+      activeTranscription.acceptsAudio = false;
+      finalTranscriptionNeedsBackfillRef.current = true;
+      notifyRecordingError('实时转写暂时不可用，录音会继续保存。');
+      closeActiveTranscription(recordingSession);
+      return;
+    }
+
+    queue.queuedBytes += queuedChunk.byteLength;
+    queue.tail = queue.tail
+      .catch(() => {})
+      .then(async () => {
+        if (
+          recordingSessionRef.current !== recordingSession ||
+          activeTranscriptionRef.current !== activeTranscription
+        ) {
+          return;
+        }
+        const response = await sendRecordingTranscriptionAudio({
+          chunk: queuedChunk,
+          recordingFlowSessionId: activeTranscription.recordingFlowSessionId,
+          recordingSessionId: activeTranscription.recordingSessionId,
+          revisionId: activeTranscription.revisionId,
+          workspaceHandle: activeTranscription.workspaceHandle,
+        });
+        if (
+          recordingSessionRef.current !== recordingSession ||
+          activeTranscriptionRef.current !== activeTranscription
+        ) {
+          return;
+        }
+        if (response.ok && response.value.accepted) {
+          return;
+        }
+        activeTranscription.acceptsAudio = false;
+        finalTranscriptionNeedsBackfillRef.current = true;
+        notifyRecordingError(
+          response.ok
+            ? '实时转写暂时不可用，录音会继续保存。'
+            : workspaceErrorDisplayMessage(response.error, '实时转写暂时不可用。')
+        );
+        closeActiveTranscription(recordingSession);
+      })
+      .catch((error) => {
+        if (
+          recordingSessionRef.current === recordingSession &&
+          activeTranscriptionRef.current === activeTranscription
+        ) {
+          activeTranscription.acceptsAudio = false;
+          finalTranscriptionNeedsBackfillRef.current = true;
+          notifyRecordingError(unknownErrorDisplayMessage(error, '实时转写暂时不可用。'));
+          closeActiveTranscription(recordingSession);
+        }
+      })
+      .finally(() => {
+        queue.queuedBytes = Math.max(0, queue.queuedBytes - queuedChunk.byteLength);
+      });
+    void queue.tail.catch(() => {});
+  }
+
   function resetRecordingDurationClock(startedAtMs: number | null = null) {
     recordingDurationRef.current = { accumulatedMs: 0, startedAtMs };
+  }
+
+  function clearShortRecordingNotice() {
+    shortRecordingCompletionArmedRef.current = false;
+    setShortRecordingNoticeVisible(false);
+  }
+
+  function clearReplacementWarning() {
+    replacementWarningCursorRef.current = null;
+  }
+
+  function shouldHoldShortRecordingSave(durationMs: number) {
+    if (durationMs >= MIN_EFFECTIVE_RECORDING_DURATION_MS) {
+      clearShortRecordingNotice();
+      return false;
+    }
+    if (shortRecordingCompletionArmedRef.current) {
+      setShortRecordingNoticeVisible(false);
+      return false;
+    }
+    shortRecordingCompletionArmedRef.current = true;
+    setShortRecordingNoticeVisible(true);
+    return true;
+  }
+
+  function shouldHoldReplacementForWarning() {
+    const roundedCursorTimeMs = Math.round(cursorTimeMs);
+    if (replacementWarningCursorRef.current === roundedCursorTimeMs) {
+      replacementWarningCursorRef.current = null;
+      return false;
+    }
+
+    replacementWarningCursorRef.current = roundedCursorTimeMs;
+    toast(REPLACE_RECORDING_WARNING_NOTICE);
+    return true;
+  }
+
+  function snapCursorToReplacementBoundary() {
+    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
+    const replacementStartMs = resolveReplacementStartMs({
+      chunks: capturedChunksRef.current,
+      cursorTimeMs,
+      totalDurationMs,
+    });
+    if (Math.abs(replacementStartMs - Math.round(cursorTimeMs)) <= WAVEFORM_SEEK_EPSILON_MS) {
+      return false;
+    }
+
+    setCursor(replacementStartMs);
+    return true;
   }
 
   function pauseRecordingDurationClock() {
@@ -279,6 +935,397 @@ export function RecordingOverlay({
     return Math.round(clock.accumulatedMs + activeMs);
   }
 
+  function pauseRecordingAt(durationMs: number) {
+    const safeDurationMs = Math.max(0, Math.round(durationMs));
+    recordingDurationRef.current = {
+      accumulatedMs: safeDurationMs,
+      startedAtMs: null,
+    };
+    setElapsedMs(safeDurationMs);
+    setTimeline((current) =>
+      moveRecordingCursor(
+        createRecordingTimeline({
+          ...current,
+          totalDurationMs: safeDurationMs,
+        }),
+        safeDurationMs
+      )
+    );
+    clearReplacementWarning();
+    persistRecoveryAudioChunksSnapshot(safeDurationMs, { force: true });
+    persistRecoveryWaveformSnapshot(safeDurationMs, waveformSamples, { force: true });
+    liveAudioInputActiveRef.current = false;
+    controllerRef.current?.pause();
+    void finishActiveTranscription(recordingSessionRef.current).catch((error) => {
+      notifyRecordingError(unknownErrorDisplayMessage(error, '最终转写未返回，录音会继续保存。'));
+    });
+    setState((current) => transitionRecordingState(current, { type: 'pause-requested' }));
+  }
+
+  function stopDraftPlayback() {
+    if (draftPlaybackUrlRef.current) {
+      draftAudioRef.current?.pause();
+    }
+    setIsDraftPlaybackPlaying(false);
+  }
+
+  function invalidateDraftPlaybackUrl() {
+    stopDraftPlayback();
+    if (draftPlaybackUrlRef.current !== null) {
+      draftPlaybackUrlRef.current = null;
+      setDraftPlaybackUrl(null);
+    }
+  }
+
+  function buildDraftPlaybackUrl() {
+    const chunks = capturedChunksRef.current.map((capturedChunk) => capturedChunk.chunk);
+    if (chunks.length === 0) {
+      return null;
+    }
+    const nextUrl = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' }));
+    draftPlaybackUrlRef.current = nextUrl;
+    setDraftPlaybackUrl(nextUrl);
+    return nextUrl;
+  }
+
+  function recoveryAudioChunkFromCaptured({
+    chunk,
+    endTimeMs,
+    startTimeMs,
+  }: CapturedRecordingChunk) {
+    return {
+      byteLength: chunk.byteLength,
+      endTimeMs,
+      startTimeMs,
+    };
+  }
+
+  function setCapturedChunks(chunks: readonly CapturedRecordingChunk[]) {
+    invalidateDraftPlaybackUrl();
+    capturedChunksRef.current = [...chunks];
+    recoveryAudioChunksRef.current = chunks.map(recoveryAudioChunkFromCaptured);
+  }
+
+  function recoveryAudioChunksSnapshot() {
+    return recoveryAudioChunksRef.current;
+  }
+
+  function persistRecoveryAudioChunksSnapshot(
+    durationMs: number,
+    { force = false }: { readonly force?: boolean } = {}
+  ) {
+    const activeDraft = activeDraftRef.current;
+    const audioChunkCount = recoveryAudioChunksRef.current.length;
+    if (!activeDraft) {
+      persistRecoveryDuration(durationMs, { force });
+      return;
+    }
+    const safeDurationMs = Math.max(0, Math.round(durationMs));
+    if (
+      !force &&
+      lastRecoveryAudioChunkCountPersistedRef.current > 0 &&
+      safeDurationMs - lastRecoveryAudioChunksPersistedMsRef.current < 1_000
+    ) {
+      persistRecoveryDuration(safeDurationMs);
+      return;
+    }
+    lastRecoveryAudioChunksPersistedMsRef.current = safeDurationMs;
+    lastRecoveryAudioChunkCountPersistedRef.current = audioChunkCount;
+    lastRecoveryDurationPersistedMsRef.current = safeDurationMs;
+    updateRecordingRecoverySnapshot({
+      patch: {
+        audioChunks: recoveryAudioChunksSnapshot(),
+        durationMs: safeDurationMs,
+      },
+      segmentId: activeDraft.segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  function capturedChunksFromRecoveredAudio({
+    audio,
+    audioChunks,
+    durationMs,
+  }: {
+    readonly audio: Uint8Array;
+    readonly audioChunks: readonly RecordingRecoveryAudioChunk[];
+    readonly durationMs: number;
+  }): readonly CapturedRecordingChunk[] {
+    if (audio.byteLength === 0) {
+      return [];
+    }
+    if (audioChunks.length === 0) {
+      return [
+        {
+          chunk: new Uint8Array(audio),
+          endTimeMs: durationMs,
+          startTimeMs: 0,
+        },
+      ];
+    }
+
+    const capturedChunks: CapturedRecordingChunk[] = [];
+    let offset = 0;
+    for (const audioChunk of audioChunks) {
+      const nextOffset = offset + audioChunk.byteLength;
+      if (nextOffset > audio.byteLength) {
+        return [
+          {
+            chunk: new Uint8Array(audio),
+            endTimeMs: durationMs,
+            startTimeMs: 0,
+          },
+        ];
+      }
+      capturedChunks.push({
+        chunk: audio.slice(offset, nextOffset),
+        endTimeMs: audioChunk.endTimeMs,
+        startTimeMs: audioChunk.startTimeMs,
+      });
+      offset = nextOffset;
+    }
+    if (offset < audio.byteLength) {
+      capturedChunks.push({
+        chunk: audio.slice(offset),
+        endTimeMs: durationMs,
+        startTimeMs: capturedChunks.at(-1)?.endTimeMs ?? 0,
+      });
+    }
+    return capturedChunks;
+  }
+
+  function recoveredDraftAudioReadLimit(audioChunks: readonly RecordingRecoveryAudioChunk[]) {
+    const mappedByteLength = audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+    return mappedByteLength > 0
+      ? Math.min(mappedByteLength, MAX_RECORDING_DRAFT_AUDIO_READ_BYTES)
+      : null;
+  }
+
+  async function restoreRecoveredDraftAudio({
+    audioChunks,
+    durationMs,
+    segmentId,
+    restoredSegmentId,
+  }: {
+    readonly audioChunks: readonly RecordingRecoveryAudioChunk[];
+    readonly durationMs: number;
+    readonly segmentId: string;
+    readonly restoredSegmentId: string;
+  }) {
+    const readLimit = recoveredDraftAudioReadLimit(audioChunks);
+    if (readLimit === null) {
+      notifyRecordingError('无法恢复录音预览，但仍可保存未完成录音。');
+      return;
+    }
+    const response = await readRecordingDraftAudio({
+      maxBytes: readLimit,
+      segmentId,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    if (
+      restoredSegmentIdRef.current !== restoredSegmentId ||
+      activeDraftRef.current?.segmentId !== segmentId
+    ) {
+      return;
+    }
+    if (!response.ok) {
+      notifyRecordingError(
+        workspaceErrorDisplayMessage(response.error, '无法恢复录音预览，但仍可保存未完成录音。')
+      );
+      return;
+    }
+
+    const restoredChunks = capturedChunksFromRecoveredAudio({
+      audio: response.value.audio,
+      audioChunks,
+      durationMs,
+    });
+    setCapturedChunks(restoredChunks);
+    lastCapturedChunkEndMsRef.current = restoredChunks.at(-1)?.endTimeMs ?? durationMs;
+    sequenceRef.current = response.value.nextSequence;
+    updateRecordingRecoverySnapshot({
+      patch: {
+        audioChunks: recoveryAudioChunksSnapshot(),
+        nextSequence: response.value.nextSequence,
+      },
+      segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  function writeRecoveryMarker(
+    segmentId: string,
+    durationMs: number,
+    {
+      recordingSessionId = timeline.recordingSessionId,
+      revisionId = activeRevisionIdRef.current,
+    }: { readonly recordingSessionId?: string; readonly revisionId?: string } = {}
+  ) {
+    lastRecoveryDurationPersistedMsRef.current = Math.max(0, Math.round(durationMs));
+    lastRecoveryAudioChunksPersistedMsRef.current = Math.max(0, Math.round(durationMs));
+    lastRecoveryAudioChunkCountPersistedRef.current = recoveryAudioChunksRef.current.length;
+    writeRecordingRecoveryDraft({
+      audioChunks: recoveryAudioChunksSnapshot(),
+      durationMs,
+      memoryId: recordingTarget.memoryId,
+      nextSequence: sequenceRef.current,
+      segmentId,
+      recordingSessionId,
+      revisionId,
+      title: titleForRecording(workspaceSession.snapshot.title),
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  function persistRecoveryDuration(
+    durationMs: number,
+    { force = false }: { readonly force?: boolean } = {}
+  ) {
+    const activeDraft = activeDraftRef.current;
+    if (!activeDraft) {
+      return;
+    }
+    const safeDurationMs = Math.max(0, Math.round(durationMs));
+    if (!force && safeDurationMs - lastRecoveryDurationPersistedMsRef.current < 1_000) {
+      return;
+    }
+    lastRecoveryDurationPersistedMsRef.current = safeDurationMs;
+    updateRecordingRecoveryDuration({
+      durationMs: safeDurationMs,
+      segmentId: activeDraft.segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  function persistRecoveryWaveformSnapshot(
+    durationMs: number,
+    samples: readonly number[],
+    { force = false }: { readonly force?: boolean } = {}
+  ) {
+    const activeDraft = activeDraftRef.current;
+    if (!activeDraft) {
+      return;
+    }
+    const safeDurationMs = Math.max(0, Math.round(durationMs));
+    if (!force && safeDurationMs - lastRecoveryWaveformPersistedMsRef.current < 1_000) {
+      return;
+    }
+    lastRecoveryWaveformPersistedMsRef.current = safeDurationMs;
+    updateRecordingRecoverySnapshot({
+      patch: {
+        durationMs: safeDurationMs,
+        waveformSamples: samples,
+      },
+      segmentId: activeDraft.segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  function clearRecoveryMarker(segmentId: string) {
+    clearRecordingRecoveryDraft({
+      segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+    lastRecoveryDurationPersistedMsRef.current = 0;
+    lastRecoveryWaveformPersistedMsRef.current = 0;
+    lastRecoveryAudioChunksPersistedMsRef.current = 0;
+    lastRecoveryAudioChunkCountPersistedRef.current = 0;
+  }
+
+  async function discardDraftAndClearRecoveryOnSuccess(segmentId: string) {
+    const response = await discardRecordingDraft({
+      segmentId,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    if (response.ok) {
+      clearRecoveryMarker(segmentId);
+    }
+    return response;
+  }
+
+  function captureLiveChunk(chunk: Uint8Array) {
+    invalidateDraftPlaybackUrl();
+    const startTimeMs = lastCapturedChunkEndMsRef.current;
+    const endTimeMs = Math.max(startTimeMs + 1, readRecordingDurationMs());
+    lastCapturedChunkEndMsRef.current = endTimeMs;
+    const capturedChunk = { chunk, endTimeMs, startTimeMs };
+    capturedChunksRef.current.push(capturedChunk);
+    recoveryAudioChunksRef.current.push(recoveryAudioChunkFromCaptured(capturedChunk));
+    persistRecoveryAudioChunksSnapshot(endTimeMs);
+  }
+
+  function captureLivePcmChunk(chunk: Uint8Array) {
+    if (chunk.byteLength === 0) {
+      return;
+    }
+    const startTimeMs = lastCapturedPcmChunkEndMsRef.current;
+    const durationMs = pcmByteLengthToDurationMs(chunk.byteLength);
+    const endTimeMs = startTimeMs + durationMs;
+    lastCapturedPcmChunkEndMsRef.current = endTimeMs;
+    const nextChunk = { chunk: new Uint8Array(chunk), endTimeMs, startTimeMs };
+    if (
+      completionBackfillTooLargeRef.current ||
+      endTimeMs > MAX_COMPLETION_BACKFILL_PCM_DURATION_MS
+    ) {
+      completionBackfillTooLargeRef.current = true;
+      const minimumStartMs = Math.max(0, endTimeMs - TRANSCRIPTION_START_BUFFER_MS);
+      capturedPcmChunksRef.current.push(nextChunk);
+      capturedPcmChunksRef.current = capturedPcmChunksRef.current.filter(
+        (capturedPcmChunk) => capturedPcmChunk.endTimeMs > minimumStartMs
+      );
+      return;
+    }
+    capturedPcmChunksRef.current.push(nextChunk);
+  }
+
+  function appendWaveformLevel(samples: readonly number[]) {
+    const durationMs = readRecordingDurationMs();
+    if (durationMs - lastWaveformSampleAtMsRef.current < WAVEFORM_SAMPLE_INTERVAL_MS) {
+      return;
+    }
+    lastWaveformSampleAtMsRef.current = durationMs;
+    const rawAverageLevel =
+      samples.reduce((sum, sample) => sum + Math.min(1, Math.max(0, sample)), 0) /
+      Math.max(1, samples.length);
+    if (rawAverageLevel >= AUDIBLE_LEVEL_THRESHOLD) {
+      lastNoticeableAudioAtMsRef.current = durationMs;
+      silenceNoticeShownRef.current = false;
+    } else if (
+      !silenceNoticeShownRef.current &&
+      durationMs - lastNoticeableAudioAtMsRef.current >= SILENCE_NOTICE_THRESHOLD_MS
+    ) {
+      silenceNoticeShownRef.current = true;
+      toast(SILENCE_NOTICE);
+    }
+    const averageLevel =
+      samples.reduce((sum, sample) => sum + Math.min(1, Math.max(0.06, sample)), 0) /
+      Math.max(1, samples.length);
+    setWaveformSamples((current) => {
+      const next = appendBoundedWaveformSample(current, averageLevel);
+      persistRecoveryWaveformSnapshot(durationMs, next);
+      return next;
+    });
+  }
+
+  function truncateWaveformSamplesAt(cursorMs: number, totalDurationMs: number) {
+    setWaveformSamples((current) => {
+      if (totalDurationMs <= 0 || current.length === 0) {
+        return [];
+      }
+      const retainedCount = Math.min(
+        current.length,
+        Math.max(0, Math.ceil((cursorMs / totalDurationMs) * current.length))
+      );
+      const next = current.slice(0, retainedCount);
+      persistRecoveryWaveformSnapshot(cursorMs, next, { force: true });
+      return next;
+    });
+  }
+
+  function byteLengthForChunks(chunks: readonly CapturedRecordingChunk[]) {
+    return chunks.reduce((sum, chunk) => sum + chunk.chunk.byteLength, 0);
+  }
+
   function failActiveRecording(
     message: string,
     recordingSession: number,
@@ -288,18 +1335,20 @@ export function RecordingOverlay({
       return;
     }
     recordingSessionRef.current += 1;
+    liveAudioInputActiveRef.current = false;
     appendFailureRef.current = message;
     const controller = controllerRef.current;
     controllerRef.current = null;
     void controller?.stop().catch(() => {});
+    closeActiveTranscription(recordingSession);
     if (discardDraft) {
       discardActiveDraft(recordingSession);
     }
     setState((current) => transitionRecordingState(current, { type: 'failed' }));
-    setError(message);
+    notifyRecordingError(message);
   }
 
-  function appendChunk(recordingId: string, recordingSession: number, chunk: Uint8Array) {
+  function appendChunk(segmentId: string, recordingSession: number, chunk: Uint8Array) {
     if (recordingSessionRef.current !== recordingSession) {
       return;
     }
@@ -310,7 +1359,7 @@ export function RecordingOverlay({
         }
         const response = await appendRecordingAudioChunk({
           chunk,
-          recordingId,
+          segmentId,
           sequence: sequenceRef.current,
           workspaceHandle: workspaceSession.workspaceHandle,
         });
@@ -328,7 +1377,8 @@ export function RecordingOverlay({
         if (recordingSessionRef.current !== recordingSession) {
           return;
         }
-        const message = appendFailureRef.current ?? errorMessage(appendError, '音频写入失败。');
+        const message =
+          appendFailureRef.current ?? unknownErrorDisplayMessage(appendError, '音频写入失败。');
         appendFailureRef.current = message;
         failActiveRecording(message, recordingSession, { discardDraft: true });
         throw appendError;
@@ -338,20 +1388,92 @@ export function RecordingOverlay({
     void appendQueueRef.current.catch(() => {});
   }
 
+  function recordingMediaHandlers({
+    recordingSession,
+  }: {
+    readonly recordingSession: number;
+  }): RecordingMediaHandlers {
+    return {
+      onChunk: (chunk) => {
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
+        captureLiveChunk(chunk);
+        const activeDraft = activeDraftRef.current;
+        if (!activeDraft || activeDraft.recordingSession !== recordingSession) {
+          return;
+        }
+        appendChunk(activeDraft.segmentId, recordingSession, chunk);
+      },
+      onError: (message) => {
+        failActiveRecording(
+          workspaceErrorDisplayMessage({ message }, '无法使用麦克风。'),
+          recordingSession,
+          { discardDraft: true }
+        );
+      },
+      onLevel: (samples) => {
+        if (recordingSessionRef.current === recordingSession && liveAudioInputActiveRef.current) {
+          appendWaveformLevel(samples);
+        }
+      },
+      onPcmChunk: (chunk) => {
+        if (recordingSessionRef.current !== recordingSession || !liveAudioInputActiveRef.current) {
+          return;
+        }
+        captureLivePcmChunk(chunk);
+        sendActiveTranscriptionAudio(recordingSession, chunk);
+      },
+      onStop: () => {},
+    };
+  }
+
+  function startMediaControllerForDraft({
+    recordingSession,
+  }: {
+    readonly recordingSession: number;
+  }) {
+    const activeMediaAdapter = mediaAdapter ?? createBrowserMediaRecorderAdapter();
+    return activeMediaAdapter.start(recordingMediaHandlers({ recordingSession }));
+  }
+
   async function handleStart() {
-    setError(null);
+    clearRecordingError();
+    clearShortRecordingNotice();
     appendFailureRef.current = null;
     appendQueueRef.current = Promise.resolve();
+    setCapturedChunks([]);
+    capturedPcmChunksRef.current = [];
     controllerRef.current = null;
-    setElapsedSeconds(0);
-    setTranscriptDraft('');
-    setReflectionsDraft('');
-    lastSavedTranscriptRef.current = '';
-    lastSavedReflectionsRef.current = '';
+    lastCapturedChunkEndMsRef.current = 0;
+    lastCapturedPcmChunkEndMsRef.current = 0;
+    lastNoticeableAudioAtMsRef.current = 0;
+    lastRecoveryDurationPersistedMsRef.current = 0;
+    lastRecoveryAudioChunksPersistedMsRef.current = 0;
+    lastRecoveryAudioChunkCountPersistedRef.current = 0;
+    lastRecoveryWaveformPersistedMsRef.current = 0;
+    lastWaveformSampleAtMsRef.current = 0;
+    revisionIndexRef.current = 0;
+    longRecordingWarningShownRef.current = false;
+    silenceNoticeShownRef.current = false;
+    clearReplacementWarning();
+    setElapsedMs(0);
+    setWaveformSamples([]);
+    replaceTranscriptDraft('');
+    completionBackfillTooLargeRef.current = false;
+    finalTranscriptionNeedsBackfillRef.current = false;
     resetRecordingDurationClock();
     const recordingSession = recordingSessionRef.current + 1;
-    const drawerSessionId = `recording-${recordingSession}`;
+    const recordingFlowSessionId = `recording-${recordingSession}`;
+    const revisionId = `${recordingFlowSessionId}-revision-0`;
     recordingSessionRef.current = recordingSession;
+    activeRevisionIdRef.current = revisionId;
+    const initialTimeline = createRecordingTimeline({
+      recordingSessionId: recordingFlowSessionId,
+      revisionId,
+    });
+    timelineRef.current = initialTimeline;
+    setTimeline(initialTimeline);
     setState((current) =>
       transitionRecordingState(current, {
         type: 'start-requested',
@@ -359,7 +1481,7 @@ export function RecordingOverlay({
     );
 
     const microphoneIntent = await beginMicrophoneIntent({
-      drawerSessionId,
+      recordingFlowSessionId,
       workspaceHandle: workspaceSession.workspaceHandle,
     });
     if (!microphoneIntent.ok) {
@@ -371,13 +1493,13 @@ export function RecordingOverlay({
     }
     if (recordingSessionRef.current !== recordingSession) {
       void clearMicrophoneIntent({
-        drawerSessionId,
+        recordingFlowSessionId,
         workspaceHandle: workspaceSession.workspaceHandle,
-      });
+      }).catch(() => {});
       return;
     }
     pendingMicrophoneIntentRef.current = {
-      drawerSessionId,
+      recordingFlowSessionId,
       recordingSession,
       workspaceHandle: workspaceSession.workspaceHandle,
     };
@@ -395,29 +1517,45 @@ export function RecordingOverlay({
     }
 
     sequenceRef.current = draft.value.nextSequence;
-    const nextRecordingId = draft.value.recordingId;
+    const nextSegmentId = draft.value.segmentId;
     if (recordingSessionRef.current !== recordingSession) {
       clearPendingMicrophoneIntent(recordingSession);
-      void discardRecordingDraft({
-        recordingId: nextRecordingId,
+      const discard = await discardRecordingDraft({
+        segmentId: nextSegmentId,
         workspaceHandle: workspaceSession.workspaceHandle,
-      });
+      }).catch((error) => ({
+        ok: false as const,
+        error: {
+          code: 'ERR_RECORDING_DISCARD_FAILED' as const,
+          message: unknownErrorDisplayMessage(error, '无法清理已取消的录音草稿。'),
+        },
+      }));
+      if (!discard.ok && !activeDraftRef.current) {
+        writeRecordingRecoveryDraft({
+          durationMs: 0,
+          memoryId: recordingTarget.memoryId,
+          nextSequence: draft.value.nextSequence,
+          recordingSessionId: recordingFlowSessionId,
+          revisionId,
+          segmentId: nextSegmentId,
+          title: titleForRecording(workspaceSession.snapshot.title),
+          workspaceId: workspaceSession.workspaceId,
+        });
+        notifyRecordingError(
+          workspaceErrorDisplayMessage(discard.error, '无法清理已取消的录音草稿。')
+        );
+      }
       return;
     }
-    activeDraftRef.current = { recordingId: nextRecordingId, recordingSession };
+    activeDraftRef.current = { segmentId: nextSegmentId, recordingSession };
+    writeRecoveryMarker(nextSegmentId, 0, {
+      recordingSessionId: recordingFlowSessionId,
+      revisionId,
+    });
 
     try {
-      const activeMediaAdapter = mediaAdapter ?? createBrowserMediaRecorderAdapter();
-      const controller = await activeMediaAdapter.start({
-        onChunk: (chunk) => appendChunk(nextRecordingId, recordingSession, chunk),
-        onError: (message) => {
-          failActiveRecording(
-            workspaceErrorDisplayMessage({ message }, '无法使用麦克风。'),
-            recordingSession,
-            { discardDraft: true }
-          );
-        },
-        onStop: () => {},
+      const controller = await startMediaControllerForDraft({
+        recordingSession,
       });
       if (recordingSessionRef.current !== recordingSession) {
         clearPendingMicrophoneIntent(recordingSession);
@@ -427,47 +1565,623 @@ export function RecordingOverlay({
       forgetPendingMicrophoneIntent(recordingSession);
       resetRecordingDurationClock(performance.now());
       controllerRef.current = controller;
+      liveAudioInputActiveRef.current = true;
       setState((current) =>
-        transitionRecordingState(current, { recordingId: nextRecordingId, type: 'draft-ready' })
+        transitionRecordingState(current, { segmentId: nextSegmentId, type: 'draft-ready' })
       );
+      queueActiveTranscriptionStart({
+        recordingFlowSessionId,
+        recordingSession,
+        revisionId,
+        timeOffsetMs: 0,
+      });
     } catch (startError) {
       clearPendingMicrophoneIntent(recordingSession);
-      const message = errorMessage(startError, '无法使用麦克风。');
+      const message = unknownErrorDisplayMessage(startError, '无法使用麦克风。');
       failActiveRecording(message, recordingSession, { discardDraft: true });
     }
   }
 
   function handlePause() {
-    pauseRecordingDurationClock();
-    controllerRef.current?.pause();
-    setState((current) => transitionRecordingState(current, { type: 'pause-requested' }));
+    pauseRecordingAt(readRecordingDurationMs());
+  }
+
+  async function replaceRecordingFromCursor() {
+    if (replacementCopySessionRef.current !== null) {
+      return;
+    }
+    if (state.status !== 'paused') {
+      return;
+    }
+
+    stopDraftPlayback();
+    clearShortRecordingNotice();
+    clearReplacementWarning();
+    const oldController = controllerRef.current;
+    const oldDraft = activeDraftRef.current;
+    if (!oldDraft) {
+      notifyRecordingError('当前录音暂时不可替换，请先继续录音或完成保存。');
+      return;
+    }
+    if (!oldController) {
+      notifyRecordingError('恢复录音可以先保存或放弃，暂不支持继续替换。');
+      return;
+    }
+
+    clearRecordingError();
+    const recordingSession = recordingSessionRef.current;
+    const recordingFlowSessionId = timeline.recordingSessionId;
+    replacementCopySessionRef.current = recordingSession;
+    setState((current) =>
+      transitionRecordingState(current, {
+        segmentId: oldDraft.segmentId,
+        type: 'replace-requested',
+      })
+    );
+    closeActiveTranscription(recordingSession);
+    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
+    const replacementStartMs = resolveReplacementStartMs({
+      chunks: capturedChunksRef.current,
+      cursorTimeMs,
+      totalDurationMs,
+    });
+    const replacesFromStart = replacementStartMs <= WAVEFORM_SEEK_EPSILON_MS;
+    const nextRecordingSession = replacesFromStart ? recordingSession + 1 : recordingSession;
+    const nextRecordingFlowSessionId = replacesFromStart
+      ? `recording-${nextRecordingSession}`
+      : recordingFlowSessionId;
+    const nextRevisionIndex = replacesFromStart ? 0 : revisionIndexRef.current + 1;
+    const nextRevisionId = `${nextRecordingFlowSessionId}-revision-${nextRevisionIndex}`;
+    const retainedChunks = capturedChunksRef.current.filter(
+      (chunk) => chunk.endTimeMs <= replacementStartMs + WAVEFORM_SEEK_EPSILON_MS
+    );
+    const retainedPcmChunks = retainPcmChunksThrough(
+      capturedPcmChunksRef.current,
+      replacementStartMs
+    );
+    const retainedByteLength = byteLengthForChunks(retainedChunks);
+
+    const previousRecordingSession = recordingSessionRef.current;
+    const previousSequence = sequenceRef.current;
+    const previousActiveDraft = activeDraftRef.current;
+    const previousCapturedChunks = capturedChunksRef.current;
+    const previousCapturedPcmChunks = capturedPcmChunksRef.current;
+    const previousRecoveryAudioChunks = recoveryAudioChunksRef.current;
+    const previousElapsedMs = elapsedMs;
+    const previousTimeline = timelineRef.current;
+    const previousWaveformSamples = waveformSamples;
+    const previousRecordingDuration = recordingDurationRef.current;
+    const previousLastCapturedChunkEndMs = lastCapturedChunkEndMsRef.current;
+    const previousLastCapturedPcmChunkEndMs = lastCapturedPcmChunkEndMsRef.current;
+    const previousLastNoticeableAudioAtMs = lastNoticeableAudioAtMsRef.current;
+    const previousRecoveryDurationPersistedMs = lastRecoveryDurationPersistedMsRef.current;
+    const previousRecoveryAudioChunksPersistedMs = lastRecoveryAudioChunksPersistedMsRef.current;
+    const previousRecoveryAudioChunkCountPersisted =
+      lastRecoveryAudioChunkCountPersistedRef.current;
+    const previousRecoveryWaveformPersistedMs = lastRecoveryWaveformPersistedMsRef.current;
+    const previousActiveRevisionId = activeRevisionIdRef.current;
+    const previousTranscriptDraft = transcriptDraftRef.current;
+    const previousAppendQueue = appendQueueRef.current;
+    const previousAppendFailure = appendFailureRef.current;
+    const previousFinalTranscriptionNeedsBackfill = finalTranscriptionNeedsBackfillRef.current;
+    const previousCompletionBackfillTooLarge = completionBackfillTooLargeRef.current;
+    const previousSilenceNoticeShown = silenceNoticeShownRef.current;
+    const previousRevisionIndex = revisionIndexRef.current;
+    let nextSegmentId: string | null = null;
+
+    try {
+      await appendQueueRef.current;
+      if (recordingSessionRef.current !== recordingSession) {
+        throw new Error('录音替换已取消。');
+      }
+      const draft = await createRecordingDraft({
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      if (!draft.ok) {
+        throw new Error(workspaceErrorDisplayMessage(draft.error, '无法创建替换录音。'));
+      }
+      nextSegmentId = draft.value.segmentId;
+      sequenceRef.current = draft.value.nextSequence;
+      appendQueueRef.current = Promise.resolve();
+      appendFailureRef.current = null;
+      if (!replacesFromStart) {
+        const cloned = await cloneRecordingDraftPrefix({
+          nextSequence: draft.value.nextSequence,
+          retainedByteLength,
+          sourceSegmentId: oldDraft.segmentId,
+          targetSegmentId: nextSegmentId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+        if (recordingSessionRef.current !== recordingSession) {
+          throw new Error('录音替换已取消。');
+        }
+        if (!cloned.ok) {
+          throw new Error(
+            workspaceErrorDisplayMessage(cloned.error, '无法保留替换位置之前的录音。')
+          );
+        }
+        sequenceRef.current = cloned.value.nextSequence;
+      }
+      replacementCopySessionRef.current = null;
+      activeDraftRef.current = {
+        segmentId: nextSegmentId,
+        recordingSession: nextRecordingSession,
+      };
+      setCapturedChunks(retainedChunks);
+      capturedPcmChunksRef.current = retainedPcmChunks;
+      lastCapturedChunkEndMsRef.current = replacementStartMs;
+      lastCapturedPcmChunkEndMsRef.current = replacementStartMs;
+      writeRecoveryMarker(nextSegmentId, replacementStartMs, {
+        recordingSessionId: nextRecordingFlowSessionId,
+        revisionId: nextRevisionId,
+      });
+      persistRecoveryAudioChunksSnapshot(replacementStartMs, { force: true });
+      lastCapturedChunkEndMsRef.current = replacementStartMs;
+      lastCapturedPcmChunkEndMsRef.current = replacementStartMs;
+      lastNoticeableAudioAtMsRef.current = replacementStartMs;
+      lastRecoveryWaveformPersistedMsRef.current = replacementStartMs;
+      lastWaveformSampleAtMsRef.current = replacementStartMs;
+      silenceNoticeShownRef.current = false;
+      revisionIndexRef.current = nextRevisionIndex;
+      activeRevisionIdRef.current = nextRevisionId;
+      finalTranscriptionNeedsBackfillRef.current = false;
+      completionBackfillTooLargeRef.current = false;
+      setElapsedMs(replacementStartMs);
+      truncateWaveformSamplesAt(replacementStartMs, totalDurationMs);
+      const replacementTimeline = createRecordingTimeline({
+        ...startReplacementAtCursor(
+          createRecordingTimeline({
+            ...timelineRef.current,
+            totalDurationMs,
+          }),
+          {
+            cursorTimeMs: replacementStartMs,
+            nextRevisionId,
+          }
+        ),
+        recordingSessionId: nextRecordingFlowSessionId,
+        revisionId: nextRevisionId,
+      });
+      timelineRef.current = replacementTimeline;
+      setTimeline(replacementTimeline);
+      const replacementTranscript = transcriptMarkdownFromSegments(
+        replacementTimeline.transcriptSegments
+      );
+      replaceTranscriptDraft(replacementTranscript);
+      updateRecordingRecoverySnapshot({
+        patch: {
+          durationMs: replacementStartMs,
+          recordingSessionId: nextRecordingFlowSessionId,
+          revisionId: nextRevisionId,
+          transcriptMarkdown: replacementTranscript,
+          transcriptSegments: replacementTimeline.transcriptSegments,
+        },
+        segmentId: nextSegmentId,
+        workspaceId: workspaceSession.workspaceId,
+      });
+      let nextController = oldController;
+      if (replacesFromStart) {
+        const microphoneIntent = await beginMicrophoneIntent({
+          recordingFlowSessionId: nextRecordingFlowSessionId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+        if (!microphoneIntent.ok) {
+          throw new Error(workspaceErrorDisplayMessage(microphoneIntent.error, '无法使用麦克风。'));
+        }
+        pendingMicrophoneIntentRef.current = {
+          recordingFlowSessionId: nextRecordingFlowSessionId,
+          recordingSession: nextRecordingSession,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        };
+        recordingSessionRef.current = nextRecordingSession;
+        nextController = await startMediaControllerForDraft({
+          recordingSession: nextRecordingSession,
+        });
+        if (recordingSessionRef.current !== nextRecordingSession) {
+          clearPendingMicrophoneIntent(nextRecordingSession);
+          await nextController.stop().catch(() => {});
+          throw new Error('录音替换已取消。');
+        }
+        forgetPendingMicrophoneIntent(nextRecordingSession);
+        void oldController.stop().catch(() => {});
+      } else {
+        oldController.resume();
+      }
+      controllerRef.current = nextController;
+      queueActiveTranscriptionStart({
+        recordingFlowSessionId: nextRecordingFlowSessionId,
+        recordingSession: nextRecordingSession,
+        revisionId: nextRevisionId,
+        timeOffsetMs: replacementStartMs,
+      });
+      recordingDurationRef.current = {
+        accumulatedMs: replacementStartMs,
+        startedAtMs: performance.now(),
+      };
+      liveAudioInputActiveRef.current = true;
+      setState((current) =>
+        transitionRecordingState(current, {
+          segmentId: nextSegmentId!,
+          type: 'resume-requested',
+        })
+      );
+      void discardRecordingDraft({
+        segmentId: oldDraft.segmentId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      }).catch(() => {});
+    } catch (replaceError) {
+      try {
+        oldController.pause();
+      } catch {
+        // Best effort rollback after a partially resumed media controller.
+      }
+      clearPendingMicrophoneIntent(nextRecordingSession);
+      closeActiveTranscription(recordingSession);
+      closeActiveTranscription(nextRecordingSession);
+      replacementCopySessionRef.current = null;
+      recordingSessionRef.current = previousRecordingSession;
+      sequenceRef.current = previousSequence;
+      activeDraftRef.current = previousActiveDraft;
+      setCapturedChunks(previousCapturedChunks);
+      recoveryAudioChunksRef.current = [...previousRecoveryAudioChunks];
+      capturedPcmChunksRef.current = previousCapturedPcmChunks;
+      lastCapturedChunkEndMsRef.current = previousLastCapturedChunkEndMs;
+      lastCapturedPcmChunkEndMsRef.current = previousLastCapturedPcmChunkEndMs;
+      lastRecoveryDurationPersistedMsRef.current = previousRecoveryDurationPersistedMs;
+      lastRecoveryAudioChunksPersistedMsRef.current = previousRecoveryAudioChunksPersistedMs;
+      lastRecoveryAudioChunkCountPersistedRef.current = previousRecoveryAudioChunkCountPersisted;
+      lastRecoveryWaveformPersistedMsRef.current = previousRecoveryWaveformPersistedMs;
+      activeRevisionIdRef.current = previousActiveRevisionId;
+      replaceTranscriptDraft(previousTranscriptDraft);
+      appendQueueRef.current = previousAppendQueue;
+      appendFailureRef.current = previousAppendFailure;
+      finalTranscriptionNeedsBackfillRef.current = previousFinalTranscriptionNeedsBackfill;
+      completionBackfillTooLargeRef.current = previousCompletionBackfillTooLarge;
+      silenceNoticeShownRef.current = previousSilenceNoticeShown;
+      revisionIndexRef.current = previousRevisionIndex;
+      lastNoticeableAudioAtMsRef.current = previousLastNoticeableAudioAtMs;
+      recordingDurationRef.current = previousRecordingDuration;
+      liveAudioInputActiveRef.current = false;
+      setElapsedMs(previousElapsedMs);
+      timelineRef.current = previousTimeline;
+      setTimeline(previousTimeline);
+      setWaveformSamples(previousWaveformSamples);
+      if (previousActiveDraft) {
+        writeRecoveryMarker(previousActiveDraft.segmentId, previousElapsedMs, {
+          recordingSessionId: timeline.recordingSessionId,
+          revisionId: previousActiveRevisionId,
+        });
+      }
+      if (nextSegmentId) {
+        void discardDraftAndClearRecoveryOnSuccess(nextSegmentId).catch(() => {});
+      }
+      setState((current) => transitionRecordingState(current, { type: 'replace-failed' }));
+      notifyRecordingError(
+        unknownErrorDisplayMessage(replaceError, '替换录音失败，原录音已保留。')
+      );
+    }
+  }
+
+  function notifyRecoveredRecordingCannotResume() {
+    if (state.status !== 'paused') {
+      return;
+    }
+    const activeDraft = activeDraftRef.current;
+    if (!activeDraft) {
+      notifyRecordingError('当前录音暂时不可继续，请先完成保存。');
+      return;
+    }
+
+    notifyRecordingError('恢复录音可以先保存或放弃，暂不支持继续录制。');
   }
 
   function handleResume() {
+    stopDraftPlayback();
+    clearShortRecordingNotice();
+    if (state.status === 'paused' && hasTailAfterCursor(timeline)) {
+      if (snapCursorToReplacementBoundary()) {
+        return;
+      }
+      if (shouldHoldReplacementForWarning()) {
+        return;
+      }
+      void replaceRecordingFromCursor();
+      return;
+    }
+    clearReplacementWarning();
+    const resumeAtMs = readRecordingDurationMs();
+    if (!controllerRef.current) {
+      notifyRecoveredRecordingCannotResume();
+      return;
+    }
+    queueActiveTranscriptionStart({
+      recordingFlowSessionId: timeline.recordingSessionId,
+      recordingSession: recordingSessionRef.current,
+      revisionId: activeRevisionIdRef.current,
+      timeOffsetMs: resumeAtMs,
+    });
+    setTimeline((current) => moveRecordingCursor(current, resumeAtMs));
     resumeRecordingDurationClock();
+    liveAudioInputActiveRef.current = true;
     controllerRef.current?.resume();
     setState((current) => transitionRecordingState(current, { type: 'resume-requested' }));
   }
 
-  async function handleStop() {
-    if (state.status !== 'recording' && state.status !== 'paused') {
+  function setCursor(
+    nextCursorTimeMs: number,
+    { syncDraftAudio = true }: { readonly syncDraftAudio?: boolean } = {}
+  ) {
+    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
+    const safeCursorTimeMs = Math.min(totalDurationMs, Math.max(0, Math.round(nextCursorTimeMs)));
+    if (syncDraftAudio && state.status === 'paused' && draftAudioRef.current) {
+      draftAudioRef.current.currentTime = safeCursorTimeMs / 1000;
+    }
+    clearReplacementWarning();
+    setTimeline((current) =>
+      moveRecordingCursor(
+        createRecordingTimeline({
+          ...current,
+          totalDurationMs,
+        }),
+        safeCursorTimeMs
+      )
+    );
+  }
+
+  function moveCursor(deltaMs: number) {
+    setCursor(cursorTimeMs + deltaMs);
+  }
+
+  async function handleDraftPlayPause() {
+    if (state.status !== 'paused') {
       return;
     }
 
-    const recordingId = state.recordingId;
+    const audio = draftAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    if (isDraftPlaybackPlaying) {
+      audio.pause();
+      setIsDraftPlaybackPlaying(false);
+      return;
+    }
+
+    const playbackSource = draftPlaybackUrlRef.current ?? buildDraftPlaybackUrl();
+    if (!playbackSource) {
+      notifyRecordingError('没有可回听的录音内容。');
+      return;
+    }
+
+    clearRecordingError();
+    audio.src = playbackSource;
+    audio.currentTime = Math.max(0, cursorTimeMs / 1000);
+    try {
+      await Promise.resolve(audio.play());
+      setIsDraftPlaybackPlaying(true);
+    } catch (playbackError) {
+      setIsDraftPlaybackPlaying(false);
+      notifyRecordingError(unknownErrorDisplayMessage(playbackError, '无法播放当前录音预览。'));
+    }
+  }
+
+  function handleDraftPlaybackTimeUpdate() {
+    const audio = draftAudioRef.current;
+    if (!audio || state.status !== 'paused') {
+      return;
+    }
+    setCursor(audio.currentTime * 1000, { syncDraftAudio: false });
+  }
+
+  function handleDraftPlaybackEnded() {
+    setIsDraftPlaybackPlaying(false);
+    setCursor(Math.max(elapsedMs, timeline.totalDurationMs), { syncDraftAudio: false });
+  }
+
+  async function saveFinalTranscript({
+    memoryId,
+    segmentId,
+    recordingSession,
+  }: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly recordingSession: number;
+  }) {
+    const markdown = transcriptDraftRef.current.trim();
+    if (markdown.length === 0) {
+      return true;
+    }
+
+    try {
+      const response = await saveTranscript({
+        markdown,
+        memoryId,
+        segmentId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      if (recordingSessionRef.current !== recordingSession) {
+        return false;
+      }
+      if (response.ok) {
+        clearRecordingError();
+        onRecordingContentSaved?.({ memory: response.value.memory });
+        return true;
+      }
+      notifyRecordingError(
+        workspaceErrorDisplayMessage(response.error, '录音已保存，转写暂时无法写入。')
+      );
+      return false;
+    } catch (saveError) {
+      if (recordingSessionRef.current === recordingSession) {
+        notifyRecordingError(
+          unknownErrorDisplayMessage(saveError, '录音已保存，转写暂时无法写入。')
+        );
+      }
+      return false;
+    }
+  }
+
+  function persistRecoveryTranscriptSnapshot(segmentId: string) {
+    const currentTimeline = timelineRef.current;
+    updateRecordingRecoverySnapshot({
+      patch: {
+        durationMs: currentTimeline.totalDurationMs,
+        recordingSessionId: currentTimeline.recordingSessionId,
+        revisionId: currentTimeline.revisionId,
+        transcriptMarkdown: transcriptDraftRef.current,
+        transcriptSegments: currentTimeline.transcriptSegments,
+      },
+      segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+  }
+
+  async function backfillFinalTranscript(recordingSession: number) {
+    const needsBackfill =
+      finalTranscriptionNeedsBackfillRef.current || transcriptDraftRef.current.trim().length === 0;
+    if (!needsBackfill) {
+      return;
+    }
+    if (completionBackfillTooLargeRef.current) {
+      notifyRecordingError(COMPLETION_BACKFILL_UNAVAILABLE_NOTICE);
+      return;
+    }
+    const pcmChunks = capturedPcmChunksRef.current;
+    if (pcmChunks.length === 0) {
+      return;
+    }
+
+    const recordingSessionId = `recording-${recordingSession}`;
+    const recordingFlowSessionId = `${recordingSessionId}-completion-backfill`;
+    const revisionId = activeRevisionIdRef.current;
+    let shouldCloseBackfill = false;
+    try {
+      const started = await startRecordingTranscription({
+        recordingFlowSessionId,
+        recordingSessionId,
+        revisionId,
+        timeOffsetMs: 0,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      if (started.ok && started.value.accepted) {
+        shouldCloseBackfill = true;
+      }
+      if (recordingSessionRef.current !== recordingSession) {
+        return;
+      }
+      if (!started.ok) {
+        notifyRecordingError(
+          workspaceErrorDisplayMessage(started.error, COMPLETION_BACKFILL_UNAVAILABLE_NOTICE)
+        );
+        return;
+      }
+      if (!started.value.accepted) {
+        return;
+      }
+
+      for (const capturedPcmChunk of pcmChunks) {
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
+        const sent = await sendRecordingTranscriptionAudio({
+          chunk: capturedPcmChunk.chunk,
+          recordingFlowSessionId,
+          recordingSessionId,
+          revisionId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+        if (!sent.ok) {
+          notifyRecordingError(
+            workspaceErrorDisplayMessage(sent.error, COMPLETION_BACKFILL_UNAVAILABLE_NOTICE)
+          );
+          return;
+        }
+        if (!sent.value.accepted) {
+          return;
+        }
+      }
+
+      const finished = await finishRecordingTranscription({
+        recordingFlowSessionId,
+        recordingSessionId,
+        revisionId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+      });
+      shouldCloseBackfill = false;
+      if (recordingSessionRef.current !== recordingSession) {
+        return;
+      }
+      if (!finished.ok) {
+        notifyRecordingError(
+          workspaceErrorDisplayMessage(finished.error, COMPLETION_BACKFILL_UNAVAILABLE_NOTICE)
+        );
+        return;
+      }
+      if (!finished.value.accepted) {
+        return;
+      }
+      applyTranscriptionSegments(finished.value.segments ?? []);
+      finalTranscriptionNeedsBackfillRef.current = false;
+    } catch (backfillError) {
+      if (recordingSessionRef.current === recordingSession) {
+        notifyRecordingError(
+          unknownErrorDisplayMessage(backfillError, COMPLETION_BACKFILL_UNAVAILABLE_NOTICE)
+        );
+      }
+    } finally {
+      if (shouldCloseBackfill) {
+        closeTranscriptionSilently({
+          recordingFlowSessionId,
+          recordingSessionId,
+          revisionId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+        });
+      }
+    }
+  }
+
+  async function handleStop({
+    bypassShortRecordingHold = false,
+  }: { readonly bypassShortRecordingHold?: boolean } = {}) {
+    if (
+      (state.status !== 'recording' && state.status !== 'paused') ||
+      replacementCopySessionRef.current !== null
+    ) {
+      return;
+    }
+
+    stopDraftPlayback();
+    const segmentId = state.segmentId;
     const recordingSession = recordingSessionRef.current;
     const controller = controllerRef.current;
-    if (!controller || appendFailureRef.current) {
+    const activeDraft = activeDraftRef.current;
+    if (!activeDraft || appendFailureRef.current) {
+      return;
+    }
+    if (activeDraft.segmentId !== segmentId) {
+      return;
+    }
+    if (!controller && state.status !== 'paused') {
       return;
     }
     const durationMs = readRecordingDurationMs();
+    if (!bypassShortRecordingHold && shouldHoldShortRecordingSave(durationMs)) {
+      return;
+    }
+    clearShortRecordingNotice();
     pauseRecordingDurationClock();
+    liveAudioInputActiveRef.current = false;
+    persistRecoveryAudioChunksSnapshot(durationMs, { force: true });
+    persistRecoveryWaveformSnapshot(durationMs, waveformSamples, { force: true });
+    setElapsedMs(durationMs);
     setState((current) => transitionRecordingState(current, { type: 'stop-requested' }));
     try {
-      await controller.stop();
+      await controller?.stop();
       await appendQueueRef.current;
+      await finishActiveTranscription(recordingSession);
     } catch (stopError) {
-      const message = appendFailureRef.current ?? errorMessage(stopError, '录音音频无法保存。');
+      const message =
+        appendFailureRef.current ?? unknownErrorDisplayMessage(stopError, '录音音频无法保存。');
       failActiveRecording(message, recordingSession, { discardDraft: true });
       return;
     }
@@ -481,12 +2195,12 @@ export function RecordingOverlay({
       finalized = await finalizeRecordingDraft({
         durationMs,
         memoryId: recordingTarget.memoryId,
-        recordingId,
+        segmentId,
         title,
         workspaceHandle: workspaceSession.workspaceHandle,
       });
     } catch (finalizeError) {
-      const message = errorMessage(finalizeError, '录音草稿无法完成保存。');
+      const message = unknownErrorDisplayMessage(finalizeError, '录音草稿无法完成保存。');
       failActiveRecording(message, recordingSession);
       return;
     }
@@ -498,115 +2212,152 @@ export function RecordingOverlay({
       return;
     }
 
-    recordingSessionRef.current += 1;
     controllerRef.current = null;
     activeDraftRef.current = null;
-    lastSavedTranscriptRef.current = transcriptDraft;
-    lastSavedReflectionsRef.current = reflectionsDraft;
-    setState((current) =>
-      transitionRecordingState(current, {
-        memoryId: finalized.value.recording.memoryId,
-        recordingId,
-        title: finalized.value.recording.title,
-        type: 'finalized',
-      })
-    );
-    onRecordingFinalized(finalized.value);
+    onAudioSegmentFinalized(finalized.value);
+    updateRecordingRecoverySnapshot({
+      patch: { finalizedAudio: finalized.value },
+      segmentId,
+      workspaceId: workspaceSession.workspaceId,
+    });
+    await backfillFinalTranscript(recordingSession);
+    persistRecoveryTranscriptSnapshot(segmentId);
+    const transcriptSaved = await saveFinalTranscript({
+      memoryId: finalized.value.segment.memoryId,
+      segmentId,
+      recordingSession,
+    });
+    if (transcriptSaved) {
+      clearRecoveryMarker(segmentId);
+    }
+    if (recordingSessionRef.current !== recordingSession) {
+      return;
+    }
+    resetClosedRecordingState();
+    onOpenChange(false);
   }
 
-  const handleLoadPlayback = useCallback(async () => {
-    if (state.status !== 'editing') {
+  function handleReturn() {
+    if (
+      exitActionPending ||
+      state.status === 'acquiring-permission' ||
+      state.status === 'finalizing'
+    ) {
       return;
     }
 
-    const playbackSession = playbackSessionRef.current + 1;
-    playbackSessionRef.current = playbackSession;
-    setError(null);
-    setPlaybackUrl(null);
-
-    const manifest = await readRecordingAudioManifest({
-      memoryId: state.memoryId,
-      recordingId: state.recordingId,
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
-    if (playbackSessionRef.current !== playbackSession) {
-      return;
-    }
-    if (!manifest.ok) {
-      setError(workspaceErrorDisplayMessage(manifest.error, '无法加载录音音频。'));
+    if (state.status === 'recording' || state.status === 'paused') {
+      stopDraftPlayback();
+      setExitConfirmationOpen(true);
       return;
     }
 
-    const recordingId = state.recordingId;
-    const memoryId = state.memoryId;
-    const { byteLength, maxChunkBytes } = manifest.value;
-    const chunkCount = Math.ceil(byteLength / maxChunkBytes);
-    const chunks = new Array<Uint8Array>(chunkCount);
-    let nextChunkIndex = 0;
-    let playbackFailed = false;
+    handleOpenChange(false);
+  }
 
-    async function readNextChunk() {
-      while (nextChunkIndex < chunkCount && !playbackFailed) {
-        if (playbackSessionRef.current !== playbackSession) {
-          return;
-        }
-        const chunkIndex = nextChunkIndex;
-        nextChunkIndex += 1;
-        const offset = chunkIndex * maxChunkBytes;
-        const length = Math.min(maxChunkBytes, byteLength - offset);
-        const response = await readRecordingAudioChunk({
-          length,
-          memoryId,
-          offset,
-          recordingId,
+  async function handleSaveAndReturn() {
+    if (exitActionPending) {
+      return;
+    }
+    setExitActionPending(true);
+    setExitConfirmationOpen(false);
+    try {
+      await handleStop({ bypassShortRecordingHold: true });
+    } finally {
+      setExitActionPending(false);
+    }
+  }
+
+  async function handleDiscardAndReturn() {
+    if (exitActionPending) {
+      return;
+    }
+
+    setExitActionPending(true);
+    setExitConfirmationOpen(false);
+    stopDraftPlayback();
+    const recordingSession = recordingSessionRef.current;
+    pauseRecordingDurationClock();
+    const controller = controllerRef.current;
+    controllerRef.current = null;
+    try {
+      await controller?.stop();
+    } catch {
+      // The user explicitly chose to exit; keep cleanup moving even if the device stop rejects.
+    }
+    await appendQueueRef.current.catch(() => {});
+    clearPendingMicrophoneIntent(recordingSession);
+    closeActiveTranscription(recordingSession);
+
+    const activeDraft = activeDraftRef.current;
+    if (activeDraft?.recordingSession === recordingSession) {
+      activeDraftRef.current = null;
+      try {
+        const discarded = await discardRecordingDraft({
+          segmentId: activeDraft.segmentId,
           workspaceHandle: workspaceSession.workspaceHandle,
         });
-        if (playbackFailed) {
-          return;
+        if (discarded.ok) {
+          clearRecoveryMarker(activeDraft.segmentId);
+        } else {
+          notifyRecordingError(
+            workspaceErrorDisplayMessage(
+              discarded.error,
+              '无法放弃录音，稍后会再次提示未完成录音。'
+            )
+          );
         }
-        if (!response.ok) {
-          playbackFailed = true;
-          throw new Error(workspaceErrorDisplayMessage(response.error, '无法加载录音音频。'));
-        }
-        if (playbackSessionRef.current !== playbackSession) {
-          return;
-        }
-        chunks[chunkIndex] = response.value.chunk;
+      } catch (discardError) {
+        notifyRecordingError(
+          unknownErrorDisplayMessage(discardError, '无法放弃录音，稍后会再次提示未完成录音。')
+        );
       }
     }
 
-    try {
-      await Promise.all(
-        Array.from({ length: Math.min(PLAYBACK_CHUNK_CONCURRENCY, chunkCount) }, readNextChunk)
-      );
-    } catch (playbackError) {
-      if (playbackSessionRef.current !== playbackSession) {
-        return;
-      }
-      setError(errorMessage(playbackError, '无法加载录音音频。'));
-      return;
-    }
+    setExitActionPending(false);
+    resetClosedRecordingState();
+    onOpenChange(false);
+  }
 
-    if (playbackSessionRef.current !== playbackSession) {
-      return;
-    }
-    setPlaybackUrl(URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' })));
-  }, [state, workspaceSession.workspaceHandle]);
-
-  function resetClosedDrawerState() {
+  function resetClosedRecordingState() {
+    closeActiveTranscription(recordingSessionRef.current);
     recordingSessionRef.current += 1;
+    liveAudioInputActiveRef.current = false;
+    transcriptionAudioQueueRef.current = null;
     appendFailureRef.current = null;
     appendQueueRef.current = Promise.resolve();
-    lastSavedTranscriptRef.current = '';
-    lastSavedReflectionsRef.current = '';
+    activeDraftRef.current = null;
+    replacementCopySessionRef.current = null;
+    controllerRef.current = null;
+    setCapturedChunks([]);
+    capturedPcmChunksRef.current = [];
     playbackSessionRef.current += 1;
+    invalidateDraftPlaybackUrl();
     resetRecordingDurationClock();
-    setElapsedSeconds(0);
-    setError(null);
-    setPlaybackUrl(null);
-    setReflectionsDraft('');
+    lastRecoveryDurationPersistedMsRef.current = 0;
+    lastRecoveryAudioChunksPersistedMsRef.current = 0;
+    lastRecoveryAudioChunkCountPersistedRef.current = 0;
+    lastRecoveryWaveformPersistedMsRef.current = 0;
+    restoredSegmentIdRef.current = null;
+    longRecordingWarningShownRef.current = false;
+    silenceNoticeShownRef.current = false;
+    clearReplacementWarning();
+    setElapsedMs(0);
+    setExitConfirmationOpen(false);
+    setExitActionPending(false);
+    clearRecordingError();
+    finalTranscriptionNeedsBackfillRef.current = false;
+    completionBackfillTooLargeRef.current = false;
+    clearShortRecordingNotice();
     setState(createInitialRecordingState());
-    setTranscriptDraft('');
+    const initialTimeline = createRecordingTimeline({
+      recordingSessionId: 'recording-0',
+      revisionId: 'revision-0',
+    });
+    timelineRef.current = initialTimeline;
+    setTimeline(initialTimeline);
+    replaceTranscriptDraft('');
+    setWaveformSamples([]);
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -614,59 +2365,220 @@ export function RecordingOverlay({
       return;
     }
     if (!nextOpen) {
-      resetClosedDrawerState();
+      resetClosedRecordingState();
     }
     onOpenChange(nextOpen);
   }
 
   const canClose = !isRecordingCloseBlocked(state);
-  const isEditing = state.status === 'editing';
+  useEffect(() => {
+    onCloseBlockedChange?.(!canClose);
+  }, [canClose, onCloseBlockedChange]);
+
   const statusText = statusTextFor(state);
+  const totalWaveformDurationMs = Math.max(elapsedMs, cursorTimeMs, timeline.totalDurationMs);
+  const cursorAtEnd = !hasTailAfterCursor(timeline);
+  const visibleTimerMs =
+    state.status === 'paused' || state.status === 'replacing' ? cursorTimeMs : elapsedMs;
+  const transcriptFocusTimeMs =
+    state.status === 'paused' || state.status === 'replacing'
+      ? cursorTimeMs
+      : timeline.totalDurationMs;
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  const composerControls =
+    state.status === 'recording' ||
+    state.status === 'paused' ||
+    state.status === 'replacing' ||
+    state.status === 'finalizing' ? (
+      <RecordingControls
+        cursorAtEnd={cursorAtEnd}
+        isPlaying={isDraftPlaybackPlaying}
+        onPause={handlePause}
+        onPlayPause={handleDraftPlayPause}
+        onResume={handleResume}
+        onSeekBackward={() => moveCursor(-SEEK_STEP_MS)}
+        onSeekForward={() => moveCursor(SEEK_STEP_MS)}
+        onStart={handleStart}
+        onStop={handleStop}
+        state={state}
+      />
+    ) : null;
 
   return (
-    <RecordAudioDrawer
-      description="录制本地音频，然后编辑本地转写和反思草稿。"
+    <RecordingSurface
+      description="录制本地音频，并在完成后保存声音和实时转写。"
       closeBlocked={!canClose}
-      error={error}
-      footer={
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={!canClose}
-          onClick={() => handleOpenChange(false)}
-        >
-          关闭录音面板
-        </Button>
-      }
+      immersive
       onOpenChange={handleOpenChange}
       open={open}
-      title={isEditing ? '编辑录音' : '录音'}
+      title="录音"
     >
-      {!isEditing ? (
-        <div className="flex flex-col gap-16">
-          <p className="text-body leading-body text-gravel">
-            {statusText} 已录制：{elapsedSeconds} 秒。
-          </p>
-          <RecordingWaveform state={state} />
-          <RecordingControls
-            onPause={handlePause}
-            onResume={handleResume}
-            onStart={handleStart}
-            onStop={handleStop}
+      <Button
+        aria-label="返回"
+        className="absolute left-24 top-40 z-10 h-[40px] w-[40px] rounded-full border-transparent bg-transparent p-0 text-cinder shadow-none hover:bg-powder/70 hover:text-obsidian disabled:bg-transparent disabled:text-fog disabled:opacity-100 sm:left-32"
+        data-vaul-no-drag
+        disabled={
+          exitActionPending ||
+          state.status === 'acquiring-permission' ||
+          state.status === 'replacing' ||
+          state.status === 'finalizing'
+        }
+        onClick={handleReturn}
+        size="iconMedium"
+        type="button"
+        variant="ghostIcon"
+      >
+        <ChevronLeft aria-hidden="true" className="h-[22px] w-[22px]" />
+      </Button>
+      <div
+        className="grid h-[min(560px,calc(100dvh-84px))] w-full grid-rows-[112px_132px_72px_88px] content-end justify-items-center gap-y-20 text-center"
+        data-testid="recording-composer-layout"
+      >
+        <audio
+          data-testid="draft-playback-audio"
+          hidden
+          onEnded={handleDraftPlaybackEnded}
+          onPause={() => setIsDraftPlaybackPlaying(false)}
+          onTimeUpdate={handleDraftPlaybackTimeUpdate}
+          preload="auto"
+          ref={draftAudioRef}
+          src={draftPlaybackUrl ?? undefined}
+        />
+        <p className="sr-only">
+          {statusText} 已录制：{elapsedSeconds} 秒。
+        </p>
+        <div
+          className="row-start-1 flex h-full w-full items-center justify-center"
+          data-testid="recording-waveform-slot"
+        >
+          <RecordingWaveform
+            cursorTimeMs={cursorTimeMs}
+            onCursorChange={setCursor}
+            samples={waveformSamples}
             state={state}
+            totalDurationMs={totalWaveformDurationMs}
           />
         </div>
-      ) : (
-        <div className="flex flex-col gap-16">
-          <TranscriptReflectionsEditor
-            reflections={reflectionsDraft}
-            transcript={transcriptDraft}
-            onReflectionsChange={setReflectionsDraft}
-            onTranscriptChange={setTranscriptDraft}
-          />
-          <RecordingPlayback playbackUrl={playbackUrl} onLoad={handleLoadPlayback} />
-        </div>
-      )}
-    </RecordAudioDrawer>
+        {state.status === 'idle' ||
+        state.status === 'failed' ||
+        state.status === 'acquiring-permission' ? (
+          <>
+            <div
+              className="row-start-2 flex h-full w-full items-center justify-center"
+              data-testid="recording-copy-slot"
+            >
+              <div className="flex max-w-[680px] flex-col gap-8 text-center font-waldenburg text-heading-sm font-regular leading-heading-sm text-obsidian">
+                <p>从一个念头开始，慢慢说，我们会安静地为你记下。</p>
+                <p>不必急着组织完整，想到哪里就说到哪里。</p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              className="row-start-3 flex h-full items-center justify-center"
+              data-testid="recording-timer-slot"
+            />
+            <div
+              className="row-start-4 flex h-full w-full max-w-[1040px] items-center justify-center"
+              data-testid="recording-controls-slot"
+            >
+              <RecordingControls
+                onPause={handlePause}
+                onResume={handleResume}
+                onStart={handleStart}
+                onStop={handleStop}
+                state={state}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className="row-start-2 flex h-full w-full items-center justify-center"
+              data-testid="recording-copy-slot"
+            >
+              <RecordingTranscriptPreview
+                autoScrollMode={
+                  state.status === 'paused' || state.status === 'replacing' ? 'focus' : 'latest'
+                }
+                fallback="实时转写会在你说话时安静地出现在这里。"
+                focusTimeMs={transcriptFocusTimeMs}
+                segments={timeline.transcriptSegments}
+              />
+            </div>
+            <div
+              className="relative row-start-3 flex h-full items-center justify-center"
+              data-testid="recording-timer-slot"
+            >
+              <p className="font-inter text-[40px] font-bold leading-none text-obsidian">
+                {formatRecordingTime(visibleTimerMs)}
+              </p>
+              {shortRecordingNoticeVisible ? (
+                <p
+                  className="absolute top-full mt-4 w-[min(80vw,680px)] text-balance text-ui-sm font-medium leading-ui-sm text-gravel"
+                  role="status"
+                >
+                  {SHORT_RECORDING_NOTICE}
+                </p>
+              ) : null}
+            </div>
+            <div
+              className="row-start-4 flex h-full w-full max-w-[1040px] items-center justify-center"
+              data-testid="recording-controls-slot"
+            >
+              {composerControls}
+            </div>
+          </>
+        )}
+      </div>
+      <Dialog
+        open={exitConfirmationOpen}
+        onOpenChange={(nextOpen) => {
+          if (!exitActionPending) {
+            setExitConfirmationOpen(nextOpen);
+          }
+        }}
+      >
+        <DialogContent className="sm:w-[min(440px,calc(100vw-(var(--spacing-40)*2)))]">
+          <DialogHeader>
+            <DialogTitle>保存这段录音吗？</DialogTitle>
+            <DialogDescription>返回会结束当前录音。</DialogDescription>
+          </DialogHeader>
+
+          <p className="text-ui-sm leading-ui-sm text-gravel">
+            可以先保存到当前记忆，或直接退出并放弃这段内容。
+          </p>
+
+          <div className="flex justify-end gap-8">
+            <Button
+              disabled={exitActionPending}
+              onClick={() => setExitConfirmationOpen(false)}
+              type="button"
+              variant="secondary"
+            >
+              取消
+            </Button>
+            <Button
+              disabled={exitActionPending}
+              onClick={() => {
+                void handleDiscardAndReturn();
+              }}
+              type="button"
+              variant="secondary"
+            >
+              直接退出
+            </Button>
+            <Button
+              disabled={exitActionPending}
+              onClick={() => {
+                void handleSaveAndReturn();
+              }}
+              type="button"
+            >
+              保存录音
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </RecordingSurface>
   );
 }

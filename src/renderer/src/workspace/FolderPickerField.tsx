@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { FieldError } from '@/components/ui/field';
 import type { WorkspaceDirectorySelection } from './workspaceApi';
 import { chooseSafeWorkspaceFolder } from './workspaceFolderSelection';
-import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 
 type FolderPickerFieldProps = {
   readonly disabled?: boolean;
@@ -72,7 +72,7 @@ export function FolderPickerField({
           {selecting ? '选择中' : '浏览'}
         </Button>
       </div>
-      {error ? <WorkspaceErrorBanner>{error}</WorkspaceErrorBanner> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );
 }

@@ -40,10 +40,22 @@ export function createRecordingDraft(
   return window.reoWorkspace.createRecordingDraft(payload);
 }
 
+export function readRecordingDraftAudio(
+  payload: Parameters<Window['reoWorkspace']['readRecordingDraftAudio']>[0]
+) {
+  return window.reoWorkspace.readRecordingDraftAudio(payload);
+}
+
 export function appendRecordingAudioChunk(
   payload: Parameters<Window['reoWorkspace']['appendRecordingAudioChunk']>[0]
 ) {
   return window.reoWorkspace.appendRecordingAudioChunk(payload);
+}
+
+export function cloneRecordingDraftPrefix(
+  payload: Parameters<Window['reoWorkspace']['cloneRecordingDraftPrefix']>[0]
+) {
+  return window.reoWorkspace.cloneRecordingDraftPrefix(payload);
 }
 
 export function finalizeRecordingDraft(
@@ -58,40 +70,14 @@ export function discardRecordingDraft(
   return window.reoWorkspace.discardRecordingDraft(payload);
 }
 
-export function getMemoryDetail(payload: Parameters<Window['reoWorkspace']['getMemoryDetail']>[0]) {
-  return window.reoWorkspace.getMemoryDetail(payload);
-}
-
 export function updateMemoryTitle(
   payload: Parameters<Window['reoWorkspace']['updateMemoryTitle']>[0]
 ) {
   return window.reoWorkspace.updateMemoryTitle(payload);
 }
 
-export function getRecordingDetail(
-  payload: Parameters<Window['reoWorkspace']['getRecordingDetail']>[0]
-) {
-  return window.reoWorkspace.getRecordingDetail(payload);
-}
-
-export function readRecordingAudioManifest(
-  payload: Parameters<Window['reoWorkspace']['readRecordingAudioManifest']>[0]
-) {
-  return window.reoWorkspace.readRecordingAudioManifest(payload);
-}
-
-export function readRecordingAudioChunk(
-  payload: Parameters<Window['reoWorkspace']['readRecordingAudioChunk']>[0]
-) {
-  return window.reoWorkspace.readRecordingAudioChunk(payload);
-}
-
 export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveTranscript']>[0]) {
   return window.reoWorkspace.saveTranscript(payload);
-}
-
-export function saveReflections(payload: Parameters<Window['reoWorkspace']['saveReflections']>[0]) {
-  return window.reoWorkspace.saveReflections(payload);
 }
 
 export function beginMicrophoneIntent(
@@ -106,11 +92,41 @@ export function clearMicrophoneIntent(
   return window.reoWorkspace.clearMicrophoneIntent(payload);
 }
 
+export function startRecordingTranscription(
+  payload: Parameters<Window['reoWorkspace']['startRecordingTranscription']>[0]
+) {
+  return window.reoWorkspace.startRecordingTranscription(payload);
+}
+
+export function sendRecordingTranscriptionAudio(
+  payload: Parameters<Window['reoWorkspace']['sendRecordingTranscriptionAudio']>[0]
+) {
+  return window.reoWorkspace.sendRecordingTranscriptionAudio(payload);
+}
+
+export function finishRecordingTranscription(
+  payload: Parameters<Window['reoWorkspace']['finishRecordingTranscription']>[0]
+) {
+  return window.reoWorkspace.finishRecordingTranscription(payload);
+}
+
+export function closeRecordingTranscription(
+  payload: Parameters<Window['reoWorkspace']['closeRecordingTranscription']>[0]
+) {
+  return window.reoWorkspace.closeRecordingTranscription(payload);
+}
+
+export function onRecordingTranscriptionEvent(
+  callback: Parameters<Window['reoWorkspace']['onRecordingTranscriptionEvent']>[0]
+) {
+  return window.reoWorkspace.onRecordingTranscriptionEvent(callback);
+}
+
 export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
-export type FinalizedRecording = Extract<
+export type FinalizedAudioSegment = Extract<
   Awaited<ReturnType<typeof finalizeRecordingDraft>>,
   { readonly ok: true }
 >['value'];
@@ -118,8 +134,6 @@ export type WorkspaceMemorySpace = Extract<
   Awaited<ReturnType<typeof listMemorySpaces>>,
   { readonly ok: true }
 >['value']['memorySpaces'][number];
-export type MemoryDetailResponse = Awaited<ReturnType<typeof getMemoryDetail>>;
-export type WorkspaceMemoryDetail = Extract<MemoryDetailResponse, { readonly ok: true }>['value'];
 export type WorkspaceMemorySummary = WorkspaceSnapshot['memories'][number];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;
 export type WorkspaceDirectorySelection = Extract<

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/toaster';
 
 const memoryTitleFormSchema = z.object({
   title: z
@@ -54,7 +55,6 @@ export function MemoryTitleDialog({
     handleSubmit,
     register,
     reset,
-    setError,
     setFocus,
   } = useForm<MemoryTitleFormValues>({
     resolver: zodResolver(memoryTitleFormSchema),
@@ -78,7 +78,9 @@ export function MemoryTitleDialog({
   async function submit(values: MemoryTitleFormValues) {
     const saveError = await onSubmitTitle(values.title.trim());
     if (saveError) {
-      setError('root', { type: 'server', message: saveError });
+      toast.error('无法保存记忆名称', {
+        description: saveError,
+      });
       return;
     }
 
@@ -128,7 +130,6 @@ export function MemoryTitleDialog({
               {...register('title')}
             />
             {errors.title ? <FieldError>{errors.title.message}</FieldError> : null}
-            {errors.root ? <FieldError>{errors.root.message}</FieldError> : null}
           </div>
           <div className="flex justify-end gap-12">
             <DialogClose asChild>

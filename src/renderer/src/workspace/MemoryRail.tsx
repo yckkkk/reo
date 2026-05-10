@@ -14,10 +14,11 @@ import type { WorkspaceSession } from './workspaceApi';
 type WorkspaceMemory = WorkspaceSession['snapshot']['memories'][number];
 
 type MemoryRailProps = {
+  readonly activeMemoryId?: string | null;
   readonly id?: string;
   readonly memories: readonly WorkspaceMemory[];
-  readonly onOpenMemory: (memoryId: string) => void;
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
+  readonly onSelectMemory: (memoryId: string) => void;
 };
 
 function memoryUpdatedTimestamp(memory: WorkspaceMemory) {
@@ -44,7 +45,13 @@ function updatedLabel(updatedAt: string) {
   return format(date, 'yyyy/MM/dd HH:mm');
 }
 
-export function MemoryRail({ id, memories, onOpenMemory, onRenameMemory }: MemoryRailProps) {
+export function MemoryRail({
+  activeMemoryId = null,
+  id,
+  memories,
+  onRenameMemory,
+  onSelectMemory,
+}: MemoryRailProps) {
   const sortedMemories = useMemo(
     () =>
       [...memories].sort(
@@ -66,49 +73,56 @@ export function MemoryRail({ id, memories, onOpenMemory, onRenameMemory }: Memor
         </div>
       ) : (
         <div className="flex flex-col gap-12">
-          {sortedMemories.map((memory) => (
-            <div
-              key={memory.memoryId}
-              className="group relative overflow-hidden rounded-cards border border-chalk bg-card-white shadow-subtle transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-slate hover:shadow-subtle-4 focus-within:border-signal-blue"
-            >
-              <button
-                type="button"
-                aria-label={`打开记忆 ${memory.title}`}
-                className="block min-h-[88px] w-full px-16 py-16 pr-48 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-card-white"
-                onClick={() => onOpenMemory(memory.memoryId)}
+          {sortedMemories.map((memory) => {
+            const isActive = memory.memoryId === activeMemoryId;
+            return (
+              <div
+                key={memory.memoryId}
+                className={[
+                  'group relative overflow-hidden rounded-cards border bg-card-white shadow-subtle transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-slate hover:shadow-subtle-4 focus-within:border-signal-blue',
+                  isActive ? 'border-signal-blue/50 shadow-subtle-4' : 'border-chalk',
+                ].join(' ')}
               >
-                <span className="block min-w-0 truncate text-body-lg font-medium leading-body-lg text-obsidian">
-                  {memory.title}
-                </span>
-                <span className="mt-8 block truncate text-ui-md leading-ui-md text-gravel">
-                  {updatedLabel(memory.updatedAt)} · {countLabel(memory.assetCount, '个片段')}
-                </span>
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghostIcon"
-                    size="icon"
-                    type="button"
-                    aria-label={`${memory.title} 更多操作`}
-                    className="absolute right-10 top-10 size-28 text-slate hover:bg-powder data-[state=open]:bg-powder data-[state=open]:text-obsidian"
-                  >
-                    <MoreHorizontal className="size-16" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  aria-label={`${memory.title} 更多操作`}
-                  side="bottom"
+                <button
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={`选择记忆 ${memory.title}`}
+                  className="block min-h-[88px] w-full px-16 py-16 pr-48 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-card-white"
+                  onClick={() => onSelectMemory(memory.memoryId)}
                 >
-                  <DropdownMenuItem onSelect={() => onRenameMemory(memory)}>
-                    <PencilLine className="size-[14px] text-slate" aria-hidden="true" />
-                    重命名记忆
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ))}
+                  <span className="block min-w-0 truncate text-body-lg font-medium leading-body-lg text-obsidian">
+                    {memory.title}
+                  </span>
+                  <span className="mt-8 block truncate text-ui-md leading-ui-md text-gravel">
+                    {updatedLabel(memory.updatedAt)} · {countLabel(memory.segmentCount, '个片段')}
+                  </span>
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghostIcon"
+                      size="icon"
+                      type="button"
+                      aria-label={`${memory.title} 更多操作`}
+                      className="absolute right-10 top-10 size-28 text-slate hover:bg-powder data-[state=open]:bg-powder data-[state=open]:text-obsidian"
+                    >
+                      <MoreHorizontal className="size-16" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    aria-label={`${memory.title} 更多操作`}
+                    side="bottom"
+                  >
+                    <DropdownMenuItem onSelect={() => onRenameMemory(memory)}>
+                      <PencilLine className="size-[14px] text-slate" aria-hidden="true" />
+                      重命名记忆
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            );
+          })}
         </div>
       )}
     </nav>

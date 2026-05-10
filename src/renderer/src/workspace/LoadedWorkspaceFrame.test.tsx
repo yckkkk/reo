@@ -26,11 +26,11 @@ const birthdayMemory = {
   title: 'My seventh birthday',
   createdAt: '2026-05-06T13:08:00.000',
   updatedAt: '2026-05-06T13:10:00.000',
-  assetCount: 2,
+  segmentCount: 2,
   durationMs: 125_000,
   audioByteLength: 2048,
   hasTranscript: true,
-  hasReflections: false,
+  attachmentCount: 0,
 };
 
 const morningMemory = {
@@ -38,11 +38,11 @@ const morningMemory = {
   title: 'Morning note',
   createdAt: '2026-04-11T09:00:00.000',
   updatedAt: '2026-04-11T09:02:00.000',
-  assetCount: 1,
+  segmentCount: 1,
   durationMs: 30_000,
   audioByteLength: 512,
   hasTranscript: false,
-  hasReflections: true,
+  attachmentCount: 1,
 };
 
 const recitalMemory = {
@@ -50,23 +50,25 @@ const recitalMemory = {
   title: 'School recital',
   createdAt: '2026-05-01T09:00:00.000',
   updatedAt: '2026-05-01T09:10:00.000',
-  assetCount: 1,
+  segmentCount: 1,
   durationMs: 60_000,
   audioByteLength: 1024,
   hasTranscript: false,
-  hasReflections: false,
+  attachmentCount: 0,
 };
 
 function renderLoadedWorkspaceFrame({
+  currentMemory = null,
   memoryRailOpen,
-  onOpenMemory = vi.fn(),
   onRenameMemory = vi.fn(),
+  onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   session = workspaceSession(),
 }: {
+  readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
   readonly memoryRailOpen?: boolean;
-  readonly onOpenMemory?: (memoryId: string) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
   readonly session?: WorkspaceSession;
 } = {}) {
@@ -81,9 +83,10 @@ function renderLoadedWorkspaceFrame({
   const renderResult = render(
     <QueryClientProvider client={queryClient}>
       <LoadedWorkspaceFrame
+        currentMemory={currentMemory}
         workspaceSession={session}
-        onOpenMemory={onOpenMemory}
         onRenameMemory={onRenameMemory}
+        onSelectMemory={onSelectMemory}
         onStartRecording={onStartRecording}
         {...frameProps}
       />
@@ -161,7 +164,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onStartRecording).toHaveBeenCalledOnce();
   });
 
-  it('renders right-side Memory containers without turning the stage into an asset timeline', () => {
+  it('renders right-side Memory containers without turning the stage into an segment timeline', () => {
     renderLoadedWorkspaceFrame({
       session: workspaceSession({
         memories: [morningMemory, recitalMemory, birthdayMemory],
@@ -181,9 +184,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(rail).queryByText('3 条记忆')).not.toBeInTheDocument();
     expect(
       within(rail)
-        .getAllByRole('button', { name: /打开记忆/ })
+        .getAllByRole('button', { name: /选择记忆/ })
         .map((button) => button.getAttribute('aria-label'))
-    ).toEqual(['打开记忆 My seventh birthday', '打开记忆 School recital', '打开记忆 Morning note']);
+    ).toEqual(['选择记忆 My seventh birthday', '选择记忆 School recital', '选择记忆 Morning note']);
     expect(within(rail).getByText('05/06 13:10 · 2 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('05/01 09:10 · 1 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('04/11 09:02 · 1 个片段')).toBeInTheDocument();
@@ -194,18 +197,33 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();
   });
 
-  it('opens an existing Memory through the right rail', async () => {
+  it('selects an existing Memory through the right rail without requiring a detail route', async () => {
     const user = userEvent.setup();
-    const onOpenMemory = vi.fn();
+    const onSelectMemory = vi.fn();
 
     renderLoadedWorkspaceFrame({
-      onOpenMemory,
+      onSelectMemory,
       session: workspaceSession({ memories: [birthdayMemory] }),
     });
 
-    await user.click(screen.getByRole('button', { name: '打开记忆 My seventh birthday' }));
+    await user.click(screen.getByRole('button', { name: '选择记忆 My seventh birthday' }));
 
-    expect(onOpenMemory).toHaveBeenCalledWith('mem_birthday');
+    expect(onSelectMemory).toHaveBeenCalledWith('mem_birthday');
+  });
+
+  it('renders the selected Memory as the current quiet stage context', () => {
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session: workspaceSession({ memories: [birthdayMemory] }),
+    });
+
+    const stage = screen.getByRole('region', { name: '记忆空间舞台' });
+    expect(within(stage).getByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
+    expect(within(stage).getByText('2 个片段 · 继续在这条记忆里记录。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择记忆 My seventh birthday' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
   });
 
   it('opens the Memory rename action from a compact card menu', async () => {
@@ -259,8 +277,8 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     expect(
-      await screen.findByRole('button', { name: '打开记忆 My seventh birthday' })
+      await screen.findByRole('button', { name: '选择记忆 My seventh birthday' })
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '打开记忆 Morning note' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '选择记忆 Morning note' })).not.toBeInTheDocument();
   });
 });

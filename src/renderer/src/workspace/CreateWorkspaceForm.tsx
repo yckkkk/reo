@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -12,16 +12,16 @@ import {
   FieldRow,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/toaster';
 import { Textarea } from '@/components/ui/textarea';
 import { isSafeWorkspaceDirectoryName } from '../../../workspace-contract/workspace-name';
 import { FolderPickerField } from './FolderPickerField';
-import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 import {
   isSafeWorkspaceDisplayPath,
   workspaceFolderErrorMessage,
 } from './workspaceFolderSelection';
 import { initializeWorkspace, type WorkspaceError, type WorkspaceSession } from './workspaceApi';
-import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
+import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 const workspaceNameErrorMessage = '记忆空间名称不能是 . 或 ..，也不能包含路径分隔符';
 export const CREATE_WORKSPACE_TITLE_INPUT_ID = 'workspace-title';
@@ -58,7 +58,6 @@ export function CreateWorkspaceForm({
   onCreateStart,
   onWorkspaceReady,
 }: CreateWorkspaceFormProps) {
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const {
     clearErrors,
@@ -84,11 +83,18 @@ export function CreateWorkspaceForm({
     titleInputRef.current?.focus();
   }, []);
 
+  function showCreateWorkspaceError(message: string) {
+    toast.error('无法创建记忆空间', {
+      description: message,
+    });
+  }
+
   function handleFolderError(message: string) {
-    setSubmitError(null);
     setValue('selectionToken', '');
     setValue('displayPath', '');
-    setError('selectionToken', { message });
+    clearErrors(['selectionToken', 'displayPath']);
+    showCreateWorkspaceError(message);
+    titleInputRef.current?.focus();
   }
 
   const submit = handleSubmit(async (values) => {
@@ -96,7 +102,6 @@ export function CreateWorkspaceForm({
       return;
     }
 
-    setSubmitError(null);
     try {
       const response = await initializeWorkspace({
         selectionToken: values.selectionToken,
@@ -108,11 +113,13 @@ export function CreateWorkspaceForm({
         setValue('selectionToken', '');
         setValue('displayPath', '');
         clearErrors(['selectionToken', 'displayPath']);
-        setSubmitError(workspaceErrorMessage(response.error));
+        showCreateWorkspaceError(workspaceErrorMessage(response.error));
         return;
       }
 
       await onWorkspaceReady(response.value);
+    } catch (error) {
+      showCreateWorkspaceError(unknownErrorDisplayMessage(error, '无法创建记忆空间。'));
     } finally {
       onCreateFinish();
     }
@@ -166,12 +173,16 @@ export function CreateWorkspaceForm({
             <FolderPickerField
               disabled={disabled}
               displayPath={displayPath}
-              error={errors.selectionToken?.message}
-              onCancel={() => setSubmitError(null)}
+              error={errors.selectionToken?.message ?? errors.displayPath?.message}
               onError={handleFolderError}
               onSelection={(selection) => {
-                setSubmitError(null);
                 clearErrors(['selectionToken', 'displayPath']);
+                if (!isSafeWorkspaceDisplayPath(selection.displayPath)) {
+                  setValue('selectionToken', '');
+                  setValue('displayPath', '');
+                  setError('selectionToken', { message: workspaceFolderErrorMessage });
+                  return;
+                }
                 setValue('selectionToken', selection.selectionToken, { shouldValidate: true });
                 setValue('displayPath', selection.displayPath, { shouldValidate: true });
               }}
@@ -179,8 +190,6 @@ export function CreateWorkspaceForm({
           </FieldControl>
         </FieldRow>
       </FieldGroup>
-
-      {submitError ? <WorkspaceErrorBanner>{submitError}</WorkspaceErrorBanner> : null}
 
       <div className="flex justify-end">
         <Button type="submit" size="compact" disabled={disabled || isSubmitting}>

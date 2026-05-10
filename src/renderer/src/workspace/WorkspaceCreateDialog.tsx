@@ -10,12 +10,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { CREATE_WORKSPACE_TITLE_INPUT_ID, CreateWorkspaceForm } from './CreateWorkspaceForm';
-import { WorkspaceErrorBanner } from './WorkspaceErrorBanner';
 import type { WorkspaceSession } from './workspaceApi';
 
 type WorkspaceCreateDialogProps = {
   readonly disabled?: boolean;
-  readonly error?: string | null;
   readonly onCreateFinish: () => void;
   readonly onCreateStart: () => boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -25,7 +23,6 @@ type WorkspaceCreateDialogProps = {
 
 export function WorkspaceCreateDialog({
   disabled = false,
-  error = null,
   onCreateFinish,
   onCreateStart,
   onOpenChange,
@@ -67,8 +64,6 @@ export function WorkspaceCreateDialog({
             </Button>
           </DialogClose>
         </div>
-
-        {error ? <WorkspaceErrorBanner>{error}</WorkspaceErrorBanner> : null}
 
         <CreateWorkspaceForm
           disabled={disabled}

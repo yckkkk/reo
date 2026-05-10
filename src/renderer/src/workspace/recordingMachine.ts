@@ -1,31 +1,23 @@
 export type RecordingState =
   | { readonly status: 'idle' }
   | { readonly status: 'acquiring-permission' }
-  | { readonly recordingId: string; readonly status: 'recording' }
-  | { readonly recordingId: string; readonly status: 'paused' }
-  | { readonly recordingId: string; readonly status: 'finalizing' }
-  | {
-      readonly memoryId: string;
-      readonly recordingId: string;
-      readonly status: 'editing';
-      readonly title: string;
-    }
+  | { readonly segmentId: string; readonly status: 'recording' }
+  | { readonly segmentId: string; readonly status: 'paused' }
+  | { readonly segmentId: string; readonly status: 'replacing' }
+  | { readonly segmentId: string; readonly status: 'finalizing' }
   | {
       readonly status: 'failed';
     };
 
 export type RecordingEvent =
   | { readonly type: 'start-requested' }
-  | { readonly recordingId: string; readonly type: 'draft-ready' }
+  | { readonly segmentId: string; readonly type: 'draft-ready' }
   | { readonly type: 'pause-requested' }
-  | { readonly type: 'resume-requested' }
+  | { readonly segmentId: string; readonly type: 'replace-requested' }
+  | { readonly type: 'replace-failed' }
+  | { readonly segmentId?: string; readonly type: 'resume-requested' }
   | { readonly type: 'stop-requested' }
-  | {
-      readonly memoryId: string;
-      readonly recordingId: string;
-      readonly title: string;
-      readonly type: 'finalized';
-    }
+  | { readonly type: 'finalized' }
   | { readonly type: 'failed' }
   | { readonly type: 'reset' };
 
@@ -38,7 +30,7 @@ export function transitionRecordingState(
   event: RecordingEvent
 ): RecordingState {
   if (event.type === 'failed') {
-    if (state.status === 'idle' || state.status === 'editing') {
+    if (state.status === 'idle') {
       return state;
     }
     return {
@@ -52,27 +44,31 @@ export function transitionRecordingState(
     return { status: 'acquiring-permission' };
   }
   if (event.type === 'draft-ready' && state.status === 'acquiring-permission') {
-    return { recordingId: event.recordingId, status: 'recording' };
+    return { segmentId: event.segmentId, status: 'recording' };
   }
   if (event.type === 'pause-requested' && state.status === 'recording') {
     return { ...state, status: 'paused' };
   }
-  if (event.type === 'resume-requested' && state.status === 'paused') {
-    return { ...state, status: 'recording' };
+  if (event.type === 'replace-requested' && state.status === 'paused') {
+    return { segmentId: event.segmentId, status: 'replacing' };
+  }
+  if (event.type === 'replace-failed' && state.status === 'replacing') {
+    return { segmentId: state.segmentId, status: 'paused' };
+  }
+  if (
+    event.type === 'resume-requested' &&
+    (state.status === 'paused' || state.status === 'replacing')
+  ) {
+    return { segmentId: event.segmentId ?? state.segmentId, status: 'recording' };
   }
   if (
     event.type === 'stop-requested' &&
     (state.status === 'recording' || state.status === 'paused')
   ) {
-    return { recordingId: state.recordingId, status: 'finalizing' };
+    return { segmentId: state.segmentId, status: 'finalizing' };
   }
   if (event.type === 'finalized' && state.status === 'finalizing') {
-    return {
-      memoryId: event.memoryId,
-      recordingId: event.recordingId,
-      status: 'editing',
-      title: event.title,
-    };
+    return createInitialRecordingState();
   }
 
   return state;
@@ -83,6 +79,7 @@ export function isRecordingCloseBlocked(state: RecordingState) {
     state.status === 'acquiring-permission' ||
     state.status === 'recording' ||
     state.status === 'paused' ||
+    state.status === 'replacing' ||
     state.status === 'finalizing'
   );
 }

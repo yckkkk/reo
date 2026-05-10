@@ -54,7 +54,7 @@ function FieldError({ className, ...props }: React.ComponentProps<'p'>) {
   return (
     <p
       data-slot="field-error"
-      className={cn('mt-8 text-ui-xs font-regular leading-ui-xs text-ember', className)}
+      className={cn('mt-8 text-ui-xs font-regular leading-ui-xs text-gravel', className)}
       {...props}
     />
   );

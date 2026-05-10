@@ -34,11 +34,16 @@ export function DrawerOverlay({
 export function DrawerContent({
   children,
   className,
+  overlayClassName,
+  showHandle = true,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+}: React.ComponentProps<typeof DrawerPrimitive.Content> & {
+  readonly overlayClassName?: string;
+  readonly showHandle?: boolean;
+}) {
   return (
     <DrawerPortal>
-      <DrawerOverlay />
+      <DrawerOverlay className={overlayClassName} />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
@@ -48,7 +53,12 @@ export function DrawerContent({
         )}
         {...props}
       >
-        <div aria-hidden="true" className="mx-auto mb-20 h-4 w-56 shrink-0 rounded-full bg-slate" />
+        {showHandle ? (
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-20 h-4 w-56 shrink-0 rounded-full bg-slate"
+          />
+        ) : null}
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
