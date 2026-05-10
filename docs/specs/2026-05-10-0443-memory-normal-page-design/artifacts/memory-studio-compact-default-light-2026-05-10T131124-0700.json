@@ -1,0 +1,638 @@
+{
+  "ok": true,
+  "targetUrl": "http://localhost:5173/",
+  "clickedSecondItem": false,
+  "scrollMethod": "not-run",
+  "interaction": "none",
+  "tolerance": 1.5,
+  "viewportOverride": {
+    "width": 900,
+    "height": 720
+  },
+  "cardWidthRange": {
+    "min": 120,
+    "max": 150
+  },
+  "before": {
+    "ok": true,
+    "viewport": {
+      "width": 900,
+      "height": 720
+    },
+    "documentHeight": 720,
+    "documentWidth": 900,
+    "bodyHeight": 720,
+    "bodyWidth": 900,
+    "windowScrollX": 0,
+    "windowScrollY": 0,
+    "studioRect": {
+      "left": 281,
+      "top": 81,
+      "width": 340,
+      "height": 548.109375,
+      "right": 621,
+      "bottom": 629.109375,
+      "centerX": 451,
+      "centerY": 355.0546875
+    },
+    "contentPanelRect": {
+      "left": 281,
+      "top": 432.1953125,
+      "width": 340,
+      "height": 196.9140625,
+      "right": 621,
+      "bottom": 629.109375,
+      "centerX": 451,
+      "centerY": 530.65234375
+    },
+    "standaloneTimelineExists": false,
+    "stripScrollOwnerCount": 1,
+    "itemCount": 4,
+    "selectedItemCount": 1,
+    "scroll": {
+      "left": 0,
+      "width": 538,
+      "clientWidth": 340,
+      "rect": {
+        "left": 281,
+        "top": 188.1953125,
+        "width": 340,
+        "height": 228,
+        "right": 621,
+        "bottom": 416.1953125,
+        "centerX": 451,
+        "centerY": 302.1953125
+      }
+    },
+    "player": {
+      "rowRect": {
+        "left": 281,
+        "top": 445.1953125,
+        "width": 340,
+        "height": 42,
+        "right": 621,
+        "bottom": 487.1953125,
+        "centerX": 451,
+        "centerY": 466.1953125
+      },
+      "timeRect": {
+        "left": 510.796875,
+        "top": 455.796875,
+        "width": 110.203125,
+        "height": 20.796875,
+        "right": 621,
+        "bottom": 476.59375,
+        "centerX": 565.8984375,
+        "centerY": 466.1953125
+      },
+      "timeWhiteSpace": "nowrap",
+      "timeText": "00:00 / 00:07"
+    },
+    "items": [
+      {
+        "index": 0,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 281,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 405,
+          "bottom": 408.1953125,
+          "centerX": 343,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 281,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 405,
+          "bottom": 320.1953125,
+          "centerX": 343,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 339,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 347,
+          "bottom": 362.1953125,
+          "centerX": 343,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 325.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 360.9296875,
+          "bottom": 434.6953125,
+          "centerX": 342.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 281,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 405,
+          "bottom": 408.1953125,
+          "centerX": 343,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 1,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": true,
+        "itemRect": {
+          "left": 417,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 541,
+          "bottom": 408.1953125,
+          "centerX": 479,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 417,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 541,
+          "bottom": 320.1953125,
+          "centerX": 479,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 475,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 483,
+          "bottom": 362.1953125,
+          "centerX": 479,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 461.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 496.9296875,
+          "bottom": 434.6953125,
+          "centerX": 478.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 417,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 541,
+          "bottom": 408.1953125,
+          "centerX": 479,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 2,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 553,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 677,
+          "bottom": 408.1953125,
+          "centerX": 615,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 553,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 677,
+          "bottom": 320.1953125,
+          "centerX": 615,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 611,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 619,
+          "bottom": 362.1953125,
+          "centerX": 615,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 597.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 632.9296875,
+          "bottom": 434.6953125,
+          "centerX": 614.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 553,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 677,
+          "bottom": 408.1953125,
+          "centerX": 615,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 3,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 689,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 813,
+          "bottom": 408.1953125,
+          "centerX": 751,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 689,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 813,
+          "bottom": 320.1953125,
+          "centerX": 751,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 747,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 755,
+          "bottom": 362.1953125,
+          "centerX": 751,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 733.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 768.9296875,
+          "bottom": 434.6953125,
+          "centerX": 750.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 689,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 813,
+          "bottom": 408.1953125,
+          "centerX": 751,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      }
+    ]
+  },
+  "after": {
+    "ok": true,
+    "viewport": {
+      "width": 900,
+      "height": 720
+    },
+    "documentHeight": 720,
+    "documentWidth": 900,
+    "bodyHeight": 720,
+    "bodyWidth": 900,
+    "windowScrollX": 0,
+    "windowScrollY": 0,
+    "studioRect": {
+      "left": 281,
+      "top": 81,
+      "width": 340,
+      "height": 548.109375,
+      "right": 621,
+      "bottom": 629.109375,
+      "centerX": 451,
+      "centerY": 355.0546875
+    },
+    "contentPanelRect": {
+      "left": 281,
+      "top": 432.1953125,
+      "width": 340,
+      "height": 196.9140625,
+      "right": 621,
+      "bottom": 629.109375,
+      "centerX": 451,
+      "centerY": 530.65234375
+    },
+    "standaloneTimelineExists": false,
+    "stripScrollOwnerCount": 1,
+    "itemCount": 4,
+    "selectedItemCount": 1,
+    "scroll": {
+      "left": 0,
+      "width": 538,
+      "clientWidth": 340,
+      "rect": {
+        "left": 281,
+        "top": 188.1953125,
+        "width": 340,
+        "height": 228,
+        "right": 621,
+        "bottom": 416.1953125,
+        "centerX": 451,
+        "centerY": 302.1953125
+      }
+    },
+    "player": {
+      "rowRect": {
+        "left": 281,
+        "top": 445.1953125,
+        "width": 340,
+        "height": 42,
+        "right": 621,
+        "bottom": 487.1953125,
+        "centerX": 451,
+        "centerY": 466.1953125
+      },
+      "timeRect": {
+        "left": 510.796875,
+        "top": 455.796875,
+        "width": 110.203125,
+        "height": 20.796875,
+        "right": 621,
+        "bottom": 476.59375,
+        "centerX": 565.8984375,
+        "centerY": 466.1953125
+      },
+      "timeWhiteSpace": "nowrap",
+      "timeText": "00:00 / 00:07"
+    },
+    "items": [
+      {
+        "index": 0,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 281,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 405,
+          "bottom": 408.1953125,
+          "centerX": 343,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 281,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 405,
+          "bottom": 320.1953125,
+          "centerX": 343,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 339,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 347,
+          "bottom": 362.1953125,
+          "centerX": 343,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 325.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 360.9296875,
+          "bottom": 434.6953125,
+          "centerX": 342.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 281,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 405,
+          "bottom": 408.1953125,
+          "centerX": 343,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 1,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": true,
+        "itemRect": {
+          "left": 417,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 541,
+          "bottom": 408.1953125,
+          "centerX": 479,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 417,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 541,
+          "bottom": 320.1953125,
+          "centerX": 479,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 475,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 483,
+          "bottom": 362.1953125,
+          "centerX": 479,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 461.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 496.9296875,
+          "bottom": 434.6953125,
+          "centerX": 478.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 417,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 541,
+          "bottom": 408.1953125,
+          "centerX": 479,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 2,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 553,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 677,
+          "bottom": 408.1953125,
+          "centerX": 615,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 553,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 677,
+          "bottom": 320.1953125,
+          "centerX": 615,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 611,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 619,
+          "bottom": 362.1953125,
+          "centerX": 615,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 597.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 632.9296875,
+          "bottom": 434.6953125,
+          "centerX": 614.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 553,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 677,
+          "bottom": 408.1953125,
+          "centerX": 615,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      },
+      {
+        "index": 3,
+        "label": "选择片段 测试工作区1 录音",
+        "selected": false,
+        "itemRect": {
+          "left": 689,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 212,
+          "right": 813,
+          "bottom": 408.1953125,
+          "centerX": 751,
+          "centerY": 302.1953125
+        },
+        "cardRect": {
+          "left": 689,
+          "top": 196.1953125,
+          "width": 124,
+          "height": 124,
+          "right": 813,
+          "bottom": 320.1953125,
+          "centerX": 751,
+          "centerY": 258.1953125
+        },
+        "dotRect": {
+          "left": 747,
+          "top": 360.1953125,
+          "width": 8,
+          "height": 2,
+          "right": 755,
+          "bottom": 362.1953125,
+          "centerX": 751,
+          "centerY": 361.1953125
+        },
+        "timeRect": {
+          "left": 733.0625,
+          "top": 418.1953125,
+          "width": 35.8671875,
+          "height": 16.5,
+          "right": 768.9296875,
+          "bottom": 434.6953125,
+          "centerX": 750.99609375,
+          "centerY": 426.4453125
+        },
+        "anchorRect": {
+          "left": 689,
+          "top": 360.1953125,
+          "width": 124,
+          "height": 48,
+          "right": 813,
+          "bottom": 408.1953125,
+          "centerX": 751,
+          "centerY": 384.1953125
+        },
+        "dotToCardCenterDelta": 0,
+        "timeToCardCenterDelta": -0.00390625,
+        "timelineBelowCard": true
+      }
+    ]
+  },
+  "failures": [],
+  "screenshot": "docs/specs/2026-05-10-0443-memory-normal-page-design/artifacts/memory-studio-compact-default-light-2026-05-10T131124-0700.png"
+}

@@ -12,7 +12,7 @@
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
 - 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
 - 当前有 `verify:titlebar` 本地视觉测量脚本，用于从截图像素中计算 macOS traffic-light 行、左侧 sidebar hide/show icon、workspace 标题文字和右侧 MemoryRail 折叠 icon 的视觉中心与标题间距；该脚本依赖本机截图和 ImageMagick，不属于 `verify:quick`。
-- 当前有 `verify:memory-studio-layout` Electron runtime telemetry 脚本，用于通过 remote debugging 端口执行 Memory Studio Segment item 点击、横向 wheel 滚动、截图和结构测量；该脚本检查单一 Segment strip scroll owner、card/dot/time 中心对齐、独立 timeline 容器消失、selected item 数量和页面纵向滚动高度，不属于 `verify:quick`。
+- 当前有 `verify:memory-studio-layout` Electron runtime telemetry 脚本，用于通过 remote debugging 端口执行 Memory Studio Segment item 点击、横向 wheel 滚动、截图和结构测量；该脚本支持 `--viewport <width>x<height>` 和 `--interaction click-scroll|none`，检查单一 Segment strip scroll owner、card/dot/time 中心对齐、独立 timeline 容器消失、selected item 数量、紧凑 card 宽度范围、audio player 时间不换行、页面横向滚动和页面纵向滚动高度，不属于 `verify:quick`。
 - Better Auth 已选型，但当前未安装。
 - Zod 已安装，当前服务 workspace IPC contract、DTO、记忆空间 metadata、segment metadata 和错误信封。
 - 当前错误码真源是 `src/workspace-contract/workspace-contract.ts` 的 `workspaceErrorCodeSchema` 和 `workspaceErrorEnvelopeSchema`；renderer 用户可见文案映射位于 `workspaceErrorMessages.ts`。
@@ -70,11 +70,12 @@ npm run verify:titlebar -- --capture -1339,1211,1200,800 --output /tmp/reo-windo
 npm run verify:titlebar:self-test
 REMOTE_DEBUGGING_PORT=9233 npm run dev
 npm run verify:memory-studio-layout -- --port 9233 --screenshot /tmp/reo-memory-studio.png --metrics /tmp/reo-memory-studio.json
+npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interaction none --screenshot /tmp/reo-memory-studio-compact.png --metrics /tmp/reo-memory-studio-compact.json
 ```
 
 `verify:titlebar` 默认读取截图完整宽度的顶部 140px titlebar 区域，将图像像素分组成 traffic-light 色块、左侧 sidebar hide/show icon 色块、workspace 标题文字色块和右侧 MemoryRail 折叠 icon 色块，计算 sidebar hide/show icon 与 traffic-light 行的垂直差值、workspace 标题文字与 sidebar hide/show icon 的水平间距、workspace 标题文字视觉中心与 sidebar hide/show icon 视觉中心的垂直差值，以及右侧 MemoryRail 折叠 icon 视觉中心与 sidebar hide/show icon 视觉中心的垂直差值；默认阈值是 1 个物理像素或 1-2 个 CSS px。截图窗口必须处于 active 状态，确保原生 traffic-light 色块可被识别；截图必须包含完整 Reo 窗口宽度，确保右侧 MemoryRail 折叠 icon 进入测量区域。该命令只作为本地操作验证证据，不替代 `verify:quick`。
 
-`verify:memory-studio-layout` 需要已启动的 Electron runtime 和可见的 Memory Studio。脚本通过 CDP 输入事件点击第二个 Segment item、执行横向 wheel 滚动，并保存可选 screenshot/metrics。通过标准是：Memory Studio 只有一个 `memory-studio-segment-strip-scroll`，每个 `memory-studio-segment-item` 同时包含 `memory-studio-segment-card`、`memory-studio-segment-timeline-dot` 和 `memory-studio-segment-timeline-time`，dot/time 与 card 水平中心偏差不超过阈值，独立 `Memory 片段时间轴` navigation 不存在，`windowScrollY` 为 0，document height 不超过 viewport height。
+`verify:memory-studio-layout` 需要已启动的 Electron runtime 和可见的 Memory Studio。脚本默认通过 CDP 输入事件点击第二个 Segment item、执行横向 wheel 滚动，并保存可选 screenshot/metrics；`--interaction none` 用于采集默认静止态视觉证据。通过标准是：Memory Studio 只有一个 `memory-studio-segment-strip-scroll`，每个 `memory-studio-segment-item` 同时包含 `memory-studio-segment-card`、`memory-studio-segment-timeline-dot` 和 `memory-studio-segment-timeline-time`，dot/time 与 card 水平中心偏差不超过阈值，独立 `Memory 片段时间轴` navigation 不存在，紧凑 Segment card 宽度处于脚本配置范围内，audio player 和等宽时间位于 viewport 内且时间 `white-space` 为 `nowrap`，`windowScrollX` 与 `windowScrollY` 均为 0，document width/height 不超过 viewport width/height。
 
 没有新鲜验证证据，不得宣称完成。
 

@@ -974,6 +974,17 @@ type SegmentAttachmentProjection = {
 - Electron runtime 操作验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`。当前会话未暴露可调用的 Computer Use MCP action 工具；本轮用同一 Electron runtime 的 CDP `Input.dispatchMouseEvent` 执行用户式点击、主题切换和横向滚动，并把该流程固化为 `verify:memory-studio-layout`。浅色 telemetry：`artifacts/memory-studio-timeline-item-telemetry-2026-05-10T1249.png` / `.json`；深色 telemetry：`artifacts/memory-studio-timeline-item-telemetry-dark-2026-05-10T1250.png` / `.json`。
 - Runtime 测量结果：浅色 viewport `1200x800`，document/body height 均为 `800`，`windowScrollY=0`，`standaloneTimelineExists=false`，`stripScrollOwnerCount=1`，`itemCount=4`，`selectedItemCount=1`，CDP 横向 wheel 后 `scrollLeft=180.5`；4 个 Segment item 的 `dotToCardCenterDelta=0`、`timeToCardCenterDelta=0` 且 `timelineBelowCard=true`。深色同项通过，CDP 横向 wheel 后 `scrollLeft=236`，全部 delta 为 `0`。
 
+### 2026-05-10 13:11 America/Los_Angeles
+
+- 自我质疑 4：如果只把录音卡整体缩小，会出现标题、状态、waveform 和等宽时间互相挤压，尤其在 900px 宽窗口下仍可能需要页面滚动。修复：Segment card 改为 `clamp(124px, 20%, 144px)` 紧凑尺寸，内部改为 `p-12`、`text-body-lg` 标题、`text-ui-sm` 状态、58px × 36px waveform 和 2px bars，等宽 duration 使用 `text-ui-md`。
+- 自我质疑 5：如果 WorkspaceFrame 只有 `min-h-full`，内容仍可能把 AppShell panel 撑出页面级滚动。修复：WorkspaceFrame 改为 `h-full min-h-0 overflow-hidden`，stage shell 改为 `min-h-0 flex-1 overflow-hidden`，右侧 MemoryRail 宽度和 stage/FAB inset 使用 responsive clamp 变量。
+- 自我质疑 6：如果播放器时间只是视觉上看起来一行，窗口缩小时仍可能折成两行或撑开页面。修复：主片段播放行和补充播放行都使用 `grid-cols-[40px_minmax(64px,1fr)_max-content]`、`w-full min-w-0` 和 `memory-studio-audio-player-time` 的 `white-space: nowrap`。
+- RED/GREEN：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "first-viewport|recording cards|narrow surfaces|right-side Memory"` 先失败于 stage shell 固定最小高度、Segment card 旧 padding/字号和 playback grid 旧列定义；实现后通过。随后新增 WorkspaceFrame 高度约束用例，`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "workspace stage"` 先失败为 frame 仍是 `min-h-full`，实现后通过。
+- Targeted 验证：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx` 通过 23 tests；`npm run typecheck` 通过。
+- Electron runtime 窄视口验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`，CDP viewport `900x720`。浅色默认态：`artifacts/memory-studio-compact-default-light-2026-05-10T131124-0700.png` / `.json`；浅色交互态：`artifacts/memory-studio-compact-interaction-light-2026-05-10T131124-0700.png` / `.json`；深色默认态：`artifacts/memory-studio-compact-default-dark-2026-05-10T131124-0700.png` / `.json`。
+- Runtime 测量结果：default/interaction/dark 三次均 `documentWidth=900`、`documentHeight=720`、`windowScrollX=0`、`windowScrollY=0`；Memory Studio region、content panel、audio player 和 audio player time 均在 viewport 内；Segment card width 均为 `124px`，处于 `120px-150px` 验收范围；audio player time `white-space=nowrap`；交互态通过 CDP 输入事件点击第二个 Segment item，并在 Segment strip 内横向 wheel 滚动到 `scrollLeft=180`。
+- Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 293 tests、renderer 217 tests、lint 和 format check。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。

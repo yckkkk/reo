@@ -41,6 +41,7 @@
   - [x] 设计系统 token 已切换为 Nordic low-saturation palette、Card Glass、On Accent、Glass Border、glass blur 和命名 shadow；token 备份文件已保存到当前 spec artifacts。
   - [x] Memory Studio 首屏布局不依赖页面纵向滚动展示主体验。
   - [x] Segment card 使用扁平矢量录音卡比例、2px 实线边界、动态 waveform bars 和等宽时间。
+  - [x] Segment card 收敛为 124px-144px 紧凑尺寸，并同步调整内部 padding、字号、waveform 和时间排版。
   - [x] 播放区 waveform 从 selected finalized audio bytes 解码真实峰值，不使用固定占位波形。
   - [x] 删除 selected Segment 内容区上方重复 summary。
   - [x] FAB 保留结构展开动效，glass/hover/halo 值提升为 Reo 设计系统 token。
@@ -56,6 +57,7 @@
 - [x] Slice 11：Electron runtime 视觉验证和 docs/current 全量同步。
   - [x] Electron runtime 浅色/深色视觉证据已记录：首屏无页面纵向滚动、无重复 summary、只显示真实 `转录` tab、playback waveform 来源为 decoded finalized audio。
   - [x] `verify:memory-studio-layout` 已作为 Memory Studio layout telemetry 入口记录，覆盖 Segment item 点击、横向滚动、card/dot/time 中心测量和独立 timeline 容器消失。
+  - [x] `verify:memory-studio-layout` 覆盖 900x720 窄视口、页面横向/纵向滚动为 0、紧凑 card 宽度范围和 audio player 时间不换行。
   - [x] `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/quality.md` 和 `docs/current/design-system/*` 已同步当前实现。
 - [x] Slice 12：最终 `verify:quick` 和 initiative 收口。
   - [x] `npm run verify:quick` 通过：typecheck、main tests、renderer tests、lint 和 format check 均为 exit 0。
