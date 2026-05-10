@@ -9,11 +9,52 @@
   - [x] MemoryRail 折叠时保持固定宽度并整体滑出，不压缩内部内容。
   - [x] Sidebar covered 状态的 workspace 标题以左上 sidebar 折叠 icon 的位置 token 为基准。
   - [x] Workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心与左上 sidebar 折叠 icon 视觉中心对齐。
-- [ ] Slice 2：Workspace Stage Empty State。
-- [ ] Slice 3：Memory Studio 基础态。
-- [ ] Slice 4：Expression Dock 与录音入口整合。
-- [ ] Slice 5：录音中态工艺。
-- [ ] Slice 6：回放与 transcript 查看态。
-- [ ] Slice 7：独立笔记 Segment。
-- [ ] Slice 8：图片 Segment。
-- [ ] Slice 9：视频 Segment。
+- [x] Slice 2：Workspace Stage Empty State。
+- [x] Slice 3：Memory Studio 基础态。
+  - [x] 定义 Memory detail query、query key、request identity 和 stale response guard。
+  - [x] 展示当前 Memory 标题、meta、空态和当前 Memory 内 Segment projection。
+  - [x] 保证右侧 Memory rail 只切 current Memory context，不进入独立详情 route。
+- [x] Slice 3A：Segment strip + timeline。
+  - [x] Segment 横向预览流只展示当前 Memory 内 Segment。
+  - [x] Segment card、时间轴、内容区和 selectedSegmentId 同步。
+- [x] Slice 3B：CarouselArrowButton 横向浏览控制。
+  - [x] `CarouselArrowButton direction="left"` 只向左滚动 Segment 横向预览流。
+  - [x] `CarouselArrowButton direction="right"` 只向右滚动 Segment 横向预览流。
+  - [x] 未溢出、最左、最右时隐藏对应按钮，隐藏后不可点击且不可聚焦。
+  - [x] 初始化、scroll、ResizeObserver、卡片数据变化和窗口尺寸变化后重新计算按钮显示。
+- [x] Slice 4：Expression Dock 与录音入口整合。
+- [x] Slice 5：录音中态工艺。
+- [x] Slice 6：回放与 transcript 查看态。
+- [x] Slice 7：内容 tab 与 SegmentAttachment `+` 菜单。
+  - [x] 内容 tab 按 selected Segment 只展示已存在内容入口；audio Segment 默认只有转录。
+  - [x] 不渲染常驻禁用的笔记、视频、图片 tab。
+  - [x] tab 最右侧 `+` 打开 selected Segment 的 SegmentAttachment 添加菜单。
+  - [x] 当前只暴露录音 attachment 项，不新建 Memory，不创建同级 Segment。
+  - [x] 切 Segment 或切 Memory 时关闭菜单，防止 attachment 写入旧 parent；保存中关闭由 Slice 8 的 attachment 写入流程承接。
+- [x] Slice 8：SegmentAttachment 录音。
+  - [x] 定义 parent `memoryId`、`segmentId`、attachment id、文件合同、IPC contract、恢复 marker 和 index projection。
+  - [x] 保存时写入 selected Segment attachment，不进入 Memory 顶层 Segment strip。
+  - [x] App 恢复保存和放弃路径走 attachment finalize/discard，不误用普通 Segment draft。
+- [x] Slice 8A：Memory Studio glass-vector 视觉收敛。
+  - [x] Reo 设计系统当前规则改为现代扁平矢量插画风 + 毛玻璃 + 北欧极简 + 日式留白，组件视觉必须追溯到 token、primitive variant 或已记录 pattern。
+  - [x] 设计系统 token 已切换为 Nordic low-saturation palette、Card Glass、On Accent、Glass Border、glass blur 和命名 shadow；token 备份文件已保存到当前 spec artifacts。
+  - [x] Memory Studio 首屏布局不依赖页面纵向滚动展示主体验。
+  - [x] Segment card 使用扁平矢量录音卡比例、2px 实线边界、动态 waveform bars 和等宽时间。
+  - [x] 播放区 waveform 从 selected finalized audio bytes 解码真实峰值，不使用固定占位波形。
+  - [x] 删除 selected Segment 内容区上方重复 summary。
+  - [x] FAB 保留结构展开动效，glass/hover/halo 值提升为 Reo 设计系统 token。
+- [x] Slice 9：危险操作和恢复收口。
+  - [x] MemoryRail More 菜单提供 `删除记忆`，确认前不写文件。
+  - [x] `workspace:deleteMemory` 把 active Memory 移入 `.reo/trash/memories/<memoryId>/` 并刷新 snapshot。
+  - [x] `workspace:restoreDeletedMemory` 通过本次 `restoreToken` 恢复 Memory，renderer 通过 toast action 触发。
+  - [x] Renderer 更新 Workspace snapshot、移除被删 Memory detail cache，并在当前 Memory 被删后切换到剩余 Memory 或 Workspace Stage。
+- [x] Slice 10：性能与可访问性收口。
+  - [x] Segment strip reduced-motion 使用 instant scroll，不强制 smooth scroll。
+  - [x] Playback waveform slider 暴露 horizontal orientation、`aria-valuetext` 和键盘 seek。
+  - [x] Runtime a11y 快检确认 Memory Studio 无可见未命名 button/link，slider 绑定 decoded-audio playback source。
+- [x] Slice 11：Electron runtime 视觉验证和 docs/current 全量同步。
+  - [x] Electron runtime 浅色/深色视觉证据已记录：首屏无页面纵向滚动、无重复 summary、只显示真实 `转录` tab、playback waveform 来源为 decoded finalized audio。
+  - [x] `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/quality.md` 和 `docs/current/design-system/*` 已同步当前实现。
+- [x] Slice 12：最终 `verify:quick` 和 initiative 收口。
+  - [x] `npm run verify:quick` 通过：typecheck、main tests、renderer tests、lint 和 format check 均为 exit 0。
+  - [x] 常态 Memory 页面相关任务已全部收口。

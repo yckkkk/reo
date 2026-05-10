@@ -1,0 +1,182 @@
+:root {
+  color-scheme: light;
+
+  /* Colors */
+  --color-eggshell: #fdfcfc;
+  --color-powder: #f5f3f1;
+  --color-chalk: #e5e5e5;
+  --color-fog: #b1b0b0;
+  --color-gravel: #777169;
+  --color-slate: #a59f97;
+  --color-cinder: #57534f;
+  --color-obsidian: #000000;
+  --color-signal-blue: #0447ff;
+  --color-ember: #ff4704;
+  --color-vector-mint: #2bd8a3;
+  --color-vector-sun: #ffd447;
+  --color-vector-coral: #ff6b4a;
+  --color-vector-lilac: #bda7ff;
+  --color-voice-spectrum: #3d75d8;
+  --color-card-white: #ffffff;
+  --color-scrim: #0f0e0d;
+
+  /* Typography — Font Families */
+  --font-waldenburg:
+    'Waldenburg', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-waldenburgfh:
+    'WaldenburgFH', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-inter:
+    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Typography — Scale */
+  --text-caption: 10px;
+  --leading-caption: 1.2;
+  --text-ui-xs: 11px;
+  --leading-ui-xs: 1.35;
+  --text-ui-sm: 12px;
+  --leading-ui-sm: 1.4;
+  --text-ui-md: 13px;
+  --leading-ui-md: 1.43;
+  --text-body: 14px;
+  --leading-body: 1.43;
+  --text-body-lg: 16px;
+  --leading-body-lg: 1.5;
+  --text-subheading: 18px;
+  --leading-subheading: 1.44;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.4;
+  --text-heading: 32px;
+  --leading-heading: 1.17;
+  --tracking-heading: -0.64px;
+  --text-heading-lg: 36px;
+  --leading-heading-lg: 1.13;
+  --tracking-heading-lg: -0.72px;
+  --text-display: 48px;
+  --leading-display: 1.08;
+  --tracking-display: -0.96px;
+
+  /* Typography — Weights */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /* Spacing */
+  --spacing-unit: 4px;
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-64: 64px;
+  --spacing-72: 72px;
+  --spacing-96: 96px;
+  --spacing-160: 160px;
+  --spacing-titlebar: 48px;
+  --spacing-titlebar-control-left: 80px;
+  --spacing-titlebar-control-top: 2px;
+  --spacing-titlebar-control-size: 32px;
+  --spacing-titlebar-control-gap: 4px;
+  --spacing-panel-titlebar-x: 28px;
+  --spacing-sidebar-content-top: 56px;
+
+  /* Layout */
+  --container-page: 1200px;
+  --container-form: 720px;
+  --page-max-width: 1200px;
+  --form-max-width: 720px;
+  --field-label-min-width: 120px;
+  --field-label-max-width: 160px;
+  --section-gap: 80-120px;
+  --card-padding: 16-24px;
+  --element-gap: 8-12px;
+
+  /* Border Radius */
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-2xl-2: 20px;
+  --radius-3xl: 24px;
+  --radius-3xl-2: 30px;
+  --radius-full: 9999px;
+
+  /* Named Radii */
+  --radius-tags: 9999px;
+  --radius-cards: 16px;
+  --radius-badges: 12px;
+  --radius-inputs: 8px;
+  --radius-modals: 24px;
+  --radius-panels: 20px;
+  --radius-buttons: 8px;
+
+  /* Shadows */
+  --shadow-subtle: none;
+  --shadow-subtle-2: none;
+  --shadow-subtle-3: none;
+  --shadow-subtle-4: none;
+  --shadow-subtle-5: none;
+  --shadow-subtle-6: none;
+  --shadow-subtle-7: none;
+  --shadow-subtle-8: none;
+  --shadow-subtle-9: none;
+
+  /* Surfaces */
+  --surface-page-ground: #fdfcfc;
+  --surface-powder-surface: #f5f3f1;
+  --surface-card-white: #ffffff;
+  --surface-obsidian: #000000;
+
+  /* Glass Vector */
+  --glass-scrim-overlay: color-mix(in srgb, var(--color-scrim) 20%, transparent);
+  --glass-recording-overlay: color-mix(in srgb, var(--color-eggshell) 68%, transparent);
+  --glass-recording-overlay-blur: 12px;
+  --glass-control-hover: color-mix(in srgb, var(--color-powder) 70%, transparent);
+  --glass-ember-hover: color-mix(in srgb, var(--color-ember) 6%, transparent);
+  --recording-primary-halo: color-mix(in srgb, var(--color-ember) 28%, transparent);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --color-eggshell: #151412;
+  --color-powder: #1d1b18;
+  --color-chalk: #393631;
+  --color-fog: #6f675f;
+  --color-gravel: #b5ada2;
+  --color-slate: #8f877d;
+  --color-cinder: #d8d1c8;
+  --color-obsidian: #f7f2ea;
+  --color-signal-blue: #7f9cff;
+  --color-ember: #ff8a63;
+  --color-vector-mint: #55e6bd;
+  --color-vector-sun: #ffe178;
+  --color-vector-coral: #ff9678;
+  --color-vector-lilac: #cab8ff;
+  --color-voice-spectrum: #8db0ff;
+  --color-card-white: #24221f;
+  --color-scrim: #0f0e0d;
+  --shadow-subtle: none;
+  --shadow-subtle-2: none;
+  --shadow-subtle-3: none;
+  --shadow-subtle-4: none;
+  --shadow-subtle-5: none;
+  --shadow-subtle-6: none;
+  --shadow-subtle-7: none;
+  --shadow-subtle-8: none;
+  --shadow-subtle-9: none;
+  --surface-page-ground: #151412;
+  --surface-powder-surface: #1d1b18;
+  --surface-card-white: #24221f;
+  --surface-obsidian: #f7f2ea;
+}
