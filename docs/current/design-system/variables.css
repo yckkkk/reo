@@ -113,17 +113,13 @@
   --section-gap-max: 160px;
   --card-padding-min: 32px;
   --card-padding-max: 56px;
-  --element-gap-min: 8px;
-  --element-gap-max: 12px;
 
   /* Border Radius */
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-2xl: 20px;
-  --radius-2xl-2: 24px;
   --radius-3xl: 24px;
-  --radius-3xl-2: 32px;
   --radius-full: 9999px;
   --radius-tags: 9999px;
   --radius-cards: 32px;

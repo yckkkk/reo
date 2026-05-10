@@ -405,6 +405,7 @@ Base unit：4px。
 - Use Eggshell for page-level surface; use Card Glass only for framed card、contained form surface、floating menu、dialog 和 rail。
 - Do not create ad hoc palettes in product components.
 - Do not create one-off component aesthetics in feature code. Size、radius、color、surface、motion、icon weight、waveform rhythm and overlay treatment must trace back to Reo tokens or this document.
+- New design tokens are added only for stable cross-component invariants or named primitive patterns. A single feature-specific measurement stays as local geometry only when it is tied to that feature's layout, and obsolete token aliases must be removed instead of kept as compatibility affordances.
 - Do not put display-scale type inside compact controls, panels, or cards.
 - Icon-only controls must expose a concrete accessible name on the button; never rely on DOM order or unnamed button positions.
 - Do not use emoji in UI for icons, status, decoration, empty states, buttons, labels, or emotional tone.
