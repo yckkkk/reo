@@ -4,28 +4,35 @@ import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
+  WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
-  WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-  WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
+  WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+  WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   type WorkspaceIpcChannel,
+  type WorkspaceRendererEventChannel,
 } from '../workspace-contract/workspace-channels.js';
 import type { ReoWorkspaceBridge } from '../workspace-contract/reo-workspace-bridge.js';
 
 export interface WorkspaceBridgeInvoker {
   readonly invoke: (channel: WorkspaceIpcChannel, payload?: unknown) => Promise<unknown>;
+  readonly on?: (
+    channel: WorkspaceRendererEventChannel,
+    listener: (payload: unknown) => void
+  ) => () => void;
 }
 
 type WorkspaceBridgeMethod = keyof ReoWorkspaceBridge;
@@ -65,9 +72,19 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
         payload
       ),
+    readRecordingDraftAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readRecordingDraftAudio'>>(
+        WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+        payload
+      ),
     appendRecordingAudioChunk: (payload) =>
       invoke<WorkspaceBridgeResponse<'appendRecordingAudioChunk'>>(
         WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+        payload
+      ),
+    cloneRecordingDraftPrefix: (payload) =>
+      invoke<WorkspaceBridgeResponse<'cloneRecordingDraftPrefix'>>(
+        WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
         payload
       ),
     finalizeRecordingDraft: (payload) =>
@@ -80,38 +97,13 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
         payload
       ),
-    getMemoryDetail: (payload) =>
-      invoke<WorkspaceBridgeResponse<'getMemoryDetail'>>(
-        WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
-        payload
-      ),
     updateMemoryTitle: (payload) =>
       invoke<WorkspaceBridgeResponse<'updateMemoryTitle'>>(
         WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
         payload
       ),
-    getRecordingDetail: (payload) =>
-      invoke<WorkspaceBridgeResponse<'getRecordingDetail'>>(
-        WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
-        payload
-      ),
-    readRecordingAudioManifest: (payload) =>
-      invoke<WorkspaceBridgeResponse<'readRecordingAudioManifest'>>(
-        WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-        payload
-      ),
-    readRecordingAudioChunk: (payload) =>
-      invoke<WorkspaceBridgeResponse<'readRecordingAudioChunk'>>(
-        WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
-        payload
-      ),
     saveTranscript: (payload) =>
       invoke<WorkspaceBridgeResponse<'saveTranscript'>>(WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, payload),
-    saveReflections: (payload) =>
-      invoke<WorkspaceBridgeResponse<'saveReflections'>>(
-        WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
-        payload
-      ),
     beginMicrophoneIntent: (payload) =>
       invoke<WorkspaceBridgeResponse<'beginMicrophoneIntent'>>(
         WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
@@ -122,6 +114,30 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
         payload
       ),
+    startRecordingTranscription: (payload) =>
+      invoke<WorkspaceBridgeResponse<'startRecordingTranscription'>>(
+        WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+        payload
+      ),
+    sendRecordingTranscriptionAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'sendRecordingTranscriptionAudio'>>(
+        WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+        payload
+      ),
+    finishRecordingTranscription: (payload) =>
+      invoke<WorkspaceBridgeResponse<'finishRecordingTranscription'>>(
+        WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
+        payload
+      ),
+    closeRecordingTranscription: (payload) =>
+      invoke<WorkspaceBridgeResponse<'closeRecordingTranscription'>>(
+        WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+        payload
+      ),
+    onRecordingTranscriptionEvent: (callback) =>
+      invoker.on?.(WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, (payload) =>
+        callback(payload as Parameters<typeof callback>[0])
+      ) ?? (() => {}),
   };
   return Object.freeze(bridge);
 }

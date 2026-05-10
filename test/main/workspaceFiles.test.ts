@@ -36,7 +36,7 @@ async function writeFinalizedMemoryRecording({
   root,
   workspaceId,
   memoryId,
-  recordingId,
+  segmentId,
   title,
   audio,
   durationMs,
@@ -44,13 +44,13 @@ async function writeFinalizedMemoryRecording({
   readonly root: string;
   readonly workspaceId: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly title: string;
   readonly audio: Uint8Array;
   readonly durationMs: number;
 }): Promise<void> {
   const memoryDirectory = path.join(root, 'memories', memoryId);
-  const recordingDirectory = path.join(memoryDirectory, 'recordings', recordingId);
+  const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
   await writeFile(
     path.join(memoryDirectory, 'memory.json'),
@@ -60,7 +60,7 @@ async function writeFinalizedMemoryRecording({
         title,
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
-        assetIds: [recordingId],
+        segmentIds: [segmentId],
       },
       null,
       2
@@ -68,15 +68,15 @@ async function writeFinalizedMemoryRecording({
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), audio);
   await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
-  await writeFile(path.join(recordingDirectory, 'reflections.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'recording.json'),
+    path.join(recordingDirectory, 'segment.json'),
     `${JSON.stringify(
       {
         schemaVersion: 1,
         workspaceId,
         memoryId,
-        recordingId,
+        segmentId,
+        type: 'audio',
         status: 'finalized',
         title,
         createdAt: '2026-05-06T13:08:00.000Z',
@@ -85,7 +85,6 @@ async function writeFinalizedMemoryRecording({
         nextSequence: 1,
         audioByteLength: audio.byteLength,
         transcriptPath: 'transcript.md',
-        reflectionsPath: 'reflections.md',
       },
       null,
       2
@@ -162,7 +161,7 @@ test('workspace init creates only stable first-slice files and no future capabil
     'index.json',
     'workspace.json',
   ]);
-  assert.deepEqual(await readdir(path.join(root, '.reo', 'drafts')), ['recordings']);
+  assert.deepEqual(await readdir(path.join(root, '.reo', 'drafts')), ['segments']);
   for (const forbidden of ['photos', 'videos', 'files', 'films']) {
     await assert.rejects(stat(path.join(root, forbidden)));
   }
@@ -311,7 +310,7 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     root,
     workspaceId: 'ws_rebuild_memories',
     memoryId: 'mem_20260506_000001',
-    recordingId: 'rec_20260506_000001',
+    segmentId: 'seg_20260506_000001',
     title: '重建录音',
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 12_000,
@@ -323,11 +322,11 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     title: '重建录音',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
-    assetCount: 1,
+    segmentCount: 1,
     durationMs: 12_000,
     audioByteLength: 3,
     hasTranscript: false,
-    hasReflections: false,
+    attachmentCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
@@ -357,7 +356,7 @@ test('open workspace fails without replacing index when memories cannot be read'
     root,
     workspaceId: 'ws_unreadable_memories',
     memoryId: 'mem_20260506_unreadable',
-    recordingId: 'rec_20260506_unreadable',
+    segmentId: 'seg_20260506_unreadable',
     title: '不可读录音',
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 3000,
@@ -393,7 +392,7 @@ test('valid but stale index is reconciled from finalized workspace files', async
     root,
     workspaceId: 'ws_stale_index',
     memoryId: 'mem_20260506_000002',
-    recordingId: 'rec_20260506_000002',
+    segmentId: 'seg_20260506_000002',
     title: '崩溃后录音',
     audio: new Uint8Array([4, 5, 6, 7]),
     durationMs: 34_000,
@@ -408,11 +407,11 @@ test('valid but stale index is reconciled from finalized workspace files', async
     title: '崩溃后录音',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
-    assetCount: 1,
+    segmentCount: 1,
     durationMs: 34_000,
     audioByteLength: 4,
     hasTranscript: false,
-    hasReflections: false,
+    attachmentCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
@@ -442,7 +441,7 @@ test('open workspace preserves the existing index when memories root changes bef
     root,
     workspaceId: 'ws_open_reconcile_swap',
     memoryId: 'mem_open_reconcile_swap',
-    recordingId: 'rec_open_reconcile_swap',
+    segmentId: 'seg_open_reconcile_swap',
     title: 'Open reconcile swap',
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 3000,
@@ -588,7 +587,7 @@ test('open workspace reconciliation computes replacement after a metadata refres
     root,
     workspaceId: 'ws_open_reconcile_current',
     memoryId: 'mem_open_reconcile_current',
-    recordingId: 'rec_open_reconcile_current',
+    segmentId: 'seg_open_reconcile_current',
     title: 'Open reconcile current',
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 3000,
@@ -600,8 +599,8 @@ test('open workspace reconciliation computes replacement after a metadata refres
         root,
         'memories',
         'mem_open_reconcile_current',
-        'recordings',
-        'rec_open_reconcile_current',
+        'segments',
+        'seg_open_reconcile_current',
         'transcript.md'
       ),
       'Open-time transcript\n'
@@ -636,7 +635,7 @@ test('open workspace recreates missing managed directories before returning read
   const opened = await openWorkspaceFiles({ rootPath: root });
 
   assert.equal(opened.ok, true);
-  await stat(path.join(root, '.reo', 'drafts', 'recordings'));
+  await stat(path.join(root, '.reo', 'drafts', 'segments'));
   await stat(path.join(root, 'memories'));
 });
 
@@ -653,7 +652,7 @@ test('workspace index update does not persist reconciliation before update succe
     root,
     workspaceId: 'ws_index_update_failure',
     memoryId: 'mem_20260506_000003',
-    recordingId: 'rec_20260506_000003',
+    segmentId: 'seg_20260506_000003',
     title: '不应提前写入',
     audio: new Uint8Array([8, 9]),
     durationMs: 5_000,
@@ -676,7 +675,7 @@ test('workspace index update does not persist reconciliation before update succe
   });
 });
 
-test('index rebuild ignores symlinked transcript and reflections presence files', async () => {
+test('index rebuild ignores symlinked transcript presence files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-markdown-presence-'));
   const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-markdown-outside-'));
   await initializeWorkspaceFiles({
@@ -690,7 +689,7 @@ test('index rebuild ignores symlinked transcript and reflections presence files'
     root,
     workspaceId: 'ws_markdown_presence',
     memoryId: 'mem_20260506_markdown_presence',
-    recordingId: 'rec_20260506_markdown_presence',
+    segmentId: 'seg_20260506_markdown_presence',
     title: 'Markdown presence',
     audio: new Uint8Array([1]),
     durationMs: 1000,
@@ -699,20 +698,14 @@ test('index rebuild ignores symlinked transcript and reflections presence files'
     root,
     'memories',
     'mem_20260506_markdown_presence',
-    'recordings',
-    'rec_20260506_markdown_presence'
+    'segments',
+    'seg_20260506_markdown_presence'
   );
   await writeFile(path.join(outside, 'transcript.md'), 'outside transcript');
-  await writeFile(path.join(outside, 'reflections.md'), 'outside reflections');
   await rm(path.join(recordingDirectory, 'transcript.md'));
-  await rm(path.join(recordingDirectory, 'reflections.md'));
   await symlink(
     path.join(outside, 'transcript.md'),
     path.join(recordingDirectory, 'transcript.md')
-  );
-  await symlink(
-    path.join(outside, 'reflections.md'),
-    path.join(recordingDirectory, 'reflections.md')
   );
 
   const opened = await openWorkspaceFiles({ rootPath: root });
@@ -720,6 +713,6 @@ test('index rebuild ignores symlinked transcript and reflections presence files'
   assert.equal(opened.ok, true);
   if (opened.ok) {
     assert.equal(opened.snapshot.memories[0]?.hasTranscript, false);
-    assert.equal(opened.snapshot.memories[0]?.hasReflections, false);
+    assert.equal(opened.snapshot.memories[0]?.attachmentCount, 0);
   }
 });

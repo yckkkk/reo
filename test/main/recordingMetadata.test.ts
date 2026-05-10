@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { finalizedRecordingMetadataSchema } from '../../src/workspace-contract/workspace-contract.js';
+import { finalizedSegmentMetadataSchema } from '../../src/workspace-contract/workspace-contract.js';
 
-const finalizedRecordingMetadata = {
+const finalizedSegmentMetadata = {
   schemaVersion: 1,
   workspaceId: 'ws_1',
   memoryId: 'mem_1',
-  recordingId: 'rec_1',
+  segmentId: 'seg_1',
+  type: 'audio',
   status: 'finalized',
   title: '一段录音',
   createdAt: '2026-05-08T14:40:00.000Z',
@@ -15,24 +16,23 @@ const finalizedRecordingMetadata = {
   nextSequence: 1,
   audioByteLength: 2048,
   transcriptPath: 'transcript.md',
-  reflectionsPath: 'reflections.md',
 } as const;
 
-test('finalized recording metadata accepts only fixed transcript and reflections file names', () => {
-  assert.deepEqual(finalizedRecordingMetadataSchema.parse(finalizedRecordingMetadata), {
-    ...finalizedRecordingMetadata,
+test('finalized audio segment metadata accepts the fixed transcript file only', () => {
+  assert.deepEqual(finalizedSegmentMetadataSchema.parse(finalizedSegmentMetadata), {
+    ...finalizedSegmentMetadata,
   });
 
   assert.throws(() =>
-    finalizedRecordingMetadataSchema.parse({
-      ...finalizedRecordingMetadata,
+    finalizedSegmentMetadataSchema.parse({
+      ...finalizedSegmentMetadata,
       transcriptPath: 'notes/transcript.md',
     })
   );
   assert.throws(() =>
-    finalizedRecordingMetadataSchema.parse({
-      ...finalizedRecordingMetadata,
-      reflectionsPath: 'custom-reflections.md',
+    finalizedSegmentMetadataSchema.parse({
+      ...finalizedSegmentMetadata,
+      notesPath: 'notes.md',
     })
   );
 });

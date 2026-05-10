@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  createSafeRecordingId,
+  createSafeSegmentId,
   ensureWorkspaceMemoriesDirectory,
   ensureWorkspaceReoDirectory,
   ensureWorkspaceDraftsDirectory,
@@ -52,10 +52,10 @@ test('workspace root rejects root swap before canonical realpath', async () => {
   }
 });
 
-test('recording ids reject traversal and slash characters', () => {
-  assert.equal(createSafeRecordingId('rec_20260506_000001'), 'rec_20260506_000001');
-  assert.throws(() => createSafeRecordingId('../escape'));
-  assert.throws(() => createSafeRecordingId('rec_bad/slash'));
+test('segment ids reject traversal and slash characters', () => {
+  assert.equal(createSafeSegmentId('seg_20260506_000001'), 'seg_20260506_000001');
+  assert.throws(() => createSafeSegmentId('../escape'));
+  assert.throws(() => createSafeSegmentId('seg_bad/slash'));
 });
 
 test('managed draft directory creation rejects .reo ancestor swap before child mkdir', async () => {

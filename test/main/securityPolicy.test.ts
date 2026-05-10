@@ -39,7 +39,11 @@ test('denies microphone permission without a one-shot renderer intent', () => {
 });
 
 test('consumes a microphone intent once for the matching sender', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -77,7 +81,7 @@ test('expires microphone intent by TTL before browser permission is granted', ()
   createMicrophoneIntent({
     senderId: 1,
     workspaceHandle: 'wh_1',
-    drawerSessionId: 'drawer_1',
+    recordingFlowSessionId: 'recording_flow_1',
     now: () => 1_000,
   });
 
@@ -97,7 +101,11 @@ test('expires microphone intent by TTL before browser permission is granted', ()
 test('permission check never grants media without consuming intent', () => {
   assert.equal(decideMediaPermissionCheck(), false);
 
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(decideMediaPermissionCheck(), false);
   assert.equal(
@@ -113,12 +121,16 @@ test('permission check never grants media without consuming intent', () => {
 });
 
 test('rejects a second active microphone intent for the same sender', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   const second = createMicrophoneIntent({
     senderId: 1,
     workspaceHandle: 'wh_2',
-    drawerSessionId: 'drawer_1',
+    recordingFlowSessionId: 'recording_flow_1',
   });
 
   assert.equal(second.ok, false);
@@ -127,11 +139,23 @@ test('rejects a second active microphone intent for the same sender', () => {
   }
 });
 
-test('clear requires the matching workspace and drawer session owner', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+test('clear requires the matching workspace and recording flow session owner', () => {
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
-  clearMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_2', drawerSessionId: 'drawer_1' });
-  clearMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_2' });
+  clearMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_2',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
+  clearMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_2',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -146,10 +170,22 @@ test('clear requires the matching workspace and drawer session owner', () => {
 });
 
 test('clears only the matching microphone intent when recording is cancelled', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
-  createMicrophoneIntent({ senderId: 2, workspaceHandle: 'wh_2', drawerSessionId: 'drawer_2' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
+  createMicrophoneIntent({
+    senderId: 2,
+    workspaceHandle: 'wh_2',
+    recordingFlowSessionId: 'recording_flow_2',
+  });
 
-  clearMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  clearMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -174,8 +210,16 @@ test('clears only the matching microphone intent when recording is cancelled', (
 });
 
 test('clears pending microphone intents when a workspace handle closes', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
-  createMicrophoneIntent({ senderId: 2, workspaceHandle: 'wh_2', drawerSessionId: 'drawer_2' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
+  createMicrophoneIntent({
+    senderId: 2,
+    workspaceHandle: 'wh_2',
+    recordingFlowSessionId: 'recording_flow_2',
+  });
 
   clearMicrophoneIntentsForWorkspaceHandle('wh_1');
 
@@ -202,7 +246,11 @@ test('clears pending microphone intents when a workspace handle closes', () => {
 });
 
 test('clears all pending microphone intents during renderer teardown', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   clearAllMicrophoneIntents();
 
@@ -219,7 +267,11 @@ test('clears all pending microphone intents during renderer teardown', () => {
 });
 
 test('denies microphone permission for an untrusted origin even with a valid intent', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -244,7 +296,11 @@ test('denies microphone permission for an untrusted origin even with a valid int
 });
 
 test('denies microphone permission for a subframe even with a valid intent', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -259,7 +315,11 @@ test('denies microphone permission for a subframe even with a valid intent', () 
 });
 
 test('denies video or camera media even for a trusted renderer with a valid microphone intent', () => {
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_1' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_1',
+  });
 
   assert.equal(
     decideMediaPermissionRequest({
@@ -271,7 +331,11 @@ test('denies video or camera media even for a trusted renderer with a valid micr
     }),
     false
   );
-  createMicrophoneIntent({ senderId: 1, workspaceHandle: 'wh_1', drawerSessionId: 'drawer_2' });
+  createMicrophoneIntent({
+    senderId: 1,
+    workspaceHandle: 'wh_1',
+    recordingFlowSessionId: 'recording_flow_2',
+  });
   assert.equal(
     decideMediaPermissionRequest({
       permission: 'media',

@@ -15,27 +15,29 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   appendRecordingAudioChunk,
+  cloneRecordingDraftPrefix,
   clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
   initializeRecordingDraftWorkspace,
-  saveRecordingDraftMarkdown,
+  readRecordingDraftAudio,
+  setAfterDraftAudioReadForTest,
   setAfterDraftDirectoryCreateForTest,
+  setAfterDraftPrefixBytesCopiedForTest,
   setBeforeDraftAudioCreateForTest,
   setBeforeDraftAudioOpenForTest,
   setBeforeDraftDirectoryCreateForTest,
-  setBeforeMarkdownWriteForTest,
 } from '../../src/main/recordingDrafts.js';
 import { createMemoryFromFileTruth } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 
-async function writeFinalizedRecordingForTest(
+async function writeFinalizedAudioSegmentForTest(
   rootPath: string,
-  recordingId: string
+  segmentId: string
 ): Promise<void> {
   const memoryDirectory = path.join(rootPath, 'memories', 'mem_active_draft_clear');
-  const recordingDirectory = path.join(memoryDirectory, 'recordings', recordingId);
+  const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
   await writeFile(
     path.join(memoryDirectory, 'memory.json'),
@@ -44,19 +46,19 @@ async function writeFinalizedRecordingForTest(
       title: 'Active draft clear',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      assetIds: [recordingId],
+      segmentIds: [segmentId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1]));
   await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
-  await writeFile(path.join(recordingDirectory, 'reflections.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'recording.json'),
+    path.join(recordingDirectory, 'segment.json'),
     `${JSON.stringify({
       schemaVersion: 1,
       workspaceId: 'ws_draft',
       memoryId: 'mem_active_draft_clear',
-      recordingId,
+      segmentId,
+      type: 'audio',
       status: 'finalized',
       title: 'Active draft clear',
       createdAt: '2026-05-06T13:08:00.000Z',
@@ -65,7 +67,6 @@ async function writeFinalizedRecordingForTest(
       nextSequence: 1,
       audioByteLength: 1,
       transcriptPath: 'transcript.md',
-      reflectionsPath: 'reflections.md',
     })}\n`
   );
 }
@@ -118,12 +119,12 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
   const draft = await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_000001',
+    createSegmentId: () => 'seg_20260506_000001',
     now: () => '2026-05-06T13:08:00.000Z',
   });
   assert.deepEqual(draft, {
     ok: true,
-    recordingId: 'rec_20260506_000001',
+    segmentId: 'seg_20260506_000001',
     nextSequence: 0,
   });
 
@@ -131,7 +132,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     (
       await appendRecordingAudioChunk({
         rootPath,
-        recordingId: 'rec_20260506_000001',
+        segmentId: 'seg_20260506_000001',
         sequence: 0,
         chunk: new Uint8Array([1, 2, 3]),
       })
@@ -141,7 +142,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
 
   const replay = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000001',
+    segmentId: 'seg_20260506_000001',
     sequence: 0,
     chunk: new Uint8Array([4]),
   });
@@ -152,7 +153,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
 
   const tooLarge = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000001',
+    segmentId: 'seg_20260506_000001',
     sequence: 1,
     chunk: new Uint8Array(1_048_577),
   });
@@ -172,16 +173,17 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     await finalizeRecordingDraft({
       durationMs: 0,
       rootPath,
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       memoryId: 'mem_20260506_000001',
       title: '第一段录音',
       now: () => '2026-05-06T13:09:00.000Z',
     }),
     {
       ok: true,
-      recording: {
+      segment: {
         memoryId: 'mem_20260506_000001',
-        recordingId: 'rec_20260506_000001',
+        segmentId: 'seg_20260506_000001',
+        type: 'audio',
         title: '第一段录音',
         durationMs: 0,
         audioByteLength: 3,
@@ -191,11 +193,11 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         title: '第一段录音',
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
-        assetCount: 1,
+        segmentCount: 1,
         durationMs: 0,
         audioByteLength: 3,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
     }
   );
@@ -206,9 +208,9 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         rootPath,
         'memories',
         'mem_20260506_000001',
-        'recordings',
-        'rec_20260506_000001',
-        'recording.json'
+        'segments',
+        'seg_20260506_000001',
+        'segment.json'
       ),
       'utf8'
     )
@@ -218,8 +220,8 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       rootPath,
       'memories',
       'mem_20260506_000001',
-      'recordings',
-      'rec_20260506_000001',
+      'segments',
+      'seg_20260506_000001',
       'audio.webm'
     )
   );
@@ -235,17 +237,17 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       title: '第一段录音',
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      assetCount: 1,
+      segmentCount: 1,
       durationMs: 0,
       audioByteLength: 3,
       hasTranscript: false,
-      hasReflections: false,
+      attachmentCount: 0,
     },
   ]);
 
   const lateAppend = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000001',
+    segmentId: 'seg_20260506_000001',
     sequence: 1,
     chunk: new Uint8Array([9]),
   });
@@ -260,9 +262,9 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         rootPath,
         'memories',
         'mem_20260506_000001',
-        'recordings',
-        'rec_20260506_000001',
-        'recording.json'
+        'segments',
+        'seg_20260506_000001',
+        'segment.json'
       ),
       'utf8'
     )
@@ -270,101 +272,422 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
   assert.deepEqual(metadataAfterLateAppend, finalizedMetadata);
 });
 
-test('recording finalize preserves draft transcript and reflections markdown', async () => {
+test('recording draft audio read returns the current safe draft audio bytes', async () => {
   const rootPath = await workspaceRoot();
-  await createRecordingDraft({
+  const segmentId = 'seg_20260506_audio_read';
+  const draft = await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_markdown_preserve',
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2]),
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_markdown_preserve',
+    segmentId,
+    sequence: 1,
+    chunk: new Uint8Array([3]),
+  });
+
+  const audio = await readRecordingDraftAudio({
+    rootPath,
+    segmentId,
+  });
+
+  assert.equal(audio.ok, true);
+  if (audio.ok) {
+    assert.deepEqual([...audio.audio], [1, 2, 3]);
+    assert.equal(audio.audioByteLength, 3);
+    assert.equal(audio.nextSequence, 2);
+  }
+});
+
+test('recording draft prefix clone copies retained audio in one draft operation', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceSegmentId = 'seg_20260506_prefix_source';
+  const targetSegmentId = 'seg_20260506_prefix_target';
+  const sourceDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => sourceSegmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(sourceDraft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: sourceSegmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2]),
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: sourceSegmentId,
+    sequence: 1,
+    chunk: new Uint8Array([3, 4]),
+  });
+  const targetDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => targetSegmentId,
+    now: () => '2026-05-06T13:09:00.000Z',
+  });
+  assert.equal(targetDraft.ok, true);
+
+  const cloned = await cloneRecordingDraftPrefix({
+    rootPath,
+    sourceSegmentId,
+    targetSegmentId,
+    retainedByteLength: 3,
+    nextSequence: 0,
+  });
+  assert.equal(cloned.ok, true);
+  if (cloned.ok) {
+    assert.equal(cloned.audioByteLength, 3);
+    assert.equal(cloned.nextSequence, 1);
+  }
+  const targetAudio = await readRecordingDraftAudio({ rootPath, segmentId: targetSegmentId });
+  assert.equal(targetAudio.ok, true);
+  if (targetAudio.ok) {
+    assert.deepEqual([...targetAudio.audio], [1, 2, 3]);
+    assert.equal(targetAudio.audioByteLength, 3);
+    assert.equal(targetAudio.nextSequence, 1);
+  }
+  const appended = await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: targetSegmentId,
+    sequence: 1,
+    chunk: new Uint8Array([9]),
+  });
+  assert.equal(appended.ok, true);
+});
+
+test('recording draft prefix clone rolls back target audio when copy fails after writing bytes', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceSegmentId = 'seg_20260506_prefix_rollback_source';
+  const targetSegmentId = 'seg_20260506_prefix_rollback_target';
+  const sourceDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => sourceSegmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(sourceDraft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: sourceSegmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3, 4]),
+  });
+  const targetDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => targetSegmentId,
+    now: () => '2026-05-06T13:09:00.000Z',
+  });
+  assert.equal(targetDraft.ok, true);
+  setAfterDraftPrefixBytesCopiedForTest(() => {
+    throw new Error('copy failed after bytes');
+  });
+
+  try {
+    const cloned = await cloneRecordingDraftPrefix({
+      rootPath,
+      sourceSegmentId,
+      targetSegmentId,
+      retainedByteLength: 4,
+      nextSequence: 0,
+    });
+
+    assert.equal(cloned.ok, false);
+    if (!cloned.ok) {
+      assert.equal(cloned.error.code, 'ERR_RECORDING_APPEND_FAILED');
+    }
+  } finally {
+    setAfterDraftPrefixBytesCopiedForTest(null);
+  }
+
+  const targetAudio = await readRecordingDraftAudio({ rootPath, segmentId: targetSegmentId });
+  assert.equal(targetAudio.ok, true);
+  if (targetAudio.ok) {
+    assert.deepEqual([...targetAudio.audio], []);
+    assert.equal(targetAudio.audioByteLength, 0);
+    assert.equal(targetAudio.nextSequence, 0);
+  }
+});
+
+test('recording draft prefix clone rolls back target audio when workspace lock is lost during copy', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceSegmentId = 'seg_20260506_prefix_lock_lost_source';
+  const targetSegmentId = 'seg_20260506_prefix_lock_lost_target';
+  let usable = true;
+  const sourceDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => sourceSegmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(sourceDraft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: sourceSegmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3, 4]),
+  });
+  const targetDraft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => targetSegmentId,
+    now: () => '2026-05-06T13:09:00.000Z',
+  });
+  assert.equal(targetDraft.ok, true);
+  setAfterDraftPrefixBytesCopiedForTest(() => {
+    usable = false;
+  });
+
+  try {
+    const cloned = await cloneRecordingDraftPrefix({
+      rootPath,
+      sourceSegmentId,
+      targetSegmentId,
+      retainedByteLength: 4,
+      nextSequence: 0,
+      assertWorkspaceUsable: () =>
+        usable
+          ? { ok: true as const }
+          : {
+              ok: false as const,
+              error: { code: 'ERR_WORKSPACE_LOCK_LOST' as const, message: 'Workspace lock lost' },
+            },
+    });
+
+    assert.equal(cloned.ok, false);
+    if (!cloned.ok) {
+      assert.equal(cloned.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+    }
+  } finally {
+    setAfterDraftPrefixBytesCopiedForTest(null);
+  }
+
+  const targetAudio = await readRecordingDraftAudio({ rootPath, segmentId: targetSegmentId });
+  assert.equal(targetAudio.ok, true);
+  if (targetAudio.ok) {
+    assert.deepEqual([...targetAudio.audio], []);
+    assert.equal(targetAudio.audioByteLength, 0);
+    assert.equal(targetAudio.nextSequence, 0);
+  }
+});
+
+test('recording draft audio read respects the caller preview byte cap', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_20260506_audio_read_cap';
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
-  assert.equal(
-    (
-      await saveRecordingDraftMarkdown({
-        rootPath,
-        recordingId: 'rec_20260506_markdown_preserve',
-        fileName: 'transcript.md',
-        markdown: '用户转写草稿\n',
-      })
-    ).ok,
-    true
-  );
-  assert.equal(
-    (
-      await saveRecordingDraftMarkdown({
-        rootPath,
-        recordingId: 'rec_20260506_markdown_preserve',
-        fileName: 'reflections.md',
-        markdown: '用户反思草稿\n',
-      })
-    ).ok,
-    true
-  );
 
+  const audio = await readRecordingDraftAudio({
+    rootPath,
+    segmentId,
+    maxBytes: 2,
+  });
+
+  assert.equal(audio.ok, false);
+  if (!audio.ok) {
+    assert.equal(audio.error.code, 'ERR_RECORDING_CHUNK_TOO_LARGE');
+  }
+});
+
+test('recording draft audio read rechecks workspace usability after async file read', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_20260506_audio_read_lock_lost';
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  let workspaceUsable = true;
+  setAfterDraftAudioReadForTest(() => {
+    workspaceUsable = false;
+  });
+  try {
+    const audio = await readRecordingDraftAudio({
+      rootPath,
+      segmentId,
+      assertWorkspaceUsable: () =>
+        workspaceUsable
+          ? { ok: true }
+          : {
+              ok: false,
+              error: {
+                code: 'ERR_WORKSPACE_LOCK_LOST',
+                message: 'Workspace lock was lost',
+              },
+            },
+    });
+
+    assert.equal(audio.ok, false);
+    if (!audio.ok) {
+      assert.equal(audio.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+    }
+  } finally {
+    setAfterDraftAudioReadForTest(null);
+  }
+});
+
+test('recording draft audio read rejects concurrent appends until the capped read completes', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_20260506_audio_read_append_race';
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  const appendDuringRead: {
+    current: Awaited<ReturnType<typeof appendRecordingAudioChunk>> | null;
+  } = { current: null };
+  setAfterDraftAudioReadForTest(async () => {
+    appendDuringRead.current = await appendRecordingAudioChunk({
+      rootPath,
+      segmentId,
+      sequence: 1,
+      chunk: new Uint8Array([4]),
+    });
+  });
+  try {
+    const audio = await readRecordingDraftAudio({
+      maxBytes: 3,
+      rootPath,
+      segmentId,
+    });
+
+    assert.equal(audio.ok, true);
+    if (audio.ok) {
+      assert.deepEqual(Array.from(audio.audio), [1, 2, 3]);
+      assert.equal(audio.audioByteLength, 3);
+    }
+    assert.equal(appendDuringRead.current?.ok, false);
+    if (appendDuringRead.current && !appendDuringRead.current.ok) {
+      assert.equal(appendDuringRead.current.error.code, 'ERR_RECORDING_APPEND_IN_FLIGHT');
+    }
+  } finally {
+    setAfterDraftAudioReadForTest(null);
+  }
+});
+
+test('recording finalize rejects concurrent draft audio reads until the capped read completes', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_20260506_audio_read_finalize_race';
+  const memoryId = 'mem_20260506_audio_read_finalize_race';
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
   await createMemoryForDraftFinalize({
     rootPath,
-    memoryId: 'mem_20260506_markdown_preserve',
-    title: '保留草稿',
-    now: '2026-05-06T13:09:00.000Z',
+    memoryId,
+    title: '读写互斥录音',
+    now: '2026-05-06T13:11:00.000Z',
   });
+
+  const finalizeDuringRead: {
+    current: Awaited<ReturnType<typeof finalizeRecordingDraft>> | null;
+  } = { current: null };
+  setAfterDraftAudioReadForTest(async () => {
+    finalizeDuringRead.current = await finalizeRecordingDraft({
+      durationMs: 1000,
+      rootPath,
+      segmentId,
+      memoryId,
+      title: '读写互斥录音',
+      now: () => '2026-05-06T13:11:00.000Z',
+    });
+  });
+  try {
+    const audio = await readRecordingDraftAudio({
+      maxBytes: 3,
+      rootPath,
+      segmentId,
+    });
+
+    assert.equal(audio.ok, true);
+    assert.equal(finalizeDuringRead.current?.ok, false);
+    if (finalizeDuringRead.current && !finalizeDuringRead.current.ok) {
+      assert.equal(finalizeDuringRead.current.error.code, 'ERR_RECORDING_APPEND_IN_FLIGHT');
+    }
+  } finally {
+    setAfterDraftAudioReadForTest(null);
+  }
 
   const finalized = await finalizeRecordingDraft({
-    durationMs: 3000,
+    durationMs: 1000,
     rootPath,
-    recordingId: 'rec_20260506_markdown_preserve',
-    memoryId: 'mem_20260506_markdown_preserve',
-    title: '保留草稿',
-    now: () => '2026-05-06T13:09:00.000Z',
+    segmentId,
+    memoryId,
+    title: '读写互斥录音',
+    now: () => '2026-05-06T13:12:00.000Z',
   });
-
   assert.equal(finalized.ok, true);
-  if (finalized.ok) {
-    assert.equal(finalized.memory.hasTranscript, true);
-    assert.equal(finalized.memory.hasReflections, true);
-  }
-  const recordingDirectory = path.join(
-    rootPath,
-    'memories',
-    'mem_20260506_markdown_preserve',
-    'recordings',
-    'rec_20260506_markdown_preserve'
-  );
-  assert.equal(
-    await readFile(path.join(recordingDirectory, 'transcript.md'), 'utf8'),
-    '用户转写草稿\n'
-  );
-  assert.equal(
-    await readFile(path.join(recordingDirectory, 'reflections.md'), 'utf8'),
-    '用户反思草稿\n'
-  );
-  const index = JSON.parse(await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8'));
-  assert.equal(index.memories[0].hasTranscript, true);
-  assert.equal(index.memories[0].hasReflections, true);
 });
 
 test('recording finalize rejects unknown draft files before durable expose', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_unknown_draft_file';
+  const segmentId = 'seg_20260506_unknown_draft_file';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId,
+    segmentId,
     sequence: 0,
     chunk: new Uint8Array([1]),
   });
   await writeFile(
-    path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId, 'unexpected.tmp'),
+    path.join(rootPath, '.reo', 'drafts', 'segments', segmentId, 'unexpected.tmp'),
     'unexpected'
   );
 
@@ -378,121 +701,33 @@ test('recording finalize rejects unknown draft files before durable expose', asy
   const finalized = await finalizeRecordingDraft({
     durationMs: 1000,
     rootPath,
-    recordingId,
+    segmentId,
     memoryId: 'mem_unknown_draft_file',
     title: 'Unknown draft file',
     now: () => '2026-05-06T13:09:00.000Z',
   });
 
   assert.equal(finalized.ok, false);
-  await stat(path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId, 'unexpected.tmp'));
+  await stat(path.join(rootPath, '.reo', 'drafts', 'segments', segmentId, 'unexpected.tmp'));
   await assert.rejects(
-    stat(path.join(rootPath, 'memories', 'mem_unknown_draft_file', 'recordings', recordingId))
-  );
-});
-
-test('recording markdown save aborts when workspace handle is lost before write', async () => {
-  const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_markdown_lock_lost';
-  await createRecordingDraft({
-    rootPath,
-    workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-  let usable = true;
-  setBeforeMarkdownWriteForTest(() => {
-    usable = false;
-  });
-
-  try {
-    const result = await saveRecordingDraftMarkdown({
-      rootPath,
-      recordingId,
-      fileName: 'transcript.md',
-      markdown: 'lost\n',
-      assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
-    });
-
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
-    }
-    await assert.rejects(
-      stat(path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId, 'transcript.md'))
-    );
-  } finally {
-    setBeforeMarkdownWriteForTest(null);
-  }
-});
-
-test('recording markdown saves the latest same-file edit when writes overlap', async () => {
-  const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_markdown_write_queue';
-  await createRecordingDraft({
-    rootPath,
-    workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-  let releaseFirstWrite: () => void = () => {};
-  const firstWriteEntered = new Promise<void>((resolveEntered) => {
-    let calls = 0;
-    setBeforeMarkdownWriteForTest(async () => {
-      calls += 1;
-      if (calls === 1) {
-        resolveEntered();
-        await new Promise<void>((resolve) => {
-          releaseFirstWrite = resolve;
-        });
-      }
-    });
-  });
-
-  try {
-    const first = saveRecordingDraftMarkdown({
-      rootPath,
-      recordingId,
-      fileName: 'transcript.md',
-      markdown: '旧内容\n',
-    });
-    await firstWriteEntered;
-    const second = saveRecordingDraftMarkdown({
-      rootPath,
-      recordingId,
-      fileName: 'transcript.md',
-      markdown: '新内容\n',
-    });
-    releaseFirstWrite();
-    assert.equal((await first).ok, true);
-    assert.equal((await second).ok, true);
-  } finally {
-    setBeforeMarkdownWriteForTest(null);
-  }
-
-  assert.equal(
-    await readFile(
-      path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId, 'transcript.md'),
-      'utf8'
-    ),
-    '新内容\n'
+    stat(path.join(rootPath, 'memories', 'mem_unknown_draft_file', 'segments', segmentId))
   );
 });
 
 test('discard draft aborts when workspace handle is lost before removal', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_discard_lock_lost';
+  const segmentId = 'seg_20260506_discard_lock_lost';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   let usable = true;
 
   const discarded = await discardRecordingDraft({
     rootPath,
-    recordingId,
+    segmentId,
     beforeDraftDiscardRemove: () => {
       usable = false;
     },
@@ -503,7 +738,7 @@ test('discard draft aborts when workspace handle is lost before removal', async 
   if (!discarded.ok) {
     assert.equal(discarded.error.code, 'ERR_WORKSPACE_LOCK_LOST');
   }
-  await stat(path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId));
+  await stat(path.join(rootPath, '.reo', 'drafts', 'segments', segmentId));
 });
 
 test('recording finalize rejects non-file draft audio before deleting the draft', async () => {
@@ -511,15 +746,15 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_audio_directory',
+    createSegmentId: () => 'seg_20260506_audio_directory',
     now: () => '2026-05-06T13:08:00.000Z',
   });
   const draftAudioPath = path.join(
     rootPath,
     '.reo',
     'drafts',
-    'recordings',
-    'rec_20260506_audio_directory',
+    'segments',
+    'seg_20260506_audio_directory',
     'audio.webm'
   );
   await rm(draftAudioPath);
@@ -535,7 +770,7 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
   const finalized = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
-    recordingId: 'rec_20260506_audio_directory',
+    segmentId: 'seg_20260506_audio_directory',
     memoryId: 'mem_20260506_audio_directory',
     title: '非法音频',
     now: () => '2026-05-06T13:09:00.000Z',
@@ -545,15 +780,15 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
   if (!finalized.ok) {
     assert.equal(finalized.error.dataRetention, 'draft-preserved');
   }
-  await stat(path.join(rootPath, '.reo', 'drafts', 'recordings', 'rec_20260506_audio_directory'));
+  await stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_audio_directory'));
   await assert.rejects(
     stat(
       path.join(
         rootPath,
         'memories',
         'mem_20260506_audio_directory',
-        'recordings',
-        'rec_20260506_audio_directory'
+        'segments',
+        'seg_20260506_audio_directory'
       )
     )
   );
@@ -565,11 +800,11 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
         title: '非法音频',
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
-        assetCount: 0,
+        segmentCount: 0,
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
     ],
   });
@@ -578,45 +813,45 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
 test('recording draft rejects symlinked draft ancestors before writing chunks', async () => {
   const rootPath = await workspaceRoot();
   const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-outside-'));
-  await rm(path.join(rootPath, '.reo', 'drafts', 'recordings'), {
+  await rm(path.join(rootPath, '.reo', 'drafts', 'segments'), {
     recursive: true,
     force: true,
   });
-  await symlink(outside, path.join(rootPath, '.reo', 'drafts', 'recordings'));
+  await symlink(outside, path.join(rootPath, '.reo', 'drafts', 'segments'));
 
   const draft = await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_symlinked_draft_root',
+    createSegmentId: () => 'seg_20260506_symlinked_draft_root',
     now: () => '2026-05-06T13:08:00.000Z',
   });
 
   assert.equal(draft.ok, false);
-  await assert.rejects(stat(path.join(outside, 'rec_20260506_symlinked_draft_root')));
+  await assert.rejects(stat(path.join(outside, 'seg_20260506_symlinked_draft_root')));
 });
 
 test('discard draft does not delete outside draft after cleanup validation', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_discard_cleanup_swap';
+  const segmentId = 'seg_20260506_discard_cleanup_swap';
   const outsideDraftsRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-discard-outside-'));
-  await mkdir(path.join(outsideDraftsRoot, recordingId));
-  await writeFile(path.join(outsideDraftsRoot, recordingId, 'sentinel.txt'), 'outside');
+  await mkdir(path.join(outsideDraftsRoot, segmentId));
+  await writeFile(path.join(outsideDraftsRoot, segmentId, 'sentinel.txt'), 'outside');
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
 
-  const recordingsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const segmentsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   let swapped = false;
   const discarded = await discardRecordingDraft({
     rootPath,
-    recordingId,
+    segmentId,
     beforeDraftDiscardRemove: async () => {
       swapped = true;
-      await rename(recordingsRoot, `${recordingsRoot}-preserved`);
-      await symlink(outsideDraftsRoot, recordingsRoot, 'dir');
+      await rename(segmentsRoot, `${segmentsRoot}-preserved`);
+      await symlink(outsideDraftsRoot, segmentsRoot, 'dir');
     },
   } as Parameters<typeof discardRecordingDraft>[0] & {
     readonly beforeDraftDiscardRemove: () => Promise<void>;
@@ -627,7 +862,7 @@ test('discard draft does not delete outside draft after cleanup validation', asy
   if (!discarded.ok) {
     assert.equal(discarded.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
   }
-  await stat(path.join(outsideDraftsRoot, recordingId, 'sentinel.txt'));
+  await stat(path.join(outsideDraftsRoot, segmentId, 'sentinel.txt'));
 });
 
 test('recording draft rejects symlinked draft audio before appending chunks', async () => {
@@ -638,15 +873,15 @@ test('recording draft rejects symlinked draft audio before appending chunks', as
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_symlinked_audio',
+    createSegmentId: () => 'seg_20260506_symlinked_audio',
     now: () => '2026-05-06T13:08:00.000Z',
   });
   const draftDirectory = path.join(
     rootPath,
     '.reo',
     'drafts',
-    'recordings',
-    'rec_20260506_symlinked_audio'
+    'segments',
+    'seg_20260506_symlinked_audio'
   );
   const draftAudioPath = path.join(draftDirectory, 'audio.webm');
   await rm(draftAudioPath);
@@ -654,7 +889,7 @@ test('recording draft rejects symlinked draft audio before appending chunks', as
 
   const result = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_symlinked_audio',
+    segmentId: 'seg_20260506_symlinked_audio',
     sequence: 0,
     chunk: new Uint8Array([65, 66]),
   });
@@ -664,25 +899,23 @@ test('recording draft rejects symlinked draft audio before appending chunks', as
     assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
   }
   assert.equal(await readFile(outsideAudioPath, 'utf8'), 'seed');
-  assert.deepEqual(
-    JSON.parse(await readFile(path.join(draftDirectory, 'recording.json'), 'utf8')),
-    {
-      schemaVersion: 1,
-      workspaceId: 'ws_draft',
-      recordingId: 'rec_20260506_symlinked_audio',
-      status: 'draft',
-      title: '',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      nextSequence: 0,
-      audioByteLength: 0,
-    }
-  );
+  assert.deepEqual(JSON.parse(await readFile(path.join(draftDirectory, 'segment.json'), 'utf8')), {
+    schemaVersion: 1,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260506_symlinked_audio',
+    type: 'audio',
+    status: 'draft',
+    title: '',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    nextSequence: 0,
+    audioByteLength: 0,
+  });
 });
 
 test('recording draft create rejects ancestor swap before writing draft files', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_ancestor_swap';
-  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const segmentId = 'seg_20260506_create_ancestor_swap';
+  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   const preservedDraftsRoot = `${draftsRoot}-preserved`;
   const outsideDraftsRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-create-outside-'));
 
@@ -693,21 +926,21 @@ test('recording draft create rejects ancestor swap before writing draft files', 
   const result = await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   setBeforeDraftDirectoryCreateForTest(null);
 
   assert.equal(result.ok, false);
-  await assert.rejects(stat(path.join(outsideDraftsRoot, recordingId)));
-  await assert.rejects(readFile(path.join(outsideDraftsRoot, recordingId, 'audio.webm')));
-  await assert.rejects(readFile(path.join(outsideDraftsRoot, recordingId, 'recording.json')));
+  await assert.rejects(stat(path.join(outsideDraftsRoot, segmentId)));
+  await assert.rejects(readFile(path.join(outsideDraftsRoot, segmentId, 'audio.webm')));
+  await assert.rejects(readFile(path.join(outsideDraftsRoot, segmentId, 'segment.json')));
 });
 
 test('recording draft create does not touch outside parent after ancestor swap before mkdir', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_no_outside_touch';
-  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const segmentId = 'seg_20260506_create_no_outside_touch';
+  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   const outsideDraftsRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-create-touch-'));
 
   setBeforeDraftDirectoryCreateForTest(async () => {
@@ -716,19 +949,19 @@ test('recording draft create does not touch outside parent after ancestor swap b
     await symlink(outsideDraftsRoot, draftsRoot, 'dir');
   });
   setAfterDraftDirectoryCreateForTest(async () => {
-    await writeFile(path.join(outsideDraftsRoot, recordingId, 'sentinel'), 'outside\n');
+    await writeFile(path.join(outsideDraftsRoot, segmentId, 'sentinel'), 'outside\n');
   });
 
   try {
     const result = await createRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      createRecordingId: () => recordingId,
+      createSegmentId: () => segmentId,
       now: () => '2026-05-06T13:08:00.000Z',
     });
 
     assert.equal(result.ok, false);
-    await assert.rejects(stat(path.join(outsideDraftsRoot, recordingId)));
+    await assert.rejects(stat(path.join(outsideDraftsRoot, segmentId)));
   } finally {
     setBeforeDraftDirectoryCreateForTest(null);
     setAfterDraftDirectoryCreateForTest(null);
@@ -737,10 +970,10 @@ test('recording draft create does not touch outside parent after ancestor swap b
 
 test('recording draft create rejects ancestor swap after leaf directory create', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_after_leaf_swap';
-  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const segmentId = 'seg_20260506_create_after_leaf_swap';
+  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   const outsideDraftsRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-after-leaf-'));
-  const outsideDraftDirectory = path.join(outsideDraftsRoot, recordingId);
+  const outsideDraftDirectory = path.join(outsideDraftsRoot, segmentId);
 
   setAfterDraftDirectoryCreateForTest(async () => {
     setAfterDraftDirectoryCreateForTest(null);
@@ -753,14 +986,14 @@ test('recording draft create rejects ancestor swap after leaf directory create',
     const result = await createRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      createRecordingId: () => recordingId,
+      createSegmentId: () => segmentId,
       now: () => '2026-05-06T13:08:00.000Z',
     });
 
     assert.equal(result.ok, false);
     await stat(outsideDraftDirectory);
     await assert.rejects(readFile(path.join(outsideDraftDirectory, 'audio.webm')));
-    await assert.rejects(readFile(path.join(outsideDraftDirectory, 'recording.json')));
+    await assert.rejects(readFile(path.join(outsideDraftDirectory, 'segment.json')));
   } finally {
     setAfterDraftDirectoryCreateForTest(null);
   }
@@ -768,10 +1001,10 @@ test('recording draft create rejects ancestor swap after leaf directory create',
 
 test('recording draft create does not touch outside parent after swap before audio create', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_audio_parent_swap';
-  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const segmentId = 'seg_20260506_create_audio_parent_swap';
+  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   const outsideDraftsRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-audio-create-'));
-  const outsideDraftDirectory = path.join(outsideDraftsRoot, recordingId);
+  const outsideDraftDirectory = path.join(outsideDraftsRoot, segmentId);
 
   setBeforeDraftAudioCreateForTest(async () => {
     await mkdir(outsideDraftDirectory);
@@ -783,7 +1016,7 @@ test('recording draft create does not touch outside parent after swap before aud
     const result = await createRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      createRecordingId: () => recordingId,
+      createSegmentId: () => segmentId,
       now: () => '2026-05-06T13:08:00.000Z',
     });
 
@@ -800,7 +1033,7 @@ test('recording draft create does not touch outside parent after swap before aud
 
 test('recording draft create aborts when workspace handle is lost before draft files are written', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_lock_lost';
+  const segmentId = 'seg_20260506_create_lock_lost';
   let usable = true;
   setBeforeDraftAudioCreateForTest(() => {
     usable = false;
@@ -810,7 +1043,7 @@ test('recording draft create aborts when workspace handle is lost before draft f
     const result = await createRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      createRecordingId: () => recordingId,
+      createSegmentId: () => segmentId,
       now: () => '2026-05-06T13:08:00.000Z',
       assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
     });
@@ -819,7 +1052,7 @@ test('recording draft create aborts when workspace handle is lost before draft f
     if (!result.ok) {
       assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
     }
-    await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId)));
+    await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'segments', segmentId)));
   } finally {
     setBeforeDraftAudioCreateForTest(null);
   }
@@ -827,7 +1060,7 @@ test('recording draft create aborts when workspace handle is lost before draft f
 
 test('recording draft create aborts when workspace handle is lost before draft directory create', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_create_directory_lock_lost';
+  const segmentId = 'seg_20260506_create_directory_lock_lost';
   let usable = true;
   let wroteAfterLockLost = false;
   setBeforeDraftDirectoryCreateForTest(() => {
@@ -841,7 +1074,7 @@ test('recording draft create aborts when workspace handle is lost before draft d
     const result = await createRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      createRecordingId: () => recordingId,
+      createSegmentId: () => segmentId,
       now: () => '2026-05-06T13:08:00.000Z',
       assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
     });
@@ -851,7 +1084,7 @@ test('recording draft create aborts when workspace handle is lost before draft d
       assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
     }
     assert.equal(wroteAfterLockLost, false);
-    await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId)));
+    await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'segments', segmentId)));
   } finally {
     setBeforeDraftDirectoryCreateForTest(null);
     setAfterDraftDirectoryCreateForTest(null);
@@ -860,28 +1093,29 @@ test('recording draft create aborts when workspace handle is lost before draft d
 
 test('recording append rejects ancestor swap before opening draft audio', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_append_ancestor_swap';
+  const segmentId = 'seg_20260506_append_ancestor_swap';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'recordings');
+  const draftsRoot = path.join(rootPath, '.reo', 'drafts', 'segments');
   const preservedDraftsRoot = `${draftsRoot}-preserved`;
   const outsideDraftDirectory = path.join(
     await mkdtemp(path.join(os.tmpdir(), 'reo-draft-append-outside-')),
-    recordingId
+    segmentId
   );
   await mkdir(outsideDraftDirectory);
   await writeFile(path.join(outsideDraftDirectory, 'audio.webm'), 'outside');
   await writeFile(
-    path.join(outsideDraftDirectory, 'recording.json'),
+    path.join(outsideDraftDirectory, 'segment.json'),
     `${JSON.stringify(
       {
         schemaVersion: 1,
         workspaceId: 'ws_draft',
-        recordingId,
+        segmentId,
+        type: 'audio',
         status: 'draft',
         title: '',
         createdAt: '2026-05-06T13:08:00.000Z',
@@ -899,7 +1133,7 @@ test('recording append rejects ancestor swap before opening draft audio', async 
   });
   const result = await appendRecordingAudioChunk({
     rootPath,
-    recordingId,
+    segmentId,
     sequence: 0,
     chunk: new Uint8Array([65, 66]),
   });
@@ -911,7 +1145,7 @@ test('recording append rejects ancestor swap before opening draft audio', async 
   }
   assert.equal(await readFile(path.join(outsideDraftDirectory, 'audio.webm'), 'utf8'), 'outside');
   assert.equal(
-    JSON.parse(await readFile(path.join(outsideDraftDirectory, 'recording.json'), 'utf8'))
+    JSON.parse(await readFile(path.join(outsideDraftDirectory, 'segment.json'), 'utf8'))
       .audioByteLength,
     0
   );
@@ -919,11 +1153,11 @@ test('recording append rejects ancestor swap before opening draft audio', async 
 
 test('recording append aborts when workspace handle is lost before audio write', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_append_lock_lost';
+  const segmentId = 'seg_20260506_append_lock_lost';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   let usable = true;
@@ -934,7 +1168,7 @@ test('recording append aborts when workspace handle is lost before audio write',
   try {
     const result = await appendRecordingAudioChunk({
       rootPath,
-      recordingId,
+      segmentId,
       sequence: 0,
       chunk: new Uint8Array([1, 2, 3]),
       assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
@@ -946,7 +1180,7 @@ test('recording append aborts when workspace handle is lost before audio write',
     }
     const metadata = JSON.parse(
       await readFile(
-        path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId, 'recording.json'),
+        path.join(rootPath, '.reo', 'drafts', 'segments', segmentId, 'segment.json'),
         'utf8'
       )
     );
@@ -959,19 +1193,19 @@ test('recording append aborts when workspace handle is lost before audio write',
 
 test('recording draft rolls back audio when metadata write fails after append', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_metadata_write_failure';
+  const segmentId = 'seg_20260506_metadata_write_failure';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  const draftDirectory = path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId);
+  const draftDirectory = path.join(rootPath, '.reo', 'drafts', 'segments', segmentId);
 
   await chmod(draftDirectory, 0o555);
   const appended = await appendRecordingAudioChunk({
     rootPath,
-    recordingId,
+    segmentId,
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
@@ -983,19 +1217,17 @@ test('recording draft rolls back audio when metadata write fails after append', 
     assert.equal(appended.error.dataRetention, 'draft-preserved');
   }
   assert.equal((await stat(path.join(draftDirectory, 'audio.webm'))).size, 0);
-  assert.deepEqual(
-    JSON.parse(await readFile(path.join(draftDirectory, 'recording.json'), 'utf8')),
-    {
-      audioByteLength: 0,
-      createdAt: '2026-05-06T13:08:00.000Z',
-      nextSequence: 0,
-      recordingId,
-      schemaVersion: 1,
-      status: 'draft',
-      title: '',
-      workspaceId: 'ws_draft',
-    }
-  );
+  assert.deepEqual(JSON.parse(await readFile(path.join(draftDirectory, 'segment.json'), 'utf8')), {
+    audioByteLength: 0,
+    createdAt: '2026-05-06T13:08:00.000Z',
+    nextSequence: 0,
+    segmentId,
+    schemaVersion: 1,
+    status: 'draft',
+    title: '',
+    type: 'audio',
+    workspaceId: 'ws_draft',
+  });
 });
 
 test('recording finalize blocks late append while finalization is active', async () => {
@@ -1003,12 +1235,12 @@ test('recording finalize blocks late append while finalization is active', async
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_000002',
+    createSegmentId: () => 'seg_20260506_000002',
     now: () => '2026-05-06T13:10:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000002',
+    segmentId: 'seg_20260506_000002',
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
@@ -1023,14 +1255,14 @@ test('recording finalize blocks late append while finalization is active', async
   const finalize = finalizeRecordingDraft({
     durationMs: 0,
     rootPath,
-    recordingId: 'rec_20260506_000002',
+    segmentId: 'seg_20260506_000002',
     memoryId: 'mem_20260506_000002',
     title: '并发录音',
     now: () => '2026-05-06T13:11:00.000Z',
   });
   const lateAppend = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000002',
+    segmentId: 'seg_20260506_000002',
     sequence: 1,
     chunk: new Uint8Array([9]),
   });
@@ -1045,25 +1277,25 @@ test('recording finalize blocks late append while finalization is active', async
       rootPath,
       'memories',
       'mem_20260506_000002',
-      'recordings',
-      'rec_20260506_000002',
+      'segments',
+      'seg_20260506_000002',
       'audio.webm'
     )
   );
   assert.equal(audio.size, 3);
 });
 
-test('recording append rejects stale draft when a finalized recording already exists', async () => {
+test('recording append rejects stale draft when a finalized audio segment already exists', async () => {
   const rootPath = await workspaceRoot();
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_stale_draft',
+    createSegmentId: () => 'seg_20260506_stale_draft',
     now: () => '2026-05-06T13:10:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_stale_draft',
+    segmentId: 'seg_20260506_stale_draft',
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
@@ -1077,7 +1309,7 @@ test('recording append rejects stale draft when a finalized recording already ex
   const finalized = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
-    recordingId: 'rec_20260506_stale_draft',
+    segmentId: 'seg_20260506_stale_draft',
     memoryId: 'mem_20260506_stale_draft',
     title: '已完成录音',
     now: () => '2026-05-06T13:11:00.000Z',
@@ -1088,18 +1320,19 @@ test('recording append rejects stale draft when a finalized recording already ex
     rootPath,
     '.reo',
     'drafts',
-    'recordings',
-    'rec_20260506_stale_draft'
+    'segments',
+    'seg_20260506_stale_draft'
   );
   await mkdir(staleDraftDirectory, { recursive: true });
   await writeFile(path.join(staleDraftDirectory, 'audio.webm'), new Uint8Array([7]));
   await writeFile(
-    path.join(staleDraftDirectory, 'recording.json'),
+    path.join(staleDraftDirectory, 'segment.json'),
     `${JSON.stringify(
       {
         schemaVersion: 1,
         workspaceId: 'ws_draft',
-        recordingId: 'rec_20260506_stale_draft',
+        segmentId: 'seg_20260506_stale_draft',
+        type: 'audio',
         status: 'draft',
         title: '',
         createdAt: '2026-05-06T13:10:00.000Z',
@@ -1113,7 +1346,7 @@ test('recording append rejects stale draft when a finalized recording already ex
 
   const staleAppend = await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_stale_draft',
+    segmentId: 'seg_20260506_stale_draft',
     sequence: 0,
     chunk: new Uint8Array([9]),
   });
@@ -1129,9 +1362,9 @@ test('recording append rejects stale draft when a finalized recording already ex
         path.join(
           rootPath,
           'memories',
-          finalized.ok ? finalized.recording.memoryId : '',
-          'recordings',
-          'rec_20260506_stale_draft',
+          finalized.ok ? finalized.segment.memoryId : '',
+          'segments',
+          'seg_20260506_stale_draft',
           'audio.webm'
         )
       )
@@ -1142,19 +1375,19 @@ test('recording append rejects stale draft when a finalized recording already ex
 
 test('recording append checks finalized truth after root draft state is cleared', async () => {
   const rootPath = await workspaceRoot();
-  const recordingId = 'rec_20260506_active_draft_clear';
+  const segmentId = 'seg_20260506_active_draft_clear';
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => recordingId,
+    createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   clearRecordingRuntimeStateForRoot(rootPath);
-  await writeFinalizedRecordingForTest(rootPath, recordingId);
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
 
   const append = await appendRecordingAudioChunk({
     rootPath,
-    recordingId,
+    segmentId,
     sequence: 0,
     chunk: new Uint8Array([2]),
   });
@@ -1170,12 +1403,10 @@ test('recording finalize returns error envelope when durable audio is missing', 
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_000003',
+    createSegmentId: () => 'seg_20260506_000003',
     now: () => '2026-05-06T13:12:00.000Z',
   });
-  await rm(
-    path.join(rootPath, '.reo', 'drafts', 'recordings', 'rec_20260506_000003', 'audio.webm')
-  );
+  await rm(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_000003', 'audio.webm'));
 
   await createMemoryForDraftFinalize({
     rootPath,
@@ -1187,7 +1418,7 @@ test('recording finalize returns error envelope when durable audio is missing', 
   const finalized = await finalizeRecordingDraft({
     durationMs: 0,
     rootPath,
-    recordingId: 'rec_20260506_000003',
+    segmentId: 'seg_20260506_000003',
     memoryId: 'mem_20260506_000003',
     title: '缺失音频',
     now: () => '2026-05-06T13:13:00.000Z',
@@ -1205,12 +1436,12 @@ test('recording finalize preserves draft metadata when index update fails', asyn
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_20260506_000004',
+    createSegmentId: () => 'seg_20260506_000004',
     now: () => '2026-05-06T13:14:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_20260506_000004',
+    segmentId: 'seg_20260506_000004',
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
@@ -1227,7 +1458,7 @@ test('recording finalize preserves draft metadata when index update fails', asyn
   const finalized = await finalizeRecordingDraft({
     durationMs: 0,
     rootPath,
-    recordingId: 'rec_20260506_000004',
+    segmentId: 'seg_20260506_000004',
     memoryId: 'mem_20260506_000004',
     title: '索引失败录音',
     now: () => '2026-05-06T13:15:00.000Z',
@@ -1240,7 +1471,7 @@ test('recording finalize preserves draft metadata when index update fails', asyn
   }
   const metadata = JSON.parse(
     await readFile(
-      path.join(rootPath, '.reo', 'drafts', 'recordings', 'rec_20260506_000004', 'recording.json'),
+      path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_000004', 'segment.json'),
       'utf8'
     )
   );
@@ -1254,12 +1485,12 @@ test('recording finalize returns only the appended recording byte length for exi
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_seed',
+    createSegmentId: () => 'seg_seed',
     now: () => '2026-05-06T13:08:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_seed',
+    segmentId: 'seg_seed',
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3, 4, 5]),
   });
@@ -1275,7 +1506,7 @@ test('recording finalize returns only the appended recording byte length for exi
       await finalizeRecordingDraft({
         rootPath,
         workspaceId: 'ws_draft',
-        recordingId: 'rec_seed',
+        segmentId: 'seg_seed',
         memoryId: 'mem_existing_size',
         title: 'Seed',
         durationMs: 1000,
@@ -1288,12 +1519,12 @@ test('recording finalize returns only the appended recording byte length for exi
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createRecordingId: () => 'rec_append_size',
+    createSegmentId: () => 'seg_append_size',
     now: () => '2026-05-06T13:10:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    recordingId: 'rec_append_size',
+    segmentId: 'seg_append_size',
     sequence: 0,
     chunk: new Uint8Array([6, 7]),
   });
@@ -1302,7 +1533,7 @@ test('recording finalize returns only the appended recording byte length for exi
     await finalizeRecordingDraft({
       rootPath,
       workspaceId: 'ws_draft',
-      recordingId: 'rec_append_size',
+      segmentId: 'seg_append_size',
       memoryId: 'mem_existing_size',
       title: 'Append',
       durationMs: 2000,
@@ -1310,9 +1541,10 @@ test('recording finalize returns only the appended recording byte length for exi
     }),
     {
       ok: true,
-      recording: {
+      segment: {
         memoryId: 'mem_existing_size',
-        recordingId: 'rec_append_size',
+        segmentId: 'seg_append_size',
+        type: 'audio',
         title: 'Append',
         durationMs: 2000,
         audioByteLength: 2,
@@ -1322,11 +1554,11 @@ test('recording finalize returns only the appended recording byte length for exi
         title: 'Seed',
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:11:00.000Z',
-        assetCount: 2,
+        segmentCount: 2,
         durationMs: 3000,
         audioByteLength: 7,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
     }
   );

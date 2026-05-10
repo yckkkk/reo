@@ -8,23 +8,25 @@ import {
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
+  WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
-  WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-  WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
+  WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+  WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
@@ -37,8 +39,6 @@ import {
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
   workspaceListMemorySpacesResponseSchema,
-  workspaceMemoryDetailResponseSchema,
-  workspaceMemoryIdRequestSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
@@ -49,16 +49,20 @@ import {
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAppendResponseSchema,
-  workspaceRecordingAudioChunkResponseSchema,
-  workspaceRecordingAudioChunkRequestSchema,
-  workspaceRecordingAudioManifestResponseSchema,
-  workspaceRecordingDetailResponseSchema,
+  workspaceRecordingDraftPrefixCloneRequestSchema,
+  workspaceRecordingDraftPrefixCloneResponseSchema,
+  workspaceRecordingDraftAudioResponseSchema,
+  workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeResponseSchema,
   workspaceRecordingFinalizeRequestSchema,
-  workspaceRecordingIdRequestSchema,
+  workspaceRecordingTranscriptionAudioRequestSchema,
+  workspaceRecordingTranscriptionCloseRequestSchema,
+  workspaceRecordingTranscriptionControlResponseSchema,
+  workspaceRecordingTranscriptionEventSchema,
+  workspaceRecordingTranscriptionStartRequestSchema,
+  workspaceSegmentIdRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
-  workspaceRecordingReadRequestSchema,
   workspaceHandleRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
@@ -85,22 +89,16 @@ import {
 } from './trustedSender.js';
 import {
   appendRecordingAudioChunk,
+  cloneRecordingDraftPrefix,
   clearRecordingRuntimeState,
   clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
-  getRecordingDetail,
-  readRecordingAudioChunk,
-  readRecordingAudioManifest,
+  readRecordingDraftAudio,
   saveRecordingMarkdown,
 } from './recordingDrafts.js';
-import {
-  createMemoryFromFileTruth,
-  readMemoryDetail,
-  updateMemoryTitleFromFileTruth,
-  type MemoryDetail,
-} from './memoryFiles.js';
+import { createMemoryFromFileTruth, updateMemoryTitleFromFileTruth } from './memoryFiles.js';
 import {
   clearAllMicrophoneIntents,
   clearMicrophoneIntent,
@@ -117,11 +115,16 @@ import {
   validateWorkspaceOpenTarget,
   type WorkspaceInitializeTarget,
 } from './workspaceFiles.js';
+import {
+  createRecordingTranscriptionSessionRegistry,
+  type RecordingTranscriptionSessionRegistry,
+} from './recordingTranscriptionSessions.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, dialog, ipcMain } = nodeRequire('electron') as Partial<typeof import('electron')>;
 const defaultHandleStore = createWorkspaceHandleStore();
 let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
+const defaultRecordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry();
 
 interface ShowOpenDirectoryDialogResult {
   readonly canceled: boolean;
@@ -138,6 +141,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly tokenStore?: WorkspaceSelectionTokenStore;
   readonly handleStore?: WorkspaceHandleStore;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
 }
 
@@ -172,6 +176,7 @@ interface HandleWorkspaceRequestOptions {
   readonly expectedSessionKey: string;
   readonly isTrustedUrl: (url: string) => boolean;
   readonly handleStore?: WorkspaceHandleStore;
+  readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
 }
 
 export interface HandleMicrophoneIntentOptions extends HandleWorkspaceRequestOptions {
@@ -188,9 +193,11 @@ export interface HandleCreateMemoryOptions extends HandleWorkspaceRequestOptions
 }
 
 export interface HandleCreateRecordingDraftOptions extends HandleWorkspaceRequestOptions {
-  readonly createRecordingId?: () => string;
+  readonly createSegmentId?: () => string;
   readonly now?: () => string;
 }
+
+export type HandleRecordingTranscriptionControlOptions = HandleWorkspaceRequestOptions;
 
 type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
@@ -393,6 +400,7 @@ export async function handleRemoveMemorySpaceForTest(
 
 export async function closeAllWorkspaceHandles(): Promise<void> {
   clearAllMicrophoneIntents();
+  defaultRecordingTranscriptionSessions.closeAll();
   await defaultHandleStore.closeAllHandles();
   clearRecordingRuntimeState();
 }
@@ -401,12 +409,12 @@ function createWorkspaceId(): string {
   return `ws_${randomUUID()}`;
 }
 
-function createRecordingId(): string {
+function createSegmentId(): string {
   const timestamp = new Date()
     .toISOString()
     .replace(/[-:TZ.]/g, '')
     .slice(0, 14);
-  return `rec_${timestamp}_${randomUUID().slice(0, 8)}`;
+  return `seg_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
 function createMemoryId(): string {
@@ -445,6 +453,42 @@ function workspaceMemorySpaceRegistryWriteError(): WorkspaceErrorEnvelope {
     'Workspace memory space registry could not be written',
     'unknown'
   );
+}
+
+function senderKeyFor(sender: TrustedSenderIdentity): string {
+  return `${sender.sessionKey}:${sender.processId}:${sender.frameRoutingId}:${sender.origin}`;
+}
+
+function sendRecordingTranscriptionEvent(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
+): void {
+  const sender = event.sender as {
+    readonly isDestroyed?: () => boolean;
+    readonly send?: (channel: string, payload: unknown) => void;
+  };
+  if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) {
+    return;
+  }
+  if (typeof sender.send !== 'function') {
+    return;
+  }
+  const parsedPayload = workspaceRecordingTranscriptionEventSchema.parse(payload);
+  try {
+    sender.send(WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, parsedPayload);
+  } catch (sendError) {
+    if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) {
+      return;
+    }
+    throw sendError;
+  }
+}
+
+export function sendRecordingTranscriptionEventForTest(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
+): void {
+  sendRecordingTranscriptionEvent(event, payload);
 }
 
 async function releaseWorkspaceLockAfterFailure(
@@ -768,6 +812,7 @@ async function withWorkspaceHandleRequest<
   handleStore,
   schema,
   invalidMessage,
+  requireUsable,
   run,
 }: {
   readonly event: TrustedSenderEventAdapter;
@@ -779,10 +824,12 @@ async function withWorkspaceHandleRequest<
   readonly handleStore: WorkspaceHandleStore;
   readonly schema: Schema;
   readonly invalidMessage: string;
+  readonly requireUsable?: boolean;
   readonly run: (
     data: z.infer<Schema>,
     handle: RequiredWorkspaceHandle,
-    assertUsable: AssertWorkspaceHandleUsable
+    assertUsable: AssertWorkspaceHandleUsable,
+    sender: TrustedSenderIdentity
   ) => MaybePromise<Result | WorkspaceErrorEnvelope>;
 }): Promise<Result | WorkspaceErrorEnvelope> {
   const trusted = validateWorkspaceSender({
@@ -801,7 +848,9 @@ async function withWorkspaceHandleRequest<
     return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', invalidMessage);
   }
 
-  const required = handleStore.requireHandle({
+  const required = (
+    requireUsable === false ? handleStore.requireOwnedHandle : handleStore.requireHandle
+  )({
     workspaceHandle: request.data.workspaceHandle,
     sender: trusted.sender,
   });
@@ -809,7 +858,12 @@ async function withWorkspaceHandleRequest<
     return required;
   }
 
-  return run(request.data as z.infer<Schema>, required.handle, required.handle.assertUsable);
+  return run(
+    request.data as z.infer<Schema>,
+    required.handle,
+    required.handle.assertUsable,
+    trusted.sender
+  );
 }
 
 async function openWorkspaceRoot({
@@ -1068,7 +1122,7 @@ async function handleBeginMicrophoneIntentCore({
     createMicrophoneIntent({
       senderId,
       workspaceHandle: request.data.workspaceHandle,
-      drawerSessionId: request.data.drawerSessionId,
+      recordingFlowSessionId: request.data.recordingFlowSessionId,
       ...(now ? { now } : {}),
     })
   );
@@ -1131,7 +1185,7 @@ async function handleClearMicrophoneIntentCore({
   clearMicrophoneIntent({
     senderId,
     workspaceHandle: request.data.workspaceHandle,
-    drawerSessionId: request.data.drawerSessionId,
+    recordingFlowSessionId: request.data.recordingFlowSessionId,
   });
   return workspaceClearMicrophoneIntentResponseSchema.parse({ ok: true, value: { cleared: true } });
 }
@@ -1155,6 +1209,7 @@ async function handleCloseWorkspaceCore({
   expectedSessionKey,
   isTrustedUrl,
   handleStore = createWorkspaceHandleStore(),
+  recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
 }: HandleWorkspaceRequestOptions): Promise<z.infer<typeof workspaceCloseResponseSchema>> {
   const trusted = validateWorkspaceSender({
     event,
@@ -1181,6 +1236,7 @@ async function handleCloseWorkspaceCore({
   }
 
   clearMicrophoneIntentsForWorkspaceHandle(request.data.workspaceHandle);
+  recordingTranscriptionSessions.closeForWorkspaceHandle(request.data.workspaceHandle);
   const closed = await handleStore.closeHandle({
     workspaceHandle: request.data.workspaceHandle,
     sender: trusted.sender,
@@ -1203,41 +1259,6 @@ export async function handleCloseWorkspaceForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceCloseResponseSchema>> {
   return handleCloseWorkspaceCore(options);
-}
-
-function handleGetMemoryDetailCore(
-  options: HandleWorkspaceRequestOptions
-): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
-  return withWorkspaceHandleRequest({
-    ...options,
-    channel: WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceMemoryIdRequestSchema,
-    invalidMessage: 'getMemoryDetail request is invalid',
-    run: (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await readMemoryDetail({
-          rootPath: handle.canonicalRoot,
-          memoryId: request.memoryId,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceMemoryDetailResponseSchema.parse(
-          result.ok ? { ok: true, value: result.value } : result
-        );
-      }),
-  });
-}
-
-export async function handleGetMemoryDetail(
-  options: HandleWorkspaceRequestOptions
-): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
-  return handleGetMemoryDetailCore(options);
-}
-
-export async function handleGetMemoryDetailForTest(
-  options: HandleWorkspaceRequestOptions
-): Promise<WorkspaceErrorEnvelope | { readonly ok: true; readonly value: MemoryDetail }> {
-  return handleGetMemoryDetailCore(options);
 }
 
 function handleUpdateMemoryTitleCore({
@@ -1308,7 +1329,7 @@ function handleCreateMemoryCore({
 }
 
 function handleCreateRecordingDraftCore({
-  createRecordingId: createRecordingIdOption = createRecordingId,
+  createSegmentId: createSegmentIdOption = createSegmentId,
   now = nowIso,
   ...options
 }: HandleCreateRecordingDraftOptions): Promise<
@@ -1325,7 +1346,7 @@ function handleCreateRecordingDraftCore({
         const result = await createRecordingDraft({
           rootPath: handle.canonicalRoot,
           workspaceId: handle.workspaceId,
-          createRecordingId: createRecordingIdOption,
+          createSegmentId: createSegmentIdOption,
           now,
           assertWorkspaceUsable: assertUsable,
         });
@@ -1334,7 +1355,7 @@ function handleCreateRecordingDraftCore({
             ? {
                 ok: true,
                 value: {
-                  recordingId: result.recordingId,
+                  segmentId: result.segmentId,
                   nextSequence: result.nextSequence,
                 },
               }
@@ -1368,6 +1389,76 @@ export async function handleCreateMemoryForTest(
   return handleCreateMemoryCore(options);
 }
 
+function closeRecordingTranscriptionCore({
+  recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
+  ...options
+}: HandleRecordingTranscriptionControlOptions): Promise<
+  z.infer<typeof workspaceRecordingTranscriptionControlResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRecordingTranscriptionCloseRequestSchema,
+    invalidMessage: 'closeRecordingTranscription request is invalid',
+    requireUsable: false,
+    run: (request, _handle, _assertUsable, trustedSender) =>
+      workspaceRecordingTranscriptionControlResponseSchema.parse(
+        recordingTranscriptionSessions.close({
+          recordingFlowSessionId: request.recordingFlowSessionId,
+          recordingSessionId: request.recordingSessionId,
+          revisionId: request.revisionId,
+          senderKey: senderKeyFor(trustedSender),
+          workspaceHandle: request.workspaceHandle,
+        })
+      ),
+  });
+}
+
+function finishRecordingTranscriptionCore({
+  recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
+  ...options
+}: HandleRecordingTranscriptionControlOptions): Promise<
+  z.infer<typeof workspaceRecordingTranscriptionControlResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRecordingTranscriptionCloseRequestSchema,
+    invalidMessage: 'finishRecordingTranscription request is invalid',
+    requireUsable: false,
+    run: async (request, _handle, assertUsable, trustedSender) => {
+      const identity = {
+        recordingFlowSessionId: request.recordingFlowSessionId,
+        recordingSessionId: request.recordingSessionId,
+        revisionId: request.revisionId,
+        senderKey: senderKeyFor(trustedSender),
+        workspaceHandle: request.workspaceHandle,
+      };
+      const usable = assertUsable();
+      if (!usable.ok) {
+        recordingTranscriptionSessions.close(identity);
+        return usable;
+      }
+      const response = await recordingTranscriptionSessions.finish(identity);
+      return workspaceRecordingTranscriptionControlResponseSchema.parse(response);
+    },
+  });
+}
+
+export async function handleCloseRecordingTranscriptionForTest(
+  options: HandleRecordingTranscriptionControlOptions
+): Promise<z.infer<typeof workspaceRecordingTranscriptionControlResponseSchema>> {
+  return closeRecordingTranscriptionCore(options);
+}
+
+export async function handleFinishRecordingTranscriptionForTest(
+  options: HandleRecordingTranscriptionControlOptions
+): Promise<z.infer<typeof workspaceRecordingTranscriptionControlResponseSchema>> {
+  return finishRecordingTranscriptionCore(options);
+}
+
 export function registerWorkspaceIpc({
   expectedSession,
   expectedSessionKey,
@@ -1375,6 +1466,7 @@ export function registerWorkspaceIpc({
   tokenStore = createWorkspaceSelectionTokenStore(),
   handleStore = defaultHandleStore,
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
 }: RegisterWorkspaceIpcOptions): void {
   const electronMain = requireElectronMainApi();
@@ -1453,6 +1545,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+      recordingTranscriptionSessions,
     })
   );
   electronMain.ipcMain.handle(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
@@ -1463,16 +1556,82 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+      recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_GET_MEMORY_DETAIL_CHANNEL, (event, input) =>
-    handleGetMemoryDetail({
+  electronMain.ipcMain.handle(WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+    withWorkspaceHandleRequest({
+      event,
+      input,
+      channel: WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      schema: workspaceRecordingTranscriptionStartRequestSchema,
+      invalidMessage: 'startRecordingTranscription request is invalid',
+      run: (request, _handle, assertUsable, trustedSender) =>
+        withUsableWorkspaceHandle(assertUsable, () =>
+          recordingTranscriptionSessions.start({
+            recordingFlowSessionId: request.recordingFlowSessionId,
+            recordingSessionId: request.recordingSessionId,
+            revisionId: request.revisionId,
+            sendEvent: (payload) => sendRecordingTranscriptionEvent(event, payload),
+            senderKey: senderKeyFor(trustedSender),
+            timeOffsetMs: request.timeOffsetMs,
+            workspaceHandle: request.workspaceHandle,
+          })
+        ),
+    })
+  );
+  electronMain.ipcMain.handle(
+    WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+    (event, input) =>
+      withWorkspaceHandleRequest({
+        event,
+        input,
+        channel: WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        schema: workspaceRecordingTranscriptionAudioRequestSchema,
+        invalidMessage: 'sendRecordingTranscriptionAudio request is invalid',
+        run: (request, _handle, assertUsable, trustedSender) =>
+          withUsableWorkspaceHandle(assertUsable, () =>
+            workspaceRecordingTranscriptionControlResponseSchema.parse(
+              recordingTranscriptionSessions.sendAudio({
+                audio: request.chunk,
+                recordingFlowSessionId: request.recordingFlowSessionId,
+                recordingSessionId: request.recordingSessionId,
+                revisionId: request.revisionId,
+                senderKey: senderKeyFor(trustedSender),
+                workspaceHandle: request.workspaceHandle,
+              })
+            )
+          ),
+      })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+    finishRecordingTranscriptionCore({
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+      recordingTranscriptionSessions,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+    closeRecordingTranscriptionCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      recordingTranscriptionSessions,
     })
   );
   electronMain.ipcMain.handle(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>
@@ -1503,6 +1662,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+      recordingTranscriptionSessions,
     })
   );
 
@@ -1546,6 +1706,32 @@ export function registerWorkspaceIpc({
     })
   );
   registerWorkspaceHandleRequest(
+    WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+    workspaceRecordingDraftAudioRequestSchema,
+    'readRecordingDraftAudio request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await readRecordingDraftAudio({
+          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+          rootPath: handle.canonicalRoot,
+          segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRecordingDraftAudioResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                  nextSequence: result.nextSequence,
+                },
+              }
+            : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
     WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
     workspaceRecordingAppendRequestSchema,
     'appendRecordingAudioChunk request is invalid',
@@ -1553,13 +1739,40 @@ export function registerWorkspaceIpc({
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await appendRecordingAudioChunk({
           rootPath: handle.canonicalRoot,
-          recordingId: request.recordingId,
+          segmentId: request.segmentId,
           sequence: request.sequence,
           chunk: request.chunk,
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceRecordingAppendResponseSchema.parse(
           result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+    workspaceRecordingDraftPrefixCloneRequestSchema,
+    'cloneRecordingDraftPrefix request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await cloneRecordingDraftPrefix({
+          rootPath: handle.canonicalRoot,
+          sourceSegmentId: request.sourceSegmentId,
+          targetSegmentId: request.targetSegmentId,
+          retainedByteLength: request.retainedByteLength,
+          nextSequence: request.nextSequence,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRecordingDraftPrefixCloneResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  audioByteLength: result.audioByteLength,
+                  nextSequence: result.nextSequence,
+                },
+              }
+            : result
         );
       })
   );
@@ -1572,7 +1785,7 @@ export function registerWorkspaceIpc({
         const result = await finalizeRecordingDraft({
           rootPath: handle.canonicalRoot,
           workspaceId: handle.workspaceId,
-          recordingId: request.recordingId,
+          segmentId: request.segmentId,
           memoryId: request.memoryId,
           title: request.title,
           durationMs: request.durationMs,
@@ -1581,20 +1794,20 @@ export function registerWorkspaceIpc({
         });
         return workspaceRecordingFinalizeResponseSchema.parse(
           result.ok
-            ? { ok: true, value: { memory: result.memory, recording: result.recording } }
+            ? { ok: true, value: { memory: result.memory, segment: result.segment } }
             : result
         );
       })
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
-    workspaceRecordingIdRequestSchema,
+    workspaceSegmentIdRequestSchema,
     'discardRecordingDraft request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await discardRecordingDraft({
           rootPath: handle.canonicalRoot,
-          recordingId: request.recordingId,
+          segmentId: request.segmentId,
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceDiscardRecordingDraftResponseSchema.parse(
@@ -1603,80 +1816,22 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
-    WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
-    workspaceRecordingReadRequestSchema,
-    'getRecordingDetail request is invalid',
+    WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
+    workspaceRecordingMarkdownSaveRequestSchema,
+    'save transcript request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await getRecordingDetail({
+        const result = await saveRecordingMarkdown({
           rootPath: handle.canonicalRoot,
           memoryId: request.memoryId,
-          recordingId: request.recordingId,
+          segmentId: request.segmentId,
+          fileName: 'transcript.md',
+          markdown: request.markdown,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceRecordingDetailResponseSchema.parse(
-          result.ok ? { ok: true, value: result.recording } : result
+        return workspaceRecordingMarkdownSaveResponseSchema.parse(
+          result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
         );
       })
   );
-  registerWorkspaceHandleRequest(
-    WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-    workspaceRecordingReadRequestSchema,
-    'readRecordingAudioManifest request is invalid',
-    (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await readRecordingAudioManifest({
-          rootPath: handle.canonicalRoot,
-          memoryId: request.memoryId,
-          recordingId: request.recordingId,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceRecordingAudioManifestResponseSchema.parse(
-          result.ok ? { ok: true, value: result.manifest } : result
-        );
-      })
-  );
-  registerWorkspaceHandleRequest(
-    WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
-    workspaceRecordingAudioChunkRequestSchema,
-    'readRecordingAudioChunk request is invalid',
-    (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await readRecordingAudioChunk({
-          rootPath: handle.canonicalRoot,
-          memoryId: request.memoryId,
-          recordingId: request.recordingId,
-          offset: request.offset,
-          length: request.length,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceRecordingAudioChunkResponseSchema.parse(
-          result.ok ? { ok: true, value: { chunk: result.chunk } } : result
-        );
-      })
-  );
-  for (const [channel, fileName] of [
-    [WORKSPACE_SAVE_TRANSCRIPT_CHANNEL, 'transcript.md'],
-    [WORKSPACE_SAVE_REFLECTIONS_CHANNEL, 'reflections.md'],
-  ] as const) {
-    registerWorkspaceHandleRequest(
-      channel,
-      workspaceRecordingMarkdownSaveRequestSchema,
-      'save markdown request is invalid',
-      (request, handle, assertUsable) =>
-        withUsableWorkspaceHandle(assertUsable, async () => {
-          const result = await saveRecordingMarkdown({
-            rootPath: handle.canonicalRoot,
-            memoryId: request.memoryId,
-            recordingId: request.recordingId,
-            fileName,
-            markdown: request.markdown,
-            assertWorkspaceUsable: assertUsable,
-          });
-          return workspaceRecordingMarkdownSaveResponseSchema.parse(
-            result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
-          );
-        })
-    );
-  }
 }

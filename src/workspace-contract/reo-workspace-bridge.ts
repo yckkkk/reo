@@ -11,24 +11,26 @@ import type {
   WorkspaceInitializeRequest,
   WorkspaceInitializeResponse,
   WorkspaceListMemorySpacesResponse,
-  WorkspaceMemoryDetailResponse,
-  WorkspaceMemoryIdRequest,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
   WorkspaceOpenRequest,
   WorkspaceRecordingAppendRequest,
   WorkspaceRecordingAppendResponse,
-  WorkspaceRecordingAudioChunkRequest,
-  WorkspaceRecordingAudioChunkResponse,
-  WorkspaceRecordingAudioManifestResponse,
-  WorkspaceRecordingDetailResponse,
+  WorkspaceRecordingDraftPrefixCloneRequest,
+  WorkspaceRecordingDraftPrefixCloneResponse,
+  WorkspaceRecordingDraftAudioResponse,
+  WorkspaceRecordingDraftAudioRequest,
   WorkspaceRecordingFinalizeRequest,
   WorkspaceRecordingFinalizeResponse,
-  WorkspaceRecordingIdRequest,
+  WorkspaceRecordingTranscriptionAudioRequest,
+  WorkspaceRecordingTranscriptionCloseRequest,
+  WorkspaceRecordingTranscriptionControlResponse,
+  WorkspaceRecordingTranscriptionEvent,
+  WorkspaceRecordingTranscriptionStartRequest,
+  WorkspaceSegmentIdRequest,
   WorkspaceRecordingMarkdownSaveRequest,
   WorkspaceRecordingMarkdownSaveResponse,
-  WorkspaceRecordingReadRequest,
   WorkspaceRemoveMemorySpaceResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
@@ -54,34 +56,25 @@ export interface ReoWorkspaceBridge {
   readonly createRecordingDraft: (
     payload: WorkspaceHandleRequest
   ) => Promise<WorkspaceCreateRecordingDraftResponse>;
+  readonly readRecordingDraftAudio: (
+    payload: WorkspaceRecordingDraftAudioRequest
+  ) => Promise<WorkspaceRecordingDraftAudioResponse>;
   readonly appendRecordingAudioChunk: (
     payload: WorkspaceRecordingAppendRequest
   ) => Promise<WorkspaceRecordingAppendResponse>;
+  readonly cloneRecordingDraftPrefix: (
+    payload: WorkspaceRecordingDraftPrefixCloneRequest
+  ) => Promise<WorkspaceRecordingDraftPrefixCloneResponse>;
   readonly finalizeRecordingDraft: (
     payload: WorkspaceRecordingFinalizeRequest
   ) => Promise<WorkspaceRecordingFinalizeResponse>;
   readonly discardRecordingDraft: (
-    payload: WorkspaceRecordingIdRequest
+    payload: WorkspaceSegmentIdRequest
   ) => Promise<WorkspaceDiscardRecordingDraftResponse>;
-  readonly getMemoryDetail: (
-    payload: WorkspaceMemoryIdRequest
-  ) => Promise<WorkspaceMemoryDetailResponse>;
   readonly updateMemoryTitle: (
     payload: WorkspaceUpdateMemoryTitleRequest
   ) => Promise<WorkspaceUpdateMemoryTitleResponse>;
-  readonly getRecordingDetail: (
-    payload: WorkspaceRecordingReadRequest
-  ) => Promise<WorkspaceRecordingDetailResponse>;
-  readonly readRecordingAudioManifest: (
-    payload: WorkspaceRecordingReadRequest
-  ) => Promise<WorkspaceRecordingAudioManifestResponse>;
-  readonly readRecordingAudioChunk: (
-    payload: WorkspaceRecordingAudioChunkRequest
-  ) => Promise<WorkspaceRecordingAudioChunkResponse>;
   readonly saveTranscript: (
-    payload: WorkspaceRecordingMarkdownSaveRequest
-  ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;
-  readonly saveReflections: (
     payload: WorkspaceRecordingMarkdownSaveRequest
   ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;
   readonly beginMicrophoneIntent: (
@@ -90,4 +83,19 @@ export interface ReoWorkspaceBridge {
   readonly clearMicrophoneIntent: (
     payload: WorkspaceMicrophoneIntentRequest
   ) => Promise<WorkspaceClearMicrophoneIntentResponse>;
+  readonly startRecordingTranscription: (
+    payload: WorkspaceRecordingTranscriptionStartRequest
+  ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly sendRecordingTranscriptionAudio: (
+    payload: WorkspaceRecordingTranscriptionAudioRequest
+  ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly finishRecordingTranscription: (
+    payload: WorkspaceRecordingTranscriptionCloseRequest
+  ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly closeRecordingTranscription: (
+    payload: WorkspaceRecordingTranscriptionCloseRequest
+  ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly onRecordingTranscriptionEvent: (
+    callback: (event: WorkspaceRecordingTranscriptionEvent) => void
+  ) => () => void;
 }

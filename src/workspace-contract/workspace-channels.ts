@@ -7,22 +7,29 @@ export const WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL = 'workspace:removeMemorySpac
 export const WORKSPACE_CLOSE_CHANNEL = 'workspace:close' as const;
 export const WORKSPACE_CREATE_MEMORY_CHANNEL = 'workspace:createMemory' as const;
 export const WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL = 'workspace:createRecordingDraft' as const;
+export const WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL =
+  'workspace:readRecordingDraftAudio' as const;
 export const WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL =
   'workspace:appendRecordingAudioChunk' as const;
+export const WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL =
+  'workspace:cloneRecordingDraftPrefix' as const;
 export const WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL =
   'workspace:finalizeRecordingDraft' as const;
 export const WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL = 'workspace:discardRecordingDraft' as const;
-export const WORKSPACE_GET_MEMORY_DETAIL_CHANNEL = 'workspace:getMemoryDetail' as const;
 export const WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL = 'workspace:updateMemoryTitle' as const;
-export const WORKSPACE_GET_RECORDING_DETAIL_CHANNEL = 'workspace:getRecordingDetail' as const;
-export const WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL =
-  'workspace:readRecordingAudioManifest' as const;
-export const WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL =
-  'workspace:readRecordingAudioChunk' as const;
 export const WORKSPACE_SAVE_TRANSCRIPT_CHANNEL = 'workspace:saveTranscript' as const;
-export const WORKSPACE_SAVE_REFLECTIONS_CHANNEL = 'workspace:saveReflections' as const;
 export const WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL = 'workspace:beginMicrophoneIntent' as const;
 export const WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL = 'workspace:clearMicrophoneIntent' as const;
+export const WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL =
+  'workspace:startRecordingTranscription' as const;
+export const WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL =
+  'workspace:sendRecordingTranscriptionAudio' as const;
+export const WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL =
+  'workspace:finishRecordingTranscription' as const;
+export const WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL =
+  'workspace:closeRecordingTranscription' as const;
+export const WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL =
+  'workspace:recordingTranscriptionEvent' as const;
 
 export const WORKSPACE_IPC_CHANNELS = [
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
@@ -34,18 +41,25 @@ export const WORKSPACE_IPC_CHANNELS = [
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_GET_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
-  WORKSPACE_GET_RECORDING_DETAIL_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_MANIFEST_CHANNEL,
-  WORKSPACE_READ_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
-  WORKSPACE_SAVE_REFLECTIONS_CHANNEL,
   WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
+  WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+  WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
 ] as const;
 
 export type WorkspaceIpcChannel = (typeof WORKSPACE_IPC_CHANNELS)[number];
+
+export const WORKSPACE_RENDERER_EVENT_CHANNELS = [
+  WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+] as const;
+
+export type WorkspaceRendererEventChannel = (typeof WORKSPACE_RENDERER_EVENT_CHANNELS)[number];

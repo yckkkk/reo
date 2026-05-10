@@ -4,6 +4,10 @@ import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
@@ -14,8 +18,12 @@ import {
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
   workspaceListMemorySpacesResponseSchema,
-  workspaceMemoryDetailResponseSchema,
   workspaceMicrophoneIntentResponseSchema,
+  workspaceRecordingTranscriptionAudioRequestSchema,
+  workspaceRecordingTranscriptionCloseRequestSchema,
+  workspaceRecordingTranscriptionControlResponseSchema,
+  workspaceRecordingTranscriptionEventSchema,
+  workspaceRecordingTranscriptionStartRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
   workspaceOpenRequestSchema,
@@ -23,7 +31,10 @@ import {
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceRemoveMemorySpaceRequestSchema,
   workspaceRecordingAppendRequestSchema,
-  workspaceRecordingAudioChunkRequestSchema,
+  workspaceRecordingDraftPrefixCloneRequestSchema,
+  workspaceRecordingDraftPrefixCloneResponseSchema,
+  workspaceRecordingDraftAudioResponseSchema,
+  workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingReadRequestSchema,
@@ -47,21 +58,32 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:close',
     'workspace:createMemory',
     'workspace:createRecordingDraft',
+    'workspace:readRecordingDraftAudio',
     'workspace:appendRecordingAudioChunk',
+    'workspace:cloneRecordingDraftPrefix',
     'workspace:finalizeRecordingDraft',
     'workspace:discardRecordingDraft',
-    'workspace:getMemoryDetail',
     'workspace:updateMemoryTitle',
-    'workspace:getRecordingDetail',
-    'workspace:readRecordingAudioManifest',
-    'workspace:readRecordingAudioChunk',
     'workspace:saveTranscript',
-    'workspace:saveReflections',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
+    'workspace:startRecordingTranscription',
+    'workspace:sendRecordingTranscriptionAudio',
+    'workspace:finishRecordingTranscription',
+    'workspace:closeRecordingTranscription',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
+  assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, ['workspace:recordingTranscriptionEvent']);
+  assert.equal(
+    WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+    'workspace:recordingTranscriptionEvent'
+  );
   assert.equal(WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory');
+  assert.equal(WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio');
+  assert.equal(
+    WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+    'workspace:cloneRecordingDraftPrefix'
+  );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
 });
 
@@ -193,14 +215,14 @@ test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot,
   );
 });
 
-test('workspace snapshot contract rejects top-level recordings projection', () => {
+test('workspace snapshot contract rejects top-level segments projection', () => {
   assert.throws(() =>
     workspaceSnapshotSchema.parse({
       workspaceId: 'ws_1',
       title: '新的 workspace',
       description: '',
       memories: [],
-      recordings: [],
+      segments: [],
     })
   );
 });
@@ -212,22 +234,22 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       title: '产品灵感',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetCount: 1,
+      segmentCount: 1,
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      hasReflections: false,
+      attachmentCount: 0,
     }),
     {
       memoryId: 'mem_1',
       title: '产品灵感',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetCount: 1,
+      segmentCount: 1,
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      hasReflections: false,
+      attachmentCount: 0,
     }
   );
   assert.throws(() =>
@@ -236,12 +258,12 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       title: '产品灵感',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetCount: 1,
+      segmentCount: 1,
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      hasReflections: false,
-      staleRecordingProjection: ['rec_old'],
+      attachmentCount: 0,
+      staleRecordingProjection: ['seg_old'],
     })
   );
   assert.throws(() =>
@@ -250,11 +272,11 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       title: '产品灵感',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetCount: 1,
+      segmentCount: 1,
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      hasReflections: false,
+      attachmentCount: 0,
     })
   );
 });
@@ -264,14 +286,14 @@ test('createRecordingDraft response contract exposes a flat draft identity paylo
     workspaceCreateRecordingDraftResponseSchema.parse({
       ok: true,
       value: {
-        recordingId: 'rec_20260508_000001',
+        segmentId: 'seg_20260508_000001',
         nextSequence: 0,
       },
     }),
     {
       ok: true,
       value: {
-        recordingId: 'rec_20260508_000001',
+        segmentId: 'seg_20260508_000001',
         nextSequence: 0,
       },
     }
@@ -281,7 +303,7 @@ test('createRecordingDraft response contract exposes a flat draft identity paylo
       ok: true,
       value: {
         ok: true,
-        recordingId: 'rec_20260508_000001',
+        segmentId: 'seg_20260508_000001',
         nextSequence: 0,
       },
     })
@@ -356,13 +378,13 @@ test('recording append contract caps chunks at 1 MiB and requires opaque workspa
   assert.deepEqual(
     workspaceRecordingAppendRequestSchema.parse({
       workspaceHandle: 'wh_1',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       sequence: 0,
       chunk,
     }),
     {
       workspaceHandle: 'wh_1',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       sequence: 0,
       chunk,
     }
@@ -370,9 +392,99 @@ test('recording append contract caps chunks at 1 MiB and requires opaque workspa
   assert.throws(() =>
     workspaceRecordingAppendRequestSchema.parse({
       workspaceHandle: 'wh_1',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       sequence: 0,
       chunk: new Uint8Array(1_048_577),
+    })
+  );
+});
+
+test('recording draft prefix clone contract keeps replacement copy explicit and bounded', () => {
+  assert.deepEqual(
+    workspaceRecordingDraftPrefixCloneRequestSchema.parse({
+      workspaceHandle: 'workspace-handle-secret',
+      sourceSegmentId: 'seg_source',
+      targetSegmentId: 'seg_target',
+      retainedByteLength: 2048,
+      nextSequence: 0,
+    }),
+    {
+      workspaceHandle: 'workspace-handle-secret',
+      sourceSegmentId: 'seg_source',
+      targetSegmentId: 'seg_target',
+      retainedByteLength: 2048,
+      nextSequence: 0,
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingDraftPrefixCloneRequestSchema.parse({
+      workspaceHandle: 'workspace-handle-secret',
+      sourceSegmentId: 'seg_same',
+      targetSegmentId: 'seg_same',
+      retainedByteLength: 2048,
+      nextSequence: 0,
+    })
+  );
+  assert.deepEqual(
+    workspaceRecordingDraftPrefixCloneResponseSchema.parse({
+      ok: true,
+      value: { audioByteLength: 2048, nextSequence: 1 },
+    }),
+    {
+      ok: true,
+      value: { audioByteLength: 2048, nextSequence: 1 },
+    }
+  );
+});
+
+test('draft audio read response returns only current draft bytes and append cursor', () => {
+  assert.deepEqual(
+    workspaceRecordingDraftAudioRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      segmentId: 'seg_20260506_000001',
+      maxBytes: 4096,
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      segmentId: 'seg_20260506_000001',
+      maxBytes: 4096,
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingDraftAudioRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      segmentId: 'seg_20260506_000001',
+      maxBytes: 64 * 1024 * 1024 + 1,
+    })
+  );
+
+  const audio = new Uint8Array([1, 2, 3]);
+  assert.deepEqual(
+    workspaceRecordingDraftAudioResponseSchema.parse({
+      ok: true,
+      value: {
+        audio,
+        audioByteLength: 3,
+        nextSequence: 2,
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        audio,
+        audioByteLength: 3,
+        nextSequence: 2,
+      },
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingDraftAudioResponseSchema.parse({
+      ok: true,
+      value: {
+        audio: [1, 2, 3],
+        audioByteLength: 3,
+        nextSequence: 2,
+      },
     })
   );
 });
@@ -382,14 +494,14 @@ test('recording finalize contract requires explicit durable duration', () => {
     workspaceRecordingFinalizeRequestSchema.parse({
       durationMs: 2000,
       memoryId: 'mem_20260506_000001',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       title: '录音',
       workspaceHandle: 'wh_1',
     }),
     {
       durationMs: 2000,
       memoryId: 'mem_20260506_000001',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       title: '录音',
       workspaceHandle: 'wh_1',
     }
@@ -397,7 +509,7 @@ test('recording finalize contract requires explicit durable duration', () => {
   assert.throws(() =>
     workspaceRecordingFinalizeRequestSchema.parse({
       memoryId: 'mem_20260506_000001',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       title: '录音',
       workspaceHandle: 'wh_1',
     })
@@ -405,137 +517,37 @@ test('recording finalize contract requires explicit durable duration', () => {
   assert.throws(() =>
     workspaceRecordingFinalizeRequestSchema.parse({
       durationMs: 2000,
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       title: '录音',
       workspaceHandle: 'wh_1',
     })
   );
 });
 
-test('finalized recording read and save contracts require memory id plus recording id', () => {
+test('finalized audio segment transcript save contract requires memory id plus segment id', () => {
   assert.deepEqual(
     workspaceRecordingReadRequestSchema.parse({
       memoryId: 'mem_20260506_000001',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       workspaceHandle: 'wh_1',
     }),
     {
       memoryId: 'mem_20260506_000001',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       workspaceHandle: 'wh_1',
     }
   );
   assert.throws(() =>
     workspaceRecordingReadRequestSchema.parse({
-      recordingId: 'rec_20260506_000001',
-      workspaceHandle: 'wh_1',
-    })
-  );
-  assert.throws(() =>
-    workspaceRecordingAudioChunkRequestSchema.parse({
-      length: 1,
-      offset: 0,
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       workspaceHandle: 'wh_1',
     })
   );
   assert.throws(() =>
     workspaceRecordingMarkdownSaveRequestSchema.parse({
       markdown: 'note',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
       workspaceHandle: 'wh_1',
-    })
-  );
-});
-
-test('memory detail response contract rejects raw paths', () => {
-  assert.deepEqual(
-    workspaceMemoryDetailResponseSchema.parse({
-      ok: true,
-      value: {
-        memoryId: 'mem_20260506_000001',
-        title: '录音记忆',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:09:00.000Z',
-        assetIds: ['rec_20260506_000001'],
-        assetCount: 1,
-        recordingsTruncated: false,
-        hasTranscript: true,
-        hasReflections: false,
-        recordings: [
-          {
-            recordingId: 'rec_20260506_000001',
-            title: '录音',
-            durationMs: 1000,
-            audioByteLength: 3,
-          },
-        ],
-      },
-    }),
-    {
-      ok: true,
-      value: {
-        memoryId: 'mem_20260506_000001',
-        title: '录音记忆',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:09:00.000Z',
-        assetIds: ['rec_20260506_000001'],
-        assetCount: 1,
-        recordingsTruncated: false,
-        hasTranscript: true,
-        hasReflections: false,
-        recordings: [
-          {
-            recordingId: 'rec_20260506_000001',
-            title: '录音',
-            durationMs: 1000,
-            audioByteLength: 3,
-          },
-        ],
-      },
-    }
-  );
-  assert.throws(() =>
-    workspaceMemoryDetailResponseSchema.parse({
-      ok: true,
-      value: {
-        memoryId: 'mem_20260506_000001',
-        title: '录音记忆',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:09:00.000Z',
-        assetIds: ['rec_20260506_000001'],
-        assetCount: 1,
-        recordingsTruncated: false,
-        hasTranscript: true,
-        hasReflections: false,
-        rootPath: '/Users/example/Voice Notes',
-        recordings: [
-          {
-            recordingId: 'rec_20260506_000001',
-            title: '录音',
-            durationMs: 1000,
-            audioByteLength: 3,
-            rootPath: '/Users/example/Voice Notes',
-          },
-        ],
-      },
-    })
-  );
-  assert.throws(() =>
-    workspaceMemoryDetailResponseSchema.parse({
-      ok: true,
-      value: {
-        memoryId: 'mem_20260506_000001',
-        title: '录音记忆',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:09:00.000Z',
-        assetIds: ['note_20260506_000001'],
-        assetCount: 1,
-        recordingsTruncated: false,
-        hasTranscript: false,
-        hasReflections: false,
-        recordings: [],
-      },
     })
   );
 });
@@ -565,7 +577,7 @@ test('memory title update contract is scoped to a memory container and strips ra
       workspaceHandle: 'wh_1',
       memoryId: 'mem_20260506_000001',
       title: '产品灵感与思考',
-      recordingId: 'rec_20260506_000001',
+      segmentId: 'seg_20260506_000001',
     })
   );
 
@@ -577,13 +589,13 @@ test('memory title update contract is scoped to a memory container and strips ra
         title: '产品灵感与思考',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        assetCount: 5,
+        segmentCount: 5,
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: true,
-        hasReflections: false,
+        attachmentCount: 0,
         rootPath: '/Users/example/Reo',
-        assetIds: ['rec_20260506_000001'],
+        segmentIds: ['seg_20260506_000001'],
       },
     })
   );
@@ -629,13 +641,13 @@ test('memory create contract creates a named Memory container without raw path a
         title: '产品灵感与思考',
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        assetCount: 0,
+        segmentCount: 0,
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
         rootPath: '/Users/example/Reo',
-        assetIds: [],
+        segmentIds: [],
       },
     })
   );
@@ -650,6 +662,132 @@ test('microphone intent response exposes no token-like authority', () => {
         microphoneIntentId: 'mic_1',
         expiresAt: 16_000,
       },
+    })
+  );
+});
+
+test('recording transcription contract keeps credentials out of renderer payloads', () => {
+  const start = workspaceRecordingTranscriptionStartRequestSchema.parse({
+    recordingFlowSessionId: 'recording-1',
+    recordingSessionId: 'recording-1',
+    revisionId: 'recording-1-revision-0',
+    timeOffsetMs: 2000,
+    workspaceHandle: 'wh_1',
+  });
+  assert.deepEqual(start, {
+    recordingFlowSessionId: 'recording-1',
+    recordingSessionId: 'recording-1',
+    revisionId: 'recording-1-revision-0',
+    timeOffsetMs: 2000,
+    workspaceHandle: 'wh_1',
+  });
+  assert.throws(() =>
+    workspaceRecordingTranscriptionStartRequestSchema.parse({
+      ...start,
+      accessToken: 'secret',
+      appId: 'secret',
+    })
+  );
+
+  const audio = new Uint8Array([1, 2, 3]);
+  assert.deepEqual(
+    workspaceRecordingTranscriptionAudioRequestSchema.parse({
+      chunk: audio,
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: 'wh_1',
+    }),
+    {
+      chunk: audio,
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: 'wh_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingTranscriptionAudioRequestSchema.parse({
+      chunk: new Uint8Array(65_537),
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: 'wh_1',
+    })
+  );
+
+  assert.deepEqual(
+    workspaceRecordingTranscriptionCloseRequestSchema.parse({
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: 'wh_1',
+    }),
+    {
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: 'wh_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceRecordingTranscriptionControlResponseSchema.parse({
+      ok: true,
+      value: { accepted: true },
+    }),
+    { ok: true, value: { accepted: true } }
+  );
+});
+
+test('recording transcription event contract carries only segment state and safe errors', () => {
+  assert.deepEqual(
+    workspaceRecordingTranscriptionEventSchema.parse({
+      kind: 'segments',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      segments: [
+        {
+          endTimeMs: 2400,
+          isFinal: false,
+          recordingSessionId: 'recording-1',
+          revisionId: 'recording-1-revision-0',
+          startTimeMs: 1200,
+          text: '实时转写',
+        },
+      ],
+    }),
+    {
+      kind: 'segments',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      segments: [
+        {
+          endTimeMs: 2400,
+          isFinal: false,
+          recordingSessionId: 'recording-1',
+          revisionId: 'recording-1-revision-0',
+          startTimeMs: 1200,
+          text: '实时转写',
+        },
+      ],
+    }
+  );
+  assert.throws(() =>
+    workspaceRecordingTranscriptionEventSchema.parse({
+      kind: 'segments',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      rootPath: '/Users/example/Reo',
+      segments: [],
+    })
+  );
+  assert.throws(() =>
+    workspaceRecordingTranscriptionEventSchema.parse({
+      kind: 'error',
+      accessToken: 'secret',
+      message: 'failed',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
     })
   );
 });

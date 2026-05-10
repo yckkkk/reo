@@ -167,11 +167,11 @@ function sameMemorySummaries(
       memory.title === other.title &&
       memory.createdAt === other.createdAt &&
       memory.updatedAt === other.updatedAt &&
-      memory.assetCount === other.assetCount &&
+      memory.segmentCount === other.segmentCount &&
       memory.durationMs === other.durationMs &&
       memory.audioByteLength === other.audioByteLength &&
       memory.hasTranscript === other.hasTranscript &&
-      memory.hasReflections === other.hasReflections
+      memory.attachmentCount === other.attachmentCount
     );
   });
 }

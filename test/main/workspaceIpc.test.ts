@@ -18,10 +18,11 @@ import {
   handleChooseWorkspaceDirectory,
   handleBeginMicrophoneIntentForTest,
   handleClearMicrophoneIntentForTest,
+  handleCloseRecordingTranscriptionForTest,
   handleCloseWorkspaceForTest,
   handleCreateRecordingDraftForTest,
   handleCreateMemoryForTest,
-  handleGetMemoryDetailForTest,
+  handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
   handleListWorkspaceMemorySpacesForTest,
@@ -29,6 +30,7 @@ import {
   handleOpenWorkspaceMemorySpaceForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
+  sendRecordingTranscriptionEventForTest,
   handleUpdateMemoryTitleForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
@@ -71,6 +73,39 @@ const microphoneEvent = {
   sender: { ...event.sender, id: 101 },
 };
 
+test('recording transcription events keep the Electron sender binding', () => {
+  const sent: unknown[] = [];
+  const senderWithSend = {
+    send(channel: string, payload: unknown) {
+      assert.equal(this, senderWithSend);
+      sent.push({ channel, payload });
+    },
+    session: expectedSession,
+  };
+
+  sendRecordingTranscriptionEventForTest(
+    { ...event, sender: senderWithSend },
+    {
+      kind: 'error',
+      message: '实时转写暂时不可用。',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+    }
+  );
+
+  assert.deepEqual(sent, [
+    {
+      channel: 'workspace:recordingTranscriptionEvent',
+      payload: {
+        kind: 'error',
+        message: '实时转写暂时不可用。',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+      },
+    },
+  ]);
+});
+
 async function assertWorkspaceLockCanBeReacquired(rootPath: string): Promise<void> {
   const lock = await acquireWorkspaceLock({ canonicalRoot: rootPath });
   assert.equal(lock.ok, true);
@@ -83,17 +118,17 @@ async function writeFinalizedMemoryRecording({
   root,
   workspaceId,
   memoryId,
-  recordingId,
+  segmentId,
   title,
 }: {
   readonly root: string;
   readonly workspaceId: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly title: string;
 }): Promise<void> {
   const memoryDirectory = path.join(root, 'memories', memoryId);
-  const recordingDirectory = path.join(memoryDirectory, 'recordings', recordingId);
+  const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
   await writeFile(
     path.join(memoryDirectory, 'memory.json'),
@@ -102,19 +137,19 @@ async function writeFinalizedMemoryRecording({
       title,
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      assetIds: [recordingId],
+      segmentIds: [segmentId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2, 3]));
   await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
-  await writeFile(path.join(recordingDirectory, 'reflections.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'recording.json'),
+    path.join(recordingDirectory, 'segment.json'),
     `${JSON.stringify({
       schemaVersion: 1,
       workspaceId,
       memoryId,
-      recordingId,
+      segmentId,
+      type: 'audio',
       status: 'finalized',
       title,
       createdAt: '2026-05-06T13:08:00.000Z',
@@ -123,7 +158,6 @@ async function writeFinalizedMemoryRecording({
       nextSequence: 1,
       audioByteLength: 3,
       transcriptPath: 'transcript.md',
-      reflectionsPath: 'reflections.md',
     })}\n`
   );
 }
@@ -328,7 +362,7 @@ test('beginMicrophoneIntent uses sender id from the IPC event and returns no raw
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -365,7 +399,7 @@ test('clearMicrophoneIntent requires the matching workspace handle owner', async
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -378,7 +412,7 @@ test('clearMicrophoneIntent requires the matching workspace handle owner', async
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -410,7 +444,7 @@ test('clearMicrophoneIntent clears pending intent after workspace lock is lost',
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -424,7 +458,7 @@ test('clearMicrophoneIntent clears pending intent after workspace lock is lost',
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -455,7 +489,7 @@ test('closeWorkspace clears pending microphone intent for the closed workspace h
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -487,6 +521,112 @@ test('closeWorkspace clears pending microphone intent for the closed workspace h
   );
 });
 
+test('closeWorkspace closes the injected recording transcription registry for the workspace handle', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-asr-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const closedHandles: string[] = [];
+  const recordingTranscriptionSessions = {
+    closeForWorkspaceHandle: (workspaceHandle: string) => {
+      closedHandles.push(workspaceHandle);
+    },
+  };
+
+  const closed = await handleCloseWorkspaceForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    recordingTranscriptionSessions: recordingTranscriptionSessions as never,
+  });
+
+  assert.deepEqual(closed, { ok: true, value: { closed: true } });
+  assert.deepEqual(closedHandles, ['wh_ipc']);
+});
+
+test('closeRecordingTranscription clears an active ASR session after workspace lock is lost', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-asr-lock-lost-'));
+  const handleStore = createRegisteredHandleStore(rootPath, () => false);
+  const closedRequests: unknown[] = [];
+  const recordingTranscriptionSessions = {
+    close: (request: unknown) => {
+      closedRequests.push(request);
+      return { ok: true as const, value: { accepted: true as const } };
+    },
+  };
+
+  const closed = await handleCloseRecordingTranscriptionForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      recordingFlowSessionId: 'flow_1',
+      recordingSessionId: 'recording_1',
+      revisionId: 'revision_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    recordingTranscriptionSessions: recordingTranscriptionSessions as never,
+  });
+
+  assert.deepEqual(closed, { ok: true, value: { accepted: true } });
+  assert.deepEqual(closedRequests, [
+    {
+      recordingFlowSessionId: 'flow_1',
+      recordingSessionId: 'recording_1',
+      revisionId: 'revision_1',
+      senderKey: 'default:7:4:reo-app://renderer',
+      workspaceHandle: 'wh_ipc',
+    },
+  ]);
+});
+
+test('finishRecordingTranscription closes an active ASR session when workspace lock is lost', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finish-asr-lock-lost-'));
+  const handleStore = createRegisteredHandleStore(rootPath, () => false);
+  const closedRequests: unknown[] = [];
+  const recordingTranscriptionSessions = {
+    close: (request: unknown) => {
+      closedRequests.push(request);
+      return { ok: true as const, value: { accepted: true as const } };
+    },
+    finish: async () => {
+      throw new Error('finish should not run after lock lost');
+    },
+  };
+
+  const finished = await handleFinishRecordingTranscriptionForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      recordingFlowSessionId: 'flow_1',
+      recordingSessionId: 'recording_1',
+      revisionId: 'revision_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    recordingTranscriptionSessions: recordingTranscriptionSessions as never,
+  });
+
+  assert.equal(finished.ok, false);
+  if (!finished.ok) {
+    assert.equal(finished.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(closedRequests, [
+    {
+      recordingFlowSessionId: 'flow_1',
+      recordingSessionId: 'recording_1',
+      revisionId: 'revision_1',
+      senderKey: 'default:7:4:reo-app://renderer',
+      workspaceHandle: 'wh_ipc',
+    },
+  ]);
+});
+
 test('closeWorkspace clears pending microphone intent after workspace lock is lost', async () => {
   resetMicrophoneIntentsForTest();
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-mic-lock-lost-'));
@@ -497,7 +637,7 @@ test('closeWorkspace clears pending microphone intent after workspace lock is lo
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -545,7 +685,7 @@ test('closeWorkspace clears pending microphone intent when lock release fails', 
     event: microphoneEvent,
     input: {
       workspaceHandle: 'wh_ipc',
-      drawerSessionId: 'drawer_1',
+      recordingFlowSessionId: 'recording_flow_1',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -585,7 +725,7 @@ test('window teardown clears all pending microphone intents through workspace cl
   createMicrophoneIntent({
     senderId: 101,
     workspaceHandle: 'wh_teardown',
-    drawerSessionId: 'drawer_1',
+    recordingFlowSessionId: 'recording_flow_1',
   });
 
   await closeAllWorkspaceHandles();
@@ -601,41 +741,6 @@ test('window teardown clears all pending microphone intents through workspace cl
     }),
     false
   );
-});
-
-test('getMemoryDetail returns finalized memory detail through a workspace handle', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-detail-'));
-  await initializeWorkspaceFiles({
-    rootPath,
-    title: 'IPC 记忆',
-    description: '',
-    createWorkspaceId: () => 'ws_ipc',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-  await writeFinalizedMemoryRecording({
-    root: rootPath,
-    workspaceId: 'ws_ipc',
-    memoryId: 'mem_ipc',
-    recordingId: 'rec_ipc',
-    title: 'IPC 录音',
-  });
-  const handleStore = createRegisteredHandleStore(rootPath);
-
-  const result = await handleGetMemoryDetailForTest({
-    event,
-    input: { workspaceHandle: 'wh_ipc', memoryId: 'mem_ipc' },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    handleStore,
-  });
-
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.value.memoryId, 'mem_ipc');
-    assert.equal(result.value.recordings[0]?.recordingId, 'rec_ipc');
-    assert.equal('rootPath' in result.value, false);
-  }
 });
 
 test('createMemory creates an empty Memory container through file truth', async () => {
@@ -670,11 +775,11 @@ test('createMemory creates an empty Memory container through file truth', async 
       title: '产品灵感与思考',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetCount: 0,
+      segmentCount: 0,
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      hasReflections: false,
+      attachmentCount: 0,
     });
   }
   assert.deepEqual(
@@ -686,7 +791,7 @@ test('createMemory creates an empty Memory container through file truth', async 
       title: '产品灵感与思考',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetIds: [],
+      segmentIds: [],
     }
   );
   assert.deepEqual(
@@ -697,11 +802,11 @@ test('createMemory creates an empty Memory container through file truth', async 
         title: '产品灵感与思考',
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        assetCount: 0,
+        segmentCount: 0,
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        hasReflections: false,
+        attachmentCount: 0,
       },
     ]
   );
@@ -727,14 +832,14 @@ test('createRecordingDraft returns a flat IPC response value', async () => {
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     handleStore,
-    createRecordingId: () => 'rec_ipc_draft',
+    createSegmentId: () => 'seg_ipc_draft',
     now: () => '2026-05-08T14:42:00.000Z',
   });
 
   assert.deepEqual(result, {
     ok: true,
     value: {
-      recordingId: 'rec_ipc_draft',
+      segmentId: 'seg_ipc_draft',
       nextSequence: 0,
     },
   });
@@ -753,7 +858,7 @@ test('updateMemoryTitle updates only the memory container through file truth', a
     root: rootPath,
     workspaceId: 'ws_ipc',
     memoryId: 'mem_ipc',
-    recordingId: 'rec_ipc',
+    segmentId: 'seg_ipc',
     title: '旧标题',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
@@ -776,10 +881,10 @@ test('updateMemoryTitle updates only the memory container through file truth', a
   if (result.ok) {
     assert.equal(result.value.memoryId, 'mem_ipc');
     assert.equal(result.value.title, '产品灵感与思考');
-    assert.equal(result.value.assetCount, 1);
+    assert.equal(result.value.segmentCount, 1);
     assert.equal(result.value.updatedAt, '2026-05-08T14:42:00.000Z');
     assert.equal('rootPath' in result.value, false);
-    assert.equal('assetIds' in result.value, false);
+    assert.equal('segmentIds' in result.value, false);
   }
   assert.deepEqual(
     JSON.parse(await readFile(path.join(rootPath, 'memories', 'mem_ipc', 'memory.json'), 'utf8')),
@@ -788,55 +893,18 @@ test('updateMemoryTitle updates only the memory container through file truth', a
       title: '产品灵感与思考',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      assetIds: ['rec_ipc'],
+      segmentIds: ['seg_ipc'],
     }
   );
   assert.equal(
     JSON.parse(
       await readFile(
-        path.join(rootPath, 'memories', 'mem_ipc', 'recordings', 'rec_ipc', 'recording.json'),
+        path.join(rootPath, 'memories', 'mem_ipc', 'segments', 'seg_ipc', 'segment.json'),
         'utf8'
       )
     ).title,
     '旧标题'
   );
-});
-
-test('getMemoryDetail stops when the workspace lock is lost during detail read', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-detail-lock-'));
-  await initializeWorkspaceFiles({
-    rootPath,
-    title: 'IPC 记忆',
-    description: '',
-    createWorkspaceId: () => 'ws_ipc',
-    now: () => '2026-05-06T13:08:00.000Z',
-  });
-  await writeFinalizedMemoryRecording({
-    root: rootPath,
-    workspaceId: 'ws_ipc',
-    memoryId: 'mem_ipc',
-    recordingId: 'rec_ipc',
-    title: 'IPC 录音',
-  });
-  let usableChecks = 0;
-  const handleStore = createRegisteredHandleStore(rootPath, () => {
-    usableChecks += 1;
-    return usableChecks < 5;
-  });
-
-  const result = await handleGetMemoryDetailForTest({
-    event,
-    input: { workspaceHandle: 'wh_ipc', memoryId: 'mem_ipc' },
-    expectedSession,
-    expectedSessionKey: 'default',
-    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
-    handleStore,
-  });
-
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
-  }
 });
 
 test('initializeWorkspace releases the lock when post-lock file writes throw', async () => {
@@ -1401,7 +1469,7 @@ test('openWorkspace rejects lock identity loss during index reconciliation', asy
     root: rootPath,
     workspaceId: 'ws_open_mid_lock_lost',
     memoryId: 'mem_open_mid_lock_lost',
-    recordingId: 'rec_open_mid_lock_lost',
+    segmentId: 'seg_open_mid_lock_lost',
     title: 'Open mid lock lost',
   });
   const tokenStore = createWorkspaceSelectionTokenStore({
@@ -1557,5 +1625,5 @@ test('openWorkspace rejects unsafe child directories before writing a workspace 
     assert.equal(draftsResult.error.dataRetention, 'none-written');
   }
   await assert.rejects(stat(path.join(draftsRoot, '.reo', 'workspace.lock')));
-  await assert.rejects(stat(path.join(outsideDrafts, 'recordings')));
+  await assert.rejects(stat(path.join(outsideDrafts, 'segments')));
 });

@@ -35,16 +35,15 @@ import {
   readSafeDirectoryIdentitySync as readDirectoryIdentitySync,
   type DirectoryIdentity,
 } from './directoryIdentity.js';
-import { getWorkspaceIndexPath } from './workspacePaths.js';
+import { getWorkspaceIndexPath, resolveWorkspaceDraftSegmentDirectory } from './workspacePaths.js';
 import {
-  draftRecordingMetadataSchema,
-  finalizedRecordingMetadataSchema,
+  draftSegmentMetadataSchema,
+  finalizedSegmentMetadataSchema,
   MEMORY_ID_PATTERN,
-  RECORDING_ASSET_ID_PATTERN,
-  RECORDING_ID_PATTERN,
+  SEGMENT_ID_PATTERN,
   workspaceError,
   workspaceMemorySummarySchema,
-  type FinalizedRecordingMetadata,
+  type FinalizedSegmentMetadata,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
 } from '../workspace-contract/workspace-contract.js';
@@ -52,13 +51,7 @@ import {
 const FINALIZE_STAGING_PREFIX = '.reo-finalizing-';
 const FINALIZE_TRANSACTION_MARKER = '.reo-finalize-transaction.json';
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
-const MEMORY_DETAIL_RECORDING_LIMIT = 24;
-const DRAFT_RECORDING_FILES = new Set([
-  'audio.webm',
-  'recording.json',
-  'transcript.md',
-  'reflections.md',
-]);
+const DRAFT_RECORDING_FILES = new Set(['audio.webm', 'segment.json', 'transcript.md']);
 const COPY_BUFFER_BYTES = 1_048_576;
 const fsyncDescriptor = promisify(fsyncCallback);
 const readDescriptor = promisify(readCallback);
@@ -87,7 +80,7 @@ export interface MemoryJson {
   readonly title: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly assetIds: readonly string[];
+  readonly segmentIds: readonly string[];
 }
 
 export interface MemorySummary {
@@ -95,33 +88,25 @@ export interface MemorySummary {
   readonly title: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly assetCount: number;
+  readonly segmentCount: number;
   readonly durationMs: number;
   readonly audioByteLength: number;
   readonly hasTranscript: boolean;
-  readonly hasReflections: boolean;
+  readonly attachmentCount: number;
 }
 
-export interface MemoryRecordingSummary {
-  readonly recordingId: string;
+export interface MemorySegmentSummary {
+  readonly segmentId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly audioByteLength: number;
 }
 
-export type MemoryDetail = MemoryJson & {
-  readonly assetCount: number;
-  readonly recordingsTruncated: boolean;
-  readonly hasTranscript: boolean;
-  readonly hasReflections: boolean;
-  readonly recordings: readonly MemoryRecordingSummary[];
-};
-
-export type RecordingDirectoryLookup =
+export type SegmentDirectoryLookup =
   | {
       readonly status: 'found';
       readonly directory: string;
-      readonly recording: MemoryRecordingSummary;
+      readonly segment: MemorySegmentSummary;
     }
   | { readonly status: 'not-found' }
   | { readonly status: 'invalid-id' }
@@ -132,8 +117,8 @@ export interface FinalizeTransactionHooksForTest {
   readonly beforeParentDirectoryCreate?: () => MaybePromise<void>;
   readonly beforeMemoryDirectoryCreate?: () => MaybePromise<void>;
   readonly beforeMemoryDirectoryMkdir?: () => MaybePromise<void>;
-  readonly beforeRecordingsDirectoryCreate?: () => MaybePromise<void>;
-  readonly beforeRecordingsDirectoryMkdir?: () => MaybePromise<void>;
+  readonly beforeSegmentsDirectoryCreate?: () => MaybePromise<void>;
+  readonly beforeSegmentsDirectoryMkdir?: () => MaybePromise<void>;
   readonly beforeStagingDirectoryCreate?: () => MaybePromise<void>;
   readonly afterStagingDirectoryCreate?: () => MaybePromise<void>;
   readonly afterMarkerWrite?: () => MaybePromise<void>;
@@ -167,11 +152,11 @@ interface RecoverFinalizeTransactionsOptions {
   readonly assertWorkspaceUsable?: () => MaybePromise<void>;
 }
 
-export interface CreateMemoryForRecordingInput {
+export interface CreateMemoryForAudioSegmentInput {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly now: () => string;
@@ -188,23 +173,23 @@ export interface CreateMemoryInput {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
-export type AppendRecordingToMemoryInput = CreateMemoryForRecordingInput;
+export type AppendAudioSegmentToMemoryInput = CreateMemoryForAudioSegmentInput;
 
-export type CreateMemoryForRecordingForTestInput = CreateMemoryForRecordingInput & {
+export type CreateMemoryForAudioSegmentForTestInput = CreateMemoryForAudioSegmentInput & {
   readonly transactionHooks?: FinalizeTransactionHooksForTest;
 };
 
-export type AppendRecordingToMemoryForTestInput = AppendRecordingToMemoryInput & {
+export type AppendAudioSegmentToMemoryForTestInput = AppendAudioSegmentToMemoryInput & {
   readonly transactionHooks?: FinalizeTransactionHooksForTest;
 };
 
-export interface ReadMemoryDetailInput {
+export interface MemoryTargetInput {
   readonly rootPath: string;
   readonly memoryId: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
-export interface UpdateMemoryTitleInput extends ReadMemoryDetailInput {
+export interface UpdateMemoryTitleInput extends MemoryTargetInput {
   readonly title: string;
   readonly now: () => string;
 }
@@ -295,7 +280,7 @@ const memoryJsonSchema = z
     title: z.string(),
     createdAt: z.string(),
     updatedAt: z.string(),
-    assetIds: z.array(z.string().regex(RECORDING_ASSET_ID_PATTERN)),
+    segmentIds: z.array(z.string().regex(SEGMENT_ID_PATTERN)),
   })
   .strict();
 
@@ -513,9 +498,9 @@ async function hasFinalizeTransactionMarker(recordingDirectory: string): Promise
 async function unlinkFinalizeTransactionMarker(
   rootPath: string,
   memoryId: string,
-  recordingId: string
+  segmentId: string
 ): Promise<string> {
-  const recordingDirectory = await memoryRecordingDirectory(rootPath, memoryId, recordingId);
+  const recordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const directoryIdentity = await readDirectoryIdentity(
     recordingDirectory,
     'Recording target path is not safe'
@@ -788,14 +773,14 @@ async function ensureMemoryRecordingsDirectory(
   }
   await assertSafeExistingDirectory(createdDirectory, 'Workspace memory directory is not safe');
 
-  await hooks?.beforeRecordingsDirectoryCreate?.();
+  await hooks?.beforeSegmentsDirectoryCreate?.();
   const safeDirectory = await memoryDirectory(rootPath, memoryId);
   if (safeDirectory !== createdDirectory) {
     throw new Error('Workspace memory directory changed');
   }
   await assertSafeExistingDirectory(safeDirectory, 'Workspace memory directory is not safe');
-  const recordingsDirectory = path.join(safeDirectory, 'recordings');
-  await hooks?.beforeRecordingsDirectoryMkdir?.();
+  const segmentsDirectory = path.join(safeDirectory, 'segments');
+  await hooks?.beforeSegmentsDirectoryMkdir?.();
   const currentSafeDirectory = await memoryDirectory(rootPath, memoryId);
   if (currentSafeDirectory !== safeDirectory) {
     throw new Error('Workspace memory directory changed');
@@ -803,53 +788,50 @@ async function ensureMemoryRecordingsDirectory(
   await assertSafeExistingDirectory(currentSafeDirectory, 'Workspace memory directory is not safe');
   createWorkspaceDirectoryWithinParent({
     parentDirectory: currentSafeDirectory,
-    directoryName: 'recordings',
+    directoryName: 'segments',
     allowExisting: true,
   });
   const safeRecordingsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(rootPath, 'memories', memoryId, 'recordings')
+    path.join(rootPath, 'memories', memoryId, 'segments')
   );
-  if (safeRecordingsDirectory !== recordingsDirectory) {
-    throw new Error('Workspace memory recordings directory changed');
+  if (safeRecordingsDirectory !== segmentsDirectory) {
+    throw new Error('Workspace memory segments directory changed');
   }
   await assertSafeExistingDirectory(
     safeRecordingsDirectory,
-    'Workspace memory recordings directory is not safe'
+    'Workspace memory segments directory is not safe'
   );
   return safeRecordingsDirectory;
 }
 
-async function draftRecordingDirectory(rootPath: string, recordingId: string): Promise<string> {
-  if (!RECORDING_ID_PATTERN.test(recordingId)) {
-    throw new Error('Invalid recording id');
-  }
+async function draftSegmentDirectory(rootPath: string, segmentId: string): Promise<string> {
   return resolveSafeWorkspaceChild(
     rootPath,
-    path.join(rootPath, '.reo', 'drafts', 'recordings', recordingId)
+    resolveWorkspaceDraftSegmentDirectory(rootPath, segmentId)
   );
 }
 
-export async function memoryRecordingDirectory(
+export async function memorySegmentDirectory(
   rootPath: string,
   memoryId: string,
-  recordingId: string
+  segmentId: string
 ): Promise<string> {
-  if (!RECORDING_ID_PATTERN.test(recordingId)) {
-    throw new Error('Invalid recording id');
+  if (!SEGMENT_ID_PATTERN.test(segmentId)) {
+    throw new Error('Invalid segment id');
   }
   return resolveSafeWorkspaceChild(
     rootPath,
-    path.join(rootPath, 'memories', memoryId, 'recordings', recordingId)
+    path.join(rootPath, 'memories', memoryId, 'segments', segmentId)
   );
 }
 
-async function recordingDirectoryExistsInAnyMemory(
+async function segmentDirectoryExistsInAnyMemory(
   rootPath: string,
-  recordingId: string
+  segmentId: string
 ): Promise<boolean> {
-  if (!RECORDING_ID_PATTERN.test(recordingId)) {
-    throw new Error('Invalid recording id');
+  if (!SEGMENT_ID_PATTERN.test(segmentId)) {
+    throw new Error('Invalid segment id');
   }
   const memoriesDirectory = await resolveSafeWorkspaceChild(
     rootPath,
@@ -860,19 +842,19 @@ async function recordingDirectoryExistsInAnyMemory(
     if (!entry.isDirectory()) {
       continue;
     }
-    if (await exists(await memoryRecordingDirectory(rootPath, entry.name, recordingId))) {
+    if (await exists(await memorySegmentDirectory(rootPath, entry.name, segmentId))) {
       return true;
     }
   }
   return false;
 }
 
-export async function assertNoDuplicateRecordingDirectoryById(
+export async function assertNoDuplicateSegmentDirectoryById(
   rootPath: string,
   ownerMemoryId: string,
-  recordingId: string
+  segmentId: string
 ): Promise<void> {
-  if (!MEMORY_ID_PATTERN.test(ownerMemoryId) || !RECORDING_ID_PATTERN.test(recordingId)) {
+  if (!MEMORY_ID_PATTERN.test(ownerMemoryId) || !SEGMENT_ID_PATTERN.test(segmentId)) {
     throw new Error('Invalid recording ownership');
   }
   await beforeDuplicateRecordingCheckForTest?.();
@@ -889,7 +871,7 @@ export async function assertNoDuplicateRecordingDirectoryById(
     ) {
       continue;
     }
-    const candidate = await memoryRecordingDirectory(rootPath, entry.name, recordingId);
+    const candidate = await memorySegmentDirectory(rootPath, entry.name, segmentId);
     let metadata: Awaited<ReturnType<typeof lstat>>;
     try {
       metadata = await lstat(candidate);
@@ -900,7 +882,7 @@ export async function assertNoDuplicateRecordingDirectoryById(
       throw error;
     }
     if (metadata.isDirectory() || metadata.isSymbolicLink()) {
-      throw new Error('Duplicate finalized recording id');
+      throw new Error('Duplicate finalized segment id');
     }
   }
 }
@@ -954,11 +936,11 @@ function hasNonEmptyFileInKnownDirectory(
 async function summarizeRecording(
   rootPath: string,
   memoryId: string,
-  recordingId: string
-): Promise<MemoryRecordingSummary> {
-  const recordingDirectory = await memoryRecordingDirectory(rootPath, memoryId, recordingId);
+  segmentId: string
+): Promise<MemorySegmentSummary> {
+  const recordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-  const recording = await readFinalizedRecordingMetadata(
+  const recording = await readFinalizedSegmentMetadata(
     recordingDirectory,
     recordingDirectoryIdentity
   );
@@ -968,63 +950,59 @@ async function summarizeRecording(
     'audio.webm'
   );
   if (
-    recording.recordingId !== recordingId ||
+    recording.segmentId !== segmentId ||
     recording.memoryId !== memoryId ||
     recording.audioByteLength !== audioByteLength
   ) {
-    throw new Error('Finalized recording metadata does not match file truth');
+    throw new Error('Finalized segment metadata does not match file truth');
   }
 
   return {
-    recordingId,
+    segmentId,
     title: recording.title,
     durationMs: recording.durationMs,
     audioByteLength,
   };
 }
 
-async function summarizeValidFinalizedRecordingDirectory(
+async function summarizeValidFinalizedSegmentDirectory(
   rootPath: string,
   memoryId: string,
-  recordingId: string
-): Promise<MemoryRecordingSummary | null> {
+  segmentId: string
+): Promise<MemorySegmentSummary | null> {
   try {
-    return await summarizeRecording(rootPath, memoryId, recordingId);
+    return await summarizeRecording(rootPath, memoryId, segmentId);
   } catch {
     return null;
   }
 }
 
-async function readFinalizedRecordingMetadata(
+async function readFinalizedSegmentMetadata(
   recordingDirectory: string,
   recordingDirectoryIdentity?: DirectoryIdentity
-): Promise<FinalizedRecordingMetadata> {
+): Promise<FinalizedSegmentMetadata> {
   const directoryIdentity =
     recordingDirectoryIdentity ?? (await readDirectoryIdentity(recordingDirectory));
-  return finalizedRecordingMetadataSchema.parse(
+  return finalizedSegmentMetadataSchema.parse(
     JSON.parse(
-      readWorkspaceTextFileInKnownDirectory(recordingDirectory, directoryIdentity, 'recording.json')
+      readWorkspaceTextFileInKnownDirectory(recordingDirectory, directoryIdentity, 'segment.json')
     )
   );
 }
 
 async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
-  let assetCount = 0;
+  let segmentCount = 0;
   let durationMs = 0;
   let audioByteLength = 0;
   let hasTranscript = false;
-  let hasReflections = false;
+  const attachmentCount = 0;
 
-  for (const recordingId of memory.assetIds) {
+  for (const segmentId of memory.segmentIds) {
     try {
-      const recordingDirectory = await memoryRecordingDirectory(
-        rootPath,
-        memory.memoryId,
-        recordingId
-      );
-      const recording = await summarizeRecording(rootPath, memory.memoryId, recordingId);
+      const recordingDirectory = await memorySegmentDirectory(rootPath, memory.memoryId, segmentId);
+      const recording = await summarizeRecording(rootPath, memory.memoryId, segmentId);
       const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-      assetCount += 1;
+      segmentCount += 1;
       durationMs += recording.durationMs;
       audioByteLength += recording.audioByteLength;
       hasTranscript =
@@ -1033,13 +1011,6 @@ async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<Me
           recordingDirectory,
           recordingDirectoryIdentity,
           'transcript.md'
-        );
-      hasReflections =
-        hasReflections ||
-        hasNonEmptyFileInKnownDirectory(
-          recordingDirectory,
-          recordingDirectoryIdentity,
-          'reflections.md'
         );
     } catch {
       continue;
@@ -1051,22 +1022,12 @@ async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<Me
     title: memory.title,
     createdAt: memory.createdAt,
     updatedAt: memory.updatedAt,
-    assetCount,
+    segmentCount,
     durationMs,
     audioByteLength,
     hasTranscript,
-    hasReflections,
+    attachmentCount,
   };
-}
-
-async function readMemorySummaryFromIndex(
-  rootPath: string,
-  memoryId: string
-): Promise<MemorySummary | null> {
-  const index = workspaceIndexSchema.parse(
-    JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
-  );
-  return index.memories.find((memory) => memory.memoryId === memoryId) ?? null;
 }
 
 export async function rebuildWorkspaceReadModel(
@@ -1212,23 +1173,23 @@ export async function updateWorkspaceIndexFromCurrent(
   });
 }
 
-export async function readFinalizedRecordingSummary(
+export async function readFinalizedSegmentSummary(
   rootPath: string,
   memoryId: string,
-  recordingId: string
-): Promise<MemoryRecordingSummary> {
-  return summarizeRecording(rootPath, memoryId, recordingId);
+  segmentId: string
+): Promise<MemorySegmentSummary> {
+  return summarizeRecording(rootPath, memoryId, segmentId);
 }
 
-async function isValidFinalizedRecordingDirectory(
+async function isValidFinalizedSegmentDirectory(
   recordingDirectory: string,
   memoryId: string,
-  recordingId: string
+  segmentId: string
 ): Promise<boolean> {
   try {
-    await assertSafeExistingDirectory(recordingDirectory, 'Recording directory is not safe');
+    await assertSafeExistingDirectory(recordingDirectory, 'Segment directory is not safe');
     const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-    const recording = await readFinalizedRecordingMetadata(
+    const recording = await readFinalizedSegmentMetadata(
       recordingDirectory,
       recordingDirectoryIdentity
     );
@@ -1239,7 +1200,7 @@ async function isValidFinalizedRecordingDirectory(
     );
     return (
       recording.memoryId === memoryId &&
-      recording.recordingId === recordingId &&
+      recording.segmentId === segmentId &&
       recording.audioByteLength === audioByteLength
     );
   } catch {
@@ -1266,16 +1227,16 @@ export async function recoverRecordingFinalizeTransactions(
       continue;
     }
     const memoryId = memoryEntry.name;
-    let recordingsDirectory: string | null = null;
+    let segmentsDirectory: string | null = null;
     let recordingEntries: Dirent[] = [];
     try {
-      recordingsDirectory = await resolveSafeWorkspaceChild(
+      segmentsDirectory = await resolveSafeWorkspaceChild(
         rootPath,
-        path.join(rootPath, 'memories', memoryId, 'recordings')
+        path.join(rootPath, 'memories', memoryId, 'segments')
       );
-      recordingEntries = await readExistingDirectoryEntries(recordingsDirectory);
+      recordingEntries = await readExistingDirectoryEntries(segmentsDirectory);
     } catch {
-      // Unsafe recordings paths are not followed during recovery.
+      // Unsafe segments paths are not followed during recovery.
     }
     let memory: MemoryJson | null = null;
     try {
@@ -1283,14 +1244,14 @@ export async function recoverRecordingFinalizeTransactions(
     } catch {
       // Invalid memory metadata is ignored during transaction recovery.
     }
-    const validRecordingIds = new Set<string>();
+    const validSegmentIds = new Set<string>();
     let markerBearingRecordingFound = false;
 
     for (const recordingEntry of recordingEntries) {
-      if (!recordingsDirectory) {
+      if (!segmentsDirectory) {
         continue;
       }
-      const recordingDirectory = path.join(recordingsDirectory, recordingEntry.name);
+      const recordingDirectory = path.join(segmentsDirectory, recordingEntry.name);
       if (!recordingEntry.isDirectory()) {
         continue;
       }
@@ -1299,26 +1260,26 @@ export async function recoverRecordingFinalizeTransactions(
         await assertRecoveryWorkspaceUsable?.();
         const removed = await removeSafeWorkspaceDirectory(
           rootPath,
-          path.join(rootPath, 'memories', memoryId, 'recordings', recordingEntry.name)
+          path.join(rootPath, 'memories', memoryId, 'segments', recordingEntry.name)
         );
         if (removed) {
           await assertRecoveryWorkspaceUsable?.();
-          await fsyncWorkspaceDirectory(recordingsDirectory).catch(() => {});
+          await fsyncWorkspaceDirectory(segmentsDirectory).catch(() => {});
         }
         continue;
       }
       if (!(await hasFinalizeTransactionMarker(recordingDirectory))) {
         continue;
       }
-      const validFinalizedRecording = await isValidFinalizedRecordingDirectory(
+      const validFinalizedSegment = await isValidFinalizedSegmentDirectory(
         recordingDirectory,
         memoryId,
         recordingEntry.name
       );
       if (!memory) {
         if (
-          validFinalizedRecording ||
-          (await exists(path.join(recordingDirectory, 'recording.json'))) ||
+          validFinalizedSegment ||
+          (await exists(path.join(recordingDirectory, 'segment.json'))) ||
           (await exists(path.join(recordingDirectory, 'audio.webm')))
         ) {
           markerBearingRecordingFound = true;
@@ -1328,18 +1289,18 @@ export async function recoverRecordingFinalizeTransactions(
         await assertRecoveryWorkspaceUsable?.();
         await removeSafeWorkspaceDirectory(
           rootPath,
-          path.join(rootPath, 'memories', memoryId, 'recordings', recordingEntry.name)
+          path.join(rootPath, 'memories', memoryId, 'segments', recordingEntry.name)
         );
         continue;
       }
-      const memoryReferencesRecording = memory.assetIds.includes(recordingEntry.name);
+      const memoryReferencesRecording = memory.segmentIds.includes(recordingEntry.name);
       if (memoryReferencesRecording) {
-        if (!validFinalizedRecording) {
-          validRecordingIds.add(recordingEntry.name);
+        if (!validFinalizedSegment) {
+          validSegmentIds.add(recordingEntry.name);
           continue;
         }
-        validRecordingIds.add(recordingEntry.name);
-        const draftDirectory = await draftRecordingDirectory(rootPath, recordingEntry.name);
+        validSegmentIds.add(recordingEntry.name);
+        const draftDirectory = await draftSegmentDirectory(rootPath, recordingEntry.name);
         try {
           await assertRecoveryWorkspaceUsable?.();
           if (removeDraftDirectory) {
@@ -1356,7 +1317,7 @@ export async function recoverRecordingFinalizeTransactions(
         try {
           await afterDraftCleanup?.();
           await assertRecoveryWorkspaceUsable?.();
-          await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'recordings'));
+          await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'segments'));
           await assertRecoveryWorkspaceUsable?.();
           await unlinkFinalizeTransactionMarker(rootPath, memoryId, recordingEntry.name);
         } catch {
@@ -1368,7 +1329,7 @@ export async function recoverRecordingFinalizeTransactions(
       await assertRecoveryWorkspaceUsable?.();
       await removeSafeWorkspaceDirectory(
         rootPath,
-        path.join(rootPath, 'memories', memoryId, 'recordings', recordingEntry.name)
+        path.join(rootPath, 'memories', memoryId, 'segments', recordingEntry.name)
       );
     }
 
@@ -1384,25 +1345,25 @@ export async function recoverRecordingFinalizeTransactions(
       );
       continue;
     }
-    for (const recordingId of memory.assetIds) {
-      if (!recordingsDirectory) {
+    for (const segmentId of memory.segmentIds) {
+      if (!segmentsDirectory) {
         continue;
       }
-      const recordingDirectory = path.join(recordingsDirectory, recordingId);
-      if (await isValidFinalizedRecordingDirectory(recordingDirectory, memoryId, recordingId)) {
-        validRecordingIds.add(recordingId);
+      const recordingDirectory = path.join(segmentsDirectory, segmentId);
+      if (await isValidFinalizedSegmentDirectory(recordingDirectory, memoryId, segmentId)) {
+        validSegmentIds.add(segmentId);
       }
     }
-    const repairedRecordingIds = memory.assetIds.filter((recordingId) =>
-      validRecordingIds.has(recordingId)
+    const repairedSegmentIds = memory.segmentIds.filter((segmentId) =>
+      validSegmentIds.has(segmentId)
     );
-    if (repairedRecordingIds.length !== memory.assetIds.length) {
+    if (repairedSegmentIds.length !== memory.segmentIds.length) {
       try {
         await assertRecoveryWorkspaceUsable?.();
         const currentMemoryDirectory = await memoryDirectory(rootPath, memoryId);
         await writeWorkspaceJsonAtomic(path.join(currentMemoryDirectory, 'memory.json'), {
           ...memory,
-          assetIds: repairedRecordingIds,
+          segmentIds: repairedSegmentIds,
         });
       } catch {
         continue;
@@ -1414,27 +1375,27 @@ export async function recoverRecordingFinalizeTransactions(
 async function writeFinalizeTransactionMarker({
   targetRecordingDirectory,
   memoryId,
-  recordingId,
+  segmentId,
 }: {
   readonly targetRecordingDirectory: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
 }): Promise<void> {
   await writeWorkspaceJsonAtomic(path.join(targetRecordingDirectory, FINALIZE_TRANSACTION_MARKER), {
     schemaVersion: 1,
     memoryId,
-    recordingId,
-    draftPath: `.reo/drafts/recordings/${recordingId}`,
+    segmentId,
+    draftPath: `.reo/drafts/segments/${segmentId}`,
   });
 }
 
-async function stagingRecordingDirectory(
+async function stagingSegmentDirectory(
   rootPath: string,
   memoryId: string,
-  recordingId: string,
+  segmentId: string,
   stagingName: string
 ): Promise<string> {
-  const targetRecordingDirectory = await memoryRecordingDirectory(rootPath, memoryId, recordingId);
+  const targetRecordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const stagingDirectory = path.join(path.dirname(targetRecordingDirectory), stagingName);
   await assertSafeExistingDirectory(stagingDirectory, 'Recording staging path is not safe');
   return stagingDirectory;
@@ -1710,12 +1671,12 @@ export async function removeSafeWorkspaceDirectory(
   return true;
 }
 
-async function removeDraftRecordingDirectorySafely(
+async function removeDraftSegmentDirectorySafely(
   rootPath: string,
-  recordingId: string,
+  segmentId: string,
   hooks?: FinalizeTransactionHooks
 ): Promise<void> {
-  const draftDirectory = await draftRecordingDirectory(rootPath, recordingId);
+  const draftDirectory = await draftSegmentDirectory(rootPath, segmentId);
   await hooks?.beforeDraftDirectoryRemove?.();
   const removed = await removeSafeWorkspaceDirectory(rootPath, draftDirectory, {
     allowMissing: true,
@@ -1740,7 +1701,7 @@ async function removeMetadataLessEmptyMemoryDirectory(
     await removeSafeWorkspaceDirectory(rootPath, directory).catch(() => {});
     return;
   }
-  if (entries.length !== 1 || entries[0] !== 'recordings') {
+  if (entries.length !== 1 || entries[0] !== 'segments') {
     return;
   }
   await assertWorkspaceUsable?.();
@@ -1750,32 +1711,32 @@ async function removeMetadataLessEmptyMemoryDirectory(
 async function cleanupPreExposeFinalizeArtifacts({
   rootPath,
   memoryId,
-  recordingId,
+  segmentId,
   memoryDirectoryPath,
   hooks,
 }: {
   readonly rootPath: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly memoryDirectoryPath: string;
   readonly hooks?: FinalizeTransactionHooks;
 }): Promise<void> {
-  const recordingsDirectory = await resolveSafeCleanupDirectory(
+  const segmentsDirectory = await resolveSafeCleanupDirectory(
     rootPath,
-    path.join(rootPath, 'memories', memoryId, 'recordings')
+    path.join(rootPath, 'memories', memoryId, 'segments')
   );
-  if (recordingsDirectory) {
-    const stagingPrefix = `${FINALIZE_STAGING_PREFIX}${recordingId}.`;
-    for (const entry of await readdir(recordingsDirectory, { withFileTypes: true })) {
+  if (segmentsDirectory) {
+    const stagingPrefix = `${FINALIZE_STAGING_PREFIX}${segmentId}.`;
+    for (const entry of await readdir(segmentsDirectory, { withFileTypes: true })) {
       if (entry.isDirectory() && entry.name.startsWith(stagingPrefix)) {
         await removeSafeWorkspaceDirectory(
           rootPath,
-          path.join(recordingsDirectory, entry.name),
+          path.join(segmentsDirectory, entry.name),
           hooks
         );
       }
     }
-    await fsyncWorkspaceDirectory(recordingsDirectory).catch(() => {});
+    await fsyncWorkspaceDirectory(segmentsDirectory).catch(() => {});
   }
 
   const safeMemoryDirectory = await resolveSafeCleanupDirectory(rootPath, memoryDirectoryPath);
@@ -1798,36 +1759,36 @@ async function cleanupPreExposeFinalizeArtifacts({
 async function copyDraftRecordingIntoMemory({
   rootPath,
   memoryId,
-  recordingId,
+  segmentId,
   hooks,
   assertUsable,
 }: {
   readonly rootPath: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly hooks?: FinalizeTransactionHooks;
   readonly assertUsable?: AssertWorkspaceUsable;
 }): Promise<{
-  readonly stagingRecordingDirectory: string;
+  readonly stagingSegmentDirectory: string;
   readonly targetRecordingDirectory: string;
 }> {
-  const targetDirectory = await memoryRecordingDirectory(rootPath, memoryId, recordingId);
+  const targetDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const parentDirectory = path.dirname(targetDirectory);
   const memoryDirectoryPath = path.dirname(parentDirectory);
   const stagingDirectory = path.join(
     parentDirectory,
-    `${FINALIZE_STAGING_PREFIX}${recordingId}.${process.pid}.${Date.now()}`
+    `${FINALIZE_STAGING_PREFIX}${segmentId}.${process.pid}.${Date.now()}`
   );
   const stagingName = path.basename(stagingDirectory);
   try {
     assertWorkspaceUsable(assertUsable);
-    if (await recordingDirectoryExistsInAnyMemory(rootPath, recordingId)) {
+    if (await segmentDirectoryExistsInAnyMemory(rootPath, segmentId)) {
       throw new Error('Recording target already exists');
     }
     await hooks?.beforeParentDirectoryCreate?.();
     assertWorkspaceUsable(assertUsable);
-    const recordingsDirectory = await ensureMemoryRecordingsDirectory(rootPath, memoryId, hooks);
-    if (recordingsDirectory !== parentDirectory) {
+    const segmentsDirectory = await ensureMemoryRecordingsDirectory(rootPath, memoryId, hooks);
+    if (segmentsDirectory !== parentDirectory) {
       throw new Error('Recording target parent changed');
     }
     await fsyncWorkspaceDirectory(path.dirname(path.dirname(parentDirectory))).catch(() => {});
@@ -1835,7 +1796,7 @@ async function copyDraftRecordingIntoMemory({
     await fsyncWorkspaceDirectory(parentDirectory).catch(() => {});
     await assertSafeExistingDirectory(
       parentDirectory,
-      'Workspace memory recordings directory is not safe'
+      'Workspace memory segments directory is not safe'
     );
     await hooks?.beforeStagingDirectoryCreate?.();
     assertWorkspaceUsable(assertUsable);
@@ -1844,48 +1805,48 @@ async function copyDraftRecordingIntoMemory({
       directoryName: stagingName,
     });
     await hooks?.afterStagingDirectoryCreate?.();
-    const markerStagingDirectory = await stagingRecordingDirectory(
+    const markerStagingDirectory = await stagingSegmentDirectory(
       rootPath,
       memoryId,
-      recordingId,
+      segmentId,
       stagingName
     );
     assertWorkspaceUsable(assertUsable);
     await writeFinalizeTransactionMarker({
       targetRecordingDirectory: markerStagingDirectory,
       memoryId,
-      recordingId,
+      segmentId,
     });
     await hooks?.afterMarkerWrite?.();
     assertWorkspaceUsable(assertUsable);
-    await draftRecordingDirectory(rootPath, recordingId);
+    await draftSegmentDirectory(rootPath, segmentId);
     await fsyncWorkspaceDirectory(
-      await stagingRecordingDirectory(rootPath, memoryId, recordingId, stagingName)
+      await stagingSegmentDirectory(rootPath, memoryId, segmentId, stagingName)
     );
     await hooks?.beforeDraftCopy?.();
     assertWorkspaceUsable(assertUsable);
-    const copyStagingDirectory = await stagingRecordingDirectory(
+    const copyStagingDirectory = await stagingSegmentDirectory(
       rootPath,
       memoryId,
-      recordingId,
+      segmentId,
       stagingName
     );
     await copyDirectoryContents(
-      await draftRecordingDirectory(rootPath, recordingId),
+      await draftSegmentDirectory(rootPath, segmentId),
       copyStagingDirectory
     );
     await hooks?.afterCopy?.();
     assertWorkspaceUsable(assertUsable);
-    const finalStagingDirectory = await stagingRecordingDirectory(
+    const finalStagingDirectory = await stagingSegmentDirectory(
       rootPath,
       memoryId,
-      recordingId,
+      segmentId,
       stagingName
     );
     await fsyncDirectoryTree(finalStagingDirectory);
     return {
-      stagingRecordingDirectory: finalStagingDirectory,
-      targetRecordingDirectory: await memoryRecordingDirectory(rootPath, memoryId, recordingId),
+      stagingSegmentDirectory: finalStagingDirectory,
+      targetRecordingDirectory: await memorySegmentDirectory(rootPath, memoryId, segmentId),
     };
   } catch (error) {
     if (error instanceof WorkspaceHandleLost) {
@@ -1894,7 +1855,7 @@ async function copyDraftRecordingIntoMemory({
     await cleanupPreExposeFinalizeArtifacts({
       rootPath,
       memoryId,
-      recordingId,
+      segmentId,
       memoryDirectoryPath,
       ...(hooks ? { hooks } : {}),
     });
@@ -1902,11 +1863,11 @@ async function copyDraftRecordingIntoMemory({
   }
 }
 
-async function writeFinalizedRecordingFiles({
+async function writeFinalizedSegmentFiles({
   targetRecordingDirectory,
   workspaceId,
   memoryId,
-  recordingId,
+  segmentId,
   title,
   durationMs,
   finalizedAt,
@@ -1914,7 +1875,7 @@ async function writeFinalizedRecordingFiles({
   readonly targetRecordingDirectory: string;
   readonly workspaceId: string;
   readonly memoryId: string;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
@@ -1934,31 +1895,32 @@ async function writeFinalizedRecordingFiles({
   if (!audio.isFile()) {
     throw new Error('Recording audio path is unsafe');
   }
-  const draftMetadata = draftRecordingMetadataSchema.parse(
+  const draftMetadata = draftSegmentMetadataSchema.parse(
     JSON.parse(
       readWorkspaceTextFileInKnownDirectory(
         targetRecordingDirectory,
         targetIdentity,
-        'recording.json'
+        'segment.json'
       )
     )
   );
   if (
     draftMetadata.workspaceId !== workspaceId ||
-    draftMetadata.recordingId !== recordingId ||
+    draftMetadata.segmentId !== segmentId ||
     draftMetadata.audioByteLength !== audio.size
   ) {
-    throw new Error('Draft recording metadata does not match file truth');
+    throw new Error('Draft segment metadata does not match file truth');
   }
   await writeWorkspaceJsonAtomicInKnownDirectory({
     directory: targetRecordingDirectory,
     directoryIdentity: targetIdentity,
-    fileName: 'recording.json',
+    fileName: 'segment.json',
     value: {
       schemaVersion: 1,
       workspaceId,
       memoryId,
-      recordingId,
+      segmentId,
+      type: 'audio',
       status: 'finalized',
       title,
       createdAt: draftMetadata.createdAt,
@@ -1967,18 +1929,16 @@ async function writeFinalizedRecordingFiles({
       nextSequence: draftMetadata.nextSequence,
       audioByteLength: audio.size,
       transcriptPath: 'transcript.md',
-      reflectionsPath: 'reflections.md',
     },
   });
   await ensureMarkdownFileInDirectory(targetRecordingDirectory, targetIdentity, 'transcript.md');
-  await ensureMarkdownFileInDirectory(targetRecordingDirectory, targetIdentity, 'reflections.md');
   return audio.size;
 }
 
 async function ensureMarkdownFileInDirectory(
   directory: string,
   directoryIdentity: DirectoryIdentity,
-  fileName: 'transcript.md' | 'reflections.md'
+  fileName: 'transcript.md'
 ): Promise<void> {
   try {
     const fd = openFileInDirectory({
@@ -2007,12 +1967,12 @@ async function ensureMarkdownFileInDirectory(
 
 async function finishFinalizeTransaction({
   rootPath,
-  stagingRecordingDirectory,
+  stagingSegmentDirectory,
   targetRecordingDirectory,
   memoryId,
   nextMemory,
   previousMemory,
-  recordingId,
+  segmentId,
   workspaceId,
   title,
   durationMs,
@@ -2022,12 +1982,12 @@ async function finishFinalizeTransaction({
   assertUsable,
 }: {
   readonly rootPath: string;
-  readonly stagingRecordingDirectory: string;
+  readonly stagingSegmentDirectory: string;
   readonly targetRecordingDirectory: string;
   readonly memoryId: string;
   readonly nextMemory: MemoryJson;
   readonly previousMemory: MemoryJson | null;
-  readonly recordingId: string;
+  readonly segmentId: string;
   readonly workspaceId: string;
   readonly title: string;
   readonly durationMs: number;
@@ -2041,27 +2001,27 @@ async function finishFinalizeTransaction({
   let rollbackMemory = true;
   try {
     assertWorkspaceUsable(assertUsable);
-    await writeFinalizedRecordingFiles({
-      targetRecordingDirectory: stagingRecordingDirectory,
+    await writeFinalizedSegmentFiles({
+      targetRecordingDirectory: stagingSegmentDirectory,
       workspaceId,
       memoryId,
-      recordingId,
+      segmentId,
       title,
       durationMs,
       finalizedAt,
     });
-    await fsyncDirectoryTree(stagingRecordingDirectory);
+    await fsyncDirectoryTree(stagingSegmentDirectory);
     await hooks?.afterStagingTreeFsync?.();
     assertWorkspaceUsable(assertUsable);
     await hooks?.beforeExpose?.();
-    const currentTargetRecordingDirectory = await memoryRecordingDirectory(
+    const currentTargetRecordingDirectory = await memorySegmentDirectory(
       rootPath,
       memoryId,
-      recordingId
+      segmentId
     );
     const currentStagingRecordingDirectory = path.join(
       path.dirname(currentTargetRecordingDirectory),
-      path.basename(stagingRecordingDirectory)
+      path.basename(stagingSegmentDirectory)
     );
     await assertSafeExistingDirectory(
       currentStagingRecordingDirectory,
@@ -2069,14 +2029,14 @@ async function finishFinalizeTransaction({
     );
     await hooks?.beforeFinalRename?.();
     assertWorkspaceUsable(assertUsable);
-    const finalTargetRecordingDirectory = await memoryRecordingDirectory(
+    const finalTargetRecordingDirectory = await memorySegmentDirectory(
       rootPath,
       memoryId,
-      recordingId
+      segmentId
     );
     const finalStagingRecordingDirectory = path.join(
       path.dirname(finalTargetRecordingDirectory),
-      path.basename(stagingRecordingDirectory)
+      path.basename(stagingSegmentDirectory)
     );
     await assertSafeExistingDirectory(
       finalStagingRecordingDirectory,
@@ -2106,20 +2066,20 @@ async function finishFinalizeTransaction({
     await rebuildIndex(rootPath);
     await hooks?.beforeDraftCleanup?.();
     assertWorkspaceUsable(assertUsable);
-    await removeDraftRecordingDirectorySafely(rootPath, recordingId, hooks);
+    await removeDraftSegmentDirectorySafely(rootPath, segmentId, hooks);
     rollbackDurableRecording = false;
     rollbackMemory = false;
     await hooks?.afterDraftCleanup?.();
     assertWorkspaceUsable(assertUsable);
-    await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'recordings'));
+    await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'segments'));
     assertWorkspaceUsable(assertUsable);
-    await unlinkFinalizeTransactionMarker(rootPath, memoryId, recordingId);
+    await unlinkFinalizeTransactionMarker(rootPath, memoryId, segmentId);
     return summarizeMemory(rootPath, nextMemory);
   } catch (error) {
     if (error instanceof WorkspaceHandleLost) {
       throw error;
     }
-    await removeSafeWorkspaceDirectory(rootPath, stagingRecordingDirectory, hooks).catch(() => {});
+    await removeSafeWorkspaceDirectory(rootPath, stagingSegmentDirectory, hooks).catch(() => {});
     const safeTargetRecordingDirectory = await resolveSafeCleanupDirectory(
       rootPath,
       targetRecordingDirectory
@@ -2156,7 +2116,7 @@ async function finishFinalizeTransaction({
 }
 
 async function createMemoryWithRecordingForTestFixture(
-  input: CreateMemoryForRecordingInput,
+  input: CreateMemoryForAudioSegmentInput,
   transactionHooks?: FinalizeTransactionHooks
 ): Promise<MemoryFilesResult<MemorySummary>> {
   try {
@@ -2171,24 +2131,24 @@ async function createMemoryWithRecordingForTestFixture(
         title: input.title,
         createdAt,
         updatedAt: createdAt,
-        assetIds: [input.recordingId],
+        segmentIds: [input.segmentId],
       };
-      const { stagingRecordingDirectory, targetRecordingDirectory } =
+      const { stagingSegmentDirectory, targetRecordingDirectory } =
         await copyDraftRecordingIntoMemory({
           rootPath: input.rootPath,
           memoryId: input.memoryId,
-          recordingId: input.recordingId,
+          segmentId: input.segmentId,
           ...(transactionHooks ? { hooks: transactionHooks } : {}),
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
       const summary = await finishFinalizeTransaction({
         rootPath: input.rootPath,
-        stagingRecordingDirectory,
+        stagingSegmentDirectory,
         targetRecordingDirectory,
         memoryId: input.memoryId,
         nextMemory: memory,
         previousMemory: null,
-        recordingId: input.recordingId,
+        segmentId: input.segmentId,
         workspaceId: input.workspaceId,
         title: input.title,
         durationMs: input.durationMs,
@@ -2217,7 +2177,7 @@ async function createMemoryWithRecordingForTestFixture(
 }
 
 export async function createMemoryWithRecordingForTest(
-  input: CreateMemoryForRecordingForTestInput
+  input: CreateMemoryForAudioSegmentForTestInput
 ): Promise<MemoryFilesResult<MemorySummary>> {
   const { transactionHooks, ...productionInput } = input;
   return createMemoryWithRecordingForTestFixture(productionInput, transactionHooks);
@@ -2256,7 +2216,7 @@ export async function createMemoryFromFileTruth(
         title: input.title,
         createdAt,
         updatedAt: createdAt,
-        assetIds: [],
+        segmentIds: [],
       };
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       await writeWorkspaceJsonAtomic(
@@ -2307,8 +2267,8 @@ export async function createMemoryFromFileTruth(
   }
 }
 
-async function appendRecordingToMemoryWithHooks(
-  input: AppendRecordingToMemoryInput,
+async function appendAudioSegmentToMemoryWithHooks(
+  input: AppendAudioSegmentToMemoryInput,
   transactionHooks?: FinalizeTransactionHooks
 ): Promise<MemoryFilesResult<MemorySummary>> {
   try {
@@ -2319,27 +2279,27 @@ async function appendRecordingToMemoryWithHooks(
       const next: MemoryJson = {
         ...current,
         updatedAt,
-        assetIds: [
-          ...current.assetIds.filter((recordingId) => recordingId !== input.recordingId),
-          input.recordingId,
+        segmentIds: [
+          ...current.segmentIds.filter((segmentId) => segmentId !== input.segmentId),
+          input.segmentId,
         ],
       };
-      const { stagingRecordingDirectory, targetRecordingDirectory } =
+      const { stagingSegmentDirectory, targetRecordingDirectory } =
         await copyDraftRecordingIntoMemory({
           rootPath: input.rootPath,
           memoryId: input.memoryId,
-          recordingId: input.recordingId,
+          segmentId: input.segmentId,
           ...(transactionHooks ? { hooks: transactionHooks } : {}),
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
       const summary = await finishFinalizeTransaction({
         rootPath: input.rootPath,
-        stagingRecordingDirectory,
+        stagingSegmentDirectory,
         targetRecordingDirectory,
         memoryId: input.memoryId,
         nextMemory: next,
         previousMemory: current,
-        recordingId: input.recordingId,
+        segmentId: input.segmentId,
         workspaceId: input.workspaceId,
         title: input.title,
         durationMs: input.durationMs,
@@ -2367,55 +2327,17 @@ async function appendRecordingToMemoryWithHooks(
   }
 }
 
-export async function appendRecordingToMemory(
-  input: AppendRecordingToMemoryInput
+export async function appendAudioSegmentToMemory(
+  input: AppendAudioSegmentToMemoryInput
 ): Promise<MemoryFilesResult<MemorySummary>> {
-  return appendRecordingToMemoryWithHooks(input);
+  return appendAudioSegmentToMemoryWithHooks(input);
 }
 
-export async function appendRecordingToMemoryForTest(
-  input: AppendRecordingToMemoryForTestInput
+export async function appendAudioSegmentToMemoryForTest(
+  input: AppendAudioSegmentToMemoryForTestInput
 ): Promise<MemoryFilesResult<MemorySummary>> {
   const { transactionHooks, ...productionInput } = input;
-  return appendRecordingToMemoryWithHooks(productionInput, transactionHooks);
-}
-
-export async function readMemoryDetail(
-  input: ReadMemoryDetailInput
-): Promise<MemoryFilesResult<MemoryDetail>> {
-  try {
-    assertWorkspaceUsable(input.assertWorkspaceUsable);
-    const memory = await readMemoryJson(input.rootPath, input.memoryId);
-    const summary = await readMemorySummaryFromIndex(input.rootPath, memory.memoryId);
-    assertWorkspaceUsable(input.assertWorkspaceUsable);
-    const recordings: MemoryRecordingSummary[] = [];
-    for (const recordingId of memory.assetIds.slice(0, MEMORY_DETAIL_RECORDING_LIMIT)) {
-      try {
-        assertWorkspaceUsable(input.assertWorkspaceUsable);
-        const recording = await summarizeRecording(input.rootPath, memory.memoryId, recordingId);
-        assertWorkspaceUsable(input.assertWorkspaceUsable);
-        recordings.push(recording);
-      } catch (error) {
-        if (error instanceof WorkspaceHandleLost) {
-          throw error;
-        }
-      }
-    }
-    assertWorkspaceUsable(input.assertWorkspaceUsable);
-    return {
-      ok: true,
-      value: {
-        ...memory,
-        assetCount: summary?.assetCount ?? memory.assetIds.length,
-        recordingsTruncated: memory.assetIds.length > MEMORY_DETAIL_RECORDING_LIMIT,
-        hasTranscript: summary?.hasTranscript ?? false,
-        hasReflections: summary?.hasReflections ?? false,
-        recordings,
-      },
-    };
-  } catch (error) {
-    return memoryFilesError(error, 'ERR_MEMORY_NOT_FOUND', 'Memory not found', 'none-written');
-  }
+  return appendAudioSegmentToMemoryWithHooks(productionInput, transactionHooks);
 }
 
 export async function updateMemoryTitleFromFileTruth(
@@ -2445,11 +2367,11 @@ export async function updateMemoryTitleFromFileTruth(
   }
 }
 
-export async function lookupRecordingDirectoryById(
+export async function lookupSegmentDirectoryById(
   rootPath: string,
-  recordingId: string
-): Promise<RecordingDirectoryLookup> {
-  if (!RECORDING_ID_PATTERN.test(recordingId)) {
+  segmentId: string
+): Promise<SegmentDirectoryLookup> {
+  if (!SEGMENT_ID_PATTERN.test(segmentId)) {
     return { status: 'invalid-id' };
   }
   await beforeRecordingLookupForTest?.();
@@ -2459,18 +2381,18 @@ export async function lookupRecordingDirectoryById(
   );
   const memoryEntries = await readExistingDirectoryEntries(memoriesDirectory);
   let foundDirectory: string | null = null;
-  let foundRecording: MemoryRecordingSummary | null = null;
+  let foundRecording: MemorySegmentSummary | null = null;
   let duplicateFound = false;
   let invalidDurableFound = false;
   for (const memoryEntry of memoryEntries) {
     if (!memoryEntry.isDirectory()) {
       continue;
     }
-    const candidate = await memoryRecordingDirectory(rootPath, memoryEntry.name, recordingId);
+    const candidate = await memorySegmentDirectory(rootPath, memoryEntry.name, segmentId);
     try {
       const metadata = await lstat(candidate);
       const recording = metadata.isDirectory()
-        ? await summarizeValidFinalizedRecordingDirectory(rootPath, memoryEntry.name, recordingId)
+        ? await summarizeValidFinalizedSegmentDirectory(rootPath, memoryEntry.name, segmentId)
         : null;
       if (recording) {
         if (foundDirectory) {
@@ -2498,24 +2420,24 @@ export async function lookupRecordingDirectoryById(
     if (!foundRecording) {
       return { status: 'invalid-durable' };
     }
-    return { status: 'found', directory: foundDirectory, recording: foundRecording };
+    return { status: 'found', directory: foundDirectory, segment: foundRecording };
   }
   return { status: 'not-found' };
 }
 
-export async function findRecordingDirectoryById(
+export async function findSegmentDirectoryById(
   rootPath: string,
-  recordingId: string
+  segmentId: string
 ): Promise<string> {
-  const lookup = await lookupRecordingDirectoryById(rootPath, recordingId);
+  const lookup = await lookupSegmentDirectoryById(rootPath, segmentId);
   if (lookup.status === 'found') {
     return lookup.directory;
   }
   if (lookup.status === 'duplicate') {
-    throw new Error('Duplicate finalized recording id');
+    throw new Error('Duplicate finalized segment id');
   }
   if (lookup.status === 'invalid-id') {
-    throw new Error('Invalid recording id');
+    throw new Error('Invalid segment id');
   }
   if (lookup.status === 'invalid-durable') {
     throw new Error('Invalid durable recording');
@@ -2523,22 +2445,22 @@ export async function findRecordingDirectoryById(
   throw new Error('Recording not found');
 }
 
-export async function findFinalizedRecordingById(
+export async function findFinalizedAudioSegmentById(
   rootPath: string,
-  recordingId: string
+  segmentId: string
 ): Promise<{
   readonly directory: string;
-  readonly recording: MemoryRecordingSummary;
+  readonly segment: MemorySegmentSummary;
 }> {
-  const lookup = await lookupRecordingDirectoryById(rootPath, recordingId);
+  const lookup = await lookupSegmentDirectoryById(rootPath, segmentId);
   if (lookup.status === 'found') {
-    return { directory: lookup.directory, recording: lookup.recording };
+    return { directory: lookup.directory, segment: lookup.segment };
   }
   if (lookup.status === 'duplicate') {
-    throw new Error('Duplicate finalized recording id');
+    throw new Error('Duplicate finalized segment id');
   }
   if (lookup.status === 'invalid-id') {
-    throw new Error('Invalid recording id');
+    throw new Error('Invalid segment id');
   }
   if (lookup.status === 'invalid-durable') {
     throw new Error('Invalid durable recording');

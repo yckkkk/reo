@@ -26,19 +26,19 @@ type MediaPermissionDecisionInput = {
 type CreateMicrophoneIntentInput = {
   readonly senderId: number;
   readonly workspaceHandle: string;
-  readonly drawerSessionId: string;
+  readonly recordingFlowSessionId: string;
   readonly now?: () => number;
 };
 
 type ClearMicrophoneIntentInput = {
   readonly senderId: number;
   readonly workspaceHandle: string;
-  readonly drawerSessionId: string;
+  readonly recordingFlowSessionId: string;
 };
 
 type MicrophoneIntent = {
   readonly workspaceHandle: string;
-  readonly drawerSessionId: string;
+  readonly recordingFlowSessionId: string;
   readonly expiresAt: number;
 };
 
@@ -68,7 +68,7 @@ export function resetMicrophoneIntentsForTest(): void {
 export function createMicrophoneIntent({
   senderId,
   workspaceHandle,
-  drawerSessionId,
+  recordingFlowSessionId,
   now: nowOption,
 }: CreateMicrophoneIntentInput): MicrophoneIntentResult {
   const now = nowOption?.() ?? Date.now();
@@ -84,7 +84,7 @@ export function createMicrophoneIntent({
 
   const intent = {
     workspaceHandle,
-    drawerSessionId,
+    recordingFlowSessionId,
     expiresAt: now + MICROPHONE_INTENT_TTL_MS,
   };
   microphoneIntentsBySender.set(senderId, intent);
@@ -99,10 +99,13 @@ export function createMicrophoneIntent({
 export function clearMicrophoneIntent({
   senderId,
   workspaceHandle,
-  drawerSessionId,
+  recordingFlowSessionId,
 }: ClearMicrophoneIntentInput): void {
   const intent = microphoneIntentsBySender.get(senderId);
-  if (intent?.workspaceHandle === workspaceHandle && intent.drawerSessionId === drawerSessionId) {
+  if (
+    intent?.workspaceHandle === workspaceHandle &&
+    intent.recordingFlowSessionId === recordingFlowSessionId
+  ) {
     microphoneIntentsBySender.delete(senderId);
   }
 }

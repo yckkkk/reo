@@ -8,7 +8,7 @@ import {
   sameDirectoryIdentity,
 } from './directoryIdentity.js';
 import {
-  RECORDING_ID_PATTERN,
+  SEGMENT_ID_PATTERN,
   workspaceError,
   type WorkspaceErrorEnvelope,
 } from '../workspace-contract/workspace-contract.js';
@@ -241,7 +241,7 @@ export async function checkWorkspaceDraftsDirectory(
   if (typeof draftsDirectory !== 'string') {
     return draftsDirectory;
   }
-  return checkWorkspaceDirectoryPath(path.join(draftsDirectory, 'recordings'));
+  return checkWorkspaceDirectoryPath(path.join(draftsDirectory, 'segments'));
 }
 
 export async function ensureWorkspaceDraftsDirectory(
@@ -258,7 +258,7 @@ export async function ensureWorkspaceDraftsDirectory(
     if (typeof draftsDirectory !== 'string') {
       return draftsDirectory;
     }
-    return ensureWorkspaceChildDirectory(draftsDirectory, 'recordings', assertUsable);
+    return ensureWorkspaceChildDirectory(draftsDirectory, 'segments', assertUsable);
   } catch (error) {
     return workspacePathError(error);
   }
@@ -277,12 +277,45 @@ export async function ensureWorkspaceMemoriesDirectory(
   return ensureWorkspaceRootChildDirectory(canonicalRoot, 'memories', assertUsable);
 }
 
-export function createSafeRecordingId(recordingId: string): string {
-  if (!RECORDING_ID_PATTERN.test(recordingId)) {
-    throw new Error('Invalid recording id');
+export function createSafeSegmentId(segmentId: string): string {
+  if (!SEGMENT_ID_PATTERN.test(segmentId)) {
+    throw new Error('Invalid segment id');
   }
 
-  return recordingId;
+  return segmentId;
+}
+
+export function resolveWorkspaceDraftSegmentDirectory(
+  canonicalRoot: string,
+  segmentId: string
+): string {
+  const safeId = createSafeSegmentId(segmentId);
+  const segmentsRoot = path.join(canonicalRoot, '.reo', 'drafts', 'segments');
+  const segmentDirectory = path.join(segmentsRoot, safeId);
+  const relative = path.relative(segmentsRoot, segmentDirectory);
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Segment path escapes workspace');
+  }
+
+  for (const candidate of [
+    path.join(canonicalRoot, '.reo'),
+    path.join(canonicalRoot, '.reo', 'drafts'),
+    segmentsRoot,
+    segmentDirectory,
+  ]) {
+    try {
+      if (lstatSync(candidate).isSymbolicLink()) {
+        throw new Error('Segment path crosses a symlink');
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
+  return segmentDirectory;
 }
 
 export function setAfterWorkspaceReoDirectoryCheckForTest(
