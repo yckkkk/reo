@@ -5,19 +5,26 @@ import WebSocket from 'ws';
 
 const defaultPort = Number(process.env.REMOTE_DEBUGGING_PORT || 9233);
 const defaultTolerance = 1.5;
+const defaultMinCardWidth = 120;
+const defaultMaxCardWidth = 150;
 
 function printHelp() {
   console.log(`Usage:
   REMOTE_DEBUGGING_PORT=9233 npm run dev
-  npm run verify:memory-studio-layout -- --port 9233 --screenshot docs/specs/.../artifacts/memory-studio-layout.png --metrics docs/specs/.../artifacts/memory-studio-layout.json
+  npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --screenshot docs/specs/.../artifacts/memory-studio-layout.png --metrics docs/specs/.../artifacts/memory-studio-layout.json
 
 Options:
-  --port <number>       Electron remote debugging port. Default: ${defaultPort}
-  --host <host>         Remote debugging host. Default: 127.0.0.1
-  --tolerance <px>      Allowed center alignment delta. Default: ${defaultTolerance}
-  --screenshot <path>   Write a viewport screenshot after measurement.
-  --metrics <path>      Write machine-readable metrics JSON.
-  --json                Print metrics JSON to stdout.
+  --port <number>          Electron remote debugging port. Default: ${defaultPort}
+  --host <host>            Remote debugging host. Default: 127.0.0.1
+  --viewport <width>x<height>
+                           Override viewport before measuring, for example 900x720.
+  --interaction <mode>     Measurement interaction: click-scroll or none. Default: click-scroll
+  --tolerance <px>         Allowed center alignment delta. Default: ${defaultTolerance}
+  --min-card-width <px>    Minimum compact Segment card width. Default: ${defaultMinCardWidth}
+  --max-card-width <px>    Maximum compact Segment card width. Default: ${defaultMaxCardWidth}
+  --screenshot <path>      Write a viewport screenshot after measurement.
+  --metrics <path>         Write machine-readable metrics JSON.
+  --json                   Print metrics JSON to stdout.
 `);
 }
 
@@ -31,6 +38,9 @@ function parseArgs(argv) {
     host: '127.0.0.1',
     port: defaultPort,
     tolerance: defaultTolerance,
+    minCardWidth: defaultMinCardWidth,
+    maxCardWidth: defaultMaxCardWidth,
+    interaction: 'click-scroll',
     json: false,
   };
 
@@ -51,8 +61,24 @@ function parseArgs(argv) {
         options.port = Number(next);
         index += 1;
         break;
+      case '--viewport':
+        options.viewport = parseViewport(next);
+        index += 1;
+        break;
+      case '--interaction':
+        options.interaction = next;
+        index += 1;
+        break;
       case '--tolerance':
         options.tolerance = Number(next);
+        index += 1;
+        break;
+      case '--min-card-width':
+        options.minCardWidth = Number(next);
+        index += 1;
+        break;
+      case '--max-card-width':
+        options.maxCardWidth = Number(next);
         index += 1;
         break;
       case '--screenshot':
@@ -77,8 +103,33 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.tolerance) || options.tolerance < 0) {
     fail('--tolerance must be a non-negative number.');
   }
+  if (!Number.isFinite(options.minCardWidth) || options.minCardWidth <= 0) {
+    fail('--min-card-width must be a positive number.');
+  }
+  if (!Number.isFinite(options.maxCardWidth) || options.maxCardWidth < options.minCardWidth) {
+    fail('--max-card-width must be greater than or equal to --min-card-width.');
+  }
+  if (!['click-scroll', 'none'].includes(options.interaction)) {
+    fail('--interaction must be click-scroll or none.');
+  }
 
   return options;
+}
+
+function parseViewport(value) {
+  if (!value) {
+    fail('--viewport requires a value like 900x720.');
+  }
+  const match = /^(\d+)x(\d+)$/i.exec(value);
+  if (!match) {
+    fail('--viewport must use <width>x<height>, for example 900x720.');
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    fail('--viewport width and height must be positive numbers.');
+  }
+  return { width, height };
 }
 
 async function fetchJson(url) {
@@ -163,6 +214,9 @@ function measurementExpression() {
     const scroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const items = Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-item"]'));
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
+    const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const playerTime = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
+    const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
     if (!scroll || items.length === 0) {
       return { ok: false, reason: 'Segment strip scroll owner or Segment items are missing.' };
     }
@@ -206,12 +260,19 @@ function measurementExpression() {
       };
     });
 
+    const playerTimeStyle = playerTime ? getComputedStyle(playerTime) : null;
+
     return {
       ok: true,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       documentHeight: document.documentElement.scrollHeight,
+      documentWidth: document.documentElement.scrollWidth,
       bodyHeight: document.body.scrollHeight,
+      bodyWidth: document.body.scrollWidth,
+      windowScrollX: window.scrollX,
       windowScrollY: window.scrollY,
+      studioRect: rectOf(studio),
+      contentPanelRect: contentPanel ? rectOf(contentPanel) : null,
       standaloneTimelineExists: Boolean(nav),
       stripScrollOwnerCount: studio.querySelectorAll('[data-slot="memory-studio-segment-strip-scroll"]').length,
       itemCount: items.length,
@@ -221,6 +282,12 @@ function measurementExpression() {
         width: scroll.scrollWidth,
         clientWidth: scroll.clientWidth,
         rect: rectOf(scroll),
+      },
+      player: {
+        rowRect: player ? rectOf(player) : null,
+        timeRect: playerTime ? rectOf(playerTime) : null,
+        timeWhiteSpace: playerTimeStyle ? playerTimeStyle.whiteSpace : null,
+        timeText: playerTime ? playerTime.textContent : null,
       },
       items: itemMetrics,
     };
@@ -243,8 +310,26 @@ function waitExpression() {
   })`;
 }
 
-function assertMetrics(metrics, tolerance) {
+function assertRectInsideViewport(failures, label, rect, viewport, tolerance) {
+  if (!rect) {
+    failures.push(`${label} is missing.`);
+    return;
+  }
+  if (rect.left < -tolerance || rect.right > viewport.width + tolerance) {
+    failures.push(
+      `${label} overflows viewport horizontally: left=${rect.left.toFixed(2)}, right=${rect.right.toFixed(2)}, viewport=${viewport.width}.`
+    );
+  }
+  if (rect.top < -tolerance || rect.bottom > viewport.height + tolerance) {
+    failures.push(
+      `${label} overflows viewport vertically: top=${rect.top.toFixed(2)}, bottom=${rect.bottom.toFixed(2)}, viewport=${viewport.height}.`
+    );
+  }
+}
+
+function assertMetrics(metrics, options) {
   const failures = [];
+  const { tolerance, minCardWidth, maxCardWidth } = options;
   if (!metrics.ok) {
     failures.push(metrics.reason || 'Unknown measurement failure.');
     return failures;
@@ -263,16 +348,64 @@ function assertMetrics(metrics, tolerance) {
   if (metrics.windowScrollY !== 0) {
     failures.push(`Expected windowScrollY 0, received ${metrics.windowScrollY}.`);
   }
+  if (metrics.windowScrollX !== 0) {
+    failures.push(`Expected windowScrollX 0, received ${metrics.windowScrollX}.`);
+  }
   if (metrics.documentHeight > metrics.viewport.height + 2) {
     failures.push(
       `Expected Memory Studio to fit the viewport height; document height ${metrics.documentHeight}, viewport ${metrics.viewport.height}.`
     );
   }
+  if (metrics.documentWidth > metrics.viewport.width + 2) {
+    failures.push(
+      `Expected Memory Studio to fit the viewport width; document width ${metrics.documentWidth}, viewport ${metrics.viewport.width}.`
+    );
+  }
+
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio region',
+    metrics.studioRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio content panel',
+    metrics.contentPanelRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio audio player',
+    metrics.player.rowRect,
+    metrics.viewport,
+    tolerance
+  );
+
+  if (metrics.player.timeWhiteSpace !== 'nowrap') {
+    failures.push(
+      `Expected audio player time to stay on one line; white-space=${metrics.player.timeWhiteSpace}.`
+    );
+  }
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio audio player time',
+    metrics.player.timeRect,
+    metrics.viewport,
+    tolerance
+  );
 
   for (const item of metrics.items) {
     if (!item.cardRect || !item.dotRect || !item.timeRect || !item.anchorRect) {
       failures.push(`Segment item ${item.index} is missing card, dot, time, or anchor.`);
       continue;
+    }
+    if (item.cardRect.width < minCardWidth || item.cardRect.width > maxCardWidth) {
+      failures.push(
+        `Segment item ${item.index} card width ${item.cardRect.width.toFixed(2)}px is outside ${minCardWidth}-${maxCardWidth}px.`
+      );
     }
     if (Math.abs(item.dotToCardCenterDelta) > tolerance) {
       failures.push(
@@ -309,7 +442,27 @@ async function main() {
   try {
     await client.send('Runtime.enable');
     await client.send('Page.enable');
+    if (options.viewport) {
+      await client.send('Emulation.setDeviceMetricsOverride', {
+        width: options.viewport.width,
+        height: options.viewport.height,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+    }
     await client.send('Input.setIgnoreInputEvents', { ignore: false }).catch(() => undefined);
+    await evaluate(
+      client,
+      `(() => {
+        window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+        if (scroll) {
+          scroll.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        }
+        return true;
+      })()`
+    );
+    await evaluate(client, waitExpression());
 
     const before = await evaluate(client, measurementExpression());
     if (!before.ok) {
@@ -317,7 +470,8 @@ async function main() {
     }
 
     let clickedSecondItem = false;
-    if (before.itemCount > 1) {
+    let scrollMethod = 'not-run';
+    if (options.interaction === 'click-scroll' && before.itemCount > 1) {
       const secondItemCenter = await evaluate(
         client,
         centerPointExpression('[data-slot="memory-studio-segment-item"]', 1)
@@ -342,30 +496,32 @@ async function main() {
       }
     }
 
-    const scrollCenter = await evaluate(
-      client,
-      centerPointExpression('[data-slot="memory-studio-segment-strip-scroll"]')
-    );
-    if (scrollCenter && before.scroll.width > before.scroll.clientWidth) {
-      await client.send('Input.dispatchMouseEvent', {
-        type: 'mouseWheel',
-        x: scrollCenter.x,
-        y: scrollCenter.y,
-        deltaX: 180,
-        deltaY: 0,
-      });
-      await evaluate(client, waitExpression());
-    }
-
     let after = await evaluate(client, measurementExpression());
-    let scrollMethod = 'cdp-mouseWheel';
-    if (
-      before.scroll.width > before.scroll.clientWidth &&
-      after.scroll.left === before.scroll.left
-    ) {
-      await evaluate(
+    if (options.interaction === 'click-scroll') {
+      const scrollCenter = await evaluate(
         client,
-        `(() => {
+        centerPointExpression('[data-slot="memory-studio-segment-strip-scroll"]')
+      );
+      if (scrollCenter && before.scroll.width > before.scroll.clientWidth) {
+        await client.send('Input.dispatchMouseEvent', {
+          type: 'mouseWheel',
+          x: scrollCenter.x,
+          y: scrollCenter.y,
+          deltaX: 180,
+          deltaY: 0,
+        });
+        scrollMethod = 'cdp-mouseWheel';
+        await evaluate(client, waitExpression());
+      }
+
+      after = await evaluate(client, measurementExpression());
+      if (
+        before.scroll.width > before.scroll.clientWidth &&
+        after.scroll.left === before.scroll.left
+      ) {
+        await evaluate(
+          client,
+          `(() => {
           const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
           if (scroll) {
             scroll.scrollTo({ left: Math.min(scroll.scrollLeft + 180, scroll.scrollWidth - scroll.clientWidth), behavior: 'auto' });
@@ -373,19 +529,26 @@ async function main() {
           }
           return true;
         })()`
-      );
-      await evaluate(client, waitExpression());
-      after = await evaluate(client, measurementExpression());
-      scrollMethod = 'dom-scroll-fallback';
+        );
+        await evaluate(client, waitExpression());
+        after = await evaluate(client, measurementExpression());
+        scrollMethod = 'dom-scroll-fallback';
+      }
     }
 
-    const failures = assertMetrics(after, options.tolerance);
+    const failures = assertMetrics(after, options);
     const metrics = {
       ok: failures.length === 0,
       targetUrl: target.url,
       clickedSecondItem,
       scrollMethod,
+      interaction: options.interaction,
       tolerance: options.tolerance,
+      viewportOverride: options.viewport ?? null,
+      cardWidthRange: {
+        min: options.minCardWidth,
+        max: options.maxCardWidth,
+      },
       before,
       after,
       failures,

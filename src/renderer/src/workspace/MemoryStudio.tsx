@@ -134,7 +134,7 @@ function MemoryStudioAudioPlaybackRow({
     <div
       data-component="memory-studio-audio-player"
       data-slot={rowSlot}
-      className="grid shrink-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-14"
+      className="grid w-full min-w-0 shrink-0 grid-cols-[40px_minmax(64px,1fr)_max-content] items-center gap-12"
     >
       <button
         type="button"
@@ -176,7 +176,10 @@ function MemoryStudioAudioPlaybackRow({
         tabIndex={audioAvailable ? 0 : -1}
         tone="voice"
       />
-      <span className="shrink-0 font-geist-mono text-ui-md font-regular leading-ui-md tracking-wide text-obsidian">
+      <span
+        data-slot="memory-studio-audio-player-time"
+        className="shrink-0 whitespace-nowrap font-geist-mono text-ui-md font-regular leading-ui-md tracking-wide text-obsidian"
+      >
         {loading ? '载入中' : `${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
       </span>
     </div>
@@ -187,14 +190,14 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-48 w-[102px] shrink-0 items-center gap-[3px] overflow-hidden"
+      className="flex h-36 w-[58px] shrink-0 items-center gap-[2px] overflow-hidden"
       data-slot="memory-studio-segment-card-waveform"
     >
       {SEGMENT_PREVIEW_SPECTRUM_DATA.map((level, index) => (
         <span
           key={index}
           className={[
-            'w-[4px] origin-center rounded-tags transition-colors duration-150 motion-reduce:animate-none',
+            'w-[2px] origin-center rounded-tags transition-colors duration-150 motion-reduce:animate-none',
             active ? 'bg-signal-blue' : 'bg-slate',
           ].join(' ')}
           style={{
@@ -735,7 +738,7 @@ export function MemoryStudio({
               className="relative mt-20 min-w-0 shrink-0"
               style={
                 {
-                  '--memory-studio-segment-card-size': 'clamp(188px, 24%, 216px)',
+                  '--memory-studio-segment-card-size': 'clamp(124px, 20%, 144px)',
                 } as CSSProperties
               }
             >
@@ -772,23 +775,23 @@ export function MemoryStudio({
                       <span
                         data-slot="memory-studio-segment-card"
                         className={[
-                          'box-border flex aspect-square w-full min-w-0 flex-col justify-between overflow-hidden rounded-panels border-2 bg-card-glass px-16 py-16 shadow-subtle backdrop-blur-glass-sm transition-colors duration-150 group-hover:border-obsidian group-hover:bg-powder group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
+                          'box-border flex aspect-square w-full min-w-0 flex-col justify-between overflow-hidden rounded-panels border-2 bg-card-glass p-12 shadow-subtle backdrop-blur-glass-sm transition-colors duration-150 group-hover:border-obsidian group-hover:bg-powder group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
                           isSelected ? 'border-signal-blue shadow-glass' : 'border-glass-border',
                         ].join(' ')}
                       >
                         <span className="block min-w-0">
-                          <span className="block line-clamp-2 text-subheading font-bold leading-subheading text-obsidian">
+                          <span className="block line-clamp-2 text-body-lg font-bold leading-body-lg text-obsidian">
                             {segment.title}
                           </span>
-                          <span className="mt-8 block truncate text-ui-md font-medium leading-ui-md text-gravel">
+                          <span className="mt-6 block truncate text-ui-sm font-medium leading-ui-sm text-gravel">
                             {segmentStateLabel(segment)}
                           </span>
                         </span>
-                        <span className="flex min-w-0 items-center justify-between gap-8">
+                        <span className="flex min-w-0 items-center justify-between gap-6">
                           <SegmentPreviewSpectrum active={isSelected} />
                           <span
                             data-slot="memory-studio-segment-card-duration"
-                            className="shrink-0 font-geist-mono text-body-lg font-bold leading-none tracking-wide text-obsidian"
+                            className="shrink-0 font-geist-mono text-ui-md font-bold leading-none tracking-wide text-obsidian"
                           >
                             {durationLabel(segment.durationMs)}
                           </span>
@@ -797,7 +800,7 @@ export function MemoryStudio({
                       <span
                         aria-hidden="true"
                         data-slot="memory-studio-segment-timeline-anchor"
-                        className="relative mt-12 flex h-56 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-4 before:h-px before:bg-chalk"
+                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-4 before:h-px before:bg-chalk"
                       >
                         <span
                           data-slot="memory-studio-segment-timeline-dot"
@@ -808,7 +811,7 @@ export function MemoryStudio({
                         />
                         <span
                           data-slot="memory-studio-segment-timeline-time"
-                          className="mt-16 font-geist-mono text-ui-sm leading-ui-sm tracking-wide text-gravel"
+                          className="mt-14 font-geist-mono text-ui-xs leading-ui-xs tracking-wide text-gravel"
                         >
                           {durationLabel(segment.durationMs)}
                         </span>

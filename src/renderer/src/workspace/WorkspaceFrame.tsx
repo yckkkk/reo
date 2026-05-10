@@ -2,14 +2,14 @@ import type { CSSProperties, ReactNode } from 'react';
 
 export const WORKSPACE_MEMORY_RAIL_ID = 'workspace-memory-rail';
 export const WORKSPACE_MEMORY_RAIL_LAYOUT = {
-  railWidth: 340,
-  stageGutter: 20,
-  stageWideGutter: 40,
+  railWidth: 'clamp(260px, 28vw, 340px)',
+  stageGutter: 'clamp(12px, 2vw, 20px)',
+  stageWideGutter: 'clamp(20px, 2.5vw, 40px)',
 } as const;
 const workspaceMemoryRailStyle = {
-  '--workspace-memory-rail-width': `${WORKSPACE_MEMORY_RAIL_LAYOUT.railWidth}px`,
-  '--workspace-memory-rail-stage-inset': `calc(var(--workspace-memory-rail-width) + ${WORKSPACE_MEMORY_RAIL_LAYOUT.stageGutter}px)`,
-  '--workspace-memory-rail-stage-inset-wide': `calc(var(--workspace-memory-rail-width) + ${WORKSPACE_MEMORY_RAIL_LAYOUT.stageWideGutter}px)`,
+  '--workspace-memory-rail-width': WORKSPACE_MEMORY_RAIL_LAYOUT.railWidth,
+  '--workspace-memory-rail-stage-inset': `calc(var(--workspace-memory-rail-width) + ${WORKSPACE_MEMORY_RAIL_LAYOUT.stageGutter})`,
+  '--workspace-memory-rail-stage-inset-wide': `calc(var(--workspace-memory-rail-width) + ${WORKSPACE_MEMORY_RAIL_LAYOUT.stageWideGutter})`,
 } as CSSProperties;
 
 type WorkspaceFrameProps = {
@@ -23,13 +23,13 @@ export function WorkspaceFrame({ children, dock, memoryRailOpen, rail }: Workspa
   return (
     <section
       data-slot="workspace-frame"
-      className="flex min-h-full flex-col bg-card-glass text-obsidian backdrop-blur-glass-lg"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-card-glass text-obsidian backdrop-blur-glass-lg"
       style={workspaceMemoryRailStyle}
     >
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           data-slot="workspace-stage-shell"
-          className={`flex min-h-[640px] flex-col py-24 pl-24 transition-[padding-right] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:py-32 sm:pl-40 ${
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden py-24 pl-24 transition-[padding-right] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:py-32 sm:pl-40 ${
             memoryRailOpen
               ? 'pr-[var(--workspace-memory-rail-stage-inset)] xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]'
               : 'pr-24 sm:pr-40 xl:pr-40'

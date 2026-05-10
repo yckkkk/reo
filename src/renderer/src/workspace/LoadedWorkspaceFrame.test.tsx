@@ -245,10 +245,15 @@ describe('LoadedWorkspaceFrame', () => {
       'right-[var(--workspace-memory-rail-stage-inset)]',
       'xl:right-[var(--workspace-memory-rail-stage-inset-wide)]'
     );
-    expect(document.querySelector('[data-slot="workspace-frame"]')).toHaveStyle({
-      '--workspace-memory-rail-stage-inset': 'calc(var(--workspace-memory-rail-width) + 20px)',
-      '--workspace-memory-rail-stage-inset-wide': 'calc(var(--workspace-memory-rail-width) + 40px)',
-      '--workspace-memory-rail-width': '340px',
+    const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
+    expect(workspaceFrame).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(workspaceFrame).not.toHaveClass('min-h-full');
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-stage-inset':
+        'calc(var(--workspace-memory-rail-width) + clamp(12px, 2vw, 20px))',
+      '--workspace-memory-rail-stage-inset-wide':
+        'calc(var(--workspace-memory-rail-width) + clamp(20px, 2.5vw, 40px))',
+      '--workspace-memory-rail-width': 'clamp(260px, 28vw, 340px)',
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
@@ -298,6 +303,8 @@ describe('LoadedWorkspaceFrame', () => {
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
     expect(railShell).toHaveClass('absolute', 'right-0', 'w-[var(--workspace-memory-rail-width)]');
+    expect(stageShell).toHaveClass('min-h-0', 'overflow-hidden');
+    expect(stageShell).not.toHaveClass('min-h-[640px]');
     expect(railShell).toHaveClass('translate-x-0', 'opacity-100');
     expect(stageShell).toHaveClass(
       'pr-[var(--workspace-memory-rail-stage-inset)]',
@@ -432,13 +439,12 @@ describe('LoadedWorkspaceFrame', () => {
       'border-2',
       'bg-card-glass',
       'backdrop-blur-glass-sm',
-      'px-16',
-      'py-16',
+      'p-12',
       'min-w-0'
     );
     expect(strip).toHaveAttribute(
       'style',
-      expect.stringContaining('--memory-studio-segment-card-size: clamp(188px, 24%, 216px)')
+      expect.stringContaining('--memory-studio-segment-card-size: clamp(124px, 20%, 144px)')
     );
     expect(stripScroll).not.toHaveClass('px-44');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
@@ -502,18 +508,21 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(within(activeCard).queryByText('SEG 01')).toBeNull();
     expect(within(activeCard).getByText('Birthday candles')).toHaveClass(
-      'text-subheading',
+      'text-body-lg',
       'font-bold',
-      'leading-subheading'
+      'leading-body-lg'
     );
     expect(within(activeCard).getByText('已有转录')).toHaveClass(
-      'text-ui-md',
+      'text-ui-sm',
       'font-medium',
-      'leading-ui-md'
+      'leading-ui-sm'
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')
-    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-body-lg', 'font-bold', 'tracking-wide');
+    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-ui-md', 'font-bold', 'tracking-wide');
+    expect(
+      activeCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
+    ).toHaveClass('h-36', 'w-[58px]', 'gap-[2px]');
 
     const activeBars = activeCard.querySelectorAll(
       '[data-slot="memory-studio-segment-card-waveform"] span'
@@ -524,7 +533,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(activeBars).toHaveLength(15);
     expect(inactiveBars).toHaveLength(15);
-    expect(activeBars[0]).toHaveClass('w-[4px]');
+    expect(activeBars[0]).toHaveClass('w-[2px]');
     expect(activeBars[0]).toHaveStyle({
       animationName: 'reo-flat-wave',
       animationDelay: '0s',
@@ -590,6 +599,31 @@ describe('LoadedWorkspaceFrame', () => {
     for (const element of glassVectorElements) {
       expectGlassVectorClass(element);
     }
+  });
+
+  it('keeps Memory Studio playback controls inside narrow surfaces without wrapping time', async () => {
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_narrow_playback',
+      detail: birthdayDetailWithTwoSegments,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const time = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
+
+    expect(player).toHaveClass(
+      'w-full',
+      'min-w-0',
+      'grid-cols-[40px_minmax(64px,1fr)_max-content]',
+      'gap-12'
+    );
+    expect(time).toHaveClass('whitespace-nowrap');
   });
 
   it('syncs the Segment strip, timeline, and content selection inside the current Memory', async () => {
@@ -1046,9 +1080,11 @@ describe('LoadedWorkspaceFrame', () => {
     expect(supplementPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(supplementPlayback).toHaveClass(
       'grid',
-      'grid-cols-[40px_minmax(0,1fr)_auto]',
+      'w-full',
+      'min-w-0',
+      'grid-cols-[40px_minmax(64px,1fr)_max-content]',
       'items-center',
-      'gap-14'
+      'gap-12'
     );
     expect(within(supplements).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
       'aria-valuetext',
