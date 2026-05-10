@@ -44,6 +44,7 @@ import {
 } from './memoryFiles.js';
 import {
   draftSegmentAttachmentMetadataSchema,
+  finalizedSegmentAttachmentMetadataSchema,
   segmentMetadataSchema,
   segmentAttachmentMetadataSchema,
   workspaceError,
@@ -267,6 +268,76 @@ async function resolveFinalizedAudioSegmentReadTarget(
     audioByteLength: summary.audioByteLength,
     metadata,
   };
+}
+
+async function resolveFinalizedAudioSegmentAttachmentReadTarget(
+  rootPath: string,
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  attachmentId: string
+): Promise<{
+  readonly directory: string;
+  readonly audioByteLength: number;
+}> {
+  const safeAttachmentId = createSafeAttachmentId(attachmentId);
+  const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+  const segmentDirectoryIdentity = await readDirectoryIdentity(segmentDirectory);
+  const attachmentsDirectory = path.join(segmentDirectory, 'attachments');
+  const attachmentsDirectoryIdentity = await readDirectoryIdentity(attachmentsDirectory);
+  const attachmentDirectory = path.join(attachmentsDirectory, safeAttachmentId);
+  const relative = path.relative(attachmentsDirectory, attachmentDirectory);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Segment attachment path escapes parent segment');
+  }
+
+  const attachmentDirectoryIdentity = await readDirectoryIdentity(attachmentDirectory);
+  const metadataFd = openFileForReadInDirectory(
+    attachmentDirectory,
+    attachmentDirectoryIdentity,
+    'attachment.json'
+  );
+  try {
+    const metadataStat = fstatSync(metadataFd);
+    if (!metadataStat.isFile() || metadataStat.size > MAX_RECORDING_METADATA_BYTES) {
+      throw new Error('Segment attachment metadata path is unsafe');
+    }
+    const metadataText = (await readFileDescriptor(metadataFd, 'utf8')) as string;
+    const metadata = finalizedSegmentAttachmentMetadataSchema.parse(JSON.parse(metadataText));
+    const audioFd = openFileForReadInDirectory(
+      attachmentDirectory,
+      attachmentDirectoryIdentity,
+      'audio.webm'
+    );
+    let audioByteLength = 0;
+    try {
+      const audioStat = fstatSync(audioFd);
+      if (!audioStat.isFile()) {
+        throw new Error('Segment attachment audio path is unsafe');
+      }
+      audioByteLength = audioStat.size;
+    } finally {
+      closeSync(audioFd);
+    }
+    if (
+      metadata.workspaceId !== workspaceId ||
+      metadata.memoryId !== memoryId ||
+      metadata.segmentId !== segmentId ||
+      metadata.attachmentId !== attachmentId ||
+      metadata.audioByteLength !== audioByteLength
+    ) {
+      throw new Error('Segment attachment durable truth is invalid');
+    }
+    await assertSameDirectory(segmentDirectory, segmentDirectoryIdentity);
+    await assertSameDirectory(attachmentsDirectory, attachmentsDirectoryIdentity);
+    await assertSameDirectory(attachmentDirectory, attachmentDirectoryIdentity);
+    return {
+      directory: attachmentDirectory,
+      audioByteLength,
+    };
+  } finally {
+    closeSync(metadataFd);
+  }
 }
 
 async function readMetadata(rootPath: string, segmentId: string): Promise<SegmentMetadata | null> {
@@ -1355,6 +1426,102 @@ export async function readFinalizedAudioSegmentContent({
       return workspaceErrorEnvelope;
     }
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Finalized audio segment not found');
+  }
+}
+
+export async function readFinalizedAudioSegmentAttachmentContent({
+  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  attachmentId,
+  assertWorkspaceUsable,
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly attachmentId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audio: Uint8Array;
+      readonly audioByteLength: number;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentAttachmentReadTarget(
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      attachmentId
+    );
+    const maxReadableBytes = Math.max(
+      1,
+      Math.min(Math.trunc(maxBytes), MAX_RECORDING_DRAFT_AUDIO_READ_BYTES)
+    );
+    if (target.audioByteLength > maxReadableBytes) {
+      return workspaceError(
+        'ERR_RECORDING_CHUNK_TOO_LARGE',
+        'Finalized segment attachment audio is too large to read'
+      );
+    }
+
+    const attachmentDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const audioFd = openFileForReadInDirectory(
+      target.directory,
+      attachmentDirectoryIdentity,
+      'audio.webm'
+    );
+    try {
+      const audio = fstatSync(audioFd);
+      if (!audio.isFile() || audio.size !== target.audioByteLength) {
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized segment attachment audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const content = (await readFileDescriptor(audioFd)) as Buffer;
+      if (content.byteLength !== target.audioByteLength || content.byteLength > maxReadableBytes) {
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized segment attachment audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+      if (stillUsable) {
+        return stillUsable;
+      }
+      await assertSameDirectory(target.directory, attachmentDirectoryIdentity);
+      return {
+        ok: true,
+        audio: new Uint8Array(content),
+        audioByteLength: target.audioByteLength,
+      };
+    } finally {
+      closeSync(audioFd);
+    }
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Finalized segment attachment audio not found'
+    );
   }
 }
 

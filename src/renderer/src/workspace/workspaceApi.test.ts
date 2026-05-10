@@ -19,6 +19,7 @@ import {
   openWorkspace,
   openMemorySpace,
   readFinalizedAudioSegment,
+  readFinalizedAudioSegmentAttachment,
   readMemoryDetail,
   readRecordingDraftAudio,
   removeMemorySpace,
@@ -42,6 +43,7 @@ describe('workspace renderer API wrapper', () => {
     restoreDeletedMemory: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
+    readFinalizedAudioSegmentAttachment: vi.fn(),
     createRecordingDraft: vi.fn(),
     createSegmentAttachmentRecordingDraft: vi.fn(),
     readRecordingDraftAudio: vi.fn(),
@@ -162,6 +164,18 @@ describe('workspace renderer API wrapper', () => {
         transcript: { exists: true, text: '正文' },
       },
     });
+    reoWorkspace.readFinalizedAudioSegmentAttachment.mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'request_att_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        audio: new Uint8Array([2]),
+        audioByteLength: 1,
+      },
+    });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
       ok: true,
       value: { segmentId: 'seg_1' },
@@ -236,6 +250,21 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 1,
           transcript: { exists: false },
           attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_1',
+              segmentId: 'seg_1',
+              attachmentId: 'att_1',
+              type: 'audio',
+              title: '补充录音',
+              createdAt: '2026-05-06T13:08:00.000Z',
+              updatedAt: '2026-05-06T13:08:00.000Z',
+              durationMs: 0,
+              audioByteLength: 1,
+              transcript: { exists: false },
+            },
+          ],
         },
         attachment: {
           workspaceId: 'ws_1',
@@ -320,6 +349,14 @@ describe('workspace renderer API wrapper', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
+    });
+    await readFinalizedAudioSegmentAttachment({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      requestId: 'request_att_1',
     });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await createSegmentAttachmentRecordingDraft({
@@ -422,6 +459,14 @@ describe('workspace renderer API wrapper', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
+    });
+    expect(reoWorkspace.readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      requestId: 'request_att_1',
     });
     expect(reoWorkspace.createSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

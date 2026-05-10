@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
@@ -59,6 +59,7 @@ const birthdayDetail = {
         exists: true,
       },
       attachmentCount: 0,
+      attachments: [],
     },
   ],
 };
@@ -84,6 +85,7 @@ const birthdayDetailWithTwoSegments = {
         exists: false,
       },
       attachmentCount: 0,
+      attachments: [],
     },
   ],
 };
@@ -146,6 +148,13 @@ function renderLoadedWorkspaceFrame({
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentAttachmentRecording = vi.fn(),
+  readFinalizedAudioSegmentAttachment = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_RECORDING_NOT_FOUND',
+      message: 'Attachment recording not found',
+    },
+  }),
   readFinalizedAudioSegment = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -165,12 +174,14 @@ function renderLoadedWorkspaceFrame({
     readonly memoryId: string;
     readonly segmentId: string;
   }) => void;
+  readonly readFinalizedAudioSegmentAttachment?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
   readonly session?: WorkspaceSession;
 } = {}) {
   Object.defineProperty(window, 'reoWorkspace', {
     configurable: true,
     value: {
+      readFinalizedAudioSegmentAttachment,
       readFinalizedAudioSegment,
       readMemoryDetail: vi.fn().mockResolvedValue({
         ok: false,
@@ -902,6 +913,163 @@ describe('LoadedWorkspaceFrame', () => {
       within(content).getByRole('button', { name: '播放片段 Birthday song' })
     ).toBeInTheDocument();
     expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
+  });
+
+  it('shows finalized recording supplements in a Supplement tab with playback and waveform controls', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:attachment-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        attachmentId: request.attachmentId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = {
+      ...birthdayDetail,
+      attachmentCount: 1,
+      segments: [
+        {
+          ...birthdayDetail.segments[0],
+          attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_birthday',
+              segmentId: 'seg_birthday_voice',
+              attachmentId: 'att_birthday_followup',
+              type: 'audio',
+              title: '补充录音',
+              createdAt: '2026-05-06T13:11:00.000',
+              updatedAt: '2026-05-06T13:11:05.000',
+              durationMs: 5_000,
+              audioByteLength: 3,
+              transcript: { exists: false },
+            },
+          ],
+        },
+      ],
+    };
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_tab',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+
+    expect(within(tabs).getByRole('tab', { name: '转录' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await userEvent.click(within(tabs).getByRole('tab', { name: '补充' }));
+
+    const supplements = await within(content).findByRole('region', { name: '片段补充内容' });
+    expect(within(supplements).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
+    expect(
+      within(supplements).getByRole('button', { name: '播放补充录音 补充录音' })
+    ).toBeInTheDocument();
+    expect(within(supplements).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
+      'aria-valuetext',
+      '00:00 / 00:05'
+    );
+    expect(within(supplements).getByText('00:00 / 00:05')).toBeInTheDocument();
+    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        attachmentId: 'att_birthday_followup',
+      })
+    );
+
+    play.mockClear();
+    await userEvent.click(
+      within(supplements).getByRole('button', { name: '播放补充录音 补充录音' })
+    );
+
+    expect(play).toHaveBeenCalledOnce();
+    expect(
+      within(supplements).getByRole('button', { name: '暂停补充录音 补充录音' })
+    ).toBeInTheDocument();
+  });
+
+  it('moves newly created SegmentAttachment recordings into the Supplement tab when they first appear', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_before_attachment',
+      detail: birthdayDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    expect(within(content).getByRole('tab', { name: '转录' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(within(content).queryByRole('tab', { name: '补充' })).toBeNull();
+
+    act(() => {
+      queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+        requestId: 'request_mem_birthday_after_attachment',
+        detail: {
+          ...birthdayDetail,
+          attachmentCount: 1,
+          segments: [
+            {
+              ...birthdayDetail.segments[0],
+              attachmentCount: 1,
+              attachments: [
+                {
+                  workspaceId: 'ws_1',
+                  memoryId: 'mem_birthday',
+                  segmentId: 'seg_birthday_voice',
+                  attachmentId: 'att_new_followup',
+                  type: 'audio',
+                  title: '补充录音',
+                  createdAt: '2026-05-06T13:12:00.000',
+                  updatedAt: '2026-05-06T13:12:04.000',
+                  durationMs: 4_000,
+                  audioByteLength: 4,
+                  transcript: { exists: false },
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '补充' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+    });
+    expect(within(content).getByRole('region', { name: '片段补充内容' })).toBeInTheDocument();
+    expect(within(content).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
+    expect(await within(content).findByRole('status')).toHaveTextContent('补充录音加载失败。');
   });
 
   it('opens the Memory rename action from a compact card menu', async () => {

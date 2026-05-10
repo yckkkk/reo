@@ -56,6 +56,12 @@ export function readFinalizedAudioSegment(
   return window.reoWorkspace.readFinalizedAudioSegment(payload);
 }
 
+export function readFinalizedAudioSegmentAttachment(
+  payload: Parameters<Window['reoWorkspace']['readFinalizedAudioSegmentAttachment']>[0]
+) {
+  return window.reoWorkspace.readFinalizedAudioSegmentAttachment(payload);
+}
+
 export function createRecordingDraft(
   payload: Parameters<Window['reoWorkspace']['createRecordingDraft']>[0]
 ) {
@@ -191,6 +197,10 @@ export type WorkspaceMemoryDetail = Extract<
 >['value']['detail'];
 export type WorkspaceFinalizedAudioSegmentContent = Extract<
   Awaited<ReturnType<typeof readFinalizedAudioSegment>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceFinalizedAudioSegmentAttachmentContent = Extract<
+  Awaited<ReturnType<typeof readFinalizedAudioSegmentAttachment>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;

@@ -26,6 +26,7 @@ import {
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -59,6 +60,8 @@ import {
   workspaceOpenMemorySpaceRequestSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
+  workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentAttachmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
   workspaceRemoveMemorySpaceRequestSchema,
@@ -123,6 +126,7 @@ import {
   finalizeRecordingDraft,
   finalizeSegmentAttachmentRecordingDraft,
   readFinalizedAudioSegmentContent,
+  readFinalizedAudioSegmentAttachmentContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
 } from './recordingDrafts.js';
@@ -1664,6 +1668,53 @@ function handleReadFinalizedAudioSegmentCore(
   });
 }
 
+function handleReadFinalizedAudioSegmentAttachmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
+    invalidMessage: 'readFinalizedAudioSegmentAttachment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Finalized segment attachment audio workspace does not match the active handle'
+          );
+        }
+
+        const result = await readFinalizedAudioSegmentAttachmentContent({
+          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          attachmentId: request.attachmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadFinalizedAudioSegmentAttachmentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  attachmentId: request.attachmentId,
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
 export async function handleReadFinalizedAudioSegment(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentResponseSchema>> {
@@ -1674,6 +1725,18 @@ export async function handleReadFinalizedAudioSegmentForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentResponseSchema>> {
   return handleReadFinalizedAudioSegmentCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentAttachment(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
+  return handleReadFinalizedAudioSegmentAttachmentCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentAttachmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
+  return handleReadFinalizedAudioSegmentAttachmentCore(options);
 }
 
 function handleFinalizeSegmentAttachmentRecordingDraftCore({
@@ -2040,6 +2103,18 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
     })
+  );
+  electronMain.ipcMain.handle(
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+    (event, input) =>
+      handleReadFinalizedAudioSegmentAttachment({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
   );
   electronMain.ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
     handleCloseWorkspace({

@@ -107,6 +107,10 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
     })),
+    readFinalizedAudioSegmentAttachment: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
+    })),
     createRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 0, segmentId: 'seg_1' },
@@ -171,6 +175,21 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           audioByteLength: 3,
           transcript: { exists: true },
           attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_1',
+              segmentId: 'seg_1',
+              attachmentId: 'att_1',
+              type: 'audio' as const,
+              title: '补充录音',
+              createdAt: '2026-05-06T13:09:00.000Z',
+              updatedAt: '2026-05-06T13:10:00.000Z',
+              durationMs: 0,
+              audioByteLength: 1,
+              transcript: { exists: false },
+            },
+          ],
         },
         attachment: {
           workspaceId: 'ws_1',

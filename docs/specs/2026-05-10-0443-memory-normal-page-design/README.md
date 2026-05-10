@@ -944,6 +944,18 @@ type SegmentAttachmentProjection = {
 - Slice 12 已完成最终验证：`npm run verify:quick` 通过。命令链路包括 `typecheck`、`test:main`、`test:renderer`、`lint` 和 `format:check`；本次输出确认 main 289 tests passed、renderer 213 tests passed，lint 和 format check exit 0。
 - `docs/initiatives/2026-05-08-memory-studio-design-convergence/tasks.md` 中常态 Memory 页面相关任务已全部勾选完成。
 
+### 2026-05-10 11:13 America/Los_Angeles
+
+- 补齐用户指出的补充录音展示路径：Memory detail 的 Segment projection 现在包含 finalized `attachments[]`；selected Segment 存在 finalized attachments 时，Memory Studio 显示 `补充` tab；补充录音在该 tab 内以与主片段播放条一致的 play/pause、真实 waveform slider、seek 和等宽时间 UI 展示，不显示 transcript 占位。
+- 新增 `workspace:readFinalizedAudioSegmentAttachment` 合同、preload bridge、main IPC handler 和 renderer Query；Query key 为 `['workspace', 'segment-attachment-content', workspaceId, memoryId, segmentId, attachmentId]`，request 携带 `workspaceHandle` 但 Query key 不包含 handle 或 raw path，response 只返回 bounded audio bytes 和 audioByteLength。
+- RED：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "recording supplements"` 先因找不到 `补充` tab 失败；`npm run test:main -- test/main/workspaceContract.test.ts` 先因缺少 attachment audio read channel/schema 失败。
+- GREEN targeted：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "recording supplements"` 通过 1 file / 1 test；`npm run test:main -- test/main/workspaceContract.test.ts test/main/workspaceBridgeSurface.test.ts test/main/workspaceIpc.test.ts` 触发 main 全套并通过 290 tests；`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/workspace/workspaceApi.test.ts src/renderer/src/App.test.tsx src/renderer/src/workspace/RecordingOverlay.test.tsx src/renderer/src/workspace/ForbiddenCapabilities.test.tsx src/renderer/src/workspace/CreateWorkspaceForm.test.tsx` 通过 6 files / 139 tests；`npm run typecheck` 通过。
+- 安全补强 RED/GREEN：自查发现 attachment audio read 需要显式拒绝 symlinked `attachments/` parent；新增 `readFinalizedAudioSegmentAttachment rejects a symlinked attachments parent` 后，`npm run test:main -- test/main/workspaceIpc.test.ts` 先失败为错误地返回 `ok: true`，补齐 parent directory identity 校验后同命令通过 main 全套 291 tests。
+- 新增补充可见性 RED/GREEN：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "moves newly created SegmentAttachment"` 先失败为第一条补充出现后 `补充` tab 仍未选中；实现 selected Segment attachments 0 -> >0 过渡检测后，同命令通过 1 file / 1 test。随后补充录音读取失败状态同一测试先因找不到 `role="status"` 失败，补齐行内 `补充录音加载失败。` 状态后通过。
+- Electron runtime 视觉验证：`REMOTE_DEBUGGING_PORT=9233 npm run dev`，CDP viewport `1600x1000`，截图 `docs/specs/2026-05-10-0443-memory-normal-page-design/artifacts/memory-studio-supplements-runtime-2026-05-10T1148.png`；测量结果：document/body height 均为 `1000`、`windowScrollY=0`、`补充` tab selected、main waveform 和 supplement waveform 都存在、supplement waveform `data-waveform-source="decoded-audio"`、supplement slider `aria-valuetext="00:00 / 00:02"`、无 transcript 占位、无常驻 `笔记/视频/图片` tab。
+- `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/electron.md` 和 `docs/current/quality.md` 已同步补充 tab、SegmentAttachment audio content Query、parent-scoped IPC read、第一条新增补充自动进入 `补充` tab、补充录音读取失败可见状态和无 transcript 的补充录音播放器规则。
+- Final verification：`npm run verify:quick` 通过；命令链路包括 `typecheck`、main 291 tests、renderer 215 tests、lint 和 format check。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。

@@ -20,6 +20,7 @@ import {
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -90,6 +91,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     readFinalizedAudioSegment: (payload) =>
       invoke<WorkspaceBridgeResponse<'readFinalizedAudioSegment'>>(
         WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+        payload
+      ),
+    readFinalizedAudioSegmentAttachment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readFinalizedAudioSegmentAttachment'>>(
+        WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
         payload
       ),
     createRecordingDraft: (payload) =>

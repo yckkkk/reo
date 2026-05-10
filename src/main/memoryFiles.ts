@@ -1381,14 +1381,12 @@ async function readValidFinalizedSegmentProjection({
       return null;
     }
 
-    const attachmentCount = (
-      await listValidSegmentAttachments({
-        rootPath,
-        workspaceId,
-        memoryId,
-        segmentId,
-      })
-    ).length;
+    const attachments = await listValidSegmentAttachments({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+    });
 
     return {
       workspaceId,
@@ -1407,7 +1405,8 @@ async function readValidFinalizedSegmentProjection({
           'transcript.md'
         ),
       },
-      attachmentCount,
+      attachmentCount: attachments.length,
+      attachments,
     };
   } catch {
     return null;

@@ -15,6 +15,7 @@ const workspaceBridgeKeys = [
   'restoreDeletedMemory',
   'readMemoryDetail',
   'readFinalizedAudioSegment',
+  'readFinalizedAudioSegmentAttachment',
   'createRecordingDraft',
   'createSegmentAttachmentRecordingDraft',
   'readRecordingDraftAudio',
@@ -72,6 +73,14 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     segmentId: 'seg_1',
     requestId: 'request_seg_1',
   });
+  await bridge.readFinalizedAudioSegmentAttachment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    attachmentId: 'att_1',
+    requestId: 'request_att_1',
+  });
   await bridge.createSegmentAttachmentRecordingDraft({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -115,6 +124,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:restoreDeletedMemory',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
+    'workspace:readFinalizedAudioSegmentAttachment',
     'workspace:createSegmentAttachmentRecordingDraft',
     'workspace:readRecordingDraftAudio',
     'workspace:appendSegmentAttachmentRecordingAudioChunk',

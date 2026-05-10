@@ -10,6 +10,7 @@ import {
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
@@ -27,6 +28,8 @@ import {
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
+  workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentAttachmentResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
   workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
   workspaceCreateSegmentAttachmentRecordingDraftResponseSchema,
@@ -83,6 +86,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedMemory',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
+    'workspace:readFinalizedAudioSegmentAttachment',
     'workspace:createRecordingDraft',
     'workspace:createSegmentAttachmentRecordingDraft',
     'workspace:readRecordingDraftAudio',
@@ -115,6 +119,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(
     WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
     'workspace:readFinalizedAudioSegment'
+  );
+  assert.equal(
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+    'workspace:readFinalizedAudioSegmentAttachment'
   );
   assert.equal(WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio');
   assert.equal(
@@ -282,6 +290,21 @@ test('segment attachment recording contract keeps parent identity explicit', () 
         audioByteLength: 3,
         transcript: { exists: false },
         attachmentCount: 1,
+        attachments: [
+          {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            attachmentId: 'att_1',
+            type: 'audio',
+            title: 'Attachment',
+            createdAt: '2026-05-10T13:14:00.000Z',
+            updatedAt: '2026-05-10T13:15:00.000Z',
+            durationMs: 500,
+            audioByteLength: 2,
+            transcript: { exists: false },
+          },
+        ],
       },
       attachment: {
         workspaceId: 'ws_1',
@@ -327,6 +350,50 @@ test('segment attachment recording contract keeps parent identity explicit', () 
     {
       workspaceHandle: 'wh_1',
       attachmentId: 'att_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentAttachmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      requestId: 'request_att_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      requestId: 'request_att_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentAttachmentResponseSchema.parse({
+      ok: true,
+      value: {
+        requestId: 'request_att_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        requestId: 'request_att_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+      },
     }
   );
 });
@@ -375,6 +442,7 @@ test('workspace memory detail contract keeps handle out of response data', () =>
             audioByteLength: 3,
             transcript: { exists: true },
             attachmentCount: 0,
+            attachments: [],
           },
         ],
       },

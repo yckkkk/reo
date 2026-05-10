@@ -23,6 +23,8 @@ import type {
   WorkspaceOpenRequest,
   WorkspaceReadFinalizedAudioSegmentRequest,
   WorkspaceReadFinalizedAudioSegmentResponse,
+  WorkspaceReadFinalizedAudioSegmentAttachmentRequest,
+  WorkspaceReadFinalizedAudioSegmentAttachmentResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
   WorkspaceRestoreDeletedMemoryRequest,
@@ -80,6 +82,9 @@ export interface ReoWorkspaceBridge {
   readonly readFinalizedAudioSegment: (
     payload: WorkspaceReadFinalizedAudioSegmentRequest
   ) => Promise<WorkspaceReadFinalizedAudioSegmentResponse>;
+  readonly readFinalizedAudioSegmentAttachment: (
+    payload: WorkspaceReadFinalizedAudioSegmentAttachmentRequest
+  ) => Promise<WorkspaceReadFinalizedAudioSegmentAttachmentResponse>;
   readonly createRecordingDraft: (
     payload: WorkspaceHandleRequest
   ) => Promise<WorkspaceCreateRecordingDraftResponse>;

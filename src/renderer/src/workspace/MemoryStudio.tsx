@@ -26,7 +26,11 @@ import type {
   WorkspaceMemorySummary,
   WorkspaceSession,
 } from './workspaceApi';
-import { memoryDetailQueryOptions, segmentContentQueryOptions } from './workspaceQueries';
+import {
+  memoryDetailQueryOptions,
+  segmentAttachmentContentQueryOptions,
+  segmentContentQueryOptions,
+} from './workspaceQueries';
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
@@ -55,7 +59,9 @@ const SEGMENT_PREVIEW_SPECTRUM_DATA = [30, 50, 70, 40, 60, 30, 40, 80, 90, 50, 3
 const SEGMENT_PREVIEW_WAVE_DURATIONS = [1.2, 1.32, 1.14, 1.26, 1.38];
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
+type MemorySegmentAttachment = MemorySegment['attachments'][number];
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
+type ActiveContentTab = 'transcript' | 'supplements';
 
 function durationLabel(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -116,6 +122,236 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   );
 }
 
+function SegmentAttachmentAudioPlayer({
+  attachment,
+  workspaceSession,
+}: {
+  readonly attachment: MemorySegmentAttachment;
+  readonly workspaceSession: WorkspaceSession;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [waveformData, setWaveformData] = useState<readonly number[]>([]);
+  const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
+  const attachmentContentQuery = useQuery(
+    segmentAttachmentContentQueryOptions(
+      workspaceSession,
+      attachment.memoryId,
+      attachment.segmentId,
+      attachment.attachmentId
+    )
+  );
+  const attachmentContent = attachmentContentQuery.data;
+  const playbackProgress =
+    attachment.durationMs > 0 ? Math.min(1, playbackTimeMs / attachment.durationMs) : 0;
+
+  useEffect(() => {
+    if (!attachmentContent) {
+      setAudioUrl(null);
+      setPlaybackTimeMs(0);
+      setWaveformData([]);
+      setWaveformSource('pending');
+      return undefined;
+    }
+
+    const nextAudioUrl = URL.createObjectURL(
+      new Blob([attachmentContent.audio as BlobPart], { type: 'audio/webm' })
+    );
+    setAudioUrl(nextAudioUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextAudioUrl);
+    };
+  }, [attachmentContent]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!attachmentContent) {
+      setWaveformData([]);
+      setWaveformSource('pending');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setWaveformData([]);
+    setWaveformSource('pending');
+
+    void decodeAudioBytesToWaveformData(
+      attachmentContent.audio,
+      MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
+    )
+      .then((nextWaveformData) => {
+        if (cancelled) {
+          return;
+        }
+
+        setWaveformData(nextWaveformData);
+        setWaveformSource('decoded-audio');
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setWaveformData([]);
+        setWaveformSource('unavailable');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentContent]);
+
+  function setPlaybackPosition(nextPlaybackTimeMs: number) {
+    if (!audioUrl) {
+      return;
+    }
+
+    const nextTimeMs = Math.min(attachment.durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
+    if (audioRef.current) {
+      audioRef.current.currentTime = nextTimeMs / 1000;
+    }
+    setPlaybackTimeMs(nextTimeMs);
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    if (typeof event.currentTarget.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    setPlaybackPosition(progress * attachment.durationMs);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setPlaybackPosition(playbackTimeMs - 5_000);
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setPlaybackPosition(playbackTimeMs + 5_000);
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setPlaybackPosition(0);
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setPlaybackPosition(attachment.durationMs);
+    }
+  }
+
+  async function togglePlayback() {
+    const audio = audioRef.current;
+
+    if (!audio || !audioUrl) {
+      return;
+    }
+
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+      return;
+    }
+
+    try {
+      await audio.play();
+      setPlaying(true);
+    } catch {
+      setPlaying(false);
+    }
+  }
+
+  return (
+    <article
+      aria-label={attachment.title}
+      className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-14 border-b border-chalk py-12 last:border-b-0"
+    >
+      <button
+        type="button"
+        disabled={!audioUrl || attachmentContentQuery.isLoading}
+        aria-label={`${playing ? '暂停' : '播放'}补充录音 ${attachment.title}`}
+        className="grid size-40 shrink-0 place-items-center rounded-full border border-glass-border bg-card-glass text-signal-blue backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent disabled:border-glass-border disabled:bg-card-glass disabled:text-fog"
+        onClick={() => {
+          void togglePlayback();
+        }}
+      >
+        {playing ? (
+          <Pause aria-hidden="true" className="size-16" />
+        ) : (
+          <Play aria-hidden="true" className="size-16 fill-current" />
+        )}
+      </button>
+      <Waveform
+        active={playing}
+        aria-disabled={!audioUrl}
+        aria-label="补充录音播放进度"
+        aria-orientation="horizontal"
+        aria-valuemax={attachment.durationMs}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(playbackTimeMs)}
+        aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(attachment.durationMs)}`}
+        barGap={4}
+        barRadius={2}
+        barWidth={2}
+        className="min-w-0 cursor-pointer rounded-buttons focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
+        data={waveformData}
+        data-slot="memory-studio-attachment-waveform"
+        data-waveform-source={waveformSource}
+        height={42}
+        label="补充录音播放进度"
+        onKeyDown={handleKeyDown}
+        onPointerDown={handlePointerDown}
+        playheadProgress={playbackProgress}
+        role="slider"
+        tabIndex={audioUrl ? 0 : -1}
+        tone="voice"
+      />
+      <span className="shrink-0 font-geist-mono text-ui-md font-regular leading-ui-md tracking-[0.04em] text-obsidian">
+        {attachmentContentQuery.isLoading
+          ? '载入中'
+          : `${durationLabel(playbackTimeMs)} / ${durationLabel(attachment.durationMs)}`}
+      </span>
+      {attachmentContentQuery.isError ? (
+        <p role="status" className="col-start-2 col-span-2 text-ui-xs leading-ui-xs text-gravel">
+          补充录音加载失败。
+        </p>
+      ) : null}
+      <audio
+        ref={audioRef}
+        src={audioUrl ?? undefined}
+        onEnded={() => {
+          setPlaying(false);
+          setPlaybackTimeMs(attachment.durationMs);
+        }}
+        onPause={() => setPlaying(false)}
+        onTimeUpdate={(event) => {
+          setPlaybackTimeMs(
+            Math.min(attachment.durationMs, Math.round(event.currentTarget.currentTime * 1000))
+          );
+        }}
+      />
+    </article>
+  );
+}
+
 function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollState {
   const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
 
@@ -140,6 +376,11 @@ export function MemoryStudio({
     useState<PlaybackWaveformSource>('pending');
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [segmentAudioUrl, setSegmentAudioUrl] = useState<string | null>(null);
+  const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
+  const segmentAttachmentPresenceRef = useRef<{
+    readonly segmentId: string | null;
+    readonly attachmentCount: number;
+  }>({ segmentId: null, attachmentCount: 0 });
   const [stripScrollState, setStripScrollState] = useState<SegmentStripScrollState>(
     hiddenSegmentStripScrollState
   );
@@ -163,6 +404,8 @@ export function MemoryStudio({
     enabled: selectedSegment !== null,
   });
   const segmentContent = selectedSegment ? segmentContentQuery.data : undefined;
+  const selectedSegmentAttachments = selectedSegment?.attachments ?? [];
+  const hasSelectedSegmentAttachments = selectedSegmentAttachments.length > 0;
   const isSelectedSegmentPlaying = playingSegmentId === selectedSegment?.segmentId;
   const selectedSegmentDurationMs = selectedSegment?.durationMs ?? 0;
   const playbackProgress =
@@ -202,14 +445,40 @@ export function MemoryStudio({
   }, [segments.length]);
 
   useEffect(() => {
+    const segmentId = selectedSegment?.segmentId ?? null;
+    const attachmentCount = selectedSegmentAttachments.length;
+    const previousPresence = segmentAttachmentPresenceRef.current;
+
+    if (!segmentId || previousPresence.segmentId !== segmentId) {
+      segmentAttachmentPresenceRef.current = { segmentId, attachmentCount };
+      return;
+    }
+
+    if (previousPresence.attachmentCount === 0 && attachmentCount > 0) {
+      setActiveContentTab('supplements');
+    }
+
+    if (previousPresence.attachmentCount !== attachmentCount) {
+      segmentAttachmentPresenceRef.current = { segmentId, attachmentCount };
+    }
+  }, [selectedSegment?.segmentId, selectedSegmentAttachments.length]);
+
+  useEffect(() => {
     if (audioRef.current && !audioRef.current.paused) {
       audioRef.current.pause();
     }
     setAudioPlaybackError(null);
     setAttachmentMenuOpen(false);
+    setActiveContentTab('transcript');
     setPlaybackTimeMs(0);
     setPlayingSegmentId(null);
   }, [selectedSegment?.segmentId]);
+
+  useEffect(() => {
+    if (activeContentTab === 'supplements' && !hasSelectedSegmentAttachments) {
+      setActiveContentTab('transcript');
+    }
+  }, [activeContentTab, hasSelectedSegmentAttachments]);
 
   useEffect(() => {
     if (!segmentContent) {
@@ -568,11 +837,33 @@ export function MemoryStudio({
                   <button
                     type="button"
                     role="tab"
-                    aria-selected="true"
-                    className="min-h-32 border-b-2 border-signal-blue px-12 text-ui-sm font-medium leading-ui-sm text-obsidian"
+                    aria-selected={activeContentTab === 'transcript'}
+                    className={[
+                      'min-h-32 border-b-2 px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
+                      activeContentTab === 'transcript'
+                        ? 'border-signal-blue text-obsidian'
+                        : 'border-transparent text-gravel hover:text-obsidian',
+                    ].join(' ')}
+                    onClick={() => setActiveContentTab('transcript')}
                   >
                     转录
                   </button>
+                  {hasSelectedSegmentAttachments ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeContentTab === 'supplements'}
+                      className={[
+                        'min-h-32 border-b-2 px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
+                        activeContentTab === 'supplements'
+                          ? 'border-signal-blue text-obsidian'
+                          : 'border-transparent text-gravel hover:text-obsidian',
+                      ].join(' ')}
+                      onClick={() => setActiveContentTab('supplements')}
+                    >
+                      补充
+                    </button>
+                  ) : null}
                 </div>
                 <DropdownMenu open={attachmentMenuOpen} onOpenChange={setAttachmentMenuOpen}>
                   <DropdownMenuTrigger asChild>
@@ -621,23 +912,39 @@ export function MemoryStudio({
                   );
                 }}
               />
-              <section
-                aria-label="片段转录"
-                data-slot="memory-studio-transcript-scroll"
-                className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
-              >
-                {segmentContentQuery.isLoading ? (
-                  <p className="text-body leading-body text-gravel">正在载入片段内容。</p>
-                ) : segmentContentQuery.isError ? (
-                  <p className="text-body leading-body text-gravel">片段内容加载失败，请重试。</p>
-                ) : segmentContent?.transcript.exists ? (
-                  <p className="max-w-[820px] text-body leading-[1.78] text-cinder">
-                    {segmentContent.transcript.text}
-                  </p>
-                ) : (
-                  <p className="text-body leading-body text-gravel">这段录音还没有转录。</p>
-                )}
-              </section>
+              {activeContentTab === 'transcript' ? (
+                <section
+                  aria-label="片段转录"
+                  data-slot="memory-studio-transcript-scroll"
+                  className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                >
+                  {segmentContentQuery.isLoading ? (
+                    <p className="text-body leading-body text-gravel">正在载入片段内容。</p>
+                  ) : segmentContentQuery.isError ? (
+                    <p className="text-body leading-body text-gravel">片段内容加载失败，请重试。</p>
+                  ) : segmentContent?.transcript.exists ? (
+                    <p className="max-w-[820px] text-body leading-[1.78] text-cinder">
+                      {segmentContent.transcript.text}
+                    </p>
+                  ) : (
+                    <p className="text-body leading-body text-gravel">这段录音还没有转录。</p>
+                  )}
+                </section>
+              ) : (
+                <section
+                  aria-label="片段补充内容"
+                  data-slot="memory-studio-supplements-scroll"
+                  className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                >
+                  {selectedSegmentAttachments.map((attachment) => (
+                    <SegmentAttachmentAudioPlayer
+                      key={attachment.attachmentId}
+                      attachment={attachment}
+                      workspaceSession={workspaceSession}
+                    />
+                  ))}
+                </section>
+              )}
               {audioPlaybackError ? (
                 <p role="status" className="mt-8 shrink-0 text-ui-sm leading-ui-sm text-gravel">
                   {audioPlaybackError}

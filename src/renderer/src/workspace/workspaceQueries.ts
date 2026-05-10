@@ -2,7 +2,9 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   listMemorySpaces,
   readFinalizedAudioSegment,
+  readFinalizedAudioSegmentAttachment,
   readMemoryDetail,
+  type WorkspaceFinalizedAudioSegmentAttachmentContent,
   type WorkspaceFinalizedAudioSegmentContent,
   type WorkspaceMemorySpace,
   type WorkspaceMemoryDetail,
@@ -52,6 +54,17 @@ function createMemoryDetailRequestId(workspaceId: string, memoryId: string) {
 
 function createSegmentContentRequestId(workspaceId: string, memoryId: string, segmentId: string) {
   return `segment-content:${workspaceId}:${memoryId}:${segmentId}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function createSegmentAttachmentContentRequestId(
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  attachmentId: string
+) {
+  return `segment-attachment-content:${workspaceId}:${memoryId}:${segmentId}:${attachmentId}:${Date.now()}:${Math.random()
     .toString(36)
     .slice(2)}`;
 }
@@ -135,6 +148,78 @@ export function segmentContentQueryOptions(
         result.value.segmentId !== segmentId
       ) {
         throw new Error('Stale segment content response');
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+export function segmentAttachmentContentQueryKey({
+  workspaceId,
+  memoryId,
+  segmentId,
+  attachmentId,
+}: {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly attachmentId: string;
+  readonly workspaceHandle?: string;
+}) {
+  return [
+    'workspace',
+    'segment-attachment-content',
+    workspaceId,
+    memoryId,
+    segmentId,
+    attachmentId,
+  ] as const;
+}
+
+export function segmentAttachmentContentQueryOptions(
+  session: WorkspaceSession,
+  memoryId: string,
+  segmentId: string,
+  attachmentId: string
+) {
+  return queryOptions({
+    queryKey: segmentAttachmentContentQueryKey({
+      workspaceId: session.workspaceId,
+      memoryId,
+      segmentId,
+      attachmentId,
+    }),
+    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentAttachmentContent> => {
+      const requestId = createSegmentAttachmentContentRequestId(
+        session.workspaceId,
+        memoryId,
+        segmentId,
+        attachmentId
+      );
+      const result = await readFinalizedAudioSegmentAttachment({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId,
+        segmentId,
+        attachmentId,
+        requestId,
+      });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '补充录音加载失败。'));
+      }
+
+      if (
+        result.value.requestId !== requestId ||
+        result.value.workspaceId !== session.workspaceId ||
+        result.value.memoryId !== memoryId ||
+        result.value.segmentId !== segmentId ||
+        result.value.attachmentId !== attachmentId
+      ) {
+        throw new Error('Stale segment attachment content response');
       }
 
       return result.value;

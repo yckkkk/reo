@@ -32,6 +32,7 @@ import {
   handleOpenWorkspace,
   handleOpenWorkspaceMemorySpaceForTest,
   handleReadFinalizedAudioSegmentForTest,
+  handleReadFinalizedAudioSegmentAttachmentForTest,
   handleReadMemoryDetailForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
@@ -974,6 +975,7 @@ test('readMemoryDetail returns current Memory segments without exposing handle o
         audioByteLength: 3,
         transcript: { exists: false },
         attachmentCount: 0,
+        attachments: [],
       },
     ]);
     assert.equal('workspaceHandle' in result.value.detail, false);
@@ -1032,6 +1034,154 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     });
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('readFinalizedAudioSegmentAttachment returns parent-scoped audio bytes without transcript text or paths', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-attachment-audio-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补充播放',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+  });
+  const attachmentDirectory = path.join(
+    rootPath,
+    'memories',
+    'mem_ipc_audio',
+    'segments',
+    'seg_ipc_audio',
+    'attachments',
+    'att_ipc_followup'
+  );
+  await mkdir(attachmentDirectory, { recursive: true });
+  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
+  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
+  await writeFile(
+    path.join(attachmentDirectory, 'attachment.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      attachmentId: 'att_ipc_followup',
+      type: 'audio',
+      status: 'finalized',
+      title: '补充录音',
+      createdAt: '2026-05-06T13:10:00.000Z',
+      finalizedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 500,
+      nextSequence: 1,
+      audioByteLength: 2,
+      transcriptPath: 'transcript.md',
+    })}\n`
+  );
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleReadFinalizedAudioSegmentAttachmentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      attachmentId: 'att_ipc_followup',
+      requestId: 'request_att_ipc_followup',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.requestId, 'request_att_ipc_followup');
+    assert.equal(result.value.workspaceId, 'ws_ipc');
+    assert.equal(result.value.memoryId, 'mem_ipc_audio');
+    assert.equal(result.value.segmentId, 'seg_ipc_audio');
+    assert.equal(result.value.attachmentId, 'att_ipc_followup');
+    assert.deepEqual(Array.from(result.value.audio), [4, 5]);
+    assert.equal(result.value.audioByteLength, 2);
+    assert.equal('transcript' in result.value, false);
+    assert.equal('workspaceHandle' in result.value, false);
+    assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('readFinalizedAudioSegmentAttachment rejects a symlinked attachments parent', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-parent-symlink-'));
+  const outsideRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-outside-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补充父目录',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+  });
+  const outsideAttachmentDirectory = path.join(outsideRoot, 'att_outside_followup');
+  await mkdir(outsideAttachmentDirectory, { recursive: true });
+  await writeFile(path.join(outsideAttachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
+  await writeFile(path.join(outsideAttachmentDirectory, 'transcript.md'), '');
+  await writeFile(
+    path.join(outsideAttachmentDirectory, 'attachment.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      attachmentId: 'att_outside_followup',
+      type: 'audio',
+      status: 'finalized',
+      title: '补充录音',
+      createdAt: '2026-05-06T13:10:00.000Z',
+      finalizedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 500,
+      nextSequence: 1,
+      audioByteLength: 2,
+      transcriptPath: 'transcript.md',
+    })}\n`
+  );
+  await symlink(
+    outsideRoot,
+    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'attachments')
+  );
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleReadFinalizedAudioSegmentAttachmentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      attachmentId: 'att_outside_followup',
+      requestId: 'request_att_symlink',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_RECORDING_NOT_FOUND');
   }
 });
 
