@@ -77,12 +77,16 @@ describe('FloatingActionButtonSpeedDial', () => {
     expect(screen.getByRole('menu', { name: '表达方式' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '录音' })).toHaveClass(
       'size-[var(--reo-speed-dial-action-size)]',
-      'hover:text-signal-blue',
-      'active:scale-[0.96]'
+      'hover:bg-obsidian',
+      'hover:text-on-accent'
     );
     expect(screen.getByRole('menuitem', { name: '录音' }).tagName).toBe('A');
     expect(screen.getByRole('menuitem', { name: '录音' })).toHaveAttribute('tabindex', '0');
     expect(screen.getByRole('menuitem', { name: '录音' })).not.toHaveAttribute('href', '#');
+    expect(screen.getByRole('menu', { name: '表达方式' })).toHaveClass('!transition-opacity');
+    expect(document.querySelector('[data-pc-section="menuitem"]')).toHaveClass(
+      '!transition-[transform,opacity]'
+    );
     expect(document.querySelector('a[href="#"]')).not.toBeInTheDocument();
     expect(screen.queryByText('笔记')).not.toBeInTheDocument();
     expect(screen.queryByText('拍照')).not.toBeInTheDocument();

@@ -10,7 +10,9 @@ describe('Textarea', () => {
     expect(textarea).toHaveClass(
       'min-h-72',
       'rounded-inputs',
-      'border-chalk',
+      'border-glass-border',
+      'bg-card-glass',
+      'backdrop-blur-glass-sm',
       'text-ui-sm',
       'leading-ui-sm',
       'placeholder:text-slate',

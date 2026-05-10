@@ -14,7 +14,7 @@ export function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn('fixed inset-0 z-50 bg-scrim/20', className)}
+      className={cn('fixed inset-0 z-50 bg-[var(--glass-scrim-overlay)]', className)}
       {...props}
     />
   );
@@ -31,7 +31,7 @@ export function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 max-h-[88vh] rounded-t-panels border border-chalk bg-eggshell px-24 py-24 shadow-subtle-4 outline-none sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-panels sm:px-32 sm:py-32',
+          'fixed inset-x-0 bottom-0 z-50 max-h-[88vh] rounded-t-panels border border-glass-border bg-card-glass px-24 py-24 shadow-glass outline-none backdrop-blur-glass-lg sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-panels sm:px-32 sm:py-32',
           className
         )}
         {...props}

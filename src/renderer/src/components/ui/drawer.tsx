@@ -25,7 +25,7 @@ export function DrawerOverlay({
   return (
     <DrawerPrimitive.Overlay
       data-slot="drawer-overlay"
-      className={cn('fixed inset-0 z-50 bg-scrim/20', className)}
+      className={cn('fixed inset-0 z-50 bg-[var(--glass-scrim-overlay)]', className)}
       {...props}
     />
   );
@@ -47,7 +47,7 @@ export function DrawerContent({
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-panels border border-chalk bg-eggshell px-24 pb-24 pt-16 shadow-subtle-4 outline-none',
+          'fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-panels border border-glass-border bg-card-glass px-24 pb-24 pt-16 shadow-glass outline-none backdrop-blur-glass-lg',
           'sm:left-1/2 sm:right-auto sm:w-[min(760px,calc(100vw-80px))] sm:-translate-x-1/2 sm:px-32 sm:pb-32',
           className
         )}

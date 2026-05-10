@@ -77,10 +77,10 @@ export function Waveform({
     const styles = getComputedStyle(canvas);
     const fillColor =
       tone === 'voice'
-        ? styles.getPropertyValue('--color-voice-spectrum') || '#3d75d8'
+        ? styles.getPropertyValue('--color-voice-spectrum') || '#a3b1b6'
         : tone === 'neutral'
-          ? styles.getPropertyValue('--color-obsidian') || '#111111'
-          : styles.getPropertyValue('--color-slate') || '#8d8982';
+          ? styles.getPropertyValue('--color-obsidian') || '#4a5559'
+          : styles.getPropertyValue('--color-slate') || '#7a8b80';
     context.fillStyle = fillColor;
 
     const step = barWidth + barGap;
@@ -102,9 +102,20 @@ export function Waveform({
       return;
     }
 
+    if (data.length === 0 || barCount <= 0) {
+      return;
+    }
+
     for (let index = 0; index < barCount; index += 1) {
-      const value = data[Math.floor((index / barCount) * data.length)] ?? 0;
-      const barHeight = Math.max(8, value * rect.height * 0.88) * (active ? 1 : 0.88);
+      const value = Math.max(
+        0,
+        Math.min(1, data[Math.floor((index / barCount) * data.length)] ?? 0)
+      );
+      if (value <= 0) {
+        continue;
+      }
+
+      const barHeight = Math.max(2, value * rect.height * 0.88) * (active ? 1 : 0.88);
       const x = index * step;
       const y = centerY - barHeight / 2;
       context.globalAlpha = active ? 0.95 : 0.64;

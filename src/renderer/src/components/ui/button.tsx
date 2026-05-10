@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-ui-md font-medium leading-ui-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-card-white disabled:opacity-100',
+  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-ui-md font-medium leading-ui-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-on-accent disabled:opacity-100',
   {
     defaultVariants: {
       size: 'default',
@@ -19,11 +19,12 @@ const buttonVariants = cva(
         iconLarge: 'size-56 p-0',
       },
       variant: {
-        default: 'border border-obsidian bg-obsidian text-card-white hover:bg-cinder',
+        default: 'border border-obsidian bg-obsidian text-on-accent hover:bg-cinder',
         accentCircle:
-          'rounded-full border border-signal-blue bg-signal-blue text-card-white shadow-subtle-4 hover:border-obsidian hover:bg-obsidian',
+          'rounded-full border border-signal-blue bg-signal-blue text-on-accent hover:border-obsidian hover:bg-obsidian',
         ghostIcon: 'border border-transparent bg-transparent text-cinder hover:text-obsidian',
-        secondary: 'border border-chalk bg-card-white text-obsidian hover:border-slate',
+        secondary:
+          'border border-glass-border bg-card-glass text-obsidian backdrop-blur-glass-sm hover:border-slate',
       },
     },
   }

@@ -20,8 +20,9 @@ describe('DropdownMenu primitive', () => {
 
     expect(screen.getByRole('menu')).toHaveClass(
       'rounded-xl',
-      'border-chalk',
-      'bg-card-white',
+      'border-glass-border',
+      'bg-card-glass',
+      'backdrop-blur-glass-md',
       'p-4'
     );
     expect(screen.getByRole('menuitem', { name: '重命名记忆' })).toHaveClass(
