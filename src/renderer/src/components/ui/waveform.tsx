@@ -25,6 +25,12 @@ type DrawWaveformState = {
   readonly tone: NonNullable<WaveformProps['tone']>;
 };
 
+const WAVEFORM_TONE_TOKEN: Record<NonNullable<WaveformProps['tone']>, string> = {
+  muted: '--color-slate',
+  neutral: '--color-obsidian',
+  voice: '--color-voice-spectrum',
+};
+
 export function Waveform({
   active = false,
   barGap = 4,
@@ -75,12 +81,7 @@ export function Waveform({
     context.scale(dpr, dpr);
     context.clearRect(0, 0, rect.width, rect.height);
     const styles = getComputedStyle(canvas);
-    const fillColor =
-      tone === 'voice'
-        ? styles.getPropertyValue('--color-voice-spectrum') || '#a3b1b6'
-        : tone === 'neutral'
-          ? styles.getPropertyValue('--color-obsidian') || '#4a5559'
-          : styles.getPropertyValue('--color-slate') || '#7a8b80';
+    const fillColor = styles.getPropertyValue(WAVEFORM_TONE_TOKEN[tone]).trim() || styles.color;
     context.fillStyle = fillColor;
 
     const step = barWidth + barGap;

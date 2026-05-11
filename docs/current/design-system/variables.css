@@ -2,24 +2,25 @@
   color-scheme: light;
 
   /* Colors - Nordic & Flat Vector Palette */
-  --color-eggshell: #f2f0eb;
-  --color-powder: #eae7df;
-  --color-chalk: #dcd5c6;
-  --color-fog: #a3b1b6;
-  --color-gravel: #859499;
-  --color-slate: #7a8b80;
-  --color-cinder: #6a7b70;
-  --color-obsidian: #4a5559;
-  --color-signal-blue: #859499;
-  --color-ember: #d2b48c;
-  --color-vector-mint: #8b9b90;
-  --color-vector-sun: #dcd5c6;
-  --color-vector-coral: #cba896;
-  --color-vector-lilac: #b0b5c0;
-  --color-voice-spectrum: #a3b1b6;
-  --color-card-glass: rgb(255 255 255 / 0.3);
-  --color-on-accent: #f2f0eb;
-  --color-scrim: rgb(74 85 89 / 0.4);
+  --color-eggshell: #fffffc;
+  --color-linen: #fcf9f6;
+  --color-powder: #f1f1f0;
+  --color-chalk: #dedee1;
+  --color-fog: #9fb0b7;
+  --color-gravel: #7f9198;
+  --color-slate: #6f858c;
+  --color-cinder: #5d727a;
+  --color-obsidian: #3f4d53;
+  --color-signal-blue: #7f9198;
+  --color-ember: #b7a8a0;
+  --color-vector-mint: #78918c;
+  --color-vector-sun: #d4dde0;
+  --color-vector-coral: #b7a1a0;
+  --color-vector-lilac: #a8b1bd;
+  --color-voice-spectrum: #9fb0b7;
+  --color-card-glass: rgb(255 255 255 / 0.36);
+  --color-on-accent: #fffffc;
+  --color-scrim: rgb(63 77 83 / 0.42);
   --color-glass-border: rgb(255 255 255 / 0.5);
   --color-glass-border-highlight: rgb(255 255 255 / 0.8);
 
@@ -121,18 +122,18 @@
   --radius-2xl: 20px;
   --radius-3xl: 24px;
   --radius-full: 9999px;
-  --radius-tags: 9999px;
+  --radius-tags: 12px;
   --radius-cards: 32px;
-  --radius-badges: 16px;
+  --radius-badges: 12px;
   --radius-inputs: 12px;
   --radius-modals: 32px;
   --radius-panels: 24px;
-  --radius-buttons: 9999px;
+  --radius-buttons: 12px;
 
   /* Shadows */
-  --shadow-subtle: 0 4px 12px rgb(122 139 128 / 0.05);
-  --shadow-glass: 0 8px 32px 0 rgb(122 139 128 / 0.1);
-  --shadow-float: 0 20px 40px -10px rgb(74 85 89 / 0.15);
+  --shadow-subtle: 0 4px 12px rgb(95 114 122 / 0.06);
+  --shadow-glass: 0 8px 32px 0 rgb(95 114 122 / 0.11);
+  --shadow-float: 0 20px 40px -10px rgb(63 77 83 / 0.16);
 
   /* Blur System */
   --blur-glass-sm: 8px;
@@ -141,6 +142,7 @@
 
   /* Surfaces */
   --surface-page-ground: var(--color-eggshell);
+  --surface-sidebar-ground: var(--color-linen);
   --surface-powder-surface: var(--color-powder);
   --surface-card-glass: var(--color-card-glass);
   --surface-obsidian: var(--color-obsidian);
@@ -156,30 +158,32 @@
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --color-eggshell: #1e2021;
-  --color-powder: #252829;
-  --color-chalk: #343a3c;
-  --color-fog: #4a5559;
-  --color-gravel: #7a8b80;
-  --color-slate: #859499;
-  --color-cinder: #a3b1b6;
-  --color-obsidian: #f2f0eb;
-  --color-signal-blue: #a3b1b6;
-  --color-ember: #d2b48c;
-  --color-vector-mint: #8b9b90;
-  --color-vector-sun: #dcd5c6;
-  --color-vector-coral: #cba896;
-  --color-vector-lilac: #b0b5c0;
-  --color-voice-spectrum: #a3b1b6;
+  --color-eggshell: #0d0d0d;
+  --color-linen: #161616;
+  --color-powder: #1b1b1c;
+  --color-chalk: #262628;
+  --color-fog: #46565d;
+  --color-gravel: #758990;
+  --color-slate: #8ca0a7;
+  --color-cinder: #a6b8bf;
+  --color-obsidian: #eef1f2;
+  --color-signal-blue: #a6b8bf;
+  --color-ember: #b7a8a0;
+  --color-vector-mint: #8aa19c;
+  --color-vector-sun: #b8c4c9;
+  --color-vector-coral: #b7a1a0;
+  --color-vector-lilac: #a8b1bd;
+  --color-voice-spectrum: #a6b8bf;
   --color-card-glass: rgb(37 40 41 / 0.4);
-  --color-on-accent: #1e2021;
-  --color-scrim: rgb(15 14 13 / 0.8);
+  --color-on-accent: #0d0d0d;
+  --color-scrim: rgb(11 15 18 / 0.82);
   --color-glass-border: rgb(255 255 255 / 0.08);
   --color-glass-border-highlight: rgb(255 255 255 / 0.15);
   --shadow-subtle: 0 4px 12px rgb(0 0 0 / 0.18);
   --shadow-glass: 0 8px 32px 0 rgb(0 0 0 / 0.3);
   --shadow-float: 0 20px 40px -10px rgb(0 0 0 / 0.36);
   --surface-page-ground: var(--color-eggshell);
+  --surface-sidebar-ground: var(--color-linen);
   --surface-powder-surface: var(--color-powder);
   --surface-card-glass: var(--color-card-glass);
   --surface-obsidian: var(--color-obsidian);

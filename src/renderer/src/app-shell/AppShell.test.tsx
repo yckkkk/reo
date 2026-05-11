@@ -74,11 +74,15 @@ describe('AppShell', () => {
       'h-screen',
       'min-h-0',
       'w-screen',
-      'overflow-hidden'
+      'overflow-hidden',
+      'bg-eggshell'
     );
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     const sidebar = screen.getByRole('complementary', { name: '记忆空间侧边栏' });
+    expect(sidebar).toHaveClass('bg-linen');
+    expect(sidebar).not.toHaveClass('bg-eggshell');
     expect(sidebar).toHaveStyle({ zIndex: '1', width: '240px' });
+    expect(document.querySelector('[data-slot="app-shell-sidebar-corner-underlay"]')).toBeNull();
     const panel = screen.getByRole('main', { name: '记忆空间内容' });
     expect(panel).toHaveStyle({
       bottom: '0px',
@@ -99,9 +103,13 @@ describe('AppShell', () => {
     );
     expect(titlebar).toHaveStyle({ zIndex: '5' });
     expect(panel).toHaveClass('flex', 'min-h-0', 'flex-col', 'overflow-hidden');
+    expect(panel).toHaveClass('border-0', 'bg-eggshell');
+    expect(panel).not.toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg');
+    expect(panel).not.toHaveClass('shadow-subtle');
     const panelTitlebar = panel.querySelector('[data-slot="app-shell-panel-titlebar"]');
     expect(panelTitlebar).toBeInTheDocument();
     expect(panelTitlebar).toHaveClass('h-titlebar', 'shrink-0');
+    expect(panelTitlebar).not.toHaveClass('bg-eggshell', 'bg-linen');
     const panelContent = panel.querySelector('[data-slot="app-shell-panel-content"]');
     expect(panelContent).toBeInTheDocument();
     expect(panelContent).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
@@ -160,7 +168,7 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
     const menu = screen.getByRole('menu', { name: '添加记忆空间' });
-    expect(menu).toHaveClass('rounded-xl', 'bg-card-glass', 'backdrop-blur-glass-md');
+    expect(menu).toHaveClass('rounded-buttons', 'bg-card-glass', 'backdrop-blur-glass-md');
     expect(menu).toHaveAttribute('data-slot', 'dropdown-menu-content');
     expect(menu).not.toHaveClass('left-full', 'ml-8');
     expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({

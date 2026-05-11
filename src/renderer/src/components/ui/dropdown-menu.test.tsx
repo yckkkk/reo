@@ -19,7 +19,7 @@ describe('DropdownMenu primitive', () => {
     );
 
     expect(screen.getByRole('menu')).toHaveClass(
-      'rounded-xl',
+      'rounded-buttons',
       'border-glass-border',
       'bg-card-glass',
       'backdrop-blur-glass-md',

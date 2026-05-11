@@ -60,6 +60,7 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 };
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [30, 50, 70, 40, 60, 30, 40, 80, 90, 50, 30, 40, 40, 60, 80];
 const SEGMENT_PREVIEW_WAVE_DURATIONS = [1.2, 1.32, 1.14, 1.26, 1.38];
+const SEGMENT_PREVIEW_BAR_RADIUS_CLASS = 'rounded-[2px]';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentAttachment = MemorySegment['attachments'][number];
@@ -201,7 +202,7 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
         <span
           key={index}
           className={[
-            'w-[2px] origin-center rounded-tags transition-colors duration-150 motion-reduce:animate-none',
+            `w-[2px] origin-center ${SEGMENT_PREVIEW_BAR_RADIUS_CLASS} transition-colors duration-150 motion-reduce:animate-none`,
             active ? 'bg-signal-blue' : 'bg-slate',
           ].join(' ')}
           style={{

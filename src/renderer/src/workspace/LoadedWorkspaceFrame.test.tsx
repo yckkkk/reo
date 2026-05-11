@@ -314,6 +314,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(rail).toHaveAttribute('id', 'workspace-memory-rail');
     expect(railShell).toHaveClass('border-l', 'border-glass-border');
     expect(rail).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg', 'px-16', 'py-20');
+    expect(rail).not.toHaveClass('bg-linen');
     expect(rail).not.toHaveClass('bg-eggshell/70');
     expect(rail).not.toHaveClass('xl:border-l');
     expect(within(rail).queryByRole('heading', { name: '当前记忆' })).not.toBeInTheDocument();
@@ -351,6 +352,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(rail).queryByText('反思')).not.toBeInTheDocument();
     expect(within(rail).queryByText('时长')).not.toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();
+    const frame = document.querySelector('[data-slot="workspace-frame"]');
+    expect(frame).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg');
+    expect(frame).not.toHaveClass('bg-eggshell', 'bg-linen');
   });
 
   it('selects an existing Memory through the right rail without requiring a detail route', async () => {
@@ -574,7 +578,8 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(activeBars).toHaveLength(15);
     expect(inactiveBars).toHaveLength(15);
-    expect(activeBars[0]).toHaveClass('w-[2px]');
+    expect(activeBars[0]).toHaveClass('w-[2px]', 'rounded-[2px]');
+    expect(activeBars[0]).not.toHaveClass('rounded-tags');
     expect(activeBars[0]).toHaveStyle({
       animationName: 'reo-flat-wave',
       animationDelay: '0s',

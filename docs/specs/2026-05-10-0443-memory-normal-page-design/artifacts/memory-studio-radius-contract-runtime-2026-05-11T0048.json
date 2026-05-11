@@ -1,0 +1,46 @@
+{
+  "loaded": {
+    "ok": true,
+    "hasStudio": true,
+    "errors": []
+  },
+  "segmentCard": {
+    "className": "box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-panels p-12 transition-colors duration-150 group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell bg-chalk",
+    "borderRadius": "24px",
+    "rect": {
+      "left": 280,
+      "top": 195.1953125,
+      "width": 148,
+      "height": 148
+    }
+  },
+  "segmentWaveBar": {
+    "className": "w-[2px] origin-center rounded-[2px] transition-colors duration-150 motion-reduce:animate-none bg-signal-blue",
+    "borderRadius": "2px",
+    "width": "1.60156px",
+    "height": "9.59375px",
+    "animationName": "reo-flat-wave",
+    "rect": {
+      "left": 292,
+      "top": 312.796875,
+      "width": 1.6015625,
+      "height": 4.796875
+    }
+  },
+  "timelineDot": {
+    "className": "relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full bg-signal-blue",
+    "borderRadius": "9999px",
+    "rect": {
+      "left": 350.5,
+      "top": 383.1953125,
+      "width": 7,
+      "height": 7
+    }
+  },
+  "document": {
+    "width": 900,
+    "height": 720,
+    "scrollX": 0,
+    "scrollY": 0
+  }
+}

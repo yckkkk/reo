@@ -1,0 +1,41 @@
+{
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "tokens": {
+    "radiusButtons": "12px",
+    "radiusTags": "12px",
+    "radiusFull": "9999px"
+  },
+  "addButton": {
+    "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-ui-md font-medium leading-ui-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-on-accent disabled:opacity-100 p-0 border border-transparent bg-transparent pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
+    "borderRadius": "12px",
+    "rect": {
+      "left": 200,
+      "top": 152,
+      "width": 28,
+      "height": 28
+    }
+  },
+  "dropdownMenu": {
+    "className": "z-50 min-w-160 overflow-hidden rounded-buttons border border-glass-border bg-card-glass p-4 text-obsidian shadow-glass outline-none backdrop-blur-glass-md",
+    "borderRadius": "12px",
+    "backgroundColor": "rgba(255, 255, 255, 0.36)",
+    "backdropFilter": "blur(16px)",
+    "rect": {
+      "left": 200,
+      "top": 188,
+      "width": 160,
+      "height": 74
+    }
+  },
+  "segmentCard": null,
+  "segmentWaveBar": null,
+  "document": {
+    "width": 900,
+    "height": 720,
+    "scrollX": 0,
+    "scrollY": 0
+  }
+}

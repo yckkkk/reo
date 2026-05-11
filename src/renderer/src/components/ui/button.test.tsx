@@ -14,6 +14,7 @@ describe('Button primitive', () => {
     button.focus();
 
     expect(button).toHaveClass('rounded-buttons', 'font-medium', 'min-h-40');
+    expect(button).not.toHaveClass('rounded-full');
     expect(button).not.toHaveClass('font-bold');
     expect(button.className).toContain('focus-visible');
     await user.click(button);
@@ -57,5 +58,6 @@ describe('Button primitive', () => {
 
     const button = screen.getByRole('button', { name: '隐藏侧边栏' });
     expect(button).toHaveClass('size-32', 'border-transparent', 'bg-transparent');
+    expect(button).not.toHaveClass('rounded-full');
   });
 });

@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "theme": {
+    "document": "dark",
+    "appShellRoot": "dark"
+  },
+  "tokens": {
+    "eggshell": "#0d0d0d",
+    "linen": "#161616",
+    "powder": "#1b1b1c",
+    "chalk": "#262628",
+    "cardGlass": "rgb(37 40 41 / 0.4)"
+  },
+  "elements": {
+    "root": {
+      "selector": "[data-slot=\"app-shell-root\"]",
+      "className": "relative h-screen min-h-0 w-screen overflow-hidden bg-eggshell text-obsidian",
+      "backgroundColor": "rgb(13, 13, 13)",
+      "borderLeftWidth": "0px",
+      "boxShadow": "none",
+      "backdropFilter": "none",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 900,
+        "height": 720
+      }
+    },
+    "titlebar": {
+      "selector": "[data-slot=\"app-shell-titlebar\"]",
+      "className": "pointer-events-auto absolute inset-x-0 top-0 h-titlebar border-0 bg-transparent [-webkit-app-region:drag]",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "borderLeftWidth": "0px",
+      "boxShadow": "none",
+      "backdropFilter": "none",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 900,
+        "height": 48
+      }
+    },
+    "sidebar": {
+      "selector": "[aria-label=\"记忆空间侧边栏\"]",
+      "className": "absolute inset-y-0 left-0 flex flex-col bg-linen px-12 pb-16 pt-sidebar-content-top",
+      "backgroundColor": "rgb(22, 22, 22)",
+      "borderLeftWidth": "0px",
+      "boxShadow": "none",
+      "backdropFilter": "none",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "width": 240,
+        "height": 720
+      }
+    },
+    "panel": {
+      "selector": "[aria-label=\"记忆空间内容\"]",
+      "className": "absolute flex min-h-0 flex-col overflow-hidden border-0 bg-eggshell transition-[left,border-radius] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
+      "backgroundColor": "rgb(13, 13, 13)",
+      "borderLeftWidth": "0px",
+      "boxShadow": "none",
+      "backdropFilter": "none",
+      "rect": {
+        "x": 240,
+        "y": 0,
+        "width": 660,
+        "height": 720
+      }
+    },
+    "panelTitlebar": {
+      "selector": "[data-slot=\"app-shell-panel-titlebar\"]",
+      "className": "h-titlebar shrink-0",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "borderLeftWidth": "0px",
+      "boxShadow": "none",
+      "backdropFilter": "none",
+      "rect": {
+        "x": 240,
+        "y": 0,
+        "width": 660,
+        "height": 48
+      }
+    },
+    "workspaceFrame": null,
+    "memoryRailShell": null
+  },
+  "underlayCount": 0,
+  "windowScroll": {
+    "x": 0,
+    "y": 0
+  },
+  "documentSize": {
+    "width": 900,
+    "height": 720
+  }
+}

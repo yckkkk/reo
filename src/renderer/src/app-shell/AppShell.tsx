@@ -246,7 +246,7 @@ export function AppShell({
 
         <aside
           aria-label="记忆空间侧边栏"
-          className="absolute inset-y-0 left-0 flex flex-col bg-eggshell px-12 pb-16 pt-sidebar-content-top"
+          className="absolute inset-y-0 left-0 flex flex-col bg-linen px-12 pb-16 pt-sidebar-content-top"
           style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
         >
           <nav className="flex flex-col gap-4" aria-label="记忆空间">
@@ -433,7 +433,7 @@ export function AppShell({
 
         <main
           aria-label="记忆空间内容"
-          className={`absolute flex min-h-0 flex-col overflow-hidden border border-glass-border bg-card-glass shadow-subtle backdrop-blur-glass-lg ${panelMotionClass}`}
+          className={`absolute flex min-h-0 flex-col overflow-hidden border-0 bg-eggshell ${panelMotionClass}`}
           style={{
             borderRadius: panelRadius,
             bottom: 0,

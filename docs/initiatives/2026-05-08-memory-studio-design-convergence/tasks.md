@@ -41,6 +41,11 @@
 - [x] Slice 8A：Memory Studio glass-vector 视觉收敛。
   - [x] Reo 设计系统当前规则改为现代扁平矢量插画风 + 毛玻璃 + 北欧极简 + 日式留白，组件视觉必须追溯到 token、primitive variant 或已记录 pattern。
   - [x] 设计系统 token 已切换为 Nordic low-saturation palette、Card Glass、On Accent、Glass Border、glass blur 和命名 shadow；token 备份文件已保存到当前 spec artifacts。
+  - [x] 设计系统 palette 已从偏木质暖黄调整为偏冷灰蓝，runtime theme、design-system theme/variables 和 tokens.json 用同一套冷色 token 合同约束。
+  - [x] 页面 ground、sidebar ground、片段/记忆卡片常态填充和选中填充分别落到 Eggshell、Linen、Powder、Chalk 设计系统 token，不在组件内建立一次性颜色。
+  - [x] AppShell root 和主内容 panel 使用 Page/Eggshell；左侧 sidebar 使用 Sidebar/Linen；titlebar 保持透明 drag slot；不增加 sidebar-to-panel underlay 或夹缝合成层；WorkspaceFrame 和 MemoryRail shell 保持 Card Glass + blur；Memory/Segment card 状态继续使用 Powder/Chalk。
+  - [x] 默认 Button、tag 和 badge radius 收敛为 12px 方圆角；`--radius-full` 只用于 FAB、录音主按钮、时间轴圆点、状态圆点和显式圆形控件。
+  - [x] DropdownMenu compact surface 改用 `--radius-buttons` 方圆角；Segment preview waveform bars 不再复用 tag radius，保留 feature-local 2px bar geometry。
   - [x] Memory Studio 首屏布局不依赖页面纵向滚动展示主体验。
   - [x] Segment card 使用扁平矢量录音卡比例、无描边填充状态、动态 waveform bars 和等宽时间。
   - [x] Segment card 收敛为 136px 最小尺寸、148px 上限，并同步调整内部 padding、字号、title 最大宽度、waveform 和时间排版。
