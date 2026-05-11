@@ -6,7 +6,9 @@
   - [x] 右上 icon-only control 折叠/展开 MemoryRail。
   - [x] 内容区不渲染 workspace header 横线。
   - [x] MemoryRail 使用主页面 surface，不显示 rail 级标题或总数。
+  - [x] MemoryRail 默认折叠，打开态左侧显示 token 分割线。
   - [x] MemoryRail 折叠时保持固定宽度并整体滑出，不压缩内部内容。
+  - [x] MemoryRail 宽度和卡片密度收敛到 compact 规格。
   - [x] Sidebar covered 状态的 workspace 标题以左上 sidebar 折叠 icon 的位置 token 为基准。
   - [x] Workspace 标题文字视觉中心和右侧 MemoryRail 折叠 control 视觉中心与左上 sidebar 折叠 icon 视觉中心对齐。
 - [x] Slice 2：Workspace Stage Empty State。
@@ -58,8 +60,15 @@
   - [x] Electron runtime 浅色/深色视觉证据已记录：首屏无页面纵向滚动、无重复 summary、只显示真实 `转录` tab、playback waveform 来源为 decoded finalized audio。
   - [x] `verify:memory-studio-layout` 已作为 Memory Studio layout telemetry 入口记录，覆盖 Segment item 点击、横向滚动、card/dot/time 中心测量和独立 timeline 容器消失。
   - [x] `verify:memory-studio-layout` 覆盖 900x720 窄视口、页面横向/纵向滚动为 0、紧凑 card 宽度范围和 audio player 时间不换行。
-  - [x] `verify:memory-studio-layout` 覆盖 AppShell root、panel、panel content、WorkspaceFrame、Workspace stage shell 和 MemoryRail shell 的首屏 viewport 边界，防止首次进入软件后右侧或底部布局依赖 resize 才恢复。
+  - [x] `verify:memory-studio-layout` 覆盖 AppShell root、panel、panel content、WorkspaceFrame、Workspace stage shell 和可见 MemoryRail shell 的首屏 viewport 边界，防止首次进入软件后右侧或底部布局依赖 resize 才恢复。
+  - [x] MemoryRail 默认 folded；Compact workspace 宽度下 MemoryRail 手动展开不挤压 Memory Studio；telemetry 退出后必须清理 viewport emulation。
   - [x] `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/quality.md` 和 `docs/current/design-system/*` 已同步当前实现。
+- [x] Slice 11A：Recording finalize 和 workspace handle reload 模型修正。
+  - [x] 普通录音 finalize response 返回完整 finalized audio Segment projection。
+  - [x] Renderer 用 finalize response 精准更新对应 Memory detail cache，并用一次性 focus intent 选中新 Segment。
+  - [x] Transcript save 更新 Workspace snapshot、Memory detail transcript presence，并 invalidate 对应 Segment content Query。
+  - [x] Trusted main-frame reload/navigation 通过 main lifecycle helper 释放 workspace handles；same-document、subframe 和 untrusted navigation 不释放。
+  - [x] Targeted tests 覆盖 finalize 后横向预览流即时出现新 Segment、reload lifecycle release、coalesced release、main process finalize projection 和 renderer cache ownership。
 - [x] Slice 12：最终 `verify:quick` 和 initiative 收口。
   - [x] `npm run verify:quick` 通过：typecheck、main tests、renderer tests、lint 和 format check 均为 exit 0。
   - [x] 常态 Memory 页面相关任务已全部收口。

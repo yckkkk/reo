@@ -1,0 +1,33 @@
+{
+  "viewport": {
+    "width": 1129,
+    "height": 771
+  },
+  "studioVisible": true,
+  "alreadyOpenError": false,
+  "railMode": "inline",
+  "railHidden": "false",
+  "railRect": {
+    "left": 857.046875,
+    "top": 49,
+    "width": 270.953125,
+    "height": 721,
+    "right": 1128,
+    "bottom": 770
+  },
+  "railClass": "absolute inset-y-0 right-0 min-h-0 overflow-hidden border-l border-glass-border transition-[transform,opacity] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none w-[var(--workspace-memory-rail-width)] translate-x-0 opacity-100",
+  "railBorderLeftWidth": "1px",
+  "railBorderLeftColor": "rgba(255, 255, 255, 0.5)",
+  "railNavClass": "flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-16 py-20 backdrop-blur-glass-lg xl:border-t-0",
+  "firstCardButtonRect": {
+    "left": 875.046875,
+    "top": 71,
+    "width": 235.953125,
+    "height": 69.59375,
+    "right": 1111,
+    "bottom": 140.59375
+  },
+  "firstCardButtonClass": "block min-h-[68px] w-full px-12 py-12 pr-40 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell",
+  "stageShellClass": "flex min-h-0 flex-1 flex-col overflow-hidden py-24 pl-24 transition-[padding-right] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:py-32 sm:pl-40 pr-[var(--workspace-memory-rail-stage-inset)] xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]",
+  "screenshot": "docs/specs/2026-05-10-0443-memory-normal-page-design/artifacts/memory-rail-compact-density-runtime.png"
+}
