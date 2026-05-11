@@ -42,8 +42,8 @@
   - [x] Reo 设计系统当前规则改为现代扁平矢量插画风 + 毛玻璃 + 北欧极简 + 日式留白，组件视觉必须追溯到 token、primitive variant 或已记录 pattern。
   - [x] 设计系统 token 已切换为 Nordic low-saturation palette、Card Glass、On Accent、Glass Border、glass blur 和命名 shadow；token 备份文件已保存到当前 spec artifacts。
   - [x] Memory Studio 首屏布局不依赖页面纵向滚动展示主体验。
-  - [x] Segment card 使用扁平矢量录音卡比例、2px 实线边界、动态 waveform bars 和等宽时间。
-  - [x] Segment card 收敛为 124px-144px 紧凑尺寸，并同步调整内部 padding、字号、waveform 和时间排版。
+  - [x] Segment card 使用扁平矢量录音卡比例、低对比 1px token 边界、动态 waveform bars 和等宽时间。
+  - [x] Segment card 收敛为 136px 最小尺寸、148px 上限，并同步调整内部 padding、字号、waveform 和时间排版。
   - [x] 播放区 waveform 从 selected finalized audio bytes 解码真实峰值，不使用固定占位波形。
   - [x] 删除 selected Segment 内容区上方重复 summary。
   - [x] FAB 保留结构展开动效，glass/hover/halo 值提升为 Reo 设计系统 token。

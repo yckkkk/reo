@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 
 const defaultPort = Number(process.env.REMOTE_DEBUGGING_PORT || 9233);
 const defaultTolerance = 1.5;
-const defaultMinCardWidth = 120;
+const defaultMinCardWidth = 136;
 const defaultMaxCardWidth = 150;
 
 function printHelp() {
@@ -517,6 +517,15 @@ function assertMetrics(metrics, options) {
     if (Math.abs(item.dotToCardCenterDelta) > tolerance) {
       failures.push(
         `Segment item ${item.index} dot is not centered under card: delta ${item.dotToCardCenterDelta.toFixed(2)}px.`
+      );
+    }
+    if (
+      Math.abs(item.dotRect.width - item.dotRect.height) > tolerance ||
+      item.dotRect.width < 6 ||
+      item.dotRect.height < 6
+    ) {
+      failures.push(
+        `Segment item ${item.index} timeline marker is not a visible round dot: ${item.dotRect.width.toFixed(2)}x${item.dotRect.height.toFixed(2)}px.`
       );
     }
     if (Math.abs(item.timeToCardCenterDelta) > tolerance) {

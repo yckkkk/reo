@@ -437,20 +437,28 @@ describe('LoadedWorkspaceFrame', () => {
       'flex-[0_0_var(--memory-studio-segment-card-size)]',
       'snap-start',
       'flex-col',
-      'min-w-0'
+      'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
     expect(segmentCards[0]).toHaveClass(
       'aspect-square',
       'rounded-panels',
-      'border-2',
+      'border',
       'bg-card-glass',
       'backdrop-blur-glass-sm',
       'p-12',
-      'min-w-0'
+      'min-h-[var(--memory-studio-segment-card-min-size)]',
+      'min-w-[var(--memory-studio-segment-card-min-size)]'
+    );
+    expect(segmentCards[0]).not.toHaveClass('border-2', 'shadow-glass');
+    expect(strip).toHaveAttribute(
+      'style',
+      expect.stringContaining('--memory-studio-segment-card-min-size: 136px')
     );
     expect(strip).toHaveAttribute(
       'style',
-      expect.stringContaining('--memory-studio-segment-card-size: clamp(124px, 20%, 144px)')
+      expect.stringContaining(
+        '--memory-studio-segment-card-size: clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)'
+      )
     );
     expect(stripScroll).not.toHaveClass('px-44');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
@@ -486,7 +494,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeTruthy();
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toBeTruthy();
+    ).toHaveClass('block', 'size-[7px]', 'min-h-[7px]', 'min-w-[7px]', 'rounded-full');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
     ).toHaveTextContent('02:05');
@@ -514,21 +522,21 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(within(activeCard).queryByText('SEG 01')).toBeNull();
     expect(within(activeCard).getByText('Birthday candles')).toHaveClass(
-      'text-body-lg',
+      'text-body',
       'font-bold',
-      'leading-body-lg'
+      'leading-body'
     );
     expect(within(activeCard).getByText('已有转录')).toHaveClass(
-      'text-ui-sm',
+      'text-ui-xs',
       'font-medium',
-      'leading-ui-sm'
+      'leading-ui-xs'
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')
-    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-ui-md', 'font-bold', 'tracking-wide');
+    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-ui-sm', 'font-bold', 'tracking-wide');
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
-    ).toHaveClass('h-36', 'w-[58px]', 'gap-[2px]');
+    ).toHaveClass('h-32', 'w-[52px]', 'gap-[2px]');
 
     const activeBars = activeCard.querySelectorAll(
       '[data-slot="memory-studio-segment-card-waveform"] span'

@@ -35,7 +35,7 @@
 - 结构性动效可以存在，例如 MemoryRail 折叠滑入/滑出、FAB speed dial 展开、录音波形律动、dialog 进入/退出；动效必须解释状态变化，而不是装饰性漂浮。
 - 图标使用 lucide 或等粗纯色几何；图形元素由基础线段、圆点、矩形、波形 bars 和纯色块构成。
 - 工程标签、时间、计数和机器感数据使用 Geist Mono、全大写或等宽数字、适度 tracking；正文和标题使用 sans-serif 或 Reo 标题字体。
-- Recording Segment card 是扁平矢量对象：aspect-square、2px solid border、22-24px radius、标题直入、底部动态 bars + 等宽时间，不放 `SEG 01` 这类表格标签。
+- Recording Segment card 是扁平矢量对象：aspect-square、低对比 1px token border、22-24px radius、标题直入、底部动态 bars + 等宽时间，不放 `SEG 01` 这类表格标签。
 
 ## Tokens — Colors
 
@@ -253,7 +253,7 @@ Base unit：4px。
 - App shell 主面板、Dialog overlay、Drawer/recording overlay 和右侧 rail 的空间关系只能使用已命名 glass token 或本文档记录的 primitive pattern，例如 `--color-card-glass`、`--color-glass-border`、`--shadow-glass`、`--blur-glass-lg`、`--glass-scrim-overlay`、`--glass-recording-overlay`、`--glass-recording-overlay-blur`、`--glass-control-hover`、`--glass-ember-hover` 和 `--recording-primary-halo`。
 - Dialog/Drawer 普通遮罩使用 `--glass-scrim-overlay`；录音沉浸层使用 `--glass-recording-overlay` + `--glass-recording-overlay-blur` + 去饱和背景；录音 control hover/halo 使用对应 glass token。
 - 玻璃化 surface 必须保留清晰文字对比、可见边界和稳定 hit target；不得让正文、按钮或 icon 因透明叠加变得灰、糊或难以点击。
-- Memory Studio 的 Segment card 是 glass-vector 内容对象：使用 Card Glass surface、2px token border、真实或当前片段的波形表达、等宽时间和明确 selected border；不得回到普通列表或附件堆叠。
+- Memory Studio 的 Segment card 是 glass-vector 内容对象：使用 Card Glass surface、1px 低饱和 token border、真实或当前片段的波形表达、等宽时间和明确 selected border；不得回到普通列表或附件堆叠。横向预览流里的 compact Segment card 必须保留最小 square 尺寸，窗口变窄时由 Segment strip 横向滚动承载，不把卡片压到内容不可读。
 - 若透明或 blur 无法提升焦点、层级或转场理解，应退回纯色块、实线边界和 typography。
 
 ## Components
