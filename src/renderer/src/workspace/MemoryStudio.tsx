@@ -21,7 +21,6 @@ import {
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
-import { countLabel } from './memoryLabels';
 import type {
   WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
@@ -456,11 +455,6 @@ export function MemoryStudio({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const detailQuery = useQuery(memoryDetailQueryOptions(workspaceSession, memory.memoryId));
   const detail = detailQuery.data?.detail;
-  const visibleMemory = detail ?? {
-    ...memory,
-    workspaceId: workspaceSession.workspaceId,
-    segments: [],
-  };
   const segments = detail?.segments ?? [];
   const selectedSegment =
     segments.find((segment) => segment.segmentId === selectedSegmentId) ?? segments[0] ?? null;
@@ -733,18 +727,8 @@ export function MemoryStudio({
         data-slot="memory-studio-layout"
         className="flex h-full min-h-0 w-full max-w-[1120px] flex-col"
       >
-        <header className="min-w-0 shrink-0 pt-4">
-          <h1 className="truncate font-waldenburg text-heading font-light leading-heading tracking-heading text-obsidian xl:text-heading-lg xl:leading-heading-lg xl:tracking-heading-lg">
-            {visibleMemory.title}
-          </h1>
-          <p className="mt-6 text-ui-md leading-ui-md text-gravel">
-            {countLabel(visibleMemory.segmentCount, '个片段')} ·{' '}
-            {durationLabel(visibleMemory.durationMs)}
-          </p>
-        </header>
-
         {detail && segments.length === 0 ? (
-          <div className="mt-48 max-w-[420px]">
+          <div className="mt-32 max-w-[420px]">
             <p className="text-body-lg font-medium leading-body-lg text-obsidian">
               这条记忆还没有片段
             </p>
@@ -754,7 +738,7 @@ export function MemoryStudio({
           <>
             <section
               aria-label="片段预览流"
-              className="relative mt-20 min-w-0 shrink-0"
+              className="relative min-w-0 shrink-0 pt-4"
               style={
                 {
                   '--memory-studio-segment-card-min-size': '136px',
@@ -931,7 +915,7 @@ export function MemoryStudio({
                         });
                       }}
                     >
-                      <Mic aria-hidden="true" className="size-14" />
+                      <Mic aria-hidden="true" className="size-16" />
                       录音补充
                     </DropdownMenuItem>
                   </DropdownMenuContent>

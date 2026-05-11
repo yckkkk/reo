@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Moon,
   PanelLeftClose,
+  PencilLine,
   Sun,
   Trash2,
 } from 'lucide-react';
@@ -48,6 +49,7 @@ type AppShellProps = {
   readonly onHome: () => void;
   readonly onLibrary: () => void;
   readonly onOpenLocalWorkspace?: (() => void) | undefined;
+  readonly onRenameMemorySpace?: ((memorySpace: WorkspaceMemorySpace) => void) | undefined;
   readonly onRemoveMemorySpace?: ((memorySpace: WorkspaceMemorySpace) => void) | undefined;
   readonly onSelectMemorySpace?: ((workspaceId: string) => void) | undefined;
   readonly onToggleTheme: () => void;
@@ -83,6 +85,7 @@ export function AppShell({
   onHome,
   onLibrary,
   onOpenLocalWorkspace,
+  onRenameMemorySpace,
   onRemoveMemorySpace,
   onSelectMemorySpace,
   onToggleTheme,
@@ -188,6 +191,11 @@ export function AppShell({
   function handleRemoveMemorySpace(memorySpace: WorkspaceMemorySpace) {
     setWorkspaceMemorySpaceMenuOpen(null);
     onRemoveMemorySpace?.(memorySpace);
+  }
+
+  function handleRenameMemorySpace(memorySpace: WorkspaceMemorySpace) {
+    setWorkspaceMemorySpaceMenuOpen(null);
+    onRenameMemorySpace?.(memorySpace);
   }
 
   return (
@@ -364,7 +372,7 @@ export function AppShell({
                         <span className="size-4 rounded-full bg-signal-blue" aria-hidden="true" />
                       ) : null}
                     </Button>
-                    {onRemoveMemorySpace ? (
+                    {onRenameMemorySpace || onRemoveMemorySpace ? (
                       <DropdownMenu
                         open={memorySpaceMenuOpen}
                         onOpenChange={(open) => {
@@ -388,10 +396,18 @@ export function AppShell({
                           side="bottom"
                           aria-label={`${memorySpace.title} 记忆空间操作`}
                         >
-                          <DropdownMenuItem onSelect={() => handleRemoveMemorySpace(memorySpace)}>
-                            <Trash2 className="size-16 text-slate" aria-hidden="true" />
-                            移除记忆空间
-                          </DropdownMenuItem>
+                          {onRenameMemorySpace ? (
+                            <DropdownMenuItem onSelect={() => handleRenameMemorySpace(memorySpace)}>
+                              <PencilLine className="size-16 text-slate" aria-hidden="true" />
+                              重命名记忆空间
+                            </DropdownMenuItem>
+                          ) : null}
+                          {onRemoveMemorySpace ? (
+                            <DropdownMenuItem onSelect={() => handleRemoveMemorySpace(memorySpace)}>
+                              <Trash2 className="size-16 text-slate" aria-hidden="true" />
+                              移除记忆空间
+                            </DropdownMenuItem>
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}

@@ -1011,6 +1011,40 @@ type SegmentAttachmentProjection = {
 - Electron runtime 视觉验证：`REMOTE_DEBUGGING_PORT=9236 npm run dev`，CDP viewport `900x720`。DropdownMenu 截图 `artifacts/app-radius-contract-runtime-2026-05-11T0046.png`，computed 证据 `artifacts/app-radius-contract-runtime-2026-05-11T0046.json`：`--radius-buttons=12px`、`--radius-tags=12px`、`--radius-full=9999px`，Add workspace button 和 DropdownMenu content computed `borderRadius=12px`，DropdownMenu 仍使用 `bg-card-glass` + `backdrop-filter: blur(16px)`。Memory Studio 截图 `artifacts/memory-studio-radius-contract-runtime-2026-05-11T0048.png`，computed 证据 `artifacts/memory-studio-radius-contract-runtime-2026-05-11T0048.json`：用户点击 `测试工作区1` 后 Memory Studio loaded，Segment card `borderRadius=24px`，preview waveform bar class 为 `rounded-[2px]`、computed `borderRadius=2px`，timeline dot computed `borderRadius=9999px`，document `900x720` 且 `scrollY=0`。
 - Full quick verification：`npm run verify:quick` 通过，命令链路包括 `typecheck`、main 302 tests、renderer 219 tests、lint 和 format check。
 
+### 2026-05-11 06:12 America/Los_Angeles
+
+- Titlebar 层级已按当前 shadcn/ui Breadcrumb 组合规则实现：`WorkspaceTitlebar` 使用 Breadcrumb 表达当前记忆空间和当前 Memory；两个 breadcrumb item 都与现有 DropdownMenu 组合，并分别提供 `重命名记忆空间` 和 `重命名记忆`。Memory Studio 中央区域不再重复显示 Memory 标题、片段数量或总时长 meta。
+- Memory title 重命名复用已有 title Dialog 能力；`MemoryTitleDialog` 泛化字段 label、校验文案和保存错误标题后，同时服务 Memory 和记忆空间 title。记忆空间重命名新增 `workspace:updateMemorySpaceTitle`，active 记忆空间用 `workspaceHandle`，inactive sidebar entry 用 `workspaceId`；main 更新 `.reo/workspace.json` 后同步 memory space registry 投影，renderer 成功后合并当前 session snapshot 和记忆空间列表。
+- Sidebar 记忆空间 More 菜单新增 `重命名记忆空间`，与 titlebar 记忆空间 DropdownMenu 打开同一个重命名 Dialog；录音流程打开时，记忆空间重命名和切换/移除一样被 App 层阻止。
+- Runtime 截图反馈指出 Breadcrumb 新增图标使用了未定义的 `size-14` token，Tailwind 回落到默认 56px spacing，导致 titlebar chevron 和 separator 过大。修复为 Reo 当前 icon token `size-16`，并清除 renderer 中所有 `size-14` 使用。
+- Runtime 截图反馈指出两个标题距离过远且中间 separator 不应是 `>`。当前 Breadcrumb list 使用 `gap-4`，separator 移除额外横向 padding 并改为 4px 圆点；renderer 回归断言确保 titlebar separator 不渲染 chevron SVG、保留 4px 圆点且不回到 `px-2`。
+- Runtime 视觉验证：`npx electron-vite build --ignoreConfigWarning` 后用隔离 user-data 目录启动 `./node_modules/.bin/electron --user-data-dir=/tmp/reo-titlebar-user-data --remote-debugging-port=9238 .`，CDP viewport `900x720`。截图 `artifacts/titlebar-breadcrumb-runtime-2026-05-11T0628.png`，computed 证据 `artifacts/titlebar-breadcrumb-runtime-2026-05-11T0628-titlebar.json`：Breadcrumb list class 含 `gap-4`，separator class 为 `flex shrink-0 items-center text-slate`，separator 不含 SVG，dot `4px × 4px`，workspace/memory chevron 都是 `16px × 16px`，dot 左右边距均为 `4px`，两个 trigger 之间总距 `12px`。
+- RED/GREEN：`npm run test:main -- --test-name-pattern updateMemorySpaceTitle` 先因缺少 channel/schema/handler 失败；`npx vitest run src/renderer/src/App.test.tsx src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/workspace/workspaceApi.test.ts` 先因缺少 titlebar Breadcrumb、DropdownMenu rename 和旧 Memory Studio heading/meta 断言失败。实现后 main targeted 通过 304 tests；renderer targeted 通过 3 files / 68 tests；`npm run typecheck` 通过。
+- Full quick verification：`npm run verify:quick` 通过，命令链路包括 `typecheck`、main 304 tests、renderer 221 tests、lint 和 format check。
+- Current 真源已同步 `docs/current/product.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/frontend.md`、`docs/current/electron.md`、`docs/current/quality.md` 和 `docs/current/architecture.md`。
+
+### 2026-05-11 06:45 America/Los_Angeles
+
+- 用户反馈：active 记忆空间重命名弹层可打开但保存失败；titlebar 两个标题旁的下拉 chevron 不应显示；用户通过 Finder 等文件管理器改名记忆空间 folder 时，Reo 不应把同一记忆空间判为错误，界面需要像本地文件真源产品一样同步当前名称。
+- 当前模型收敛：`.reo/workspace.json` 和记忆空间 root folder 是记忆空间 title/file truth；memory space registry 只是 main-owned 列表和打开入口投影，不是保存成败真源。Active 记忆空间 rename 在 `.reo/workspace.json` 写入成功后即返回 Workspace snapshot；registry projection 写入失败不阻断保存。Inactive registry entry rename 仍需要 registry 解析 root 并更新 projection，因为它没有 active handle。
+- 文件管理器改名采用最小协调规则：registry 读取或解析 root 时，如果原 root 不存在，只在原父目录下最多检查 200 个直接子目录，读取 `.reo/workspace.json`，按同一 `workspaceId` 找回同一个 Reo 记忆空间；找到后返回 canonical root 和新 folder basename title 投影，但不在 list/resolve 阶段写 `.reo/workspace.json`。用户打开该记忆空间时，main 先获取 single-writer lock，并确认打开的 `workspaceId` 仍匹配 registry request，再把 folder basename 写回 `.reo/workspace.json.title` 并 upsert registry projection。真实删除、移动到非同父目录或同名 root 被其他 Reo workspace 替换，仍返回 typed error 并保留用户可见移除入口。
+- Titlebar Breadcrumb 保持 DropdownMenu trigger 能力，但 trigger 不再渲染 chevron icon；层级之间仍用 4px 圆点 separator。
+- RED/GREEN：`npm run test:main -- --test-name-pattern "updateMemorySpaceTitle keeps|Finder-renamed"` 先失败于 active rename 被 registry projection error 阻断，以及 registry 不跟随 Finder-renamed folder。实现后同命令通过 main 306 tests。`npx vitest run src/renderer/src/App.test.tsx --testNamePattern "titlebar breadcrumb"` 先失败于 titlebar breadcrumb 内仍存在 SVG chevron；移除 chevron 后通过 1 test。
+- Codex CLI review 指出 registry list/resolve 不应在没有 workspace lock 时写 `.reo/workspace.json`，以及 workspace title update 的 index reconciliation 必须重新消费 lock usability；实现调整为 registry 只读投影、`openMemorySpace` 获取 lock 后再持久化 Finder-renamed folder title，并补充 targeted main test 覆盖该路径。
+- Codex CLI 二次 review 指出 Finder rename sibling scan 不能无界扫描大型父目录，rename IPC 需要先验证 sender 再 parse payload，open-by-registry 写回 title 前必须确认 opened workspaceId 匹配 request；实现改为 200 个 sibling scan 上限、trust-boundary 前置校验和 stale-root metadata invalid guard。
+- Runtime 视觉验证：`npx electron-vite build --ignoreConfigWarning` 后用隔离 user-data 目录启动 `./node_modules/.bin/electron --user-data-dir=/var/folders/.../reo-titlebar-user-data-6jcoVd --remote-debugging-port=9238 .`，CDP viewport `900x720`。截图 `artifacts/titlebar-breadcrumb-runtime-2026-05-11T0658-no-chevrons.png`，computed 证据 `artifacts/titlebar-breadcrumb-runtime-2026-05-11T0658-no-chevrons.json`：Breadcrumb text 为 `测试工作区1灵感`，breadcrumb 内 SVG 数量为 `0`，Breadcrumb list class 含 `gap-4`，separator class 为 `flex shrink-0 items-center text-slate`，separator padding 为 `0px`，dot `4px × 4px`，两个 title trigger 文本为 `测试工作区1` 和 `灵感`，trigger gap 为 `12px`，`windowScroll` 为 `0,0`。
+- Full quick verification：`npm run verify:quick` 通过，命令链路包括 `typecheck`、main 306 tests、renderer 221 tests、lint 和 format check。
+- Current 真源已同步 active rename best-effort registry projection、Finder-renamed folder 协调和 titlebar 无 chevron 规则。
+
+### 2026-05-11 07:24 America/Los_Angeles
+
+- 用户补充约束：Reo 的文件管理模型需要参考 Obsidian 这类 local-first 文件产品；用户或 Codex 在访达、编辑器中修改合法 JSON 或 Markdown 文件时，Reo 不应把“外部修改”本身判为错误，而应把文件作为真源重新投影 UI。
+- 模型收敛：不引入 watcher、同步状态机或并发 merge 模型；当前最小规则是 active session 在窗口重新获得 focus 或 visibility 回到 visible 时通过 `workspace:readWorkspaceSnapshot` 重新读取文件真源。合法 JSON、目录 identity 和 ownership 通过则同步 snapshot；非法 JSON、schema 不匹配或 unsafe path 返回 typed error 并保留既有文件状态。
+- Main 实现：新增 `workspace:readWorkspaceSnapshot` contract/preload/main handler，request 只包含 `workspaceHandle`，response 只返回 Workspace snapshot；main 读取 `.reo/workspace.json` 并通过 index read/rebuild 从当前 `memory.json`、finalized segment/attachment metadata、audio bytes 和 `transcript.md` presence 重新投影，不暴露 root path 或 handle。
+- Renderer 实现：App 在 active 记忆空间且没有录音流程打开时，窗口 focus/visibility 恢复会调用 snapshot read，成功后 seed snapshot Query、更新当前 session、保留仍存在的 current Memory selection，并 invalidate memory space list、Memory detail、Segment content 和 SegmentAttachment content Query；录音流程打开时跳过该刷新，避免绕过当前录音的 Workspace/Memory 切换保护。
+- RED/GREEN：`npm run test:main -- --test-name-pattern "workspace snapshot read|readWorkspaceSnapshot reflects|workspace preload bridge exposes explicit methods"` 先失败于缺少 channel/schema/bridge/handler；`npx vitest run src/renderer/src/App.test.tsx --testNamePattern "external JSON edits"` 先失败于 focus 后未调用 snapshot read。实现后 main targeted 通过 308 tests，renderer targeted 通过 1 file / 1 test。
+- Current 真源已同步 `docs/current/architecture.md`、`docs/current/data.md`、`docs/current/flow.md`、`docs/current/electron.md`、`docs/current/frontend.md` 和 `docs/current/quality.md`。
+
 ## 待确认问题
 
 1. 长音频 waveform 的性能策略需要继续评估：当前播放区已经从 finalized audio bytes 解码真实峰值；更长音频进入 runtime 前需要确认 peaks cache、lazy decode、wavesurfer peaks 或 main-side 预计算策略。

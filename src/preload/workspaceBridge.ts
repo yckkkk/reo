@@ -24,12 +24,14 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   type WorkspaceIpcChannel,
   type WorkspaceRendererEventChannel,
@@ -72,8 +74,18 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
         payload
       ),
+    updateMemorySpaceTitle: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateMemorySpaceTitle'>>(
+        WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
+        payload
+      ),
     closeWorkspace: (payload) =>
       invoke<WorkspaceBridgeResponse<'closeWorkspace'>>(WORKSPACE_CLOSE_CHANNEL, payload),
+    readWorkspaceSnapshot: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readWorkspaceSnapshot'>>(
+        WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
+        payload
+      ),
     createMemory: (payload) =>
       invoke<WorkspaceBridgeResponse<'createMemory'>>(WORKSPACE_CREATE_MEMORY_CHANNEL, payload),
     deleteMemory: (payload) =>

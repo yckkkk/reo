@@ -13,10 +13,12 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
+  WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
@@ -24,6 +26,8 @@ import {
   workspaceDeleteMemoryResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadWorkspaceSnapshotRequestSchema,
+  workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
@@ -51,6 +55,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
+  workspaceUpdateMemorySpaceTitleRequestSchema,
+  workspaceUpdateMemorySpaceTitleResponseSchema,
   workspaceOpenRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
   workspaceRemoveMemorySpaceResponseSchema,
@@ -80,7 +86,9 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:open',
     'workspace:openMemorySpace',
     'workspace:removeMemorySpace',
+    'workspace:updateMemorySpaceTitle',
     'workspace:close',
+    'workspace:readWorkspaceSnapshot',
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
@@ -115,6 +123,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory');
   assert.equal(WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory');
   assert.equal(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory');
+  assert.equal(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot');
   assert.equal(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail');
   assert.equal(
     WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
@@ -130,6 +139,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:cloneRecordingDraftPrefix'
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
+  assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
   assert.equal(
     WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
     'workspace:createSegmentAttachmentRecordingDraft'
@@ -146,6 +156,44 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
     'workspace:discardSegmentAttachmentRecordingDraft'
   );
+});
+
+test('workspace snapshot read contract refreshes file truth without exposing raw paths', () => {
+  assert.deepEqual(
+    workspaceReadWorkspaceSnapshotRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+    }
+  );
+  const response = workspaceReadWorkspaceSnapshotResponseSchema.parse({
+    ok: true,
+    value: {
+      workspaceId: 'ws_1',
+      title: '外部更新空间',
+      description: '由 Codex 更新',
+      memories: [
+        {
+          memoryId: 'mem_1',
+          title: '外部更新记忆',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          segmentCount: 1,
+          durationMs: 1000,
+          audioByteLength: 3,
+          hasTranscript: true,
+          attachmentCount: 0,
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal('rootPath' in response.value, false);
+    assert.equal('workspaceHandle' in response.value, false);
+  }
 });
 
 test('memory dangerous operation contract keeps delete and restore path explicit', () => {
@@ -1019,6 +1067,79 @@ test('memory title update contract is scoped to a memory container and strips ra
         attachmentCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: ['seg_20260506_000001'],
+      },
+    })
+  );
+});
+
+test('memory space title update contract accepts either active handle or registry workspace id', () => {
+  assert.deepEqual(
+    workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      title: '测试工作区1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      title: '测试工作区1',
+    }
+  );
+  assert.deepEqual(
+    workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+      workspaceId: 'ws_1',
+      title: '测试工作区1',
+    }),
+    {
+      workspaceId: 'ws_1',
+      title: '测试工作区1',
+    }
+  );
+  assert.throws(() =>
+    workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+      title: '测试工作区1',
+    })
+  );
+  assert.throws(() =>
+    workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+      workspaceId: 'ws_1',
+      workspaceHandle: 'wh_1',
+      title: '测试工作区1',
+    })
+  );
+  assert.throws(() =>
+    workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+      workspaceId: 'ws_1',
+      title: '',
+    })
+  );
+  assert.deepEqual(
+    workspaceUpdateMemorySpaceTitleResponseSchema.parse({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '测试工作区1',
+        description: 'Private notes',
+        memories: [],
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '测试工作区1',
+        description: 'Private notes',
+        memories: [],
+      },
+    }
+  );
+  assert.throws(() =>
+    workspaceUpdateMemorySpaceTitleResponseSchema.parse({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '测试工作区1',
+        description: 'Private notes',
+        memories: [],
+        rootPath: '/Users/example/Workspace',
       },
     })
   );

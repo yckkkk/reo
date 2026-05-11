@@ -19,8 +19,10 @@ import test from 'node:test';
 import {
   initializeWorkspaceFiles,
   openWorkspaceFiles,
+  readWorkspaceSnapshotFromFileTruth,
   setBeforeWorkspaceJsonNoFollowFinalAssertForTest,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
+  updateWorkspaceTitleFromFileTruth,
   updateWorkspaceIndex,
 } from '../../src/main/workspaceFiles.js';
 import { setAfterAtomicWorkspaceFileTempOpenForTest } from '../../src/main/atomicWorkspaceFile.js';
@@ -460,6 +462,83 @@ test('open workspace preserves the existing index when memories root changes bef
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
   }
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
+});
+
+test('workspace snapshot refresh preserves the existing index when memories root changes before reconciliation persist', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-snapshot-reconcile-swap-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Snapshot reconcile swap',
+    description: '',
+    createWorkspaceId: () => 'ws_snapshot_reconcile_swap',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root,
+    workspaceId: 'ws_snapshot_reconcile_swap',
+    memoryId: 'mem_snapshot_reconcile_swap',
+    segmentId: 'seg_snapshot_reconcile_swap',
+    title: 'Snapshot reconcile swap',
+    audio: new Uint8Array([1, 2, 3]),
+    durationMs: 3000,
+  });
+  const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+  setBeforeWorkspaceIndexReconciliationPersistForTest(async () => {
+    setBeforeWorkspaceIndexReconciliationPersistForTest(null);
+    await rename(path.join(root, 'memories'), path.join(root, 'memories-preserved'));
+    await mkdir(path.join(root, 'memories'));
+  });
+
+  try {
+    const snapshot = await readWorkspaceSnapshotFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_snapshot_reconcile_swap',
+    });
+    assert.equal(snapshot.ok, false);
+  } finally {
+    setBeforeWorkspaceIndexReconciliationPersistForTest(null);
+  }
+  assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
+});
+
+test('workspace title update preserves metadata and index when memories root changes before reconciliation persist', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-title-reconcile-swap-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Title reconcile swap',
+    description: '',
+    createWorkspaceId: () => 'ws_title_reconcile_swap',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root,
+    workspaceId: 'ws_title_reconcile_swap',
+    memoryId: 'mem_title_reconcile_swap',
+    segmentId: 'seg_title_reconcile_swap',
+    title: 'Title reconcile swap',
+    audio: new Uint8Array([1, 2, 3]),
+    durationMs: 3000,
+  });
+  const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+  const previousMetadata = await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8');
+  setBeforeWorkspaceIndexReconciliationPersistForTest(async () => {
+    setBeforeWorkspaceIndexReconciliationPersistForTest(null);
+    await rename(path.join(root, 'memories'), path.join(root, 'memories-preserved'));
+    await mkdir(path.join(root, 'memories'));
+  });
+
+  try {
+    const updated = await updateWorkspaceTitleFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_title_reconcile_swap',
+      title: 'Renamed title',
+    });
+    assert.equal(updated.ok, false);
+  } finally {
+    setBeforeWorkspaceIndexReconciliationPersistForTest(null);
+  }
+  assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
+  assert.equal(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8'), previousMetadata);
 });
 
 test('open workspace reports lock lost before target revalidation errors', async () => {

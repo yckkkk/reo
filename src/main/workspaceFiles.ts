@@ -68,6 +68,19 @@ interface OpenWorkspaceFilesOptions {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
+interface UpdateWorkspaceTitleOptions {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly title: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}
+
+interface ReadWorkspaceSnapshotOptions {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}
+
 type MaybePromise<T> = T | Promise<T>;
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
 
@@ -271,6 +284,30 @@ export async function validateWorkspaceOpenTarget(
   }
 
   return validateWorkspaceOpenCanonicalTarget(canonicalRoot);
+}
+
+export async function validateWorkspaceOpenTargetWorkspaceId({
+  rootPath,
+  workspaceId,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+}): Promise<WorkspaceInitializeTarget> {
+  const target = await validateWorkspaceOpenTarget(rootPath);
+  if (!target.ok) {
+    return target;
+  }
+
+  const metadata = await readMetadata(target.canonicalRoot);
+  if (!metadata || metadata.workspaceId !== workspaceId) {
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Workspace metadata is invalid',
+      'previous-file-preserved'
+    );
+  }
+
+  return target;
 }
 
 export async function validateEmptyWorkspaceOpenCanonicalTarget(
@@ -565,6 +602,110 @@ export async function openWorkspaceFiles({
     ok: true,
     snapshot: snapshotFrom(metadata, index),
   };
+}
+
+export async function updateWorkspaceTitleFromFileTruth({
+  rootPath,
+  workspaceId,
+  title,
+  assertWorkspaceUsable: assertUsable,
+}: UpdateWorkspaceTitleOptions): Promise<WorkspaceFilesResult> {
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceOpenTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+    const { canonicalRoot } = target;
+    const metadata = await readMetadata(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    if (!metadata || metadata.workspaceId !== workspaceId) {
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'previous-file-preserved'
+      );
+    }
+    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    const index = await readOrRebuildIndex(canonicalRoot, {
+      assertBeforePersist: async () => {
+        assertWorkspaceUsable(assertUsable);
+        await readModel.assertMemoriesRootCurrent();
+      },
+      rebuiltMemories: readModel.memories,
+    });
+    assertWorkspaceUsable(assertUsable);
+    const nextMetadata = { ...metadata, title };
+    await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), nextMetadata, () =>
+      assertWorkspaceUsable(assertUsable)
+    );
+    assertWorkspaceUsable(assertUsable);
+    return {
+      ok: true,
+      snapshot: snapshotFrom(nextMetadata, index),
+    };
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_UPDATE_FAILED',
+      'Workspace title could not be updated',
+      'previous-file-preserved'
+    );
+  }
+}
+
+export async function readWorkspaceSnapshotFromFileTruth({
+  rootPath,
+  workspaceId,
+  assertWorkspaceUsable: assertUsable,
+}: ReadWorkspaceSnapshotOptions): Promise<WorkspaceFilesResult> {
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceOpenTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+
+    const { canonicalRoot } = target;
+    const metadata = await readMetadata(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    if (!metadata || metadata.workspaceId !== workspaceId) {
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'previous-file-preserved'
+      );
+    }
+
+    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    const index = await readOrRebuildIndex(canonicalRoot, {
+      assertBeforePersist: async () => {
+        assertWorkspaceUsable(assertUsable);
+        await readModel.assertMemoriesRootCurrent();
+      },
+      rebuiltMemories: readModel.memories,
+    });
+    assertWorkspaceUsable(assertUsable);
+    return {
+      ok: true,
+      snapshot: snapshotFrom(metadata, index),
+    };
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_OPEN_FAILED',
+      'Workspace snapshot could not be read',
+      'previous-file-preserved'
+    );
+  }
 }
 
 async function readWorkspaceJsonNoFollow<T>(

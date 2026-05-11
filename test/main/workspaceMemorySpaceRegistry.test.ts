@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -49,6 +49,150 @@ test('workspace memory space registry persists memorySpaces across registry inst
     JSON.stringify(await secondRegistry.listMemorySpaces()).includes('/Users/example'),
     false
   );
+});
+
+test('workspace memory space registry follows Finder-renamed memory space folders by workspaceId', async () => {
+  const parentPath = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-rename-'));
+  const originalRoot = path.join(parentPath, '旧空间');
+  const renamedRoot = path.join(parentPath, '灵感空间');
+  await mkdir(path.join(originalRoot, '.reo'), { recursive: true });
+  await writeFile(
+    path.join(originalRoot, '.reo', 'workspace.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        workspaceId: 'ws_runtime_validated',
+        title: '旧空间',
+        description: 'Final runtime validation workspace.',
+        createdAt: '2026-05-08T07:47:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const registryPath = path.join(parentPath, 'registry.json');
+  const registry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:48:00.000Z',
+  });
+  await registry.upsertMemorySpace({
+    canonicalRoot: originalRoot,
+    snapshot,
+  });
+
+  await rename(originalRoot, renamedRoot);
+
+  assert.deepEqual(await registry.listMemorySpaces(), [
+    {
+      workspaceId: 'ws_runtime_validated',
+      title: '灵感空间',
+      description: 'Final runtime validation workspace.',
+      addedAt: '2026-05-08T07:48:00.000Z',
+      lastOpenedAt: '2026-05-08T07:48:00.000Z',
+    },
+  ]);
+  assert.equal(
+    await registry.resolveMemorySpaceRoot('ws_runtime_validated'),
+    await realpath(renamedRoot)
+  );
+  assert.equal(
+    JSON.parse(await readFile(path.join(renamedRoot, '.reo', 'workspace.json'), 'utf8')).title,
+    '旧空间'
+  );
+  assert.equal(
+    JSON.parse(await readFile(registryPath, 'utf8')).memorySpaces[0]?.rootPath,
+    originalRoot
+  );
+});
+
+test('workspace memory space registry updates title projections without changing recency order', async () => {
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-title-update-')),
+    'registry.json'
+  );
+  let currentTime = '2026-05-08T07:48:00.000Z';
+  const registry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => currentTime,
+  });
+
+  await registry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Runtime validated memory',
+    snapshot,
+  });
+  currentTime = '2026-05-08T07:49:00.000Z';
+  await registry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Product research',
+    snapshot: {
+      ...snapshot,
+      workspaceId: 'ws_product_research',
+      title: 'Product research',
+      description: '',
+    },
+  });
+  currentTime = '2026-05-08T07:50:00.000Z';
+
+  await registry.updateMemorySpaceSnapshot({
+    canonicalRoot: '/Users/example/Runtime validated memory',
+    snapshot: {
+      ...snapshot,
+      title: 'Renamed memory space',
+      description: 'Renamed description',
+    },
+  });
+
+  assert.deepEqual(await registry.listMemorySpaces(), [
+    {
+      workspaceId: 'ws_product_research',
+      title: 'Product research',
+      description: '',
+      addedAt: '2026-05-08T07:49:00.000Z',
+      lastOpenedAt: '2026-05-08T07:49:00.000Z',
+    },
+    {
+      workspaceId: 'ws_runtime_validated',
+      title: 'Renamed memory space',
+      description: 'Renamed description',
+      addedAt: '2026-05-08T07:48:00.000Z',
+      lastOpenedAt: '2026-05-08T07:48:00.000Z',
+    },
+  ]);
+});
+
+test('workspace memory space registry keeps stale entries when Finder rename scan cannot read the parent', async () => {
+  const parentPath = await mkdtemp(
+    path.join(os.tmpdir(), 'reo-memory-space-registry-rename-unreadable-')
+  );
+  const registryDirectory = await mkdtemp(
+    path.join(os.tmpdir(), 'reo-memory-space-registry-unreadable-parent-registry-')
+  );
+  const originalRoot = path.join(parentPath, '旧空间');
+  const registryPath = path.join(registryDirectory, 'registry.json');
+  const registry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:48:00.000Z',
+  });
+  await registry.upsertMemorySpace({
+    canonicalRoot: originalRoot,
+    snapshot,
+  });
+
+  await chmod(parentPath, 0o000);
+  try {
+    assert.deepEqual(await registry.listMemorySpaces(), [
+      {
+        workspaceId: 'ws_runtime_validated',
+        title: 'Runtime validated memory',
+        description: 'Final runtime validation workspace.',
+        addedAt: '2026-05-08T07:48:00.000Z',
+        lastOpenedAt: '2026-05-08T07:48:00.000Z',
+      },
+    ]);
+    assert.equal(await registry.resolveMemorySpaceRoot('ws_runtime_validated'), originalRoot);
+  } finally {
+    await chmod(parentPath, 0o700);
+  }
 });
 
 test('workspace memory space registry serializes concurrent upserts without dropping memorySpaces', async () => {

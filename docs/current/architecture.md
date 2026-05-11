@@ -25,7 +25,7 @@ docs/
 - 当前 preload API 是 `window.reoWorkspace`。
 - 当前 IPC surface 是显式 workspace channels。
 - 当前 workspace IPC channel names、request/response Zod schemas、bridge contract types 和 schema-free value helpers 位于 `src/workspace-contract`；renderer/preload 只消费类型、窄 bridge 或 schema-free helpers，main process 拥有 schema 校验。
-- 当前 main process 拥有 workspace 目录选择、初始化、打开、关闭、Memory 容器创建、Memory 标题更新、recording draft 写入和 audio chunk 读取能力。
+- 当前 main process 拥有 workspace 目录选择、初始化、打开、关闭、记忆空间标题更新、Memory 容器创建、Memory 标题更新、recording draft 写入和 audio chunk 读取能力。
 - 当前没有 database layer。
 - 当前没有 auth layer。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
@@ -56,7 +56,7 @@ docs/
 
 Reo 的记忆空间是用户选择的本地文件夹。记忆空间 folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 
-记忆空间 root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock` 与同目录 `.reo/workspace.lock.lock`，并绑定当前记忆空间 root 和 `.reo` directory identity；lock directory owner 写入当前 main process pid 和进程启动指纹，owner 进程已退出或启动指纹不匹配的 stale lock 只允许在重新获取 lock 时被替换。用户内容使用普通文件保存：memory 元数据位于 `memories/<memoryId>/memory.json`，finalized audio segment 位于 `memories/<memoryId>/segments/<segmentId>/`，draft audio segment 位于 `.reo/drafts/segments/<segmentId>/`。Memory title 是可变显示 metadata，不参与 durable directory identity；`memoryId` 是 `memories/<memoryId>/` 的稳定文件身份。
+记忆空间 root 使用 `AGENTS.md` 作为 Codex CLI 和未来 Reo 内置 AI 的协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，single-writer lock 使用 `.reo/workspace.lock` 与同目录 `.reo/workspace.lock.lock`，并绑定当前记忆空间 root 和 `.reo` directory identity；lock directory owner 写入当前 main process pid 和进程启动指纹，owner 进程已退出或启动指纹不匹配的 stale lock 只允许在重新获取 lock 时被替换。用户内容使用普通文件保存：memory 元数据位于 `memories/<memoryId>/memory.json`，finalized audio segment 位于 `memories/<memoryId>/segments/<segmentId>/`，draft audio segment 位于 `.reo/drafts/segments/<segmentId>/`。Memory title 是可变显示 metadata，不参与 durable directory identity；`memoryId` 是 `memories/<memoryId>/` 的稳定文件身份。记忆空间 title 真源是 `.reo/workspace.json` 和当前 root folder 名称：文件管理器把记忆空间 folder 改名后，registry 只按同一个 `workspaceId` 在原父目录内做有界重新定位并返回投影；写回 `.reo/workspace.json` 必须发生在后续 open 已获取 single-writer lock 且确认 workspaceId 匹配之后。合法 JSON 文件外部编辑属于当前文件真源模型；Reo 通过打开、列表协调或 active snapshot refresh 从文件重新投影 UI。
 
 当前没有 DB-backed persistence layer。
 

@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "listClassName": "flex min-w-0 items-center break-words text-ui-md leading-ui-md text-gravel flex-nowrap gap-4",
+  "separatorClassName": "flex shrink-0 items-center text-slate",
+  "workspaceButton": {
+    "left": 268,
+    "top": 1.203125,
+    "right": 391.3671875,
+    "bottom": 34.796875,
+    "width": 123.3671875,
+    "height": 33.59375,
+    "centerX": 329.68359375,
+    "centerY": 18
+  },
+  "memoryButton": {
+    "left": 403.3671875,
+    "top": 1.203125,
+    "right": 471.3671875,
+    "bottom": 34.796875,
+    "width": 68,
+    "height": 33.59375,
+    "centerX": 437.3671875,
+    "centerY": 18
+  },
+  "dot": {
+    "left": 395.3671875,
+    "top": 16,
+    "right": 399.3671875,
+    "bottom": 20,
+    "width": 4,
+    "height": 4,
+    "centerX": 397.3671875,
+    "centerY": 18
+  },
+  "workspaceIcon": {
+    "left": 371.3671875,
+    "top": 10,
+    "right": 387.3671875,
+    "bottom": 26,
+    "width": 16,
+    "height": 16,
+    "centerX": 379.3671875,
+    "centerY": 18
+  },
+  "memoryIcon": {
+    "left": 451.3671875,
+    "top": 10,
+    "right": 467.3671875,
+    "bottom": 26,
+    "width": 16,
+    "height": 16,
+    "centerX": 459.3671875,
+    "centerY": 18
+  },
+  "edgeGapLeft": 4,
+  "edgeGapRight": 4,
+  "totalBetweenButtons": 12,
+  "checks": {
+    "hasBreadcrumb": true,
+    "listUsesCompactGap": true,
+    "separatorHasNoSvg": true,
+    "separatorHasNoPaddingClass": true,
+    "dotIs4px": true,
+    "workspaceIconIs16px": true,
+    "memoryIconIs16px": true,
+    "compactEdgeGaps": true
+  },
+  "screenshot": "docs/specs/2026-05-10-0443-memory-normal-page-design/artifacts/titlebar-breadcrumb-runtime-2026-05-11T0628.png"
+}

@@ -9,7 +9,9 @@ const workspaceBridgeKeys = [
   'openWorkspace',
   'openMemorySpace',
   'removeMemorySpace',
+  'updateMemorySpaceTitle',
   'closeWorkspace',
+  'readWorkspaceSnapshot',
   'createMemory',
   'deleteMemory',
   'restoreDeletedMemory',
@@ -57,6 +59,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   await bridge.listMemorySpaces();
   await bridge.openMemorySpace({ workspaceId: 'ws_1' });
   await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
+  await bridge.updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
+  await bridge.readWorkspaceSnapshot({ workspaceHandle: 'wh_1' });
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
   await bridge.restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
@@ -119,6 +123,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:listMemorySpaces',
     'workspace:openMemorySpace',
     'workspace:removeMemorySpace',
+    'workspace:updateMemorySpaceTitle',
+    'workspace:readWorkspaceSnapshot',
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
@@ -144,6 +150,7 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
   });
 
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
+  await bridge.updateMemorySpaceTitle({ workspaceHandle: 'wh_1', title: '测试工作区1' });
   await bridge.updateMemoryTitle({
     workspaceHandle: 'wh_1',
     memoryId: 'mem_1',
@@ -162,6 +169,10 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     {
       channel: 'workspace:createMemory',
       payload: { workspaceHandle: 'wh_1', title: '产品灵感与思考' },
+    },
+    {
+      channel: 'workspace:updateMemorySpaceTitle',
+      payload: { workspaceHandle: 'wh_1', title: '测试工作区1' },
     },
     {
       channel: 'workspace:updateMemoryTitle',

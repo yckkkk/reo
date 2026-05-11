@@ -1,0 +1,52 @@
+{
+  "breadcrumbText": "测试工作区1灵感",
+  "breadcrumbSvgCount": 0,
+  "breadcrumbListClass": "flex min-w-0 items-center break-words text-ui-md leading-ui-md text-gravel flex-nowrap gap-4",
+  "separatorClass": "flex shrink-0 items-center text-slate",
+  "separatorRect": {
+    "x": 367.3671875,
+    "y": 16,
+    "width": 4,
+    "height": 4,
+    "left": 367.3671875,
+    "right": 371.3671875
+  },
+  "separatorPaddingLeft": "0px",
+  "separatorPaddingRight": "0px",
+  "dotRect": {
+    "x": 367.3671875,
+    "y": 16,
+    "width": 4,
+    "height": 4,
+    "left": 367.3671875,
+    "right": 371.3671875
+  },
+  "triggerTexts": ["测试工作区1", "灵感"],
+  "triggerRects": [
+    {
+      "x": 268,
+      "y": 1.203125,
+      "width": 95.3671875,
+      "height": 33.59375,
+      "left": 268,
+      "right": 363.3671875
+    },
+    {
+      "x": 375.3671875,
+      "y": 1.203125,
+      "width": 40,
+      "height": 33.59375,
+      "left": 375.3671875,
+      "right": 415.3671875
+    }
+  ],
+  "triggerGap": 12,
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "windowScroll": {
+    "x": 0,
+    "y": 0
+  }
+}

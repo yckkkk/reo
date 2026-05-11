@@ -26,8 +26,20 @@ export function removeMemorySpace(
   return window.reoWorkspace.removeMemorySpace(payload);
 }
 
+export function updateMemorySpaceTitle(
+  payload: Parameters<Window['reoWorkspace']['updateMemorySpaceTitle']>[0]
+) {
+  return window.reoWorkspace.updateMemorySpaceTitle(payload);
+}
+
 export function closeWorkspace(payload: Parameters<Window['reoWorkspace']['closeWorkspace']>[0]) {
   return window.reoWorkspace.closeWorkspace(payload);
+}
+
+export function readWorkspaceSnapshot(
+  payload: Parameters<Window['reoWorkspace']['readWorkspaceSnapshot']>[0]
+) {
+  return window.reoWorkspace.readWorkspaceSnapshot(payload);
 }
 
 export function createMemory(payload: Parameters<Window['reoWorkspace']['createMemory']>[0]) {

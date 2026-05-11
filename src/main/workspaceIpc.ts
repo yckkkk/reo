@@ -30,12 +30,14 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
@@ -64,6 +66,8 @@ import {
   workspaceReadFinalizedAudioSegmentAttachmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadWorkspaceSnapshotRequestSchema,
+  workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRemoveMemorySpaceRequestSchema,
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceRecordingAppendRequestSchema,
@@ -90,6 +94,9 @@ import {
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
+  workspaceUpdateActiveMemorySpaceTitleRequestSchema,
+  workspaceUpdateMemorySpaceTitleRequestSchema,
+  workspaceUpdateMemorySpaceTitleResponseSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
   type WorkspaceInitializeResponse,
@@ -148,9 +155,12 @@ import {
   createWorkspaceInitializeTargetInParent,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
+  readWorkspaceSnapshotFromFileTruth,
   removeLockOnlyReoDirectory,
+  updateWorkspaceTitleFromFileTruth,
   validateEmptyWorkspaceOpenCanonicalTargetAfterLock,
   validateWorkspaceOpenTarget,
+  validateWorkspaceOpenTargetWorkspaceId,
   type WorkspaceInitializeTarget,
 } from './workspaceFiles.js';
 import {
@@ -259,6 +269,13 @@ type HandleListWorkspaceMemorySpacesOptions = WorkspaceIpcBaseOptions & {
 type HandleRemoveWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+};
+
+type HandleUpdateMemorySpaceTitleOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly handleStore?: WorkspaceHandleStore;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
 };
 
@@ -443,6 +460,181 @@ export async function handleRemoveMemorySpaceForTest(
   options: HandleRemoveWorkspaceMemorySpaceOptions
 ): Promise<z.infer<typeof workspaceRemoveMemorySpaceResponseSchema>> {
   return handleRemoveMemorySpaceCore(options);
+}
+
+async function persistMemorySpaceTitleUpdate({
+  canonicalRoot,
+  workspaceId,
+  title,
+  memorySpaceRegistry,
+  assertWorkspaceUsable,
+  registryProjection = 'required',
+}: {
+  readonly canonicalRoot: string;
+  readonly workspaceId: string;
+  readonly title: string;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly assertWorkspaceUsable: () => WorkspaceErrorEnvelope | { readonly ok: true };
+  readonly registryProjection?: 'required' | 'best-effort';
+}): Promise<z.infer<typeof workspaceUpdateMemorySpaceTitleResponseSchema>> {
+  const updated = await updateWorkspaceTitleFromFileTruth({
+    rootPath: canonicalRoot,
+    workspaceId,
+    title,
+    assertWorkspaceUsable,
+  });
+  if (!updated.ok) {
+    return updated;
+  }
+
+  try {
+    if (registryProjection === 'best-effort') {
+      await memorySpaceRegistry.upsertMemorySpace({
+        canonicalRoot,
+        snapshot: updated.snapshot,
+      });
+    } else {
+      await memorySpaceRegistry.updateMemorySpaceSnapshot({
+        canonicalRoot,
+        snapshot: updated.snapshot,
+      });
+    }
+  } catch {
+    if (registryProjection === 'required') {
+      return workspaceMemorySpaceRegistryWriteError();
+    }
+  }
+
+  return workspaceUpdateMemorySpaceTitleResponseSchema.parse({
+    ok: true,
+    value: updated.snapshot,
+  });
+}
+
+async function updateRegisteredMemorySpaceTitle({
+  request,
+  memorySpaceRegistry,
+}: {
+  readonly request: Extract<
+    z.infer<typeof workspaceUpdateMemorySpaceTitleRequestSchema>,
+    { readonly workspaceId: string }
+  >;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+}): Promise<z.infer<typeof workspaceUpdateMemorySpaceTitleResponseSchema>> {
+  let rootPath: string | null;
+  try {
+    rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(request.workspaceId);
+  } catch (error) {
+    return workspaceMemorySpaceRegistryReadError(error);
+  }
+
+  if (!rootPath) {
+    return workspaceError(
+      'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+      'Memory space registry entry was not found'
+    );
+  }
+
+  const target = await validateWorkspaceOpenTarget(rootPath);
+  if (!target.ok) {
+    return target;
+  }
+  const lock = await acquireWorkspaceLock({ canonicalRoot: target.canonicalRoot });
+  if (!lock.ok) {
+    return lock;
+  }
+
+  const assertWorkspaceUsable = () =>
+    lock.lock.isUsable()
+      ? { ok: true as const }
+      : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+
+  try {
+    return await persistMemorySpaceTitleUpdate({
+      canonicalRoot: target.canonicalRoot,
+      workspaceId: request.workspaceId,
+      title: request.title,
+      memorySpaceRegistry,
+      assertWorkspaceUsable,
+    });
+  } finally {
+    if (lock.lock.isHeld()) {
+      await lock.lock.release().catch(() => {});
+    }
+  }
+}
+
+async function handleUpdateMemorySpaceTitleCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+}: HandleUpdateMemorySpaceTitleOptions): Promise<
+  z.infer<typeof workspaceUpdateMemorySpaceTitleResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceUpdateMemorySpaceTitleRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'updateMemorySpaceTitle request is invalid'
+    );
+  }
+
+  if ('workspaceHandle' in request.data) {
+    return withWorkspaceHandleRequest({
+      event,
+      input,
+      channel: WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      schema: workspaceUpdateActiveMemorySpaceTitleRequestSchema,
+      invalidMessage: 'updateMemorySpaceTitle request is invalid',
+      run: (activeRequest, handle, assertUsable) =>
+        withUsableWorkspaceHandle(assertUsable, () =>
+          persistMemorySpaceTitleUpdate({
+            canonicalRoot: handle.canonicalRoot,
+            workspaceId: handle.workspaceId,
+            title: activeRequest.title,
+            memorySpaceRegistry,
+            assertWorkspaceUsable: assertUsable,
+            registryProjection: 'best-effort',
+          })
+        ),
+    });
+  }
+
+  return updateRegisteredMemorySpaceTitle({
+    request: request.data,
+    memorySpaceRegistry,
+  });
+}
+
+export async function handleUpdateMemorySpaceTitle(
+  options: HandleUpdateMemorySpaceTitleOptions
+): Promise<z.infer<typeof workspaceUpdateMemorySpaceTitleResponseSchema>> {
+  return handleUpdateMemorySpaceTitleCore(options);
+}
+
+export async function handleUpdateMemorySpaceTitleForTest(
+  options: HandleUpdateMemorySpaceTitleOptions
+): Promise<z.infer<typeof workspaceUpdateMemorySpaceTitleResponseSchema>> {
+  return handleUpdateMemorySpaceTitleCore(options);
 }
 
 export async function closeAllWorkspaceHandles(): Promise<void> {
@@ -927,6 +1119,8 @@ async function openWorkspaceRoot({
   handleStore,
   createHandle,
   memorySpaceRegistry,
+  expectedWorkspaceId,
+  expectedWorkspaceTitle,
   afterWorkspaceLockAcquiredForTest,
 }: {
   readonly canonicalRoot: string;
@@ -934,6 +1128,8 @@ async function openWorkspaceRoot({
   readonly handleStore: WorkspaceHandleStore;
   readonly createHandle?: (() => string) | undefined;
   readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly expectedWorkspaceId?: string | undefined;
+  readonly expectedWorkspaceTitle?: string | undefined;
   readonly afterWorkspaceLockAcquiredForTest?: (() => MaybePromise<void>) | undefined;
 }): Promise<WorkspaceInitializeResponse> {
   const lock = await acquireWorkspaceLock({ canonicalRoot });
@@ -944,6 +1140,16 @@ async function openWorkspaceRoot({
   if (!lock.lock.isUsable()) {
     await releaseWorkspaceLockAfterFailure(lock);
     return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
+  if (expectedWorkspaceId !== undefined) {
+    const target = await validateWorkspaceOpenTargetWorkspaceId({
+      rootPath: canonicalRoot,
+      workspaceId: expectedWorkspaceId,
+    });
+    if (!target.ok) {
+      await releaseWorkspaceLockAfterFailure(lock);
+      return target;
+    }
   }
 
   let opened: Awaited<ReturnType<typeof openWorkspaceFiles>>;
@@ -963,6 +1169,31 @@ async function openWorkspaceRoot({
     await releaseWorkspaceLockAfterFailure(lock);
     return opened;
   }
+  let snapshot = opened.snapshot;
+  if (expectedWorkspaceId !== undefined && snapshot.workspaceId !== expectedWorkspaceId) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Workspace metadata is invalid',
+      'previous-file-preserved'
+    );
+  }
+  if (expectedWorkspaceTitle !== undefined && snapshot.title !== expectedWorkspaceTitle) {
+    const updated = await updateWorkspaceTitleFromFileTruth({
+      rootPath: canonicalRoot,
+      workspaceId: snapshot.workspaceId,
+      title: expectedWorkspaceTitle,
+      assertWorkspaceUsable: () =>
+        lock.lock.isUsable()
+          ? { ok: true as const }
+          : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
+    });
+    if (!updated.ok) {
+      await releaseWorkspaceLockAfterFailure(lock);
+      return updated;
+    }
+    snapshot = updated.snapshot;
+  }
   if (!lock.lock.isUsable()) {
     await releaseWorkspaceLockAfterFailure(lock);
     return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
@@ -970,7 +1201,7 @@ async function openWorkspaceRoot({
 
   return persistAndRegisterWorkspaceSession({
     canonicalRoot,
-    snapshot: opened.snapshot,
+    snapshot,
     trustedSender,
     lock,
     handleStore,
@@ -1092,7 +1323,11 @@ async function handleOpenWorkspaceMemorySpaceCore({
   }
 
   let rootPath: string | null;
+  let registryTitle: string | undefined;
   try {
+    registryTitle = (await memorySpaceRegistry.listMemorySpaces()).find(
+      (memorySpace) => memorySpace.workspaceId === request.data.workspaceId
+    )?.title;
     rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(request.data.workspaceId);
   } catch (error) {
     return workspaceMemorySpaceRegistryReadError(error);
@@ -1116,6 +1351,8 @@ async function handleOpenWorkspaceMemorySpaceCore({
     handleStore,
     createHandle,
     memorySpaceRegistry,
+    expectedWorkspaceId: request.data.workspaceId,
+    expectedWorkspaceTitle: registryTitle,
     afterWorkspaceLockAcquiredForTest,
   });
 }
@@ -1611,6 +1848,46 @@ function handleReadMemoryDetailCore(
   });
 }
 
+function handleReadWorkspaceSnapshotCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadWorkspaceSnapshotResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadWorkspaceSnapshotRequestSchema,
+    invalidMessage: 'readWorkspaceSnapshot request is invalid',
+    run: (_request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await readWorkspaceSnapshotFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadWorkspaceSnapshotResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: result.snapshot,
+              }
+            : result
+        );
+      }),
+  });
+}
+
+export async function handleReadWorkspaceSnapshot(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadWorkspaceSnapshotResponseSchema>> {
+  return handleReadWorkspaceSnapshotCore(options);
+}
+
+export async function handleReadWorkspaceSnapshotForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadWorkspaceSnapshotResponseSchema>> {
+  return handleReadWorkspaceSnapshotCore(options);
+}
+
 export async function handleReadMemoryDetail(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
@@ -1947,6 +2224,17 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
+  electronMain.ipcMain.handle(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
+    handleUpdateMemorySpaceTitle({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
+    })
+  );
   electronMain.ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
     handleBeginMicrophoneIntent({
       event,
@@ -2125,6 +2413,16 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       recordingTranscriptionSessions,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, (event, input) =>
+    handleReadWorkspaceSnapshot({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
     })
   );
 

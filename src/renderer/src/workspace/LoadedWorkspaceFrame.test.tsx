@@ -389,10 +389,8 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
-    expect(
-      within(studio).getByRole('heading', { name: 'My seventh birthday' })
-    ).toBeInTheDocument();
-    expect(within(studio).getByText('0 个片段 · 00:00')).toBeInTheDocument();
+    expect(within(studio).queryByRole('heading', { name: 'My seventh birthday' })).toBeNull();
+    expect(within(studio).queryByText('0 个片段 · 00:00')).toBeNull();
     expect(within(studio).getByText('这条记忆还没有片段')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '选择记忆 My seventh birthday' })).toHaveAttribute(
       'aria-current',
@@ -414,10 +412,8 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(await screen.findByRole('region', { name: 'Memory Studio' })).toBeInTheDocument();
     const studio = screen.getByRole('region', { name: 'Memory Studio' });
-    expect(
-      within(studio).getByRole('heading', { name: 'My seventh birthday' })
-    ).toBeInTheDocument();
-    expect(within(studio).getByText('2 个片段 · 02:05')).toBeInTheDocument();
+    expect(within(studio).queryByRole('heading', { name: 'My seventh birthday' })).toBeNull();
+    expect(within(studio).queryByText('2 个片段 · 02:05')).toBeNull();
     const content = within(studio).getByRole('region', { name: '片段内容' });
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday candles' })

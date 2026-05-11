@@ -96,6 +96,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     openMemorySpace: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
@@ -220,6 +221,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { discarded: true as const },
     })),
+    updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,

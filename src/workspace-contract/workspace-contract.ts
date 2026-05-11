@@ -53,6 +53,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
   'ERR_WORKSPACE_INIT_FAILED',
   'ERR_WORKSPACE_OPEN_FAILED',
+  'ERR_WORKSPACE_UPDATE_FAILED',
   'ERR_RECORDING_INVALID_ID',
   'ERR_RECORDING_NOT_FOUND',
   'ERR_RECORDING_SEQUENCE',
@@ -234,6 +235,14 @@ export const workspaceRemoveMemorySpaceResponseSchema = z.discriminatedUnion('ok
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceUpdateMemorySpaceTitleResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: workspaceSnapshotSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceClearMicrophoneIntentResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -318,6 +327,34 @@ export const workspaceHandleRequestSchema = z.strictObject({
 });
 
 const workspaceHandleSchema = workspaceHandleRequestSchema;
+export const workspaceReadWorkspaceSnapshotRequestSchema = workspaceHandleSchema;
+
+export const workspaceReadWorkspaceSnapshotResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: workspaceSnapshotSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceUpdateActiveMemorySpaceTitleRequestSchema = workspaceHandleSchema
+  .extend({
+    title: workspaceTitleTextSchema,
+  })
+  .strict();
+
+export const workspaceUpdateRegisteredMemorySpaceTitleRequestSchema =
+  workspaceMemorySpaceIdRequestSchema
+    .extend({
+      title: workspaceTitleTextSchema,
+    })
+    .strict();
+
+export const workspaceUpdateMemorySpaceTitleRequestSchema = z.union([
+  workspaceUpdateActiveMemorySpaceTitleRequestSchema,
+  workspaceUpdateRegisteredMemorySpaceTitleRequestSchema,
+]);
+
 export const workspaceMemoryTitleSchema = workspaceTitleTextSchema;
 export const workspaceRecordingTitleSchema = workspaceTitleTextSchema;
 
@@ -760,13 +797,25 @@ export type WorkspaceInitializeRequest = z.infer<typeof workspaceInitializeReque
 export type WorkspaceInitializeResponse = z.infer<typeof workspaceInitializeResponseSchema>;
 export type WorkspaceOpenRequest = z.infer<typeof workspaceOpenRequestSchema>;
 export type WorkspaceMemorySpaceIdRequest = z.infer<typeof workspaceMemorySpaceIdRequestSchema>;
+export type WorkspaceUpdateMemorySpaceTitleRequest = z.infer<
+  typeof workspaceUpdateMemorySpaceTitleRequestSchema
+>;
 export type WorkspaceCloseRequest = z.infer<typeof workspaceCloseRequestSchema>;
+export type WorkspaceReadWorkspaceSnapshotRequest = z.infer<
+  typeof workspaceReadWorkspaceSnapshotRequestSchema
+>;
 export type WorkspaceListMemorySpacesResponse = z.infer<
   typeof workspaceListMemorySpacesResponseSchema
 >;
 export type WorkspaceCloseResponse = z.infer<typeof workspaceCloseResponseSchema>;
+export type WorkspaceReadWorkspaceSnapshotResponse = z.infer<
+  typeof workspaceReadWorkspaceSnapshotResponseSchema
+>;
 export type WorkspaceRemoveMemorySpaceResponse = z.infer<
   typeof workspaceRemoveMemorySpaceResponseSchema
+>;
+export type WorkspaceUpdateMemorySpaceTitleResponse = z.infer<
+  typeof workspaceUpdateMemorySpaceTitleResponseSchema
 >;
 export type WorkspaceClearMicrophoneIntentResponse = z.infer<
   typeof workspaceClearMicrophoneIntentResponseSchema

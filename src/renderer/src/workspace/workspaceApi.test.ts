@@ -21,10 +21,12 @@ import {
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentAttachment,
   readMemoryDetail,
+  readWorkspaceSnapshot,
   readRecordingDraftAudio,
   removeMemorySpace,
   restoreDeletedMemory,
   saveTranscript,
+  updateMemorySpaceTitle,
   updateMemoryTitle,
   appendSegmentAttachmentRecordingAudioChunk,
 } from './workspaceApi';
@@ -38,6 +40,7 @@ describe('workspace renderer API wrapper', () => {
     openMemorySpace: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
@@ -54,6 +57,7 @@ describe('workspace renderer API wrapper', () => {
     finalizeSegmentAttachmentRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
     discardSegmentAttachmentRecordingDraft: vi.fn(),
+    updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
     saveTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
@@ -98,6 +102,15 @@ describe('workspace renderer API wrapper', () => {
       value: { removed: true },
     });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '记忆',
+        description: '',
+        memories: [],
+      },
+    });
     reoWorkspace.createMemory.mockResolvedValue({
       ok: true,
       value: {
@@ -333,7 +346,9 @@ describe('workspace renderer API wrapper', () => {
     await openWorkspace({ selectionToken: 'selection-token-2' });
     await openMemorySpace({ workspaceId: 'ws_1' });
     await removeMemorySpace({ workspaceId: 'ws_1' });
+    await updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
     await closeWorkspace({ workspaceHandle: 'wh_1' });
+    await readWorkspaceSnapshot({ workspaceHandle: 'wh_1' });
     await createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
     await deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
     await restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
@@ -435,6 +450,13 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.listMemorySpaces).toHaveBeenCalledTimes(1);
     expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+    expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      title: '测试工作区1',
+    });
+    expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+    });
     expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       title: '产品灵感与思考',

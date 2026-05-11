@@ -27,6 +27,8 @@ import type {
   WorkspaceReadFinalizedAudioSegmentAttachmentResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
+  WorkspaceReadWorkspaceSnapshotRequest,
+  WorkspaceReadWorkspaceSnapshotResponse,
   WorkspaceRestoreDeletedMemoryRequest,
   WorkspaceRestoreDeletedMemoryResponse,
   WorkspaceRecordingAppendRequest,
@@ -49,6 +51,8 @@ import type {
   WorkspaceRecordingMarkdownSaveRequest,
   WorkspaceRecordingMarkdownSaveResponse,
   WorkspaceRemoveMemorySpaceResponse,
+  WorkspaceUpdateMemorySpaceTitleRequest,
+  WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
 } from './workspace-contract.js';
@@ -66,7 +70,13 @@ export interface ReoWorkspaceBridge {
   readonly removeMemorySpace: (
     payload: WorkspaceMemorySpaceIdRequest
   ) => Promise<WorkspaceRemoveMemorySpaceResponse>;
+  readonly updateMemorySpaceTitle: (
+    payload: WorkspaceUpdateMemorySpaceTitleRequest
+  ) => Promise<WorkspaceUpdateMemorySpaceTitleResponse>;
   readonly closeWorkspace: (payload: WorkspaceCloseRequest) => Promise<WorkspaceCloseResponse>;
+  readonly readWorkspaceSnapshot: (
+    payload: WorkspaceReadWorkspaceSnapshotRequest
+  ) => Promise<WorkspaceReadWorkspaceSnapshotResponse>;
   readonly createMemory: (
     payload: WorkspaceCreateMemoryRequest
   ) => Promise<WorkspaceCreateMemoryResponse>;

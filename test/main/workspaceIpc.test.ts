@@ -31,6 +31,7 @@ import {
   handleListWorkspaceMemorySpacesForTest,
   handleOpenWorkspace,
   handleOpenWorkspaceMemorySpaceForTest,
+  handleReadWorkspaceSnapshotForTest,
   handleReadFinalizedAudioSegmentForTest,
   handleReadFinalizedAudioSegmentAttachmentForTest,
   handleReadMemoryDetailForTest,
@@ -38,6 +39,7 @@ import {
   handleRemoveMemorySpaceForTest,
   handleRestoreDeletedMemoryForTest,
   sendRecordingTranscriptionEventForTest,
+  handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
 } from '../../src/main/workspaceIpc.js';
 import { appendSegmentAttachmentRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
@@ -1382,6 +1384,269 @@ test('updateMemoryTitle updates only the memory container through file truth', a
   );
 });
 
+test('updateMemorySpaceTitle updates workspace file truth and registry projection', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-workspace-title-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: 'Private notes',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const registryPath = path.join(rootPath, 'registry.json');
+  let registryNow = '2026-05-08T14:39:00.000Z';
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => registryNow,
+  });
+  await memorySpaceRegistry.upsertMemorySpace({
+    canonicalRoot: rootPath,
+    snapshot: {
+      workspaceId: 'ws_ipc',
+      title: 'IPC 记忆',
+      description: 'Private notes',
+      memories: [],
+    },
+  });
+  registryNow = '2026-05-08T14:41:00.000Z';
+  await memorySpaceRegistry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Recently opened',
+    snapshot: {
+      workspaceId: 'ws_recent',
+      title: '最近打开',
+      description: '',
+      memories: [],
+    },
+  });
+  registryNow = '2026-05-08T14:42:00.000Z';
+
+  const inactiveResult = await handleUpdateMemorySpaceTitleForTest({
+    event,
+    input: {
+      workspaceId: 'ws_ipc',
+      title: '测试工作区1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    memorySpaceRegistry,
+  });
+
+  assert.equal(inactiveResult.ok, true);
+  if (inactiveResult.ok) {
+    assert.deepEqual(inactiveResult.value, {
+      workspaceId: 'ws_ipc',
+      title: '测试工作区1',
+      description: 'Private notes',
+      memories: [],
+    });
+    assert.equal('rootPath' in inactiveResult.value, false);
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(rootPath, '.reo', 'workspace.json'), 'utf8')).title,
+    '测试工作区1'
+  );
+  assert.deepEqual(await memorySpaceRegistry.listMemorySpaces(), [
+    {
+      workspaceId: 'ws_recent',
+      title: '最近打开',
+      description: '',
+      addedAt: '2026-05-08T14:41:00.000Z',
+      lastOpenedAt: '2026-05-08T14:41:00.000Z',
+    },
+    {
+      workspaceId: 'ws_ipc',
+      title: '测试工作区1',
+      description: 'Private notes',
+      addedAt: '2026-05-08T14:39:00.000Z',
+      lastOpenedAt: '2026-05-08T14:39:00.000Z',
+    },
+  ]);
+
+  const activeResult = await handleUpdateMemorySpaceTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: '测试工作区2',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createRegisteredHandleStore(rootPath),
+    memorySpaceRegistry,
+  });
+
+  assert.equal(activeResult.ok, true);
+  if (activeResult.ok) {
+    assert.equal(activeResult.value.title, '测试工作区2');
+    assert.equal('rootPath' in activeResult.value, false);
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(rootPath, '.reo', 'workspace.json'), 'utf8')).title,
+    '测试工作区2'
+  );
+});
+
+test('updateMemorySpaceTitle keeps active workspace rename when registry projection write fails', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-workspace-title-active-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: 'Private notes',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+
+  const result = await handleUpdateMemorySpaceTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: '灵感空间',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createRegisteredHandleStore(rootPath),
+    memorySpaceRegistry: {
+      listMemorySpaces: async () => [],
+      resolveMemorySpaceRoot: async () => null,
+      removeMemorySpace: async () => {},
+      updateMemorySpaceSnapshot: async () => {
+        throw new Error('registry projection is unavailable');
+      },
+      upsertMemorySpace: async () => {
+        throw new Error('registry projection is unavailable');
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.title, '灵感空间');
+    assert.equal('rootPath' in result.value, false);
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(rootPath, '.reo', 'workspace.json'), 'utf8')).title,
+    '灵感空间'
+  );
+});
+
+test('updateMemorySpaceTitle rejects untrusted senders before parsing payloads', async () => {
+  let payloadRead = false;
+  const hostileInput = {};
+  Object.defineProperty(hostileInput, 'workspaceId', {
+    enumerable: true,
+    get() {
+      payloadRead = true;
+      return 'ws_untrusted';
+    },
+  });
+
+  const result = await handleUpdateMemorySpaceTitleForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: hostileInput,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.equal(payloadRead, false);
+});
+
+test('readWorkspaceSnapshot reflects external workspace and memory JSON edits', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-snapshot-refresh-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 记忆',
+    description: 'Private notes',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc',
+    segmentId: 'seg_ipc',
+    title: '旧记忆',
+  });
+
+  await writeFile(
+    path.join(rootPath, '.reo', 'workspace.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        workspaceId: 'ws_ipc',
+        title: '外部空间',
+        description: 'Codex updated workspace metadata.',
+        createdAt: '2026-05-06T13:08:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+  await writeFile(
+    path.join(rootPath, 'memories', 'mem_ipc', 'memory.json'),
+    `${JSON.stringify(
+      {
+        memoryId: 'mem_ipc',
+        title: '外部记忆',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-08T14:42:00.000Z',
+        segmentIds: ['seg_ipc'],
+      },
+      null,
+      2
+    )}\n`
+  );
+  await writeFile(
+    path.join(rootPath, 'memories', 'mem_ipc', 'segments', 'seg_ipc', 'transcript.md'),
+    '外部转写内容\n'
+  );
+
+  const result = await handleReadWorkspaceSnapshotForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createRegisteredHandleStore(rootPath),
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.title, '外部空间');
+    assert.equal(result.value.description, 'Codex updated workspace metadata.');
+    assert.deepEqual(result.value.memories, [
+      {
+        memoryId: 'mem_ipc',
+        title: '外部记忆',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-08T14:42:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: true,
+        attachmentCount: 0,
+      },
+    ]);
+    assert.equal('rootPath' in result.value, false);
+    assert.equal('workspaceHandle' in result.value, false);
+  }
+});
+
 test('initializeWorkspace releases the lock when post-lock file writes throw', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-throw-'));
   const workspaceRoot = path.join(rootPath, '写入失败工作区');
@@ -1707,6 +1972,9 @@ test('listMemorySpaces returns an error envelope when the memory space registry 
       },
       resolveMemorySpaceRoot: async () => null,
       removeMemorySpace: async () => {},
+      updateMemorySpaceSnapshot: async () => {
+        throw new Error('unused');
+      },
       upsertMemorySpace: async () => {
         throw new Error('unused');
       },
@@ -1776,6 +2044,131 @@ test('openMemorySpace opens a persisted memory space without a selection token',
     });
     assert.equal('rootPath' in result.value, false);
   }
+});
+
+test('openMemorySpace persists a Finder-renamed memory space title after acquiring the lock', async () => {
+  const parentPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-finder-rename-'));
+  const originalRoot = path.join(parentPath, '旧空间');
+  const renamedRoot = path.join(parentPath, '灵感空间');
+  await mkdir(originalRoot, { recursive: true });
+  const registryPath = path.join(parentPath, 'registry.json');
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:49:00.000Z',
+  });
+  await initializeWorkspaceFiles({
+    rootPath: originalRoot,
+    title: '旧空间',
+    description: 'Final runtime validation workspace.',
+    createWorkspaceId: () => 'ws_runtime_validated',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+  await memorySpaceRegistry.upsertMemorySpace({
+    canonicalRoot: originalRoot,
+    snapshot: {
+      workspaceId: 'ws_runtime_validated',
+      title: '旧空间',
+      description: 'Final runtime validation workspace.',
+      memories: [],
+    },
+  });
+  await rename(originalRoot, renamedRoot);
+
+  const result = await handleOpenWorkspaceMemorySpaceForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    createHandle: () => 'wh_memory_space_finder_rename',
+    memorySpaceRegistry,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.snapshot.title, '灵感空间');
+    assert.equal('rootPath' in result.value, false);
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(renamedRoot, '.reo', 'workspace.json'), 'utf8')).title,
+    '灵感空间'
+  );
+  assert.deepEqual(await memorySpaceRegistry.listMemorySpaces(), [
+    {
+      workspaceId: 'ws_runtime_validated',
+      title: '灵感空间',
+      description: 'Final runtime validation workspace.',
+      addedAt: '2026-05-08T07:49:00.000Z',
+      lastOpenedAt: '2026-05-08T07:49:00.000Z',
+    },
+  ]);
+});
+
+test('openMemorySpace does not rewrite titles when a registry root now belongs to another workspace', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-stale-root-'));
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-stale-root-registry-')),
+    'registry.json'
+  );
+  const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => '2026-05-08T07:49:00.000Z',
+  });
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: '旧空间',
+    description: '',
+    createWorkspaceId: () => 'ws_runtime_validated',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+  await memorySpaceRegistry.upsertMemorySpace({
+    canonicalRoot: rootPath,
+    snapshot: {
+      workspaceId: 'ws_runtime_validated',
+      title: '旧空间',
+      description: '',
+      memories: [],
+    },
+  });
+  await writeFile(
+    path.join(rootPath, '.reo', 'workspace.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        workspaceId: 'ws_other_workspace',
+        title: '其他空间',
+        description: '',
+        createdAt: '2026-05-08T07:47:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+  const indexPath = path.join(rootPath, '.reo', 'index.json');
+  await rm(indexPath, { force: true });
+
+  const result = await handleOpenWorkspaceMemorySpaceForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    memorySpaceRegistry,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_METADATA_INVALID');
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(rootPath, '.reo', 'workspace.json'), 'utf8')).title,
+    '其他空间'
+  );
+  await assert.rejects(readFile(indexPath, 'utf8'), { code: 'ENOENT' });
 });
 
 test('openMemorySpace reports a missing persisted workspace folder', async () => {

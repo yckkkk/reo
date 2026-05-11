@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -17,39 +17,52 @@ import { FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/toaster';
 
-const memoryTitleFormSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, '请输入记忆名称')
-    .max(WORKSPACE_TITLE_MAX_LENGTH, `记忆名称最多 ${WORKSPACE_TITLE_MAX_LENGTH} 个字符`),
-});
-
-type MemoryTitleFormValues = z.infer<typeof memoryTitleFormSchema>;
+type MemoryTitleFormValues = {
+  readonly title: string;
+};
 
 type MemoryTitleDialogProps = {
   readonly description: string;
   readonly initialTitle?: string | undefined;
+  readonly fieldLabel?: string | undefined;
   readonly labelClassName?: string | undefined;
+  readonly maxLengthMessage?: string | undefined;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSubmitTitle: (title: string) => Promise<string | null>;
   readonly open: boolean;
   readonly placeholder?: string | undefined;
+  readonly requiredMessage?: string | undefined;
+  readonly saveErrorTitle?: string | undefined;
   readonly submitLabel: string;
   readonly title: string;
 };
 
 export function MemoryTitleDialog({
   description,
+  fieldLabel = '记忆名称',
   initialTitle = '',
   labelClassName,
+  maxLengthMessage = `记忆名称最多 ${WORKSPACE_TITLE_MAX_LENGTH} 个字符`,
   onOpenChange,
   onSubmitTitle,
   open,
   placeholder,
+  requiredMessage = '请输入记忆名称',
+  saveErrorTitle = '无法保存记忆名称',
   submitLabel,
   title,
 }: MemoryTitleDialogProps) {
+  const titleFormSchema = useMemo(
+    () =>
+      z.object({
+        title: z
+          .string()
+          .trim()
+          .min(1, requiredMessage)
+          .max(WORKSPACE_TITLE_MAX_LENGTH, maxLengthMessage),
+      }),
+    [maxLengthMessage, requiredMessage]
+  );
   const {
     formState: { errors, isSubmitting },
     handleSubmit,
@@ -57,7 +70,7 @@ export function MemoryTitleDialog({
     reset,
     setFocus,
   } = useForm<MemoryTitleFormValues>({
-    resolver: zodResolver(memoryTitleFormSchema),
+    resolver: zodResolver(titleFormSchema),
     defaultValues: { title: initialTitle },
   });
 
@@ -78,7 +91,7 @@ export function MemoryTitleDialog({
   async function submit(values: MemoryTitleFormValues) {
     const saveError = await onSubmitTitle(values.title.trim());
     if (saveError) {
-      toast.error('无法保存记忆名称', {
+      toast.error(saveErrorTitle, {
         description: saveError,
       });
       return;
@@ -120,7 +133,7 @@ export function MemoryTitleDialog({
           </DialogHeader>
           <div>
             <FieldLabel htmlFor="memory-title-dialog-input" className={labelClassName}>
-              记忆名称
+              {fieldLabel}
             </FieldLabel>
             <Input
               id="memory-title-dialog-input"

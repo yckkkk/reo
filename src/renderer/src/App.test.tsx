@@ -28,6 +28,8 @@ describe('App', () => {
     finalizeSegmentAttachmentRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
     discardSegmentAttachmentRecordingDraft: vi.fn(),
+    updateMemorySpaceTitle: vi.fn(),
+    readWorkspaceSnapshot: vi.fn(),
     updateMemoryTitle: vi.fn(),
     saveTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
@@ -38,6 +40,16 @@ describe('App', () => {
     closeRecordingTranscription: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
   };
+
+  function createDeferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    });
+    return { promise, reject, resolve };
+  }
 
   function installRecordingBrowserMocks() {
     class FakeMediaRecorder {
@@ -107,6 +119,20 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
     });
+    reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+        message: 'Memory space not found',
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_OPEN_FAILED',
+        message: 'Workspace snapshot could not be read',
+      },
+    });
     reoWorkspace.readMemoryDetail.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
@@ -170,6 +196,26 @@ describe('App', () => {
     if (expandButton) {
       await user.click(expandButton);
     }
+  }
+
+  async function findTitlebarMemoryControl(title: string) {
+    return within(screen.getByRole('banner', { name: '标题栏', hidden: true })).findByRole(
+      'button',
+      {
+        hidden: true,
+        name: `${title} 记忆操作`,
+      }
+    );
+  }
+
+  function getTitlebarMemoryControl(title: string) {
+    return within(screen.getByRole('banner', { name: '标题栏', hidden: true })).getByRole(
+      'button',
+      {
+        hidden: true,
+        name: `${title} 记忆操作`,
+      }
+    );
   }
 
   function stubWorkspaceRailInlineMedia(matches: boolean) {
@@ -595,6 +641,316 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: '重命名记忆' })).not.toBeInTheDocument();
   });
 
+  it('uses titlebar breadcrumb dropdowns to rename the active memory space and Memory', async () => {
+    const user = userEvent.setup();
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 2,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const renamedMemory = {
+      ...originalMemory,
+      title: '灵感',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '测试工作区1',
+        description: 'Private notes',
+        memories: [originalMemory],
+      },
+    });
+    reoWorkspace.updateMemoryTitle.mockResolvedValue({
+      ok: true,
+      value: renamedMemory,
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    expect(within(titlebar).getByRole('navigation', { name: '当前位置' })).toBeInTheDocument();
+    expect(
+      within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' })
+    ).toBeInTheDocument();
+    expect(
+      within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
+    ).toBeInTheDocument();
+    expect(titlebar.querySelector('[data-slot="breadcrumb-list"]')).toHaveClass('gap-4');
+    expect(titlebar.querySelector('[data-slot="breadcrumb"]')?.querySelector('svg')).toBeNull();
+    const breadcrumbSeparator = titlebar.querySelector('[data-slot="breadcrumb-separator"]');
+    expect(breadcrumbSeparator?.querySelector('svg')).toBeNull();
+    expect(breadcrumbSeparator?.querySelector('.size-4.rounded-full')).toBeInTheDocument();
+    expect(breadcrumbSeparator).not.toHaveClass('px-2');
+    expect(screen.queryByRole('heading', { name: 'My seventh birthday' })).not.toBeInTheDocument();
+    expect(screen.queryByText('2 个片段 · 02:05')).not.toBeInTheDocument();
+
+    await user.click(within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+
+    const workspaceDialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
+    const workspaceTitleInput = within(workspaceDialog).getByLabelText('记忆空间名称');
+    expect(workspaceTitleInput).toHaveValue('Daily memory');
+    await user.clear(workspaceTitleInput);
+    await user.type(workspaceTitleInput, '测试工作区1');
+    await user.click(within(workspaceDialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '测试工作区1',
+      })
+    );
+    expect(
+      within(titlebar).getByRole('button', { name: '测试工作区1 记忆空间操作' })
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+
+    const memoryDialog = screen.getByRole('dialog', { name: '重命名记忆' });
+    const memoryTitleInput = within(memoryDialog).getByLabelText('记忆名称');
+    expect(memoryTitleInput).toHaveValue('My seventh birthday');
+    await user.clear(memoryTitleInput);
+    await user.type(memoryTitleInput, '灵感');
+    await user.click(within(memoryDialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateMemoryTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_birthday',
+        title: '灵感',
+      })
+    );
+    expect(within(titlebar).getByRole('button', { name: '灵感 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('refreshes the active workspace from external JSON edits when the window regains focus', async () => {
+    const user = userEvent.setup();
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: '旧记忆',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 1000,
+      audioByteLength: 3,
+      hasTranscript: false,
+      attachmentCount: 0,
+    };
+    const refreshedMemory = {
+      ...originalMemory,
+      title: '外部记忆',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      hasTranscript: true,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: '外部空间',
+        description: 'Codex updated workspace metadata.',
+        memories: [refreshedMemory],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    expect(
+      within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    expect(
+      within(titlebar).getByRole('button', { name: '外部空间 记忆空间操作' })
+    ).toBeInTheDocument();
+    expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('ignores stale external JSON refresh responses when focus events overlap', async () => {
+    const user = userEvent.setup();
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: '旧记忆',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 1000,
+      audioByteLength: 3,
+      hasTranscript: false,
+      attachmentCount: 0,
+    };
+    const staleRefresh =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
+    const freshRefresh =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
+
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(freshRefresh.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      freshRefresh.resolve({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: '最新空间',
+          description: 'Fresh workspace truth.',
+          memories: [{ ...originalMemory, title: '最新记忆' }],
+        },
+      });
+      await freshRefresh.promise;
+    });
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    expect(
+      await within(titlebar).findByRole('button', { name: '最新空间 记忆空间操作' })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      staleRefresh.resolve({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: '过期空间',
+          description: 'Stale workspace truth.',
+          memories: [{ ...originalMemory, title: '过期记忆' }],
+        },
+      });
+      await staleRefresh.promise;
+    });
+
+    expect(
+      within(titlebar).getByRole('button', { name: '最新空间 记忆空间操作' })
+    ).toBeInTheDocument();
+    expect(
+      within(titlebar).queryByRole('button', { name: '过期空间 记忆空间操作' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(titlebar).queryByRole('button', { name: '过期记忆 记忆操作' })
+    ).not.toBeInTheDocument();
+  });
+
   it('confirms Memory deletion, removes it from the current Studio, and restores it from undo', async () => {
     const user = userEvent.setup();
     const deletedMemory = {
@@ -773,7 +1129,7 @@ describe('App', () => {
     );
     await expandMemoryRail(user);
     expect(screen.getByRole('button', { name: '选择记忆 产品灵感与思考' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '产品灵感与思考' })).toBeInTheDocument();
+    expect(getTitlebarMemoryControl('产品灵感与思考')).toBeInTheDocument();
   });
 
   it('records from the loaded workspace FAB into the current existing Memory', async () => {
@@ -1129,7 +1485,8 @@ describe('App', () => {
       })
     );
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
-    expect(await screen.findByText('2 个片段 · 00:03')).toBeInTheDocument();
+    expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
+    expect(screen.queryByText('2 个片段 · 00:03')).not.toBeInTheDocument();
   });
 
   it('recovers an unfinished SegmentAttachment recording through attachment IPC', async () => {
@@ -1248,7 +1605,8 @@ describe('App', () => {
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.saveTranscript).not.toHaveBeenCalled();
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
-    expect(await screen.findByText('1 个片段 · 00:00')).toBeInTheDocument();
+    expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
+    expect(screen.queryByText('1 个片段 · 00:00')).not.toBeInTheDocument();
   });
 
   it('discards an unfinished SegmentAttachment recovery through attachment IPC', async () => {
@@ -1433,7 +1791,8 @@ describe('App', () => {
         },
       },
     });
-    expect(await screen.findByText('2 个片段 · 00:03')).toBeInTheDocument();
+    expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
+    expect(screen.queryByText('2 个片段 · 00:03')).not.toBeInTheDocument();
 
     reoWorkspace.saveTranscript.mockResolvedValue({
       ok: true,
@@ -1782,6 +2141,76 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
     expect(reoWorkspace.openWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('renames an imported memory space from the sidebar more menu', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.listMemorySpaces
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          memorySpaces: [
+            {
+              workspaceId: 'ws_imported',
+              title: 'Runtime validated memory',
+              description: 'Final runtime validation workspace.',
+              addedAt: '2026-05-08T07:48:00.000Z',
+              lastOpenedAt: '2026-05-08T07:48:00.000Z',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          memorySpaces: [
+            {
+              workspaceId: 'ws_imported',
+              title: '测试工作区1',
+              description: 'Final runtime validation workspace.',
+              addedAt: '2026-05-08T07:48:00.000Z',
+              lastOpenedAt: '2026-05-08T07:48:00.000Z',
+            },
+          ],
+        },
+      });
+    reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_imported',
+        title: '测试工作区1',
+        description: 'Final runtime validation workspace.',
+        memories: [],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(
+      await screen.findByRole('button', { name: 'Runtime validated memory' })
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Runtime validated memory 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
+    const titleInput = within(dialog).getByLabelText('记忆空间名称');
+    expect(titleInput).toHaveValue('Runtime validated memory');
+    await user.clear(titleInput);
+    await user.type(titleInput, '测试工作区1');
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
+        workspaceId: 'ws_imported',
+        title: '测试工作区1',
+      })
+    );
+    expect(await screen.findByRole('button', { name: '测试工作区1' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '重命名记忆空间' })).not.toBeInTheDocument();
   });
 
   it('removes a persisted workspace from the sidebar list after confirmation without deleting its folder', async () => {
@@ -2176,7 +2605,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('heading', { name: 'Existing memory' });
+    await findTitlebarMemoryControl('Existing memory');
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
@@ -2187,9 +2616,7 @@ describe('App', () => {
     expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
     expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Existing memory', hidden: true })
-    ).toBeInTheDocument();
+    expect(getTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
   });
 
   it('blocks native window unload while recording is busy', async () => {
@@ -2252,7 +2679,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('heading', { name: 'Existing memory' });
+    await findTitlebarMemoryControl('Existing memory');
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
 
@@ -2551,8 +2978,13 @@ describe('App', () => {
     await expandMemoryRail(user);
     await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
 
-    expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
-    expect(screen.getByText('1 个片段 · 02:15')).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole('banner', { name: '标题栏' })).findByRole('button', {
+        name: 'My seventh birthday 记忆操作',
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My seventh birthday' })).not.toBeInTheDocument();
+    expect(screen.queryByText('1 个片段 · 02:15')).not.toBeInTheDocument();
   });
 
   it('returns from a loaded workspace to the starter home and releases the workspace handle', async () => {
@@ -2705,11 +3137,11 @@ describe('App', () => {
     await expandMemoryRail(user);
     await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
 
-    expect(await screen.findByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
+    expect(await findTitlebarMemoryControl('My seventh birthday')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory' }));
 
-    expect(screen.getByRole('heading', { name: 'My seventh birthday' })).toBeInTheDocument();
+    expect(getTitlebarMemoryControl('My seventh birthday')).toBeInTheDocument();
   });
 
   it('finalizes a FAB recording against the current selected memory without creating a new memory', async () => {
@@ -2796,7 +3228,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('heading', { name: 'My seventh birthday' });
+    await findTitlebarMemoryControl('My seventh birthday');
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
     expect(screen.queryByRole('dialog', { name: '新建记忆' })).not.toBeInTheDocument();
@@ -3073,7 +3505,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('heading', { name: 'My seventh birthday' });
+    await findTitlebarMemoryControl('My seventh birthday');
     await user.click(await screen.findByRole('button', { name: '添加片段补充内容' }));
     await user.click(await screen.findByRole('menuitem', { name: '录音补充' }));
 
@@ -3146,7 +3578,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await screen.findByRole('heading', { name: 'My seventh birthday' });
+    await findTitlebarMemoryControl('My seventh birthday');
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
 
@@ -3246,7 +3678,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await expandMemoryRail(user);
     await user.click(await screen.findByRole('button', { name: '选择记忆 Morning note' }));
-    expect(await screen.findByRole('heading', { name: 'Morning note' })).toBeInTheDocument();
+    expect(await findTitlebarMemoryControl('Morning note')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
