@@ -69,7 +69,7 @@ export function MemoryRail({
       className="flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-16 py-20 backdrop-blur-glass-lg xl:border-t-0"
     >
       {sortedMemories.length === 0 ? (
-        <div className="flex min-h-[96px] flex-col justify-center rounded-panels border border-glass-border bg-card-glass px-16 py-16 backdrop-blur-glass-sm">
+        <div className="flex min-h-[96px] flex-col justify-center rounded-panels bg-powder px-16 py-16">
           <p className="text-body font-medium leading-body text-obsidian">还没有记忆</p>
           <p className="mt-4 text-ui-sm leading-ui-sm text-gravel">先为这一刻命名。</p>
         </div>
@@ -80,9 +80,10 @@ export function MemoryRail({
             return (
               <div
                 key={memory.memoryId}
+                data-slot="memory-rail-card"
                 className={[
-                  'group relative overflow-hidden rounded-panels border bg-card-glass backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-powder focus-within:border-signal-blue',
-                  isActive ? 'border-signal-blue shadow-glass' : 'border-glass-border',
+                  'group relative overflow-hidden rounded-panels transition-colors duration-150',
+                  isActive ? 'bg-chalk' : 'bg-powder hover:bg-chalk',
                 ].join(' ')}
               >
                 <button
@@ -106,7 +107,7 @@ export function MemoryRail({
                       size="icon"
                       type="button"
                       aria-label={`${memory.title} 更多操作`}
-                      className="absolute right-8 top-8 size-24 text-slate hover:bg-powder data-[state=open]:bg-powder data-[state=open]:text-obsidian"
+                      className="absolute right-8 top-8 size-24 text-slate hover:bg-card-glass data-[state=open]:bg-card-glass data-[state=open]:text-obsidian"
                     >
                       <MoreHorizontal className="size-[14px]" aria-hidden="true" />
                     </Button>

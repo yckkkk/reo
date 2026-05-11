@@ -293,6 +293,7 @@ describe('LoadedWorkspaceFrame', () => {
 
   it('renders right-side Memory containers without turning the stage into an segment timeline', () => {
     renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
       session: workspaceSession({
         memories: [morningMemory, recitalMemory, birthdayMemory],
       }),
@@ -322,10 +323,25 @@ describe('LoadedWorkspaceFrame', () => {
         .getAllByRole('button', { name: /选择记忆/ })
         .map((button) => button.getAttribute('aria-label'))
     ).toEqual(['选择记忆 My seventh birthday', '选择记忆 School recital', '选择记忆 Morning note']);
-    expect(within(rail).getByRole('button', { name: '选择记忆 My seventh birthday' })).toHaveClass(
-      'min-h-[68px]',
-      'px-12',
-      'py-12'
+    const birthdayMemoryButton = within(rail).getByRole('button', {
+      name: '选择记忆 My seventh birthday',
+    });
+    const recitalMemoryButton = within(rail).getByRole('button', {
+      name: '选择记忆 School recital',
+    });
+    const birthdayMemoryCard = birthdayMemoryButton.closest('[data-slot="memory-rail-card"]');
+    const recitalMemoryCard = recitalMemoryButton.closest('[data-slot="memory-rail-card"]');
+
+    expect(birthdayMemoryButton).toHaveClass('min-h-[68px]', 'px-12', 'py-12');
+    expect(birthdayMemoryCard).toHaveClass('rounded-panels', 'bg-chalk');
+    expect(recitalMemoryCard).toHaveClass('rounded-panels', 'bg-powder');
+    expect(birthdayMemoryCard).not.toHaveClass(
+      'border',
+      'border-signal-blue',
+      'border-glass-border',
+      'shadow-glass',
+      'backdrop-blur-glass-sm',
+      'bg-card-glass'
     );
     expect(within(rail).getByText('05/06 13:10 · 2 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('05/01 09:10 · 1 个片段')).toBeInTheDocument();
@@ -442,14 +458,23 @@ describe('LoadedWorkspaceFrame', () => {
     expect(segmentCards[0]).toHaveClass(
       'aspect-square',
       'rounded-panels',
-      'border',
-      'bg-card-glass',
-      'backdrop-blur-glass-sm',
+      'bg-chalk',
       'p-12',
       'min-h-[var(--memory-studio-segment-card-min-size)]',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
-    expect(segmentCards[0]).not.toHaveClass('border-2', 'shadow-glass');
+    expect(segmentCards[1]).toHaveClass('bg-powder');
+    expect(segmentCards[0]).not.toHaveClass(
+      'border',
+      'border-2',
+      'border-signal-blue',
+      'border-glass-border',
+      'shadow-glass',
+      'shadow-subtle',
+      'backdrop-blur-glass-sm'
+    );
+    expect(within(segmentCards[0] as HTMLElement).queryByText('已有转录')).toBeNull();
+    expect(within(segmentCards[1] as HTMLElement).queryByText('本地音频')).toBeNull();
     expect(strip).toHaveAttribute(
       'style',
       expect.stringContaining('--memory-studio-segment-card-min-size: 136px')
@@ -491,16 +516,19 @@ describe('LoadedWorkspaceFrame', () => {
     expect(activeItem.querySelector('[data-slot="memory-studio-segment-card"]')).toBeTruthy();
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
-    ).toBeTruthy();
+    ).toHaveClass('before:top-[3px]');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
     ).toHaveClass('block', 'size-[7px]', 'min-h-[7px]', 'min-w-[7px]', 'rounded-full');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
-    ).toHaveTextContent('02:05');
+    ).toHaveClass('mt-12', 'block', 'text-slate');
+    expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
+    ).toHaveTextContent('13:08');
     expect(
       inactiveItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
-    ).toHaveTextContent('01:05');
+    ).toHaveTextContent('13:12');
     expect(within(studio).queryByRole('navigation', { name: 'Memory 片段时间轴' })).toBeNull();
   });
 
@@ -521,15 +549,14 @@ describe('LoadedWorkspaceFrame', () => {
     const inactiveCard = within(studio).getByRole('button', { name: '选择片段 Birthday song' });
 
     expect(within(activeCard).queryByText('SEG 01')).toBeNull();
+    expect(within(activeCard).queryByText('已有转录')).toBeNull();
+    expect(within(inactiveCard).queryByText('本地音频')).toBeNull();
     expect(within(activeCard).getByText('Birthday candles')).toHaveClass(
       'text-body',
       'font-bold',
-      'leading-body'
-    );
-    expect(within(activeCard).getByText('已有转录')).toHaveClass(
-      'text-ui-xs',
-      'font-medium',
-      'leading-ui-xs'
+      'leading-body',
+      'max-w-[88px]',
+      'whitespace-normal'
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')

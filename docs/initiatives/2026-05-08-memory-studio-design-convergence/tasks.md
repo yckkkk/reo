@@ -19,7 +19,7 @@
 - [x] Slice 3A：Segment strip + timeline。
   - [x] Segment 横向预览流只展示当前 Memory 内 Segment。
   - [x] Segment card、时间轴、内容区和 selectedSegmentId 同步。
-  - [x] Segment card、timeline 圆点和时间标签属于同一个横向 scroll item，圆点和时间随 Segment strip 滚动并保持在对应卡片下方居中。
+  - [x] Segment card、timeline 圆点和创建时间标签属于同一个横向 scroll item，圆点和时间随 Segment strip 滚动并保持在对应卡片下方居中。
 - [x] Slice 3B：CarouselArrowButton 横向浏览控制。
   - [x] `CarouselArrowButton direction="left"` 只向左滚动 Segment 横向预览流。
   - [x] `CarouselArrowButton direction="right"` 只向右滚动 Segment 横向预览流。
@@ -42,8 +42,9 @@
   - [x] Reo 设计系统当前规则改为现代扁平矢量插画风 + 毛玻璃 + 北欧极简 + 日式留白，组件视觉必须追溯到 token、primitive variant 或已记录 pattern。
   - [x] 设计系统 token 已切换为 Nordic low-saturation palette、Card Glass、On Accent、Glass Border、glass blur 和命名 shadow；token 备份文件已保存到当前 spec artifacts。
   - [x] Memory Studio 首屏布局不依赖页面纵向滚动展示主体验。
-  - [x] Segment card 使用扁平矢量录音卡比例、低对比 1px token 边界、动态 waveform bars 和等宽时间。
-  - [x] Segment card 收敛为 136px 最小尺寸、148px 上限，并同步调整内部 padding、字号、waveform 和时间排版。
+  - [x] Segment card 使用扁平矢量录音卡比例、无描边填充状态、动态 waveform bars 和等宽时间。
+  - [x] Segment card 收敛为 136px 最小尺寸、148px 上限，并同步调整内部 padding、字号、title 最大宽度、waveform 和时间排版。
+  - [x] MemoryRail card 与 Segment card 收敛到同一类无描边填充状态，未选中 `bg-powder`，选中 `bg-chalk`。
   - [x] 播放区 waveform 从 selected finalized audio bytes 解码真实峰值，不使用固定占位波形。
   - [x] 删除 selected Segment 内容区上方重复 summary。
   - [x] FAB 保留结构展开动效，glass/hover/halo 值提升为 Reo 设计系统 token。

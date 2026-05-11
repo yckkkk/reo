@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { Mic, Pause, Play, Plus } from 'lucide-react';
 import {
   useEffect,
@@ -72,13 +73,6 @@ function durationLabel(durationMs: number) {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function segmentStateLabel(segment: MemorySegment) {
-  if (segment.attachmentCount > 0) {
-    return `${countLabel(segment.attachmentCount, '个补充')}`;
-  }
-  return segment.transcript.exists ? '已有转录' : '本地音频';
-}
-
 function segmentPreviewWaveDelay(index: number) {
   return index === 0 ? '0s' : `-${(index * 0.1).toFixed(1)}s`;
 }
@@ -93,6 +87,14 @@ function prefersReducedMotion() {
   }
 
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function createdTimeLabel(createdAt: string) {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) {
+    return '时间未知';
+  }
+  return format(date, 'HH:mm');
 }
 
 type MemoryStudioAudioPlaybackRowProps = {
@@ -793,16 +795,13 @@ export function MemoryStudio({
                       <span
                         data-slot="memory-studio-segment-card"
                         className={[
-                          'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-panels border bg-card-glass p-12 shadow-subtle backdrop-blur-glass-sm transition-colors duration-150 group-hover:border-cinder group-hover:bg-card-glass group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
-                          isSelected ? 'border-signal-blue' : 'border-glass-border',
+                          'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-panels p-12 transition-colors duration-150 group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
+                          isSelected ? 'bg-chalk' : 'bg-powder group-hover:bg-chalk',
                         ].join(' ')}
                       >
                         <span className="block min-w-0">
-                          <span className="block line-clamp-2 text-body font-bold leading-body text-obsidian">
+                          <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-obsidian">
                             {segment.title}
-                          </span>
-                          <span className="mt-6 block truncate text-ui-xs font-medium leading-ui-xs text-gravel">
-                            {segmentStateLabel(segment)}
                           </span>
                         </span>
                         <span className="flex min-w-0 items-center justify-between gap-6">
@@ -818,7 +817,7 @@ export function MemoryStudio({
                       <span
                         aria-hidden="true"
                         data-slot="memory-studio-segment-timeline-anchor"
-                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-4 before:h-px before:bg-chalk"
+                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-chalk"
                       >
                         <span
                           data-slot="memory-studio-segment-timeline-dot"
@@ -829,9 +828,9 @@ export function MemoryStudio({
                         />
                         <span
                           data-slot="memory-studio-segment-timeline-time"
-                          className="mt-14 font-geist-mono text-ui-xs leading-ui-xs tracking-wide text-gravel"
+                          className="mt-12 block font-geist-mono text-ui-xs leading-ui-xs tracking-wide text-slate"
                         >
-                          {durationLabel(segment.durationMs)}
+                          {createdTimeLabel(segment.createdAt)}
                         </span>
                       </span>
                     </button>

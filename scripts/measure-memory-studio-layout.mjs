@@ -252,6 +252,15 @@ function measurementExpression() {
       const dotRect = dot ? rectOf(dot) : null;
       const timeRect = time ? rectOf(time) : null;
       const anchorRect = anchor ? rectOf(anchor) : null;
+      const anchorLineStyle = anchor ? getComputedStyle(anchor, '::before') : null;
+      const anchorLineTop = anchorLineStyle ? Number.parseFloat(anchorLineStyle.top) : Number.NaN;
+      const anchorLineHeight = anchorLineStyle
+        ? Number.parseFloat(anchorLineStyle.height)
+        : Number.NaN;
+      const timelineLineCenterY =
+        anchorRect && Number.isFinite(anchorLineTop) && Number.isFinite(anchorLineHeight)
+          ? anchorRect.top + anchorLineTop + anchorLineHeight / 2
+          : null;
       return {
         index,
         label: item.getAttribute('aria-label'),
@@ -260,9 +269,13 @@ function measurementExpression() {
         cardRect,
         dotRect,
         timeRect,
+        timeText: time ? time.textContent.trim() : '',
         anchorRect,
         dotToCardCenterDelta: cardRect && dotRect ? dotRect.centerX - cardRect.centerX : null,
+        dotToTimelineLineCenterDelta:
+          dotRect && timelineLineCenterY ? dotRect.centerY - timelineLineCenterY : null,
         timeToCardCenterDelta: cardRect && timeRect ? timeRect.centerX - cardRect.centerX : null,
+        timelineLineCenterY,
         timelineBelowCard: cardRect && anchorRect ? anchorRect.top >= cardRect.bottom : false,
       };
     });
@@ -520,6 +533,14 @@ function assertMetrics(metrics, options) {
       );
     }
     if (
+      item.dotToTimelineLineCenterDelta === null ||
+      Math.abs(item.dotToTimelineLineCenterDelta) > tolerance
+    ) {
+      failures.push(
+        `Segment item ${item.index} dot is not centered on timeline line: delta ${item.dotToTimelineLineCenterDelta?.toFixed(2) ?? 'missing'}px.`
+      );
+    }
+    if (
       Math.abs(item.dotRect.width - item.dotRect.height) > tolerance ||
       item.dotRect.width < 6 ||
       item.dotRect.height < 6
@@ -532,6 +553,9 @@ function assertMetrics(metrics, options) {
       failures.push(
         `Segment item ${item.index} time is not centered under card: delta ${item.timeToCardCenterDelta.toFixed(2)}px.`
       );
+    }
+    if (item.timeRect.width <= 0 || item.timeRect.height <= 0 || !item.timeText) {
+      failures.push(`Segment item ${item.index} timeline time label is not visible.`);
     }
     if (!item.timelineBelowCard) {
       failures.push(`Segment item ${item.index} timeline anchor is not below the card.`);

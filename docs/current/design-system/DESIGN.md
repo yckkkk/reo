@@ -28,14 +28,14 @@
 ## Glass Vector
 
 - 毛玻璃用于表达工作区、overlay、录音沉浸层、dialog/scrim 和侧栏关系的空间聚焦；它必须服务注意力和当前操作，不作为通用装饰。
-- 现代扁平矢量用于表达 Memory、Segment、SegmentAttachment、波形、时间轴、图标和按钮状态；插画性对象优先使用几何纯色面和无描边形体，交互性容器才使用 1px/2px token 边界。
+- 现代扁平矢量用于表达 Memory、Segment、SegmentAttachment、波形、时间轴、图标和按钮状态；插画性对象优先使用几何纯色面和无描边形体，只有输入、弹层、危险确认或需要明确可操作边界的控件才使用 1px/2px token 边界。
 - 北欧极简要求页面 palette 保持低饱和、材料克制和功能诚实；高饱和色只能做小面积状态或品牌焦点。
 - 日式留白要求主要页面保留大面积负空间、非等分排布和不对称平衡；留白必须服务表达和回看，不得变成空洞占位。
 - Hover/active/focus 使用纯色切换、颜色反转、border 色、focus ring、轻量 opacity 和明确 motion；避免用大阴影、悬浮位移或缩放模拟物理厚度。
 - 结构性动效可以存在，例如 MemoryRail 折叠滑入/滑出、FAB speed dial 展开、录音波形律动、dialog 进入/退出；动效必须解释状态变化，而不是装饰性漂浮。
 - 图标使用 lucide 或等粗纯色几何；图形元素由基础线段、圆点、矩形、波形 bars 和纯色块构成。
 - 工程标签、时间、计数和机器感数据使用 Geist Mono、全大写或等宽数字、适度 tracking；正文和标题使用 sans-serif 或 Reo 标题字体。
-- Recording Segment card 是扁平矢量对象：aspect-square、低对比 1px token border、22-24px radius、标题直入、底部动态 bars + 等宽时间，不放 `SEG 01` 这类表格标签。
+- Recording Segment card 是扁平矢量对象：aspect-square、无描边填充 surface、22-24px radius、标题直入、底部动态 bars + 等宽时间，不放 `SEG 01`、`一个补充`、`已有转录` 或 `本地音频` 这类表格/状态标签。
 
 ## Tokens — Colors
 
@@ -253,7 +253,8 @@ Base unit：4px。
 - App shell 主面板、Dialog overlay、Drawer/recording overlay 和右侧 rail 的空间关系只能使用已命名 glass token 或本文档记录的 primitive pattern，例如 `--color-card-glass`、`--color-glass-border`、`--shadow-glass`、`--blur-glass-lg`、`--glass-scrim-overlay`、`--glass-recording-overlay`、`--glass-recording-overlay-blur`、`--glass-control-hover`、`--glass-ember-hover` 和 `--recording-primary-halo`。
 - Dialog/Drawer 普通遮罩使用 `--glass-scrim-overlay`；录音沉浸层使用 `--glass-recording-overlay` + `--glass-recording-overlay-blur` + 去饱和背景；录音 control hover/halo 使用对应 glass token。
 - 玻璃化 surface 必须保留清晰文字对比、可见边界和稳定 hit target；不得让正文、按钮或 icon 因透明叠加变得灰、糊或难以点击。
-- Memory Studio 的 Segment card 是 glass-vector 内容对象：使用 Card Glass surface、1px 低饱和 token border、真实或当前片段的波形表达、等宽时间和明确 selected border；不得回到普通列表或附件堆叠。横向预览流里的 compact Segment card 必须保留最小 square 尺寸，窗口变窄时由 Segment strip 横向滚动承载，不把卡片压到内容不可读。
+- Memory Studio 的 Segment card 是 glass-vector 内容对象：使用无描边填充 surface、真实或当前片段的波形表达、等宽时长和明确 selected fill；未选中使用 `bg-powder`，选中使用 `bg-chalk`，浅色模式卡片比页面更灰，深色模式卡片比页面更亮，不得回到普通列表、边框卡片或附件堆叠。横向预览流里的 compact Segment card 必须保留最小 square 尺寸，窗口变窄时由 Segment strip 横向滚动承载，不把卡片压到内容不可读。
+- MemoryRail memory card 复用同一类无描边填充状态：未选中使用 `bg-powder`，当前 Memory 使用 `bg-chalk`，不用常态 border、shadow 或 blur 表达 card 层级。
 - 若透明或 blur 无法提升焦点、层级或转场理解，应退回纯色块、实线边界和 typography。
 
 ## Components
