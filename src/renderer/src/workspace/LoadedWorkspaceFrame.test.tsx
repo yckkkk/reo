@@ -253,7 +253,7 @@ describe('LoadedWorkspaceFrame', () => {
         'calc(var(--workspace-memory-rail-width) + clamp(12px, 2vw, 20px))',
       '--workspace-memory-rail-stage-inset-wide':
         'calc(var(--workspace-memory-rail-width) + clamp(20px, 2.5vw, 40px))',
-      '--workspace-memory-rail-width': 'clamp(260px, 28vw, 340px)',
+      '--workspace-memory-rail-width': 'clamp(220px, 24vw, 280px)',
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
@@ -311,7 +311,8 @@ describe('LoadedWorkspaceFrame', () => {
       'xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]'
     );
     expect(rail).toHaveAttribute('id', 'workspace-memory-rail');
-    expect(rail).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg');
+    expect(railShell).toHaveClass('border-l', 'border-glass-border');
+    expect(rail).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg', 'px-16', 'py-20');
     expect(rail).not.toHaveClass('bg-eggshell/70');
     expect(rail).not.toHaveClass('xl:border-l');
     expect(within(rail).queryByRole('heading', { name: '当前记忆' })).not.toBeInTheDocument();
@@ -321,6 +322,11 @@ describe('LoadedWorkspaceFrame', () => {
         .getAllByRole('button', { name: /选择记忆/ })
         .map((button) => button.getAttribute('aria-label'))
     ).toEqual(['选择记忆 My seventh birthday', '选择记忆 School recital', '选择记忆 Morning note']);
+    expect(within(rail).getByRole('button', { name: '选择记忆 My seventh birthday' })).toHaveClass(
+      'min-h-[68px]',
+      'px-12',
+      'py-12'
+    );
     expect(within(rail).getByText('05/06 13:10 · 2 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('05/01 09:10 · 1 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('04/11 09:02 · 1 个片段')).toBeInTheDocument();

@@ -66,22 +66,22 @@ export function MemoryRail({
     <nav
       id={id}
       aria-label="记忆列表"
-      className="flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-20 py-24 backdrop-blur-glass-lg xl:border-t-0"
+      className="flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-16 py-20 backdrop-blur-glass-lg xl:border-t-0"
     >
       {sortedMemories.length === 0 ? (
-        <div className="flex min-h-[128px] flex-col justify-center rounded-cards border border-glass-border bg-card-glass px-18 py-20 backdrop-blur-glass-sm">
-          <p className="text-body-lg font-medium leading-body-lg text-obsidian">还没有记忆</p>
-          <p className="mt-8 text-body leading-body text-gravel">先为这一刻命名。</p>
+        <div className="flex min-h-[96px] flex-col justify-center rounded-panels border border-glass-border bg-card-glass px-16 py-16 backdrop-blur-glass-sm">
+          <p className="text-body font-medium leading-body text-obsidian">还没有记忆</p>
+          <p className="mt-4 text-ui-sm leading-ui-sm text-gravel">先为这一刻命名。</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-12">
+        <div className="flex flex-col gap-8">
           {sortedMemories.map((memory) => {
             const isActive = memory.memoryId === activeMemoryId;
             return (
               <div
                 key={memory.memoryId}
                 className={[
-                  'group relative overflow-hidden rounded-cards border bg-card-glass backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-powder focus-within:border-signal-blue',
+                  'group relative overflow-hidden rounded-panels border bg-card-glass backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-powder focus-within:border-signal-blue',
                   isActive ? 'border-signal-blue shadow-glass' : 'border-glass-border',
                 ].join(' ')}
               >
@@ -89,13 +89,13 @@ export function MemoryRail({
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={`选择记忆 ${memory.title}`}
-                  className="block min-h-[88px] w-full px-16 py-16 pr-48 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
+                  className="block min-h-[68px] w-full px-12 py-12 pr-40 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
                   onClick={() => onSelectMemory(memory.memoryId)}
                 >
-                  <span className="block min-w-0 truncate text-body-lg font-medium leading-body-lg text-obsidian">
+                  <span className="block min-w-0 truncate text-body font-medium leading-body text-obsidian">
                     {memory.title}
                   </span>
-                  <span className="mt-8 block truncate text-ui-md leading-ui-md text-gravel">
+                  <span className="mt-4 block truncate text-ui-sm leading-ui-sm text-gravel">
                     {updatedLabel(memory.updatedAt)} · {countLabel(memory.segmentCount, '个片段')}
                   </span>
                 </button>
@@ -106,9 +106,9 @@ export function MemoryRail({
                       size="icon"
                       type="button"
                       aria-label={`${memory.title} 更多操作`}
-                      className="absolute right-10 top-10 size-28 text-slate hover:bg-powder data-[state=open]:bg-powder data-[state=open]:text-obsidian"
+                      className="absolute right-8 top-8 size-24 text-slate hover:bg-powder data-[state=open]:bg-powder data-[state=open]:text-obsidian"
                     >
-                      <MoreHorizontal className="size-16" aria-hidden="true" />
+                      <MoreHorizontal className="size-[14px]" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent

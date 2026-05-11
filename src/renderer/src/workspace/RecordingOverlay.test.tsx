@@ -150,12 +150,18 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
         segment: {
-          type: 'audio' as const,
-          audioByteLength: 3,
-          durationMs: 0,
+          workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
+          type: 'audio' as const,
           title: 'Daily memory 录音',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-06T13:08:00.000Z',
+          audioByteLength: 3,
+          durationMs: 0,
+          transcript: { exists: false },
+          attachmentCount: 0,
+          attachments: [],
         },
       },
     })),
@@ -1002,6 +1008,8 @@ describe('RecordingOverlay', () => {
     });
     expect(onRecordingContentSaved).toHaveBeenCalledWith({
       memory: savedMemorySummary,
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('textbox', { name: '转写' })).not.toBeInTheDocument();
@@ -1318,12 +1326,18 @@ describe('RecordingOverlay', () => {
               updatedAt: '2026-05-06T13:08:00.000Z',
             },
             segment: {
-              type: 'audio' as const,
-              audioByteLength: 3,
-              durationMs: 2000,
+              workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
+              type: 'audio' as const,
               title: 'Daily memory 录音',
+              createdAt: '2026-05-06T13:08:00.000Z',
+              updatedAt: '2026-05-06T13:08:00.000Z',
+              audioByteLength: 3,
+              durationMs: 2000,
+              transcript: { exists: false },
+              attachmentCount: 0,
+              attachments: [],
             },
           },
         };
@@ -1422,7 +1436,11 @@ describe('RecordingOverlay', () => {
       segmentId: 'seg_1',
       workspaceHandle: workspaceSession.workspaceHandle,
     });
-    expect(onRecordingContentSaved).toHaveBeenCalledWith({ memory: savedMemorySummary });
+    expect(onRecordingContentSaved).toHaveBeenCalledWith({
+      memory: savedMemorySummary,
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

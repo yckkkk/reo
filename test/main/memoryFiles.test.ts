@@ -206,12 +206,18 @@ test('finalizes a draft into a durable memory directory', async () => {
   assert.deepEqual(finalized, {
     ok: true,
     segment: {
+      workspaceId: 'ws_memory',
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
       type: 'audio',
       title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
       durationMs: 73_000,
       audioByteLength: 3,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
     },
     memory: {
       memoryId: 'mem_20260506_000001',

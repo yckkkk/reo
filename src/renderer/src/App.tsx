@@ -37,6 +37,7 @@ import {
   updateMemoryTitle,
   type FinalizedAudioSegment,
   type FinalizedSegmentAttachmentRecording,
+  type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
@@ -57,6 +58,7 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  segmentContentQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
@@ -70,6 +72,14 @@ type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
 type MemoryCreateIntent =
   | { readonly afterCreate: 'stay-on-stage' }
   | { readonly afterCreate: 'record-memory' };
+type SegmentFocusIntent = {
+  readonly memoryId: string;
+  readonly segmentId: string;
+};
+type MemoryDetailQueryData = {
+  readonly requestId: string;
+  readonly detail: WorkspaceMemoryDetail;
+};
 
 const WORKSPACE_STAGE_VIEW: TopLevelWorkspaceView = { name: 'workspace-stage' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
@@ -78,6 +88,14 @@ const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
 const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
 const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
+const WORKSPACE_MEMORY_RAIL_INLINE_QUERY = '(min-width: 1100px)';
+
+function canShowInlineMemoryRail(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return true;
+  }
+  return window.matchMedia(WORKSPACE_MEMORY_RAIL_INLINE_QUERY).matches;
+}
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
@@ -94,6 +112,42 @@ export function mergeMemoryIntoSession(
         updatedMemory,
         ...current.snapshot.memories.filter((memory) => memory.memoryId !== updatedMemory.memoryId),
       ],
+    },
+  };
+}
+
+function mergeSegmentIntoMemoryDetail(
+  currentDetail: MemoryDetailQueryData | undefined,
+  memory: WorkspaceMemorySummary,
+  segment: WorkspaceMemoryDetail['segments'][number],
+  workspaceId: string
+): MemoryDetailQueryData | undefined {
+  if (
+    !currentDetail ||
+    currentDetail.detail.workspaceId !== workspaceId ||
+    currentDetail.detail.memoryId !== memory.memoryId ||
+    segment.workspaceId !== workspaceId ||
+    segment.memoryId !== memory.memoryId
+  ) {
+    return currentDetail;
+  }
+
+  let segmentReplaced = false;
+  const segments = currentDetail.detail.segments.map((currentSegment) => {
+    if (currentSegment.segmentId !== segment.segmentId) {
+      return currentSegment;
+    }
+    segmentReplaced = true;
+    return segment;
+  });
+
+  return {
+    ...currentDetail,
+    detail: {
+      ...currentDetail.detail,
+      ...memory,
+      workspaceId: currentDetail.detail.workspaceId,
+      segments: segmentReplaced ? segments : [...segments, segment],
     },
   };
 }
@@ -129,12 +183,32 @@ export function App() {
     useState<RecordingRecoveryDraft | null>(null);
   const [recordingRecoveryReviewDraft, setRecordingRecoveryReviewDraft] =
     useState<RecordingRecoveryDraft | null>(null);
-  const [memoryRailOpen, setMemoryRailOpen] = useState(true);
+  const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
+  const [memoryRailOpen, setMemoryRailOpen] = useState(false);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [segmentFocusIntent, setSegmentFocusIntent] = useState<SegmentFocusIntent | null>(null);
   const lastWorkspaceErrorToastRef = useRef<string | null>(null);
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(WORKSPACE_MEMORY_RAIL_INLINE_QUERY);
+    const syncMemoryRailMode = (event?: MediaQueryListEvent) => {
+      const matches = event?.matches ?? mediaQuery.matches;
+      setMemoryRailInline(matches);
+    };
+
+    syncMemoryRailMode();
+    mediaQuery.addEventListener('change', syncMemoryRailMode);
+    return () => {
+      mediaQuery.removeEventListener('change', syncMemoryRailMode);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -593,6 +667,10 @@ export function App() {
 
   function handleAudioSegmentFinalized(finalized: FinalizedAudioSegment) {
     const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: activeWorkspaceSession.workspaceId,
+      memoryId: finalized.memory.memoryId,
+    });
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
       snapshotQueryKey,
       (currentSnapshot) =>
@@ -604,7 +682,19 @@ export function App() {
           finalized.memory
         ).snapshot
     );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
+      mergeSegmentIntoMemoryDetail(
+        currentDetail,
+        finalized.memory,
+        finalized.segment,
+        activeWorkspaceSession.workspaceId
+      )
+    );
     setSelectedMemoryId(finalized.segment.memoryId);
+    setSegmentFocusIntent({
+      memoryId: finalized.segment.memoryId,
+      segmentId: finalized.segment.segmentId,
+    });
     setWorkspaceSession((currentSession) =>
       currentSession?.workspaceId === activeWorkspaceSession.workspaceId
         ? mergeMemoryIntoSession(currentSession, finalized.memory)
@@ -755,7 +845,11 @@ export function App() {
             workspaceHandle: activeWorkspaceSession.workspaceHandle,
           });
           if (transcriptResponse.ok) {
-            handleRecordingContentSaved({ memory: transcriptResponse.value.memory });
+            handleRecordingContentSaved({
+              memory: transcriptResponse.value.memory,
+              memoryId: finalizedAudio.segment.memoryId,
+              segmentId: finalizedAudio.segment.segmentId,
+            });
           } else {
             transcriptSaved = false;
             toast.error('录音已保存，转写暂时无法写入。', {
@@ -1122,7 +1216,7 @@ export function App() {
     });
   }
 
-  function handleRecordingContentSaved({ memory }: SavedRecordingContent) {
+  function handleRecordingContentSaved({ memory, memoryId, segmentId }: SavedRecordingContent) {
     const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
       snapshotQueryKey,
@@ -1135,6 +1229,46 @@ export function App() {
           memory
         ).snapshot
     );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+      memoryDetailQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId,
+      }),
+      (currentDetail) => {
+        if (
+          !currentDetail ||
+          currentDetail.detail.workspaceId !== activeWorkspaceSession.workspaceId ||
+          currentDetail.detail.memoryId !== memoryId
+        ) {
+          return currentDetail;
+        }
+
+        return {
+          ...currentDetail,
+          detail: {
+            ...currentDetail.detail,
+            ...memory,
+            workspaceId: currentDetail.detail.workspaceId,
+            segments: currentDetail.detail.segments.map((segment) =>
+              segment.segmentId === segmentId
+                ? {
+                    ...segment,
+                    transcript: { exists: true },
+                  }
+                : segment
+            ),
+          },
+        };
+      }
+    );
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentContentQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId,
+        segmentId,
+      }),
+    });
     setSelectedMemoryId(memory.memoryId);
     setWorkspaceSession((currentSession) =>
       currentSession?.workspaceId === activeWorkspaceSession.workspaceId
@@ -1188,8 +1322,19 @@ export function App() {
           <LoadedWorkspaceFrame
             workspaceSession={activeWorkspaceSession}
             currentMemory={currentMemory}
+            segmentFocusIntent={
+              currentMemory && segmentFocusIntent?.memoryId === currentMemory.memoryId
+                ? segmentFocusIntent.segmentId
+                : null
+            }
             memoryRailOpen={memoryRailOpen}
+            memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
             onDeleteMemory={openMemoryDeleteDialog}
+            onSegmentFocusConsumed={(segmentId) => {
+              setSegmentFocusIntent((currentIntent) =>
+                currentIntent?.segmentId === segmentId ? null : currentIntent
+              );
+            }}
             onSelectMemory={selectMemory}
             onRenameMemory={setMemoryRenameTarget}
             onStartSegmentAttachmentRecording={requestStartSegmentAttachmentRecording}

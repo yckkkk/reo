@@ -34,7 +34,9 @@ import {
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
+  readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
+  readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
 };
 
@@ -425,7 +427,9 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
 
 export function MemoryStudio({
   memory,
+  onSegmentFocusConsumed,
   onStartSegmentAttachmentRecording,
+  segmentFocusIntent = null,
   workspaceSession,
 }: MemoryStudioProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -505,6 +509,18 @@ export function MemoryStudio({
       resizeObserver?.disconnect();
     };
   }, [segments.length]);
+
+  useEffect(() => {
+    if (!segmentFocusIntent) {
+      return;
+    }
+    if (!segments.some((segment) => segment.segmentId === segmentFocusIntent)) {
+      return;
+    }
+
+    setSelectedSegmentId(segmentFocusIntent);
+    onSegmentFocusConsumed?.(segmentFocusIntent);
+  }, [onSegmentFocusConsumed, segmentFocusIntent, segments]);
 
   useEffect(() => {
     const segmentId = selectedSegment?.segmentId ?? null;

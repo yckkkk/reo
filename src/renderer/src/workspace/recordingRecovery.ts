@@ -1,4 +1,5 @@
 import type {
+  FinalizedAudioSegment,
   FinalizedSegmentAttachmentRecording,
   WorkspaceMemorySummary,
   WorkspaceSession,
@@ -43,17 +44,7 @@ export type RecordingRecoveryDraft = {
 
 export type RecordingRecoveryTargetKind = 'segment' | 'segment-attachment';
 
-export type RecordingRecoveryFinalizedAudio = {
-  readonly memory: WorkspaceMemorySummary;
-  readonly segment: {
-    readonly audioByteLength: number;
-    readonly durationMs: number;
-    readonly memoryId: string;
-    readonly segmentId: string;
-    readonly title: string;
-    readonly type: 'audio';
-  };
-};
+export type RecordingRecoveryFinalizedAudio = FinalizedAudioSegment;
 
 export type RecordingRecoveryAudioChunk = {
   readonly byteLength: number;
@@ -264,6 +255,7 @@ function isRecoveryDraft(value: unknown): value is RecordingRecoveryDraft {
     draft.durationMs >= 0 &&
     (draft.finalizedAudio === undefined ||
       isRecoveryFinalizedAudio(draft.finalizedAudio, {
+        workspaceId: draft.workspaceId,
         memoryId: draft.memoryId,
         segmentId: draft.segmentId,
       })) &&
@@ -346,7 +338,7 @@ function isRecoveryFinalizedAttachment(
 
 function isRecoveryFinalizedAudio(
   value: unknown,
-  draft: Pick<RecordingRecoveryDraft, 'memoryId' | 'segmentId'>
+  draft: Pick<RecordingRecoveryDraft, 'memoryId' | 'segmentId' | 'workspaceId'>
 ): value is RecordingRecoveryFinalizedAudio {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -358,17 +350,29 @@ function isRecoveryFinalizedAudio(
     finalized.memory.memoryId === draft.memoryId &&
     typeof segment === 'object' &&
     segment !== null &&
+    segment.workspaceId === draft.workspaceId &&
     segment.type === 'audio' &&
     segment.memoryId === draft.memoryId &&
     segment.segmentId === draft.segmentId &&
     typeof segment.title === 'string' &&
     segment.title.length > 0 &&
+    typeof segment.createdAt === 'string' &&
+    segment.createdAt.length > 0 &&
+    typeof segment.updatedAt === 'string' &&
+    segment.updatedAt.length > 0 &&
     typeof segment.durationMs === 'number' &&
     Number.isFinite(segment.durationMs) &&
     segment.durationMs >= 0 &&
     typeof segment.audioByteLength === 'number' &&
     Number.isInteger(segment.audioByteLength) &&
-    segment.audioByteLength >= 0
+    segment.audioByteLength >= 0 &&
+    typeof segment.transcript === 'object' &&
+    segment.transcript !== null &&
+    typeof segment.transcript.exists === 'boolean' &&
+    typeof segment.attachmentCount === 'number' &&
+    Number.isInteger(segment.attachmentCount) &&
+    segment.attachmentCount >= 0 &&
+    Array.isArray(segment.attachments)
   );
 }
 

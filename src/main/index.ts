@@ -17,6 +17,7 @@ import {
   setupPermissionRequestHandler,
 } from './security.js';
 import { closeAllWorkspaceHandles, registerWorkspaceIpc } from './workspaceIpc.js';
+import { bindWorkspaceHandleLifecycle } from './workspaceHandleLifecycle.js';
 
 app.enableSandbox();
 registerAppShellScheme();
@@ -55,19 +56,14 @@ function createWindow(): void {
     void mainWindow.loadURL(getAppShellUrl('index.html'));
   }
 
-  mainWindow.webContents.on('render-process-gone', () => {
-    void closeAllWorkspaceHandles();
-  });
-
-  mainWindow.webContents.on('will-navigate', (event) => {
-    if (!isTrustedAppUrl(event.url)) {
-      return;
-    }
-    void closeAllWorkspaceHandles();
+  bindWorkspaceHandleLifecycle({
+    browserWindow: mainWindow,
+    closeWorkspaceHandles: closeAllWorkspaceHandles,
+    isTrustedAppUrl,
+    webContents: mainWindow.webContents,
   });
 
   mainWindow.on('closed', () => {
-    void closeAllWorkspaceHandles();
     mainWindow = null;
   });
 }

@@ -1413,6 +1413,21 @@ async function readValidFinalizedSegmentProjection({
   }
 }
 
+export async function readFinalizedSegmentProjection(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+}): Promise<WorkspaceSegmentProjection> {
+  const projection = await readValidFinalizedSegmentProjection(input);
+
+  if (!projection) {
+    throw new Error('Finalized segment projection does not match file truth');
+  }
+
+  return projection;
+}
+
 export async function readMemoryDetailFromFileTruth(input: {
   readonly rootPath: string;
   readonly workspaceId: string;

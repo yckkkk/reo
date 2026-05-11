@@ -10,10 +10,13 @@ import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
   readonly memoryRailOpen?: boolean;
+  readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
+  readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
+  readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
 };
@@ -21,11 +24,14 @@ type LoadedWorkspaceFrameProps = {
 export function LoadedWorkspaceFrame({
   currentMemory = null,
   memoryRailOpen = true,
+  memoryRailMode = 'inline',
   onDeleteMemory,
   onRenameMemory,
+  onSegmentFocusConsumed,
   onSelectMemory,
   onStartSegmentAttachmentRecording,
   onStartRecording,
+  segmentFocusIntent = null,
   workspaceSession,
 }: LoadedWorkspaceFrameProps) {
   const snapshotQuery = useQuery(workspaceSnapshotQueryOptions(workspaceSession));
@@ -34,6 +40,7 @@ export function LoadedWorkspaceFrame({
   return (
     <WorkspaceFrame
       memoryRailOpen={memoryRailOpen}
+      memoryRailMode={memoryRailMode}
       rail={
         <MemoryRail
           id={WORKSPACE_MEMORY_RAIL_ID}
@@ -50,7 +57,9 @@ export function LoadedWorkspaceFrame({
         <MemoryStudio
           key={currentMemory.memoryId}
           memory={currentMemory}
+          {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}
+          segmentFocusIntent={segmentFocusIntent}
           workspaceSession={workspaceSession}
         />
       ) : (

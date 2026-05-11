@@ -36,6 +36,7 @@ import {
   assertNoDuplicateSegmentDirectoryById,
   lookupSegmentDirectoryById,
   memorySegmentDirectory,
+  readFinalizedSegmentProjection,
   readFinalizedSegmentSummary,
   refreshMemoryIndexEntry,
   removeSafeWorkspaceDirectory,
@@ -1544,14 +1545,7 @@ type FinalizeRecordingDraftForTestInput = FinalizeRecordingDraftInput & {
 type FinalizeRecordingDraftResult =
   | {
       readonly ok: true;
-      readonly segment: {
-        readonly memoryId: string;
-        readonly segmentId: string;
-        readonly type: 'audio';
-        readonly title: string;
-        readonly durationMs: number;
-        readonly audioByteLength: number;
-      };
+      readonly segment: WorkspaceSegmentProjection;
       readonly memory: MemorySummary;
     }
   | WorkspaceErrorEnvelope;
@@ -1630,17 +1624,15 @@ async function finalizeRecordingDraftWithHooks(
       return finalized;
     }
 
-    const recording = await readFinalizedSegmentSummary(rootPath, memoryId, segmentId);
+    const segment = await readFinalizedSegmentProjection({
+      rootPath,
+      workspaceId: workspaceId ?? metadata.workspaceId,
+      memoryId,
+      segmentId,
+    });
     return {
       ok: true,
-      segment: {
-        memoryId,
-        segmentId,
-        type: 'audio',
-        title,
-        durationMs,
-        audioByteLength: recording.audioByteLength,
-      },
+      segment,
       memory: finalized.value,
     };
   } catch {

@@ -98,6 +98,8 @@ export type RecordingTarget =
     };
 export type SavedRecordingContent = {
   readonly memory: WorkspaceMemorySummary;
+  readonly memoryId: string;
+  readonly segmentId: string;
 };
 
 const MIN_EFFECTIVE_RECORDING_DURATION_MS = 2_000;
@@ -2078,7 +2080,7 @@ export function RecordingOverlay({
       }
       if (response.ok) {
         clearRecordingError();
-        onRecordingContentSaved?.({ memory: response.value.memory });
+        onRecordingContentSaved?.({ memory: response.value.memory, memoryId, segmentId });
         return true;
       }
       notifyRecordingError(

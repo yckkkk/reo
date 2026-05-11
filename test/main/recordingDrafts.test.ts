@@ -187,12 +187,18 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     {
       ok: true,
       segment: {
+        workspaceId: 'ws_draft',
         memoryId: 'mem_20260506_000001',
         segmentId: 'seg_20260506_000001',
         type: 'audio',
         title: '第一段录音',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
         durationMs: 0,
         audioByteLength: 3,
+        transcript: { exists: false },
+        attachmentCount: 0,
+        attachments: [],
       },
       memory: {
         memoryId: 'mem_20260506_000001',
@@ -1653,12 +1659,18 @@ test('recording finalize returns only the appended recording byte length for exi
     {
       ok: true,
       segment: {
+        workspaceId: 'ws_draft',
         memoryId: 'mem_existing_size',
         segmentId: 'seg_append_size',
         type: 'audio',
         title: 'Append',
+        createdAt: '2026-05-06T13:10:00.000Z',
+        updatedAt: '2026-05-06T13:11:00.000Z',
         durationMs: 2000,
         audioByteLength: 2,
+        transcript: { exists: false },
+        attachmentCount: 0,
+        attachments: [],
       },
       memory: {
         memoryId: 'mem_existing_size',

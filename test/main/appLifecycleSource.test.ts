@@ -6,12 +6,8 @@ test('main window teardown releases workspace handles', async () => {
   const source = await readFile('src/main/index.ts', 'utf8');
 
   assert.match(source, /closeAllWorkspaceHandles/);
-  assert.match(source, /render-process-gone/);
-  assert.match(
-    source,
-    /mainWindow\.webContents\.on\('will-navigate', \(event\)[\s\S]*!isTrustedAppUrl\(event\.url\)[\s\S]*return;[\s\S]*closeAllWorkspaceHandles/
-  );
-  assert.match(source, /mainWindow\.on\('closed'[\s\S]*closeAllWorkspaceHandles/);
+  assert.match(source, /bindWorkspaceHandleLifecycle/);
+  assert.match(source, /closeWorkspaceHandles:\s*closeAllWorkspaceHandles/);
   assert.match(source, /uncaughtException[\s\S]*closeAllWorkspaceHandles/);
 });
 

@@ -29,8 +29,9 @@ Options:
 }
 
 function fail(message, code = 1) {
-  console.error(message);
-  process.exit(code);
+  const error = new Error(message);
+  error.exitCode = code;
+  throw error;
 }
 
 function parseArgs(argv) {
@@ -291,6 +292,10 @@ function measurementExpression() {
         frameRect: workspaceFrame ? rectOf(workspaceFrame) : null,
         stageShellRect: workspaceStageShell ? rectOf(workspaceStageShell) : null,
         railShellRect: workspaceRailShell ? rectOf(workspaceRailShell) : null,
+        railMode: workspaceRailShell ? workspaceRailShell.getAttribute('data-rail-mode') : null,
+        railHidden: workspaceRailShell
+          ? workspaceRailShell.getAttribute('aria-hidden') === 'true'
+          : null,
         frameOverflow: workspaceFrame ? getComputedStyle(workspaceFrame).overflow : null,
         stageShellOverflow: workspaceStageShell
           ? getComputedStyle(workspaceStageShell).overflow
@@ -408,6 +413,16 @@ function assertMetrics(metrics, options) {
       `Expected WorkspaceFrame overflow hidden; received ${metrics.workspace.frameOverflow}.`
     );
   }
+  if (metrics.viewport.width < 1100 && metrics.workspace.railMode !== 'overlay') {
+    failures.push(
+      `Expected compact MemoryRail mode overlay below 1100px; received ${metrics.workspace.railMode}.`
+    );
+  }
+  if (metrics.viewport.width < 1100 && metrics.workspace.railHidden !== true) {
+    failures.push(
+      'Expected compact MemoryRail to start hidden so it cannot squeeze Memory Studio.'
+    );
+  }
 
   assertRectInsideViewport(
     failures,
@@ -444,13 +459,15 @@ function assertMetrics(metrics, options) {
     metrics.viewport,
     tolerance
   );
-  assertRectInsideViewport(
-    failures,
-    'Workspace MemoryRail shell',
-    metrics.workspace.railShellRect,
-    metrics.viewport,
-    tolerance
-  );
+  if (metrics.workspace.railHidden !== true) {
+    assertRectInsideViewport(
+      failures,
+      'Workspace MemoryRail shell',
+      metrics.workspace.railShellRect,
+      metrics.viewport,
+      tolerance
+    );
+  }
 
   assertRectInsideViewport(
     failures,
@@ -529,6 +546,7 @@ async function main() {
   }
 
   const client = await connectCdp(target.webSocketDebuggerUrl);
+  let viewportOverrideApplied = false;
   try {
     await client.send('Runtime.enable');
     await client.send('Page.enable');
@@ -539,6 +557,7 @@ async function main() {
         deviceScaleFactor: 1,
         mobile: false,
       });
+      viewportOverrideApplied = true;
     } else {
       await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     }
@@ -670,10 +689,26 @@ async function main() {
       fail(`Memory Studio layout telemetry failed:\n- ${failures.join('\n- ')}`);
     }
   } finally {
+    if (viewportOverrideApplied) {
+      await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
+      await evaluate(
+        client,
+        `(() => {
+          window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+          const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+          if (scroll) {
+            scroll.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+          }
+          window.dispatchEvent(new Event('resize'));
+          return true;
+        })()`
+      ).catch(() => undefined);
+    }
     client.close();
   }
 }
 
 main().catch((error) => {
-  fail(error.stack || error.message);
+  console.error(error.stack || error.message);
+  process.exit(error.exitCode || 1);
 });

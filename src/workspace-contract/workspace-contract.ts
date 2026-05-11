@@ -597,14 +597,7 @@ export const workspaceRecordingFinalizeResponseSchema = z.discriminatedUnion('ok
     ok: z.literal(true),
     value: z.strictObject({
       memory: workspaceMemorySummarySchema,
-      segment: z.strictObject({
-        memoryId: memoryIdSchema,
-        segmentId: segmentIdSchema,
-        type: z.literal('audio'),
-        title: z.string(),
-        durationMs: z.number().int().nonnegative(),
-        audioByteLength: z.number().int().nonnegative(),
-      }),
+      segment: workspaceSegmentProjectionSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
