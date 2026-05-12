@@ -127,20 +127,5 @@ function truncateSegmentAtCursor(
   if (segment.endTimeMs <= cursorTimeMs) {
     return segment;
   }
-  if (segment.startTimeMs >= cursorTimeMs) {
-    return null;
-  }
-
-  const durationMs = Math.max(1, segment.endTimeMs - segment.startTimeMs);
-  const retainedRatio = Math.min(1, Math.max(0, (cursorTimeMs - segment.startTimeMs) / durationMs));
-  const retainedLength = Math.max(1, Math.floor(segment.text.length * retainedRatio));
-  const retainedText = segment.text.slice(0, retainedLength).trim();
-  if (retainedText.length === 0) {
-    return null;
-  }
-  return {
-    ...segment,
-    endTimeMs: cursorTimeMs,
-    text: retainedText,
-  };
+  return null;
 }

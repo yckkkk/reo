@@ -55,7 +55,7 @@ describe('RecordingTranscriptPreview', () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it('renders the active transcript segment and scrolls when cursor focus changes', () => {
+  it('renders the active transcript segment and scrolls only inside the transcript container when cursor focus changes', () => {
     const { rerender } = render(
       <RecordingTranscriptPreview
         fallback="实时转写会在你说话时安静地出现在这里。"
@@ -66,7 +66,16 @@ describe('RecordingTranscriptPreview', () => {
 
     expect(screen.getByRole('region', { name: '实时转写' })).toBeInTheDocument();
     expect(screen.getByText('第一段转写')).toHaveAttribute('aria-current', 'true');
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+
+    const scrollContainer = screen.getByTestId('recording-transcript-scroll');
+    const scrollTo = vi.fn();
+    scrollContainer.scrollTo = scrollTo;
+    setScrollMetrics(scrollContainer, { clientHeight: 80, scrollHeight: 220, scrollTop: 0 });
+    Object.defineProperties(screen.getByText('第二段转写'), {
+      offsetHeight: { configurable: true, value: 20 },
+      offsetTop: { configurable: true, value: 100 },
+    });
 
     rerender(
       <RecordingTranscriptPreview
@@ -77,7 +86,17 @@ describe('RecordingTranscriptPreview', () => {
     );
 
     expect(screen.getByText('第二段转写')).toHaveAttribute('aria-current', 'true');
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', top: 70 });
+    expect(scrollContainer).toHaveClass(
+      'edge-fade-y',
+      'font-sans',
+      'scrollbar-hover',
+      'text-body-lg',
+      'font-medium',
+      'leading-body-lg'
+    );
+    expect(scrollContainer).not.toHaveClass('text-heading-sm');
   });
 
   it('keeps a quiet fallback when no transcript segment is available', () => {
@@ -89,7 +108,9 @@ describe('RecordingTranscriptPreview', () => {
       />
     );
 
-    expect(screen.getByText('实时转写会在你说话时安静地出现在这里。')).toBeInTheDocument();
+    const fallback = screen.getByText('实时转写会在你说话时安静地出现在这里。');
+    expect(fallback).toBeInTheDocument();
+    expect(fallback).toHaveClass('font-sans', 'text-body-lg', 'font-medium', 'leading-body-lg');
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 

@@ -1,9 +1,19 @@
 import type { KeyboardEvent, PointerEvent } from 'react';
+import { useRef } from 'react';
 import { Waveform } from '@/components/ui/waveform';
 import type { RecordingState } from '../recordingMachine';
 
-const READY_WAVEFORM_DATA = Array.from({ length: 96 }, () => 0.08);
+const READY_WAVEFORM_DATA = Array.from({ length: 160 }, (_, index) => {
+  if (index > 54 && index < 63) {
+    return 0.18;
+  }
+  return 0.06;
+});
 const LOW_ACTIVITY_WAVEFORM_DATA = Array.from({ length: 160 }, () => 0.06);
+const RECORDING_WAVEFORM_BAR_RADIUS = 4;
+const RECORDING_WAVEFORM_BAR_WIDTH = 4;
+const RECORDING_WAVEFORM_HEIGHT = 88;
+const RECORDING_WAVEFORM_KEY_STEP_MS = 1_000;
 
 type RecordingWaveformProps = {
   readonly cursorTimeMs: number;
@@ -37,11 +47,12 @@ export function RecordingWaveform({
     : samples.length > 0
       ? samples
       : LOW_ACTIVITY_WAVEFORM_DATA;
-  const playheadProgress =
+  const waveformProgress =
     (state.status === 'paused' || state.status === 'replacing') && totalDurationMs > 0
       ? cursorTimeMs / totalDurationMs
       : null;
   const canSeek = state.status === 'paused' && totalDurationMs > 0 && Boolean(onCursorChange);
+  const pointerScrubbingRef = useRef(false);
 
   function updateCursorFromPointer(event: PointerEvent<HTMLDivElement>) {
     if (!canSeek || !onCursorChange) {
@@ -60,14 +71,19 @@ export function RecordingWaveform({
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
+    pointerScrubbingRef.current = true;
     updateCursorFromPointer(event);
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!canSeek || event.buttons !== 1) {
+    if (!canSeek || !pointerScrubbingRef.current) {
       return;
     }
     updateCursorFromPointer(event);
+  }
+
+  function endPointerScrub() {
+    pointerScrubbingRef.current = false;
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -76,31 +92,32 @@ export function RecordingWaveform({
     }
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      onCursorChange(Math.max(0, cursorTimeMs - 15_000));
+      onCursorChange(Math.max(0, cursorTimeMs - RECORDING_WAVEFORM_KEY_STEP_MS));
     }
     if (event.key === 'ArrowRight') {
       event.preventDefault();
-      onCursorChange(Math.min(totalDurationMs, cursorTimeMs + 15_000));
+      onCursorChange(Math.min(totalDurationMs, cursorTimeMs + RECORDING_WAVEFORM_KEY_STEP_MS));
     }
   }
 
   return (
     <Waveform
       active={state.status === 'recording'}
-      barGap={isReadyState ? 8 : 3}
-      barRadius={2}
-      barWidth={isReadyState ? 3 : 3}
+      barRadius={RECORDING_WAVEFORM_BAR_RADIUS}
+      barWidth={RECORDING_WAVEFORM_BAR_WIDTH}
       className="mx-auto w-full max-w-[min(72vw,1120px)]"
       data={waveformData}
       data-vaul-no-drag
-      height={state.status === 'paused' ? 112 : 72}
+      height={RECORDING_WAVEFORM_HEIGHT}
       label={waveformLabel(state)}
-      mode={isReadyState ? 'dots' : 'bars'}
+      mode="bars"
       onKeyDown={handleKeyDown}
+      onPointerCancel={endPointerScrub}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      playheadProgress={playheadProgress}
-      tone={isReadyState ? 'muted' : 'neutral'}
+      onPointerUp={endPointerScrub}
+      progress={waveformProgress}
+      tone="neutral"
       {...(canSeek
         ? {
             'aria-valuemax': Math.round(totalDurationMs),

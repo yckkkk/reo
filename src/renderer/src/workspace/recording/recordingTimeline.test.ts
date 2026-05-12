@@ -8,7 +8,7 @@ import {
 } from './recordingTimeline';
 
 describe('recordingTimeline', () => {
-  it('truncates transcript segments after the cursor and advances the revision for replacement', () => {
+  it('drops transcript segments that overlap the replacement cursor without fabricating partial text', () => {
     const timeline = createRecordingTimeline({
       recordingSessionId: 'recording-1',
       revisionId: 'rev-1',
@@ -41,11 +41,7 @@ describe('recordingTimeline', () => {
     expect(replaced.revisionId).toBe('rev-2');
     expect(replaced.totalDurationMs).toBe(5_000);
     expect(replaced.cursorTimeMs).toBe(5_000);
-    expect(replaced.transcriptSegments.map((segment) => segment.text)).toEqual(['前半段', '会']);
-    expect(replaced.transcriptSegments.at(-1)).toMatchObject({
-      endTimeMs: 5_000,
-      startTimeMs: 4_000,
-    });
+    expect(replaced.transcriptSegments.map((segment) => segment.text)).toEqual(['前半段']);
   });
 
   it('keeps the transcript before the replacement cursor when new replacement text arrives', () => {

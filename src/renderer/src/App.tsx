@@ -83,6 +83,15 @@ type MemoryDetailQueryData = {
   readonly requestId: string;
   readonly detail: WorkspaceMemoryDetail;
 };
+type RecordingFlow =
+  | { readonly status: 'closed' }
+  | {
+      readonly closeBlocked: boolean;
+      readonly open: boolean;
+      readonly recoveredDraft: RecordingRecoveryDraft | null;
+      readonly status: 'active';
+      readonly target: RecordingTarget;
+    };
 
 const WORKSPACE_STAGE_VIEW: TopLevelWorkspaceView = { name: 'workspace-stage' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
@@ -181,12 +190,9 @@ export function App() {
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
-  const [recordingTarget, setRecordingTarget] = useState<RecordingTarget | null>(null);
-  const [recordingCloseBlocked, setRecordingCloseBlocked] = useState(false);
+  const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
   const [recordingRecoveryActionPending, setRecordingRecoveryActionPending] = useState(false);
   const [recordingRecoveryDraft, setRecordingRecoveryDraft] =
-    useState<RecordingRecoveryDraft | null>(null);
-  const [recordingRecoveryReviewDraft, setRecordingRecoveryReviewDraft] =
     useState<RecordingRecoveryDraft | null>(null);
   const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
@@ -212,6 +218,16 @@ export function App() {
     []
   );
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
+  const activeRecordingFlow = recordingFlow.status === 'active' ? recordingFlow : null;
+  const recordingTarget = activeRecordingFlow?.target ?? null;
+  const recordingOverlayOpen = activeRecordingFlow?.open ?? false;
+  const recordingCloseBlocked = activeRecordingFlow?.closeBlocked ?? false;
+  const recordingRecoveryReviewDraft = activeRecordingFlow?.recoveredDraft ?? null;
+  const handleRecordingCloseBlockedChange = useCallback((closeBlocked: boolean) => {
+    setRecordingFlow((currentFlow) =>
+      currentFlow.status === 'active' ? { ...currentFlow, closeBlocked } : currentFlow
+    );
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -416,7 +432,7 @@ export function App() {
       }
     }
 
-    setRecordingTarget(null);
+    setRecordingFlow({ status: 'closed' });
     setMemoryCreateIntent(null);
     setMemoryRenameTarget(null);
     setMemorySpaceRenameTarget(null);
@@ -500,7 +516,7 @@ export function App() {
         return;
       }
 
-      setRecordingTarget(null);
+      setRecordingFlow({ status: 'closed' });
       setMemoryCreateIntent(null);
       setMemoryRenameTarget(null);
       setMemorySpaceRenameTarget(null);
@@ -673,7 +689,7 @@ export function App() {
 
       let closeFailureMessage: string | null = null;
       if (activeSession) {
-        setRecordingTarget(null);
+        setRecordingFlow({ status: 'closed' });
         setMemoryCreateIntent(null);
         setMemoryDeleteTarget(null);
         setMemoryRenameTarget(null);
@@ -1220,6 +1236,7 @@ export function App() {
       );
 
       if (memoryCreateIntent?.afterCreate === 'record-memory') {
+        setMemoryCreateIntent(null);
         openRecording({ kind: 'existing-memory', memoryId: response.value.memoryId });
       } else {
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
@@ -1395,9 +1412,17 @@ export function App() {
     }
   }
 
-  function openRecording(target: RecordingTarget) {
-    setRecordingCloseBlocked(false);
-    setRecordingTarget(target);
+  function openRecording(
+    target: RecordingTarget,
+    recoveredDraft: RecordingRecoveryDraft | null = null
+  ) {
+    setRecordingFlow({
+      closeBlocked: false,
+      open: true,
+      recoveredDraft,
+      status: 'active',
+      target,
+    });
   }
 
   function reviewRecoveredRecording() {
@@ -1417,8 +1442,7 @@ export function App() {
     setSelectedMemoryId(draft.memoryId);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     setRecordingRecoveryDraft(null);
-    setRecordingRecoveryReviewDraft(draft);
-    openRecording({ kind: 'existing-memory', memoryId: draft.memoryId });
+    openRecording({ kind: 'existing-memory', memoryId: draft.memoryId }, draft);
   }
 
   function requestStartRecording() {
@@ -1521,11 +1545,13 @@ export function App() {
   }
 
   function handleRecordingOpenChange(nextOpen: boolean) {
-    if (!nextOpen) {
-      setRecordingCloseBlocked(false);
-      setRecordingTarget(null);
-      setRecordingRecoveryReviewDraft(null);
-    }
+    setRecordingFlow((currentFlow) =>
+      currentFlow.status === 'active' ? { ...currentFlow, open: nextOpen } : currentFlow
+    );
+  }
+
+  function handleRecordingFlowSettled() {
+    setRecordingFlow({ status: 'closed' });
   }
 
   return (
@@ -1582,12 +1608,13 @@ export function App() {
       </AppShell>
       {recordingTarget ? (
         <RecordingOverlay
-          onCloseBlockedChange={setRecordingCloseBlocked}
+          onCloseBlockedChange={handleRecordingCloseBlockedChange}
           onRecordingContentSaved={handleRecordingContentSaved}
           onOpenChange={handleRecordingOpenChange}
           onAudioSegmentFinalized={handleAudioSegmentFinalized}
+          onRecordingFlowSettled={handleRecordingFlowSettled}
           onSegmentAttachmentFinalized={handleSegmentAttachmentFinalized}
-          open
+          open={recordingOverlayOpen}
           recoveredDraft={recordingRecoveryReviewDraft}
           recordingTarget={recordingTarget}
           workspaceSession={activeWorkspaceSession}

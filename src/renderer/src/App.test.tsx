@@ -99,6 +99,8 @@ describe('App', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
     reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
@@ -1358,6 +1360,7 @@ describe('App', () => {
       })
     );
     expect(await screen.findByRole('dialog', { name: '录音' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '新建记忆' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '开始录音' }));
     await user.click(screen.getByRole('button', { name: '停止录音' }));
     await user.click(screen.getByRole('button', { name: '停止录音' }));
@@ -2047,7 +2050,6 @@ describe('App', () => {
     expect(screen.getByLabelText('暂停录音波形')).toBeInTheDocument();
     expect(screen.getByText('恢复后的转写内容')).toBeInTheDocument();
     expect(screen.getByText('00:03.72')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
     await waitFor(() =>
       expect(reoWorkspace.readRecordingDraftAudio).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
@@ -2055,6 +2057,8 @@ describe('App', () => {
         maxBytes: 3,
       })
     );
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled());
 
     await user.click(screen.getByRole('button', { name: '停止录音' }));
 

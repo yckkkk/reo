@@ -12,6 +12,7 @@ export type RecordingMediaHandlers = {
 };
 
 export type RecordingMediaController = {
+  readonly flush: () => Promise<boolean>;
   readonly pause: () => void;
   readonly resume: () => void;
   readonly stop: () => Promise<void>;
@@ -72,6 +73,18 @@ function resolvePcmWorkletUrl() {
   return new URL('./recordingPcmWorklet.js', import.meta.url).toString();
 }
 
+function emitPcmMessageData(data: unknown, onPcmChunk: RecordingMediaHandlers['onPcmChunk']) {
+  if (data instanceof Uint8Array) {
+    onPcmChunk?.(new Uint8Array(data));
+    return true;
+  }
+  if (data instanceof ArrayBuffer) {
+    onPcmChunk?.(new Uint8Array(data));
+    return true;
+  }
+  return false;
+}
+
 export function createBrowserMediaRecorderAdapter({
   AudioContextCtor = resolveAudioContextCtor(),
   AudioWorkletNodeCtor = resolveAudioWorkletNodeCtor(),
@@ -112,6 +125,56 @@ export function createBrowserMediaRecorderAdapter({
       let pcmSilenceGain: GainNode | null = null;
       let pcmWorkletNode: AudioWorkletNode | null = null;
       let pcmPaused = false;
+      const dataFlushWaiters = new Set<(flushed: boolean) => void>();
+
+      function resolveDataFlushWaiters() {
+        for (const resolve of dataFlushWaiters) {
+          resolve(true);
+        }
+        dataFlushWaiters.clear();
+      }
+
+      function waitForNextDataFlush() {
+        return new Promise<boolean>((resolve) => {
+          let timeout: number | null = null;
+          const complete = (flushed: boolean) => {
+            if (timeout !== null) {
+              window.clearTimeout(timeout);
+              timeout = null;
+            }
+            dataFlushWaiters.delete(complete);
+            resolve(flushed);
+          };
+          timeout = window.setTimeout(() => complete(false), DURABLE_AUDIO_CHUNK_DURATION_MS);
+          dataFlushWaiters.add(complete);
+        });
+      }
+
+      async function waitForPendingDataChunks() {
+        await Promise.all([...pendingChunks]);
+        if (recordingFailure) {
+          throw recordingFailure;
+        }
+      }
+
+      async function flushRecorderData() {
+        if (recordingFailure) {
+          throw recordingFailure;
+        }
+        let observedDataFlush = true;
+        if (recorder.state !== 'inactive' && typeof recorder.requestData === 'function') {
+          const nextDataFlush = waitForNextDataFlush();
+          try {
+            recorder.requestData();
+          } catch (error) {
+            resolveDataFlushWaiters();
+            throw error;
+          }
+          observedDataFlush = await nextDataFlush;
+        }
+        await waitForPendingDataChunks();
+        return observedDataFlush;
+      }
 
       function stopLevelPump() {
         if (animationFrame !== null) {
@@ -167,12 +230,7 @@ export function createBrowserMediaRecorderAdapter({
           timeout = window.setTimeout(resolveFlush, 100);
           workletNode.port.onmessage = (event: MessageEvent<unknown>) => {
             const data = event.data;
-            if (data instanceof Uint8Array) {
-              onPcmChunk?.(new Uint8Array(data));
-              return;
-            }
-            if (data instanceof ArrayBuffer) {
-              onPcmChunk?.(new Uint8Array(data));
+            if (emitPcmMessageData(data, onPcmChunk)) {
               return;
             }
             if (
@@ -250,12 +308,7 @@ export function createBrowserMediaRecorderAdapter({
             if (pcmPaused) {
               return;
             }
-            const data = event.data;
-            if (data instanceof Uint8Array) {
-              onPcmChunk(new Uint8Array(data));
-            } else if (data instanceof ArrayBuffer) {
-              onPcmChunk(new Uint8Array(data));
-            }
+            emitPcmMessageData(event.data, onPcmChunk);
           };
           pcmAudioSource.connect(pcmWorkletNode);
           pcmWorkletNode.connect(pcmSilenceGain);
@@ -316,6 +369,7 @@ export function createBrowserMediaRecorderAdapter({
 
       recorder.ondataavailable = (event) => {
         if (event.data.size === 0) {
+          resolveDataFlushWaiters();
           return;
         }
         const pendingChunk = event.data
@@ -328,6 +382,7 @@ export function createBrowserMediaRecorderAdapter({
           })
           .finally(() => {
             pendingChunks.delete(pendingChunk);
+            resolveDataFlushWaiters();
           });
         pendingChunks.add(pendingChunk);
         void pendingChunk.catch(() => {});
@@ -350,6 +405,7 @@ export function createBrowserMediaRecorderAdapter({
       await startPcmPump();
 
       return {
+        flush: flushRecorderData,
         pause: () => {
           if (recorder.state === 'recording') {
             recorder.pause();
@@ -388,10 +444,7 @@ export function createBrowserMediaRecorderAdapter({
               if (!stopError) {
                 await waitForStop;
               }
-              await Promise.all([...pendingChunks]);
-              if (recordingFailure) {
-                throw recordingFailure;
-              }
+              await waitForPendingDataChunks();
               if (stopError) {
                 throw stopError;
               }

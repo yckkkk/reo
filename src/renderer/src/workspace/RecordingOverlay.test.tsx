@@ -269,6 +269,7 @@ function createMediaAdapter() {
       const handlerIndex = handlers.length;
       handlers.push(nextHandlers);
       const controller: RecordingMediaController = {
+        flush: vi.fn(async () => true),
         pause: vi.fn(),
         resume: vi.fn(),
         stop: vi.fn(async () => {
@@ -304,6 +305,31 @@ async function emitRecordedAudio(media: ReturnType<typeof createMediaAdapter>) {
   await flushPromises();
 }
 
+function mockWaveformRect(waveform: HTMLElement, width = 200, height = 88) {
+  vi.spyOn(waveform, 'getBoundingClientRect').mockReturnValue({
+    bottom: height,
+    height,
+    left: 0,
+    right: width,
+    toJSON: () => ({}),
+    top: 0,
+    width,
+    x: 0,
+    y: 0,
+  });
+}
+
+function scrubPausedWaveformTo(progress: number) {
+  const waveform = screen.getByRole('slider', { name: '暂停录音波形' });
+  mockWaveformRect(waveform);
+  fireEvent.pointerDown(waveform, {
+    clientX: Math.round(200 * progress),
+    pointerId: 1,
+  });
+  fireEvent.pointerUp(waveform, { pointerId: 1 });
+  return waveform;
+}
+
 function expectNoMockTranscript() {
   expect(screen.queryByText(/Mock transcript/i)).not.toBeInTheDocument();
   expect(screen.queryByDisplayValue(/Mock transcript/i)).not.toBeInTheDocument();
@@ -312,6 +338,8 @@ function expectNoMockTranscript() {
 describe('RecordingOverlay', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
     vi.mocked(toast).mockClear();
     vi.mocked(toast.error).mockClear();
@@ -337,10 +365,25 @@ describe('RecordingOverlay', () => {
     );
 
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
-    expect(screen.getByText('从一个念头开始，慢慢说，我们会安静地为你记下。')).toBeInTheDocument();
+    const primaryPrompt = screen.getByText('从一个念头开始，慢慢说，我们会安静地为你记下。');
+    expect(primaryPrompt).toBeInTheDocument();
     expect(screen.getByText('不必急着组织完整，想到哪里就说到哪里。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '开始录音' })).toHaveClass('rounded-full');
-    expect(screen.getByLabelText('静态录音波形')).toBeInTheDocument();
+    expect(primaryPrompt.parentElement).toHaveClass(
+      'font-sans',
+      'text-body-lg',
+      'font-medium',
+      'leading-body-lg'
+    );
+    expect(primaryPrompt.parentElement).not.toHaveClass('text-heading-sm', 'font-regular');
+    expect(screen.getByRole('button', { name: '开始录音' })).toHaveClass(
+      'rounded-full',
+      'bg-brand-ember',
+      'text-destructive-foreground'
+    );
+    const waveform = screen.getByLabelText('静态录音波形');
+    expect(waveform).toHaveAttribute('data-waveform-mode', 'bars');
+    expect(waveform).toHaveAttribute('data-waveform-bar-width', '4');
+    expect(waveform).toHaveAttribute('data-waveform-bar-radius', '4');
     expect(screen.queryByText(/\d\d:\d\d\.\d\d/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '暂停录音' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '停止录音' })).not.toBeInTheDocument();
@@ -480,6 +523,41 @@ describe('RecordingOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('does not expose mid-track replacement for segment attachment recording', async () => {
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        onSegmentAttachmentFinalized={() => {}}
+        open
+        recordingTarget={{
+          kind: 'segment-attachment',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(10000));
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+
+    scrubPausedWaveformTo(0.5);
+
+    expect(screen.queryByRole('button', { name: '替换录音' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '继续录音' })).not.toBeInTheDocument();
+    expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalledWith(
+      '补充录音暂不支持从中间替换，可以保存后再补充一段。'
+    );
+  });
+
   it('re-enables return after save-and-return fails', async () => {
     const bridge = installWorkspaceBridge({
       finalizeRecordingDraft: vi.fn(async () => ({
@@ -515,6 +593,39 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回' }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('reopens the recording surface when optimistic completion fails after visual close', async () => {
+    const bridge = installWorkspaceBridge({
+      finalizeRecordingDraft: vi.fn(async () => ({
+        error: { code: 'ERR_RECORDING_FINALIZE_FAILED' as const, message: 'finalize failed' },
+        ok: false as const,
+      })),
+    });
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenNthCalledWith(1, false);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(toast.error).toHaveBeenCalledWith('无法完成录音保存。');
   });
 
   it('asks before returning from paused recording and can discard without saving', async () => {
@@ -606,7 +717,7 @@ describe('RecordingOverlay', () => {
     expect(screen.getByTestId('recording-right-control-slot')).toHaveClass('justify-end');
   });
 
-  it('renders the active recording state with dynamic waveform, timer, transcript and disabled locator controls', async () => {
+  it('renders the active recording state with dynamic waveform, timer and transcript', async () => {
     installWorkspaceBridge();
     const media = createMediaAdapter();
 
@@ -624,13 +735,16 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     act(() => vi.advanceTimersByTime(4720));
 
-    expect(screen.getByLabelText('实时录音波形')).toBeInTheDocument();
+    const waveform = screen.getByLabelText('实时录音波形');
+    expect(waveform).toHaveAttribute('data-waveform-mode', 'bars');
+    expect(waveform).toHaveAttribute('data-waveform-bar-width', '4');
+    expect(waveform).toHaveAttribute('data-waveform-bar-radius', '4');
     expect(screen.getByRole('region', { name: '实时转写' })).toBeInTheDocument();
     expect(screen.getByText('00:04.72')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '暂停录音' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '播放录音' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '后退 15 秒' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '前进 15 秒' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '后退 15 秒' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '前进 15 秒' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '停止录音' })).toBeEnabled();
     expect(document.querySelector('[data-slot="recording-playhead"]')).not.toBeInTheDocument();
   });
@@ -1921,7 +2035,7 @@ describe('RecordingOverlay', () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
-  it('renders the paused state with a playhead, cursor time, enabled locator controls and continue action', async () => {
+  it('renders the paused state with split waveform progress, cursor time and continue action', async () => {
     installWorkspaceBridge();
     const media = createMediaAdapter();
 
@@ -1940,14 +2054,56 @@ describe('RecordingOverlay', () => {
     act(() => vi.advanceTimersByTime(14970));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
 
-    expect(screen.getByLabelText('暂停录音波形')).toBeInTheDocument();
-    expect(document.querySelector('[data-slot="recording-playhead"]')).toBeInTheDocument();
+    const waveform = screen.getByRole('slider', { name: '暂停录音波形' });
+    expect(waveform).toHaveAttribute('data-waveform-mode', 'bars');
+    expect(waveform).toHaveAttribute('data-waveform-bar-width', '4');
+    expect(waveform).toHaveAttribute('data-waveform-bar-radius', '4');
+    expect(waveform).toHaveAttribute('data-waveform-progress-style', 'split');
+    expect(document.querySelector('[data-slot="recording-playhead"]')).not.toBeInTheDocument();
     expect(screen.getByText('00:14.97')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '后退 15 秒' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '前进 15 秒' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '后退 15 秒' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '前进 15 秒' })).not.toBeInTheDocument();
     expect(media.controller.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores paused recording waveform pointer movement until a scrub starts on the waveform', async () => {
+    installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(14970));
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+
+    const waveform = screen.getByRole('slider', { name: '暂停录音波形' });
+    vi.spyOn(waveform, 'getBoundingClientRect').mockReturnValue({
+      bottom: 112,
+      height: 112,
+      left: 0,
+      right: 200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 200,
+      x: 0,
+      y: 0,
+    });
+
+    fireEvent.pointerMove(waveform, { buttons: 1, clientX: 0, pointerId: 1 });
+
+    expect(waveform).toHaveAttribute('aria-valuenow', '14970');
+    expect(screen.getByText('00:14.97')).toBeInTheDocument();
   });
 
   it('plays the paused draft audio and keeps cursor time synchronized', async () => {
@@ -1974,7 +2130,10 @@ describe('RecordingOverlay', () => {
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
+    await flushPromises();
+    scrubPausedWaveformTo(0);
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
     await flushPromises();
 
@@ -1992,7 +2151,7 @@ describe('RecordingOverlay', () => {
     expect(screen.getByText('00:02.12')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '替换录音' })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole('button', { name: '前进 15 秒' }));
+    scrubPausedWaveformTo(1);
     expect(draftAudio.currentTime).toBe(4);
     expect(screen.getByText('00:04.00')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
@@ -2001,6 +2160,58 @@ describe('RecordingOverlay', () => {
       fireEvent.ended(draftAudio);
     });
     expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+  });
+
+  it('starts paused draft playback from the beginning when the cursor is at the end', async () => {
+    installWorkspaceBridge();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(4000));
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
+    expect(screen.getByText('00:04.00')).toBeInTheDocument();
+
+    const playButton = screen.getByRole('button', { name: '播放录音' });
+    expect(playButton.querySelector('svg')).not.toHaveClass('ml-2');
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await flushPromises();
+    fireEvent.click(playButton);
+    await flushPromises();
+
+    const draftAudio = screen.getByTestId('draft-playback-audio') as HTMLAudioElement;
+    expect(draftAudio.currentTime).toBe(0);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalledWith('无法播放当前录音预览。');
+
+    act(() => {
+      draftAudio.currentTime = 4;
+      fireEvent.ended(draftAudio);
+    });
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
+    await flushPromises();
+
+    expect(draftAudio.currentTime).toBe(0);
+    expect(play).toHaveBeenCalledTimes(2);
   });
 
   it('keeps paused playback recoverable when no audio chunk is available yet', async () => {
@@ -2021,12 +2232,100 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
+    const playbackButton = screen.getByRole('button', { name: '播放录音' });
+    expect(playbackButton).toBeDisabled();
+    fireEvent.click(playbackButton);
 
+    expect(media.controller.flush).toHaveBeenCalledTimes(1);
     expect(play).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith('没有可回听的录音内容。');
+    expect(toast.error).not.toHaveBeenCalledWith('没有可回听的录音内容。');
+    expect(toast.error).not.toHaveBeenCalledWith('无法播放当前录音预览。');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
+  });
+
+  it('waits for the paused draft audio element to become playable before enabling playback', async () => {
+    installWorkspaceBridge();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const load = vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(3000));
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
+
+    const playbackButton = screen.getByRole('button', { name: '播放录音' });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(playbackButton).toBeDisabled();
+    fireEvent.click(playbackButton);
+    expect(play).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalledWith('无法播放当前录音预览。');
+
+    const draftAudio = screen.getByTestId('draft-playback-audio') as HTMLAudioElement;
+    fireEvent.canPlay(draftAudio);
+    await flushPromises();
+
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
+    await flushPromises();
+
+    expect(draftAudio).toHaveAttribute('src', 'blob:draft-audio');
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('prepares paused draft playback from the captured chunk prefix when the flush times out', async () => {
+    installWorkspaceBridge();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const load = vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(3000));
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    vi.mocked(media.controller.flush).mockResolvedValueOnce(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeDisabled();
+
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await flushPromises();
+
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+    expect(screen.getByTestId('draft-playback-audio')).toHaveAttribute('src', 'blob:draft-audio');
   });
 
   it('keeps a recovered draft saveable without appending a new media session', async () => {
@@ -2068,15 +2367,17 @@ describe('RecordingOverlay', () => {
     );
 
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: '继续录音' }));
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
     await flushPromises();
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: '继续录音' })).not.toBeInTheDocument();
 
     expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
     expect(bridge.beginMicrophoneIntent).not.toHaveBeenCalled();
     expect(media.adapter.start).not.toHaveBeenCalled();
     expect(bridge.appendRecordingAudioChunk).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续录制。');
-    expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
+    expect(toast.error).not.toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续录制。');
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
   });
 
   it('saves recovered transcript markdown when the recovery marker only has sidecar text', async () => {
@@ -2216,18 +2517,16 @@ describe('RecordingOverlay', () => {
     );
 
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: '继续录音' }));
-    await flushPromises();
+    expect(screen.queryByRole('button', { name: '继续录音' })).not.toBeInTheDocument();
 
     expect(bridge.startRecordingTranscription).not.toHaveBeenCalled();
     expect(bridge.closeRecordingTranscription).not.toHaveBeenCalled();
     expect(bridge.discardRecordingDraft).not.toHaveBeenCalled();
     expect(adapter.start).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续录制。');
-    expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
+    expect(toast.error).not.toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续录制。');
   });
 
-  it('does not replace a recovered draft with a new media session', async () => {
+  it('does not expose unavailable continue or replace actions for a recovered draft', async () => {
     const bridge = installWorkspaceBridge({
       createRecordingDraft: vi.fn(async () => ({
         ok: true as const,
@@ -2273,20 +2572,15 @@ describe('RecordingOverlay', () => {
     );
 
     await flushPromises();
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
-    expect(toast).toHaveBeenCalledWith('从这里重新录制会替换后面的录音内容。');
-    expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
+    scrubPausedWaveformTo(0.5);
 
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
-
+    expect(screen.queryByRole('button', { name: '继续录音' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '替换录音' })).not.toBeInTheDocument();
     expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
     expect(bridge.appendRecordingAudioChunk).not.toHaveBeenCalled();
     expect(bridge.discardRecordingDraft).not.toHaveBeenCalled();
     expect(media.adapter.start).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续替换。');
+    expect(toast.error).not.toHaveBeenCalledWith('恢复录音可以先保存或放弃，暂不支持继续替换。');
   });
 
   it('keeps the previous recovery marker when unmounted during active replacement copy', async () => {
@@ -2324,9 +2618,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     act(() => vi.advanceTimersByTime(15000));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0.5);
     const replaceButton = screen.getByRole('button', { name: '替换录音' });
     fireEvent.click(replaceButton);
     fireEvent.click(replaceButton);
@@ -2336,6 +2628,14 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '正在替换录音' }));
     expect(bridge.createRecordingDraft).toHaveBeenCalledTimes(2);
     unmount();
+    prefixCopy.resolve({
+      error: {
+        code: 'ERR_RECORDING_APPEND_FAILED' as const,
+        message: 'copy failed',
+      },
+      ok: false as const,
+    });
+    await flushPromises();
 
     expect(bridge.discardRecordingDraft).not.toHaveBeenCalledWith({
       segmentId: 'seg_1',
@@ -2346,6 +2646,7 @@ describe('RecordingOverlay', () => {
     ).toMatchObject({
       segmentId: 'seg_1',
     });
+    expect(toast.error).not.toHaveBeenCalledWith('替换录音失败，原录音已保留。');
   });
 
   it('updates the paused cursor and restarts capture when replacing from the beginning', async () => {
@@ -2378,17 +2679,10 @@ describe('RecordingOverlay', () => {
     act(() => vi.advanceTimersByTime(14970));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
+    scrubPausedWaveformTo(0);
 
     expect(screen.getByText('00:00.00')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '替换录音' })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
-
-    expect(toast).toHaveBeenCalledWith('从这里重新录制会替换后面的录音内容。');
-    expect(media.adapter.start).toHaveBeenCalledTimes(1);
-    expect(bridge.createRecordingDraft).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
@@ -2419,7 +2713,7 @@ describe('RecordingOverlay', () => {
     expect(screen.getByRole('button', { name: '暂停录音' })).toBeEnabled();
   });
 
-  it('snaps the visible replacement cursor to the durable chunk boundary before replacing', async () => {
+  it('starts replacement immediately after resolving the durable cursor boundary', async () => {
     const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-audio');
@@ -2449,6 +2743,9 @@ describe('RecordingOverlay', () => {
     act(() => media.emitChunk(new Uint8Array([3])));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
     await flushPromises();
 
@@ -2466,8 +2763,15 @@ describe('RecordingOverlay', () => {
     await flushPromises();
 
     expect(screen.getByText('00:06.00')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '替换录音' })).toBeEnabled();
-    expect(bridge.createRecordingDraft).toHaveBeenCalledTimes(1);
+    expect(bridge.createRecordingDraft).toHaveBeenCalledTimes(2);
+    expect(bridge.cloneRecordingDraftPrefix).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retainedByteLength: 2,
+        sourceSegmentId: 'seg_1',
+        targetSegmentId: 'seg_1',
+      })
+    );
+    expect(media.controller.resume).toHaveBeenCalledTimes(1);
     expect(toast).not.toHaveBeenCalledWith('从这里重新录制会替换后面的录音内容。');
   });
 
@@ -2510,9 +2814,7 @@ describe('RecordingOverlay', () => {
     act(() => media.emitChunk(new Uint8Array([4, 5, 6])));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0.25);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2584,9 +2886,7 @@ describe('RecordingOverlay', () => {
       })
     );
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0.25);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
@@ -2646,6 +2946,7 @@ describe('RecordingOverlay', () => {
     act(() => media.emitChunk(new Uint8Array([7, 8, 9])));
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '播放录音' }));
     await flushPromises();
 
@@ -2654,9 +2955,7 @@ describe('RecordingOverlay', () => {
       'blob:before-replacement'
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0.25);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2699,9 +2998,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
     vi.mocked(media.adapter.start).mockRejectedValueOnce(new Error('restart failed'));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2747,9 +3044,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     act(() => vi.advanceTimersByTime(2000));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2796,9 +3091,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     act(() => vi.advanceTimersByTime(5000));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2854,9 +3147,7 @@ describe('RecordingOverlay', () => {
     await flushPromises();
     act(() => vi.advanceTimersByTime(15000));
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
-    fireEvent.click(screen.getByRole('button', { name: '后退 15 秒' }));
-    fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
-    await flushPromises();
+    scrubPausedWaveformTo(0.5);
     fireEvent.click(screen.getByRole('button', { name: '替换录音' }));
     await flushPromises();
 
@@ -2941,12 +3232,46 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
+    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     append.resolve({ ok: true, value: { nextSequence: 1 } });
     await flushPromises();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
-    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('closes the recording surface without waiting for final transcription backfill', async () => {
+    const finalTranscription = createDeferred<TranscriptionControlResponse>();
+    installWorkspaceBridge({
+      finishRecordingTranscription: vi.fn(() => finalTranscription.promise),
+    });
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(2000));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(window.reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
+
+    finalTranscription.resolve({ ok: true, value: { accepted: true } });
+    await flushPromises();
+    expect(window.reoWorkspace.finalizeRecordingDraft).toHaveBeenCalledTimes(1);
   });
 
   it('passes the elapsed recording duration to finalize', async () => {
@@ -3005,6 +3330,42 @@ describe('RecordingOverlay', () => {
     expect(media.controller.stop).not.toHaveBeenCalled();
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: '暂停录音' })).toBeEnabled();
+  });
+
+  it('warns before saving a paused short recording without clearing preview playback', async () => {
+    installWorkspaceBridge();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(750));
+    fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
+    await flushPromises();
+    fireEvent.canPlay(screen.getByTestId('draft-playback-audio'));
+    await flushPromises();
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(screen.getByRole('status')).toHaveTextContent('录音时间较短，可能无法生成有效内容。');
+    expect(media.controller.stop).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '继续录音' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
   });
 
   it('passes the current memory target when recording from the current memory context', async () => {
@@ -3131,9 +3492,10 @@ describe('RecordingOverlay', () => {
 
   it('does not expose stop or finalize before the media controller is ready', async () => {
     const controller: RecordingMediaController = {
+      flush: vi.fn(async () => true),
       pause: vi.fn(),
       resume: vi.fn(),
-      stop: vi.fn(),
+      stop: vi.fn(async () => {}),
     };
     const start = createDeferred<RecordingMediaController>();
     const bridge = installWorkspaceBridge();
@@ -3184,9 +3546,10 @@ describe('RecordingOverlay', () => {
     });
     const media = createMediaAdapter();
     const controller: RecordingMediaController = {
+      flush: vi.fn(async () => true),
       pause: vi.fn(),
       resume: vi.fn(),
-      stop: vi.fn(),
+      stop: vi.fn(async () => {}),
     };
     vi.mocked(media.adapter.start).mockImplementation(async () => {
       order.push('media-start');
@@ -3350,9 +3713,10 @@ describe('RecordingOverlay', () => {
     const bridge = installWorkspaceBridge();
     const media = createMediaAdapter();
     const controller: RecordingMediaController = {
+      flush: vi.fn(async () => true),
       pause: vi.fn(),
       resume: vi.fn(),
-      stop: vi.fn(),
+      stop: vi.fn(async () => {}),
     };
     vi.mocked(media.adapter.start).mockReturnValue(start.promise);
 

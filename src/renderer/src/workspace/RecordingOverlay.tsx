@@ -47,10 +47,14 @@ import {
   type RecordingMediaController,
   type RecordingMediaHandlers,
 } from './mediaRecorderAdapter';
-import { RecordingControls } from './recording/RecordingControls';
+import {
+  RecordingControls,
+  type PausedRecordingPrimaryAction,
+} from './recording/RecordingControls';
 import { RecordingSurface } from './recording/RecordingSurface';
 import { RecordingTranscriptPreview } from './recording/RecordingTranscriptPreview';
 import { RecordingWaveform } from './recording/RecordingWaveform';
+import { RECORDING_SPEECH_TEXT_CLASS } from './recording/recordingTypography';
 import {
   applyTranscriptResult,
   createRecordingTimeline,
@@ -82,6 +86,7 @@ type RecordingOverlayProps = {
   readonly onOpenChange: (open: boolean) => void;
   readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
   readonly onAudioSegmentFinalized: (recording: FinalizedAudioSegment) => void;
+  readonly onRecordingFlowSettled?: () => void;
   readonly onSegmentAttachmentFinalized?: (recording: FinalizedSegmentAttachmentRecording) => void;
   readonly open: boolean;
   readonly recoveredDraft?: RecordingRecoveryDraft | null;
@@ -106,7 +111,6 @@ const MIN_EFFECTIVE_RECORDING_DURATION_MS = 2_000;
 const MAX_RECORDING_DURATION_MS = 60 * 60 * 1000;
 const LONG_RECORDING_WARNING_THRESHOLD_MS = 55 * 60 * 1000;
 const RECORDING_TIMER_INTERVAL_MS = 40;
-const SEEK_STEP_MS = 15_000;
 const SILENCE_NOTICE_THRESHOLD_MS = 15_000;
 const AUDIBLE_LEVEL_THRESHOLD = 0.08;
 const WAVEFORM_SAMPLE_INTERVAL_MS = 80;
@@ -115,11 +119,11 @@ const MAX_WAVEFORM_SAMPLES = 2400;
 const MAX_COMPLETION_BACKFILL_PCM_DURATION_MS = 10 * 60 * 1000;
 const TRANSCRIPTION_START_BUFFER_MS = 10_000;
 const MAX_TRANSCRIPTION_AUDIO_QUEUE_BYTES = 1024 * 1024;
+const DRAFT_PLAYBACK_READY_TIMEOUT_MS = 1500;
 const SHORT_RECORDING_NOTICE =
   '录音时间较短，可能无法生成有效内容。你可以继续录音，或再次点击完成保存。';
 const LONG_RECORDING_WARNING_NOTICE = '录音即将达到时长上限，请尽快完成或分段记录。';
 const MAX_RECORDING_DURATION_NOTICE = '录音已达到时长上限，已自动暂停。';
-const REPLACE_RECORDING_WARNING_NOTICE = '从这里重新录制会替换后面的录音内容。';
 const SILENCE_NOTICE = '暂时没有检测到明显声音，你可以靠近麦克风或继续录音。';
 const COMPLETION_BACKFILL_UNAVAILABLE_NOTICE = '录音已保存，转写暂时不可用，稍后可重新尝试。';
 
@@ -133,6 +137,22 @@ type CapturedPcmChunk = {
   readonly chunk: Uint8Array;
   readonly endTimeMs: number;
   readonly startTimeMs: number;
+};
+
+type DraftPlaybackStatus = 'idle' | 'preparing' | 'ready' | 'unavailable';
+
+type DraftPlaybackPreview = {
+  readonly chunkCount: number;
+  readonly session: number | null;
+  readonly status: DraftPlaybackStatus;
+  readonly url: string | null;
+};
+
+const EMPTY_DRAFT_PLAYBACK_PREVIEW: DraftPlaybackPreview = {
+  chunkCount: 0,
+  session: null,
+  status: 'idle',
+  url: null,
 };
 
 type ActiveTranscriptionSession = {
@@ -227,6 +247,25 @@ function resolveReplacementStartMs({
   return Math.min(totalDurationMs, containingOrNextChunk.endTimeMs);
 }
 
+function resolveDraftPlaybackStartMs({
+  cursorTimeMs,
+  totalDurationMs,
+}: {
+  readonly cursorTimeMs: number;
+  readonly totalDurationMs: number;
+}) {
+  const safeTotalDurationMs = Math.max(0, Math.round(totalDurationMs));
+  if (safeTotalDurationMs <= WAVEFORM_SEEK_EPSILON_MS) {
+    return 0;
+  }
+
+  const safeCursorTimeMs = Math.min(Math.max(0, Math.round(cursorTimeMs)), safeTotalDurationMs);
+  if (safeCursorTimeMs >= safeTotalDurationMs - WAVEFORM_SEEK_EPSILON_MS) {
+    return 0;
+  }
+  return safeCursorTimeMs;
+}
+
 function retainPcmChunksThrough(
   chunks: readonly CapturedPcmChunk[],
   cursorTimeMs: number
@@ -258,6 +297,7 @@ export function RecordingOverlay({
   onOpenChange,
   onRecordingContentSaved,
   onAudioSegmentFinalized,
+  onRecordingFlowSettled,
   onSegmentAttachmentFinalized,
   open,
   recoveredDraft = null,
@@ -271,7 +311,9 @@ export function RecordingOverlay({
   );
   const cursorTimeMs = timeline.cursorTimeMs;
   const [waveformSamples, setWaveformSamples] = useState<readonly number[]>([]);
-  const [draftPlaybackUrl, setDraftPlaybackUrl] = useState<string | null>(null);
+  const [draftPlaybackPreview, setDraftPlaybackPreviewState] = useState<DraftPlaybackPreview>(
+    EMPTY_DRAFT_PLAYBACK_PREVIEW
+  );
   const [exitConfirmationOpen, setExitConfirmationOpen] = useState(false);
   const [exitActionPending, setExitActionPending] = useState(false);
   const [isDraftPlaybackPlaying, setIsDraftPlaybackPlaying] = useState(false);
@@ -283,7 +325,7 @@ export function RecordingOverlay({
   const capturedPcmChunksRef = useRef<CapturedPcmChunk[]>([]);
   const controllerRef = useRef<RecordingMediaController | null>(null);
   const draftAudioRef = useRef<HTMLAudioElement | null>(null);
-  const draftPlaybackUrlRef = useRef<string | null>(null);
+  const draftPlaybackPreviewRef = useRef<DraftPlaybackPreview>(EMPTY_DRAFT_PLAYBACK_PREVIEW);
   const activeDraftRef = useRef<{
     readonly segmentId: string;
     readonly recordingSession: number;
@@ -318,7 +360,6 @@ export function RecordingOverlay({
     startedAtMs: number | null;
   }>({ accumulatedMs: 0, startedAtMs: null });
   const longRecordingWarningShownRef = useRef(false);
-  const replacementWarningCursorRef = useRef<number | null>(null);
   const restoredSegmentIdRef = useRef<string | null>(null);
   const silenceNoticeShownRef = useRef(false);
   const shortRecordingCompletionArmedRef = useRef(false);
@@ -515,11 +556,11 @@ export function RecordingOverlay({
 
   useEffect(() => {
     return () => {
-      if (draftPlaybackUrlRef.current) {
+      if (draftPlaybackPreviewRef.current.url) {
         draftAudioRef.current?.pause();
       }
       liveAudioInputActiveRef.current = false;
-      draftPlaybackUrlRef.current = null;
+      draftPlaybackPreviewRef.current = EMPTY_DRAFT_PLAYBACK_PREVIEW;
       playbackSessionRef.current += 1;
       recordingSessionRef.current += 1;
       const pendingMicrophoneIntent = pendingMicrophoneIntentRef.current;
@@ -570,8 +611,15 @@ export function RecordingOverlay({
     }).catch(() => {});
   }
 
+  const draftPlaybackUrl = draftPlaybackPreview.url;
+  const draftPlaybackStatus = draftPlaybackPreview.status;
+
+  function setDraftPlaybackPreview(nextPreview: DraftPlaybackPreview) {
+    draftPlaybackPreviewRef.current = nextPreview;
+    setDraftPlaybackPreviewState(nextPreview);
+  }
+
   useEffect(() => {
-    draftPlaybackUrlRef.current = draftPlaybackUrl;
     return () => {
       if (draftPlaybackUrl) {
         URL.revokeObjectURL(draftPlaybackUrl);
@@ -884,10 +932,6 @@ export function RecordingOverlay({
     setShortRecordingNoticeVisible(false);
   }
 
-  function clearReplacementWarning() {
-    replacementWarningCursorRef.current = null;
-  }
-
   function shouldHoldShortRecordingSave(durationMs: number) {
     if (durationMs >= MIN_EFFECTIVE_RECORDING_DURATION_MS) {
       clearShortRecordingNotice();
@@ -899,33 +943,6 @@ export function RecordingOverlay({
     }
     shortRecordingCompletionArmedRef.current = true;
     setShortRecordingNoticeVisible(true);
-    return true;
-  }
-
-  function shouldHoldReplacementForWarning() {
-    const roundedCursorTimeMs = Math.round(cursorTimeMs);
-    if (replacementWarningCursorRef.current === roundedCursorTimeMs) {
-      replacementWarningCursorRef.current = null;
-      return false;
-    }
-
-    replacementWarningCursorRef.current = roundedCursorTimeMs;
-    toast(REPLACE_RECORDING_WARNING_NOTICE);
-    return true;
-  }
-
-  function snapCursorToReplacementBoundary() {
-    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
-    const replacementStartMs = resolveReplacementStartMs({
-      chunks: capturedChunksRef.current,
-      cursorTimeMs,
-      totalDurationMs,
-    });
-    if (Math.abs(replacementStartMs - Math.round(cursorTimeMs)) <= WAVEFORM_SEEK_EPSILON_MS) {
-      return false;
-    }
-
-    setCursor(replacementStartMs);
     return true;
   }
 
@@ -960,6 +977,13 @@ export function RecordingOverlay({
 
   function pauseRecordingAt(durationMs: number) {
     const safeDurationMs = Math.max(0, Math.round(durationMs));
+    const pausedRecordingSession = recordingSessionRef.current;
+    setDraftPlaybackPreview({
+      chunkCount: capturedChunksRef.current.length,
+      session: pausedRecordingSession,
+      status: 'preparing',
+      url: null,
+    });
     recordingDurationRef.current = {
       accumulatedMs: safeDurationMs,
       startedAtMs: null,
@@ -974,11 +998,49 @@ export function RecordingOverlay({
         safeDurationMs
       )
     );
-    clearReplacementWarning();
     persistRecoveryAudioChunksSnapshot(safeDurationMs, { force: true });
     persistRecoveryWaveformSnapshot(safeDurationMs, waveformSamples, { force: true });
     liveAudioInputActiveRef.current = false;
-    controllerRef.current?.pause();
+    const controller = controllerRef.current;
+    controller?.pause();
+    const previewFlush = controller?.flush() ?? Promise.resolve(false);
+    void previewFlush
+      .then((flushed) => {
+        if (
+          recordingSessionRef.current !== pausedRecordingSession ||
+          draftPlaybackPreviewRef.current.session !== pausedRecordingSession
+        ) {
+          return;
+        }
+        if (!flushed && capturedChunksRef.current.length === 0) {
+          setDraftPlaybackPreview({
+            chunkCount: 0,
+            session: pausedRecordingSession,
+            status: 'unavailable',
+            url: null,
+          });
+          return;
+        }
+        prepareDraftPlaybackPreviewForSession(pausedRecordingSession);
+      })
+      .catch(() => {
+        if (
+          recordingSessionRef.current !== pausedRecordingSession ||
+          draftPlaybackPreviewRef.current.session !== pausedRecordingSession
+        ) {
+          return;
+        }
+        if (capturedChunksRef.current.length > 0) {
+          prepareDraftPlaybackPreviewForSession(pausedRecordingSession);
+          return;
+        }
+        setDraftPlaybackPreview({
+          chunkCount: 0,
+          session: pausedRecordingSession,
+          status: 'unavailable',
+          url: null,
+        });
+      });
     void finishActiveTranscription(recordingSessionRef.current).catch((error) => {
       notifyRecordingError(unknownErrorDisplayMessage(error, '最终转写未返回，录音会继续保存。'));
     });
@@ -986,18 +1048,20 @@ export function RecordingOverlay({
   }
 
   function stopDraftPlayback() {
-    if (draftPlaybackUrlRef.current) {
+    if (draftPlaybackPreviewRef.current.url) {
       draftAudioRef.current?.pause();
     }
     setIsDraftPlaybackPlaying(false);
   }
 
-  function invalidateDraftPlaybackUrl() {
+  function cancelDraftPlaybackPreview(status: DraftPlaybackStatus = 'idle') {
     stopDraftPlayback();
-    if (draftPlaybackUrlRef.current !== null) {
-      draftPlaybackUrlRef.current = null;
-      setDraftPlaybackUrl(null);
-    }
+    setDraftPlaybackPreview({
+      chunkCount: 0,
+      session: null,
+      status,
+      url: null,
+    });
   }
 
   function buildDraftPlaybackUrl() {
@@ -1005,10 +1069,128 @@ export function RecordingOverlay({
     if (chunks.length === 0) {
       return null;
     }
-    const nextUrl = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' }));
-    draftPlaybackUrlRef.current = nextUrl;
-    setDraftPlaybackUrl(nextUrl);
-    return nextUrl;
+    return URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' }));
+  }
+
+  function isDraftAudioSource(audio: HTMLAudioElement, source: string) {
+    return (
+      audio.src === source || audio.currentSrc === source || audio.getAttribute('src') === source
+    );
+  }
+
+  function isDraftAudioReadyForSource(audio: HTMLAudioElement, source: string) {
+    return (
+      isDraftAudioSource(audio, source) && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    );
+  }
+
+  function waitForDraftPlaybackReady(audio: HTMLAudioElement, source: string) {
+    if (isDraftAudioReadyForSource(audio, source)) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      let timeout: number | null = null;
+      let settled = false;
+      const finish = (ready: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (timeout !== null) {
+          window.clearTimeout(timeout);
+          timeout = null;
+        }
+        audio.removeEventListener('canplay', handleReady);
+        audio.removeEventListener('loadeddata', handleReady);
+        audio.removeEventListener('error', handleError);
+        resolve(ready);
+      };
+      const handleReady = () => finish(isDraftAudioSource(audio, source));
+      const handleError = () => finish(false);
+      audio.addEventListener('canplay', handleReady);
+      audio.addEventListener('loadeddata', handleReady);
+      audio.addEventListener('error', handleError);
+      timeout = window.setTimeout(() => {
+        finish(isDraftAudioReadyForSource(audio, source));
+      }, DRAFT_PLAYBACK_READY_TIMEOUT_MS);
+      try {
+        audio.load();
+      } catch {
+        finish(false);
+      }
+    });
+  }
+
+  async function prepareDraftPlaybackPreview(source: string) {
+    const audio = draftAudioRef.current;
+    if (!audio) {
+      return false;
+    }
+    audio.src = source;
+    return waitForDraftPlaybackReady(audio, source);
+  }
+
+  function prepareDraftPlaybackPreviewForSession(recordingSession: number) {
+    const chunkCount = capturedChunksRef.current.length;
+    if (chunkCount === 0) {
+      setDraftPlaybackPreview({
+        chunkCount: 0,
+        session: recordingSession,
+        status: 'unavailable',
+        url: null,
+      });
+      return;
+    }
+    stopDraftPlayback();
+    const playbackSource = buildDraftPlaybackUrl();
+    if (!playbackSource) {
+      setDraftPlaybackPreview({
+        chunkCount: 0,
+        session: recordingSession,
+        status: 'unavailable',
+        url: null,
+      });
+      return;
+    }
+    const preparingPreview = {
+      chunkCount,
+      session: recordingSession,
+      status: 'preparing' as const,
+      url: playbackSource,
+    };
+    setDraftPlaybackPreview(preparingPreview);
+    void prepareDraftPlaybackPreview(playbackSource)
+      .then((ready) => {
+        const currentPreview = draftPlaybackPreviewRef.current;
+        if (
+          recordingSessionRef.current !== recordingSession ||
+          currentPreview.session !== recordingSession ||
+          currentPreview.url !== playbackSource ||
+          currentPreview.chunkCount !== chunkCount
+        ) {
+          return;
+        }
+        setDraftPlaybackPreview({
+          ...currentPreview,
+          status: ready ? 'ready' : 'unavailable',
+        });
+      })
+      .catch(() => {
+        const currentPreview = draftPlaybackPreviewRef.current;
+        if (
+          recordingSessionRef.current !== recordingSession ||
+          currentPreview.session !== recordingSession ||
+          currentPreview.url !== playbackSource ||
+          currentPreview.chunkCount !== chunkCount
+        ) {
+          return;
+        }
+        setDraftPlaybackPreview({
+          ...currentPreview,
+          status: 'unavailable',
+        });
+      });
   }
 
   function recoveryAudioChunkFromCaptured({
@@ -1024,7 +1206,7 @@ export function RecordingOverlay({
   }
 
   function setCapturedChunks(chunks: readonly CapturedRecordingChunk[]) {
-    invalidateDraftPlaybackUrl();
+    cancelDraftPlaybackPreview();
     capturedChunksRef.current = [...chunks];
     recoveryAudioChunksRef.current = chunks.map(recoveryAudioChunkFromCaptured);
   }
@@ -1164,6 +1346,7 @@ export function RecordingOverlay({
       durationMs,
     });
     setCapturedChunks(restoredChunks);
+    prepareDraftPlaybackPreviewForSession(recordingSessionRef.current);
     lastCapturedChunkEndMsRef.current = restoredChunks.at(-1)?.endTimeMs ?? durationMs;
     sequenceRef.current = response.value.nextSequence;
     updateRecordingRecoverySnapshot({
@@ -1284,7 +1467,6 @@ export function RecordingOverlay({
   }
 
   function captureLiveChunk(chunk: Uint8Array) {
-    invalidateDraftPlaybackUrl();
     const startTimeMs = lastCapturedChunkEndMsRef.current;
     const endTimeMs = Math.max(startTimeMs + 1, readRecordingDurationMs());
     lastCapturedChunkEndMsRef.current = endTimeMs;
@@ -1292,6 +1474,10 @@ export function RecordingOverlay({
     capturedChunksRef.current.push(capturedChunk);
     recoveryAudioChunksRef.current.push(recoveryAudioChunkFromCaptured(capturedChunk));
     persistRecoveryAudioChunksSnapshot(endTimeMs);
+    const pausedPreviewSession = draftPlaybackPreviewRef.current.session;
+    if (pausedPreviewSession !== null && pausedPreviewSession === recordingSessionRef.current) {
+      prepareDraftPlaybackPreviewForSession(pausedPreviewSession);
+    }
   }
 
   function captureLivePcmChunk(chunk: Uint8Array) {
@@ -1385,6 +1571,7 @@ export function RecordingOverlay({
       discardActiveDraft(recordingSession);
     }
     setState((current) => transitionRecordingState(current, { type: 'failed' }));
+    onOpenChange(true);
     notifyRecordingError(message);
   }
 
@@ -1490,6 +1677,7 @@ export function RecordingOverlay({
     clearShortRecordingNotice();
     appendFailureRef.current = null;
     appendQueueRef.current = Promise.resolve();
+    cancelDraftPlaybackPreview();
     setCapturedChunks([]);
     capturedPcmChunksRef.current = [];
     controllerRef.current = null;
@@ -1504,7 +1692,6 @@ export function RecordingOverlay({
     revisionIndexRef.current = 0;
     longRecordingWarningShownRef.current = false;
     silenceNoticeShownRef.current = false;
-    clearReplacementWarning();
     setElapsedMs(0);
     setWaveformSamples([]);
     replaceTranscriptDraft('');
@@ -1666,9 +1853,6 @@ export function RecordingOverlay({
       return;
     }
 
-    stopDraftPlayback();
-    clearShortRecordingNotice();
-    clearReplacementWarning();
     const oldController = controllerRef.current;
     const oldDraft = activeDraftRef.current;
     if (!oldDraft) {
@@ -1680,6 +1864,8 @@ export function RecordingOverlay({
       return;
     }
 
+    clearShortRecordingNotice();
+    cancelDraftPlaybackPreview();
     clearRecordingError();
     const recordingSession = recordingSessionRef.current;
     const recordingFlowSessionId = timeline.recordingSessionId;
@@ -1712,6 +1898,10 @@ export function RecordingOverlay({
       replacementStartMs
     );
     const retainedByteLength = byteLengthForChunks(retainedChunks);
+    const replacementNeedsTranscriptBackfill = timelineRef.current.transcriptSegments.some(
+      (segment) =>
+        segment.startTimeMs < replacementStartMs && replacementStartMs < segment.endTimeMs
+    );
 
     const previousRecordingSession = recordingSessionRef.current;
     const previousSequence = sequenceRef.current;
@@ -1796,7 +1986,7 @@ export function RecordingOverlay({
       silenceNoticeShownRef.current = false;
       revisionIndexRef.current = nextRevisionIndex;
       activeRevisionIdRef.current = nextRevisionId;
-      finalTranscriptionNeedsBackfillRef.current = false;
+      finalTranscriptionNeedsBackfillRef.current = replacementNeedsTranscriptBackfill;
       completionBackfillTooLargeRef.current = false;
       setElapsedMs(replacementStartMs);
       truncateWaveformSamplesAt(replacementStartMs, totalDurationMs);
@@ -1882,6 +2072,20 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
       }).catch(() => {});
     } catch (replaceError) {
+      const replacementStillCurrent =
+        replacementCopySessionRef.current === recordingSession ||
+        recordingSessionRef.current === recordingSession ||
+        recordingSessionRef.current === nextRecordingSession;
+      if (!replacementStillCurrent) {
+        clearPendingMicrophoneIntent(nextRecordingSession);
+        closeActiveTranscription(recordingSession);
+        closeActiveTranscription(nextRecordingSession);
+        replacementCopySessionRef.current = null;
+        if (nextSegmentId) {
+          void discardDraftAndClearRecoveryOnSuccess(nextSegmentId).catch(() => {});
+        }
+        return;
+      }
       try {
         oldController.pause();
       } catch {
@@ -1927,6 +2131,7 @@ export function RecordingOverlay({
       if (nextSegmentId) {
         void discardDraftAndClearRecoveryOnSuccess(nextSegmentId).catch(() => {});
       }
+      prepareDraftPlaybackPreviewForSession(previousRecordingSession);
       setState((current) => transitionRecordingState(current, { type: 'replace-failed' }));
       notifyRecordingError(
         unknownErrorDisplayMessage(replaceError, '替换录音失败，原录音已保留。')
@@ -1948,28 +2153,21 @@ export function RecordingOverlay({
   }
 
   function handleResume() {
-    stopDraftPlayback();
-    clearShortRecordingNotice();
     if (state.status === 'paused' && hasTailAfterCursor(timeline)) {
       if (recordingTarget.kind === 'segment-attachment') {
         notifyRecordingError('补充录音暂不支持从中间替换，可以保存后再补充一段。');
         return;
       }
-      if (snapCursorToReplacementBoundary()) {
-        return;
-      }
-      if (shouldHoldReplacementForWarning()) {
-        return;
-      }
       void replaceRecordingFromCursor();
       return;
     }
-    clearReplacementWarning();
     const resumeAtMs = readRecordingDurationMs();
     if (!controllerRef.current) {
       notifyRecoveredRecordingCannotResume();
       return;
     }
+    clearShortRecordingNotice();
+    cancelDraftPlaybackPreview();
     queueActiveTranscriptionStart({
       recordingFlowSessionId: timeline.recordingSessionId,
       recordingSession: recordingSessionRef.current,
@@ -1989,23 +2187,31 @@ export function RecordingOverlay({
   ) {
     const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
     const safeCursorTimeMs = Math.min(totalDurationMs, Math.max(0, Math.round(nextCursorTimeMs)));
-    if (syncDraftAudio && state.status === 'paused' && draftAudioRef.current) {
-      draftAudioRef.current.currentTime = safeCursorTimeMs / 1000;
+    const draftAudio = draftAudioRef.current;
+    if (
+      syncDraftAudio &&
+      state.status === 'paused' &&
+      draftAudio &&
+      Math.abs(draftAudio.currentTime * 1000 - safeCursorTimeMs) > WAVEFORM_SEEK_EPSILON_MS
+    ) {
+      draftAudio.currentTime = safeCursorTimeMs / 1000;
     }
-    clearReplacementWarning();
-    setTimeline((current) =>
-      moveRecordingCursor(
+    setTimeline((current) => {
+      const nextTimeline = moveRecordingCursor(
         createRecordingTimeline({
           ...current,
           totalDurationMs,
         }),
         safeCursorTimeMs
-      )
-    );
-  }
-
-  function moveCursor(deltaMs: number) {
-    setCursor(cursorTimeMs + deltaMs);
+      );
+      if (
+        nextTimeline.totalDurationMs === current.totalDurationMs &&
+        Math.abs(nextTimeline.cursorTimeMs - current.cursorTimeMs) <= WAVEFORM_SEEK_EPSILON_MS
+      ) {
+        return current;
+      }
+      return nextTimeline;
+    });
   }
 
   async function handleDraftPlayPause() {
@@ -2022,19 +2228,32 @@ export function RecordingOverlay({
       setIsDraftPlaybackPlaying(false);
       return;
     }
+    if (draftPlaybackStatus !== 'ready') {
+      return;
+    }
 
-    const playbackSource = draftPlaybackUrlRef.current ?? buildDraftPlaybackUrl();
+    const playbackSource = draftPlaybackPreviewRef.current.url;
     if (!playbackSource) {
-      notifyRecordingError('没有可回听的录音内容。');
+      setDraftPlaybackPreview({
+        ...draftPlaybackPreviewRef.current,
+        status: 'unavailable',
+      });
       return;
     }
 
     clearRecordingError();
     audio.src = playbackSource;
-    audio.currentTime = Math.max(0, cursorTimeMs / 1000);
+    const playbackStartMs = resolveDraftPlaybackStartMs({
+      cursorTimeMs,
+      totalDurationMs: Math.max(elapsedMs, timeline.totalDurationMs),
+    });
+    audio.currentTime = playbackStartMs / 1000;
     try {
       await Promise.resolve(audio.play());
       setIsDraftPlaybackPlaying(true);
+      if (Math.abs(playbackStartMs - cursorTimeMs) > WAVEFORM_SEEK_EPSILON_MS) {
+        setCursor(playbackStartMs, { syncDraftAudio: false });
+      }
     } catch (playbackError) {
       setIsDraftPlaybackPlaying(false);
       notifyRecordingError(unknownErrorDisplayMessage(playbackError, '无法播放当前录音预览。'));
@@ -2218,7 +2437,11 @@ export function RecordingOverlay({
 
   async function handleStop({
     bypassShortRecordingHold = false,
-  }: { readonly bypassShortRecordingHold?: boolean } = {}) {
+    closeImmediately = true,
+  }: {
+    readonly bypassShortRecordingHold?: boolean;
+    readonly closeImmediately?: boolean;
+  } = {}) {
     if (
       (state.status !== 'recording' && state.status !== 'paused') ||
       replacementCopySessionRef.current !== null
@@ -2226,7 +2449,6 @@ export function RecordingOverlay({
       return;
     }
 
-    stopDraftPlayback();
     const segmentId = state.segmentId;
     const recordingSession = recordingSessionRef.current;
     const controller = controllerRef.current;
@@ -2245,12 +2467,16 @@ export function RecordingOverlay({
       return;
     }
     clearShortRecordingNotice();
+    cancelDraftPlaybackPreview();
     pauseRecordingDurationClock();
     liveAudioInputActiveRef.current = false;
     persistRecoveryAudioChunksSnapshot(durationMs, { force: true });
     persistRecoveryWaveformSnapshot(durationMs, waveformSamples, { force: true });
     setElapsedMs(durationMs);
     setState((current) => transitionRecordingState(current, { type: 'stop-requested' }));
+    if (closeImmediately) {
+      onOpenChange(false);
+    }
     try {
       await controller?.stop();
       await appendQueueRef.current;
@@ -2294,7 +2520,10 @@ export function RecordingOverlay({
         });
         clearRecoveryMarker(segmentId);
         resetClosedRecordingState();
-        onOpenChange(false);
+        onRecordingFlowSettled?.();
+        if (!closeImmediately) {
+          onOpenChange(false);
+        }
         return;
       }
 
@@ -2335,7 +2564,10 @@ export function RecordingOverlay({
         return;
       }
       resetClosedRecordingState();
-      onOpenChange(false);
+      onRecordingFlowSettled?.();
+      if (!closeImmediately) {
+        onOpenChange(false);
+      }
     } catch (finalizeError) {
       const message = unknownErrorDisplayMessage(finalizeError, '录音草稿无法完成保存。');
       failActiveRecording(message, recordingSession);
@@ -2368,7 +2600,7 @@ export function RecordingOverlay({
     setExitActionPending(true);
     setExitConfirmationOpen(false);
     try {
-      await handleStop({ bypassShortRecordingHold: true });
+      await handleStop({ bypassShortRecordingHold: true, closeImmediately: false });
     } finally {
       setExitActionPending(false);
     }
@@ -2428,6 +2660,7 @@ export function RecordingOverlay({
 
     setExitActionPending(false);
     resetClosedRecordingState();
+    onRecordingFlowSettled?.();
     onOpenChange(false);
   }
 
@@ -2444,7 +2677,7 @@ export function RecordingOverlay({
     setCapturedChunks([]);
     capturedPcmChunksRef.current = [];
     playbackSessionRef.current += 1;
-    invalidateDraftPlaybackUrl();
+    cancelDraftPlaybackPreview();
     resetRecordingDurationClock();
     lastRecoveryDurationPersistedMsRef.current = 0;
     lastRecoveryAudioChunksPersistedMsRef.current = 0;
@@ -2453,7 +2686,6 @@ export function RecordingOverlay({
     restoredSegmentIdRef.current = null;
     longRecordingWarningShownRef.current = false;
     silenceNoticeShownRef.current = false;
-    clearReplacementWarning();
     setElapsedMs(0);
     setExitConfirmationOpen(false);
     setExitActionPending(false);
@@ -2478,6 +2710,7 @@ export function RecordingOverlay({
     }
     if (!nextOpen) {
       resetClosedRecordingState();
+      onRecordingFlowSettled?.();
     }
     onOpenChange(nextOpen);
   }
@@ -2489,7 +2722,6 @@ export function RecordingOverlay({
 
   const statusText = statusTextFor(state);
   const totalWaveformDurationMs = Math.max(elapsedMs, cursorTimeMs, timeline.totalDurationMs);
-  const cursorAtEnd = !hasTailAfterCursor(timeline);
   const visibleTimerMs =
     state.status === 'paused' || state.status === 'replacing' ? cursorTimeMs : elapsedMs;
   const transcriptFocusTimeMs =
@@ -2497,19 +2729,26 @@ export function RecordingOverlay({
       ? cursorTimeMs
       : timeline.totalDurationMs;
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  const pausedPrimaryAction: PausedRecordingPrimaryAction =
+    state.status !== 'paused' || !activeDraftRef.current || !controllerRef.current
+      ? 'none'
+      : hasTailAfterCursor(timeline)
+        ? recordingTarget.kind === 'existing-memory'
+          ? 'replace'
+          : 'none'
+        : 'resume';
   const composerControls =
     state.status === 'recording' ||
     state.status === 'paused' ||
     state.status === 'replacing' ||
     state.status === 'finalizing' ? (
       <RecordingControls
-        cursorAtEnd={cursorAtEnd}
         isPlaying={isDraftPlaybackPlaying}
         onPause={handlePause}
         onPlayPause={handleDraftPlayPause}
-        onResume={handleResume}
-        onSeekBackward={() => moveCursor(-SEEK_STEP_MS)}
-        onSeekForward={() => moveCursor(SEEK_STEP_MS)}
+        onPrimaryPausedAction={handleResume}
+        pausedPrimaryAction={pausedPrimaryAction}
+        playbackDisabled={draftPlaybackStatus !== 'ready'}
         onStart={handleStart}
         onStop={handleStop}
         state={state}
@@ -2579,7 +2818,9 @@ export function RecordingOverlay({
               className="row-start-2 flex h-full w-full items-center justify-center"
               data-testid="recording-copy-slot"
             >
-              <div className="flex max-w-[680px] flex-col gap-8 text-center font-sans text-heading-sm font-regular leading-heading-sm text-foreground">
+              <div
+                className={`flex max-w-[680px] flex-col gap-8 text-center text-foreground ${RECORDING_SPEECH_TEXT_CLASS}`}
+              >
                 <p>从一个念头开始，慢慢说，我们会安静地为你记下。</p>
                 <p>不必急着组织完整，想到哪里就说到哪里。</p>
               </div>
@@ -2595,7 +2836,7 @@ export function RecordingOverlay({
             >
               <RecordingControls
                 onPause={handlePause}
-                onResume={handleResume}
+                onPrimaryPausedAction={handleResume}
                 onStart={handleStart}
                 onStop={handleStop}
                 state={state}

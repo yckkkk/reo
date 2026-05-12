@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { findTranscriptSegmentAtTime, type TranscriptSegment } from './recordingTimeline';
+import { RECORDING_SPEECH_TEXT_CLASS } from './recordingTypography';
 
 type TranscriptAutoScrollMode = 'focus' | 'latest';
 
@@ -65,6 +66,19 @@ function scrollTranscriptToBottom(element: HTMLElement) {
   element.scrollTop = element.scrollHeight;
 }
 
+function scrollTranscriptFocusIntoView(container: HTMLElement, focusedElement: HTMLElement) {
+  const availableOffset = Math.max(0, (container.clientHeight - focusedElement.offsetHeight) / 2);
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const top = Math.min(maxScrollTop, Math.max(0, focusedElement.offsetTop - availableOffset));
+
+  if (typeof container.scrollTo === 'function') {
+    container.scrollTo({ behavior: 'instant', top });
+    return;
+  }
+
+  container.scrollTop = top;
+}
+
 export function RecordingTranscriptPreview({
   autoScrollMode = 'focus',
   fallback,
@@ -112,14 +126,11 @@ export function RecordingTranscriptPreview({
       return;
     }
 
-    if (typeof focusedSegmentRef.current?.scrollIntoView !== 'function') {
+    if (!scrollContainerRef.current || !focusedSegmentRef.current) {
       return;
     }
 
-    focusedSegmentRef.current.scrollIntoView({
-      block: 'center',
-      behavior: 'instant',
-    });
+    scrollTranscriptFocusIntoView(scrollContainerRef.current, focusedSegmentRef.current);
   }, [autoScrollMode, focusedSegmentKey]);
 
   useEffect(() => {
@@ -143,7 +154,10 @@ export function RecordingTranscriptPreview({
     >
       {segments.length > 0 ? (
         <div
-          className="select-text max-h-[120px] overflow-y-auto py-16 text-balance text-heading-sm font-medium leading-[1.55] text-foreground"
+          className={cn(
+            'edge-fade-y scrollbar-hover select-text max-h-[120px] overflow-y-auto py-16 text-balance text-foreground',
+            RECORDING_SPEECH_TEXT_CLASS
+          )}
           data-testid="recording-transcript-scroll"
           onKeyDown={markUserScrollIntent}
           onScroll={handleTranscriptScroll}
@@ -171,7 +185,12 @@ export function RecordingTranscriptPreview({
           })}
         </div>
       ) : (
-        <p className="max-w-[620px] text-balance text-body-lg font-medium leading-body-lg text-muted-foreground">
+        <p
+          className={cn(
+            'max-w-[620px] text-balance text-muted-foreground',
+            RECORDING_SPEECH_TEXT_CLASS
+          )}
+        >
           {fallback}
         </p>
       )}

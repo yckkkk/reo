@@ -1,23 +1,24 @@
-import { Check, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { Check, Pause, Play } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { RecordingState } from '../recordingMachine';
 
+export type PausedRecordingPrimaryAction = 'resume' | 'replace' | 'none';
+
 type RecordingControlsProps = {
-  readonly cursorAtEnd?: boolean;
   readonly isPlaying?: boolean;
+  readonly playbackDisabled?: boolean;
   readonly onPause: () => void;
   readonly onPlayPause?: () => void;
-  readonly onResume: () => void;
-  readonly onSeekBackward?: () => void;
-  readonly onSeekForward?: () => void;
+  readonly onPrimaryPausedAction: () => void;
+  readonly pausedPrimaryAction?: PausedRecordingPrimaryAction;
   readonly onStart: () => void;
   readonly onStop: () => void;
   readonly state: RecordingState;
 };
 
-function LocatorIconButton({
+function PlaybackIconButton({
   children,
   className,
   label,
@@ -44,13 +45,12 @@ function LocatorIconButton({
 }
 
 export function RecordingControls({
-  cursorAtEnd = true,
   isPlaying = false,
+  playbackDisabled = false,
   onPause,
   onPlayPause,
-  onResume,
-  onSeekBackward,
-  onSeekForward,
+  onPrimaryPausedAction,
+  pausedPrimaryAction = 'none',
   onStart,
   onStop,
   state,
@@ -71,7 +71,7 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full bg-brand-ember p-0 text-primary-foreground shadow-none hover:bg-brand-ember disabled:bg-muted"
+        className="size-[88px] rounded-full bg-brand-ember p-0 text-destructive-foreground shadow-none hover:bg-brand-ember disabled:bg-muted"
         disabled={disabled}
         onClick={onStart}
         size="iconLarge"
@@ -99,7 +99,15 @@ export function RecordingControls({
 
   const isPaused = state.status === 'paused';
   const locatorDisabled = !isPaused;
-  const primaryLabel = isPaused ? (cursorAtEnd ? '继续录音' : '替换录音') : '暂停录音';
+  const playbackControlDisabled = locatorDisabled || playbackDisabled;
+  const pausedPrimaryLabel =
+    pausedPrimaryAction === 'resume'
+      ? '继续录音'
+      : pausedPrimaryAction === 'replace'
+        ? '替换录音'
+        : null;
+  const pausedPrimaryText =
+    pausedPrimaryAction === 'resume' ? '继续' : pausedPrimaryAction === 'replace' ? '替换' : null;
   const playbackLabel = isPlaying ? '暂停回放' : '播放录音';
 
   return (
@@ -108,22 +116,17 @@ export function RecordingControls({
       data-vaul-no-drag
     >
       <div className="flex justify-start" data-testid="recording-left-control-slot">
-        {isPaused ? (
+        {isPaused && pausedPrimaryLabel && pausedPrimaryText ? (
           <Button
-            aria-label={primaryLabel}
-            className={cn(
-              'h-40 w-[108px] rounded-lg px-10 text-ui-md shadow-none',
-              cursorAtEnd
-                ? 'bg-card text-brand-ember hover:bg-secondary hover:text-foreground'
-                : 'bg-card text-brand-ember hover:bg-secondary hover:text-foreground'
-            )}
-            onClick={onResume}
+            aria-label={pausedPrimaryLabel}
+            className="h-40 w-[108px] rounded-lg bg-card px-10 text-ui-md text-brand-ember shadow-none hover:bg-secondary hover:text-foreground"
+            onClick={onPrimaryPausedAction}
             type="button"
             variant="secondary"
           >
-            {cursorAtEnd ? '继续' : '替换'}
+            {pausedPrimaryText}
           </Button>
-        ) : (
+        ) : isPaused ? null : (
           <Button
             aria-label="暂停录音"
             className="h-40 w-[108px] rounded-lg bg-card p-0 text-brand-ember shadow-none hover:bg-secondary hover:text-foreground"
@@ -146,26 +149,18 @@ export function RecordingControls({
         data-testid="recording-locator-control-slot"
         role="group"
       >
-        <LocatorIconButton disabled={locatorDisabled} label="后退 15 秒" onClick={onSeekBackward}>
-          <RotateCcw aria-hidden="true" className="size-[18px]" />
-          <span className="text-caption font-bold leading-none">15</span>
-        </LocatorIconButton>
-        <LocatorIconButton
+        <PlaybackIconButton
           className="text-muted-foreground disabled:!text-muted-foreground"
-          disabled={locatorDisabled}
+          disabled={playbackControlDisabled}
           label={playbackLabel}
           onClick={onPlayPause}
         >
           {isPlaying ? (
             <Pause aria-hidden="true" className="size-[18px] fill-current stroke-[3]" />
           ) : (
-            <Play aria-hidden="true" className="ml-2 size-24 fill-current stroke-[2]" />
+            <Play aria-hidden="true" className="size-24 fill-current stroke-[2]" />
           )}
-        </LocatorIconButton>
-        <LocatorIconButton disabled={locatorDisabled} label="前进 15 秒" onClick={onSeekForward}>
-          <RotateCw aria-hidden="true" className="size-[18px]" />
-          <span className="text-caption font-bold leading-none">15</span>
-        </LocatorIconButton>
+        </PlaybackIconButton>
       </div>
 
       <div className="flex justify-end" data-testid="recording-right-control-slot">

@@ -106,6 +106,136 @@ describe('MediaRecorder adapter', () => {
     expect(chunks).toEqual([new Uint8Array([9])]);
   });
 
+  it('flushes current recorder data for paused draft preview', async () => {
+    let resolvePreviewChunk: (value: ArrayBuffer) => void = () => {};
+    const track = { stop: vi.fn() };
+    const stream = {
+      getAudioTracks: vi.fn(() => [track]),
+      getTracks: vi.fn(() => [track]),
+    } as unknown as MediaStream;
+    const mediaDevices = {
+      getUserMedia: vi.fn(async () => stream),
+    };
+    const previewData = {
+      arrayBuffer: vi.fn(
+        () =>
+          new Promise<ArrayBuffer>((resolve) => {
+            resolvePreviewChunk = resolve;
+          })
+      ),
+      size: 1,
+    };
+    const requestData = vi.fn();
+
+    class FakeMediaRecorder {
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onstop: (() => void) | null = null;
+      state: 'inactive' | 'paused' | 'recording' = 'recording';
+
+      pause() {
+        this.state = 'paused';
+      }
+      requestData() {
+        requestData();
+        this.ondataavailable?.({ data: previewData } as unknown as BlobEvent);
+      }
+      resume() {
+        this.state = 'recording';
+      }
+      start() {}
+      stop() {
+        this.state = 'inactive';
+        this.onstop?.();
+      }
+    }
+
+    const chunks: Uint8Array[] = [];
+    const adapter = createBrowserMediaRecorderAdapter({
+      mediaDevices,
+      MediaRecorderCtor: FakeMediaRecorder as unknown as typeof MediaRecorder,
+    });
+    const controller = await adapter.start({
+      onChunk: (chunk) => chunks.push(chunk),
+      onError: () => {},
+      onStop: () => {},
+    });
+
+    controller.pause();
+    let flushResult: boolean | null = null;
+    const flushPromise = controller.flush().then((result) => {
+      flushResult = result;
+    });
+    await Promise.resolve();
+
+    expect(requestData).toHaveBeenCalledTimes(1);
+    expect(flushResult).toBeNull();
+
+    resolvePreviewChunk(new Uint8Array([4]).buffer);
+    await flushPromise;
+
+    expect(chunks).toEqual([new Uint8Array([4])]);
+    expect(flushResult).toBe(true);
+  });
+
+  it('reports when a paused preview flush times out before dataavailable arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const track = { stop: vi.fn() };
+      const stream = {
+        getAudioTracks: vi.fn(() => [track]),
+        getTracks: vi.fn(() => [track]),
+      } as unknown as MediaStream;
+      const mediaDevices = {
+        getUserMedia: vi.fn(async () => stream),
+      };
+      const requestData = vi.fn();
+
+      class FakeMediaRecorder {
+        ondataavailable: ((event: BlobEvent) => void) | null = null;
+        onerror: (() => void) | null = null;
+        onstop: (() => void) | null = null;
+        state: 'inactive' | 'paused' | 'recording' = 'recording';
+
+        pause() {
+          this.state = 'paused';
+        }
+        requestData() {
+          requestData();
+        }
+        resume() {
+          this.state = 'recording';
+        }
+        start() {}
+        stop() {
+          this.state = 'inactive';
+          this.onstop?.();
+        }
+      }
+
+      const adapter = createBrowserMediaRecorderAdapter({
+        mediaDevices,
+        MediaRecorderCtor: FakeMediaRecorder as unknown as typeof MediaRecorder,
+      });
+      const controller = await adapter.start({
+        onChunk: () => {},
+        onError: () => {},
+        onStop: () => {},
+      });
+
+      controller.pause();
+      const flushPromise = controller.flush();
+      await Promise.resolve();
+      expect(requestData).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(250);
+
+      await expect(flushPromise).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reuses the same stop operation while final chunk conversion is pending', async () => {
     let resolveFinalChunk: (value: ArrayBuffer) => void = () => {};
     const track = { stop: vi.fn() };
