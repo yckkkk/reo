@@ -95,11 +95,12 @@ type RecordingOverlayProps = {
 };
 
 export type RecordingTarget =
-  | { readonly kind: 'existing-memory'; readonly memoryId: string }
+  | { readonly kind: 'existing-memory'; readonly memoryId: string; readonly title?: string }
   | {
       readonly kind: 'segment-attachment';
       readonly memoryId: string;
       readonly segmentId: string;
+      readonly title: string;
     };
 export type SavedRecordingContent = {
   readonly memory: WorkspaceMemorySummary;
@@ -173,12 +174,17 @@ type TranscriptionAudioQueue = {
   tail: Promise<void>;
 };
 
-function titleForRecording(workspaceTitle: string) {
-  return `${workspaceTitle} 录音`;
-}
-
-function titleForRecordingTarget(target: RecordingTarget, workspaceTitle: string) {
-  return target.kind === 'segment-attachment' ? '补充录音' : titleForRecording(workspaceTitle);
+function titleForRecordingTarget(target: RecordingTarget, workspaceSession: WorkspaceSession) {
+  if (target.title) {
+    return target.title;
+  }
+  if (target.kind === 'segment-attachment') {
+    return target.title;
+  }
+  const memory = workspaceSession.snapshot.memories.find(
+    (candidate) => candidate.memoryId === target.memoryId
+  );
+  return `录音${(memory?.segmentCount ?? 0) + 1}`;
 }
 
 const RECORDING_STATUS_TEXT = {
@@ -1389,7 +1395,7 @@ export function RecordingOverlay({
       segmentId,
       recordingSessionId,
       revisionId,
-      title: titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title),
+      title: titleForRecordingTarget(recordingTarget, workspaceSession),
       workspaceId: workspaceSession.workspaceId,
     });
   }
@@ -1797,7 +1803,7 @@ export function RecordingOverlay({
           recordingSessionId: recordingFlowSessionId,
           revisionId,
           segmentId: nextSegmentId,
-          title: titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title),
+          title: titleForRecordingTarget(recordingTarget, workspaceSession),
           workspaceId: workspaceSession.workspaceId,
         });
         notifyRecordingError(
@@ -2491,7 +2497,7 @@ export function RecordingOverlay({
       return;
     }
 
-    const title = titleForRecordingTarget(recordingTarget, workspaceSession.snapshot.title);
+    const title = titleForRecordingTarget(recordingTarget, workspaceSession);
     try {
       if (recordingTarget.kind === 'segment-attachment') {
         const finalizedAttachment = await finalizeSegmentAttachmentRecordingDraft({

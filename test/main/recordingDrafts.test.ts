@@ -3,6 +3,7 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   rm,
@@ -34,6 +35,7 @@ import {
 } from '../../src/main/recordingDrafts.js';
 import {
   createMemoryFromFileTruth,
+  findSegmentDirectoryById,
   readMemoryDetailFromFileTruth,
 } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
@@ -98,6 +100,18 @@ function workspaceLockLost() {
       message: 'Workspace lock was lost',
     },
   } as const;
+}
+
+async function findAttachmentDirectoryById(
+  segmentDirectory: string,
+  attachmentId: string
+): Promise<string> {
+  const attachmentsDirectory = path.join(segmentDirectory, 'attachments');
+  const attachmentDirectoryName = (await readdir(attachmentsDirectory)).find(
+    (entry) => entry === attachmentId || entry.startsWith(`${attachmentId}--`)
+  );
+  assert.ok(attachmentDirectoryName);
+  return path.join(attachmentsDirectory, attachmentDirectoryName);
 }
 
 async function createMemoryForDraftFinalize({
@@ -214,29 +228,11 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     }
   );
 
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_20260506_000001');
   const finalizedMetadata = JSON.parse(
-    await readFile(
-      path.join(
-        rootPath,
-        'memories',
-        'mem_20260506_000001',
-        'segments',
-        'seg_20260506_000001',
-        'segment.json'
-      ),
-      'utf8'
-    )
+    await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')
   );
-  const audio = await stat(
-    path.join(
-      rootPath,
-      'memories',
-      'mem_20260506_000001',
-      'segments',
-      'seg_20260506_000001',
-      'audio.webm'
-    )
-  );
+  const audio = await stat(path.join(segmentDirectory, 'audio.webm'));
   const index = JSON.parse(await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8'));
   assert.equal(finalizedMetadata.status, 'finalized');
   assert.equal(finalizedMetadata.memoryId, 'mem_20260506_000001');
@@ -269,17 +265,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
   }
 
   const metadataAfterLateAppend = JSON.parse(
-    await readFile(
-      path.join(
-        rootPath,
-        'memories',
-        'mem_20260506_000001',
-        'segments',
-        'seg_20260506_000001',
-        'segment.json'
-      ),
-      'utf8'
-    )
+    await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')
   );
   assert.deepEqual(metadataAfterLateAppend, finalizedMetadata);
 });
@@ -359,23 +345,15 @@ test('segment attachment recording finalizes under the selected segment without 
       path.join(rootPath, 'memories', 'mem_attachment_parent', 'segments', 'att_20260506_followup')
     )
   );
-  assert.equal(
-    (
-      await stat(
-        path.join(
-          rootPath,
-          'memories',
-          'mem_attachment_parent',
-          'segments',
-          'seg_20260506_attachment_parent',
-          'attachments',
-          'att_20260506_followup',
-          'audio.webm'
-        )
-      )
-    ).isFile(),
-    true
+  const segmentDirectory = await findSegmentDirectoryById(
+    rootPath,
+    'seg_20260506_attachment_parent'
   );
+  const attachmentDirectory = await findAttachmentDirectoryById(
+    segmentDirectory,
+    'att_20260506_followup'
+  );
+  assert.equal((await stat(path.join(attachmentDirectory, 'audio.webm'))).isFile(), true);
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
     workspaceId: 'ws_draft',
@@ -1389,16 +1367,8 @@ test('recording finalize blocks late append while finalization is active', async
     assert.equal(lateAppend.error.code, 'ERR_RECORDING_FINALIZED');
   }
   assert.equal((await finalize).ok, true);
-  const audio = await stat(
-    path.join(
-      rootPath,
-      'memories',
-      'mem_20260506_000002',
-      'segments',
-      'seg_20260506_000002',
-      'audio.webm'
-    )
-  );
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_20260506_000002');
+  const audio = await stat(path.join(segmentDirectory, 'audio.webm'));
   assert.equal(audio.size, 3);
 });
 
@@ -1473,21 +1443,8 @@ test('recording append rejects stale draft when a finalized audio segment alread
     assert.equal(staleAppend.error.code, 'ERR_RECORDING_FINALIZED');
   }
   assert.equal((await stat(path.join(staleDraftDirectory, 'audio.webm'))).size, 1);
-  assert.equal(
-    (
-      await stat(
-        path.join(
-          rootPath,
-          'memories',
-          finalized.ok ? finalized.segment.memoryId : '',
-          'segments',
-          'seg_20260506_stale_draft',
-          'audio.webm'
-        )
-      )
-    ).size,
-    3
-  );
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_20260506_stale_draft');
+  assert.equal((await stat(path.join(segmentDirectory, 'audio.webm'))).size, 3);
 });
 
 test('recording append checks finalized truth after root draft state is cleared', async () => {

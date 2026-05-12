@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Mic, Pause, Play, Plus } from 'lucide-react';
+import { Ellipsis, Mic, Pause, Pencil, Play, Plus } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -34,6 +34,7 @@ import {
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
+  readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -43,6 +44,12 @@ type MemoryStudioProps = {
 export type SegmentAttachmentRecordingTarget = {
   readonly memoryId: string;
   readonly segmentId: string;
+  readonly title: string;
+};
+
+export type SegmentRenameTarget = {
+  readonly memoryId: string;
+  readonly segment: WorkspaceMemoryDetail['segments'][number];
 };
 
 const CAROUSEL_SCROLL_RATIO = 0.8;
@@ -432,6 +439,7 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
 
 export function MemoryStudio({
   memory,
+  onRenameSegment,
   onSegmentFocusConsumed,
   onStartSegmentAttachmentRecording,
   segmentFocusIntent = null,
@@ -440,6 +448,7 @@ export function MemoryStudio({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pointerScrubbingRef = useRef(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const [audioPlaybackError, setAudioPlaybackError] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
@@ -789,59 +798,98 @@ export function MemoryStudio({
                 {segments.map((segment) => {
                   const isSelected = segment.segmentId === selectedSegment.segmentId;
                   return (
-                    <button
+                    <div
                       key={segment.segmentId}
-                      type="button"
                       data-slot="memory-studio-segment-item"
-                      aria-current={isSelected ? 'true' : undefined}
-                      aria-label={`选择片段 ${segment.title}`}
                       className={[
-                        'group flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none',
+                        'group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none',
                       ].join(' ')}
-                      onClick={() => setSelectedSegmentId(segment.segmentId)}
                     >
-                      <span
-                        data-slot="memory-studio-segment-card"
-                        className={[
-                          'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background',
-                          isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
-                        ].join(' ')}
+                      <button
+                        type="button"
+                        aria-current={isSelected ? 'true' : undefined}
+                        aria-label={`选择片段 ${segment.title}`}
+                        className="flex w-full flex-col rounded-xl text-left outline-none"
+                        onClick={() => setSelectedSegmentId(segment.segmentId)}
                       >
                         <span className="block min-w-0">
-                          <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
-                            {segment.title}
-                          </span>
-                        </span>
-                        <span className="flex min-w-0 items-center justify-between gap-6">
-                          <SegmentPreviewSpectrum active={isSelected} />
                           <span
-                            data-slot="memory-studio-segment-card-duration"
-                            className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
+                            data-slot="memory-studio-segment-card"
+                            className={[
+                              'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-within:ring-2 group-focus-within:ring-ring group-focus-within:ring-offset-2 group-focus-within:ring-offset-background',
+                              isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
+                            ].join(' ')}
                           >
-                            {durationLabel(segment.durationMs)}
+                            <span className="block min-w-0 pr-24">
+                              <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
+                                {segment.title}
+                              </span>
+                            </span>
+                            <span className="flex min-w-0 items-center justify-between gap-6">
+                              <SegmentPreviewSpectrum active={isSelected} />
+                              <span
+                                data-slot="memory-studio-segment-card-duration"
+                                className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
+                              >
+                                {durationLabel(segment.durationMs)}
+                              </span>
+                            </span>
                           </span>
                         </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        data-slot="memory-studio-segment-timeline-anchor"
-                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
-                      >
                         <span
-                          data-slot="memory-studio-segment-timeline-dot"
-                          className={[
-                            'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
-                            isSelected ? 'bg-primary' : 'bg-muted-foreground',
-                          ].join(' ')}
-                        />
-                        <span
-                          data-slot="memory-studio-segment-timeline-time"
-                          className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
+                          aria-hidden="true"
+                          data-slot="memory-studio-segment-timeline-anchor"
+                          className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
                         >
-                          {createdTimeLabel(segment.createdAt)}
+                          <span
+                            data-slot="memory-studio-segment-timeline-dot"
+                            className={[
+                              'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
+                              isSelected ? 'bg-primary' : 'bg-muted-foreground',
+                            ].join(' ')}
+                          />
+                          <span
+                            data-slot="memory-studio-segment-timeline-time"
+                            className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
+                          >
+                            {createdTimeLabel(segment.createdAt)}
+                          </span>
                         </span>
-                      </span>
-                    </button>
+                      </button>
+                      <DropdownMenu
+                        open={openSegmentMenuId === segment.segmentId}
+                        onOpenChange={(open) =>
+                          setOpenSegmentMenuId(open ? segment.segmentId : null)
+                        }
+                      >
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`片段 ${segment.title} 更多操作`}
+                            className={[
+                              'absolute right-8 top-8 z-[1] inline-flex size-28 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:bg-secondary data-[state=open]:text-foreground data-[state=open]:opacity-100',
+                            ].join(' ')}
+                          >
+                            <Ellipsis aria-hidden="true" className="size-16" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          aria-label={`片段 ${segment.title} 操作`}
+                          aria-labelledby={undefined}
+                          align="end"
+                        >
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setOpenSegmentMenuId(null);
+                              onRenameSegment({ memoryId: memory.memoryId, segment });
+                            }}
+                          >
+                            <Pencil aria-hidden="true" className="size-16" />
+                            重命名
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   );
                 })}
               </div>
@@ -942,6 +990,7 @@ export function MemoryStudio({
                         onStartSegmentAttachmentRecording({
                           memoryId: memory.memoryId,
                           segmentId: selectedSegment.segmentId,
+                          title: `补充录音${selectedSegment.attachmentCount + 1}`,
                         });
                       }}
                     >

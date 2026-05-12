@@ -435,6 +435,10 @@ async function readOrRebuildIndex(
     workspaceIndexSchema
   );
 
+  if (parsedIndex && !rebuiltMemories) {
+    return parsedIndex;
+  }
+
   let memories = [
     ...(rebuiltMemories ?? (await rebuildMemoryIndex(canonicalRoot, { persist: false }))),
   ];
@@ -578,14 +582,8 @@ export async function openWorkspaceFiles({
       assertWorkspaceUsable: () => assertWorkspaceUsable(assertUsable),
     });
     assertWorkspaceUsable(assertUsable);
-    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
-    assertWorkspaceUsable(assertUsable);
     index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => {
-        assertWorkspaceUsable(assertUsable);
-        await readModel.assertMemoriesRootCurrent();
-      },
-      rebuiltMemories: readModel.memories,
+      assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
     });
     assertWorkspaceUsable(assertUsable);
   } catch (error) {
@@ -627,14 +625,8 @@ export async function updateWorkspaceTitleFromFileTruth({
         'previous-file-preserved'
       );
     }
-    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
-    assertWorkspaceUsable(assertUsable);
     const index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => {
-        assertWorkspaceUsable(assertUsable);
-        await readModel.assertMemoriesRootCurrent();
-      },
-      rebuiltMemories: readModel.memories,
+      assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
     });
     assertWorkspaceUsable(assertUsable);
     const nextMetadata = { ...metadata, title };

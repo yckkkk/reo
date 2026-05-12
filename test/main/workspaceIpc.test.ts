@@ -41,6 +41,7 @@ import {
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
+  handleUpdateSegmentTitleForTest,
 } from '../../src/main/workspaceIpc.js';
 import { appendSegmentAttachmentRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
@@ -55,6 +56,7 @@ import {
   resetMicrophoneIntentsForTest,
 } from '../../src/main/security.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
+import { findSegmentDirectoryById } from '../../src/main/memoryFiles.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
 import { createWorkspaceMemorySpaceRegistry } from '../../src/main/workspaceMemorySpaceRegistry.js';
 import type {
@@ -794,7 +796,10 @@ test('createMemory creates an empty Memory container through file truth', async 
   }
   assert.deepEqual(
     JSON.parse(
-      await readFile(path.join(rootPath, 'memories', 'mem_ipc_created', 'memory.json'), 'utf8')
+      await readFile(
+        path.join(rootPath, 'memories', 'mem_ipc_created--产品灵感与思考', 'memory.json'),
+        'utf8'
+      )
     ),
     {
       memoryId: 'mem_ipc_created',
@@ -1303,26 +1308,21 @@ test('segment attachment recording IPC keeps the finalized audio under the paren
       path.join(rootPath, 'memories', 'mem_ipc_attachment', 'segments', 'att_ipc_attachment_child')
     )
   );
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_attachment_parent');
+  const attachmentDirectoryName = (await readdir(path.join(segmentDirectory, 'attachments'))).find(
+    (entry) =>
+      entry === 'att_ipc_attachment_child' || entry.startsWith('att_ipc_attachment_child--')
+  );
+  assert.ok(attachmentDirectoryName);
   assert.equal(
     (
-      await stat(
-        path.join(
-          rootPath,
-          'memories',
-          'mem_ipc_attachment',
-          'segments',
-          'seg_ipc_attachment_parent',
-          'attachments',
-          'att_ipc_attachment_child',
-          'audio.webm'
-        )
-      )
+      await stat(path.join(segmentDirectory, 'attachments', attachmentDirectoryName, 'audio.webm'))
     ).isFile(),
     true
   );
 });
 
-test('updateMemoryTitle updates only the memory container through file truth', async () => {
+test('updateMemoryTitle renames the memory node through file truth', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memory-title-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -1359,28 +1359,82 @@ test('updateMemoryTitle updates only the memory container through file truth', a
     assert.equal(result.value.memoryId, 'mem_ipc');
     assert.equal(result.value.title, '产品灵感与思考');
     assert.equal(result.value.segmentCount, 1);
-    assert.equal(result.value.updatedAt, '2026-05-08T14:42:00.000Z');
+    assert.equal(result.value.updatedAt, '2026-05-06T13:09:00.000Z');
     assert.equal('rootPath' in result.value, false);
     assert.equal('segmentIds' in result.value, false);
   }
-  assert.deepEqual(
-    JSON.parse(await readFile(path.join(rootPath, 'memories', 'mem_ipc', 'memory.json'), 'utf8')),
-    {
-      memoryId: 'mem_ipc',
-      title: '产品灵感与思考',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      updatedAt: '2026-05-08T14:42:00.000Z',
-      segmentIds: ['seg_ipc'],
-    }
+  const memoryDirectory = path.join(rootPath, 'memories', 'mem_ipc--产品灵感与思考');
+  await assert.rejects(stat(path.join(rootPath, 'memories', 'mem_ipc')));
+  assert.deepEqual(JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')), {
+    memoryId: 'mem_ipc',
+    title: '产品灵感与思考',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    updatedAt: '2026-05-06T13:09:00.000Z',
+    segmentIds: ['seg_ipc'],
+  });
+  assert.equal(
+    JSON.parse(
+      await readFile(path.join(memoryDirectory, 'segments', 'seg_ipc', 'segment.json'), 'utf8')
+    ).title,
+    '旧标题'
+  );
+});
+
+test('updateSegmentTitle renames the segment node through file truth', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-segment-title-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 片段',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_segment',
+    segmentId: 'seg_ipc_segment',
+    title: '旧录音',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleUpdateSegmentTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_segment',
+      segmentId: 'seg_ipc_segment',
+      title: '录音1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-08T14:43:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.memory.memoryId, 'mem_ipc_segment');
+    assert.equal(result.value.memory.updatedAt, '2026-05-06T13:09:00.000Z');
+    assert.equal(result.value.segment.segmentId, 'seg_ipc_segment');
+    assert.equal(result.value.segment.title, '录音1');
+    assert.equal(result.value.segment.updatedAt, '2026-05-06T13:09:00.000Z');
+    assert.equal('rootPath' in result.value.segment, false);
+  }
+
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_segment');
+  assert.equal(path.basename(segmentDirectory), 'seg_ipc_segment--录音1');
+  assert.equal(
+    JSON.parse(await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')).title,
+    '录音1'
   );
   assert.equal(
     JSON.parse(
-      await readFile(
-        path.join(rootPath, 'memories', 'mem_ipc', 'segments', 'seg_ipc', 'segment.json'),
-        'utf8'
-      )
-    ).title,
-    '旧标题'
+      await readFile(path.join(rootPath, 'memories', 'mem_ipc_segment', 'memory.json'), 'utf8')
+    ).updatedAt,
+    '2026-05-06T13:09:00.000Z'
   );
 });
 
@@ -1509,6 +1563,7 @@ test('updateMemorySpaceTitle keeps active workspace rename when registry project
     handleStore: createRegisteredHandleStore(rootPath),
     memorySpaceRegistry: {
       listMemorySpaces: async () => [],
+      resolveMemorySpace: async () => null,
       resolveMemorySpaceRoot: async () => null,
       removeMemorySpace: async () => {},
       updateMemorySpaceSnapshot: async () => {
@@ -1970,6 +2025,7 @@ test('listMemorySpaces returns an error envelope when the memory space registry 
       listMemorySpaces: async () => {
         throw new Error('registry unreadable');
       },
+      resolveMemorySpace: async () => null,
       resolveMemorySpaceRoot: async () => null,
       removeMemorySpace: async () => {},
       updateMemorySpaceSnapshot: async () => {
@@ -2044,6 +2100,55 @@ test('openMemorySpace opens a persisted memory space without a selection token',
     });
     assert.equal('rootPath' in result.value, false);
   }
+});
+
+test('openMemorySpace resolves only the selected memory space before opening', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-memorySpace-open-selected-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'Runtime validated memory',
+    description: 'Final runtime validation workspace.',
+    createWorkspaceId: () => 'ws_runtime_validated',
+    now: () => '2026-05-08T07:47:00.000Z',
+  });
+
+  const result = await handleOpenWorkspaceMemorySpaceForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    createHandle: () => 'wh_memory_space_open_selected',
+    memorySpaceRegistry: {
+      listMemorySpaces: async () => {
+        throw new Error('open should not list every memory space');
+      },
+      resolveMemorySpace: async () => ({
+        workspaceId: 'ws_runtime_validated',
+        title: 'Runtime validated memory',
+        description: 'Final runtime validation workspace.',
+        rootPath,
+        addedAt: '2026-05-08T07:48:00.000Z',
+        lastOpenedAt: '2026-05-08T07:48:00.000Z',
+      }),
+      resolveMemorySpaceRoot: async () => rootPath,
+      removeMemorySpace: async () => {},
+      updateMemorySpaceSnapshot: async () => {
+        throw new Error('unused');
+      },
+      upsertMemorySpace: async () => ({
+        workspaceId: 'ws_runtime_validated',
+        title: 'Runtime validated memory',
+        description: 'Final runtime validation workspace.',
+        addedAt: '2026-05-08T07:48:00.000Z',
+        lastOpenedAt: '2026-05-08T07:48:00.000Z',
+      }),
+    },
+  });
+
+  assert.equal(result.ok, true);
 });
 
 test('openMemorySpace persists a Finder-renamed memory space title after acquiring the lock', async () => {
@@ -2340,6 +2445,7 @@ test('openWorkspace rejects lock identity loss during index reconciliation', asy
     segmentId: 'seg_open_mid_lock_lost',
     title: 'Open mid lock lost',
   });
+  await writeFile(path.join(rootPath, '.reo', 'index.json'), '{not json');
   const tokenStore = createWorkspaceSelectionTokenStore({
     createToken: () => 'selection-token-open-mid-lock-lost',
     now: () => 1_000,

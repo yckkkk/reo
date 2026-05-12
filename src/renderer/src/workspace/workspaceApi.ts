@@ -140,6 +140,12 @@ export function updateMemoryTitle(
   return window.reoWorkspace.updateMemoryTitle(payload);
 }
 
+export function updateSegmentTitle(
+  payload: Parameters<Window['reoWorkspace']['updateSegmentTitle']>[0]
+) {
+  return window.reoWorkspace.updateSegmentTitle(payload);
+}
+
 export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveTranscript']>[0]) {
   return window.reoWorkspace.saveTranscript(payload);
 }
@@ -196,6 +202,10 @@ export type FinalizedAudioSegment = Extract<
 >['value'];
 export type FinalizedSegmentAttachmentRecording = Extract<
   Awaited<ReturnType<typeof finalizeSegmentAttachmentRecordingDraft>>,
+  { readonly ok: true }
+>['value'];
+export type RenamedSegment = Extract<
+  Awaited<ReturnType<typeof updateSegmentTitle>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceMemorySpace = Extract<

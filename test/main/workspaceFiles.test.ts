@@ -26,6 +26,7 @@ import {
   updateWorkspaceIndex,
 } from '../../src/main/workspaceFiles.js';
 import { setAfterAtomicWorkspaceFileTempOpenForTest } from '../../src/main/atomicWorkspaceFile.js';
+import { setBeforeReadModelReaddirForTest } from '../../src/main/memoryFiles.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 
 async function sha256(filePath: string): Promise<string> {
@@ -345,6 +346,49 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
   });
 });
 
+test('open workspace uses a valid index without scanning finalized memory files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-fast-open-index-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '快速进入',
+    description: '',
+    createWorkspaceId: () => 'ws_fast_open',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const indexedMemory = {
+    memoryId: 'mem_fast_open',
+    title: '已索引记忆',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    updatedAt: '2026-05-06T13:09:00.000Z',
+    segmentCount: 1,
+    durationMs: 3000,
+    audioByteLength: 3,
+    hasTranscript: false,
+    attachmentCount: 0,
+  };
+  await writeFile(
+    path.join(root, '.reo', 'index.json'),
+    `${JSON.stringify({ schemaVersion: 1, memories: [indexedMemory] }, null, 2)}\n`
+  );
+  setBeforeReadModelReaddirForTest(() => {
+    throw new Error('open should not rebuild the read model when index is valid');
+  });
+
+  try {
+    assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
+      ok: true,
+      snapshot: {
+        workspaceId: 'ws_fast_open',
+        title: '快速进入',
+        description: '',
+        memories: [indexedMemory],
+      },
+    });
+  } finally {
+    setBeforeReadModelReaddirForTest(null);
+  }
+});
+
 test('open workspace fails without replacing index when memories cannot be read', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-unreadable-memories-'));
   await initializeWorkspaceFiles({
@@ -381,7 +425,7 @@ test('open workspace fails without replacing index when memories cannot be read'
   assert.equal(await readFile(indexPath, 'utf8'), indexBefore);
 });
 
-test('valid but stale index is reconciled from finalized workspace files', async () => {
+test('open workspace uses stale valid index and snapshot refresh reconciles file truth', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-stale-index-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -421,16 +465,36 @@ test('valid but stale index is reconciled from finalized workspace files', async
       workspaceId: 'ws_stale_index',
       title: '合法但陈旧索引',
       description: '',
-      memories: [expectedMemory],
+      memories: [],
     },
   });
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {
+    schemaVersion: 1,
+    memories: [],
+  });
+
+  assert.deepEqual(
+    await readWorkspaceSnapshotFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_stale_index',
+    }),
+    {
+      ok: true,
+      snapshot: {
+        workspaceId: 'ws_stale_index',
+        title: '合法但陈旧索引',
+        description: '',
+        memories: [expectedMemory],
+      },
+    }
+  );
   assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {
     schemaVersion: 1,
     memories: [expectedMemory],
   });
 });
 
-test('open workspace preserves the existing index when memories root changes before reconciliation persist', async () => {
+test('open workspace returns valid index without reconciliation before returning ready', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-reconcile-swap-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -449,7 +513,9 @@ test('open workspace preserves the existing index when memories root changes bef
     durationMs: 3000,
   });
   const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+  let reconciliationStarted = false;
   setBeforeWorkspaceIndexReconciliationPersistForTest(async () => {
+    reconciliationStarted = true;
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
     await rename(path.join(root, 'memories'), path.join(root, 'memories-preserved'));
     await mkdir(path.join(root, 'memories'));
@@ -457,10 +523,11 @@ test('open workspace preserves the existing index when memories root changes bef
 
   try {
     const opened = await openWorkspaceFiles({ rootPath: root });
-    assert.equal(opened.ok, false);
+    assert.equal(opened.ok, true);
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
   }
+  assert.equal(reconciliationStarted, false);
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });
 
@@ -501,7 +568,7 @@ test('workspace snapshot refresh preserves the existing index when memories root
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });
 
-test('workspace title update preserves metadata and index when memories root changes before reconciliation persist', async () => {
+test('workspace title update uses a valid index without rebuilding memory file truth', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-title-reconcile-swap-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -519,12 +586,14 @@ test('workspace title update preserves metadata and index when memories root cha
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 3000,
   });
+  await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_title_reconcile_swap',
+  });
   const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
-  const previousMetadata = await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8');
   setBeforeWorkspaceIndexReconciliationPersistForTest(async () => {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
-    await rename(path.join(root, 'memories'), path.join(root, 'memories-preserved'));
-    await mkdir(path.join(root, 'memories'));
+    throw new Error('workspace title update should not rebuild a valid index');
   });
 
   try {
@@ -533,12 +602,19 @@ test('workspace title update preserves metadata and index when memories root cha
       workspaceId: 'ws_title_reconcile_swap',
       title: 'Renamed title',
     });
-    assert.equal(updated.ok, false);
+    assert.equal(updated.ok, true);
+    if (updated.ok) {
+      assert.equal(updated.snapshot.title, 'Renamed title');
+      assert.equal(updated.snapshot.memories[0]?.memoryId, 'mem_title_reconcile_swap');
+    }
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
   }
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
-  assert.equal(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8'), previousMetadata);
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
+    'Renamed title'
+  );
 });
 
 test('open workspace reports lock lost before target revalidation errors', async () => {
@@ -653,7 +729,7 @@ test('open workspace does not create drafts when lock identity is lost during dr
   await assert.rejects(stat(path.join(root, '.reo', 'drafts')));
 });
 
-test('open workspace reconciliation computes replacement after a metadata refresh', async () => {
+test('workspace snapshot refresh computes replacement after a metadata refresh', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-reconcile-current-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -687,10 +763,13 @@ test('open workspace reconciliation computes replacement after a metadata refres
   });
 
   try {
-    const opened = await openWorkspaceFiles({ rootPath: root });
-    assert.equal(opened.ok, true);
-    if (opened.ok) {
-      assert.equal(opened.snapshot.memories[0]?.hasTranscript, true);
+    const snapshot = await readWorkspaceSnapshotFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_open_reconcile_current',
+    });
+    assert.equal(snapshot.ok, true);
+    if (snapshot.ok) {
+      assert.equal(snapshot.snapshot.memories[0]?.hasTranscript, true);
     }
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
@@ -787,7 +866,10 @@ test('index rebuild ignores symlinked transcript presence files', async () => {
     path.join(recordingDirectory, 'transcript.md')
   );
 
-  const opened = await openWorkspaceFiles({ rootPath: root });
+  const opened = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_markdown_presence',
+  });
 
   assert.equal(opened.ok, true);
   if (opened.ok) {

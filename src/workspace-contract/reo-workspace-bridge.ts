@@ -55,6 +55,8 @@ import type {
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
+  WorkspaceUpdateSegmentTitleRequest,
+  WorkspaceUpdateSegmentTitleResponse,
 } from './workspace-contract.js';
 
 export interface ReoWorkspaceBridge {
@@ -128,6 +130,9 @@ export interface ReoWorkspaceBridge {
   readonly updateMemoryTitle: (
     payload: WorkspaceUpdateMemoryTitleRequest
   ) => Promise<WorkspaceUpdateMemoryTitleResponse>;
+  readonly updateSegmentTitle: (
+    payload: WorkspaceUpdateSegmentTitleRequest
+  ) => Promise<WorkspaceUpdateSegmentTitleResponse>;
   readonly saveTranscript: (
     payload: WorkspaceRecordingMarkdownSaveRequest
   ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;

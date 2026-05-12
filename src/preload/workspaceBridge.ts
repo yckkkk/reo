@@ -33,6 +33,7 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   type WorkspaceIpcChannel,
   type WorkspaceRendererEventChannel,
 } from '../workspace-contract/workspace-channels.js';
@@ -163,6 +164,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     updateMemoryTitle: (payload) =>
       invoke<WorkspaceBridgeResponse<'updateMemoryTitle'>>(
         WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+        payload
+      ),
+    updateSegmentTitle: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateSegmentTitle'>>(
+        WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
         payload
       ),
     saveTranscript: (payload) =>

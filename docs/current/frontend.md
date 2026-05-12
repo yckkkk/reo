@@ -67,7 +67,8 @@
 
 - 当前 loaded workspace frame 使用 AppShell panel titlebar、中央 Workspace Stage 或 Memory Studio、右侧可折叠 MemoryRail 和底部 ExpressionDock。
 - Titlebar 使用 shadcn/ui Breadcrumb 组合当前记忆空间标题和当前 Memory 标题，两个层级都用 DropdownMenu 提供重命名入口，中间 separator 使用 4px 圆点；titlebar 内容使用 `px-28`，右侧 icon controls 额外内收 `mr-16`。
-- 右侧 MemoryRail 读取当前 workspace snapshot 的 Memory 容器，只展示 title、最近更新时间和片段数，并通过 DropdownMenu More 操作打开 memory rename Dialog 或 Memory delete confirmation Dialog。
+- 右侧 MemoryRail 读取当前 workspace snapshot 的 Memory 容器，按 Memory 投影 `updatedAt` 倒序展示 title、最近更新时间和片段数，并通过 DropdownMenu More 操作打开 memory rename Dialog 或 Memory delete confirmation Dialog。
+- Memory space、Memory 和 Segment rename Dialog 提交后立即关闭并更新本地投影；后台 IPC 保存失败时只在当前 title 仍是本次提交值时回滚，并通过 root toast 显示错误。
 - 底部 ExpressionDock 使用 Floating Action Button Speed Dial，录音是唯一可执行 action，其他 action-shaped 位置只表达展开态布局。
 - WorkspaceFrame 使用 `h-full min-h-0 overflow-hidden bg-background`，避免内容把 AppShell panel 撑出页面滚动。
 - WorkspaceFrame 持有页面级内容轨道：stage shell 只负责外侧 padding，`workspace-stage-content` 使用 `mx-auto w-full max-w-[var(--workspace-stage-max-width)]` 居中，当前 `--workspace-stage-max-width` 为 `1120px`；Expression FAB track 使用同一最大宽度。WorkspaceStage 和 MemoryStudio 只填满该轨道，页面级宽度和偏移由 WorkspaceFrame 统一持有。
@@ -80,9 +81,10 @@
 
 - 选中 Memory 后中央显示 Memory Studio，通过 Memory detail Query 读取当前 Memory 的 finalized audio Segment projection 和每个 Segment 的 finalized attachments projection。
 - Memory Studio 填满 WorkspaceFrame 提供的居中内容轨道，本身只管理 Segment 预览流、播放区和内容区的内部布局。
-- Memory Studio 展示空态、Segment 横向预览流、横向浏览按钮、时间轴和当前片段内容区；不重复渲染 Memory 标题、片段数量或总时长 meta。
+- Memory Studio 展示空态、按 Segment 投影 `updatedAt` 倒序排列的 Segment 横向预览流、横向浏览按钮、时间轴和当前片段内容区；不重复渲染 Memory 标题、片段数量或总时长 meta。
 - Segment card、时间轴点、播放区、内容 tab 和内容区通过 feature-local `selectedSegmentId` 同步，只作用于当前 Memory 内的 Segment。
 - Segment card 使用紧凑正方形比例、无描边填充状态、静态 waveform glyph 和等宽时间；preview waveform 低振幅为圆点、高振幅为圆角竖柱，常态使用 `muted-foreground`，选中态使用 `foreground`；card 常态为 `bg-card`，选中为 `bg-secondary`。
+- Segment card 的选择 button 和 More trigger 是同一 item 内的 sibling controls。More trigger 只在 item hover、focus-within 或 menu open 时可见，使用 DropdownMenu 承载 `重命名` 操作，并打开 `SegmentRenameDialog`。
 - Segment card width 使用 `--memory-studio-segment-card-min-size: 136px` 和 `--memory-studio-segment-card-size: clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)`，Segment item 与 card 都保留同一最小尺寸，窄窗口通过 strip 横向滚动承载，不压缩卡片内容。
 - Segment 横向预览流使用 `edge-fade-x` 表达左右边缘裁切；不在业务层创建独立 gradient overlay。
 - Timeline marker 是无描边实心圆点，时间轴线穿过圆点中心，时间标签显示 Segment 创建时间并在圆点下方持续可见；三者固定在对应卡片下方居中，并随同一个 Segment item 横向滚动。
@@ -92,7 +94,7 @@
 - 内容 tab 只展示 selected Segment 已存在的内容入口，audio Segment 始终有 `转录` tab；只有 selected Segment 存在 finalized attachments 时才显示 `补充` tab。
 - `补充` tab 内的录音补充通过 SegmentAttachment audio content Query 读取本地音频 bytes，使用与主播放区一致的 play/pause、真实 waveform slider、点击 seek、scrub-session 拖拽 seek 和等宽时间 UI，不展示 transcript。
 - `笔记`、`视频`、`图片` 不作为常驻禁用 tab 渲染。
-- 右侧 `+` 打开 selected Segment 的 SegmentAttachment compact menu，当前显示录音补充项；录音补充写入 selected Segment attachment，不写入 Memory 顶层 Segment strip，不新建 Memory，不创建同级 Segment。
+- 右侧 `+` 打开 selected Segment 的 SegmentAttachment compact menu，当前显示录音补充项；录音补充默认 title 是所选 Segment 内的 `补充录音N`，写入 selected Segment attachment，不写入 Memory 顶层 Segment strip，不新建 Memory，不创建同级 Segment。
 
 ## Recording Overlay
 
@@ -105,7 +107,7 @@
 - 录音中的转写区域只消费真实 ASR 片段，不生成本地 mock transcript。需要复制的转录内容必须可选中。
 - 录音转写在录音中只跟随内部转写容器底部，暂停态 cursor focus 也只滚动内部转写容器；不得使用会滚动外层页面或 Drawer 的 element-level focus scrolling。
 - 录音真实转写容器使用 `edge-fade-y scrollbar-hover`：上下边缘渐隐，右侧滚动条默认隐藏，hover 或 focus-within 时显示。
-- 点击完成录音会立即关闭 visible recording surface；App 保留隐藏的 recording lifecycle owner 直到 durable audio finalize、必要的 completion backfill、transcript save 和 recovery marker 收口完成。完成后不进入强制描述、转写编辑或反思编辑窗口；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment；若后台收口失败，recording surface 重新打开到失败恢复态。
+- 点击完成录音会立即关闭 visible recording surface；App 保留隐藏的 recording lifecycle owner 直到 durable audio finalize、必要的 completion backfill、transcript save 和 recovery marker 收口完成。普通录音默认 title 是目标 Memory 内的 `录音N`；恢复录音使用 recovery marker 保存的 title。完成后不进入强制描述、转写编辑或反思编辑窗口；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment；若后台收口失败，recording surface 重新打开到失败恢复态。
 - 录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context，并使用 root toast 提示先完成或关闭录音。
 
 ## State 与 Data
@@ -114,7 +116,7 @@
 - 当前 QueryClient provider 服务 memory space list、记忆空间 snapshot cache、Memory detail cache、selected Segment content cache 和 selected SegmentAttachment audio content cache。
 - Active recording lifecycle、overlay close protection、recording controls、local playback state 和 Blob URL 不进入 Query。
 - Zustand 已选型，但当前未安装；没有跨 component subtree state owner 前，不创建 Zustand store。
-- 表单使用 React Hook Form + Zod。
+- 表单使用 React Hook Form + Zod；Memory space create、Memory create、Memory rename、Segment rename 和 memory space rename Dialog 的提交前 title draft 都由表单持有。
 - 来自 main/server boundary 的 async data 使用 TanStack Query。
 
 ## shadcn/ui 边界

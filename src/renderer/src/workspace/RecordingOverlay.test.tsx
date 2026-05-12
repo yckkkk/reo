@@ -147,7 +147,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           hasTranscript: false,
           memoryId: 'mem_1',
           segmentCount: 1,
-          title: 'Daily memory 录音',
+          title: '录音1',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
         segment: {
@@ -189,7 +189,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
               segmentId: 'seg_1',
               attachmentId: 'att_1',
               type: 'audio' as const,
-              title: '补充录音',
+              title: '补充录音1',
               createdAt: '2026-05-06T13:09:00.000Z',
               updatedAt: '2026-05-06T13:10:00.000Z',
               durationMs: 0,
@@ -204,7 +204,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           segmentId: 'seg_1',
           attachmentId: 'att_1',
           type: 'audio' as const,
-          title: '补充录音',
+          title: '补充录音1',
           createdAt: '2026-05-06T13:09:00.000Z',
           updatedAt: '2026-05-06T13:10:00.000Z',
           durationMs: 0,
@@ -223,6 +223,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     })),
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
+    updateSegmentTitle: vi.fn(),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,
       value: { memory: savedMemorySummary, saved: true as const },
@@ -470,6 +471,7 @@ describe('RecordingOverlay', () => {
           kind: 'segment-attachment',
           memoryId: 'mem_1',
           segmentId: 'seg_parent',
+          title: '补充录音1',
         }}
         workspaceSession={workspaceSession}
       />
@@ -486,7 +488,7 @@ describe('RecordingOverlay', () => {
       parentSegmentId: 'seg_parent',
       segmentId: 'att_1',
       targetKind: 'segment-attachment',
-      title: '补充录音',
+      title: '补充录音1',
       workspaceId: 'ws_1',
     });
 
@@ -515,7 +517,7 @@ describe('RecordingOverlay', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_parent',
       attachmentId: 'att_1',
-      title: '补充录音',
+      title: '补充录音1',
       durationMs: expect.any(Number),
     });
     expect(onSegmentAttachmentFinalized).toHaveBeenCalledOnce();
@@ -538,6 +540,7 @@ describe('RecordingOverlay', () => {
           kind: 'segment-attachment',
           memoryId: 'mem_1',
           segmentId: 'seg_parent',
+          title: '补充录音1',
         }}
         workspaceSession={workspaceSession}
       />
@@ -1961,7 +1964,7 @@ describe('RecordingOverlay', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      title: 'Daily memory 录音',
+      title: '录音1',
     });
 
     act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
@@ -3300,7 +3303,7 @@ describe('RecordingOverlay', () => {
       durationMs: 2000,
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      title: 'Daily memory 录音',
+      title: '录音1',
       workspaceHandle: 'workspace-handle-secret',
     });
   });
@@ -3432,7 +3435,7 @@ describe('RecordingOverlay', () => {
       durationMs: 750,
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      title: 'Daily memory 录音',
+      title: '录音1',
       workspaceHandle: 'workspace-handle-secret',
     });
   });

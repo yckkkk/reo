@@ -20,6 +20,7 @@ import {
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
@@ -55,6 +56,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
+  workspaceUpdateSegmentTitleRequestSchema,
+  workspaceUpdateSegmentTitleResponseSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleResponseSchema,
   workspaceOpenRequestSchema,
@@ -106,6 +109,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:discardRecordingDraft',
     'workspace:discardSegmentAttachmentRecordingDraft',
     'workspace:updateMemoryTitle',
+    'workspace:updateSegmentTitle',
     'workspace:saveTranscript',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
@@ -139,6 +143,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:cloneRecordingDraftPrefix'
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
+  assert.equal(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle');
   assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
   assert.equal(
     WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
@@ -1067,6 +1072,76 @@ test('memory title update contract is scoped to a memory container and strips ra
         attachmentCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: ['seg_20260506_000001'],
+      },
+    })
+  );
+});
+
+test('segment title update contract returns memory and segment projections without raw paths', () => {
+  assert.deepEqual(
+    workspaceUpdateSegmentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      title: '录音1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      title: '录音1',
+    }
+  );
+  assert.throws(() =>
+    workspaceUpdateSegmentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      title: '录音1',
+    })
+  );
+  assert.throws(() =>
+    workspaceUpdateSegmentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      title: '',
+    })
+  );
+
+  assert.throws(() =>
+    workspaceUpdateSegmentTitleResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_20260506_000001',
+          title: '产品灵感与思考',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          segmentCount: 1,
+          durationMs: 1000,
+          audioByteLength: 3,
+          hasTranscript: true,
+          attachmentCount: 0,
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_20260506_000001',
+          segmentId: 'seg_20260506_000001',
+          type: 'audio',
+          title: '录音1',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          durationMs: 1000,
+          audioByteLength: 3,
+          transcript: { exists: true },
+          attachmentCount: 0,
+          attachments: [],
+          rootPath: '/Users/example/Reo',
+        },
       },
     })
   );

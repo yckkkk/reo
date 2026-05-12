@@ -145,6 +145,7 @@ function renderLoadedWorkspaceFrame({
   memoryRailOpen,
   onDeleteMemory = vi.fn(),
   onRenameMemory = vi.fn(),
+  onRenameSegment = vi.fn(),
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentAttachmentRecording = vi.fn(),
@@ -168,6 +169,7 @@ function renderLoadedWorkspaceFrame({
   readonly memoryRailOpen?: boolean;
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onRenameSegment?: () => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
   readonly onStartSegmentAttachmentRecording?: (target: {
@@ -207,6 +209,7 @@ function renderLoadedWorkspaceFrame({
         workspaceSession={session}
         onDeleteMemory={onDeleteMemory}
         onRenameMemory={onRenameMemory}
+        onRenameSegment={onRenameSegment}
         onSelectMemory={onSelectMemory}
         onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}
         onStartRecording={onStartRecording}
@@ -536,8 +539,13 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
-    const activeItem = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
-    const inactiveItem = within(strip).getByRole('button', { name: '选择片段 Birthday song' });
+    const activeButton = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
+    const inactiveButton = within(strip).getByRole('button', { name: '选择片段 Birthday song' });
+    const activeItem = activeButton.closest('[data-slot="memory-studio-segment-item"]');
+    const inactiveItem = inactiveButton.closest('[data-slot="memory-studio-segment-item"]');
+    if (!(activeItem instanceof HTMLElement) || !(inactiveItem instanceof HTMLElement)) {
+      throw new Error('Segment item wrapper missing');
+    }
 
     expect(activeItem).toHaveAttribute('data-slot', 'memory-studio-segment-item');
     expect(activeItem).toHaveClass(
@@ -1184,6 +1192,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onStartSegmentAttachmentRecording).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
+      title: '补充录音1',
     });
 
     await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday song' }));

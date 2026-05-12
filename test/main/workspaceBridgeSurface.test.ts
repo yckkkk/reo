@@ -29,6 +29,7 @@ const workspaceBridgeKeys = [
   'discardRecordingDraft',
   'discardSegmentAttachmentRecordingDraft',
   'updateMemoryTitle',
+  'updateSegmentTitle',
   'saveTranscript',
   'beginMicrophoneIntent',
   'clearMicrophoneIntent',
@@ -156,6 +157,13 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     memoryId: 'mem_1',
     title: '产品灵感与思考',
   });
+  await bridge.updateSegmentTitle({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    title: '录音1',
+  });
   await bridge.beginMicrophoneIntent({
     workspaceHandle: 'wh_1',
     recordingFlowSessionId: 'recording_flow_1',
@@ -177,6 +185,16 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     {
       channel: 'workspace:updateMemoryTitle',
       payload: { workspaceHandle: 'wh_1', memoryId: 'mem_1', title: '产品灵感与思考' },
+    },
+    {
+      channel: 'workspace:updateSegmentTitle',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        title: '录音1',
+      },
     },
     {
       channel: 'workspace:beginMicrophoneIntent',

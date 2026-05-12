@@ -275,6 +275,7 @@ export const finalizedSegmentMetadataSchema = z.strictObject({
   title: z.string(),
   createdAt: z.string(),
   finalizedAt: z.string(),
+  updatedAt: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
   nextSequence: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
@@ -311,6 +312,7 @@ export const finalizedSegmentAttachmentMetadataSchema = z.strictObject({
   title: z.string(),
   createdAt: z.string(),
   finalizedAt: z.string(),
+  updatedAt: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
   nextSequence: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
@@ -430,6 +432,14 @@ export const workspaceUpdateMemoryTitleRequestSchema = workspaceMemoryIdRequestS
   })
   .strict();
 
+export const workspaceUpdateSegmentTitleRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    title: workspaceRecordingTitleSchema,
+  })
+  .strict();
+
 export const workspaceCreateMemoryRequestSchema = workspaceHandleSchema
   .extend({
     title: workspaceMemoryTitleSchema,
@@ -484,6 +494,17 @@ export const workspaceUpdateMemoryTitleResponseSchema = z.discriminatedUnion('ok
   z.strictObject({
     ok: z.literal(true),
     value: workspaceMemorySummarySchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceUpdateSegmentTitleResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+    }),
   }),
   workspaceErrorEnvelopeSchema,
 ]);
@@ -854,6 +875,9 @@ export type WorkspaceRecordingDraftAudioRequest = z.infer<
 export type WorkspaceUpdateMemoryTitleRequest = z.infer<
   typeof workspaceUpdateMemoryTitleRequestSchema
 >;
+export type WorkspaceUpdateSegmentTitleRequest = z.infer<
+  typeof workspaceUpdateSegmentTitleRequestSchema
+>;
 export type WorkspaceCreateMemoryRequest = z.infer<typeof workspaceCreateMemoryRequestSchema>;
 export type WorkspaceDeleteMemoryRequest = z.infer<typeof workspaceDeleteMemoryRequestSchema>;
 export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
@@ -870,6 +894,9 @@ export type WorkspaceReadFinalizedAudioSegmentAttachmentRequest = z.infer<
 >;
 export type WorkspaceUpdateMemoryTitleResponse = z.infer<
   typeof workspaceUpdateMemoryTitleResponseSchema
+>;
+export type WorkspaceUpdateSegmentTitleResponse = z.infer<
+  typeof workspaceUpdateSegmentTitleResponseSchema
 >;
 export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemoryResponseSchema>;
 export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;

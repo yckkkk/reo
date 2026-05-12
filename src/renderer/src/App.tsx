@@ -11,6 +11,7 @@ import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
+import { SegmentRenameDialog, type SegmentRenameTarget } from './workspace/SegmentRenameDialog';
 import {
   RecordingOverlay,
   type RecordingTarget,
@@ -38,6 +39,7 @@ import {
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
+  updateSegmentTitle,
   type FinalizedAudioSegment,
   type FinalizedSegmentAttachmentRecording,
   type WorkspaceMemoryDetail,
@@ -112,20 +114,119 @@ const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完�
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
 
+function sortByProjectedUpdatedAt<
+  T extends { readonly updatedAt: string; readonly createdAt: string },
+>(items: readonly T[]): T[] {
+  return [...items].sort((first, second) => {
+    const updatedComparison = second.updatedAt.localeCompare(first.updatedAt);
+    if (updatedComparison !== 0) {
+      return updatedComparison;
+    }
+    return second.createdAt.localeCompare(first.createdAt);
+  });
+}
+
+function sortSegmentsByUpdatedAt(
+  segments: readonly WorkspaceMemoryDetail['segments'][number][]
+): WorkspaceMemoryDetail['segments'] {
+  return sortByProjectedUpdatedAt(segments);
+}
+
+function sortMemoriesByUpdatedAt(
+  memories: readonly WorkspaceMemorySummary[]
+): WorkspaceMemorySummary[] {
+  return sortByProjectedUpdatedAt(memories);
+}
+
+function mergeMemoryIntoSnapshot(
+  current: WorkspaceSession['snapshot'],
+  updatedMemory: WorkspaceMemorySummary
+): WorkspaceSession['snapshot'] {
+  return {
+    ...current,
+    memories: sortMemoriesByUpdatedAt([
+      updatedMemory,
+      ...current.memories.filter((memory) => memory.memoryId !== updatedMemory.memoryId),
+    ]),
+  };
+}
+
+function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemorySummary): boolean {
+  return (
+    first.memoryId === second.memoryId &&
+    first.title === second.title &&
+    first.createdAt === second.createdAt &&
+    first.updatedAt === second.updatedAt &&
+    first.segmentCount === second.segmentCount &&
+    first.durationMs === second.durationMs &&
+    first.audioByteLength === second.audioByteLength &&
+    first.hasTranscript === second.hasTranscript &&
+    first.attachmentCount === second.attachmentCount
+  );
+}
+
+function sameWorkspaceSnapshot(
+  first: WorkspaceSession['snapshot'],
+  second: WorkspaceSession['snapshot']
+): boolean {
+  return (
+    first.workspaceId === second.workspaceId &&
+    first.title === second.title &&
+    first.description === second.description &&
+    first.memories.length === second.memories.length &&
+    first.memories.every((memory, index) => {
+      const other = second.memories[index];
+      return other !== undefined && sameMemorySummary(memory, other);
+    })
+  );
+}
+
 export function mergeMemoryIntoSession(
   current: WorkspaceSession,
   updatedMemory: WorkspaceMemorySummary
 ): WorkspaceSession {
   return {
     ...current,
-    snapshot: {
-      ...current.snapshot,
-      memories: [
-        updatedMemory,
-        ...current.snapshot.memories.filter((memory) => memory.memoryId !== updatedMemory.memoryId),
-      ],
-    },
+    snapshot: mergeMemoryIntoSnapshot(current.snapshot, updatedMemory),
   };
+}
+
+function mergeMemoryIntoSnapshotIfCurrentTitle(
+  current: WorkspaceSession['snapshot'] | undefined,
+  memoryId: string,
+  expectedTitle: string,
+  updatedMemory: WorkspaceMemorySummary
+): WorkspaceSession['snapshot'] | undefined {
+  if (!current) {
+    return current;
+  }
+  const currentMemory = current.memories.find((memory) => memory.memoryId === memoryId);
+  if (currentMemory?.title !== expectedTitle) {
+    return current;
+  }
+  return mergeMemoryIntoSnapshot(current, updatedMemory);
+}
+
+function mergeMemoryIntoSessionIfCurrentTitle(
+  current: WorkspaceSession | null,
+  workspaceId: string,
+  memoryId: string,
+  expectedTitle: string,
+  updatedMemory: WorkspaceMemorySummary
+): WorkspaceSession | null {
+  if (current?.workspaceId !== workspaceId) {
+    return current;
+  }
+  const nextSnapshot = mergeMemoryIntoSnapshotIfCurrentTitle(
+    current.snapshot,
+    memoryId,
+    expectedTitle,
+    updatedMemory
+  );
+  if (!nextSnapshot) {
+    return current;
+  }
+  return nextSnapshot === current.snapshot ? current : { ...current, snapshot: nextSnapshot };
 }
 
 function mergeSegmentIntoMemoryDetail(
@@ -159,9 +260,25 @@ function mergeSegmentIntoMemoryDetail(
       ...currentDetail.detail,
       ...memory,
       workspaceId: currentDetail.detail.workspaceId,
-      segments: segmentReplaced ? segments : [...segments, segment],
+      segments: sortSegmentsByUpdatedAt(segmentReplaced ? segments : [...segments, segment]),
     },
   };
+}
+
+function mergeSegmentIntoMemoryDetailIfCurrentTitle(
+  currentDetail: MemoryDetailQueryData | undefined,
+  memory: WorkspaceMemorySummary,
+  segment: WorkspaceMemoryDetail['segments'][number],
+  workspaceId: string,
+  expectedTitle: string
+): MemoryDetailQueryData | undefined {
+  const currentSegment = currentDetail?.detail.segments.find(
+    (candidate) => candidate.segmentId === segment.segmentId
+  );
+  if (currentSegment?.title !== expectedTitle) {
+    return currentDetail;
+  }
+  return mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, workspaceId);
 }
 
 function replaceSessionMemories(
@@ -188,6 +305,7 @@ export function App() {
   const [memoryCreateIntent, setMemoryCreateIntent] = useState<MemoryCreateIntent | null>(null);
   const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
+  const [segmentRenameTarget, setSegmentRenameTarget] = useState<SegmentRenameTarget | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
@@ -290,13 +408,14 @@ export function App() {
     const activeSession = workspaceSession;
     let disposed = false;
 
-    async function refreshWorkspaceFromFileTruth() {
+    async function refreshWorkspaceFromFileTruth({ showError }: { readonly showError: boolean }) {
       const requestId = ++workspaceSnapshotRefreshRequestRef.current;
       const sessionRevision = workspaceSessionRevisionRef.current;
       const response = await readWorkspaceSnapshot({
         workspaceHandle: activeSession.workspaceHandle,
       }).catch((error: unknown) => {
         if (
+          showError &&
           !disposed &&
           requestId === workspaceSnapshotRefreshRequestRef.current &&
           sessionRevision === workspaceSessionRevisionRef.current
@@ -316,12 +435,23 @@ export function App() {
       }
 
       if (!response.ok) {
-        setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, '无法刷新记忆空间。'));
+        if (showError) {
+          setWorkspaceEntryError(
+            workspaceErrorDisplayMessage(response.error, '无法刷新记忆空间。')
+          );
+        }
         return;
       }
 
       if (response.value.workspaceId !== activeSession.workspaceId) {
-        setWorkspaceEntryError('无法刷新记忆空间。');
+        if (showError) {
+          setWorkspaceEntryError('无法刷新记忆空间。');
+        }
+        return;
+      }
+
+      if (sameWorkspaceSnapshot(activeSession.snapshot, response.value)) {
+        setWorkspaceEntryError(null);
         return;
       }
 
@@ -359,21 +489,16 @@ export function App() {
       });
     }
 
-    function handleFocus() {
-      void refreshWorkspaceFromFileTruth();
-    }
-
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        void refreshWorkspaceFromFileTruth();
+        void refreshWorkspaceFromFileTruth({ showError: true });
       }
     }
 
-    window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    void refreshWorkspaceFromFileTruth({ showError: false });
     return () => {
       disposed = true;
-      window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [queryClient, recordingTarget, setWorkspaceSession, workspaceSession]);
@@ -608,54 +733,126 @@ export function App() {
       return null;
     }
 
+    const target = memorySpaceRenameTarget;
     const activeTarget =
-      workspaceSession?.workspaceId === memorySpaceRenameTarget.workspaceId
-        ? workspaceSession
-        : null;
+      workspaceSession?.workspaceId === target.workspaceId ? workspaceSession : null;
+    const previousTitle = target.title;
+    const previousDescription = activeTarget?.snapshot.description ?? '';
+    const optimisticDescription = previousDescription;
 
-    try {
-      const response = await updateMemorySpaceTitle(
-        activeTarget
-          ? {
-              workspaceHandle: activeTarget.workspaceHandle,
-              title: nextTitle,
-            }
-          : {
-              workspaceId: memorySpaceRenameTarget.workspaceId,
-              title: nextTitle,
-            }
+    setMemorySpaceRenameTarget(null);
+    mergeMemorySpaceTitleIntoList(target.workspaceId, nextTitle, optimisticDescription);
+    if (activeTarget) {
+      const optimisticSnapshot = {
+        ...activeTarget.snapshot,
+        title: nextTitle,
+        description: optimisticDescription,
+      };
+      seedWorkspaceSnapshot(queryClient, {
+        ...activeTarget,
+        snapshot: optimisticSnapshot,
+      });
+      setWorkspaceSession((currentSession) =>
+        currentSession?.workspaceId === target.workspaceId
+          ? { ...currentSession, snapshot: { ...currentSession.snapshot, title: nextTitle } }
+          : currentSession
       );
-
-      if (!response.ok) {
-        return workspaceErrorDisplayMessage(response.error, '无法重命名记忆空间。');
-      }
-
-      mergeMemorySpaceTitleIntoList(
-        response.value.workspaceId,
-        response.value.title,
-        response.value.description
-      );
-
-      if (activeTarget) {
-        seedWorkspaceSnapshot(queryClient, {
-          ...activeTarget,
-          snapshot: response.value,
-        });
-        setWorkspaceSession((currentSession) =>
-          currentSession?.workspaceId === response.value.workspaceId
-            ? { ...currentSession, snapshot: response.value }
-            : currentSession
-        );
-      } else {
-        void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
-      }
-
-      setMemorySpaceRenameTarget(null);
-      toast.success('已重命名记忆空间');
-      return null;
-    } catch (error) {
-      return unknownErrorDisplayMessage(error, '无法重命名记忆空间。');
     }
+
+    void (async () => {
+      const rollback = () => {
+        queryClient.setQueryData<readonly WorkspaceMemorySpaceListItem[] | undefined>(
+          memorySpacesQueryKey(),
+          (currentMemorySpaces) =>
+            currentMemorySpaces?.map((memorySpace) =>
+              memorySpace.workspaceId === target.workspaceId && memorySpace.title === nextTitle
+                ? { ...memorySpace, title: previousTitle, description: previousDescription }
+                : memorySpace
+            )
+        );
+        if (activeTarget) {
+          queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+            workspaceSnapshotQueryKey(activeTarget),
+            (currentSnapshot) =>
+              currentSnapshot?.workspaceId === target.workspaceId &&
+              currentSnapshot.title === nextTitle
+                ? {
+                    ...currentSnapshot,
+                    title: previousTitle,
+                    description: previousDescription,
+                  }
+                : currentSnapshot
+          );
+          setWorkspaceSession((currentSession) =>
+            currentSession?.workspaceId === target.workspaceId &&
+            currentSession.snapshot.title === nextTitle
+              ? {
+                  ...currentSession,
+                  snapshot: {
+                    ...currentSession.snapshot,
+                    title: previousTitle,
+                    description: previousDescription,
+                  },
+                }
+              : currentSession
+          );
+        }
+      };
+
+      try {
+        const response = await updateMemorySpaceTitle(
+          activeTarget
+            ? {
+                workspaceHandle: activeTarget.workspaceHandle,
+                title: nextTitle,
+              }
+            : {
+                workspaceId: target.workspaceId,
+                title: nextTitle,
+              }
+        );
+
+        if (!response.ok) {
+          rollback();
+          toast.error('无法保存记忆空间名称', {
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名记忆空间。'),
+          });
+          return;
+        }
+
+        mergeMemorySpaceTitleIntoList(
+          response.value.workspaceId,
+          response.value.title,
+          response.value.description
+        );
+
+        if (activeTarget) {
+          queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+            workspaceSnapshotQueryKey(activeTarget),
+            (currentSnapshot) =>
+              currentSnapshot?.workspaceId === response.value.workspaceId &&
+              currentSnapshot.title === nextTitle
+                ? response.value
+                : currentSnapshot
+          );
+          setWorkspaceSession((currentSession) =>
+            currentSession?.workspaceId === response.value.workspaceId &&
+            currentSession.snapshot.title === nextTitle
+              ? { ...currentSession, snapshot: response.value }
+              : currentSession
+          );
+        } else {
+          void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
+        }
+      } catch (error) {
+        rollback();
+        toast.error('无法保存记忆空间名称', {
+          description: unknownErrorDisplayMessage(error, '无法重命名记忆空间。'),
+        });
+      }
+    })();
+
+    return null;
   }
 
   async function confirmRemoveMemorySpace() {
@@ -979,8 +1176,10 @@ export function App() {
                 ...currentDetail.detail,
                 ...finalized.memory,
                 workspaceId: currentDetail.detail.workspaceId,
-                segments: currentDetail.detail.segments.map((segment) =>
-                  segment.segmentId === finalized.segment.segmentId ? finalized.segment : segment
+                segments: sortSegmentsByUpdatedAt(
+                  currentDetail.detail.segments.map((segment) =>
+                    segment.segmentId === finalized.segment.segmentId ? finalized.segment : segment
+                  )
                 ),
               },
             }
@@ -1196,6 +1395,7 @@ export function App() {
     setMemorySpaceRemoveTarget(null);
     setMemorySpaceRenameTarget(null);
     setMemoryRenameTarget(null);
+    setSegmentRenameTarget(null);
     setMemoryCreateIntent(intent);
   }
 
@@ -1250,45 +1450,200 @@ export function App() {
   }
 
   async function saveRenamedMemory(memory: WorkspaceMemorySummary, title: string) {
-    if (title === memory.title.trim()) {
+    const nextTitle = title.trim();
+    if (nextTitle === memory.title.trim()) {
       return null;
     }
 
-    try {
-      const response = await updateMemoryTitle({
-        workspaceHandle: activeWorkspaceSession.workspaceHandle,
-        memoryId: memory.memoryId,
-        title,
-      });
+    const optimisticMemory = { ...memory, title: nextTitle };
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    setMemoryRenameTarget(null);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeMemoryIntoSnapshot(
+          currentSnapshot ?? activeWorkspaceSession.snapshot,
+          optimisticMemory
+        )
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeMemoryIntoSession(currentSession, optimisticMemory)
+        : currentSession
+    );
 
-      if (!response.ok) {
-        return workspaceErrorDisplayMessage(response.error, '无法重命名记忆。');
-      }
+    void (async () => {
+      const rollback = () => {
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) =>
+            mergeMemoryIntoSnapshotIfCurrentTitle(
+              currentSnapshot,
+              memory.memoryId,
+              nextTitle,
+              memory
+            )
+        );
+        setWorkspaceSession((currentSession) =>
+          mergeMemoryIntoSessionIfCurrentTitle(
+            currentSession,
+            activeWorkspaceSession.workspaceId,
+            memory.memoryId,
+            nextTitle,
+            memory
+          )
+        );
+      };
 
-      const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+      try {
+        const response = await updateMemoryTitle({
+          workspaceHandle: activeWorkspaceSession.workspaceHandle,
+          memoryId: memory.memoryId,
+          title: nextTitle,
+        });
 
-      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-        snapshotQueryKey,
-        (currentSnapshot) =>
-          mergeMemoryIntoSession(
-            {
-              ...activeWorkspaceSession,
-              snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
-            },
+        if (!response.ok) {
+          rollback();
+          toast.error('无法保存记忆名称', {
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名记忆。'),
+          });
+          return;
+        }
+
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) =>
+            mergeMemoryIntoSnapshotIfCurrentTitle(
+              currentSnapshot,
+              memory.memoryId,
+              nextTitle,
+              response.value
+            )
+        );
+        setWorkspaceSession((currentSession) =>
+          mergeMemoryIntoSessionIfCurrentTitle(
+            currentSession,
+            activeWorkspaceSession.workspaceId,
+            memory.memoryId,
+            nextTitle,
             response.value
-          ).snapshot
-      );
-      setWorkspaceSession((currentSession) =>
-        currentSession?.workspaceId === activeWorkspaceSession.workspaceId
-          ? mergeMemoryIntoSession(currentSession, response.value)
-          : currentSession
-      );
-      setMemoryRenameTarget(null);
-      toast.success('已重命名记忆');
+          )
+        );
+      } catch (error) {
+        rollback();
+        toast.error('无法保存记忆名称', {
+          description: unknownErrorDisplayMessage(error, '无法重命名记忆。'),
+        });
+      }
+    })();
+
+    return null;
+  }
+
+  async function saveRenamedSegment(target: SegmentRenameTarget, title: string) {
+    const nextTitle = title.trim();
+    if (nextTitle === target.segment.title.trim()) {
       return null;
-    } catch (error) {
-      return unknownErrorDisplayMessage(error, '无法重命名记忆。');
     }
+
+    const memory =
+      activeWorkspaceSession.snapshot.memories.find(
+        (candidate) => candidate.memoryId === target.memoryId
+      ) ?? null;
+    if (!memory) {
+      return '无法确认片段所属记忆。';
+    }
+
+    const optimisticSegment = { ...target.segment, title: nextTitle };
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: activeWorkspaceSession.workspaceId,
+      memoryId: target.memoryId,
+    });
+    setSegmentRenameTarget(null);
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
+      mergeSegmentIntoMemoryDetailIfCurrentTitle(
+        currentDetail,
+        memory,
+        optimisticSegment,
+        activeWorkspaceSession.workspaceId,
+        target.segment.title
+      )
+    );
+    setSegmentFocusIntent({
+      memoryId: target.memoryId,
+      segmentId: target.segment.segmentId,
+    });
+
+    void (async () => {
+      const rollback = () => {
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          detailQueryKey,
+          (currentDetail) =>
+            mergeSegmentIntoMemoryDetailIfCurrentTitle(
+              currentDetail,
+              memory,
+              target.segment,
+              activeWorkspaceSession.workspaceId,
+              nextTitle
+            )
+        );
+      };
+
+      try {
+        const response = await updateSegmentTitle({
+          workspaceHandle: activeWorkspaceSession.workspaceHandle,
+          workspaceId: activeWorkspaceSession.workspaceId,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+          title: nextTitle,
+        });
+
+        if (!response.ok) {
+          rollback();
+          toast.error('无法保存片段名称', {
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名片段。'),
+          });
+          return;
+        }
+
+        const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) =>
+            mergeMemoryIntoSnapshot(
+              currentSnapshot ?? activeWorkspaceSession.snapshot,
+              response.value.memory
+            )
+        );
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          detailQueryKey,
+          (currentDetail) =>
+            mergeSegmentIntoMemoryDetailIfCurrentTitle(
+              currentDetail,
+              response.value.memory,
+              response.value.segment,
+              activeWorkspaceSession.workspaceId,
+              nextTitle
+            )
+        );
+        setWorkspaceSession((currentSession) =>
+          currentSession?.workspaceId === activeWorkspaceSession.workspaceId
+            ? mergeMemoryIntoSession(currentSession, response.value.memory)
+            : currentSession
+        );
+        setSegmentFocusIntent({
+          memoryId: response.value.segment.memoryId,
+          segmentId: response.value.segment.segmentId,
+        });
+      } catch (error) {
+        rollback();
+        toast.error('无法保存片段名称', {
+          description: unknownErrorDisplayMessage(error, '无法重命名片段。'),
+        });
+      }
+    })();
+
+    return null;
   }
 
   function applyMemoryListUpdate(memories: readonly WorkspaceMemorySummary[]) {
@@ -1316,6 +1671,7 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setMemoryCreateIntent(null);
     setMemoryRenameTarget(null);
+    setSegmentRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
     setMemoryDeleteTarget(memory);
   }
@@ -1442,7 +1798,7 @@ export function App() {
     setSelectedMemoryId(draft.memoryId);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     setRecordingRecoveryDraft(null);
-    openRecording({ kind: 'existing-memory', memoryId: draft.memoryId }, draft);
+    openRecording({ kind: 'existing-memory', memoryId: draft.memoryId, title: draft.title }, draft);
   }
 
   function requestStartRecording() {
@@ -1457,6 +1813,7 @@ export function App() {
   function requestStartSegmentAttachmentRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
+    readonly title: string;
   }) {
     if (blockRecordingFlowInterruption()) {
       return;
@@ -1467,6 +1824,7 @@ export function App() {
       kind: 'segment-attachment',
       memoryId: target.memoryId,
       segmentId: target.segmentId,
+      title: target.title,
     });
   }
 
@@ -1601,6 +1959,7 @@ export function App() {
             }}
             onSelectMemory={selectMemory}
             onRenameMemory={setMemoryRenameTarget}
+            onRenameSegment={setSegmentRenameTarget}
             onStartSegmentAttachmentRecording={requestStartSegmentAttachmentRecording}
             onStartRecording={requestStartRecording}
           />
@@ -1641,6 +2000,16 @@ export function App() {
         }}
         onSave={saveRenamedMemory}
         open={memoryRenameTarget !== null}
+      />
+      <SegmentRenameDialog
+        target={segmentRenameTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSegmentRenameTarget(null);
+          }
+        }}
+        onSave={saveRenamedSegment}
+        open={segmentRenameTarget !== null}
       />
       <MemoryDeleteDialog
         disabled={workspaceActionPending}

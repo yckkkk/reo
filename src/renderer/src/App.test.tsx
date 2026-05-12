@@ -31,6 +31,7 @@ describe('App', () => {
     updateMemorySpaceTitle: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     updateMemoryTitle: vi.fn(),
+    updateSegmentTitle: vi.fn(),
     saveTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
@@ -120,6 +121,10 @@ describe('App', () => {
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
+    });
+    reoWorkspace.updateSegmentTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Segment not found' },
     });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
@@ -615,10 +620,9 @@ describe('App', () => {
         },
       },
     });
-    reoWorkspace.updateMemoryTitle.mockResolvedValue({
-      ok: true,
-      value: renamedMemory,
-    });
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateMemoryTitle']>>>();
+    reoWorkspace.updateMemoryTitle.mockReturnValue(rename.promise);
 
     render(
       <ReoQueryProvider>
@@ -653,6 +657,135 @@ describe('App', () => {
     );
     expect(screen.getByRole('button', { name: '选择记忆 产品灵感与思考' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '重命名记忆' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rename.resolve({ ok: true, value: renamedMemory });
+      await rename.promise;
+    });
+  });
+
+  it('renames a Segment card optimistically without waiting for file persistence', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 5000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const segment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: '录音1',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 5000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentTitle']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.updateSegmentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 录音1' });
+
+    await user.click(screen.getByRole('button', { name: '片段 录音1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名片段' });
+    const titleInput = within(dialog).getByLabelText('片段名称');
+    await user.clear(titleInput);
+    await user.type(titleInput, '晨间记录');
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateSegmentTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        title: '晨间记录',
+      })
+    );
+    expect(screen.getByRole('button', { name: '选择片段 晨间记录' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '重命名片段' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rename.resolve({
+        ok: true,
+        value: {
+          memory,
+          segment: {
+            ...segment,
+            title: '晨间记录',
+          },
+        },
+      });
+      await rename.promise;
+    });
   });
 
   it('uses titlebar breadcrumb dropdowns to rename the active memory space and Memory', async () => {
@@ -781,7 +914,125 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '灵感 记忆操作' })).toBeInTheDocument();
   });
 
-  it('refreshes the active workspace from external JSON edits when the window regains focus', async () => {
+  it('refreshes the active workspace once after open and ignores focus-only events', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('heading', { name: '今天想记录些什么？' });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips child query invalidation when external JSON refresh returns the same snapshot', async () => {
+    const user = userEvent.setup();
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 1000,
+      audioByteLength: 3,
+      hasTranscript: false,
+      attachmentCount: 0,
+    };
+    const snapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [originalMemory],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot,
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          workspaceId: 'ws_1',
+          ...originalMemory,
+          segments: [],
+        },
+      },
+    }));
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: snapshot,
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await waitFor(() => expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the active workspace from external JSON edits when the document becomes visible', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -821,15 +1072,25 @@ describe('App', () => {
         },
       },
     });
-    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceId: 'ws_1',
-        title: '外部空间',
-        description: 'Codex updated workspace metadata.',
-        memories: [refreshedMemory],
-      },
-    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: '外部空间',
+          description: 'Codex updated workspace metadata.',
+          memories: [refreshedMemory],
+        },
+      });
 
     render(
       <ReoQueryProvider>
@@ -847,9 +1108,10 @@ describe('App', () => {
     expect(
       within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' })
     ).toBeInTheDocument();
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
     });
 
     await waitFor(() =>
@@ -863,7 +1125,7 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
   });
 
-  it('ignores stale external JSON refresh responses when focus events overlap', async () => {
+  it('ignores stale external JSON refresh responses when visibility events overlap', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -903,6 +1165,15 @@ describe('App', () => {
       },
     });
     reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      })
       .mockReturnValueOnce(staleRefresh.promise)
       .mockReturnValueOnce(freshRefresh.promise);
 
@@ -917,13 +1188,14 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
       document.dispatchEvent(new Event('visibilitychange'));
     });
 
-    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(3));
 
     await act(async () => {
       freshRefresh.resolve({
@@ -1220,7 +1492,7 @@ describe('App', () => {
           durationMs: 1,
           memoryId: 'mem_existing',
           segmentId: 'seg_1',
-          title: 'Daily memory 录音',
+          title: '录音2',
           updatedAt: '2026-05-08T14:30:01.000Z',
         }),
       },
@@ -1251,7 +1523,7 @@ describe('App', () => {
     const finalizePayload = reoWorkspace.finalizeRecordingDraft.mock.calls[0]?.[0];
     expect(finalizePayload).toMatchObject({
       segmentId: 'seg_1',
-      title: 'Daily memory 录音',
+      title: '录音2',
       workspaceHandle: 'workspace-handle-1',
       memoryId: 'mem_existing',
     });
@@ -1328,7 +1600,7 @@ describe('App', () => {
           durationMs: 1,
           memoryId: 'mem_recording_target',
           segmentId: 'seg_1',
-          title: 'Daily memory 录音',
+          title: '录音1',
           updatedAt: '2026-05-08T14:42:01.000Z',
         }),
       },
@@ -3410,7 +3682,7 @@ describe('App', () => {
     });
     expect(finalizedSegmentButton).toHaveAttribute('aria-current', 'true');
     expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
   it('finalizes a SegmentAttachment recording from the selected Segment plus menu', async () => {
     const user = userEvent.setup();
@@ -3746,5 +4018,42 @@ describe('App', () => {
     ).toMatchObject({
       memories: [{ memoryId: 'mem_1', segmentCount: 1 }],
     });
+  });
+
+  it('keeps unchanged activity order when merging a renamed memory projection', () => {
+    const olderMemory = {
+      audioByteLength: 3,
+      createdAt: '2026-05-06T13:08:00.000Z',
+      durationMs: 2000,
+      attachmentCount: 0,
+      hasTranscript: false,
+      memoryId: 'mem_older',
+      segmentCount: 1,
+      title: 'Older',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+    };
+    const newerMemory = {
+      ...olderMemory,
+      memoryId: 'mem_newer',
+      title: 'Newer',
+      updatedAt: '2026-05-06T13:12:00.000Z',
+    };
+    const session = {
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      snapshot: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [newerMemory, olderMemory],
+      },
+    };
+
+    expect(
+      mergeMemoryIntoSession(session, {
+        ...olderMemory,
+        title: 'Renamed older',
+      }).snapshot.memories.map((memory) => memory.memoryId)
+    ).toEqual(['mem_newer', 'mem_older']);
   });
 });

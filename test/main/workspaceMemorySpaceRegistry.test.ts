@@ -51,7 +51,7 @@ test('workspace memory space registry persists memorySpaces across registry inst
   );
 });
 
-test('workspace memory space registry follows Finder-renamed memory space folders by workspaceId', async () => {
+test('workspace memory space registry lists cached entries and resolves Finder-renamed folders on demand', async () => {
   const parentPath = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-rename-'));
   const originalRoot = path.join(parentPath, '旧空间');
   const renamedRoot = path.join(parentPath, '灵感空间');
@@ -86,12 +86,20 @@ test('workspace memory space registry follows Finder-renamed memory space folder
   assert.deepEqual(await registry.listMemorySpaces(), [
     {
       workspaceId: 'ws_runtime_validated',
-      title: '灵感空间',
+      title: 'Runtime validated memory',
       description: 'Final runtime validation workspace.',
       addedAt: '2026-05-08T07:48:00.000Z',
       lastOpenedAt: '2026-05-08T07:48:00.000Z',
     },
   ]);
+  assert.deepEqual(await registry.resolveMemorySpace('ws_runtime_validated'), {
+    workspaceId: 'ws_runtime_validated',
+    title: '灵感空间',
+    description: 'Final runtime validation workspace.',
+    rootPath: await realpath(renamedRoot),
+    addedAt: '2026-05-08T07:48:00.000Z',
+    lastOpenedAt: '2026-05-08T07:48:00.000Z',
+  });
   assert.equal(
     await registry.resolveMemorySpaceRoot('ws_runtime_validated'),
     await realpath(renamedRoot)

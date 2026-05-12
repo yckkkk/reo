@@ -49,9 +49,13 @@ type WorkspaceMemorySpaceRegistryEntry = z.infer<typeof workspaceMemorySpaceRegi
 type WorkspaceMetadata = z.infer<typeof workspaceMetadataSchema>;
 
 export type WorkspaceMemorySpace = Omit<WorkspaceMemorySpaceRegistryEntry, 'rootPath'>;
+export type WorkspaceMemorySpaceWithRoot = WorkspaceMemorySpaceRegistryEntry;
 
 export interface WorkspaceMemorySpaceRegistry {
   readonly listMemorySpaces: () => Promise<readonly WorkspaceMemorySpace[]>;
+  readonly resolveMemorySpace: (
+    workspaceId: string
+  ) => Promise<WorkspaceMemorySpaceWithRoot | null>;
   readonly resolveMemorySpaceRoot: (workspaceId: string) => Promise<string | null>;
   readonly removeMemorySpace: (workspaceId: string) => Promise<void>;
   readonly updateMemorySpaceSnapshot: (input: {
@@ -193,26 +197,27 @@ export function createWorkspaceMemorySpaceRegistry({
     };
   }
 
-  async function readReconciledRegistry(): Promise<WorkspaceMemorySpaceRegistryFile> {
-    const registry = await readRegistry();
-    const memorySpaces = await Promise.all(registry.memorySpaces.map(reconcileMemorySpace));
-    return {
-      schemaVersion: MEMORY_SPACE_REGISTRY_VERSION,
-      memorySpaces,
-    };
+  async function resolveMemorySpaceById(
+    workspaceId: string
+  ): Promise<WorkspaceMemorySpaceWithRoot | null> {
+    return withRegistryWriteLock(async () => {
+      const registry = await readRegistry();
+      const memorySpace =
+        registry.memorySpaces.find((candidate) => candidate.workspaceId === workspaceId) ?? null;
+      return memorySpace ? reconcileMemorySpace(memorySpace) : null;
+    });
   }
 
   return {
     async listMemorySpaces() {
-      const registry = await withRegistryWriteLock(readReconciledRegistry);
+      const registry = await withRegistryWriteLock(readRegistry);
       return registry.memorySpaces.map(stripRootPath);
     },
+    async resolveMemorySpace(workspaceId) {
+      return resolveMemorySpaceById(workspaceId);
+    },
     async resolveMemorySpaceRoot(workspaceId) {
-      const registry = await withRegistryWriteLock(readReconciledRegistry);
-      return (
-        registry.memorySpaces.find((memorySpace) => memorySpace.workspaceId === workspaceId)
-          ?.rootPath ?? null
-      );
+      return (await resolveMemorySpaceById(workspaceId))?.rootPath ?? null;
     },
     async removeMemorySpace(workspaceId) {
       return withRegistryWriteLock(async () => {
@@ -234,7 +239,7 @@ export function createWorkspaceMemorySpaceRegistry({
         if (canonicalRoot.length > MAX_REGISTRY_ROOT_PATH_LENGTH) {
           throw new Error('Memory space root path is too long');
         }
-        const registry = await readReconciledRegistry();
+        const registry = await readRegistry();
         const existingIndex = registry.memorySpaces.findIndex(
           (memorySpace) => memorySpace.workspaceId === snapshot.workspaceId
         );
