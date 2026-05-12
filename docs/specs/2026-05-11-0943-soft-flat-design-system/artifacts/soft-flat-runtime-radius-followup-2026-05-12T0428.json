@@ -1,0 +1,158 @@
+{
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "clickedWorkspace": "测试工作区1",
+  "before": {
+    "url": "http://localhost:5173/",
+    "toastText": [],
+    "memorySpaceButtons": ["测试工作区1", "我和宝"]
+  },
+  "lockToastPresent": false,
+  "openedWithoutLockToast": true,
+  "bodyToastText": [],
+  "sidebarItem": {
+    "selector": "[data-slot=\"workspace-memory-space-item\"]",
+    "present": true,
+    "className": "group/memorySpace relative flex min-h-32 items-center gap-4 rounded-md pr-4 transition-colors duration-150 ease-out hover:bg-secondary focus-within:bg-secondary bg-secondary",
+    "radius": "12px",
+    "rect": {
+      "left": 12,
+      "right": 228,
+      "top": 188,
+      "bottom": 220,
+      "width": 216,
+      "height": 32
+    }
+  },
+  "breadcrumbWorkspace": {
+    "name": "测试工作区1 记忆空间操作",
+    "className": "inline-flex max-w-[220px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground",
+    "radius": "8px",
+    "rect": {
+      "left": 240,
+      "right": 335.3671875,
+      "top": 1.203125,
+      "bottom": 34.796875,
+      "width": 95.3671875,
+      "height": 33.59375
+    }
+  },
+  "breadcrumbAny": [
+    {
+      "label": "测试工作区1 记忆空间操作",
+      "radius": "8px",
+      "className": "inline-flex max-w-[220px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground",
+      "rect": {
+        "left": 240,
+        "right": 335.3671875,
+        "top": 1.203125,
+        "bottom": 34.796875,
+        "width": 95.3671875,
+        "height": 33.59375
+      }
+    },
+    {
+      "label": "测试灵感 记忆操作",
+      "radius": "8px",
+      "className": "inline-flex max-w-[260px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary",
+      "rect": {
+        "left": 347.3671875,
+        "right": 419.3671875,
+        "top": 1.203125,
+        "bottom": 34.796875,
+        "width": 72,
+        "height": 33.59375
+      }
+    }
+  ],
+  "titlebarActions": {
+    "className": "pointer-events-auto mr-16 flex items-center gap-8 [-webkit-app-region:no-drag]",
+    "rect": {
+      "left": 812,
+      "right": 884,
+      "top": 2,
+      "bottom": 34,
+      "width": 72,
+      "height": 32
+    },
+    "rightInset": 16
+  },
+  "titlebarIconButtons": [
+    {
+      "name": "新建记忆",
+      "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 size-32 rounded-sm p-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground",
+      "radius": "8px",
+      "rect": {
+        "left": 812,
+        "right": 844,
+        "top": 2,
+        "bottom": 34,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "name": "展开记忆列表",
+      "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 size-32 rounded-sm p-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground",
+      "radius": "8px",
+      "rect": {
+        "left": 852,
+        "right": 884,
+        "top": 2,
+        "bottom": 34,
+        "width": 32,
+        "height": 32
+      }
+    }
+  ],
+  "speedDialAction": {
+    "radius": "9999px",
+    "rect": {
+      "left": 458,
+      "right": 498,
+      "top": 640,
+      "bottom": 680,
+      "width": 40,
+      "height": 40
+    },
+    "className": "p-speeddial-action grid size-[var(--reo-speed-dial-action-size)] place-items-center !rounded-full border-0 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-card text-foreground hover:bg-secondary hover:text-foreground",
+    "fullRound": true
+  },
+  "speedDialUnavailableAction": {
+    "radius": "9999px",
+    "rect": {
+      "left": 642,
+      "right": 682,
+      "top": 640,
+      "bottom": 680,
+      "width": 40,
+      "height": 40
+    },
+    "className": "p-speeddial-action p-disabled grid size-[var(--reo-speed-dial-action-size)] place-items-center !rounded-full border-0 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-default bg-card text-muted-foreground",
+    "fullRound": true
+  },
+  "fabTrigger": {
+    "selector": "button[aria-label=\"关闭表达入口\"], button[aria-label=\"打开表达入口\"]",
+    "present": true,
+    "className": "!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-primary !text-primary-foreground !transition-colors !duration-200 !ease-out hover:!bg-primary focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background p-speeddial-button p-button-rounded p-button p-component p-button-icon-only",
+    "radius": "9999px",
+    "rect": {
+      "left": 542,
+      "right": 598,
+      "top": 632,
+      "bottom": 688,
+      "width": 56,
+      "height": 56
+    }
+  },
+  "documentScroll": {
+    "x": 0,
+    "y": 0,
+    "width": 900,
+    "height": 720
+  },
+  "violations": ["Titlebar actions right inset expected >= 40px, received 16."],
+  "ok": false
+}

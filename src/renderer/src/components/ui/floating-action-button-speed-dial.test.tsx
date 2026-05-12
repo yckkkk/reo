@@ -44,20 +44,11 @@ describe('FloatingActionButtonSpeedDial', () => {
     const trigger = screen.getByRole('button', { name: '打开表达入口' });
     expect(document.querySelector('[data-slot="floating-action-button-speed-dial"]')).toHaveClass(
       'pointer-events-none',
-      'h-[var(--reo-speed-dial-shell-height)]',
-      'max-w-[var(--reo-speed-dial-shell-width)]'
+      'relative',
+      'mx-auto',
+      'w-full'
     );
-    expect(document.querySelector('[data-slot="floating-action-button-speed-dial"]')).toHaveStyle({
-      '--reo-speed-dial-action-size': `${FLOATING_ACTION_BUTTON_SPEED_DIAL_GEOMETRY.actionSize}px`,
-      '--reo-speed-dial-diameter': `${FLOATING_ACTION_BUTTON_SPEED_DIAL_GEOMETRY.diameter}px`,
-      '--reo-speed-dial-shell-height': `${FLOATING_ACTION_BUTTON_SPEED_DIAL_GEOMETRY.shellHeight}px`,
-      '--reo-speed-dial-shell-width': `${FLOATING_ACTION_BUTTON_SPEED_DIAL_GEOMETRY.shellWidth}px`,
-    });
-    expect(trigger).toHaveClass(
-      '!bg-signal-blue',
-      '!rounded-full',
-      '!size-[var(--reo-speed-dial-diameter)]'
-    );
+    expect(trigger).toHaveClass('!bg-primary', '!rounded-full');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveAttribute(
       'aria-controls',
@@ -71,14 +62,16 @@ describe('FloatingActionButtonSpeedDial', () => {
       'aria-expanded',
       'true'
     );
-    expect(screen.getByRole('button', { name: '关闭表达入口' })).toHaveClass(
-      '!size-[var(--reo-speed-dial-diameter)]'
-    );
+    expect(screen.getByRole('button', { name: '关闭表达入口' })).toHaveClass('!rounded-full');
     expect(screen.getByRole('menu', { name: '表达方式' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '录音' })).toHaveClass(
-      'size-[var(--reo-speed-dial-action-size)]',
-      'hover:bg-obsidian',
-      'hover:text-on-accent'
+      '!rounded-full',
+      'hover:bg-secondary',
+      'hover:text-foreground'
+    );
+    expect(screen.getByRole('menuitem', { name: '录音' })).not.toHaveClass(
+      'rounded-md',
+      'rounded-lg'
     );
     expect(screen.getByRole('menuitem', { name: '录音' }).tagName).toBe('A');
     expect(screen.getByRole('menuitem', { name: '录音' })).toHaveAttribute('tabindex', '0');
@@ -103,7 +96,6 @@ describe('FloatingActionButtonSpeedDial', () => {
     );
     expect(screen.getByRole('menuitem', { name: '上传暂不可用' })).toHaveClass(
       'cursor-default',
-      'size-[var(--reo-speed-dial-action-size)]',
       'focus-visible:ring-2',
       'p-disabled'
     );

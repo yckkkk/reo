@@ -10,7 +10,7 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<'ol'>) {
     <ol
       data-slot="breadcrumb-list"
       className={cn(
-        'flex min-w-0 flex-wrap items-center gap-3 break-words text-ui-md leading-ui-md text-gravel',
+        'flex min-w-0 flex-wrap items-center gap-3 break-words text-ui-md leading-ui-md text-muted-foreground',
         className
       )}
       {...props}
@@ -33,7 +33,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentProps<'span'>) {
     <span
       aria-current="page"
       data-slot="breadcrumb-page"
-      className={cn('min-w-0 font-medium text-obsidian', className)}
+      className={cn('min-w-0 font-medium text-foreground', className)}
       {...props}
     />
   );
@@ -45,7 +45,7 @@ function BreadcrumbSeparator({ children, className, ...props }: React.ComponentP
       aria-hidden="true"
       data-slot="breadcrumb-separator"
       role="presentation"
-      className={cn('flex shrink-0 items-center text-slate', className)}
+      className={cn('flex shrink-0 items-center text-muted-foreground', className)}
       {...props}
     >
       {children ?? <span className="size-4 rounded-full bg-current" />}

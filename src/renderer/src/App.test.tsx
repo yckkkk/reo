@@ -448,30 +448,40 @@ describe('App', () => {
     );
     const railShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
     expect(titlebarContent).toHaveStyle({ left: '240px' });
     expect(titlebarContent).toHaveStyle({
-      top: 'calc(var(--spacing-titlebar-control-top) + ((var(--spacing-titlebar-control-size) - var(--spacing-titlebar)) / 2))',
+      top: '-6px',
     });
     expect(expandButton).toHaveAttribute('aria-controls', 'workspace-memory-rail');
     expect(expandButton).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('navigation', { name: '记忆列表' })).not.toBeInTheDocument();
     expect(railShell).toHaveAttribute('data-rail-mode', 'inline');
     expect(railShell).toHaveAttribute('aria-hidden', 'true');
-    expect(stageShell).toHaveClass('pr-24', 'sm:pr-40', 'xl:pr-40');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_0px]');
+    expect(frameBody).toHaveClass(
+      'transition-[grid-template-columns]',
+      'duration-200',
+      'ease-out',
+      'motion-reduce:transition-none'
+    );
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
 
     await user.click(expandButton);
 
     expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
-    expect(railShell).toHaveClass('border-l', 'border-glass-border');
-    expect(stageShell).toHaveClass('pr-[var(--workspace-memory-rail-stage-inset)]');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_var(--workspace-memory-rail-width)]');
+    expect(railShell).toHaveClass('border-l', 'border-secondary');
+    expect(railShell).not.toHaveClass('border-border', 'shadow-float');
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
 
     await user.click(within(titlebar).getByRole('button', { name: '隐藏侧边栏' }));
     expect(sidebarToggleControls).toHaveStyle({
-      left: 'var(--spacing-titlebar-control-left)',
+      left: '80px',
     });
     expect(titlebarContent).toHaveStyle({
-      left: 'calc(var(--spacing-titlebar-control-left) + var(--spacing-titlebar-control-size) + var(--spacing-titlebar-control-gap) - var(--spacing-panel-titlebar-x))',
+      left: '88px',
     });
 
     const collapseButton = within(titlebar).getByRole('button', { name: '折叠记忆列表' });
@@ -530,6 +540,7 @@ describe('App', () => {
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
     const railShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
+    const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
     expect(within(titlebar).getByRole('button', { name: '展开记忆列表' })).toHaveAttribute(
       'aria-expanded',
       'false'
@@ -537,16 +548,16 @@ describe('App', () => {
     expect(railShell).toHaveAttribute('data-rail-mode', 'overlay');
     expect(railShell).toHaveAttribute('aria-hidden', 'true');
     expect(screen.queryByRole('navigation', { name: '记忆列表' })).not.toBeInTheDocument();
-    expect(stageShell).toHaveClass('pr-24', 'sm:pr-40', 'xl:pr-40');
-    expect(stageShell).not.toHaveClass('pr-[var(--workspace-memory-rail-stage-inset)]');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_0px]');
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
 
     await user.click(within(titlebar).getByRole('button', { name: '展开记忆列表' }));
 
     expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
     expect(railShell).toHaveAttribute('data-rail-mode', 'overlay');
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
-    expect(stageShell).toHaveClass('pr-24', 'sm:pr-40', 'xl:pr-40');
-    expect(stageShell).not.toHaveClass('pr-[var(--workspace-memory-rail-stage-inset)]');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_0px]');
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
 
     act(() => {
       media.setMatches(true);
@@ -559,7 +570,8 @@ describe('App', () => {
     expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
     expect(railShell).toHaveAttribute('data-rail-mode', 'inline');
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
-    expect(stageShell).toHaveClass('pr-[var(--workspace-memory-rail-stage-inset)]');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_var(--workspace-memory-rail-width)]');
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
   });
 
   it('renames a Memory container from the right rail menu', async () => {
@@ -708,13 +720,15 @@ describe('App', () => {
 
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
     expect(within(titlebar).getByRole('navigation', { name: '当前位置' })).toBeInTheDocument();
-    expect(
-      within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' })
-    ).toBeInTheDocument();
+    expect(within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' })).toHaveClass(
+      'rounded-sm'
+    );
     expect(
       within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
-    ).toBeInTheDocument();
+    ).toHaveClass('rounded-sm');
     expect(titlebar.querySelector('[data-slot="breadcrumb-list"]')).toHaveClass('gap-4');
+    expect(titlebar.querySelector('[data-slot="workspace-titlebar-actions"]')).toHaveClass('mr-16');
+    expect(titlebar.querySelector('[data-slot="workspace-titlebar"]')).toHaveClass('px-28');
     expect(titlebar.querySelector('[data-slot="breadcrumb"]')?.querySelector('svg')).toBeNull();
     const breadcrumbSeparator = titlebar.querySelector('[data-slot="breadcrumb-separator"]');
     expect(breadcrumbSeparator?.querySelector('svg')).toBeNull();

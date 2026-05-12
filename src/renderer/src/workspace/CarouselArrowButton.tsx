@@ -18,7 +18,7 @@ export function CarouselArrowButton({ ariaLabel, direction, onClick }: CarouselA
           asChild
           size="iconMedium"
           variant="secondary"
-          className="!size-40 rounded-full border-glass-border bg-card-glass text-cinder backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent"
+          className="!size-40 rounded-full border border-secondary bg-background text-foreground transition-colors duration-150 ease-out hover:border-secondary hover:bg-secondary hover:text-foreground"
         >
           <TooltipTrigger type="button" aria-label={ariaLabel} onClick={onClick}>
             <Icon aria-hidden="true" className="size-[17px]" />

@@ -2527,7 +2527,7 @@ export function RecordingOverlay({
     >
       <Button
         aria-label="返回"
-        className="absolute left-24 top-40 z-10 h-[40px] w-[40px] rounded-full border-transparent bg-transparent p-0 text-cinder shadow-none hover:bg-[var(--glass-control-hover)] hover:text-obsidian disabled:bg-transparent disabled:text-fog disabled:opacity-100 sm:left-32"
+        className="absolute left-24 top-40 z-10 size-40 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100 sm:left-32"
         data-vaul-no-drag
         disabled={
           exitActionPending ||
@@ -2540,7 +2540,7 @@ export function RecordingOverlay({
         type="button"
         variant="ghostIcon"
       >
-        <ChevronLeft aria-hidden="true" className="h-[22px] w-[22px]" />
+        <ChevronLeft aria-hidden="true" className="size-20" />
       </Button>
       <div
         className="grid h-[min(560px,calc(100dvh-84px))] w-full grid-rows-[112px_132px_72px_88px] content-end justify-items-center gap-y-20 text-center"
@@ -2579,7 +2579,7 @@ export function RecordingOverlay({
               className="row-start-2 flex h-full w-full items-center justify-center"
               data-testid="recording-copy-slot"
             >
-              <div className="flex max-w-[680px] flex-col gap-8 text-center font-waldenburg text-heading-sm font-regular leading-heading-sm text-obsidian">
+              <div className="flex max-w-[680px] flex-col gap-8 text-center font-sans text-heading-sm font-regular leading-heading-sm text-foreground">
                 <p>从一个念头开始，慢慢说，我们会安静地为你记下。</p>
                 <p>不必急着组织完整，想到哪里就说到哪里。</p>
               </div>
@@ -2621,12 +2621,12 @@ export function RecordingOverlay({
               className="relative row-start-3 flex h-full items-center justify-center"
               data-testid="recording-timer-slot"
             >
-              <p className="font-inter text-[40px] font-bold leading-none text-obsidian">
+              <p className="font-sans text-heading-lg font-bold leading-none text-foreground">
                 {formatRecordingTime(visibleTimerMs)}
               </p>
               {shortRecordingNoticeVisible ? (
                 <p
-                  className="absolute top-full mt-4 w-[min(80vw,680px)] text-balance text-ui-sm font-medium leading-ui-sm text-gravel"
+                  className="absolute top-full mt-4 w-[min(80vw,680px)] text-balance text-ui-sm font-medium leading-ui-sm text-muted-foreground"
                   role="status"
                 >
                   {SHORT_RECORDING_NOTICE}
@@ -2656,7 +2656,7 @@ export function RecordingOverlay({
             <DialogDescription>返回会结束当前录音。</DialogDescription>
           </DialogHeader>
 
-          <p className="text-ui-sm leading-ui-sm text-gravel">
+          <p className="text-ui-sm leading-ui-sm text-muted-foreground">
             可以先保存到当前记忆，或直接退出并放弃这段内容。
           </p>
 

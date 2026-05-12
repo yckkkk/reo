@@ -13,7 +13,7 @@ describe('Button primitive', () => {
     const button = screen.getByRole('button', { name: '记录记忆' });
     button.focus();
 
-    expect(button).toHaveClass('rounded-buttons', 'font-medium', 'min-h-40');
+    expect(button).toHaveClass('rounded-lg', 'font-medium', 'min-h-40');
     expect(button).not.toHaveClass('rounded-full');
     expect(button).not.toHaveClass('font-bold');
     expect(button.className).toContain('focus-visible');
@@ -35,18 +35,37 @@ describe('Button primitive', () => {
     );
 
     const button = screen.getByRole('button', { name: '浏览' });
-    expect(button).toHaveClass('min-h-32', 'rounded-buttons', 'px-12', 'text-ui-sm');
+    expect(button).toHaveClass('min-h-32', 'rounded-md', 'px-12', 'text-ui-sm');
+    expect(button).not.toHaveClass('rounded-full', 'rounded-lg');
   });
 
-  it('supports the accent icon action shape', () => {
+  it('supports destructive action semantics without component-local styling', () => {
+    render(<Button variant="destructive">删除</Button>);
+
+    expect(screen.getByRole('button', { name: '删除' })).toHaveClass(
+      'bg-destructive',
+      'text-destructive-foreground',
+      'hover:bg-destructive'
+    );
+  });
+
+  it('keeps large icon actions square-rounded by default', () => {
     render(
-      <Button variant="accentCircle" size="iconLarge" aria-label="创建记忆空间">
+      <Button size="iconLarge" aria-label="创建记忆空间">
         +
       </Button>
     );
 
     const button = screen.getByRole('button', { name: '创建记忆空间' });
-    expect(button).toHaveClass('size-56', 'rounded-full', 'bg-signal-blue', 'hover:bg-obsidian');
+    expect(button).toHaveClass(
+      'size-56',
+      'rounded-lg',
+      'border-0',
+      'bg-primary',
+      'hover:bg-primary',
+      'shadow-none'
+    );
+    expect(button).not.toHaveClass('rounded-full');
   });
 
   it('supports naked icon controls without raw button styling', () => {
@@ -57,7 +76,21 @@ describe('Button primitive', () => {
     );
 
     const button = screen.getByRole('button', { name: '隐藏侧边栏' });
-    expect(button).toHaveClass('size-32', 'border-transparent', 'bg-transparent');
-    expect(button).not.toHaveClass('rounded-full');
+    expect(button).toHaveClass('size-32', 'rounded-sm', 'border-0', 'bg-transparent');
+    expect(button).toHaveClass('hover:bg-accent', 'hover:text-accent-foreground');
+    expect(button).not.toHaveClass('rounded-full', 'rounded-lg', 'rounded-md');
+    expect(button).not.toHaveClass('border-transparent', 'shadow-float');
+  });
+
+  it('keeps 40px icon controls square-rounded rather than circular', () => {
+    render(
+      <Button variant="ghostIcon" size="iconMedium" aria-label="返回">
+        R
+      </Button>
+    );
+
+    const button = screen.getByRole('button', { name: '返回' });
+    expect(button).toHaveClass('size-40', 'rounded-md');
+    expect(button).not.toHaveClass('rounded-full', 'rounded-lg');
   });
 });

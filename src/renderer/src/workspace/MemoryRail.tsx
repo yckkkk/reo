@@ -66,12 +66,12 @@ export function MemoryRail({
     <nav
       id={id}
       aria-label="记忆列表"
-      className="flex min-h-0 flex-col border-t border-glass-border bg-card-glass px-16 py-20 backdrop-blur-glass-lg xl:border-t-0"
+      className="flex h-full min-h-0 w-full flex-col bg-background px-8 py-20"
     >
       {sortedMemories.length === 0 ? (
-        <div className="flex min-h-[96px] flex-col justify-center rounded-panels bg-powder px-16 py-16">
-          <p className="text-body font-medium leading-body text-obsidian">还没有记忆</p>
-          <p className="mt-4 text-ui-sm leading-ui-sm text-gravel">先为这一刻命名。</p>
+        <div className="flex min-h-[96px] flex-col justify-center rounded-xl bg-card px-16 py-16">
+          <p className="text-body font-medium leading-body text-foreground">还没有记忆</p>
+          <p className="mt-4 text-ui-sm leading-ui-sm text-muted-foreground">先为这一刻命名。</p>
         </div>
       ) : (
         <div className="flex flex-col gap-8">
@@ -82,21 +82,21 @@ export function MemoryRail({
                 key={memory.memoryId}
                 data-slot="memory-rail-card"
                 className={[
-                  'group relative overflow-hidden rounded-panels transition-colors duration-150',
-                  isActive ? 'bg-chalk' : 'bg-powder hover:bg-chalk',
+                  'group relative overflow-hidden rounded-xl transition-colors duration-150',
+                  isActive ? 'bg-secondary' : 'bg-card hover:bg-secondary',
                 ].join(' ')}
               >
                 <button
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={`选择记忆 ${memory.title}`}
-                  className="block min-h-[68px] w-full px-12 py-12 pr-40 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
+                  className="block min-h-[68px] w-full px-12 py-12 pr-40 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   onClick={() => onSelectMemory(memory.memoryId)}
                 >
-                  <span className="block min-w-0 truncate text-body font-medium leading-body text-obsidian">
+                  <span className="block min-w-0 truncate text-body font-medium leading-body text-foreground">
                     {memory.title}
                   </span>
-                  <span className="mt-4 block truncate text-ui-sm leading-ui-sm text-gravel">
+                  <span className="mt-4 block truncate text-ui-sm leading-ui-sm text-muted-foreground">
                     {updatedLabel(memory.updatedAt)} · {countLabel(memory.segmentCount, '个片段')}
                   </span>
                 </button>
@@ -107,7 +107,7 @@ export function MemoryRail({
                       size="icon"
                       type="button"
                       aria-label={`${memory.title} 更多操作`}
-                      className="absolute right-8 top-8 size-24 text-slate hover:bg-card-glass data-[state=open]:bg-card-glass data-[state=open]:text-obsidian"
+                      className="absolute right-8 top-8 size-24 text-muted-foreground hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
                     >
                       <MoreHorizontal className="size-[14px]" aria-hidden="true" />
                     </Button>
@@ -118,11 +118,14 @@ export function MemoryRail({
                     side="bottom"
                   >
                     <DropdownMenuItem onSelect={() => onRenameMemory(memory)}>
-                      <PencilLine className="size-[14px] text-slate" aria-hidden="true" />
+                      <PencilLine
+                        className="size-[14px] text-muted-foreground"
+                        aria-hidden="true"
+                      />
                       重命名记忆
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => onDeleteMemory(memory)}>
-                      <Trash2 className="size-[14px] text-slate" aria-hidden="true" />
+                      <Trash2 className="size-[14px] text-muted-foreground" aria-hidden="true" />
                       删除记忆
                     </DropdownMenuItem>
                   </DropdownMenuContent>

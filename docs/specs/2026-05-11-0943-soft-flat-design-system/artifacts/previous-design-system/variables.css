@@ -1,0 +1,193 @@
+:root {
+  color-scheme: light;
+
+  /* Colors - Nordic & Flat Vector Palette */
+  --color-eggshell: #fffffc;
+  --color-linen: #fcf9f6;
+  --color-powder: #f1f1f0;
+  --color-chalk: #dedee1;
+  --color-fog: #9fb0b7;
+  --color-gravel: #7f9198;
+  --color-slate: #6f858c;
+  --color-cinder: #5d727a;
+  --color-obsidian: #3f4d53;
+  --color-signal-blue: #7f9198;
+  --color-ember: #b7a8a0;
+  --color-vector-mint: #78918c;
+  --color-vector-sun: #d4dde0;
+  --color-vector-coral: #b7a1a0;
+  --color-vector-lilac: #a8b1bd;
+  --color-voice-spectrum: #9fb0b7;
+  --color-card-glass: rgb(255 255 255 / 0.36);
+  --color-on-accent: #fffffc;
+  --color-scrim: rgb(63 77 83 / 0.42);
+  --color-glass-border: rgb(255 255 255 / 0.5);
+  --color-glass-border-highlight: rgb(255 255 255 / 0.8);
+
+  /* Typography - Font Families */
+  --font-waldenburg:
+    'Waldenburg', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-waldenburgfh:
+    'WaldenburgFH', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-memory-serif: 'Songti SC', STSong, 'Noto Serif CJK SC', serif;
+  --font-inter:
+    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Typography - Tracking */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.05em;
+  --tracking-wider: 0.1em;
+  --tracking-widest: 0.2em;
+  --tracking-heading: -0.02em;
+  --tracking-heading-lg: -0.02em;
+  --tracking-display: -0.04em;
+
+  /* Typography - Scale */
+  --text-caption: 10px;
+  --leading-caption: 1.4;
+  --text-ui-xs: 11px;
+  --leading-ui-xs: 1.5;
+  --text-ui-sm: 12px;
+  --leading-ui-sm: 1.6;
+  --text-ui-md: 13px;
+  --leading-ui-md: 1.6;
+  --text-body: 14px;
+  --leading-body: 1.6;
+  --text-body-lg: 16px;
+  --leading-body-lg: 1.6;
+  --text-subheading: 18px;
+  --leading-subheading: 1.5;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.4;
+  --text-heading: 32px;
+  --leading-heading: 1.2;
+  --text-heading-lg: 36px;
+  --leading-heading-lg: 1.2;
+  --text-display: 48px;
+  --leading-display: 1.1;
+
+  /* Typography - Weights */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
+
+  /* Spacing */
+  --spacing-unit: 4px;
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-64: 64px;
+  --spacing-72: 72px;
+  --spacing-96: 96px;
+  --spacing-160: 160px;
+  --spacing-titlebar: 48px;
+  --spacing-titlebar-control-left: 80px;
+  --spacing-titlebar-control-top: 2px;
+  --spacing-titlebar-control-size: 32px;
+  --spacing-titlebar-control-gap: 4px;
+  --spacing-panel-titlebar-x: 28px;
+  --spacing-sidebar-content-top: 56px;
+
+  /* Layout */
+  --container-page: 1200px;
+  --container-form: 720px;
+  --page-max-width: 1200px;
+  --form-max-width: 720px;
+  --field-label-min-width: 120px;
+  --field-label-max-width: 160px;
+  --section-gap-min: 120px;
+  --section-gap-max: 160px;
+  --card-padding-min: 32px;
+  --card-padding-max: 56px;
+
+  /* Border Radius */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-full: 9999px;
+  --radius-tags: 12px;
+  --radius-cards: 32px;
+  --radius-badges: 12px;
+  --radius-inputs: 12px;
+  --radius-modals: 32px;
+  --radius-panels: 24px;
+  --radius-buttons: 12px;
+
+  /* Shadows */
+  --shadow-subtle: 0 4px 12px rgb(95 114 122 / 0.06);
+  --shadow-glass: 0 8px 32px 0 rgb(95 114 122 / 0.11);
+  --shadow-float: 0 20px 40px -10px rgb(63 77 83 / 0.16);
+
+  /* Blur System */
+  --blur-glass-sm: 8px;
+  --blur-glass-md: 16px;
+  --blur-glass-lg: 24px;
+
+  /* Surfaces */
+  --surface-page-ground: var(--color-eggshell);
+  --surface-sidebar-ground: var(--color-linen);
+  --surface-powder-surface: var(--color-powder);
+  --surface-card-glass: var(--color-card-glass);
+  --surface-obsidian: var(--color-obsidian);
+
+  /* Glass Vector */
+  --glass-scrim-overlay: color-mix(in srgb, var(--color-scrim) 30%, transparent);
+  --glass-recording-overlay: var(--color-card-glass);
+  --glass-recording-overlay-blur: var(--blur-glass-lg);
+  --glass-control-hover: rgb(255 255 255 / 0.6);
+  --glass-ember-hover: color-mix(in srgb, var(--color-ember) 18%, transparent);
+  --recording-primary-halo: color-mix(in srgb, var(--color-slate) 22%, transparent);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --color-eggshell: #0d0d0d;
+  --color-linen: #161616;
+  --color-powder: #1b1b1c;
+  --color-chalk: #262628;
+  --color-fog: #46565d;
+  --color-gravel: #758990;
+  --color-slate: #8ca0a7;
+  --color-cinder: #a6b8bf;
+  --color-obsidian: #eef1f2;
+  --color-signal-blue: #a6b8bf;
+  --color-ember: #b7a8a0;
+  --color-vector-mint: #8aa19c;
+  --color-vector-sun: #b8c4c9;
+  --color-vector-coral: #b7a1a0;
+  --color-vector-lilac: #a8b1bd;
+  --color-voice-spectrum: #a6b8bf;
+  --color-card-glass: rgb(37 40 41 / 0.4);
+  --color-on-accent: #0d0d0d;
+  --color-scrim: rgb(11 15 18 / 0.82);
+  --color-glass-border: rgb(255 255 255 / 0.08);
+  --color-glass-border-highlight: rgb(255 255 255 / 0.15);
+  --shadow-subtle: 0 4px 12px rgb(0 0 0 / 0.18);
+  --shadow-glass: 0 8px 32px 0 rgb(0 0 0 / 0.3);
+  --shadow-float: 0 20px 40px -10px rgb(0 0 0 / 0.36);
+  --surface-page-ground: var(--color-eggshell);
+  --surface-sidebar-ground: var(--color-linen);
+  --surface-powder-surface: var(--color-powder);
+  --surface-card-glass: var(--color-card-glass);
+  --surface-obsidian: var(--color-obsidian);
+  --glass-control-hover: rgb(255 255 255 / 0.1);
+  --glass-ember-hover: color-mix(in srgb, var(--color-ember) 16%, transparent);
+  --recording-primary-halo: color-mix(in srgb, var(--color-slate) 28%, transparent);
+}

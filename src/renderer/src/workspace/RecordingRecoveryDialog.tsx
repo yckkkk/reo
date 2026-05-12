@@ -43,14 +43,19 @@ export function RecordingRecoveryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <p className="text-ui-sm leading-ui-sm text-gravel">
+        <p className="text-ui-sm leading-ui-sm text-muted-foreground">
           {finalizedRecordingSaved
             ? '可以重试保存转写，或只关闭这个恢复提示。'
             : '可以先保存到当前记忆，或放弃这段未完成内容。'}
         </p>
 
         <div className="flex justify-end gap-8">
-          <Button type="button" variant="secondary" disabled={disabled} onClick={onDiscard}>
+          <Button
+            type="button"
+            variant={finalizedRecordingSaved ? 'secondary' : 'destructive'}
+            disabled={disabled}
+            onClick={onDiscard}
+          >
             {finalizedRecordingSaved ? '关闭提示' : '放弃'}
           </Button>
           {finalizedRecordingSaved || !canReview ? null : (

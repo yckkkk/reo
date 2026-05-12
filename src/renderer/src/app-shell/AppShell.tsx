@@ -30,16 +30,23 @@ export type ThemeMode = 'light' | 'dark';
 export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
 export const SIDEBAR_RESIZE_STEP = 20;
-export const PANEL_RADIUS = 12;
+export const PANEL_RADIUS = 'var(--radius-md)';
 export const TITLEBAR_HEIGHT = 48;
+const TITLEBAR_CONTROL_LEFT = 80;
+const TITLEBAR_CONTROL_TOP = 2;
+const TITLEBAR_CONTROL_SIZE = 32;
+const TITLEBAR_CONTROL_GAP = 4;
+const PANEL_TITLEBAR_X = 28;
+const COLLAPSED_PANEL_TITLEBAR_LEFT =
+  TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP - PANEL_TITLEBAR_X;
 const PANEL_MOTION_CLASS =
-  'transition-[left,border-radius] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none';
+  'transition-[left,border-radius] duration-200 ease-out motion-reduce:transition-none';
 const SIDEBAR_NAV_BUTTON_CLASS =
-  'w-full justify-start border-transparent px-8 text-cinder hover:border-chalk hover:bg-powder';
+  'w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground';
 const HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS =
-  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
+  'pointer-events-none size-28 rounded-sm text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 const HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS =
-  'pointer-events-none size-28 rounded-buttons text-slate opacity-0 hover:bg-powder hover:text-obsidian group-hover/memorySpace:pointer-events-auto group-hover/memorySpace:opacity-100 group-focus-within/memorySpace:pointer-events-auto group-focus-within/memorySpace:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
+  'pointer-events-none size-28 rounded-sm text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground group-hover/memorySpace:pointer-events-auto group-hover/memorySpace:opacity-100 group-focus-within/memorySpace:pointer-events-auto group-focus-within/memorySpace:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 
 type AppShellProps = {
   readonly activeSection?: AppShellActiveSection | undefined;
@@ -74,7 +81,7 @@ export function clampSidebarWidth(width: number) {
 }
 
 function sidebarNavButtonClass(current: boolean) {
-  return cn(SIDEBAR_NAV_BUTTON_CLASS, current ? 'bg-powder' : 'bg-transparent');
+  return cn(SIDEBAR_NAV_BUTTON_CLASS, current ? 'bg-secondary text-foreground' : 'bg-transparent');
 }
 
 export function AppShell({
@@ -141,11 +148,8 @@ export function AppShell({
 
   const panelLeft = sidebarState === 'expanded' ? `${safeSidebarWidth}px` : '0px';
   const panelTitlebarLeft =
-    sidebarState === 'expanded'
-      ? panelLeft
-      : 'calc(var(--spacing-titlebar-control-left) + var(--spacing-titlebar-control-size) + var(--spacing-titlebar-control-gap) - var(--spacing-panel-titlebar-x))';
-  const panelRadius =
-    sidebarState === 'expanded' ? `${PANEL_RADIUS}px 0 0 ${PANEL_RADIUS}px` : '0px';
+    sidebarState === 'expanded' ? panelLeft : `${COLLAPSED_PANEL_TITLEBAR_LEFT}px`;
+  const panelRadius = sidebarState === 'expanded' ? `${PANEL_RADIUS} 0 0 ${PANEL_RADIUS}` : '0px';
   const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
@@ -203,13 +207,13 @@ export function AppShell({
       <div
         data-slot="app-shell-root"
         data-theme={themeMode}
-        className="relative h-screen min-h-0 w-screen overflow-hidden bg-eggshell text-obsidian"
+        className="relative h-screen min-h-0 w-screen overflow-hidden bg-background text-foreground"
       >
         <div
           role="banner"
           aria-label="标题栏"
           data-slot="app-shell-titlebar"
-          className="pointer-events-auto absolute inset-x-0 top-0 h-titlebar border-0 bg-transparent [-webkit-app-region:drag]"
+          className="pointer-events-auto absolute inset-x-0 top-0 h-[48px] border-0 bg-transparent [-webkit-app-region:drag]"
           style={{
             zIndex: 5,
           }}
@@ -220,8 +224,8 @@ export function AppShell({
             data-slot="app-shell-titlebar-controls"
             className="pointer-events-auto absolute flex items-center gap-8 [-webkit-app-region:no-drag]"
             style={{
-              left: 'var(--spacing-titlebar-control-left)',
-              top: 'var(--spacing-titlebar-control-top)',
+              left: `${TITLEBAR_CONTROL_LEFT}px`,
+              top: `${TITLEBAR_CONTROL_TOP}px`,
             }}
           >
             <Button
@@ -240,11 +244,11 @@ export function AppShell({
           {panelTitlebar ? (
             <div
               data-slot="app-shell-panel-titlebar-content"
-              className={`pointer-events-none absolute flex h-titlebar items-center ${panelMotionClass}`}
+              className={`pointer-events-none absolute flex h-[48px] items-center ${panelMotionClass}`}
               style={{
                 left: panelTitlebarLeft,
                 right: 0,
-                top: 'calc(var(--spacing-titlebar-control-top) + ((var(--spacing-titlebar-control-size) - var(--spacing-titlebar)) / 2))',
+                top: `${TITLEBAR_CONTROL_TOP + (TITLEBAR_CONTROL_SIZE - TITLEBAR_HEIGHT) / 2}px`,
               }}
             >
               {panelTitlebar}
@@ -254,7 +258,7 @@ export function AppShell({
 
         <aside
           aria-label="记忆空间侧边栏"
-          className="absolute inset-y-0 left-0 flex flex-col bg-linen px-12 pb-16 pt-sidebar-content-top"
+          className="absolute inset-y-0 left-0 flex flex-col bg-card px-12 pb-16 pt-[56px]"
           style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
         >
           <nav className="flex flex-col gap-4" aria-label="记忆空间">
@@ -290,7 +294,7 @@ export function AppShell({
             >
               <h2
                 id="workspace-memory-spaces-heading"
-                className="px-8 text-ui-sm font-regular leading-ui-sm text-slate"
+                className="px-8 text-ui-sm font-regular leading-ui-sm text-muted-foreground"
               >
                 记忆空间
               </h2>
@@ -329,11 +333,11 @@ export function AppShell({
                       }}
                     >
                       <DropdownMenuItem onSelect={handleCreateWorkspace}>
-                        <FolderPlus className="size-16 text-slate" aria-hidden="true" />
+                        <FolderPlus className="size-16 text-muted-foreground" aria-hidden="true" />
                         创建本地记忆空间
                       </DropdownMenuItem>
                       <DropdownMenuItem onSelect={handleOpenLocalWorkspace}>
-                        <Folder className="size-16 text-slate" aria-hidden="true" />
+                        <Folder className="size-16 text-muted-foreground" aria-hidden="true" />
                         打开本地记忆空间
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -354,8 +358,8 @@ export function AppShell({
                     key={memorySpace.workspaceId}
                     data-slot="workspace-memory-space-item"
                     className={cn(
-                      'group/memorySpace relative flex min-h-32 items-center gap-4 rounded-buttons border border-transparent bg-transparent pr-4 transition-colors hover:border-chalk hover:bg-powder focus-within:border-chalk focus-within:bg-powder',
-                      memorySpaceCurrent ? 'border-chalk bg-powder' : null
+                      'group/memorySpace relative flex min-h-32 items-center gap-4 rounded-md bg-transparent pr-4 transition-colors duration-150 ease-out hover:bg-secondary focus-within:bg-secondary',
+                      memorySpaceCurrent ? 'bg-secondary' : null
                     )}
                   >
                     <Button
@@ -363,13 +367,13 @@ export function AppShell({
                       variant="ghostIcon"
                       size="compact"
                       aria-current={memorySpaceCurrent ? 'page' : undefined}
-                      className="min-w-0 flex-1 shrink justify-start border-0 bg-transparent px-8 text-cinder hover:text-cinder"
+                      className="min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-muted-foreground hover:bg-transparent hover:text-foreground"
                       onClick={() => handleSelectMemorySpace(memorySpace.workspaceId)}
                     >
                       <Folder className="size-16" aria-hidden="true" />
                       <span className="min-w-0 flex-1 truncate text-left">{memorySpace.title}</span>
                       {memorySpaceCurrent ? (
-                        <span className="size-4 rounded-full bg-signal-blue" aria-hidden="true" />
+                        <span className="size-4 rounded-full bg-primary" aria-hidden="true" />
                       ) : null}
                     </Button>
                     {onRenameMemorySpace || onRemoveMemorySpace ? (
@@ -398,13 +402,19 @@ export function AppShell({
                         >
                           {onRenameMemorySpace ? (
                             <DropdownMenuItem onSelect={() => handleRenameMemorySpace(memorySpace)}>
-                              <PencilLine className="size-16 text-slate" aria-hidden="true" />
+                              <PencilLine
+                                className="size-16 text-muted-foreground"
+                                aria-hidden="true"
+                              />
                               重命名记忆空间
                             </DropdownMenuItem>
                           ) : null}
                           {onRemoveMemorySpace ? (
                             <DropdownMenuItem onSelect={() => handleRemoveMemorySpace(memorySpace)}>
-                              <Trash2 className="size-16 text-slate" aria-hidden="true" />
+                              <Trash2
+                                className="size-16 text-muted-foreground"
+                                aria-hidden="true"
+                              />
                               移除记忆空间
                             </DropdownMenuItem>
                           ) : null}
@@ -449,7 +459,7 @@ export function AppShell({
 
         <main
           aria-label="记忆空间内容"
-          className={`absolute flex min-h-0 flex-col overflow-hidden border-0 bg-eggshell ${panelMotionClass}`}
+          className={`absolute flex min-h-0 flex-col overflow-hidden border-0 bg-background ${panelMotionClass}`}
           style={{
             borderRadius: panelRadius,
             bottom: 0,
@@ -461,7 +471,7 @@ export function AppShell({
         >
           <div
             data-slot="app-shell-panel-titlebar"
-            className="h-titlebar shrink-0"
+            className="h-[48px] shrink-0"
             aria-hidden="true"
           />
           <div

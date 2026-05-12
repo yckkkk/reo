@@ -1,0 +1,80 @@
+{
+  "viewport": {
+    "width": 1200,
+    "height": 800
+  },
+  "clickedWorkspace": "already-open",
+  "lockToastPresent": false,
+  "workspaceFrame": {
+    "className": "flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground",
+    "rect": {
+      "left": 240,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 960,
+      "height": 752
+    },
+    "railWidthVar": "240px",
+    "stageInsetVar": "calc(240px + clamp(12px, 2vw, 20px))"
+  },
+  "stageShell": {
+    "className": "flex min-h-0 flex-1 flex-col overflow-hidden py-24 pl-24 transition-[padding-right] duration-200 ease-out motion-reduce:transition-none sm:py-32 sm:pl-40 pr-[var(--workspace-memory-rail-stage-inset)] xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]",
+    "rect": {
+      "left": 240,
+      "top": 48,
+      "right": 1200,
+      "bottom": 610.9140625,
+      "width": 960,
+      "height": 562.9140625
+    }
+  },
+  "railShell": {
+    "className": "absolute inset-y-0 right-0 min-h-0 overflow-hidden transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none w-[var(--workspace-memory-rail-width)] translate-x-0 opacity-100",
+    "rect": {
+      "left": 960,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 240,
+      "height": 752
+    },
+    "ariaHidden": "false",
+    "railMode": "inline"
+  },
+  "rail": {
+    "className": "flex h-full min-h-0 w-full flex-col bg-card px-16 py-20",
+    "rect": {
+      "left": 960,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 240,
+      "height": 752
+    },
+    "backgroundColor": "rgb(244, 244, 245)",
+    "heightMatchesShell": true
+  },
+  "activeCard": {
+    "className": "group relative overflow-hidden rounded-xl bg-transparent transition-colors duration-150",
+    "rect": {
+      "left": 976,
+      "top": 68,
+      "right": 1184,
+      "bottom": 137.59375,
+      "width": 208,
+      "height": 69.59375
+    },
+    "backgroundColor": "rgba(0, 0, 0, 0)"
+  },
+  "inactiveCard": null,
+  "cardCount": 1,
+  "documentScroll": {
+    "x": 0,
+    "y": 0,
+    "width": 1200,
+    "height": 800
+  },
+  "violations": [],
+  "ok": true
+}

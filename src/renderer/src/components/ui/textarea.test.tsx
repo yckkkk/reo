@@ -9,15 +9,18 @@ describe('Textarea', () => {
     const textarea = screen.getByRole('textbox', { name: '描述' });
     expect(textarea).toHaveClass(
       'min-h-72',
-      'rounded-inputs',
-      'border-glass-border',
-      'bg-card-glass',
-      'backdrop-blur-glass-sm',
+      'rounded-lg',
+      'border-0',
+      'bg-input',
       'text-ui-sm',
       'leading-ui-sm',
-      'placeholder:text-slate',
-      'focus:border-signal-blue',
-      'aria-invalid:border-ember'
+      'placeholder:text-muted-foreground',
+      'focus-visible:ring-2',
+      'focus-visible:ring-ring',
+      'aria-invalid:ring-2',
+      'aria-invalid:ring-destructive'
     );
+    expect(textarea).toHaveClass('shadow-none');
+    expect(textarea).not.toHaveClass('border-border', 'bg-card', 'focus:border-primary');
   });
 });

@@ -104,10 +104,10 @@ function createFloatingActionButtonSpeedDialActionTemplate(open: boolean) {
           children: <Icon className="size-20" strokeWidth={1.9} aria-hidden="true" />,
           className: cn(
             options.className,
-            'grid size-[var(--reo-speed-dial-action-size)] place-items-center rounded-full border outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
+            'grid size-[var(--reo-speed-dial-action-size)] place-items-center !rounded-full border-0 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
             unavailable
-              ? 'cursor-default border-chalk bg-powder text-slate'
-              : 'border-glass-border bg-card-glass text-cinder backdrop-blur-glass-sm hover:border-obsidian hover:bg-obsidian hover:text-on-accent'
+              ? 'cursor-default bg-card text-muted-foreground'
+              : 'bg-card text-foreground hover:bg-secondary hover:text-foreground'
           ),
           'data-slot': unavailable
             ? 'floating-action-button-speed-dial-action-unavailable'
@@ -187,7 +187,7 @@ export function FloatingActionButtonSpeedDial({
       <SpeedDial
         id={id}
         aria-label={open ? closeLabel : openLabel}
-        buttonClassName="!size-[var(--reo-speed-dial-diameter)] !rounded-full !border !border-signal-blue !bg-signal-blue !text-on-accent !transition-colors !duration-200 hover:!border-obsidian hover:!bg-obsidian focus-visible:!ring-2 focus-visible:!ring-signal-blue focus-visible:!ring-offset-2 focus-visible:!ring-offset-eggshell"
+        buttonClassName="!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-primary !text-primary-foreground !transition-colors !duration-200 !ease-out hover:!bg-primary focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background"
         className="!pointer-events-auto !absolute !bottom-0 !left-[calc(50%-28px)] !z-10"
         direction="up"
         hideIcon={<X className="size-20" strokeWidth={1.8} aria-hidden="true" />}
@@ -202,7 +202,7 @@ export function FloatingActionButtonSpeedDial({
         visible={open}
         pt={{
           action: {
-            className: '!bg-card-glass !p-0 !shadow-none',
+            className: '!rounded-full !bg-card !p-0 !shadow-none',
           },
           button: {
             root: {
@@ -228,7 +228,7 @@ export function FloatingActionButtonSpeedDial({
             return {
               role: 'none',
               className: cn(
-                '!absolute !transition-[transform,opacity] !duration-200 !ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:!transition-none',
+                '!absolute !transition-[transform,opacity] !duration-200 !ease-out motion-reduce:!transition-none',
                 visible && '!pointer-events-auto'
               ),
             };

@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 rounded-buttons text-ui-md font-medium leading-ui-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell disabled:pointer-events-none disabled:border-fog disabled:bg-fog disabled:text-on-accent disabled:opacity-100',
+  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',
   {
     defaultVariants: {
       size: 'default',
@@ -12,19 +12,18 @@ const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: 'min-h-40 px-16',
-        compact: 'min-h-32 px-12 text-ui-sm leading-ui-sm',
-        icon: 'size-32 p-0',
-        iconMedium: 'size-40 p-0',
-        iconLarge: 'size-56 p-0',
+        default: 'min-h-40 rounded-lg px-16',
+        compact: 'min-h-32 rounded-md px-12 text-ui-sm leading-ui-sm',
+        icon: 'size-32 rounded-sm p-0',
+        iconMedium: 'size-40 rounded-md p-0',
+        iconLarge: 'size-56 rounded-lg p-0',
       },
       variant: {
-        default: 'border border-obsidian bg-obsidian text-on-accent hover:bg-cinder',
-        accentCircle:
-          'rounded-full border border-signal-blue bg-signal-blue text-on-accent hover:border-obsidian hover:bg-obsidian',
-        ghostIcon: 'border border-transparent bg-transparent text-cinder hover:text-obsidian',
-        secondary:
-          'border border-glass-border bg-card-glass text-obsidian backdrop-blur-glass-sm hover:border-slate',
+        default: 'bg-primary text-primary-foreground hover:bg-primary',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive',
+        ghostIcon:
+          'bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-card text-card-foreground hover:bg-secondary',
       },
     },
   }

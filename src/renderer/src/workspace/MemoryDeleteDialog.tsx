@@ -25,17 +25,19 @@ export function MemoryDeleteDialog({
 }: MemoryDeleteDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-2 border-glass-border-highlight bg-card-glass shadow-glass">
+      <DialogContent className="bg-popover shadow-modal">
         <DialogHeader>
           <DialogTitle>删除记忆</DialogTitle>
           <DialogDescription>是否删除这条记忆？</DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-cards border border-chalk bg-eggshell px-16 py-14">
-          <p className="text-body-lg font-semibold leading-body-lg text-obsidian">
+        <div className="rounded-xl bg-card px-16 py-14">
+          <p className="text-body-lg font-semibold leading-body-lg text-foreground">
             {memory?.title ?? '这条记忆'}
           </p>
-          <p className="mt-8 text-body leading-body text-gravel">片段和补充录音会先进入恢复区。</p>
+          <p className="mt-8 text-body leading-body text-muted-foreground">
+            片段和补充录音会先进入恢复区。
+          </p>
         </div>
 
         <div className="flex justify-end gap-8">
@@ -47,7 +49,7 @@ export function MemoryDeleteDialog({
           >
             取消
           </Button>
-          <Button type="button" disabled={disabled} onClick={onConfirm}>
+          <Button type="button" variant="destructive" disabled={disabled} onClick={onConfirm}>
             删除
           </Button>
         </div>

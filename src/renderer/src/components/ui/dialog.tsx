@@ -14,7 +14,7 @@ export function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn('fixed inset-0 z-50 bg-[var(--glass-scrim-overlay)]', className)}
+      className={cn('fixed inset-0 z-50 bg-scrim', className)}
       {...props}
     />
   );
@@ -31,7 +31,7 @@ export function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 max-h-[88vh] rounded-t-panels border border-glass-border bg-card-glass px-24 py-24 shadow-glass outline-none backdrop-blur-glass-lg sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-panels sm:px-32 sm:py-32',
+          'fixed inset-x-0 bottom-0 z-50 max-h-[88vh] rounded-t-xl border-0 bg-popover px-24 py-24 text-popover-foreground shadow-modal outline-none sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:w-[min(var(--container-form),calc(100vw-(var(--spacing-40)*2)))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:px-32 sm:py-32',
           className
         )}
         {...props}
@@ -54,7 +54,7 @@ export function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        'text-subheading font-medium leading-subheading tracking-normal text-obsidian',
+        'text-subheading font-medium leading-subheading tracking-normal text-popover-foreground',
         className
       )}
       {...props}
@@ -69,7 +69,7 @@ export function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn('text-ui-sm leading-ui-sm text-gravel', className)}
+      className={cn('text-ui-sm leading-ui-sm text-muted-foreground', className)}
       {...props}
     />
   );

@@ -58,7 +58,6 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
   canScrollRight: false,
 };
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [30, 50, 70, 40, 60, 30, 40, 80, 90, 50, 30, 40, 40, 60, 80];
-const SEGMENT_PREVIEW_WAVE_DURATIONS = [1.2, 1.32, 1.14, 1.26, 1.38];
 const SEGMENT_PREVIEW_BAR_RADIUS_CLASS = 'rounded-[2px]';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
@@ -71,22 +70,6 @@ function durationLabel(durationMs: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function segmentPreviewWaveDelay(index: number) {
-  return index === 0 ? '0s' : `-${(index * 0.1).toFixed(1)}s`;
-}
-
-function segmentPreviewWaveDuration(index: number) {
-  return `${SEGMENT_PREVIEW_WAVE_DURATIONS[index % SEGMENT_PREVIEW_WAVE_DURATIONS.length]}s`;
-}
-
-function prefersReducedMotion() {
-  if (typeof window.matchMedia !== 'function') {
-    return false;
-  }
-
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function createdTimeLabel(createdAt: string) {
@@ -144,7 +127,7 @@ function MemoryStudioAudioPlaybackRow({
         type="button"
         disabled={disabled}
         aria-label={playButtonLabel}
-        className="grid size-40 shrink-0 place-items-center rounded-full border border-glass-border bg-card-glass text-signal-blue backdrop-blur-glass-sm transition-colors duration-150 hover:border-obsidian hover:bg-obsidian hover:text-on-accent disabled:border-glass-border disabled:bg-card-glass disabled:text-fog"
+        className="grid size-40 shrink-0 place-items-center rounded-md border-0 bg-card text-primary transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground disabled:bg-muted disabled:text-muted-foreground"
         onClick={() => {
           void onTogglePlayback();
         }}
@@ -167,7 +150,7 @@ function MemoryStudioAudioPlaybackRow({
         barGap={4}
         barRadius={2}
         barWidth={2}
-        className="min-w-0 cursor-pointer rounded-buttons focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell"
+        className="min-w-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         data={waveformData}
         data-slot={waveformSlot}
         data-waveform-source={waveformSource}
@@ -182,7 +165,7 @@ function MemoryStudioAudioPlaybackRow({
       />
       <span
         data-slot="memory-studio-audio-player-time"
-        className="shrink-0 whitespace-nowrap font-geist-mono text-ui-md font-regular leading-ui-md tracking-wide text-obsidian"
+        className="shrink-0 whitespace-nowrap font-mono text-ui-md font-regular leading-ui-md tracking-wide text-foreground"
       >
         {loading ? '载入中' : `${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
       </span>
@@ -201,16 +184,10 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
         <span
           key={index}
           className={[
-            `w-[2px] origin-center ${SEGMENT_PREVIEW_BAR_RADIUS_CLASS} transition-colors duration-150 motion-reduce:animate-none`,
-            active ? 'bg-signal-blue' : 'bg-slate',
+            `w-[2px] origin-center ${SEGMENT_PREVIEW_BAR_RADIUS_CLASS} transition-colors duration-150`,
+            active ? 'bg-primary' : 'bg-muted-foreground',
           ].join(' ')}
           style={{
-            animationDelay: active ? segmentPreviewWaveDelay(index) : undefined,
-            animationDirection: active ? 'alternate' : undefined,
-            animationDuration: active ? segmentPreviewWaveDuration(index) : undefined,
-            animationIterationCount: active ? 'infinite' : undefined,
-            animationName: active ? 'reo-flat-wave' : undefined,
-            animationTimingFunction: active ? 'ease-in-out' : undefined,
             height: `${level}%`,
           }}
         />
@@ -377,7 +354,7 @@ function SegmentAttachmentAudioPlayer({
   }
 
   return (
-    <article aria-label={attachment.title} className="border-b border-chalk py-12 last:border-b-0">
+    <article aria-label={attachment.title} className="py-12">
       <MemoryStudioAudioPlaybackRow
         audioAvailable={audioUrl !== null}
         durationMs={attachment.durationMs}
@@ -396,7 +373,7 @@ function SegmentAttachmentAudioPlayer({
         waveformSource={waveformSource}
       />
       {attachmentContentQuery.isError ? (
-        <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-gravel">
+        <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-muted-foreground">
           补充录音加载失败。
         </p>
       ) : null}
@@ -685,7 +662,7 @@ export function MemoryStudio({
 
     if (typeof element.scrollTo === 'function') {
       element.scrollTo({
-        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        behavior: 'instant',
         left: nextScrollLeft,
       });
       return;
@@ -729,10 +706,12 @@ export function MemoryStudio({
       >
         {detail && segments.length === 0 ? (
           <div className="mt-32 max-w-[420px]">
-            <p className="text-body-lg font-medium leading-body-lg text-obsidian">
+            <p className="text-body-lg font-medium leading-body-lg text-foreground">
               这条记忆还没有片段
             </p>
-            <p className="mt-8 text-body leading-body text-gravel">继续在这条记忆里记录。</p>
+            <p className="mt-8 text-body leading-body text-muted-foreground">
+              继续在这条记忆里记录。
+            </p>
           </div>
         ) : detail && segments.length > 0 && selectedSegment ? (
           <>
@@ -773,19 +752,19 @@ export function MemoryStudio({
                       aria-current={isSelected ? 'true' : undefined}
                       aria-label={`选择片段 ${segment.title}`}
                       className={[
-                        'group flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-panels text-left outline-none',
+                        'group flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none',
                       ].join(' ')}
                       onClick={() => setSelectedSegmentId(segment.segmentId)}
                     >
                       <span
                         data-slot="memory-studio-segment-card"
                         className={[
-                          'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-panels p-12 transition-colors duration-150 group-focus-visible:ring-2 group-focus-visible:ring-signal-blue group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-eggshell',
-                          isSelected ? 'bg-chalk' : 'bg-powder group-hover:bg-chalk',
+                          'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background',
+                          isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
                         ].join(' ')}
                       >
                         <span className="block min-w-0">
-                          <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-obsidian">
+                          <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
                             {segment.title}
                           </span>
                         </span>
@@ -793,7 +772,7 @@ export function MemoryStudio({
                           <SegmentPreviewSpectrum active={isSelected} />
                           <span
                             data-slot="memory-studio-segment-card-duration"
-                            className="shrink-0 font-geist-mono text-ui-sm font-bold leading-none tracking-wide text-obsidian"
+                            className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
                           >
                             {durationLabel(segment.durationMs)}
                           </span>
@@ -802,18 +781,18 @@ export function MemoryStudio({
                       <span
                         aria-hidden="true"
                         data-slot="memory-studio-segment-timeline-anchor"
-                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-chalk"
+                        className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
                       >
                         <span
                           data-slot="memory-studio-segment-timeline-dot"
                           className={[
                             'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
-                            isSelected ? 'bg-signal-blue' : 'bg-gravel',
+                            isSelected ? 'bg-primary' : 'bg-muted-foreground',
                           ].join(' ')}
                         />
                         <span
                           data-slot="memory-studio-segment-timeline-time"
-                          className="mt-12 block font-geist-mono text-ui-xs leading-ui-xs tracking-wide text-slate"
+                          className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
                         >
                           {createdTimeLabel(segment.createdAt)}
                         </span>
@@ -838,7 +817,7 @@ export function MemoryStudio({
             <section
               aria-label="片段内容"
               data-slot="memory-studio-content-panel"
-              className="mt-16 flex min-h-0 flex-1 flex-col border-t border-chalk pt-12"
+              className="mt-16 flex min-h-0 flex-1 flex-col pt-12"
             >
               <MemoryStudioAudioPlaybackRow
                 audioAvailable={segmentAudioUrl !== null}
@@ -858,17 +837,21 @@ export function MemoryStudio({
                 waveformSource={playbackWaveformSource}
               />
 
-              <div className="mt-12 flex shrink-0 items-center justify-between gap-8 border-b border-chalk">
-                <div role="tablist" aria-label="片段内容类型" className="flex min-w-0 items-end">
+              <div className="mt-12 flex shrink-0 items-center justify-between gap-8">
+                <div
+                  role="tablist"
+                  aria-label="片段内容类型"
+                  className="flex min-w-0 items-center gap-4"
+                >
                   <button
                     type="button"
                     role="tab"
                     aria-selected={activeContentTab === 'transcript'}
                     className={[
-                      'min-h-32 border-b-2 px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
+                      'min-h-32 rounded-lg px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                       activeContentTab === 'transcript'
-                        ? 'border-signal-blue text-obsidian'
-                        : 'border-transparent text-gravel hover:text-obsidian',
+                        ? 'bg-secondary text-foreground'
+                        : 'bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground',
                     ].join(' ')}
                     onClick={() => setActiveContentTab('transcript')}
                   >
@@ -880,10 +863,10 @@ export function MemoryStudio({
                       role="tab"
                       aria-selected={activeContentTab === 'supplements'}
                       className={[
-                        'min-h-32 border-b-2 px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell',
+                        'min-h-32 rounded-lg px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         activeContentTab === 'supplements'
-                          ? 'border-signal-blue text-obsidian'
-                          : 'border-transparent text-gravel hover:text-obsidian',
+                          ? 'bg-secondary text-foreground'
+                          : 'bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground',
                       ].join(' ')}
                       onClick={() => setActiveContentTab('supplements')}
                     >
@@ -896,7 +879,7 @@ export function MemoryStudio({
                     <button
                       type="button"
                       aria-label="添加片段补充内容"
-                      className="mb-2 inline-flex size-32 items-center justify-center rounded-buttons text-cinder transition-colors duration-150 hover:bg-powder hover:text-obsidian focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell data-[state=open]:bg-powder data-[state=open]:text-obsidian"
+                      className="mb-2 inline-flex size-32 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                     >
                       <Plus aria-hidden="true" className="size-16" />
                     </button>
@@ -945,15 +928,21 @@ export function MemoryStudio({
                   className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
                 >
                   {segmentContentQuery.isLoading ? (
-                    <p className="text-body leading-body text-gravel">正在载入片段内容。</p>
+                    <p className="text-body leading-body text-muted-foreground">
+                      正在载入片段内容。
+                    </p>
                   ) : segmentContentQuery.isError ? (
-                    <p className="text-body leading-body text-gravel">片段内容加载失败，请重试。</p>
+                    <p className="text-body leading-body text-muted-foreground">
+                      片段内容加载失败，请重试。
+                    </p>
                   ) : segmentContent?.transcript.exists ? (
-                    <p className="max-w-[820px] text-body leading-[1.78] text-cinder">
+                    <p className="select-text max-w-[820px] text-body leading-[1.78] text-foreground">
                       {segmentContent.transcript.text}
                     </p>
                   ) : (
-                    <p className="text-body leading-body text-gravel">这段录音还没有转录。</p>
+                    <p className="text-body leading-body text-muted-foreground">
+                      这段录音还没有转录。
+                    </p>
                   )}
                 </section>
               ) : (
@@ -972,16 +961,21 @@ export function MemoryStudio({
                 </section>
               )}
               {audioPlaybackError ? (
-                <p role="status" className="mt-8 shrink-0 text-ui-sm leading-ui-sm text-gravel">
+                <p
+                  role="status"
+                  className="mt-8 shrink-0 text-ui-sm leading-ui-sm text-muted-foreground"
+                >
                   {audioPlaybackError}
                 </p>
               ) : null}
             </section>
           </>
         ) : detailQuery.isError ? (
-          <p className="mt-32 text-body leading-body text-gravel">记忆内容加载失败，请重试。</p>
+          <p className="mt-32 text-body leading-body text-muted-foreground">
+            记忆内容加载失败，请重试。
+          </p>
         ) : (
-          <p className="mt-32 text-body leading-body text-gravel">正在载入记忆内容。</p>
+          <p className="mt-32 text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
         )}
       </div>
     </section>

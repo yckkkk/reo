@@ -26,9 +26,9 @@ type DrawWaveformState = {
 };
 
 const WAVEFORM_TONE_TOKEN: Record<NonNullable<WaveformProps['tone']>, string> = {
-  muted: '--color-slate',
-  neutral: '--color-obsidian',
-  voice: '--color-voice-spectrum',
+  muted: '--muted-foreground',
+  neutral: '--foreground',
+  voice: '--primary',
 };
 
 export function Waveform({
@@ -168,12 +168,12 @@ export function Waveform({
       {safePlayheadProgress !== null ? (
         <span
           aria-hidden="true"
-          className="absolute top-1/2 block h-[calc(100%-10px)] w-[2px] -translate-y-1/2 bg-voice-spectrum"
+          className="absolute top-1/2 block h-[calc(100%-10px)] w-[2px] -translate-y-1/2 bg-primary"
           data-slot="recording-playhead"
           style={{ left: playheadLeft }}
         >
-          <span className="absolute left-1/2 top-0 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-voice-spectrum" />
-          <span className="absolute bottom-0 left-1/2 h-8 w-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-voice-spectrum" />
+          <span className="absolute left-1/2 top-0 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
+          <span className="absolute bottom-0 left-1/2 h-8 w-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-primary" />
         </span>
       ) : null}
     </div>

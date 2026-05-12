@@ -7,7 +7,7 @@ describe('Input primitive', () => {
     render(<Input aria-label="记忆空间名称" placeholder="记忆空间名称" />);
 
     const input = screen.getByLabelText('记忆空间名称');
-    expect(input).toHaveClass('rounded-inputs', 'min-h-40', 'text-ui-md');
+    expect(input).toHaveClass('rounded-lg', 'min-h-40', 'text-ui-md');
     expect(input).not.toHaveClass('text-body-lg');
   });
 

@@ -25,7 +25,7 @@ export function DrawerOverlay({
   return (
     <DrawerPrimitive.Overlay
       data-slot="drawer-overlay"
-      className={cn('fixed inset-0 z-50 bg-[var(--glass-scrim-overlay)]', className)}
+      className={cn('fixed inset-0 z-50 bg-scrim', className)}
       {...props}
     />
   );
@@ -47,7 +47,7 @@ export function DrawerContent({
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-panels border border-glass-border bg-card-glass px-24 pb-24 pt-16 shadow-glass outline-none backdrop-blur-glass-lg',
+          'fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-xl border-0 bg-popover px-24 pb-24 pt-16 text-popover-foreground shadow-modal outline-none',
           'sm:left-1/2 sm:right-auto sm:w-[min(760px,calc(100vw-80px))] sm:-translate-x-1/2 sm:px-32 sm:pb-32',
           className
         )}
@@ -56,7 +56,7 @@ export function DrawerContent({
         {showHandle ? (
           <div
             aria-hidden="true"
-            className="mx-auto mb-20 h-4 w-56 shrink-0 rounded-full bg-slate"
+            className="mx-auto mb-20 h-4 w-56 shrink-0 rounded-full bg-secondary"
           />
         ) : null}
         {children}
@@ -81,7 +81,7 @@ export function DrawerTitle({
     <DrawerPrimitive.Title
       data-slot="drawer-title"
       className={cn(
-        'font-waldenburg text-heading font-light leading-heading tracking-heading text-obsidian',
+        'font-sans text-heading font-light leading-heading tracking-heading text-popover-foreground',
         className
       )}
       {...props}
@@ -96,7 +96,7 @@ export function DrawerDescription({
   return (
     <DrawerPrimitive.Description
       data-slot="drawer-description"
-      className={cn('text-body leading-body text-gravel', className)}
+      className={cn('text-body leading-body text-muted-foreground', className)}
       {...props}
     />
   );

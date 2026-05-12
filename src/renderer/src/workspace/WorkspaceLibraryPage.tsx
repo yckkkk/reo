@@ -3,7 +3,7 @@ export function WorkspaceLibraryPage() {
     <section aria-labelledby="workspace-library-title" className="min-h-full px-40 py-32">
       <h1
         id="workspace-library-title"
-        className="text-heading font-regular leading-heading text-obsidian"
+        className="text-heading font-regular leading-heading text-foreground"
       >
         资料库
       </h1>

@@ -105,7 +105,7 @@ function setScrollMetrics(
   });
 }
 
-function expectGlassVectorClass(element: Element | null) {
+function expectSoftFlatClass(element: Element | null) {
   expect(element).toBeInstanceOf(HTMLElement);
   const className = (element as HTMLElement).getAttribute('class') ?? '';
   expect(className).not.toMatch(/(^|\s)(hover:|active:)?-?translate-/);
@@ -113,7 +113,7 @@ function expectGlassVectorClass(element: Element | null) {
   expect(className).not.toMatch(/(^|\s)(hover:|active:)?opacity-/);
   expect(className).not.toMatch(/\b(?:bg|border|text)-[^\s/]+\/\d/);
   expect(className).not.toMatch(/card-white|text-card-white|border-card-white/);
-  expect(className).not.toMatch(/shadow-subtle-\d/);
+  expect(className).not.toMatch(/shadow-none-\d/);
 }
 
 const morningMemory = {
@@ -242,22 +242,18 @@ describe('LoadedWorkspaceFrame', () => {
     expect(dock).toHaveClass('pointer-events-none');
     expect(dock.closest('[data-slot="workspace-expression-fab-layer"]')).toHaveClass(
       'bottom-32',
-      'right-[var(--workspace-memory-rail-stage-inset)]',
-      'xl:right-[var(--workspace-memory-rail-stage-inset-wide)]'
+      'right-24',
+      'sm:right-40'
     );
     const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
     expect(workspaceFrame).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
     expect(workspaceFrame).not.toHaveClass('min-h-full');
     expect(workspaceFrame).toHaveStyle({
-      '--workspace-memory-rail-stage-inset':
-        'calc(var(--workspace-memory-rail-width) + clamp(12px, 2vw, 20px))',
-      '--workspace-memory-rail-stage-inset-wide':
-        'calc(var(--workspace-memory-rail-width) + clamp(20px, 2.5vw, 40px))',
-      '--workspace-memory-rail-width': 'clamp(220px, 24vw, 280px)',
+      '--workspace-memory-rail-width': '240px',
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
-      '!bg-signal-blue',
+      '!bg-primary',
       '!rounded-full',
       '!size-[var(--reo-speed-dial-diameter)]'
     );
@@ -267,7 +263,11 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.click(dialTrigger);
     const recordingAction = within(dock).getByRole('menuitem', { name: '录音' });
-    expect(recordingAction).toHaveClass('rounded-full', 'size-[var(--reo-speed-dial-action-size)]');
+    expect(recordingAction).toHaveClass(
+      '!rounded-full',
+      'size-[var(--reo-speed-dial-action-size)]'
+    );
+    expect(recordingAction).not.toHaveClass('rounded-md', 'rounded-lg');
     expect(within(dock).getByRole('menu', { name: '表达方式' })).toBeInTheDocument();
     expect(within(dock).queryByText('笔记')).not.toBeInTheDocument();
     expect(within(dock).queryByText('拍照')).not.toBeInTheDocument();
@@ -302,20 +302,26 @@ describe('LoadedWorkspaceFrame', () => {
     const rail = screen.getByRole('navigation', { name: '记忆列表' });
     const railShell = rail.closest('[data-slot="workspace-memory-rail-shell"]');
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
-    expect(railShell).toHaveClass('absolute', 'right-0', 'w-[var(--workspace-memory-rail-width)]');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_var(--workspace-memory-rail-width)]');
+    expect(railShell).toHaveClass('relative', 'col-start-2', 'row-start-1', 'w-full');
+    expect(frameBody).toHaveClass(
+      'transition-[grid-template-columns]',
+      'duration-200',
+      'ease-out',
+      'motion-reduce:transition-none'
+    );
     expect(stageShell).toHaveClass('min-h-0', 'overflow-hidden');
     expect(stageShell).not.toHaveClass('min-h-[640px]');
     expect(railShell).toHaveClass('translate-x-0', 'opacity-100');
-    expect(stageShell).toHaveClass(
-      'pr-[var(--workspace-memory-rail-stage-inset)]',
-      'xl:pr-[var(--workspace-memory-rail-stage-inset-wide)]'
-    );
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
     expect(rail).toHaveAttribute('id', 'workspace-memory-rail');
-    expect(railShell).toHaveClass('border-l', 'border-glass-border');
-    expect(rail).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg', 'px-16', 'py-20');
-    expect(rail).not.toHaveClass('bg-linen');
-    expect(rail).not.toHaveClass('bg-eggshell/70');
+    expect(railShell).toHaveClass('border-l', 'border-secondary');
+    expect(railShell).not.toHaveClass('border-border', 'shadow-float');
+    expect(rail).toHaveClass('h-full', 'w-full', 'bg-background', 'px-8', 'py-20');
+    expect(rail).not.toHaveClass('px-16');
+    expect(rail).not.toHaveClass('bg-card', 'bg-background/70');
     expect(rail).not.toHaveClass('xl:border-l');
     expect(within(rail).queryByRole('heading', { name: '当前记忆' })).not.toBeInTheDocument();
     expect(within(rail).queryByText('3 条记忆')).not.toBeInTheDocument();
@@ -334,15 +340,16 @@ describe('LoadedWorkspaceFrame', () => {
     const recitalMemoryCard = recitalMemoryButton.closest('[data-slot="memory-rail-card"]');
 
     expect(birthdayMemoryButton).toHaveClass('min-h-[68px]', 'px-12', 'py-12');
-    expect(birthdayMemoryCard).toHaveClass('rounded-panels', 'bg-chalk');
-    expect(recitalMemoryCard).toHaveClass('rounded-panels', 'bg-powder');
+    expect(birthdayMemoryButton).toHaveAttribute('aria-current', 'page');
+    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'bg-secondary');
+    expect(recitalMemoryCard).toHaveClass('rounded-xl', 'bg-card', 'hover:bg-secondary');
     expect(birthdayMemoryCard).not.toHaveClass(
       'border',
-      'border-signal-blue',
-      'border-glass-border',
-      'shadow-glass',
-      'backdrop-blur-glass-sm',
-      'bg-card-glass'
+      'border-primary',
+      'border-border',
+      'shadow-float',
+      'bg-card',
+      'hover:bg-secondary'
     );
     expect(within(rail).getByText('05/06 13:10 · 2 个片段')).toBeInTheDocument();
     expect(within(rail).getByText('05/01 09:10 · 1 个片段')).toBeInTheDocument();
@@ -353,8 +360,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(rail).queryByText('时长')).not.toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();
     const frame = document.querySelector('[data-slot="workspace-frame"]');
-    expect(frame).toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg');
-    expect(frame).not.toHaveClass('bg-eggshell', 'bg-linen');
+    expect(frame).toHaveClass('bg-background');
+    expect(frame).not.toHaveClass('bg-card', 'shadow-float');
   });
 
   it('selects an existing Memory through the right rail without requiring a detail route', async () => {
@@ -444,7 +451,7 @@ describe('LoadedWorkspaceFrame', () => {
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
     const transcriptScroll = studio.querySelector('[data-slot="memory-studio-transcript-scroll"]');
 
-    expect(stageContent).toHaveClass('items-stretch', 'justify-start');
+    expect(stageContent).toHaveClass('items-stretch', 'justify-center');
     expect(studio).toHaveClass('overflow-hidden');
     expect(studioLayout).toHaveClass('max-w-[1120px]');
     expect(segmentItems).toHaveLength(2);
@@ -457,21 +464,21 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(segmentCards[0]).toHaveClass(
       'aspect-square',
-      'rounded-panels',
-      'bg-chalk',
+      'rounded-xl',
+      'bg-secondary',
       'p-12',
       'min-h-[var(--memory-studio-segment-card-min-size)]',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
-    expect(segmentCards[1]).toHaveClass('bg-powder');
+    expect(segmentCards[1]).toHaveClass('bg-card');
     expect(segmentCards[0]).not.toHaveClass(
       'border',
       'border-2',
-      'border-signal-blue',
-      'border-glass-border',
-      'shadow-glass',
-      'shadow-subtle',
-      'backdrop-blur-glass-sm'
+      'border-primary',
+      'border-border',
+      'shadow-float',
+      'shadow-none',
+      ''
     );
     expect(within(segmentCards[0] as HTMLElement).queryByText('已有转录')).toBeNull();
     expect(within(segmentCards[1] as HTMLElement).queryByText('本地音频')).toBeNull();
@@ -522,7 +529,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toHaveClass('block', 'size-[7px]', 'min-h-[7px]', 'min-w-[7px]', 'rounded-full');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
-    ).toHaveClass('mt-12', 'block', 'text-slate');
+    ).toHaveClass('mt-12', 'block', 'text-muted-foreground');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
     ).toHaveTextContent('13:08');
@@ -532,7 +539,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(studio).queryByRole('navigation', { name: 'Memory 片段时间轴' })).toBeNull();
   });
 
-  it('renders Segment recording cards with balanced flat-vector waveform and mono duration', async () => {
+  it('renders Segment recording cards with balanced Soft Flat waveform and mono duration', async () => {
     const session = workspaceSession({ memories: [birthdayMemory] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
@@ -560,7 +567,7 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')
-    ).toHaveClass('shrink-0', 'font-geist-mono', 'text-ui-sm', 'font-bold', 'tracking-wide');
+    ).toHaveClass('shrink-0', 'font-mono', 'text-ui-sm', 'font-bold', 'tracking-wide');
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
     ).toHaveClass('h-32', 'w-[52px]', 'gap-[2px]');
@@ -576,19 +583,13 @@ describe('LoadedWorkspaceFrame', () => {
     expect(inactiveBars).toHaveLength(15);
     expect(activeBars[0]).toHaveClass('w-[2px]', 'rounded-[2px]');
     expect(activeBars[0]).not.toHaveClass('rounded-tags');
-    expect(activeBars[0]).toHaveStyle({
-      animationName: 'reo-flat-wave',
-      animationDelay: '0s',
-      animationDirection: 'alternate',
-      animationIterationCount: 'infinite',
-      animationTimingFunction: 'ease-in-out',
-      height: '30%',
-    });
-    expect(activeBars[8]).toHaveStyle({ animationDelay: '-0.8s', height: '90%' });
-    expect(
-      new Set(Array.from(activeBars, (bar) => (bar as HTMLElement).style.animationDuration)).size
-    ).toBeGreaterThan(1);
-    expect(inactiveBars[0]).not.toHaveStyle({ animationName: 'reo-flat-wave' });
+    expect(activeBars[0]).toHaveStyle({ height: '30%' });
+    expect(activeBars[8]).toHaveStyle({ height: '90%' });
+    for (const bar of activeBars) {
+      expect((bar as HTMLElement).style.animationName).toBe('');
+      expect((bar as HTMLElement).style.animationDuration).toBe('');
+    }
+    expect(inactiveBars[0]).toHaveStyle({ height: '30%' });
   });
 
   it('does not repeat selected Segment summary above the player', async () => {
@@ -613,7 +614,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('uses the glass-vector contract for visible Memory Studio surfaces', async () => {
+  it('uses the Soft Flat contract for visible Memory Studio surfaces', async () => {
     const session = workspaceSession({ memories: [birthdayMemory] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
@@ -621,12 +622,12 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_glass_vector',
+      requestId: 'request_mem_birthday_soft_flat',
       detail: birthdayDetailWithTwoSegments,
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
-    const glassVectorElements = [
+    const softFlatElements = [
       studio,
       studio.querySelector('[data-slot="memory-studio-layout"]'),
       ...Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')),
@@ -638,8 +639,8 @@ describe('LoadedWorkspaceFrame', () => {
       within(studio).getByRole('button', { name: '添加片段补充内容' }),
     ];
 
-    for (const element of glassVectorElements) {
-      expectGlassVectorClass(element);
+    for (const element of softFlatElements) {
+      expectSoftFlatClass(element);
     }
   });
 
@@ -690,7 +691,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(birthdayItem).toHaveAttribute('aria-current', 'true');
     expect(
       birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toHaveClass('bg-signal-blue');
+    ).toHaveClass('bg-primary');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday candles' })
     ).toBeInTheDocument();
@@ -706,10 +707,10 @@ describe('LoadedWorkspaceFrame', () => {
     ).not.toHaveAttribute('aria-current');
     expect(
       birthdaySongItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toHaveClass('bg-signal-blue');
+    ).toHaveClass('bg-primary');
     expect(
       birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).not.toHaveClass('bg-signal-blue');
+    ).not.toHaveClass('bg-primary');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday song' })
     ).toBeInTheDocument();
@@ -749,6 +750,15 @@ describe('LoadedWorkspaceFrame', () => {
     fireEvent.scroll(stripScroll as HTMLElement);
 
     const rightButton = await within(strip).findByRole('button', { name: '向右浏览片段卡片' });
+    expect(rightButton).toHaveClass('rounded-full', 'border', 'border-secondary', 'bg-background');
+    expect(rightButton).not.toHaveClass(
+      'rounded-md',
+      'bg-card',
+      'border-border',
+      'ring-4',
+      'ring-background',
+      'shadow-float'
+    );
     expect(
       within(strip).queryByRole('button', { name: '向左浏览片段卡片' })
     ).not.toBeInTheDocument();
@@ -766,7 +776,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.click(rightButton);
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', left: 212 });
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', left: 212 });
     expect(
       within(strip).getByRole('button', { name: '选择片段 Birthday candles' })
     ).toHaveAttribute('aria-current', 'true');
@@ -783,10 +793,20 @@ describe('LoadedWorkspaceFrame', () => {
         within(strip).queryByRole('button', { name: '向右浏览片段卡片' })
       ).not.toBeInTheDocument();
     });
-    expect(within(strip).getByRole('button', { name: '向左浏览片段卡片' })).toBeInTheDocument();
+    const leftButton = within(strip).getByRole('button', { name: '向左浏览片段卡片' });
+    expect(leftButton).toBeInTheDocument();
+    expect(leftButton).toHaveClass('rounded-full', 'border', 'border-secondary', 'bg-background');
+    expect(leftButton).not.toHaveClass(
+      'rounded-md',
+      'bg-card',
+      'border-border',
+      'ring-4',
+      'ring-background',
+      'shadow-float'
+    );
   });
 
-  it('uses instant Segment strip scrolling when reduced motion is requested', async () => {
+  it('uses instant Segment strip scrolling', async () => {
     const user = userEvent.setup();
     const matchMedia = vi.fn((query: string) => ({
       matches: query === '(prefers-reduced-motion: reduce)',
@@ -825,7 +845,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.click(await within(strip).findByRole('button', { name: '向右浏览片段卡片' }));
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'auto', left: 212 });
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', left: 212 });
   });
 
   it('plays finalized audio and shows transcript content for the selected Segment', async () => {
@@ -1243,15 +1263,23 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.queryByRole('navigation', { name: '记忆列表' })).not.toBeInTheDocument();
     const railShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
     expect(railShell).toHaveAttribute('aria-hidden', 'true');
     expect(railShell).toHaveAttribute('inert');
-    expect(railShell).toHaveClass('absolute', 'right-0', 'w-[var(--workspace-memory-rail-width)]');
-    expect(railShell).toHaveClass('translate-x-full', 'opacity-0', 'pointer-events-none');
-    expect(stageShell).toHaveClass('pr-24', 'sm:pr-40', 'xl:pr-40');
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_0px]');
+    expect(frameBody).toHaveClass(
+      'transition-[grid-template-columns]',
+      'duration-200',
+      'ease-out',
+      'motion-reduce:transition-none'
+    );
+    expect(railShell).toHaveClass('relative', 'col-start-2', 'row-start-1', 'w-full');
+    expect(railShell).toHaveClass('opacity-0', 'pointer-events-none');
+    expect(railShell).not.toHaveClass('translate-x-full');
+    expect(stageShell).toHaveClass('px-24', 'sm:px-40');
     expect(document.querySelector('[data-slot="workspace-expression-fab-layer"]')).toHaveClass(
       'right-24',
-      'sm:right-40',
-      'xl:right-40'
+      'sm:right-40'
     );
     expect(screen.getByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();

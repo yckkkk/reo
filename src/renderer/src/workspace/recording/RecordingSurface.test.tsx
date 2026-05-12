@@ -68,4 +68,24 @@ describe('RecordingSurface', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/agent|cloud|api key|model/i)).not.toBeInTheDocument();
   });
+
+  it('uses an opaque semantic background for the immersive recording surface', () => {
+    render(
+      <RecordingSurface
+        closeBlocked={false}
+        description="录制本地音频。"
+        immersive
+        onOpenChange={vi.fn()}
+        open
+        title="记录记忆"
+      >
+        <Button type="button">开始录音</Button>
+      </RecordingSurface>
+    );
+
+    expect(document.querySelector('[data-slot="drawer-overlay"]')).toHaveClass('bg-background');
+    expect(document.querySelector('[data-slot="drawer-overlay"]')).not.toHaveClass(
+      'bg-background/95'
+    );
+  });
 });

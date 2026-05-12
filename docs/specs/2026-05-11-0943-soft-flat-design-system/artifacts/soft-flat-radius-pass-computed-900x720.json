@@ -1,0 +1,94 @@
+{
+  "url": "http://localhost:5173/",
+  "viewport": {
+    "width": 900,
+    "height": 720
+  },
+  "controls": [
+    {
+      "name": "sidebarToggle32Icon",
+      "selector": "button[aria-label=\"隐藏侧边栏\"], button[aria-label=\"显示侧边栏\"]",
+      "expectation": "32px icon button uses rounded-sm, not full",
+      "present": true,
+      "width": 32,
+      "height": 32,
+      "borderTopLeftRadius": "8px",
+      "borderTopRightRadius": "8px",
+      "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 size-32 rounded-sm p-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "titlebarCreateMemory32Icon",
+      "selector": "button[aria-label=\"新建记忆\"]",
+      "expectation": "32px icon button uses rounded-sm, not full",
+      "present": true,
+      "width": 32,
+      "height": 32,
+      "borderTopLeftRadius": "8px",
+      "borderTopRightRadius": "8px",
+      "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 size-32 rounded-sm p-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "carouselRight40Icon",
+      "selector": "button[aria-label=\"向右浏览片段卡片\"]",
+      "expectation": "40px carousel action uses rounded-md, not full",
+      "present": true,
+      "width": 40,
+      "height": 40,
+      "borderTopLeftRadius": "12px",
+      "borderTopRightRadius": "12px",
+      "className": "inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 size-40 p-0 !size-40 rounded-md bg-card text-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "memoryStudioPlay40Icon",
+      "selector": "button[aria-label^=\"播放片段\"], button[aria-label^=\"暂停片段\"]",
+      "expectation": "40px playback action uses rounded-md, not full",
+      "present": true,
+      "width": 40,
+      "height": 40,
+      "borderTopLeftRadius": "12px",
+      "borderTopRightRadius": "12px",
+      "className": "grid size-40 shrink-0 place-items-center rounded-md border-0 bg-card text-primary transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground disabled:bg-muted disabled:text-muted-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "segmentAttachmentAdd32Icon",
+      "selector": "button[aria-label=\"添加片段补充内容\"]",
+      "expectation": "32px icon button uses rounded-sm, not full",
+      "present": true,
+      "width": 32,
+      "height": 32,
+      "borderTopLeftRadius": "8px",
+      "borderTopRightRadius": "8px",
+      "className": "mb-2 inline-flex size-32 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "speedDialRecording40MenuAction",
+      "selector": "[data-slot=\"floating-action-button-speed-dial-action-active\"]",
+      "expectation": "40px speed dial menu action uses rounded-md, not full",
+      "present": true,
+      "width": 40,
+      "height": 40,
+      "borderTopLeftRadius": "12px",
+      "borderTopRightRadius": "12px",
+      "className": "p-speeddial-action grid size-[var(--reo-speed-dial-action-size)] place-items-center !rounded-md border-0 outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-card text-foreground hover:bg-secondary hover:text-foreground",
+      "isFullRoundEquivalent": false
+    },
+    {
+      "name": "fabTrigger56Cta",
+      "selector": "button[aria-label=\"关闭表达入口\"], button[aria-label=\"打开表达入口\"]",
+      "expectation": "FAB CTA remains rounded-full",
+      "present": true,
+      "width": 56,
+      "height": 56,
+      "borderTopLeftRadius": "9999px",
+      "borderTopRightRadius": "9999px",
+      "className": "!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-primary !text-primary-foreground !transition-colors !duration-200 !ease-out hover:!bg-primary focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background p-speeddial-button p-button-rounded p-button p-component p-button-icon-only",
+      "isFullRoundEquivalent": true
+    }
+  ],
+  "violations": []
+}

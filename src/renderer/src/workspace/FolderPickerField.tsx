@@ -56,8 +56,9 @@ export function FolderPickerField({
     <div className="flex min-w-0 flex-col gap-8">
       <div className="flex min-w-0 items-center gap-8">
         <div
-          className="min-h-32 min-w-0 flex-1 truncate rounded-inputs border border-transparent px-12 py-8 text-ui-sm font-medium leading-ui-sm text-cinder"
+          className="select-text min-h-32 min-w-0 flex-1 truncate rounded-lg bg-card px-12 py-8 text-ui-sm font-medium leading-ui-sm text-muted-foreground"
           aria-label="已选择文件夹"
+          title={displayPath || undefined}
         >
           {displayPath || '未选择文件夹'}
         </div>

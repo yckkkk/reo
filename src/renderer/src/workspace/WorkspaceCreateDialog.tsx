@@ -58,7 +58,7 @@ export function WorkspaceCreateDialog({
               size="icon"
               aria-label="关闭"
               disabled={disabled}
-              className="-mr-8 -mt-8 text-slate hover:bg-powder hover:text-obsidian"
+              className="-mr-8 -mt-8 text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
               <X className="size-16" aria-hidden="true" />
             </Button>

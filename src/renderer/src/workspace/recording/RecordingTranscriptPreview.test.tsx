@@ -116,7 +116,7 @@ describe('RecordingTranscriptPreview', () => {
       />
     );
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', top: 280 });
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', top: 280 });
   });
 
   it('stops following live transcript when the user scrolls away and resumes at bottom', () => {
@@ -171,7 +171,7 @@ describe('RecordingTranscriptPreview', () => {
       />
     );
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', top: 360 });
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', top: 360 });
   });
 
   it('stops following live transcript when keyboard scrolling moves away from the bottom', () => {
@@ -202,7 +202,7 @@ describe('RecordingTranscriptPreview', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it('keeps following when a smooth programmatic scroll emits intermediate scroll events', () => {
+  it('keeps following when a programmatic scroll emits intermediate scroll events', () => {
     const { rerender } = render(
       <RecordingTranscriptPreview
         autoScrollMode="latest"
@@ -249,7 +249,7 @@ describe('RecordingTranscriptPreview', () => {
     );
 
     expect(scrollTo).toHaveBeenCalledTimes(2);
-    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: 'smooth', top: 360 });
+    expect(scrollTo).toHaveBeenLastCalledWith({ behavior: 'instant', top: 360 });
   });
 
   it('does not reserve a pane-like filled transcript block', () => {

@@ -42,12 +42,12 @@ function transcriptVersionFor(segments: readonly TranscriptSegment[]) {
 
 function segmentToneClass(segment: TranscriptSegment, active: boolean) {
   if (active) {
-    return 'text-obsidian';
+    return 'text-foreground';
   }
   if (segment.isFinal) {
-    return 'text-cinder';
+    return 'text-foreground';
   }
-  return 'text-slate';
+  return 'text-muted-foreground';
 }
 
 function isScrolledToBottom(element: HTMLElement) {
@@ -58,7 +58,7 @@ function isScrolledToBottom(element: HTMLElement) {
 
 function scrollTranscriptToBottom(element: HTMLElement) {
   if (typeof element.scrollTo === 'function') {
-    element.scrollTo({ behavior: 'smooth', top: element.scrollHeight });
+    element.scrollTo({ behavior: 'instant', top: element.scrollHeight });
     return;
   }
 
@@ -118,7 +118,7 @@ export function RecordingTranscriptPreview({
 
     focusedSegmentRef.current.scrollIntoView({
       block: 'center',
-      behavior: 'smooth',
+      behavior: 'instant',
     });
   }, [autoScrollMode, focusedSegmentKey]);
 
@@ -143,7 +143,7 @@ export function RecordingTranscriptPreview({
     >
       {segments.length > 0 ? (
         <div
-          className="max-h-[120px] overflow-y-auto py-16 text-balance text-heading-sm font-medium leading-[1.55] text-cinder [mask-image:linear-gradient(to_bottom,transparent_0%,black_18%,black_82%,transparent_100%)]"
+          className="select-text max-h-[120px] overflow-y-auto py-16 text-balance text-heading-sm font-medium leading-[1.55] text-foreground"
           data-testid="recording-transcript-scroll"
           onKeyDown={markUserScrollIntent}
           onScroll={handleTranscriptScroll}
@@ -171,7 +171,7 @@ export function RecordingTranscriptPreview({
           })}
         </div>
       ) : (
-        <p className="max-w-[620px] text-balance text-body-lg font-medium leading-body-lg text-gravel">
+        <p className="max-w-[620px] text-balance text-body-lg font-medium leading-body-lg text-muted-foreground">
           {fallback}
         </p>
       )}

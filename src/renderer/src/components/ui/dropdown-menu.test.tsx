@@ -19,18 +19,22 @@ describe('DropdownMenu primitive', () => {
     );
 
     expect(screen.getByRole('menu')).toHaveClass(
-      'rounded-buttons',
-      'border-glass-border',
-      'bg-card-glass',
-      'backdrop-blur-glass-md',
+      'rounded-lg',
+      'border-0',
+      'bg-popover',
+      'text-popover-foreground',
+      'shadow-float',
       'p-4'
     );
+    expect(screen.getByRole('menu')).not.toHaveClass('border-border', 'bg-card');
     expect(screen.getByRole('menuitem', { name: '重命名记忆' })).toHaveClass(
       'min-h-32',
       'rounded-lg',
       'px-8',
       'text-ui-xs',
-      'font-regular'
+      'font-regular',
+      'focus:bg-accent',
+      'focus:text-accent-foreground'
     );
   });
 });

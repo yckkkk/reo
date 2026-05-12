@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
-  'w-full min-w-0 rounded-inputs border border-glass-border bg-card-glass text-obsidian shadow-subtle outline-none backdrop-blur-glass-sm transition-colors selection:bg-signal-blue selection:text-on-accent placeholder:text-slate focus:border-signal-blue disabled:cursor-not-allowed disabled:bg-powder disabled:text-gravel aria-invalid:border-ember',
+  'w-full min-w-0 rounded-lg border-0 bg-input text-foreground shadow-none outline-none transition-colors duration-150 ease-out selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground aria-invalid:ring-2 aria-invalid:ring-destructive',
   {
     defaultVariants: {
       size: 'default',

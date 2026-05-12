@@ -42,7 +42,10 @@ export function WorkspaceTitlebar({
   const toggleLabel = memoryRailOpen ? '折叠记忆列表' : '展开记忆列表';
 
   return (
-    <div className="flex h-full w-full items-center justify-between gap-16 px-[var(--spacing-panel-titlebar-x)]">
+    <div
+      data-slot="workspace-titlebar"
+      className="flex h-full w-full items-center justify-between gap-16 px-28"
+    >
       <Breadcrumb
         className="pointer-events-auto min-w-0 [-webkit-app-region:no-drag]"
         aria-label="当前位置"
@@ -54,14 +57,14 @@ export function WorkspaceTitlebar({
                 <button
                   type="button"
                   aria-label={`${title} 记忆空间操作`}
-                  className="inline-flex max-w-[220px] items-center gap-3 rounded-buttons px-4 py-4 text-body-lg font-medium leading-body-lg text-cinder outline-none transition-colors duration-150 hover:bg-powder hover:text-obsidian focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell data-[state=open]:bg-powder data-[state=open]:text-obsidian"
+                  className="inline-flex max-w-[220px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                 >
                   <span className="min-w-0 truncate">{title}</span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="bottom" aria-label={`${title} 记忆空间操作`}>
                 <DropdownMenuItem onSelect={onRenameMemorySpace}>
-                  <PencilLine className="size-16 text-slate" aria-hidden="true" />
+                  <PencilLine className="size-16 text-muted-foreground" aria-hidden="true" />
                   重命名记忆空间
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -77,7 +80,7 @@ export function WorkspaceTitlebar({
                       <button
                         type="button"
                         aria-label={`${currentMemory.title} 记忆操作`}
-                        className="inline-flex max-w-[260px] items-center gap-3 rounded-buttons px-4 py-4 text-body-lg font-medium leading-body-lg text-obsidian outline-none transition-colors duration-150 hover:bg-powder focus-visible:ring-2 focus-visible:ring-signal-blue focus-visible:ring-offset-2 focus-visible:ring-offset-eggshell data-[state=open]:bg-powder"
+                        className="inline-flex max-w-[260px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary"
                       >
                         <span className="min-w-0 truncate">{currentMemory.title}</span>
                       </button>
@@ -88,7 +91,7 @@ export function WorkspaceTitlebar({
                       aria-label={`${currentMemory.title} 记忆操作`}
                     >
                       <DropdownMenuItem onSelect={() => onRenameMemory?.(currentMemory)}>
-                        <PencilLine className="size-16 text-slate" aria-hidden="true" />
+                        <PencilLine className="size-16 text-muted-foreground" aria-hidden="true" />
                         重命名记忆
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -99,13 +102,16 @@ export function WorkspaceTitlebar({
           ) : null}
         </BreadcrumbList>
       </Breadcrumb>
-      <div className="pointer-events-auto flex items-center gap-8 [-webkit-app-region:no-drag]">
+      <div
+        data-slot="workspace-titlebar-actions"
+        className="pointer-events-auto mr-16 flex items-center gap-8 [-webkit-app-region:no-drag]"
+      >
         <Tooltip>
           <Button asChild variant="ghostIcon" size="icon">
             <TooltipTrigger
               type="button"
               aria-label="新建记忆"
-              className="rounded-buttons text-cinder hover:bg-powder hover:text-obsidian"
+              className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={onCreateMemory}
             >
               <Plus className="size-16" aria-hidden="true" />
@@ -120,7 +126,7 @@ export function WorkspaceTitlebar({
               aria-controls={WORKSPACE_MEMORY_RAIL_ID}
               aria-expanded={memoryRailOpen}
               aria-label={toggleLabel}
-              className="rounded-buttons text-cinder hover:bg-powder hover:text-obsidian"
+              className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={onToggleMemoryRail}
             >
               <ToggleIcon className="size-16" aria-hidden="true" />

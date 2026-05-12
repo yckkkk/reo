@@ -75,12 +75,12 @@ describe('AppShell', () => {
       'min-h-0',
       'w-screen',
       'overflow-hidden',
-      'bg-eggshell'
+      'bg-background'
     );
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     const sidebar = screen.getByRole('complementary', { name: '记忆空间侧边栏' });
-    expect(sidebar).toHaveClass('bg-linen');
-    expect(sidebar).not.toHaveClass('bg-eggshell');
+    expect(sidebar).toHaveClass('bg-card');
+    expect(sidebar).not.toHaveClass('bg-background');
     expect(sidebar).toHaveStyle({ zIndex: '1', width: '240px' });
     expect(document.querySelector('[data-slot="app-shell-sidebar-corner-underlay"]')).toBeNull();
     const panel = screen.getByRole('main', { name: '记忆空间内容' });
@@ -90,30 +90,30 @@ describe('AppShell', () => {
       right: '0px',
       top: '0px',
     });
-    expect(panel.style.borderRadius).toBe('12px 0 0 12px');
+    expect(panel.style.borderRadius).toBe('var(--radius-md) 0 0 var(--radius-md)');
     expect(panel.style.zIndex).toBe('2');
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
     expect(TITLEBAR_HEIGHT).toBe(48);
     expect(titlebar).toHaveAttribute('data-slot', 'app-shell-titlebar');
     expect(titlebar).toHaveClass(
-      'h-titlebar',
+      'h-[48px]',
       'border-0',
       'bg-transparent',
       '[-webkit-app-region:drag]'
     );
     expect(titlebar).toHaveStyle({ zIndex: '5' });
     expect(panel).toHaveClass('flex', 'min-h-0', 'flex-col', 'overflow-hidden');
-    expect(panel).toHaveClass('border-0', 'bg-eggshell');
-    expect(panel).not.toHaveClass('bg-card-glass', 'backdrop-blur-glass-lg');
-    expect(panel).not.toHaveClass('shadow-subtle');
+    expect(panel).toHaveClass('border-0', 'bg-background');
+    expect(panel).not.toHaveClass('bg-card', '');
+    expect(panel).not.toHaveClass('shadow-none');
     const panelTitlebar = panel.querySelector('[data-slot="app-shell-panel-titlebar"]');
     expect(panelTitlebar).toBeInTheDocument();
-    expect(panelTitlebar).toHaveClass('h-titlebar', 'shrink-0');
-    expect(panelTitlebar).not.toHaveClass('bg-eggshell', 'bg-linen');
+    expect(panelTitlebar).toHaveClass('h-[48px]', 'shrink-0');
+    expect(panelTitlebar).not.toHaveClass('bg-background', 'bg-card');
     const panelContent = panel.querySelector('[data-slot="app-shell-panel-content"]');
     expect(panelContent).toBeInTheDocument();
     expect(panelContent).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
-    expect(sidebar).toHaveClass('pt-sidebar-content-top');
+    expect(sidebar).toHaveClass('pt-[56px]');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');
@@ -129,7 +129,8 @@ describe('AppShell', () => {
     expect(activeWorkspaceButton).toHaveAttribute('aria-current', 'page');
     expect(activeWorkspaceItem).toContainElement(activeWorkspaceButton);
     expect(activeWorkspaceItem).toContainElement(activeWorkspaceMoreButton);
-    expect(activeWorkspaceItem).toHaveClass('rounded-buttons', 'border', 'border-chalk');
+    expect(activeWorkspaceItem).toHaveClass('rounded-md', 'bg-secondary');
+    expect(activeWorkspaceItem).not.toHaveClass('border', 'border-border', 'shadow-float');
     expect(activeWorkspaceMoreButton).toHaveClass(
       'opacity-0',
       'pointer-events-none',
@@ -144,8 +145,8 @@ describe('AppShell', () => {
     expect(windowControls).toHaveClass('items-center', '[-webkit-app-region:no-drag]');
     expect(windowControls).not.toHaveClass('top-0', 'h-titlebar');
     expect(windowControls).toHaveStyle({
-      left: 'var(--spacing-titlebar-control-left)',
-      top: 'var(--spacing-titlebar-control-top)',
+      left: '80px',
+      top: '2px',
     });
     expect(screen.queryByText('隐藏侧边栏')).not.toBeInTheDocument();
     expect(screen.queryByText(/films|photos|videos|files/i)).not.toBeInTheDocument();
@@ -168,7 +169,8 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
 
     const menu = screen.getByRole('menu', { name: '添加记忆空间' });
-    expect(menu).toHaveClass('rounded-buttons', 'bg-card-glass', 'backdrop-blur-glass-md');
+    expect(menu).toHaveClass('rounded-lg', 'border-0', 'bg-popover', 'shadow-float');
+    expect(menu).not.toHaveClass('bg-card', 'border-border');
     expect(menu).toHaveAttribute('data-slot', 'dropdown-menu-content');
     expect(menu).not.toHaveClass('left-full', 'ml-8');
     expect(screen.getByRole('complementary', { name: '记忆空间侧边栏' })).toHaveStyle({
@@ -371,8 +373,8 @@ describe('AppShell', () => {
     expect(windowControls).toHaveClass('items-center');
     expect(windowControls).not.toHaveClass('top-0', 'h-titlebar');
     expect(windowControls).toHaveStyle({
-      left: 'var(--spacing-titlebar-control-left)',
-      top: 'var(--spacing-titlebar-control-top)',
+      left: '80px',
+      top: '2px',
     });
 
     fireEvent.click(screen.getByRole('button', { name: '隐藏侧边栏' }));
@@ -381,8 +383,8 @@ describe('AppShell', () => {
     expect(windowControls).toHaveClass('items-center');
     expect(windowControls).not.toHaveClass('top-0', 'h-titlebar');
     expect(windowControls).toHaveStyle({
-      left: 'var(--spacing-titlebar-control-left)',
-      top: 'var(--spacing-titlebar-control-top)',
+      left: '80px',
+      top: '2px',
     });
     expect(screen.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page');
     const panel = screen.getByRole('main', { name: '记忆空间内容' });
@@ -409,13 +411,12 @@ describe('AppShell', () => {
     expect(handle).toHaveAttribute('aria-valuemax', '520');
     expect(handle).toHaveAttribute('aria-valuenow', '240');
     expect(handle).toHaveStyle({ width: '8px' });
-    expect(handle).not.toHaveClass('hover:bg-chalk/40');
-    expect(handle).not.toHaveClass('focus-visible:bg-chalk/60');
+    expect(handle).not.toHaveClass('hover:bg-secondary/40');
+    expect(handle).not.toHaveClass('focus-visible:bg-secondary/60');
 
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toHaveClass('duration-200');
     fireEvent.pointerDown(handle, { clientX: 240, pointerId: 1 });
-    expect(screen.getByRole('main', { name: '记忆空间内容' }).className).not.toContain(
-      'duration-[280ms]'
-    );
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).not.toHaveClass('duration-200');
     fireEvent.pointerMove(handle, { clientX: 900, pointerId: 1 });
     fireEvent.pointerUp(handle, { pointerId: 1 });
 

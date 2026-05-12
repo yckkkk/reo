@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@import './theme.css';
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    min-width: 320px;
+    margin: 0;
+    background: var(--color-eggshell);
+    color: var(--color-obsidian);
+    font-family: var(--font-inter);
+    font-feature-settings: 'kern' 1;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}

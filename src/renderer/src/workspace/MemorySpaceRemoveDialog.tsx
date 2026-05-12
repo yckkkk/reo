@@ -33,7 +33,7 @@ export function MemorySpaceRemoveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <p className="text-ui-sm leading-ui-sm text-gravel">本地文件夹不会被删除。</p>
+        <p className="text-ui-sm leading-ui-sm text-muted-foreground">本地文件夹不会被删除。</p>
 
         <div className="flex justify-end gap-8">
           <Button
@@ -44,7 +44,7 @@ export function MemorySpaceRemoveDialog({
           >
             取消
           </Button>
-          <Button type="button" disabled={disabled} onClick={onConfirm}>
+          <Button type="button" variant="destructive" disabled={disabled} onClick={onConfirm}>
             移除
           </Button>
         </div>

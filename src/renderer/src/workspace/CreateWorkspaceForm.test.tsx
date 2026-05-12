@@ -69,7 +69,7 @@ describe('CreateWorkspaceForm', () => {
     expect(screen.queryByRole('heading', { name: '创建本地记忆空间' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('记忆空间名称')).toHaveFocus();
     expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('描述')).toHaveClass('min-h-72', 'rounded-inputs', 'text-ui-sm');
+    expect(screen.getByLabelText('描述')).toHaveClass('min-h-72', 'rounded-lg', 'text-ui-sm');
     expect(screen.getByText('补充这个记忆空间的用途，可选')).toHaveClass('text-ui-xs');
     expect(screen.getByText('给新的记忆空间起一个名字')).toHaveClass('text-ui-xs');
     expect(screen.getByRole('button', { name: '浏览' })).toHaveClass('min-h-32');

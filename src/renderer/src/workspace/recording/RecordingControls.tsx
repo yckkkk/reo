@@ -17,7 +17,7 @@ type RecordingControlsProps = {
   readonly state: RecordingState;
 };
 
-function RoundIconButton({
+function LocatorIconButton({
   children,
   className,
   label,
@@ -30,7 +30,7 @@ function RoundIconButton({
     <Button
       aria-label={label}
       className={cn(
-        'size-40 rounded-full !border-transparent !bg-transparent p-0 text-cinder shadow-none hover:!bg-transparent hover:text-obsidian disabled:!border-transparent disabled:!bg-transparent disabled:!text-slate disabled:opacity-45',
+        'size-40 rounded-md !bg-transparent p-0 text-muted-foreground shadow-none hover:!bg-accent hover:text-foreground disabled:!bg-transparent disabled:!text-muted-foreground disabled:opacity-45',
         className
       )}
       size="iconMedium"
@@ -71,12 +71,11 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full border-[3px] border-glass-border-highlight bg-ember p-0 text-on-accent shadow-[0_0_0_4px_var(--recording-primary-halo)] hover:bg-ember disabled:bg-fog"
+        className="size-[88px] rounded-full bg-brand-ember p-0 text-primary-foreground shadow-none hover:bg-brand-ember disabled:bg-muted"
         disabled={disabled}
         onClick={onStart}
         size="iconLarge"
         type="button"
-        variant="accentCircle"
       >
         <span className="sr-only">{label}</span>
       </Button>
@@ -88,11 +87,10 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full border-glass-border-highlight bg-fog p-0 text-on-accent"
+        className="size-[88px] rounded-full bg-muted p-0 text-muted-foreground"
         disabled
         size="iconLarge"
         type="button"
-        variant="accentCircle"
       >
         <span className="sr-only">{label}</span>
       </Button>
@@ -114,10 +112,10 @@ export function RecordingControls({
           <Button
             aria-label={primaryLabel}
             className={cn(
-              'h-40 w-[108px] rounded-full !border-transparent !bg-transparent px-10 text-ui-md shadow-none',
+              'h-40 w-[108px] rounded-lg px-10 text-ui-md shadow-none',
               cursorAtEnd
-                ? 'text-ember hover:!bg-transparent hover:text-obsidian'
-                : 'text-ember hover:!bg-[var(--glass-ember-hover)]'
+                ? 'bg-card text-brand-ember hover:bg-secondary hover:text-foreground'
+                : 'bg-card text-brand-ember hover:bg-secondary hover:text-foreground'
             )}
             onClick={onResume}
             type="button"
@@ -128,7 +126,7 @@ export function RecordingControls({
         ) : (
           <Button
             aria-label="暂停录音"
-            className="h-40 w-[108px] rounded-full !border-transparent !bg-transparent p-0 text-ember shadow-none hover:!bg-transparent hover:text-obsidian"
+            className="h-40 w-[108px] rounded-lg bg-card p-0 text-brand-ember shadow-none hover:bg-secondary hover:text-foreground"
             onClick={onPause}
             type="button"
             variant="secondary"
@@ -148,12 +146,12 @@ export function RecordingControls({
         data-testid="recording-locator-control-slot"
         role="group"
       >
-        <RoundIconButton disabled={locatorDisabled} label="后退 15 秒" onClick={onSeekBackward}>
+        <LocatorIconButton disabled={locatorDisabled} label="后退 15 秒" onClick={onSeekBackward}>
           <RotateCcw aria-hidden="true" className="size-[18px]" />
-          <span className="text-[9px] font-bold leading-none">15</span>
-        </RoundIconButton>
-        <RoundIconButton
-          className="text-cinder disabled:!text-slate"
+          <span className="text-caption font-bold leading-none">15</span>
+        </LocatorIconButton>
+        <LocatorIconButton
+          className="text-muted-foreground disabled:!text-muted-foreground"
           disabled={locatorDisabled}
           label={playbackLabel}
           onClick={onPlayPause}
@@ -163,18 +161,18 @@ export function RecordingControls({
           ) : (
             <Play aria-hidden="true" className="ml-2 size-24 fill-current stroke-[2]" />
           )}
-        </RoundIconButton>
-        <RoundIconButton disabled={locatorDisabled} label="前进 15 秒" onClick={onSeekForward}>
+        </LocatorIconButton>
+        <LocatorIconButton disabled={locatorDisabled} label="前进 15 秒" onClick={onSeekForward}>
           <RotateCw aria-hidden="true" className="size-[18px]" />
-          <span className="text-[9px] font-bold leading-none">15</span>
-        </RoundIconButton>
+          <span className="text-caption font-bold leading-none">15</span>
+        </LocatorIconButton>
       </div>
 
       <div className="flex justify-end" data-testid="recording-right-control-slot">
         {state.status === 'recording' || state.status === 'paused' ? (
           <Button
             aria-label="停止录音"
-            className="rounded-full !border-transparent !bg-transparent px-8 text-obsidian shadow-none hover:!bg-transparent hover:text-cinder"
+            className="rounded-lg bg-card px-8 text-foreground shadow-none hover:bg-secondary hover:text-foreground"
             onClick={onStop}
             type="button"
             variant="secondary"
