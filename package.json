@@ -56,6 +56,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.1",
+    "agentation": "^3.0.2",
     "electron": "^41.5.0",
     "electron-vite": "6.0.0-beta.1",
     "eslint": "^10.2.0",
