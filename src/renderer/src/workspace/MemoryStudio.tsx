@@ -57,8 +57,8 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
   canScrollLeft: false,
   canScrollRight: false,
 };
-const SEGMENT_PREVIEW_SPECTRUM_DATA = [30, 50, 70, 40, 60, 30, 40, 80, 90, 50, 30, 40, 40, 60, 80];
-const SEGMENT_PREVIEW_BAR_RADIUS_CLASS = 'rounded-[2px]';
+const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
+const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentAttachment = MemorySegment['attachments'][number];
@@ -85,11 +85,14 @@ type MemoryStudioAudioPlaybackRowProps = {
   readonly durationMs: number;
   readonly loading: boolean;
   readonly onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  readonly onPointerCancel: () => void;
   readonly onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
+  readonly onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
+  readonly onPointerUp: () => void;
   readonly onTogglePlayback: () => Promise<void> | void;
   readonly playButtonLabel: string;
   readonly playbackTimeMs: number;
-  readonly playheadProgress: number;
+  readonly playbackProgress: number;
   readonly playing: boolean;
   readonly rowSlot: string;
   readonly waveformData: readonly number[];
@@ -103,11 +106,14 @@ function MemoryStudioAudioPlaybackRow({
   durationMs,
   loading,
   onKeyDown,
+  onPointerCancel,
   onPointerDown,
+  onPointerMove,
+  onPointerUp,
   onTogglePlayback,
   playButtonLabel,
   playbackTimeMs,
-  playheadProgress,
+  playbackProgress,
   playing,
   rowSlot,
   waveformData,
@@ -147,9 +153,8 @@ function MemoryStudioAudioPlaybackRow({
         aria-valuemin={0}
         aria-valuenow={Math.round(playbackTimeMs)}
         aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
-        barGap={4}
-        barRadius={2}
-        barWidth={2}
+        barRadius={4}
+        barWidth={4}
         className="min-w-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         data={waveformData}
         data-slot={waveformSlot}
@@ -157,8 +162,11 @@ function MemoryStudioAudioPlaybackRow({
         height={42}
         label={waveformLabel}
         onKeyDown={onKeyDown}
+        onPointerCancel={onPointerCancel}
         onPointerDown={onPointerDown}
-        playheadProgress={playheadProgress}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        progress={playbackProgress}
         role="slider"
         tabIndex={audioAvailable ? 0 : -1}
         tone="voice"
@@ -175,24 +183,18 @@ function MemoryStudioAudioPlaybackRow({
 
 function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   return (
-    <span
-      aria-hidden="true"
-      className="flex h-32 w-[52px] shrink-0 items-center gap-[2px] overflow-hidden"
+    <Waveform
+      barGap={2}
+      barRadius={4}
+      barWidth={4}
+      className="w-[52px] shrink-0"
+      data={SEGMENT_PREVIEW_WAVEFORM_DATA}
       data-slot="memory-studio-segment-card-waveform"
-    >
-      {SEGMENT_PREVIEW_SPECTRUM_DATA.map((level, index) => (
-        <span
-          key={index}
-          className={[
-            `w-[2px] origin-center ${SEGMENT_PREVIEW_BAR_RADIUS_CLASS} transition-colors duration-150`,
-            active ? 'bg-primary' : 'bg-muted-foreground',
-          ].join(' ')}
-          style={{
-            height: `${level}%`,
-          }}
-        />
-      ))}
-    </span>
+      decorative
+      height={32}
+      mode="bars"
+      tone={active ? 'neutral' : 'muted'}
+    />
   );
 }
 
@@ -204,6 +206,7 @@ function SegmentAttachmentAudioPlayer({
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pointerScrubbingRef = useRef(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -292,7 +295,7 @@ function SegmentAttachmentAudioPlayer({
     setPlaybackTimeMs(nextTimeMs);
   }
 
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+  function seekFromPointer(event: PointerEvent<HTMLDivElement>) {
     if (!audioUrl) {
       return;
     }
@@ -302,11 +305,31 @@ function SegmentAttachmentAudioPlayer({
       return;
     }
 
+    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    setPlaybackPosition(progress * attachment.durationMs);
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
     if (typeof event.currentTarget.setPointerCapture === 'function') {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
-    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setPlaybackPosition(progress * attachment.durationMs);
+    pointerScrubbingRef.current = true;
+    seekFromPointer(event);
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!pointerScrubbingRef.current) {
+      return;
+    }
+    seekFromPointer(event);
+  }
+
+  function endPointerScrub() {
+    pointerScrubbingRef.current = false;
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -360,11 +383,14 @@ function SegmentAttachmentAudioPlayer({
         durationMs={attachment.durationMs}
         loading={attachmentContentQuery.isLoading}
         onKeyDown={handleKeyDown}
+        onPointerCancel={endPointerScrub}
         onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endPointerScrub}
         onTogglePlayback={togglePlayback}
         playButtonLabel={`${playing ? '暂停' : '播放'}补充录音 ${attachment.title}`}
         playbackTimeMs={playbackTimeMs}
-        playheadProgress={playbackProgress}
+        playbackProgress={playbackProgress}
         playing={playing}
         rowSlot="memory-studio-attachment-player"
         waveformData={waveformData}
@@ -412,6 +438,7 @@ export function MemoryStudio({
   workspaceSession,
 }: MemoryStudioProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pointerScrubbingRef = useRef(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const [audioPlaybackError, setAudioPlaybackError] = useState<string | null>(null);
@@ -606,7 +633,7 @@ export function MemoryStudio({
     setPlaybackTimeMs(nextTimeMs);
   }
 
-  function handlePlaybackPointerDown(event: PointerEvent<HTMLDivElement>) {
+  function seekSelectedSegmentFromPointer(event: PointerEvent<HTMLDivElement>) {
     if (!selectedSegment || !segmentAudioUrl) {
       return;
     }
@@ -616,11 +643,31 @@ export function MemoryStudio({
       return;
     }
 
+    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    setSelectedSegmentPlaybackPosition(progress * selectedSegment.durationMs);
+  }
+
+  function handlePlaybackPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!selectedSegment || !segmentAudioUrl) {
+      return;
+    }
+
     if (typeof event.currentTarget.setPointerCapture === 'function') {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
-    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setSelectedSegmentPlaybackPosition(progress * selectedSegment.durationMs);
+    pointerScrubbingRef.current = true;
+    seekSelectedSegmentFromPointer(event);
+  }
+
+  function handlePlaybackPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!pointerScrubbingRef.current) {
+      return;
+    }
+    seekSelectedSegmentFromPointer(event);
+  }
+
+  function endPlaybackPointerScrub() {
+    pointerScrubbingRef.current = false;
   }
 
   function handlePlaybackKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -700,10 +747,7 @@ export function MemoryStudio({
       aria-label="Memory Studio"
       className="flex h-full min-h-0 w-full flex-col overflow-hidden text-left"
     >
-      <div
-        data-slot="memory-studio-layout"
-        className="flex h-full min-h-0 w-full max-w-[1120px] flex-col"
-      >
+      <div data-slot="memory-studio-layout" className="flex h-full min-h-0 w-full flex-col">
         {detail && segments.length === 0 ? (
           <div className="mt-32 max-w-[420px]">
             <p className="text-body-lg font-medium leading-body-lg text-foreground">
@@ -740,7 +784,7 @@ export function MemoryStudio({
               <div
                 ref={stripScrollRef}
                 data-slot="memory-studio-segment-strip-scroll"
-                className="flex snap-x gap-12 overflow-x-auto px-0 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 {segments.map((segment) => {
                   const isSelected = segment.segmentId === selectedSegment.segmentId;
@@ -824,11 +868,14 @@ export function MemoryStudio({
                 durationMs={selectedSegment.durationMs}
                 loading={segmentContentQuery.isLoading}
                 onKeyDown={handlePlaybackKeyDown}
+                onPointerCancel={endPlaybackPointerScrub}
                 onPointerDown={handlePlaybackPointerDown}
+                onPointerMove={handlePlaybackPointerMove}
+                onPointerUp={endPlaybackPointerScrub}
                 onTogglePlayback={toggleSelectedSegmentPlayback}
                 playButtonLabel={`${isSelectedSegmentPlaying ? '暂停' : '播放'}片段 ${selectedSegment.title}`}
                 playbackTimeMs={playbackTimeMs}
-                playheadProgress={playbackProgress}
+                playbackProgress={playbackProgress}
                 playing={isSelectedSegmentPlaying}
                 rowSlot="memory-studio-player"
                 waveformData={playbackWaveformData}
@@ -925,7 +972,7 @@ export function MemoryStudio({
                 <section
                   aria-label="片段转录"
                   data-slot="memory-studio-transcript-scroll"
-                  className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                  className="edge-fade-y scrollbar-hover mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
                 >
                   {segmentContentQuery.isLoading ? (
                     <p className="text-body leading-body text-muted-foreground">

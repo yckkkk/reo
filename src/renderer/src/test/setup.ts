@@ -33,11 +33,17 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   value: (contextType: string) =>
     contextType === '2d'
       ? {
+          arc: () => undefined,
           beginPath: () => undefined,
+          clip: () => undefined,
           clearRect: () => undefined,
           fill: () => undefined,
+          rect: () => undefined,
+          restore: () => undefined,
           roundRect: () => undefined,
+          save: () => undefined,
           scale: () => undefined,
+          setTransform: () => undefined,
         }
       : null,
 });

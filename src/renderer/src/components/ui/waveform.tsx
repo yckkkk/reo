@@ -11,7 +11,7 @@ export type WaveformProps = ComponentProps<'div'> & {
   readonly height?: number;
   readonly label?: string;
   readonly mode?: 'bars' | 'dots';
-  readonly playheadProgress?: number | null;
+  readonly progress?: number | null;
   readonly tone?: 'muted' | 'neutral' | 'voice';
 };
 
@@ -22,14 +22,74 @@ type DrawWaveformState = {
   readonly barWidth: number;
   readonly data: readonly number[];
   readonly mode: NonNullable<WaveformProps['mode']>;
+  readonly progress: number | null;
   readonly tone: NonNullable<WaveformProps['tone']>;
 };
+
+type CanvasBackingStore = {
+  readonly dpr: number;
+  readonly height: number;
+  readonly width: number;
+};
+
+type WaveformBarShape =
+  | {
+      readonly centerX: number;
+      readonly centerY: number;
+      readonly kind: 'dot';
+      readonly radius: number;
+    }
+  | {
+      readonly height: number;
+      readonly kind: 'bar';
+      readonly radius: number;
+      readonly width: number;
+      readonly x: number;
+      readonly y: number;
+    };
 
 const WAVEFORM_TONE_TOKEN: Record<NonNullable<WaveformProps['tone']>, string> = {
   muted: '--muted-foreground',
   neutral: '--foreground',
   voice: '--primary',
 };
+const DOT_HEIGHT_RATIO = 1.25;
+
+function readColorToken(styles: CSSStyleDeclaration, token: string, fallback: string) {
+  return styles.getPropertyValue(token).trim() || fallback;
+}
+
+export function resolveWaveformBarShape({
+  barHeight,
+  barRadius,
+  barWidth,
+  centerY,
+  x,
+}: {
+  readonly barHeight: number;
+  readonly barRadius: number;
+  readonly barWidth: number;
+  readonly centerY: number;
+  readonly x: number;
+}): WaveformBarShape {
+  if (barHeight <= barWidth * DOT_HEIGHT_RATIO) {
+    return {
+      centerX: x + barWidth / 2,
+      centerY,
+      kind: 'dot',
+      radius: barWidth / 2,
+    };
+  }
+
+  return {
+    height: barHeight,
+    kind: 'bar',
+    radius: barRadius,
+    width: barWidth,
+    x,
+    y: centerY - barHeight / 2,
+  };
+}
 
 export function Waveform({
   active = false,
@@ -42,12 +102,13 @@ export function Waveform({
   height = 64,
   label = '音频波形',
   mode = 'bars',
-  playheadProgress = null,
+  progress = null,
   tone = 'voice',
   ...props
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const backingStoreRef = useRef<CanvasBackingStore | null>(null);
   const drawStateRef = useRef<DrawWaveformState>({
     active,
     barGap,
@@ -55,6 +116,7 @@ export function Waveform({
     barWidth,
     data,
     mode,
+    progress,
     tone,
   });
 
@@ -65,24 +127,40 @@ export function Waveform({
       return;
     }
 
-    const { active, barGap, barRadius, barWidth, data, mode, tone } = drawStateRef.current;
+    const { active, barGap, barRadius, barWidth, data, mode, progress, tone } =
+      drawStateRef.current;
     const rect = container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
+    const nextBackingStore = {
+      dpr,
+      height: rect.height,
+      width: rect.width,
+    };
+    const previousBackingStore = backingStoreRef.current;
+    if (
+      !previousBackingStore ||
+      previousBackingStore.dpr !== nextBackingStore.dpr ||
+      previousBackingStore.height !== nextBackingStore.height ||
+      previousBackingStore.width !== nextBackingStore.width
+    ) {
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      backingStoreRef.current = nextBackingStore;
+    }
 
     const context = canvas.getContext('2d');
     if (!context) {
       return;
     }
 
-    context.scale(dpr, dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, rect.width, rect.height);
     const styles = getComputedStyle(canvas);
-    const fillColor = styles.getPropertyValue(WAVEFORM_TONE_TOKEN[tone]).trim() || styles.color;
-    context.fillStyle = fillColor;
+    const fillColor = readColorToken(styles, WAVEFORM_TONE_TOKEN[tone], styles.color);
+    const playedColor = readColorToken(styles, '--foreground', fillColor);
+    const unplayedColor = readColorToken(styles, '--secondary', fillColor);
 
     const step = barWidth + barGap;
     const barCount = Math.floor(rect.width / step);
@@ -92,6 +170,7 @@ export function Waveform({
       const dotRadius = Math.max(1.4, Math.min(2.4, barWidth / 2));
       const dotGap = Math.max(6, step);
       const dotCount = Math.floor(rect.width / dotGap);
+      context.fillStyle = fillColor;
       context.globalAlpha = active ? 0.72 : 0.58;
       for (let index = 0; index < dotCount; index += 1) {
         const x = index * dotGap + dotRadius;
@@ -107,31 +186,72 @@ export function Waveform({
       return;
     }
 
-    for (let index = 0; index < barCount; index += 1) {
-      const value = Math.max(
-        0,
-        Math.min(1, data[Math.floor((index / barCount) * data.length)] ?? 0)
-      );
-      if (value <= 0) {
-        continue;
+    const drawBars = (fillStyle: string, globalAlpha: number, clipWidth?: number) => {
+      context.save();
+      if (clipWidth !== undefined) {
+        context.beginPath();
+        context.rect(0, 0, clipWidth, rect.height);
+        context.clip();
       }
 
-      const barHeight = Math.max(2, value * rect.height * 0.88) * (active ? 1 : 0.88);
-      const x = index * step;
-      const y = centerY - barHeight / 2;
-      context.globalAlpha = active ? 0.95 : 0.64;
-      context.beginPath();
-      context.roundRect(x, y, barWidth, barHeight, barRadius);
-      context.fill();
+      context.fillStyle = fillStyle;
+      context.globalAlpha = globalAlpha;
+      for (let index = 0; index < barCount; index += 1) {
+        const value = Math.max(
+          0,
+          Math.min(1, data[Math.floor((index / barCount) * data.length)] ?? 0)
+        );
+        if (value <= 0) {
+          continue;
+        }
+
+        const barHeight = Math.max(2, value * rect.height * 0.88) * (active ? 1 : 0.88);
+        const x = index * step;
+        const shape = resolveWaveformBarShape({
+          barHeight,
+          barRadius,
+          barWidth,
+          centerY,
+          x,
+        });
+        context.beginPath();
+        if (shape.kind === 'dot') {
+          context.arc(shape.centerX, shape.centerY, shape.radius, 0, Math.PI * 2);
+        } else {
+          context.roundRect(shape.x, shape.y, shape.width, shape.height, shape.radius);
+        }
+        context.fill();
+      }
+      context.restore();
+    };
+
+    const safeProgress = progress === null ? null : Math.min(1, Math.max(0, progress));
+
+    if (safeProgress !== null) {
+      drawBars(unplayedColor, active ? 0.92 : 0.86);
+      if (safeProgress > 0) {
+        drawBars(playedColor, active ? 1 : 0.98, rect.width * safeProgress);
+      }
+    } else {
+      drawBars(fillColor, active ? 0.95 : 0.64);
     }
 
     context.globalAlpha = 1;
   }, []);
 
   useEffect(() => {
-    drawStateRef.current = { active, barGap, barRadius, barWidth, data, mode, tone };
+    drawStateRef.current = {
+      active,
+      barGap,
+      barRadius,
+      barWidth,
+      data,
+      mode,
+      progress,
+      tone,
+    };
     drawWaveform();
-  }, [active, barGap, barRadius, barWidth, data, drawWaveform, mode, tone]);
+  }, [active, barGap, barRadius, barWidth, data, drawWaveform, mode, progress, tone]);
 
   useEffect(() => {
     const observedContainer = containerRef.current;
@@ -145,37 +265,25 @@ export function Waveform({
     return () => resizeObserver.disconnect();
   }, [drawWaveform]);
 
-  const safePlayheadProgress =
-    playheadProgress === null ? null : Math.min(1, Math.max(0, playheadProgress));
-  const playheadLeft =
-    safePlayheadProgress === null
-      ? undefined
-      : safePlayheadProgress >= 1
-        ? 'calc(100% - 2px)'
-        : `${safePlayheadProgress * 100}%`;
+  const safeProgress = progress === null ? null : Math.min(1, Math.max(0, progress));
 
   return (
     <div
       aria-hidden={decorative}
       aria-label={decorative ? undefined : label}
       className={cn('relative overflow-hidden', className)}
+      data-waveform-progress={safeProgress === null ? undefined : String(safeProgress)}
+      data-waveform-progress-style={safeProgress === null ? undefined : 'split'}
+      data-waveform-bar-radius={barRadius}
+      data-waveform-bar-width={barWidth}
+      data-waveform-mode={mode}
+      data-waveform-tone={tone}
       ref={containerRef}
       role={decorative ? undefined : 'img'}
       style={{ height }}
       {...props}
     >
       <canvas className="block h-full w-full" ref={canvasRef} />
-      {safePlayheadProgress !== null ? (
-        <span
-          aria-hidden="true"
-          className="absolute top-1/2 block h-[calc(100%-10px)] w-[2px] -translate-y-1/2 bg-primary"
-          data-slot="recording-playhead"
-          style={{ left: playheadLeft }}
-        >
-          <span className="absolute left-1/2 top-0 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
-          <span className="absolute bottom-0 left-1/2 h-8 w-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-primary" />
-        </span>
-      ) : null}
     </div>
   );
 }

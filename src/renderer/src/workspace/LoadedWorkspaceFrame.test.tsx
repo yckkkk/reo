@@ -245,15 +245,21 @@ describe('LoadedWorkspaceFrame', () => {
       'right-24',
       'sm:right-40'
     );
+    expect(dock.closest('[data-slot="workspace-expression-fab-track"]')).toHaveClass(
+      'mx-auto',
+      'w-full',
+      'max-w-[var(--workspace-stage-max-width)]'
+    );
     const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
     expect(workspaceFrame).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
     expect(workspaceFrame).not.toHaveClass('min-h-full');
     expect(workspaceFrame).toHaveStyle({
       '--workspace-memory-rail-width': '240px',
+      '--workspace-stage-max-width': '1120px',
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
-      '!bg-primary',
+      '!bg-brand-ember',
       '!rounded-full',
       '!size-[var(--reo-speed-dial-diameter)]'
     );
@@ -302,6 +308,7 @@ describe('LoadedWorkspaceFrame', () => {
     const rail = screen.getByRole('navigation', { name: '记忆列表' });
     const railShell = rail.closest('[data-slot="workspace-memory-rail-shell"]');
     const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const stageContent = document.querySelector('[data-slot="workspace-stage-content"]');
     const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
     expect(railShell).toHaveAttribute('aria-hidden', 'false');
     expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_var(--workspace-memory-rail-width)]');
@@ -316,6 +323,11 @@ describe('LoadedWorkspaceFrame', () => {
     expect(stageShell).not.toHaveClass('min-h-[640px]');
     expect(railShell).toHaveClass('translate-x-0', 'opacity-100');
     expect(stageShell).toHaveClass('px-24', 'sm:px-40');
+    expect(stageContent).toHaveClass(
+      'mx-auto',
+      'w-full',
+      'max-w-[var(--workspace-stage-max-width)]'
+    );
     expect(rail).toHaveAttribute('id', 'workspace-memory-rail');
     expect(railShell).toHaveClass('border-l', 'border-secondary');
     expect(railShell).not.toHaveClass('border-border', 'shadow-float');
@@ -451,9 +463,16 @@ describe('LoadedWorkspaceFrame', () => {
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
     const transcriptScroll = studio.querySelector('[data-slot="memory-studio-transcript-scroll"]');
 
-    expect(stageContent).toHaveClass('items-stretch', 'justify-center');
+    expect(stageContent).toHaveClass(
+      'mx-auto',
+      'w-full',
+      'max-w-[var(--workspace-stage-max-width)]',
+      'items-stretch',
+      'justify-center'
+    );
     expect(studio).toHaveClass('overflow-hidden');
-    expect(studioLayout).toHaveClass('max-w-[1120px]');
+    expect(studioLayout).toHaveClass('w-full');
+    expect(studioLayout).not.toHaveClass('max-w-[1120px]');
     expect(segmentItems).toHaveLength(2);
     expect(segmentCards).toHaveLength(2);
     expect(segmentItems[0]).toHaveClass(
@@ -493,8 +512,14 @@ describe('LoadedWorkspaceFrame', () => {
       )
     );
     expect(stripScroll).not.toHaveClass('px-44');
+    expect(stripScroll).toHaveClass('edge-fade-x');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
-    expect(transcriptScroll).toHaveClass('min-h-0', 'overflow-y-auto');
+    expect(transcriptScroll).toHaveClass(
+      'edge-fade-y',
+      'min-h-0',
+      'overflow-y-auto',
+      'scrollbar-hover'
+    );
   });
 
   it('keeps timeline marker and time inside the same horizontal Segment item', async () => {
@@ -570,26 +595,22 @@ describe('LoadedWorkspaceFrame', () => {
     ).toHaveClass('shrink-0', 'font-mono', 'text-ui-sm', 'font-bold', 'tracking-wide');
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
-    ).toHaveClass('h-32', 'w-[52px]', 'gap-[2px]');
+    ).toHaveClass('w-[52px]');
 
-    const activeBars = activeCard.querySelectorAll(
-      '[data-slot="memory-studio-segment-card-waveform"] span'
+    const activeWaveform = activeCard.querySelector(
+      '[data-slot="memory-studio-segment-card-waveform"]'
     );
-    const inactiveBars = inactiveCard.querySelectorAll(
-      '[data-slot="memory-studio-segment-card-waveform"] span'
+    const inactiveWaveform = inactiveCard.querySelector(
+      '[data-slot="memory-studio-segment-card-waveform"]'
     );
 
-    expect(activeBars).toHaveLength(15);
-    expect(inactiveBars).toHaveLength(15);
-    expect(activeBars[0]).toHaveClass('w-[2px]', 'rounded-[2px]');
-    expect(activeBars[0]).not.toHaveClass('rounded-tags');
-    expect(activeBars[0]).toHaveStyle({ height: '30%' });
-    expect(activeBars[8]).toHaveStyle({ height: '90%' });
-    for (const bar of activeBars) {
-      expect((bar as HTMLElement).style.animationName).toBe('');
-      expect((bar as HTMLElement).style.animationDuration).toBe('');
-    }
-    expect(inactiveBars[0]).toHaveStyle({ height: '30%' });
+    expect(activeWaveform).toHaveAttribute('data-waveform-mode', 'bars');
+    expect(activeWaveform).toHaveAttribute('data-waveform-bar-width', '4');
+    expect(activeWaveform).toHaveAttribute('data-waveform-bar-radius', '4');
+    expect(activeWaveform).toHaveAttribute('data-waveform-tone', 'neutral');
+    expect(activeWaveform?.querySelector('span')).toBeNull();
+    expect(inactiveWaveform).toHaveAttribute('data-waveform-tone', 'muted');
+    expect(inactiveWaveform?.querySelector('span')).toBeNull();
   });
 
   it('does not repeat selected Segment summary above the player', async () => {
@@ -962,6 +983,117 @@ describe('LoadedWorkspaceFrame', () => {
     });
   });
 
+  it('supports continuous waveform scrubbing across the full playback hit area', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pointer-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: true,
+          text: 'Pointer scrubbing should update continuously.',
+        },
+      },
+    }));
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_pointer_scrub',
+      detail: birthdayDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const slider = await within(studio).findByRole('slider', { name: '片段播放进度' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({
+      bottom: 42,
+      height: 42,
+      left: 0,
+      right: 200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 200,
+      x: 0,
+      y: 0,
+    });
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('tabindex', '0');
+    });
+    fireEvent.pointerDown(slider, { buttons: 1, clientX: 50, pointerId: 1 });
+    fireEvent.pointerMove(slider, { buttons: 1, clientX: 150, pointerId: 1 });
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('aria-valuenow', '93750');
+      expect(slider).toHaveAttribute('aria-valuetext', '01:33 / 02:05');
+      expect(slider).toHaveAttribute('data-waveform-progress', '0.75');
+    });
+  });
+
+  it('ignores playback waveform pointer movement until a scrub starts on the waveform', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pointer-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: true,
+          text: 'Pointer movement without a waveform scrub should not seek.',
+        },
+      },
+    }));
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_pointer_move_without_scrub',
+      detail: birthdayDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const slider = await within(studio).findByRole('slider', { name: '片段播放进度' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({
+      bottom: 42,
+      height: 42,
+      left: 0,
+      right: 200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 200,
+      x: 0,
+      y: 0,
+    });
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('tabindex', '0');
+    });
+    fireEvent.pointerMove(slider, { buttons: 1, clientX: 150, pointerId: 1 });
+
+    expect(slider).toHaveAttribute('aria-valuenow', '0');
+    expect(slider).toHaveAttribute('aria-valuetext', '00:00 / 02:05');
+    expect(slider).toHaveAttribute('data-waveform-progress', '0');
+  });
+
   it('builds the playback waveform from decoded finalized audio bytes instead of static data', async () => {
     const audioSamples = Float32Array.from([0, 0.2, -0.6, 0.1, 0.9, -0.4, 0.05, -0.8]);
     const decodeAudioData = vi.fn(async (_audioData: ArrayBuffer) => ({
@@ -1174,6 +1306,82 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
+  it('ignores supplement waveform pointer movement until a scrub starts on the waveform', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:attachment-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        attachmentId: request.attachmentId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = {
+      ...birthdayDetail,
+      attachmentCount: 1,
+      segments: [
+        {
+          ...birthdayDetail.segments[0],
+          attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_birthday',
+              segmentId: 'seg_birthday_voice',
+              attachmentId: 'att_birthday_followup',
+              type: 'audio',
+              title: '补充录音',
+              createdAt: '2026-05-06T13:11:00.000',
+              updatedAt: '2026-05-06T13:11:05.000',
+              durationMs: 5_000,
+              audioByteLength: 3,
+              transcript: { exists: false },
+            },
+          ],
+        },
+      ],
+    };
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_move_without_scrub',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充' }));
+    const supplements = await within(content).findByRole('region', { name: '片段补充内容' });
+    const slider = await within(supplements).findByRole('slider', { name: '补充录音播放进度' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({
+      bottom: 42,
+      height: 42,
+      left: 0,
+      right: 200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 200,
+      x: 0,
+      y: 0,
+    });
+
+    fireEvent.pointerMove(slider, { buttons: 1, clientX: 150, pointerId: 1 });
+
+    expect(slider).toHaveAttribute('aria-valuenow', '0');
+    expect(slider).toHaveAttribute('aria-valuetext', '00:00 / 00:05');
+    expect(slider).toHaveAttribute('data-waveform-progress', '0');
+  });
+
   it('moves newly created SegmentAttachment recordings into the Supplement tab when they first appear', async () => {
     const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -1280,6 +1488,10 @@ describe('LoadedWorkspaceFrame', () => {
     expect(document.querySelector('[data-slot="workspace-expression-fab-layer"]')).toHaveClass(
       'right-24',
       'sm:right-40'
+    );
+    expect(document.querySelector('[data-slot="workspace-expression-fab-track"]')).toHaveClass(
+      'mx-auto',
+      'max-w-[var(--workspace-stage-max-width)]'
     );
     expect(screen.getByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();

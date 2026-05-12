@@ -217,7 +217,10 @@ function measurementExpression() {
     const appShellPanelContent = document.querySelector('[data-slot="app-shell-panel-content"]');
     const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
     const workspaceStageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
+    const workspaceStageContent = document.querySelector('[data-slot="workspace-stage-content"]');
+    const workspaceFabTrack = document.querySelector('[data-slot="workspace-expression-fab-track"]');
     const workspaceRailShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
+    const studioLayout = studio.querySelector('[data-slot="memory-studio-layout"]');
     const scroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const items = Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-item"]'));
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
@@ -281,6 +284,15 @@ function measurementExpression() {
     });
 
     const playerTimeStyle = playerTime ? getComputedStyle(playerTime) : null;
+    const stageContentRect =
+      workspaceStageContent ? rectOf(workspaceStageContent) : null;
+    const stageShellRect = workspaceStageShell ? rectOf(workspaceStageShell) : null;
+    const fabTrackRect = workspaceFabTrack ? rectOf(workspaceFabTrack) : null;
+    const studioRect = rectOf(studio);
+    const studioLayoutRect = studioLayout ? rectOf(studioLayout) : null;
+    const stageContentStyle = workspaceStageContent
+      ? getComputedStyle(workspaceStageContent)
+      : null;
 
     return {
       ok: true,
@@ -303,7 +315,18 @@ function measurementExpression() {
       },
       workspace: {
         frameRect: workspaceFrame ? rectOf(workspaceFrame) : null,
-        stageShellRect: workspaceStageShell ? rectOf(workspaceStageShell) : null,
+        stageShellRect,
+        stageContentRect,
+        fabTrackRect,
+        stageContentMaxWidth: stageContentStyle ? stageContentStyle.maxWidth : null,
+        stageContentLeftGutter:
+          stageShellRect && stageContentRect ? stageContentRect.left - stageShellRect.left : null,
+        stageContentRightGutter:
+          stageShellRect && stageContentRect ? stageShellRect.right - stageContentRect.right : null,
+        fabTrackLeftGutter:
+          stageShellRect && fabTrackRect ? fabTrackRect.left - stageShellRect.left : null,
+        fabTrackRightGutter:
+          stageShellRect && fabTrackRect ? stageShellRect.right - fabTrackRect.right : null,
         railShellRect: workspaceRailShell ? rectOf(workspaceRailShell) : null,
         railMode: workspaceRailShell ? workspaceRailShell.getAttribute('data-rail-mode') : null,
         railHidden: workspaceRailShell
@@ -315,7 +338,8 @@ function measurementExpression() {
           : null,
         railShellOverflow: workspaceRailShell ? getComputedStyle(workspaceRailShell).overflow : null,
       },
-      studioRect: rectOf(studio),
+      studioRect,
+      studioLayoutRect,
       contentPanelRect: contentPanel ? rectOf(contentPanel) : null,
       standaloneTimelineExists: Boolean(nav),
       stripScrollOwnerCount: studio.querySelectorAll('[data-slot="memory-studio-segment-strip-scroll"]').length,
@@ -472,6 +496,63 @@ function assertMetrics(metrics, options) {
     metrics.viewport,
     tolerance
   );
+  assertRectInsideViewport(
+    failures,
+    'Workspace stage content',
+    metrics.workspace.stageContentRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Workspace expression FAB track',
+    metrics.workspace.fabTrackRect,
+    metrics.viewport,
+    tolerance
+  );
+  if (metrics.workspace.stageContentMaxWidth !== '1120px') {
+    failures.push(
+      `Expected Workspace stage content max-width 1120px; received ${metrics.workspace.stageContentMaxWidth}.`
+    );
+  }
+  if (
+    metrics.workspace.stageContentLeftGutter === null ||
+    metrics.workspace.stageContentRightGutter === null ||
+    Math.abs(metrics.workspace.stageContentLeftGutter - metrics.workspace.stageContentRightGutter) >
+      tolerance
+  ) {
+    failures.push(
+      `Expected Workspace stage content gutters to be symmetric; left=${metrics.workspace.stageContentLeftGutter?.toFixed(2) ?? 'missing'}, right=${metrics.workspace.stageContentRightGutter?.toFixed(2) ?? 'missing'}.`
+    );
+  }
+  if (
+    metrics.workspace.fabTrackLeftGutter === null ||
+    metrics.workspace.fabTrackRightGutter === null ||
+    Math.abs(metrics.workspace.fabTrackLeftGutter - metrics.workspace.fabTrackRightGutter) >
+      tolerance
+  ) {
+    failures.push(
+      `Expected Workspace FAB track gutters to match the stage content model; left=${metrics.workspace.fabTrackLeftGutter?.toFixed(2) ?? 'missing'}, right=${metrics.workspace.fabTrackRightGutter?.toFixed(2) ?? 'missing'}.`
+    );
+  }
+  if (
+    metrics.workspace.stageContentRect &&
+    metrics.studioRect &&
+    Math.abs(metrics.workspace.stageContentRect.width - metrics.studioRect.width) > tolerance
+  ) {
+    failures.push(
+      `Expected Memory Studio to fill the stage content track; stage=${metrics.workspace.stageContentRect.width.toFixed(2)}px, studio=${metrics.studioRect.width.toFixed(2)}px.`
+    );
+  }
+  if (
+    metrics.studioLayoutRect &&
+    metrics.studioRect &&
+    Math.abs(metrics.studioLayoutRect.width - metrics.studioRect.width) > tolerance
+  ) {
+    failures.push(
+      `Expected Memory Studio layout to fill its region; layout=${metrics.studioLayoutRect.width.toFixed(2)}px, studio=${metrics.studioRect.width.toFixed(2)}px.`
+    );
+  }
   if (metrics.workspace.railHidden !== true) {
     assertRectInsideViewport(
       failures,
