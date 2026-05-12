@@ -50,3 +50,72 @@
     -webkit-app-region: no-drag;
   }
 }
+
+@utility edge-fade-y {
+  --edge-fade-size: var(--spacing-24);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--edge-fade-size),
+    black calc(100% - var(--edge-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--edge-fade-size),
+    black calc(100% - var(--edge-fade-size)),
+    transparent 100%
+  );
+}
+
+@utility edge-fade-x {
+  --edge-fade-size: var(--spacing-32);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--edge-fade-size),
+    black calc(100% - var(--edge-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--edge-fade-size),
+    black calc(100% - var(--edge-fade-size)),
+    transparent 100%
+  );
+}
+
+@utility scrollbar-hover {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  &::-webkit-scrollbar-thumb,
+  &::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  &:hover,
+  &:focus-within {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 42%, transparent) transparent;
+    scrollbar-width: thin;
+  }
+
+  &:hover::-webkit-scrollbar,
+  &:focus-within::-webkit-scrollbar {
+    width: var(--spacing-8);
+    height: var(--spacing-8);
+  }
+
+  &:hover::-webkit-scrollbar-thumb,
+  &:focus-within::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-full);
+    background-color: color-mix(in oklab, var(--muted-foreground) 42%, transparent);
+  }
+}

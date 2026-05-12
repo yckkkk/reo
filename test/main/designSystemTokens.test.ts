@@ -10,7 +10,7 @@ const lightColorContract = {
   'card-foreground': '#18181b',
   popover: '#ffffff',
   'popover-foreground': '#18181b',
-  primary: '#0447ff',
+  primary: '#18181b',
   'primary-foreground': '#ffffff',
   secondary: '#e5e7eb',
   'secondary-foreground': '#18181b',
@@ -23,9 +23,7 @@ const lightColorContract = {
   scrim: 'rgb(24 24 27 / 0.32)',
   border: 'transparent',
   input: '#f4f4f5',
-  ring: '#0447ff',
-  'brand-blue': '#0447ff',
-  'brand-spectrum': '#3d75d8',
+  ring: '#18181b',
   'brand-ember': '#ff4704',
 } as const;
 
@@ -36,8 +34,8 @@ const darkColorContract = {
   'card-foreground': '#fafafa',
   popover: '#27272a',
   'popover-foreground': '#fafafa',
-  primary: '#3d75d8',
-  'primary-foreground': '#ffffff',
+  primary: '#fafafa',
+  'primary-foreground': '#09090b',
   secondary: '#27272a',
   'secondary-foreground': '#fafafa',
   muted: '#18181b',
@@ -49,9 +47,7 @@ const darkColorContract = {
   scrim: 'rgb(0 0 0 / 0.62)',
   border: 'transparent',
   input: '#18181b',
-  ring: '#3d75d8',
-  'brand-blue': '#0447ff',
-  'brand-spectrum': '#3d75d8',
+  ring: '#fafafa',
   'brand-ember': '#ff4704',
 } as const;
 
@@ -105,6 +101,11 @@ test('design token source defines compact Soft Flat semantic colors', () => {
   for (const [name, expectedValue] of Object.entries(darkColorContract)) {
     assert.equal(tokens.dark[name]?.$value, expectedValue, `dark ${name}`);
   }
+
+  assert.equal(tokens.color['brand-blue'], undefined, 'light brand-blue removed');
+  assert.equal(tokens.color['brand-spectrum'], undefined, 'light brand-spectrum removed');
+  assert.equal(tokens.dark['brand-blue'], undefined, 'dark brand-blue removed');
+  assert.equal(tokens.dark['brand-spectrum'], undefined, 'dark brand-spectrum removed');
 });
 
 test('runtime and design-system CSS project the same semantic tokens', () => {
@@ -124,6 +125,8 @@ test('runtime and design-system CSS project the same semantic tokens', () => {
     for (const [name, expectedValue] of Object.entries(darkColorContract)) {
       assert.equal(cssVariableValue(css, name, 'dark'), expectedValue, path);
     }
+
+    assert.doesNotMatch(css, /--brand-blue|--brand-spectrum/, path);
   }
 });
 

@@ -48,7 +48,7 @@ describe('FloatingActionButtonSpeedDial', () => {
       'mx-auto',
       'w-full'
     );
-    expect(trigger).toHaveClass('!bg-primary', '!rounded-full');
+    expect(trigger).toHaveClass('!bg-brand-ember', '!rounded-full');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveAttribute(
       'aria-controls',

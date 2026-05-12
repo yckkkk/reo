@@ -187,7 +187,7 @@ export function FloatingActionButtonSpeedDial({
       <SpeedDial
         id={id}
         aria-label={open ? closeLabel : openLabel}
-        buttonClassName="!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-primary !text-primary-foreground !transition-colors !duration-200 !ease-out hover:!bg-primary focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background"
+        buttonClassName="!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-brand-ember !text-destructive-foreground !transition-colors !duration-200 !ease-out hover:!bg-brand-ember focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background"
         className="!pointer-events-auto !absolute !bottom-0 !left-[calc(50%-28px)] !z-10"
         direction="up"
         hideIcon={<X className="size-20" strokeWidth={1.8} aria-hidden="true" />}
