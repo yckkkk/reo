@@ -1793,6 +1793,36 @@ async function recoverSegmentAttachmentFinalizeTransactions({
   }
 }
 
+async function segmentAttachmentRecoveryWorkExists({
+  rootPath,
+  recordingDirectory,
+}: {
+  readonly rootPath: string;
+  readonly recordingDirectory: string;
+}): Promise<boolean> {
+  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+    rootPath,
+    path.join(recordingDirectory, 'attachments')
+  );
+  const attachmentEntries = await readExistingDirectoryEntries(attachmentsDirectory);
+  for (const attachmentEntry of attachmentEntries) {
+    if (!attachmentEntry.isDirectory()) {
+      continue;
+    }
+    if (attachmentEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
+      return true;
+    }
+    const attachmentDirectory = await resolveSafeWorkspaceChild(
+      rootPath,
+      path.join(attachmentsDirectory, attachmentEntry.name)
+    );
+    if (await hasFinalizeTransactionMarker(attachmentDirectory)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function readValidFinalizedSegmentFileTruthFromDirectory({
   recordingDirectory,
   memoryId,
@@ -2329,6 +2359,7 @@ export async function recoverRecordingFinalizeTransactions(
     }
     const validSegmentIds = new Set<string>();
     let markerBearingRecordingFound = false;
+    let needsFileTruthRecovery = false;
 
     for (const recordingEntry of recordingEntries) {
       if (!segmentsDirectory) {
@@ -2345,6 +2376,7 @@ export async function recoverRecordingFinalizeTransactions(
         });
         const hasMarker = await hasFinalizeTransactionMarker(recordingDirectory);
         const hasPayload = await finalizedPayloadExists(recordingDirectory);
+        needsFileTruthRecovery ||= hasMarker;
         if (finalizedSegmentFileTruth || (!hasMarker && hasPayload)) {
           markerBearingRecordingFound = markerBearingRecordingFound || !memory;
           continue;
@@ -2362,8 +2394,15 @@ export async function recoverRecordingFinalizeTransactions(
         continue;
       }
       if (!(await hasFinalizeTransactionMarker(recordingDirectory))) {
+        if (memory) {
+          needsFileTruthRecovery ||= await segmentAttachmentRecoveryWorkExists({
+            rootPath,
+            recordingDirectory,
+          }).catch(() => false);
+        }
         continue;
       }
+      needsFileTruthRecovery = true;
       const finalizedSegmentFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
         memoryId,
         recordingDirectory,
@@ -2444,6 +2483,9 @@ export async function recoverRecordingFinalizeTransactions(
         memoryId,
         assertRecoveryWorkspaceUsable
       );
+      continue;
+    }
+    if (!needsFileTruthRecovery) {
       continue;
     }
     const fileTruthSegments = await listValidFinalizedSegmentFileTruths(rootPath, memoryId).catch(

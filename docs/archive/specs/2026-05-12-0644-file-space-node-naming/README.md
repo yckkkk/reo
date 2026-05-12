@@ -119,7 +119,7 @@
 - Main RED：打开已导入记忆空间只 resolve 当前 entry，不先 list/协调全部 registry entry。
 - Main RED：当合法 Segment 文件空间节点存在但 `memory.json.segmentIds` mirror 遗漏该 id 时，`updateSegmentTitleFromFileTruth` 仍能重命名该 Segment，并修复 mirror。
 - Main RED：当合法 Segment 文件空间节点存在但 `memory.json.segmentIds` mirror 遗漏该 id 时，`readMemoryDetailFromFileTruth` 仍投影该 Segment。
-- Main RED：recovery 从合法 Segment 文件空间节点修复 `memory.json.segmentIds` mirror。
+- Main RED：无 finalize marker 时 recovery 不为修复 `memory.json.segmentIds` mirror 全量读取 Segment metadata；带 marker 的合法 Segment 文件空间节点仍会在 recovery 中修复 mirror。
 - Main RED：带 finalize marker 的合法 Segment 文件空间节点即使不在 `memory.json.segmentIds` mirror 中，recovery 也必须保留该节点、清理 marker 并修复 mirror。
 - Main RED：Workspace title update 遇到合法 `.reo/index.json` 时不得 rebuild memory file truth。
 
@@ -127,9 +127,10 @@
 
 - `npm run test:renderer -- src/renderer/src/App.test.tsx -t "does not refresh the active workspace on focus-only events|skips child query invalidation when external JSON refresh returns the same snapshot|refreshes the open workspace snapshot from external JSON edits when the document becomes visible|ignores stale workspace refresh responses when visibility events overlap"` 通过：4 个目标测试覆盖 focus-only 不刷新、相同 snapshot 不重刷、visibility refresh 和 stale response。
 - `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "marker-bearing valid segment file-space node missing from segmentIds mirror" .tmp/test-main/test/main/memoryFiles.test.js` RED 失败：旧 recovery 删除了合法 marker-bearing Segment 文件空间节点。
-- `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "missing the valid file-space node|missing from the segmentIds mirror|repairs segmentIds mirror from valid segment file-space nodes|marker-bearing valid segment file-space node missing from segmentIds mirror" .tmp/test-main/test/main/memoryFiles.test.js` 通过：4 个目标测试覆盖 Segment file-space node truth 和 `segmentIds` mirror 修复。
+- `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "missing the valid file-space node|missing from the segmentIds mirror|repairs segmentIds mirror from valid segment file-space nodes|marker-bearing valid segment file-space node missing from segmentIds mirror" .tmp/test-main/test/main/memoryFiles.test.js` 通过：4 个目标测试覆盖 Segment file-space node truth 和 marker-bearing `segmentIds` mirror 修复。
 - `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "workspace title update uses a valid index without rebuilding memory file truth" .tmp/test-main/test/main/workspaceFiles.test.js` RED 失败：旧 Workspace title update 会 rebuild memory file truth。
 - `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "workspace title update uses a valid index without rebuilding memory file truth" .tmp/test-main/test/main/workspaceFiles.test.js` 通过：Workspace title update 在合法 index 存在时走 cache，不全量扫描 Memory 文件树。
+- `npx tsc -p tsconfig.main.test.json && node --test --test-name-pattern "recovery leaves stale segmentIds mirror|recovery does not scan file truth only|recovery preserves marker-bearing valid segment|recovery preserves externally renamed valid segments|recovery clears finalized attachment markers" .tmp/test-main/test/main/memoryFiles.test.js` RED 后通过：无 marker recovery 不为 mirror 修复读取完整 Segment file truth；marker-bearing Segment 和 Attachment recovery 仍收口。
 - `npx tsc -p tsconfig.main.test.json` 通过。
 - `npx vitest run src/renderer/src/App.test.tsx src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/workspace/ForbiddenCapabilities.test.tsx` 通过：3 个文件、77 个测试。
 - `npm run test:main` 通过：335 个 main/preload 测试。

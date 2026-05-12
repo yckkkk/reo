@@ -3773,7 +3773,7 @@ test('recovery removes stale drafts for finalized segments before clearing marke
   await assert.rejects(stat(path.join(recordingDirectory, '.reo-finalize-transaction.json')));
 });
 
-test('repairs memory metadata that points at a missing finalized audio segment during recovery', async () => {
+test('recovery leaves stale segmentIds mirror alone when no finalize marker exists', async () => {
   const rootPath = await workspaceRoot();
   await writeMemoryJsonForTest(rootPath, {
     memoryId: 'mem_existing',
@@ -3789,7 +3789,7 @@ test('repairs memory metadata that points at a missing finalized audio segment d
     title: 'Existing memory',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: [],
+    segmentIds: ['seg_missing'],
   });
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
@@ -3809,7 +3809,7 @@ test('repairs memory metadata that points at a missing finalized audio segment d
   });
 });
 
-test('recovery repairs segmentIds mirror from valid segment file-space nodes', async () => {
+test('recovery does not scan file truth only to repair segmentIds mirror without a marker', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_file_space_nodes';
   const segmentId = 'seg_20260512_recovery_file_space_node';
@@ -3834,8 +3834,17 @@ test('recovery repairs segmentIds mirror from valid segment file-space nodes', a
         readonly segmentIds: readonly string[];
       }
     ).segmentIds,
-    [segmentId]
+    []
   );
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments[0]?.segmentId, segmentId);
+  }
 });
 
 test('recovery preserves marker-bearing valid segment file-space node missing from segmentIds mirror', async () => {
@@ -3890,14 +3899,15 @@ test('recovery preserves externally renamed valid segments whose title starts li
   await recoverRecordingFinalizeTransactions(rootPath);
 
   await stat(path.join(recordingDirectory, 'segment.json'));
-  assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
-    [segmentId]
-  );
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments[0]?.segmentId, segmentId);
+  }
 });
 
 test('recovery clears finalized attachment markers after stale draft cleanup', async () => {
@@ -4402,7 +4412,7 @@ test('recovery preserves renamed marker-bearing durable recording when finalized
   });
 });
 
-test('recovery ignores symlinked finalize markers when repairing invalid segments', async () => {
+test('recovery ignores symlinked finalize markers without repairing invalid segments', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_marker_symlink';
   const segmentId = 'seg_20260506_recovery_marker_symlink';
@@ -4430,8 +4440,17 @@ test('recovery ignores symlinked finalize markers when repairing invalid segment
     title: 'Recovery marker symlink',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: [],
+    segmentIds: [segmentId],
   });
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments.length, 0);
+  }
 });
 
 test('recovery preserves metadata-less marker-bearing finalized segments', async () => {
@@ -4522,7 +4541,7 @@ test('recovery ignores symlinked segments directories without deleting outside f
   await stat(outsideStaging);
 });
 
-test('recovery drops recording references whose leaf directory is a symlink', async () => {
+test('recovery leaves recording references whose leaf directory is a symlink to read-time truth', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_leaf_symlink';
   const segmentId = 'seg_recovery_leaf_symlink';
@@ -4571,9 +4590,18 @@ test('recovery drops recording references whose leaf directory is a symlink', as
       title: 'Leaf symlink',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
-      segmentIds: [],
+      segmentIds: [segmentId],
     }
   );
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments.length, 0);
+  }
 });
 
 test('recovery does not delete outside staging after segments cleanup validation', async () => {
