@@ -2,9 +2,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppShell,
-  type ThemeMode,
   type WorkspaceMemorySpace as SidebarWorkspaceMemorySpace,
 } from './app-shell/AppShell';
+import {
+  cycleThemePreference,
+  readThemePreference,
+  resolveEffectiveTheme,
+  SYSTEM_DARK_MEDIA_QUERY,
+  writeThemePreference,
+  type ThemePreference,
+} from './app-shell/themePreference';
 import { ReoToaster, toast } from './components/ui/toaster';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
@@ -316,7 +323,16 @@ export function App() {
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
+    readThemePreference()
+  );
+  const [isSystemDark, setIsSystemDark] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia(SYSTEM_DARK_MEDIA_QUERY).matches;
+  });
+  const effectiveTheme = resolveEffectiveTheme(themePreference, isSystemDark);
   const [segmentFocusIntent, setSegmentFocusIntent] = useState<SegmentFocusIntent | null>(null);
   const lastWorkspaceErrorToastRef = useRef<string | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
@@ -372,8 +388,25 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset['theme'] = themeMode;
-  }, [themeMode]);
+    document.documentElement.dataset['theme'] = effectiveTheme;
+  }, [effectiveTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(SYSTEM_DARK_MEDIA_QUERY);
+    const syncSystemDark = (event?: MediaQueryListEvent) => {
+      setIsSystemDark(event?.matches ?? mediaQuery.matches);
+    };
+
+    syncSystemDark();
+    mediaQuery.addEventListener('change', syncSystemDark);
+    return () => {
+      mediaQuery.removeEventListener('change', syncSystemDark);
+    };
+  }, []);
 
   useEffect(() => {
     if (!recordingTarget || !recordingCloseBlocked) {
@@ -503,8 +536,13 @@ export function App() {
     };
   }, [queryClient, recordingTarget, setWorkspaceSession, workspaceSession]);
 
-  function toggleTheme() {
-    setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'));
+  const setThemePreference = useCallback((next: ThemePreference) => {
+    setThemePreferenceState(next);
+    writeThemePreference(next);
+  }, []);
+
+  function cyclePreference() {
+    setThemePreference(cycleThemePreference(themePreference));
   }
 
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
@@ -1028,7 +1066,8 @@ export function App() {
         ]
       : memorySpaces;
   const shellProps = {
-    themeMode,
+    themePreference,
+    effectiveTheme,
     memorySpaces: visibleWorkspaceMemorySpaces,
     onCreateWorkspace: openWorkspaceCreateDialog,
     onHome: () => {
@@ -1037,7 +1076,7 @@ export function App() {
     onLibrary: () => {
       void navigateLibrary();
     },
-    onToggleTheme: toggleTheme,
+    onCycleThemePreference: cyclePreference,
     onOpenLocalWorkspace: () => {
       void handleOpenLocalWorkspace();
     },
@@ -1087,7 +1126,7 @@ export function App() {
   if (!workspaceSession) {
     return (
       <>
-        <ReoToaster themeMode={themeMode} />
+        <ReoToaster themeMode={effectiveTheme} />
         <AppShell
           {...shellProps}
           activeSection={workspaceView.name === 'library' ? 'library' : 'home'}
@@ -1914,7 +1953,7 @@ export function App() {
 
   return (
     <>
-      <ReoToaster themeMode={themeMode} />
+      <ReoToaster themeMode={effectiveTheme} />
       <AppShell
         {...shellProps}
         activeWorkspaceId={activeWorkspaceSession.workspaceId}

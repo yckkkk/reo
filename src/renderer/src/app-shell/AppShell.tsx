@@ -4,6 +4,7 @@ import {
   Home,
   Library,
   Menu,
+  MonitorSmartphone,
   MoreHorizontal,
   Moon,
   PanelLeftClose,
@@ -22,10 +23,11 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import type { ThemeMode, ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
 export type AppShellActiveSection = 'home' | 'library' | 'workspace';
-export type ThemeMode = 'light' | 'dark';
+export type { ThemeMode, ThemePreference } from './themePreference';
 
 export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
@@ -59,10 +61,23 @@ type AppShellProps = {
   readonly onRenameMemorySpace?: ((memorySpace: WorkspaceMemorySpace) => void) | undefined;
   readonly onRemoveMemorySpace?: ((memorySpace: WorkspaceMemorySpace) => void) | undefined;
   readonly onSelectMemorySpace?: ((workspaceId: string) => void) | undefined;
-  readonly onToggleTheme: () => void;
-  readonly themeMode: ThemeMode;
+  readonly onCycleThemePreference: () => void;
+  readonly themePreference: ThemePreference;
+  readonly effectiveTheme: ThemeMode;
   readonly memorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
   readonly panelTitlebar?: React.ReactNode;
+};
+
+const THEME_PREFERENCE_ICON: Record<ThemePreference, typeof Sun> = {
+  light: Sun,
+  dark: Moon,
+  system: MonitorSmartphone,
+};
+
+const THEME_CYCLE_LABEL: Record<ThemePreference, string> = {
+  light: '切换到深色模式',
+  dark: '切换到跟随系统',
+  system: '切换到浅色模式',
 };
 
 export type WorkspaceMemorySpace = {
@@ -95,9 +110,10 @@ export function AppShell({
   onRenameMemorySpace,
   onRemoveMemorySpace,
   onSelectMemorySpace,
-  onToggleTheme,
+  onCycleThemePreference,
   panelTitlebar,
-  themeMode,
+  themePreference,
+  effectiveTheme,
   memorySpaces = [],
 }: AppShellProps) {
   const [sidebarState, setSidebarState] = React.useState<AppShellState>('expanded');
@@ -153,8 +169,8 @@ export function AppShell({
   const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
-  const ThemeToggleIcon = themeMode === 'dark' ? Sun : Moon;
-  const themeToggleLabel = themeMode === 'dark' ? '切换到浅色模式' : '切换到深色模式';
+  const ThemeCycleIcon = THEME_PREFERENCE_ICON[themePreference];
+  const themeCycleLabel = THEME_CYCLE_LABEL[themePreference];
   const currentSection = activeSection ?? (activeWorkspaceId ? 'workspace' : 'home');
   const homeCurrent = currentSection === 'home';
   const libraryCurrent = currentSection === 'library';
@@ -206,7 +222,7 @@ export function AppShell({
     <TooltipProvider>
       <div
         data-slot="app-shell-root"
-        data-theme={themeMode}
+        data-theme={effectiveTheme}
         className="relative h-screen min-h-0 w-screen overflow-hidden bg-background text-foreground"
       >
         <div
@@ -430,11 +446,15 @@ export function AppShell({
           <div className="mt-auto flex items-center">
             <Tooltip>
               <Button asChild variant="ghostIcon" size="icon">
-                <TooltipTrigger type="button" aria-label={themeToggleLabel} onClick={onToggleTheme}>
-                  <ThemeToggleIcon className="size-16" aria-hidden="true" />
+                <TooltipTrigger
+                  type="button"
+                  aria-label={themeCycleLabel}
+                  onClick={onCycleThemePreference}
+                >
+                  <ThemeCycleIcon className="size-16" aria-hidden="true" />
                 </TooltipTrigger>
               </Button>
-              <TooltipContent side="right">{themeToggleLabel}</TooltipContent>
+              <TooltipContent side="right">{themeCycleLabel}</TooltipContent>
             </Tooltip>
           </div>
 

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, mergeMemoryIntoSession } from './App';
+import { THEME_PREFERENCE_STORAGE_KEY } from './app-shell/themePreference';
 import { ReoQueryProvider } from './queryClient';
 
 describe('App', () => {
@@ -369,6 +370,8 @@ describe('App', () => {
       },
     });
 
+    window.localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, 'light');
+
     render(
       <ReoQueryProvider>
         <App />
@@ -408,6 +411,67 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '记忆' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
+  });
+
+  it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(prefers-color-scheme: dark)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(() => false),
+      }))
+    );
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const shell = await screen.findByRole('main', { name: '记忆空间内容' });
+    const themedRoot = shell.closest('[data-theme]');
+    expect(themedRoot).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(screen.getByRole('button', { name: '切换到浅色模式' })).toBeInTheDocument();
+    expect(window.localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY)).toBeNull();
+  });
+
+  it('persists the chosen theme preference across remounts and cycles through all three states', async () => {
+    const user = userEvent.setup();
+
+    const { unmount } = render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: '切换到浅色模式' }));
+    expect(window.localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY)).toBe('light');
+
+    await user.click(screen.getByRole('button', { name: '切换到深色模式' }));
+    expect(window.localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY)).toBe('dark');
+
+    await user.click(screen.getByRole('button', { name: '切换到跟随系统' }));
+    expect(window.localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY)).toBe('system');
+
+    window.localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, 'dark');
+    unmount();
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const shell = await screen.findByRole('main', { name: '记忆空间内容' });
+    expect(shell.closest('[data-theme]')).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
   });
 
   it('uses the titlebar Memory control to collapse and expand the workspace Memory list', async () => {

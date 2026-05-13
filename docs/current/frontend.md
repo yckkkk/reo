@@ -11,7 +11,7 @@
 - 当前设计系统是黑色为主、红色为辅的 Soft Flat Design System：纯白或极深灰画布、低对比灰度容器、无同平面描边、基础组件无阴影、浮层使用克制 Z 轴投影、黑色用于核心动作和明确状态，红色用于表达入口、录音主按钮和危险/高注意力状态。
 - `src/renderer/src/index.css` 负责 Tailwind v4 import、`data-theme="dark"` dark variant、Electron drag/no-drag utility、全局不可选中文本和输入/转录类文本可选中规则。
 - `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x` 和 `scrollbar-hover`。它们用于可滚动内容边缘渐隐和 hover/focus 时才显露滚动条的文本容器，不由业务组件重复实现 gradient overlay、mask 或 scrollbar 规则。
-- 当前 App shell 支持浅色/深色主题切换；主题状态由 `App` 持有，并通过 App shell `data-theme="light|dark"` 与 document 根节点 `data-theme` 驱动 token 级联，确保 Radix portal 内容也继承当前主题。
+- 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme` 与 document 根节点 `data-theme` 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容也继承当前主题。侧边栏底部使用单按钮循环 `浅色 → 深色 → 跟随系统 → 浅色`，按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
 - 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。

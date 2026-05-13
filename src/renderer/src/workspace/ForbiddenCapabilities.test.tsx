@@ -23,7 +23,13 @@ describe('forbidden first-slice capabilities', () => {
   it('does not show future media, AI, auth, or global search capabilities', () => {
     render(
       <ReoQueryProvider>
-        <AppShell themeMode="light" onHome={() => {}} onLibrary={() => {}} onToggleTheme={() => {}}>
+        <AppShell
+          themePreference="light"
+          effectiveTheme="light"
+          onHome={() => {}}
+          onLibrary={() => {}}
+          onCycleThemePreference={() => {}}
+        >
           <LoadedWorkspaceFrame
             workspaceSession={workspaceSession}
             onDeleteMemory={() => {}}

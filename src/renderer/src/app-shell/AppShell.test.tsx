@@ -2,13 +2,20 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppShell, TITLEBAR_HEIGHT, type ThemeMode } from './AppShell';
+import { AppShell, TITLEBAR_HEIGHT } from './AppShell';
+import {
+  cycleThemePreference,
+  resolveEffectiveTheme,
+  type ThemePreference,
+} from './themePreference';
 
 describe('AppShell', () => {
   function TestAppShell({
     activeWorkspaceId,
     activeSection,
     children,
+    initialThemePreference = 'light',
+    isSystemDark = false,
     onCreateWorkspace = vi.fn(),
     onHome,
     onLibrary = vi.fn(),
@@ -23,6 +30,8 @@ describe('AppShell', () => {
     readonly activeWorkspaceId?: string;
     readonly activeSection?: 'home' | 'library' | 'workspace';
     readonly children: ReactNode;
+    readonly initialThemePreference?: ThemePreference;
+    readonly isSystemDark?: boolean;
     readonly onCreateWorkspace?: () => void;
     readonly onHome?: () => void;
     readonly onLibrary?: () => void;
@@ -37,17 +46,18 @@ describe('AppShell', () => {
       readonly workspaceId: string;
     }>;
   }) {
-    const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+    const [themePreference, setThemePreference] = useState<ThemePreference>(initialThemePreference);
 
     return (
       <AppShell
         activeWorkspaceId={activeWorkspaceId}
         activeSection={activeSection}
-        themeMode={themeMode}
+        themePreference={themePreference}
+        effectiveTheme={resolveEffectiveTheme(themePreference, isSystemDark)}
         memorySpaces={memorySpaces}
         onCreateWorkspace={onCreateWorkspace}
-        onToggleTheme={() =>
-          setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'))
+        onCycleThemePreference={() =>
+          setThemePreference((current) => cycleThemePreference(current))
         }
         onHome={onHome ?? (() => {})}
         onLibrary={onLibrary}
@@ -346,9 +356,9 @@ describe('AppShell', () => {
     expect(screen.queryByRole('menu', { name: 'reo 更多操作' })).not.toBeInTheDocument();
   });
 
-  it('toggles the app theme from the sidebar tool area', () => {
+  it('cycles theme preference light → dark → system → light from the sidebar tool area', () => {
     render(
-      <TestAppShell>
+      <TestAppShell initialThemePreference="light" isSystemDark={false}>
         <div>Starter home</div>
       </TestAppShell>
     );
@@ -357,7 +367,25 @@ describe('AppShell', () => {
     expect(shell).toHaveAttribute('data-theme', 'light');
 
     fireEvent.click(screen.getByRole('button', { name: '切换到深色模式' }));
+    expect(shell).toHaveAttribute('data-theme', 'dark');
 
+    fireEvent.click(screen.getByRole('button', { name: '切换到跟随系统' }));
+    expect(shell).toHaveAttribute('data-theme', 'light');
+    expect(screen.getByRole('button', { name: '切换到浅色模式' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '切换到浅色模式' }));
+    expect(shell).toHaveAttribute('data-theme', 'light');
+    expect(screen.getByRole('button', { name: '切换到深色模式' })).toBeInTheDocument();
+  });
+
+  it('renders effective dark theme when preference is "system" and the OS reports dark', () => {
+    render(
+      <TestAppShell initialThemePreference="system" isSystemDark>
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    const shell = screen.getByRole('main', { name: '记忆空间内容' }).closest('[data-theme]');
     expect(shell).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByRole('button', { name: '切换到浅色模式' })).toBeInTheDocument();
   });
