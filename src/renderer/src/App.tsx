@@ -397,15 +397,9 @@ export function App() {
     }
 
     const mediaQuery = window.matchMedia(SYSTEM_DARK_MEDIA_QUERY);
-    const syncSystemDark = (event?: MediaQueryListEvent) => {
-      setIsSystemDark(event?.matches ?? mediaQuery.matches);
-    };
-
-    syncSystemDark();
-    mediaQuery.addEventListener('change', syncSystemDark);
-    return () => {
-      mediaQuery.removeEventListener('change', syncSystemDark);
-    };
+    const handleChange = (event: MediaQueryListEvent) => setIsSystemDark(event.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
   useEffect(() => {

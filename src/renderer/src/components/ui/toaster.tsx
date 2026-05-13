@@ -1,5 +1,5 @@
 import { Toaster, toast } from 'sonner';
-import type { ThemeMode } from '@/app-shell/AppShell';
+import type { ThemeMode } from '@/app-shell/themePreference';
 
 type ReoToasterProps = {
   readonly themeMode: ThemeMode;

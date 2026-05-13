@@ -10,37 +10,13 @@ function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === 'string' && (PREFERENCE_VALUES as readonly string[]).includes(value);
 }
 
-function browserStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 export function readThemePreference(): ThemePreference {
-  const storage = browserStorage();
-  if (!storage) {
-    return 'system';
-  }
-  try {
-    const raw = storage.getItem(THEME_PREFERENCE_STORAGE_KEY);
-    return isThemePreference(raw) ? raw : 'system';
-  } catch {
-    return 'system';
-  }
+  const raw = window.localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY);
+  return isThemePreference(raw) ? raw : 'system';
 }
 
 export function writeThemePreference(preference: ThemePreference): void {
-  const storage = browserStorage();
-  if (!storage) {
-    return;
-  }
-  try {
-    storage.setItem(THEME_PREFERENCE_STORAGE_KEY, preference);
-  } catch {
-    // Preference is best-effort renderer state; in-memory value still drives the current session.
-  }
+  window.localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, preference);
 }
 
 export function resolveEffectiveTheme(

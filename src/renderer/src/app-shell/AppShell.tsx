@@ -23,11 +23,10 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { ThemeMode, ThemePreference } from './themePreference';
+import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
 export type AppShellActiveSection = 'home' | 'library' | 'workspace';
-export type { ThemeMode, ThemePreference } from './themePreference';
 
 export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
@@ -68,16 +67,10 @@ type AppShellProps = {
   readonly panelTitlebar?: React.ReactNode;
 };
 
-const THEME_PREFERENCE_ICON: Record<ThemePreference, typeof Sun> = {
-  light: Sun,
-  dark: Moon,
-  system: MonitorSmartphone,
-};
-
-const THEME_CYCLE_LABEL: Record<ThemePreference, string> = {
-  light: '切换到深色模式',
-  dark: '切换到跟随系统',
-  system: '切换到浅色模式',
+const THEME_STATE_VIEW: Record<ThemePreference, { icon: typeof Sun; label: string }> = {
+  light: { icon: Sun, label: '切换到浅色模式' },
+  dark: { icon: Moon, label: '切换到深色模式' },
+  system: { icon: MonitorSmartphone, label: '切换到跟随系统' },
 };
 
 export type WorkspaceMemorySpace = {
@@ -169,8 +162,8 @@ export function AppShell({
   const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
-  const ThemeCycleIcon = THEME_PREFERENCE_ICON[themePreference];
-  const themeCycleLabel = THEME_CYCLE_LABEL[themePreference];
+  const ThemeCycleIcon = THEME_STATE_VIEW[themePreference].icon;
+  const themeCycleLabel = THEME_STATE_VIEW[cycleThemePreference(themePreference)].label;
   const currentSection = activeSection ?? (activeWorkspaceId ? 'workspace' : 'home');
   const homeCurrent = currentSection === 'home';
   const libraryCurrent = currentSection === 'library';
