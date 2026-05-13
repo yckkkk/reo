@@ -926,8 +926,10 @@ describe('App', () => {
       within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
     ).toHaveClass('rounded-sm');
     expect(titlebar.querySelector('[data-slot="breadcrumb-list"]')).toHaveClass('gap-4');
-    expect(titlebar.querySelector('[data-slot="workspace-titlebar-actions"]')).toHaveClass('mr-16');
-    expect(titlebar.querySelector('[data-slot="workspace-titlebar"]')).toHaveClass('px-28');
+    expect(titlebar.querySelector('[data-slot="workspace-titlebar"]')).toHaveClass(
+      'pl-28',
+      'pr-12'
+    );
     expect(titlebar.querySelector('[data-slot="breadcrumb"]')?.querySelector('svg')).toBeNull();
     const breadcrumbSeparator = titlebar.querySelector('[data-slot="breadcrumb-separator"]');
     expect(breadcrumbSeparator?.querySelector('svg')).toBeNull();

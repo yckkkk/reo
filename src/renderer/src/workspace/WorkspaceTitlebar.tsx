@@ -44,7 +44,7 @@ export function WorkspaceTitlebar({
   return (
     <div
       data-slot="workspace-titlebar"
-      className="flex h-full w-full items-center justify-between gap-16 px-28"
+      className="flex h-full w-full items-center justify-between gap-16 pl-28 pr-12 transition-[padding-left] duration-200 ease-out motion-reduce:transition-none group-data-[sidebar-state=expanded]/panel-titlebar:pl-12"
     >
       <Breadcrumb
         className="pointer-events-auto min-w-0 [-webkit-app-region:no-drag]"
@@ -57,7 +57,7 @@ export function WorkspaceTitlebar({
                 <button
                   type="button"
                   aria-label={`${title} 记忆空间操作`}
-                  className="inline-flex max-w-[220px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+                  className="inline-flex max-w-[220px] items-center gap-3 rounded-sm px-4 py-4 text-body font-regular leading-body text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                 >
                   <span className="min-w-0 truncate">{title}</span>
                 </button>
@@ -80,7 +80,7 @@ export function WorkspaceTitlebar({
                       <button
                         type="button"
                         aria-label={`${currentMemory.title} 记忆操作`}
-                        className="inline-flex max-w-[260px] items-center gap-3 rounded-sm px-4 py-4 text-body-lg font-medium leading-body-lg text-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary"
+                        className="inline-flex max-w-[260px] items-center gap-3 rounded-sm px-4 py-4 text-body font-medium leading-body text-foreground outline-none transition-colors duration-150 ease-out hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary"
                       >
                         <span className="min-w-0 truncate">{currentMemory.title}</span>
                       </button>
@@ -104,7 +104,7 @@ export function WorkspaceTitlebar({
       </Breadcrumb>
       <div
         data-slot="workspace-titlebar-actions"
-        className="pointer-events-auto mr-16 flex items-center gap-8 [-webkit-app-region:no-drag]"
+        className="pointer-events-auto flex items-center gap-8 [-webkit-app-region:no-drag]"
       >
         <Tooltip>
           <Button asChild variant="ghostIcon" size="icon">

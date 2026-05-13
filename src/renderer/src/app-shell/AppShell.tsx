@@ -253,7 +253,8 @@ export function AppShell({
           {panelTitlebar ? (
             <div
               data-slot="app-shell-panel-titlebar-content"
-              className={`pointer-events-none absolute flex h-[48px] items-center ${panelMotionClass}`}
+              data-sidebar-state={sidebarState}
+              className={`group/panel-titlebar pointer-events-none absolute flex h-[48px] items-center ${panelMotionClass}`}
               style={{
                 left: panelTitlebarLeft,
                 right: 0,

@@ -932,7 +932,7 @@ export function MemoryStudio({
                 waveformSource={playbackWaveformSource}
               />
 
-              <div className="mt-12 flex shrink-0 items-center justify-between gap-8">
+              <div className="mt-32 flex shrink-0 items-center justify-between gap-8">
                 <div
                   role="tablist"
                   aria-label="片段内容类型"
@@ -1021,7 +1021,7 @@ export function MemoryStudio({
                 <section
                   aria-label="片段转录"
                   data-slot="memory-studio-transcript-scroll"
-                  className="edge-fade-y scrollbar-hover mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                  className="edge-fade-y scrollbar-hover mt-4 min-h-0 flex-1 overflow-y-auto pl-8 pr-8 pb-6"
                 >
                   {segmentContentQuery.isLoading ? (
                     <p className="text-body leading-body text-muted-foreground">
@@ -1045,7 +1045,7 @@ export function MemoryStudio({
                 <section
                   aria-label="片段补充内容"
                   data-slot="memory-studio-supplements-scroll"
-                  className="mt-10 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                  className="mt-4 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
                 >
                   {selectedSegmentAttachments.map((attachment) => (
                     <SegmentAttachmentAudioPlayer
