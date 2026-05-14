@@ -24,6 +24,7 @@ import {
   handleCreateSegmentAttachmentRecordingDraftForTest,
   handleCreateMemoryForTest,
   handleDeleteMemoryForTest,
+  handleDeleteSegmentForTest,
   handleFinalizeSegmentAttachmentRecordingDraftForTest,
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
@@ -38,6 +39,7 @@ import {
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
   handleRestoreDeletedMemoryForTest,
+  handleRestoreDeletedSegmentForTest,
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
@@ -928,6 +930,103 @@ test('deleteMemory hides a Memory from the read model and restoreDeletedMemory r
     handleStore,
   });
   assert.equal(readRestored.ok, true);
+});
+
+test('deleteSegment hides a Segment from its Memory and restoreDeletedSegment restores it', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-segment-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 删除片段',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_segment_delete',
+    segmentId: 'seg_segment_delete',
+    title: 'Segment delete',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const memoryDirectory = path.join(rootPath, 'memories', 'mem_segment_delete');
+  const segmentDirectory = path.join(memoryDirectory, 'segments', 'seg_segment_delete');
+
+  const deleted = await handleDeleteSegmentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_segment_delete',
+      segmentId: 'seg_segment_delete',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(deleted.ok, true);
+  if (deleted.ok) {
+    assert.equal(deleted.value.segmentId, 'seg_segment_delete');
+    assert.equal(deleted.value.restoreToken, 'seg_segment_delete');
+    assert.equal(deleted.value.memory.memoryId, 'mem_segment_delete');
+    assert.equal(deleted.value.memory.segmentCount, 0);
+    assert.equal('rootPath' in deleted.value, false);
+  }
+  await assert.rejects(stat(segmentDirectory));
+  assert.deepEqual(JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')), {
+    memoryId: 'mem_segment_delete',
+    title: 'Segment delete',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    updatedAt: '2026-05-06T13:09:00.000Z',
+    segmentIds: [],
+  });
+
+  const detailAfterDelete = await handleReadMemoryDetailForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_segment_delete',
+      requestId: 'request_segment_deleted',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(detailAfterDelete.ok, true);
+  if (detailAfterDelete.ok) {
+    assert.deepEqual(detailAfterDelete.value.detail.segments, []);
+  }
+
+  const restored = await handleRestoreDeletedSegmentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_segment_delete',
+      restoreToken: 'seg_segment_delete',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal(restored.value.memory.memoryId, 'mem_segment_delete');
+    assert.equal(restored.value.memory.segmentCount, 1);
+    assert.equal(restored.value.segment.segmentId, 'seg_segment_delete');
+    assert.equal('rootPath' in restored.value, false);
+  }
+  await stat(segmentDirectory);
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')).segmentIds,
+    ['seg_segment_delete']
+  );
 });
 
 test('readMemoryDetail returns current Memory segments without exposing handle or root path', async () => {

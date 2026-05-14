@@ -1,31 +1,31 @@
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
-import type { WorkspaceMemorySummary } from './workspaceApi';
+import type { SegmentDeleteTarget } from './segmentActionTargets';
 
-type MemoryDeleteDialogProps = {
+type SegmentDeleteDialogProps = {
   readonly disabled?: boolean;
-  readonly memory: WorkspaceMemorySummary | null;
   readonly onConfirm: () => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
+  readonly target: SegmentDeleteTarget | null;
 };
 
-export function MemoryDeleteDialog({
+export function SegmentDeleteDialog({
   disabled = false,
-  memory,
   onConfirm,
   onOpenChange,
   open,
-}: MemoryDeleteDialogProps) {
-  const memoryTitle = memory?.title ?? '这条记忆';
+  target,
+}: SegmentDeleteDialogProps) {
+  const segmentTitle = target?.segment.title ?? '这段录音';
 
   return (
     <WorkspaceDangerConfirmDialog
-      description={`删除“${memoryTitle}”？片段和补充录音会先进入恢复区。`}
+      description={`删除“${segmentTitle}”？补充录音会随片段一起进入恢复区。`}
       disabled={disabled}
       onConfirm={onConfirm}
       onOpenChange={onOpenChange}
       open={open}
-      title="删除记忆"
+      title="删除片段"
     />
   );
 }

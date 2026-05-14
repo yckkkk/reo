@@ -1,11 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
-import {
-  MemoryStudio,
-  type SegmentAttachmentRecordingTarget,
-  type SegmentRenameTarget,
-} from './MemoryStudio';
+import { MemoryStudio, type SegmentAttachmentRecordingTarget } from './MemoryStudio';
 import { MemoryRail } from './MemoryRail';
+import type { SegmentDeleteTarget, SegmentRenameTarget } from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
 import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
@@ -16,6 +13,7 @@ type LoadedWorkspaceFrameProps = {
   readonly memoryRailOpen?: boolean;
   readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
+  readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
@@ -31,6 +29,7 @@ export function LoadedWorkspaceFrame({
   memoryRailOpen = true,
   memoryRailMode = 'inline',
   onDeleteMemory,
+  onDeleteSegment,
   onRenameMemory,
   onRenameSegment,
   onSegmentFocusConsumed,
@@ -63,6 +62,7 @@ export function LoadedWorkspaceFrame({
         <MemoryStudio
           key={currentMemory.memoryId}
           memory={currentMemory}
+          onDeleteSegment={onDeleteSegment}
           onRenameSegment={onRenameSegment}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}

@@ -144,6 +144,7 @@ function renderLoadedWorkspaceFrame({
   currentMemory = null,
   memoryRailOpen,
   onDeleteMemory = vi.fn(),
+  onDeleteSegment = vi.fn(),
   onRenameMemory = vi.fn(),
   onRenameSegment = vi.fn(),
   onSelectMemory = vi.fn(),
@@ -168,6 +169,7 @@ function renderLoadedWorkspaceFrame({
   readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
   readonly memoryRailOpen?: boolean;
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onDeleteSegment?: () => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegment?: () => void;
   readonly onSelectMemory?: (memoryId: string) => void;
@@ -208,6 +210,7 @@ function renderLoadedWorkspaceFrame({
         currentMemory={currentMemory}
         workspaceSession={session}
         onDeleteMemory={onDeleteMemory}
+        onDeleteSegment={onDeleteSegment}
         onRenameMemory={onRenameMemory}
         onRenameSegment={onRenameSegment}
         onSelectMemory={onSelectMemory}

@@ -33,6 +33,8 @@ describe('DropdownMenu primitive', () => {
       'px-8',
       'text-ui-xs',
       'font-regular',
+      'data-[highlighted]:bg-accent',
+      'data-[highlighted]:text-accent-foreground',
       'focus:bg-accent',
       'focus:text-accent-foreground'
     );

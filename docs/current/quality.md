@@ -6,7 +6,7 @@
 
 - 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library 和 `npm run verify:quick`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 和 preload 纯策略函数。
-- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试。
+- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
@@ -17,7 +17,7 @@
 - Zod 已安装，当前服务 workspace IPC contract、DTO、记忆空间 metadata、segment metadata 和错误信封。
 - 当前错误码真源是 `src/workspace-contract/workspace-contract.ts` 的 `workspaceErrorCodeSchema` 和 `workspaceErrorEnvelopeSchema`；renderer 用户可见文案映射位于 `workspaceErrorMessages.ts`。
 - TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 memory space creation form、memory rename form、memory space list 和记忆空间 snapshot cache。
-- `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、App shell、recording audio controls 和 icon controls。
+- `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、AlertDialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、App shell、recording audio controls 和 icon controls。
 - Workspace single-writer lock 使用 `.reo/workspace.lock` no-follow leaf file 和同目录 `.reo/workspace.lock.lock` 目录锁，owner 文件写入 pid 与进程启动指纹，不依赖通用 lock service。
 - Sentry 和 `electron-log` 已选型，但当前未安装。
 - 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
@@ -58,7 +58,7 @@ npm run verify:quick
 - `dev`：运行 `scripts/run-dev.mjs`，加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
-- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，setup 文件加载 Testing Library DOM matchers、pointer capture 与 `ResizeObserver` 测试替身，并在每个测试后执行 DOM cleanup。
+- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，jsdom URL 固定为 `http://127.0.0.1/`，setup 文件加载 Testing Library DOM matchers、pointer capture、`ResizeObserver` 测试替身和 localStorage 测试存储，并在每个测试后执行 DOM cleanup。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
 - `format:check`：运行 `prettier --check .`。
 
@@ -89,12 +89,13 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 
 - 每个行为代码变更必须有独立 spec、RED/GREEN/REFACTOR 证据、`docs/current/*` 更新和 `npm run verify:quick`。
 - 每个代码变更在完成前必须执行简化审查：复用已有 helper/component，删除重复逻辑、冗余状态、不必要 JSX wrapper、无价值注释，检查热路径额外工作、事件监听器、timer 和 Blob URL 清理。
+- Segment delete projection 这类跨 UI/cache/session 的纯规则必须有独立 renderer 单元测试，覆盖乱序 delayed commit、多个 pending delete、外部 summary 变化、不使用 aggregate count 猜测实体身份、commit/undo phase 互斥，以及 stale refresh detail 不能越过 session revision 写入重开后的 cache。
 - 只读 runtime validation 不伪装成 RED；只有发现行为缺陷并修改代码时，才先写 failing test 或记录可复现失败，再进入 GREEN。
 - Codex CLI read-only validation 必须在 Reo quiescent 或记忆空间 closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
 - Renderer source 禁止直接 import Node/Electron API；restricted import 规则必须由测试覆盖。
 - Preload source 不得引入 Zod-backed contract 或普通 Node package；preload path 必须指向 `out/preload/index.cjs`。
-- Main tests 必须覆盖 workspace file truth、IPC contract、trusted sender、selection token、single-writer lock、stale lock owner 启动指纹、无启动指纹 owner 的 PID 复用判定、filesystem containment、atomic write、metadata schema、memory space registry 同父目录 folder rename 协调、active memory space rename 不被 registry projection 写入失败阻断、active Workspace snapshot read 同步外部合法 JSON 和 transcript presence 修改、file-space node 目录命名投影、Finder 直接重命名后的 metadata id 定位、Segment title update、Segment file-space node truth 与 `segmentIds` mirror repair、SegmentAttachment 更新时间投影、index rebuild/recovery、Memory delete/restore move + rollback、recording draft/finalize、finalize response full Segment projection、unfinished draft audio read 与读取上限、draft audio read/append/finalize 互斥、markdown save、error envelope、lock-lost 行为、trusted main-frame reload/navigation workspace handle release、lifecycle release coalescing、豆包 ASR live session、协议 frame、response 解析、错误脱敏、非预期 close 断线报告、初始连接重试、pending start close、录音中断线重连、PCM replay buffer、录音转写 session registry、timestamp offset 和 stale revision 丢弃。
-- Renderer tests 必须覆盖当前用户可见行为和 owner 边界，而不是绑定内部 class 串。最小覆盖面包括 App shell 与 workspace entry、WorkspaceFrame/MemoryRail layout contract、Memory Studio selection/content/query ownership、Segment card More 菜单和重命名 Dialog、rename optimistic update 与 rollback、visibility refresh 的无变化不重刷、Waveform 点击与 scrub-session seek、SegmentAttachment content 与录音 target、FAB 当前 Memory target、recording flow 阻塞与 `beforeunload`、recording recovery 保存/放弃/检查、录音三态 waveform 和 typography、paused draft playback readiness 与 replay 起点、暂停态可执行 action capability、replacement transaction/rollback、completion backfill、transcript focus/scroll、finalize 后 App cache projection 和 Query key ownership。
+- Main tests 必须覆盖 workspace file truth、IPC contract、trusted sender、selection token、single-writer lock、stale lock owner 启动指纹、无启动指纹 owner 的 PID 复用判定、filesystem containment、atomic write、metadata schema、memory space registry 同父目录 folder rename 协调、active memory space rename 不被 registry projection 写入失败阻断、active Workspace snapshot read 同步外部合法 JSON 和 transcript presence 修改、file-space node 目录命名投影、Finder 直接重命名后的 metadata id 定位、Segment title update、Segment delete/restore、Segment delete/restore 在 source identity 验证后目录被替换时不得移动替换目录、Segment delete/restore index-failure rollback 不得移动 replacement active/trash 目录、Segment delete/restore index-failure rollback 在 lock lost 后不得继续搬文件、Segment delete/restore 成功路径不得为 mirror 和 index refresh 重复扫描 Segment tree、Segment restore 不得在恢复前扫描 active candidates，且同 id renamed active duplicate 必须回滚本次恢复、restore parent missing 不得通过先 exists 再使用实现、destructive Segment read 遇到 unsafe finalized metadata leaf 必须返回 unsafe typed error、Segment file-space node truth 与 `segmentIds` mirror repair、SegmentAttachment 更新时间投影、index rebuild/recovery、Memory delete/restore move + rollback、recording draft/finalize、finalize response full Segment projection、unfinished draft audio read 与读取上限、draft audio read/append/finalize 互斥、markdown save、error envelope、lock-lost 行为、trusted main-frame reload/navigation workspace handle release、lifecycle release coalescing、豆包 ASR live session、协议 frame、response 解析、错误脱敏、非预期 close 断线报告、初始连接重试、pending start close、录音中断线重连、PCM replay buffer、录音转写 session registry、timestamp offset 和 stale revision 丢弃。
+- Renderer tests 必须覆盖当前用户可见行为和 owner 边界，而不是绑定内部 class 串。最小覆盖面包括 App shell 与 workspace entry、WorkspaceFrame/MemoryRail layout contract、Memory Studio selection/content/query ownership、Button / DropdownMenu / toast action 交互状态约束、Memory/Segment/Memory space remove 共享危险确认结构、Segment card More 菜单、Segment rename/delete Dialog、rename optimistic update 与 rollback、Segment delete 的乐观投影、toast undo、delayed IPC commit、10 秒 grace-period duration、toast 不可手动 dismiss、重复 toast auto-close 不重复提交、commit 已开始后 undo 不回滚、离开 workspace 后不使用旧 handle 提交 pending delete、旧 handle 的 in-flight delayed delete response 不改写同 workspaceId 的新 session、旧 pending refresh detail 不改写重开后的 Memory detail cache、恢复 action 的 icon+文字结构、默认透明状态和 hover/focus 样式、delete failure rollback、`file-written-index-stale` failure 不做本地假恢复、grace period 内 file-truth refresh 不打破 pending delete projection、多个 pending Segment delete 的 projection 不互相复活、delayed commit 乱序返回时仍重放剩余 pending projection、pending projection 不用 aggregate count equality 猜测实体身份、pending projection 保留外部 summary 变化、pending delete 不压制非目标 Memory detail/content invalidation、session 边界清理不含 handle 的内容 query cache、rollback 不覆盖后续 Memory 投影变化、成功 commit 后移除 Segment content 与 SegmentAttachment content cache、visibility refresh 的无变化不重刷、Waveform 点击与 scrub-session seek、SegmentAttachment content 与录音 target、FAB 当前 Memory target、recording flow 阻塞与 `beforeunload`、recording recovery 保存/放弃/检查、录音三态 waveform 和 typography、paused draft playback readiness 与 replay 起点、暂停态可执行 action capability、replacement transaction/rollback、completion backfill、transcript focus/scroll、finalize 后 App cache projection 和 Query key ownership。
 - Operation validation 必须覆盖 OS dialog、mic permission、record/pause/resume/stop、playback、save failure、restart/reopen、viewport/reference。
 - 设计变更的操作验证必须覆盖运行时视觉证据；布局、尺寸、折叠位移、展开态、浅色/深色和交互状态不能只由 class 或单元测试证明。
 - 对抗审查有 unresolved BLOCKER/MAJOR 时不得进入 `$writing-plans`、`$plan-eng-review` 或实现阶段。
@@ -111,7 +112,7 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 
 - 当前 Vitest 只服务 renderer/component 行为测试。
 - 当前 main process 纯策略测试继续使用 Node test runner。
-- 当前 Vitest 配置覆盖 Vite transform、React JSX、jsdom DOM queries 和 Testing Library matchers。
+- 当前 Vitest 配置覆盖 Vite transform、React JSX、jsdom DOM queries、jsdom URL 和 Testing Library matchers。
 - 当前不启用 snapshot、coverage、browser mode 或 watch 作为验证门禁。
 - 新 renderer 行为必须优先写 Testing Library 测试，断言 accessible role/name 和用户可见状态。
 

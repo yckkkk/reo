@@ -33,6 +33,7 @@ describe('forbidden first-slice capabilities', () => {
           <LoadedWorkspaceFrame
             workspaceSession={workspaceSession}
             onDeleteMemory={() => {}}
+            onDeleteSegment={() => {}}
             onRenameMemory={() => {}}
             onRenameSegment={() => {}}
             onSelectMemory={() => {}}

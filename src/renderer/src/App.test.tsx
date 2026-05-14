@@ -1,9 +1,17 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App, mergeMemoryIntoSession } from './App';
 import { THEME_PREFERENCE_STORAGE_KEY } from './app-shell/themePreference';
-import { ReoQueryProvider } from './queryClient';
+import { toast } from './components/ui/toaster';
+import { createReoQueryClient, ReoQueryProvider } from './queryClient';
+import {
+  memoryDetailQueryKey,
+  segmentAttachmentContentQueryKey,
+  segmentContentQueryKey,
+  workspaceSnapshotQueryKey,
+} from './workspace/workspaceQueries';
 
 describe('App', () => {
   const reoWorkspace = {
@@ -17,6 +25,8 @@ describe('App', () => {
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
+    deleteSegment: vi.fn(),
+    restoreDeletedSegment: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
     createRecordingDraft: vi.fn(),
@@ -119,6 +129,14 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_MEMORY_RESTORE_FAILED', message: 'Memory could not be restored' },
     });
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_SEGMENT_DELETE_FAILED', message: 'Segment could not be deleted' },
+    });
+    reoWorkspace.restoreDeletedSegment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_SEGMENT_RESTORE_FAILED', message: 'Segment could not be restored' },
+    });
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
@@ -190,6 +208,7 @@ describe('App', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   async function openCreateWorkspaceDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -751,7 +770,7 @@ describe('App', () => {
       updatedAt: '2026-05-06T13:10:00.000Z',
       durationMs: 5000,
       audioByteLength: 2048,
-      transcript: { exists: true },
+      transcript: { exists: false },
       attachmentCount: 0,
       attachments: [],
     };
@@ -850,7 +869,7 @@ describe('App', () => {
       });
       await rename.promise;
     });
-  });
+  }, 10_000);
 
   it('uses titlebar breadcrumb dropdowns to rename the active memory space and Memory', async () => {
     const user = userEvent.setup();
@@ -1035,7 +1054,7 @@ describe('App', () => {
       segmentCount: 1,
       durationMs: 1000,
       audioByteLength: 3,
-      hasTranscript: false,
+      hasTranscript: true,
       attachmentCount: 0,
     };
     const snapshot = {
@@ -1383,9 +1402,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除记忆' }));
 
-    const dialog = screen.getByRole('dialog', { name: '删除记忆' });
-    expect(within(dialog).getByText('My seventh birthday')).toBeInTheDocument();
-    expect(within(dialog).getByText('片段和补充录音会先进入恢复区。')).toBeInTheDocument();
+    const dialog = screen.getByRole('alertdialog', { name: '删除记忆' });
+    expect(dialog).toHaveTextContent('删除“My seventh birthday”？片段和补充录音会先进入恢复区。');
 
     await user.click(within(dialog).getByRole('button', { name: '删除' }));
 
@@ -1400,9 +1418,17 @@ describe('App', () => {
       'aria-current',
       'page'
     );
-    expect(await screen.findByText('已删除记忆')).toBeInTheDocument();
+    const memoryToastTitle = await screen.findByText('已删除记忆');
+    expect(memoryToastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
+    expect(screen.getByText('My seventh birthday')).toBeInTheDocument();
+    const memoryUndoButton = screen.getByRole('button', { name: '恢复' });
+    expect(memoryUndoButton).toHaveClass('reo-toast-action');
+    expect(memoryUndoButton).not.toHaveClass('bg-secondary', 'hover:bg-accent');
+    expect(memoryUndoButton).toHaveClass('hover:text-popover-foreground');
+    expect(memoryUndoButton).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-ring');
+    expect(memoryUndoButton.querySelector('svg[aria-hidden="true"]')).toHaveClass('h-16', 'w-16');
 
-    await user.click(screen.getByRole('button', { name: '恢复' }));
+    await user.click(memoryUndoButton);
 
     await waitFor(() =>
       expect(reoWorkspace.restoreDeletedMemory).toHaveBeenCalledWith({
@@ -1414,6 +1440,2242 @@ describe('App', () => {
       await screen.findByRole('button', { name: '选择记忆 My seventh birthday' })
     ).toHaveAttribute('aria-current', 'page');
   });
+
+  it('optimistically hides a deleted Segment and restores it from toast undo without IPC', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: 'Birthday candles',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_song',
+      type: 'audio' as const,
+      title: 'Birthday song',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterDelete = {
+      ...memory,
+      segmentCount: 1,
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      hasTranscript: false,
+    };
+    const fileTruthSnapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [memory],
+    };
+    const refreshAfterOptimisticDelete =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: fileTruthSnapshot,
+      })
+      .mockReturnValueOnce(refreshAfterOptimisticDelete.promise)
+      .mockResolvedValue({
+        ok: true,
+        value: fileTruthSnapshot,
+      });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: memoryAfterDelete,
+        segmentId: deletedSegment.segmentId,
+        restoreToken: deletedSegment.segmentId,
+      },
+    });
+    reoWorkspace.restoreDeletedSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory,
+        segment: deletedSegment,
+      },
+    });
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('button', { name: '片段 Birthday candles 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+
+    const dialog = screen.getByRole('alertdialog', { name: '删除片段' });
+    expect(dialog).toHaveTextContent('Birthday candles');
+    expect(dialog).toHaveTextContent('补充录音会随片段一起进入恢复区。');
+    const cancelDeleteSegmentButton = within(dialog).getByRole('button', { name: '取消' });
+    const confirmDeleteSegmentButton = within(dialog).getByRole('button', { name: '删除' });
+    expect(cancelDeleteSegmentButton).toHaveClass(
+      'hover:bg-accent',
+      'hover:text-accent-foreground'
+    );
+    expect(cancelDeleteSegmentButton).not.toHaveClass('hover:bg-secondary');
+    expect(confirmDeleteSegmentButton).toHaveClass('hover:bg-destructive-hover');
+    expect(confirmDeleteSegmentButton).not.toHaveClass('hover:bg-destructive/90');
+    expect(confirmDeleteSegmentButton).not.toHaveClass('hover:bg-destructive');
+
+    await user.click(confirmDeleteSegmentButton);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '选择片段 Birthday candles' })).toBeNull()
+    );
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      refreshAfterOptimisticDelete.resolve({
+        ok: true,
+        value: fileTruthSnapshot,
+      });
+      await refreshAfterOptimisticDelete.promise;
+    });
+    const pendingSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      pendingSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 1024,
+      durationMs: 65_000,
+      hasTranscript: false,
+      segmentCount: 1,
+    });
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '选择片段 Birthday candles' })).toBeNull();
+    expect(screen.getByRole('button', { name: '选择片段 Birthday song' })).toBeInTheDocument();
+    const toastTitle = await screen.findByText('已删除片段');
+    expect(toastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
+    expect(screen.getByText('Birthday candles')).toBeInTheDocument();
+    const segmentUndoButton = screen.getByRole('button', { name: '恢复' });
+    expect(segmentUndoButton).toHaveClass('reo-toast-action');
+    expect(segmentUndoButton).not.toHaveClass('bg-secondary', 'hover:bg-accent');
+    expect(segmentUndoButton).toHaveClass('hover:text-popover-foreground');
+    expect(segmentUndoButton).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-ring');
+    expect(segmentUndoButton.querySelector('svg[aria-hidden="true"]')).toHaveClass('h-16', 'w-16');
+
+    await user.click(segmentUndoButton);
+
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole('button', { name: '选择片段 Birthday candles' })
+    ).toBeInTheDocument();
+    const restoredSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      restoredSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 3072,
+      durationMs: 190_000,
+      hasTranscript: true,
+      segmentCount: 2,
+    });
+  }, 20_000);
+
+  it('keeps external summary changes while projecting a pending Segment delete', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_external_summary',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_external_deleted',
+      type: 'audio' as const,
+      title: 'Birthday candles external summary',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_external_remaining',
+      type: 'audio' as const,
+      title: 'Birthday song external summary',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const externallyUpdatedFileTruthMemory = {
+      ...memory,
+      updatedAt: '2026-05-06T13:20:00.000Z',
+      hasTranscript: true,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [externallyUpdatedFileTruthMemory],
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [externallyUpdatedFileTruthMemory],
+        },
+      });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles external summary' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles external summary 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles external summary' })
+      ).toBeNull()
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2)
+    );
+
+    const projectedSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      projectedSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 1024,
+      durationMs: 65_000,
+      hasTranscript: true,
+      segmentCount: 1,
+      updatedAt: '2026-05-06T13:20:00.000Z',
+    });
+  }, 20_000);
+
+  it('keeps non-target Memory detail refreshable during a pending Segment delete', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_invalidation',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const otherMemory = {
+      memoryId: 'mem_other_invalidation',
+      title: 'Other memory',
+      createdAt: '2026-05-07T13:08:00.000Z',
+      updatedAt: '2026-05-07T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 50_000,
+      audioByteLength: 512,
+      hasTranscript: false,
+      attachmentCount: 0,
+    };
+    const otherMemoryAfterRefresh = {
+      ...otherMemory,
+      updatedAt: '2026-05-07T14:13:05.000Z',
+      hasTranscript: true,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_invalidation_deleted',
+      type: 'audio' as const,
+      title: 'Birthday candles invalidation',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_invalidation_remaining',
+      type: 'audio' as const,
+      title: 'Birthday song invalidation',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const otherSegment = {
+      workspaceId: 'ws_1',
+      memoryId: otherMemory.memoryId,
+      segmentId: 'seg_other_invalidation',
+      type: 'audio' as const,
+      title: 'Other segment invalidation',
+      createdAt: '2026-05-07T13:08:00.000Z',
+      updatedAt: '2026-05-07T13:13:05.000Z',
+      durationMs: 50_000,
+      audioByteLength: 512,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory, otherMemory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory, otherMemory],
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory, otherMemoryAfterRefresh],
+        },
+      });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail:
+          payload.memoryId === memory.memoryId
+            ? {
+                ...memory,
+                workspaceId: 'ws_1',
+                segments: [deletedSegment, remainingSegment],
+              }
+            : {
+                ...otherMemory,
+                workspaceId: 'ws_1',
+                segments: [otherSegment],
+              },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await screen.findByRole('button', { name: '选择片段 Birthday candles invalidation' });
+
+    await user.click(screen.getByRole('button', { name: '选择记忆 Other memory' }));
+    await screen.findByRole('button', { name: '选择片段 Other segment invalidation' });
+    await user.click(screen.getByRole('button', { name: '选择记忆 My seventh birthday' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles invalidation' });
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles invalidation 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles invalidation' })
+      ).toBeNull()
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2)
+    );
+
+    await user.click(screen.getByRole('button', { name: '选择记忆 Other memory' }));
+
+    await waitFor(() =>
+      expect(
+        reoWorkspace.readMemoryDetail.mock.calls.filter(
+          ([payload]) => payload.memoryId === otherMemory.memoryId
+        )
+      ).toHaveLength(2)
+    );
+  }, 20_000);
+
+  it('restores an optimistically deleted Segment without rolling back a later Memory rename', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_scoped_undo',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday_scoped_undo',
+      segmentId: 'seg_birthday_voice_scoped_undo',
+      type: 'audio' as const,
+      title: 'Birthday candles scoped undo',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday_scoped_undo',
+      segmentId: 'seg_birthday_song_scoped_undo',
+      type: 'audio' as const,
+      title: 'Birthday song scoped undo',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterDelete = {
+      ...memory,
+      segmentCount: 1,
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      hasTranscript: false,
+    };
+    const renamedMemoryAfterDelete = {
+      ...memoryAfterDelete,
+      title: 'Renamed birthday',
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.updateMemoryTitle.mockResolvedValue({
+      ok: true,
+      value: renamedMemoryAfterDelete,
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles scoped undo' });
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles scoped undo 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles scoped undo' })
+      ).toBeNull()
+    );
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await user.click(
+      within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+    const renameDialog = screen.getByRole('dialog', { name: '重命名记忆' });
+    const titleInput = within(renameDialog).getByLabelText('记忆名称');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Renamed birthday');
+    await user.click(within(renameDialog).getByRole('button', { name: '保存' }));
+
+    expect(
+      await within(titlebar).findByRole('button', { name: 'Renamed birthday 记忆操作' })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    expect(
+      await screen.findByRole('button', { name: '选择片段 Birthday candles scoped undo' })
+    ).toBeInTheDocument();
+    expect(
+      within(titlebar).getByRole('button', { name: 'Renamed birthday 记忆操作' })
+    ).toBeInTheDocument();
+    expect(
+      within(titlebar).queryByRole('button', { name: 'My seventh birthday 记忆操作' })
+    ).not.toBeInTheDocument();
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it('commits Segment deletion after the undo toast grace period expires', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_commit',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday_commit',
+      segmentId: 'seg_birthday_voice_commit',
+      type: 'audio' as const,
+      title: 'Birthday candles commit',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday_commit',
+      segmentId: 'seg_birthday_song_commit',
+      type: 'audio' as const,
+      title: 'Birthday song commit',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterDelete = {
+      ...memory,
+      segmentCount: 1,
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      hasTranscript: false,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: memoryAfterDelete,
+        segmentId: deletedSegment.segmentId,
+        restoreToken: deletedSegment.segmentId,
+      },
+    });
+    const queryClient = createReoQueryClient();
+    const deletedSegmentContentKey = segmentContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: deletedSegment.segmentId,
+    });
+    const deletedAttachmentContentKey = segmentAttachmentContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: deletedSegment.segmentId,
+      attachmentId: 'att_birthday_followup_commit',
+    });
+    queryClient.setQueryData(deletedSegmentContentKey, {
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      memoryId: memory.memoryId,
+      requestId: 'segment-content:stale',
+      segmentId: deletedSegment.segmentId,
+      transcript: { exists: false, text: '' },
+      workspaceId: 'ws_1',
+    });
+    queryClient.setQueryData(deletedAttachmentContentKey, {
+      attachmentId: 'att_birthday_followup_commit',
+      audio: new Uint8Array([2]),
+      audioByteLength: 1,
+      memoryId: memory.memoryId,
+      requestId: 'segment-attachment-content:stale',
+      segmentId: deletedSegment.segmentId,
+      workspaceId: 'ws_1',
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles commit' });
+
+    await user.click(screen.getByRole('button', { name: '片段 Birthday candles commit 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '选择片段 Birthday candles commit' })).toBeNull()
+    );
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已删除片段');
+    expect(segmentDeleteToast).toMatchObject({
+      className: 'reo-undo-toast',
+      dismissible: false,
+      duration: 10000,
+    });
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+    await act(async () => {
+      segmentDeleteToast?.onAutoClose?.(segmentDeleteToast);
+      segmentDeleteToast?.onAutoClose?.(segmentDeleteToast);
+    });
+
+    await waitFor(() =>
+      expect(reoWorkspace.deleteSegment).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday_commit',
+        segmentId: 'seg_birthday_voice_commit',
+      })
+    );
+    expect(reoWorkspace.deleteSegment).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(deletedSegmentContentKey)).toBeUndefined();
+    expect(queryClient.getQueryData(deletedAttachmentContentKey)).toBeUndefined();
+  }, 20_000);
+
+  it('does not undo a Segment delete after the grace period has started committing', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_commit_race',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_commit_race',
+      type: 'audio' as const,
+      title: 'Birthday candles commit race',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const deleteDeferred =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['deleteSegment']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment],
+        },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockReturnValue(deleteDeferred.promise);
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles commit race' });
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles commit race 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'className' in entry && entry.className === 'reo-undo-toast');
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+
+    await act(async () => {
+      segmentDeleteToast.onAutoClose?.(segmentDeleteToast);
+    });
+    await waitFor(() => expect(reoWorkspace.deleteSegment).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    expect(
+      screen.queryByRole('button', { name: '选择片段 Birthday candles commit race' })
+    ).toBeNull();
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deleteDeferred.resolve({
+        ok: true,
+        value: {
+          memory: {
+            ...memory,
+            audioByteLength: 0,
+            durationMs: 0,
+            hasTranscript: false,
+            segmentCount: 0,
+          },
+          segmentId: deletedSegment.segmentId,
+          restoreToken: deletedSegment.segmentId,
+        },
+      });
+      await deleteDeferred.promise;
+    });
+
+    expect(
+      screen.queryByRole('button', { name: '选择片段 Birthday candles commit race' })
+    ).toBeNull();
+  }, 20_000);
+
+  it('keeps other pending Segment deletes projected when one delayed commit succeeds', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_multi_pending',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 3,
+      durationMs: 6000,
+      audioByteLength: 600,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const firstSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_multi_first',
+      type: 'audio' as const,
+      title: 'Birthday candles multi first',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+      durationMs: 1000,
+      audioByteLength: 100,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const secondSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_multi_second',
+      type: 'audio' as const,
+      title: 'Birthday candles multi second',
+      createdAt: '2026-05-06T13:10:00.000Z',
+      updatedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 2000,
+      audioByteLength: 200,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_multi_remaining',
+      type: 'audio' as const,
+      title: 'Birthday song multi remaining',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 3000,
+      audioByteLength: 300,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterFirstDelete = {
+      ...memory,
+      segmentCount: 2,
+      durationMs: 5000,
+      audioByteLength: 500,
+    };
+    const memoryAfterSecondDelete = {
+      ...memory,
+      segmentCount: 2,
+      durationMs: 4000,
+      audioByteLength: 400,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [firstSegment, secondSegment, remainingSegment],
+        },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        memory:
+          payload.segmentId === secondSegment.segmentId
+            ? memoryAfterSecondDelete
+            : memoryAfterFirstDelete,
+        segmentId: payload.segmentId,
+        restoreToken: payload.segmentId,
+      },
+    }));
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles multi first' });
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles multi first 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles multi first' })
+      ).toBeNull()
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles multi second 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles multi second' })
+      ).toBeNull()
+    );
+
+    const secondSegmentToast = [...toast.getToasts()].find(
+      (entry) => 'description' in entry && entry.description === secondSegment.title
+    );
+    if (!secondSegmentToast || !('onAutoClose' in secondSegmentToast)) {
+      throw new Error('Second Segment delete toast did not expose an auto-close handler');
+    }
+
+    await act(async () => {
+      secondSegmentToast.onAutoClose?.(secondSegmentToast);
+    });
+
+    await waitFor(() =>
+      expect(reoWorkspace.deleteSegment).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: secondSegment.segmentId,
+      })
+    );
+    const pendingSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      pendingSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 300,
+      durationMs: 3000,
+      hasTranscript: false,
+      segmentCount: 1,
+    });
+    expect(
+      screen.queryByRole('button', { name: '选择片段 Birthday candles multi first' })
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '选择片段 Birthday candles multi second' })
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: '选择片段 Birthday song multi remaining' })
+    ).toBeInTheDocument();
+  }, 20_000);
+
+  it('does not double subtract a pending Segment when file-truth refresh already excludes it', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_refresh_already_deleted',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_refresh_already_deleted',
+      type: 'audio' as const,
+      title: 'Birthday candles already deleted',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_refresh_remaining',
+      type: 'audio' as const,
+      title: 'Birthday song already deleted refresh',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterFileTruthDelete = {
+      ...memory,
+      audioByteLength: remainingSegment.audioByteLength,
+      durationMs: remainingSegment.durationMs,
+      hasTranscript: false,
+      segmentCount: 1,
+    };
+    const refreshAfterOptimisticDelete =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      })
+      .mockReturnValueOnce(refreshAfterOptimisticDelete.promise);
+    let fileTruthAlreadyDeleted = false;
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...(fileTruthAlreadyDeleted ? memoryAfterFileTruthDelete : memory),
+          workspaceId: 'ws_1',
+          segments: fileTruthAlreadyDeleted
+            ? [remainingSegment]
+            : [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles already deleted' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles already deleted 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles already deleted' })
+      ).toBeNull()
+    );
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      fileTruthAlreadyDeleted = true;
+      refreshAfterOptimisticDelete.resolve({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memoryAfterFileTruthDelete],
+        },
+      });
+      await refreshAfterOptimisticDelete.promise;
+    });
+
+    const pendingSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      pendingSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 1024,
+      durationMs: 65_000,
+      hasTranscript: false,
+      segmentCount: 1,
+    });
+  }, 20_000);
+
+  it('rolls back optimistic Segment deletion when delayed commit fails', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_rollback',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday_rollback',
+      segmentId: 'seg_birthday_voice_rollback',
+      type: 'audio' as const,
+      title: 'Birthday candles rollback',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_SEGMENT_DELETE_FAILED', message: 'Segment could not be deleted' },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles rollback' });
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles rollback 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles rollback' })
+      ).toBeNull()
+    );
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已删除片段');
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+    await act(async () => {
+      segmentDeleteToast?.onAutoClose?.(segmentDeleteToast);
+    });
+
+    await waitFor(() => expect(reoWorkspace.deleteSegment).toHaveBeenCalled());
+    expect(
+      await screen.findByRole('button', { name: '选择片段 Birthday candles rollback' })
+    ).toBeInTheDocument();
+    expect((await screen.findAllByText('无法删除片段。')).length).toBeGreaterThan(0);
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it('keeps Segment deletion projected when delayed commit reports stale file truth', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_stale_file_truth',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_stale_file_truth',
+      type: 'audio' as const,
+      title: 'Birthday candles stale file truth',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment],
+        },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_LOCK_LOST',
+        dataRetention: 'file-written-index-stale',
+        message: 'Workspace lock was lost',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles stale file truth' });
+
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles stale file truth 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles stale file truth' })
+      ).toBeNull()
+    );
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已删除片段');
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+    await act(async () => {
+      segmentDeleteToast.onAutoClose?.(segmentDeleteToast);
+    });
+
+    await waitFor(() => expect(reoWorkspace.deleteSegment).toHaveBeenCalled());
+    expect(
+      screen.queryByRole('button', { name: '选择片段 Birthday candles stale file truth' })
+    ).toBeNull();
+    expect((await screen.findAllByText('无法删除片段。')).length).toBeGreaterThan(0);
+    expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it('does not commit a pending Segment delete after leaving the workspace session', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_leave',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_leave',
+      type: 'audio' as const,
+      title: 'Birthday candles leave',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: 'Private notes',
+        memories: [memory],
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment],
+        },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles leave' });
+
+    await user.click(screen.getByRole('button', { name: '片段 Birthday candles leave 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '选择片段 Birthday candles leave' })).toBeNull()
+    );
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已删除片段');
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+
+    await user.click(screen.getByRole('button', { name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+
+    await act(async () => {
+      segmentDeleteToast.onAutoClose?.(segmentDeleteToast);
+    });
+
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it('ignores an in-flight delayed Segment delete response after reopening the same workspace id', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_reopen',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_reopen_deleted',
+      type: 'audio' as const,
+      title: 'Birthday candles reopen',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const remainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_reopen_remaining',
+      type: 'audio' as const,
+      title: 'Birthday song reopen',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const memoryAfterOldDelete = {
+      ...memory,
+      segmentCount: 1,
+      durationMs: 65_000,
+      audioByteLength: 1024,
+    };
+    const delayedDelete =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['deleteSegment']>>>();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            addedAt: '2026-05-06T13:08:00.000Z',
+            lastOpenedAt: '2026-05-06T13:08:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.openMemorySpace
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-1',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-2',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [deletedSegment, remainingSegment],
+        },
+      },
+    }));
+    reoWorkspace.deleteSegment.mockReturnValue(delayedDelete.promise);
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles reopen' });
+
+    await user.click(screen.getByRole('button', { name: '片段 Birthday candles reopen 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '选择片段 Birthday candles reopen' })).toBeNull()
+    );
+
+    const segmentDeleteToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已删除片段');
+    if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {
+      throw new Error('Segment delete toast did not expose an auto-close handler');
+    }
+    await act(async () => {
+      segmentDeleteToast.onAutoClose?.(segmentDeleteToast);
+    });
+    await waitFor(() => expect(reoWorkspace.deleteSegment).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    expect(
+      await screen.findByRole('button', { name: '选择片段 Birthday candles reopen' })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      delayedDelete.resolve({
+        ok: true,
+        value: {
+          memory: memoryAfterOldDelete,
+          segmentId: deletedSegment.segmentId,
+          restoreToken: deletedSegment.segmentId,
+        },
+      });
+      await delayedDelete.promise;
+    });
+
+    expect(
+      screen.getByRole('button', { name: '选择片段 Birthday candles reopen' })
+    ).toBeInTheDocument();
+    const reopenedSnapshot = queryClient.getQueryData<{
+      readonly memories: readonly (typeof memory)[];
+    }>(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }));
+    expect(
+      reopenedSnapshot?.memories.find((candidate) => candidate.memoryId === memory.memoryId)
+    ).toMatchObject({
+      audioByteLength: 3072,
+      durationMs: 190_000,
+      segmentCount: 2,
+    });
+  }, 20_000);
+
+  it('does not let a stale pending refresh detail overwrite a reopened workspace session', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_reopen_refresh',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 2,
+      durationMs: 190_000,
+      audioByteLength: 3072,
+      hasTranscript: true,
+      attachmentCount: 0,
+    };
+    const deletedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_reopen_refresh_deleted',
+      type: 'audio' as const,
+      title: 'Birthday candles stale refresh',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      transcript: { exists: true },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const staleRemainingSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_birthday_reopen_refresh_remaining',
+      type: 'audio' as const,
+      title: 'Old remaining from stale refresh',
+      createdAt: '2026-05-06T13:12:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      durationMs: 65_000,
+      audioByteLength: 1024,
+      transcript: { exists: false },
+      attachmentCount: 0,
+      attachments: [],
+    };
+    const freshRemainingSegment = {
+      ...staleRemainingSegment,
+      title: 'Fresh remaining after reopen',
+    };
+    const staleRefreshSnapshot =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
+    const staleRefreshDetail =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readMemoryDetail']>>>();
+    let staleRefreshDetailRequestId = '';
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            addedAt: '2026-05-06T13:08:00.000Z',
+            lastOpenedAt: '2026-05-06T13:08:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.openMemorySpace
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-1',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-2',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      })
+      .mockReturnValueOnce(staleRefreshSnapshot.promise)
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => {
+      if (payload.requestId.startsWith('memory-detail-refresh:')) {
+        staleRefreshDetailRequestId = payload.requestId;
+        return staleRefreshDetail.promise;
+      }
+      return {
+        ok: true,
+        value: {
+          requestId: payload.requestId,
+          detail: {
+            ...memory,
+            workspaceId: 'ws_1',
+            segments:
+              payload.workspaceHandle === 'workspace-handle-2'
+                ? [deletedSegment, freshRemainingSegment]
+                : [deletedSegment, staleRemainingSegment],
+          },
+        },
+      };
+    });
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...memory,
+          audioByteLength: staleRemainingSegment.audioByteLength,
+          durationMs: staleRemainingSegment.durationMs,
+          hasTranscript: staleRemainingSegment.transcript.exists,
+          segmentCount: 1,
+        },
+        segmentId: deletedSegment.segmentId,
+        restoreToken: deletedSegment.segmentId,
+      },
+    });
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    await screen.findByRole('button', { name: '选择片段 Birthday candles stale refresh' });
+    await user.click(
+      screen.getByRole('button', { name: '片段 Birthday candles stale refresh 更多操作' })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除片段' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: '选择片段 Birthday candles stale refresh' })
+      ).toBeNull()
+    );
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      staleRefreshSnapshot.resolve({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      });
+      await staleRefreshSnapshot.promise;
+    });
+    await waitFor(() =>
+      expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: expect.stringMatching(/^memory-detail-refresh:/),
+          workspaceHandle: 'workspace-handle-1',
+        })
+      )
+    );
+
+    await user.click(screen.getByRole('button', { name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    await screen.findByRole('button', { name: '选择片段 Fresh remaining after reopen' });
+
+    await act(async () => {
+      staleRefreshDetail.resolve({
+        ok: true,
+        value: {
+          requestId: staleRefreshDetailRequestId,
+          detail: {
+            ...memory,
+            workspaceId: 'ws_1',
+            segments: [deletedSegment, staleRemainingSegment],
+          },
+        },
+      });
+      await staleRefreshDetail.promise;
+    });
+
+    const reopenedDetail = queryClient.getQueryData<{
+      readonly detail: { readonly segments: readonly { readonly title: string }[] };
+    }>(
+      memoryDetailQueryKey({
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+      })
+    );
+    expect(reopenedDetail?.detail.segments.map((segment) => segment.title)).toContain(
+      'Fresh remaining after reopen'
+    );
+    expect(reopenedDetail?.detail.segments.map((segment) => segment.title)).not.toContain(
+      'Old remaining from stale refresh'
+    );
+  }, 20_000);
+
+  it('does not expose Segment deletion while a recording flow is open', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_recording_blocks_delete',
+      title: 'Recording guard memory',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:13:05.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: false,
+      attachmentCount: 0,
+    };
+    const segment = audioSegmentProjection({
+      audioByteLength: 2048,
+      durationMs: 125_000,
+      memoryId: memory.memoryId,
+      segmentId: 'seg_recording_blocks_delete',
+      title: 'Recording guard segment',
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.createRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 0, segmentId: 'seg_new_recording' },
+    });
+    reoWorkspace.appendRecordingAudioChunk.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 1 },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    const segmentMenuButton = await screen.findByRole('button', {
+      name: '片段 Recording guard segment 更多操作',
+    });
+
+    await user.click(screen.getByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '录音' }));
+    expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
+
+    fireEvent.click(segmentMenuButton);
+    expect(
+      screen.queryByRole('menu', {
+        hidden: true,
+        name: '片段 Recording guard segment 操作',
+      })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { hidden: true, name: '删除' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '删除片段' })).not.toBeInTheDocument();
+    expect(reoWorkspace.deleteSegment).not.toHaveBeenCalled();
+  }, 20_000);
 
   it('creates a named Memory from the titlebar plus control and opens it', async () => {
     const user = userEvent.setup();
@@ -2599,8 +4861,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
 
-    expect(screen.getByRole('dialog', { name: '移除记忆空间' })).toBeInTheDocument();
-    expect(screen.getByText('本地文件夹不会被删除。')).toBeInTheDocument();
+    const dialog = screen.getByRole('alertdialog', { name: '移除记忆空间' });
+    expect(dialog).toHaveTextContent('从 Reo 的记忆空间列表中移除“测试1”？本地文件夹不会被删除。');
 
     await user.click(screen.getByRole('button', { name: '移除' }));
 
@@ -2652,7 +4914,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     expect(await screen.findByText('无法移除记忆空间')).toBeInTheDocument();
-    const dialog = screen.getByRole('dialog', { name: '移除记忆空间' });
+    const dialog = screen.getByRole('alertdialog', { name: '移除记忆空间' });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).queryByText('无法保存记忆空间列表。')).not.toBeInTheDocument();
   });

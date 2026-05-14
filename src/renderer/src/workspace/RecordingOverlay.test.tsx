@@ -100,6 +100,8 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
+    deleteSegment: vi.fn(),
+    restoreDeletedSegment: vi.fn(),
     readMemoryDetail: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_MEMORY_NOT_FOUND' as const, message: 'Memory not found' },

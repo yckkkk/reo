@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Ellipsis, Mic, Pause, Pencil, Play, Plus } from 'lucide-react';
+import { Ellipsis, Mic, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -21,6 +21,7 @@ import {
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
+import type { SegmentDeleteTarget, SegmentRenameTarget } from './segmentActionTargets';
 import type {
   WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
@@ -34,6 +35,7 @@ import {
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
+  readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
@@ -45,11 +47,6 @@ export type SegmentAttachmentRecordingTarget = {
   readonly memoryId: string;
   readonly segmentId: string;
   readonly title: string;
-};
-
-export type SegmentRenameTarget = {
-  readonly memoryId: string;
-  readonly segment: WorkspaceMemoryDetail['segments'][number];
 };
 
 const CAROUSEL_SCROLL_RATIO = 0.8;
@@ -439,6 +436,7 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
 
 export function MemoryStudio({
   memory,
+  onDeleteSegment,
   onRenameSegment,
   onSegmentFocusConsumed,
   onStartSegmentAttachmentRecording,
@@ -886,6 +884,15 @@ export function MemoryStudio({
                           >
                             <Pencil aria-hidden="true" className="size-16" />
                             重命名
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setOpenSegmentMenuId(null);
+                              onDeleteSegment({ memoryId: memory.memoryId, segment });
+                            }}
+                          >
+                            <Trash2 aria-hidden="true" className="size-16" />
+                            删除
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

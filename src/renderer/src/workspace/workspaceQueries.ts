@@ -179,6 +179,18 @@ export function segmentAttachmentContentQueryKey({
   ] as const;
 }
 
+export function segmentAttachmentContentQueryPrefix({
+  workspaceId,
+  memoryId,
+  segmentId,
+}: {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+}) {
+  return ['workspace', 'segment-attachment-content', workspaceId, memoryId, segmentId] as const;
+}
+
 export function segmentAttachmentContentQueryOptions(
   session: WorkspaceSession,
   memoryId: string,
@@ -227,6 +239,20 @@ export function segmentAttachmentContentQueryOptions(
     retry: false,
     staleTime: Infinity,
   });
+}
+
+export function workspaceHandleScopedContentQueryBelongsToWorkspace(
+  queryKey: readonly unknown[],
+  workspaceId: string
+) {
+  const [scope, kind, queryWorkspaceId] = queryKey;
+  return (
+    scope === 'workspace' &&
+    queryWorkspaceId === workspaceId &&
+    (kind === 'memory-detail' ||
+      kind === 'segment-content' ||
+      kind === 'segment-attachment-content')
+  );
 }
 
 export function memorySpacesQueryKey() {

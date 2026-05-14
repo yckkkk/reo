@@ -7,6 +7,8 @@ import type {
   WorkspaceCreateMemoryResponse,
   WorkspaceDeleteMemoryRequest,
   WorkspaceDeleteMemoryResponse,
+  WorkspaceDeleteSegmentRequest,
+  WorkspaceDeleteSegmentResponse,
   WorkspaceCreateRecordingDraftResponse,
   WorkspaceCreateSegmentAttachmentRecordingDraftRequest,
   WorkspaceCreateSegmentAttachmentRecordingDraftResponse,
@@ -31,6 +33,8 @@ import type {
   WorkspaceReadWorkspaceSnapshotResponse,
   WorkspaceRestoreDeletedMemoryRequest,
   WorkspaceRestoreDeletedMemoryResponse,
+  WorkspaceRestoreDeletedSegmentRequest,
+  WorkspaceRestoreDeletedSegmentResponse,
   WorkspaceRecordingAppendRequest,
   WorkspaceRecordingAppendResponse,
   WorkspaceAppendSegmentAttachmentRecordingAudioRequest,
@@ -88,6 +92,12 @@ export interface ReoWorkspaceBridge {
   readonly restoreDeletedMemory: (
     payload: WorkspaceRestoreDeletedMemoryRequest
   ) => Promise<WorkspaceRestoreDeletedMemoryResponse>;
+  readonly deleteSegment: (
+    payload: WorkspaceDeleteSegmentRequest
+  ) => Promise<WorkspaceDeleteSegmentResponse>;
+  readonly restoreDeletedSegment: (
+    payload: WorkspaceRestoreDeletedSegmentRequest
+  ) => Promise<WorkspaceRestoreDeletedSegmentResponse>;
   readonly readMemoryDetail: (
     payload: WorkspaceReadMemoryDetailRequest
   ) => Promise<WorkspaceReadMemoryDetailResponse>;

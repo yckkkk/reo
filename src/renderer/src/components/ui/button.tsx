@@ -19,11 +19,11 @@ const buttonVariants = cva(
         iconLarge: 'size-56 rounded-lg p-0',
       },
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive',
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive-hover',
         ghostIcon:
           'bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-card text-card-foreground hover:bg-secondary',
+        secondary: 'bg-card text-card-foreground hover:bg-accent hover:text-accent-foreground',
       },
     },
   }

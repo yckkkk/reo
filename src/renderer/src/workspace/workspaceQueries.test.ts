@@ -3,6 +3,7 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   segmentContentQueryKey,
+  workspaceHandleScopedContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 
@@ -36,5 +37,35 @@ describe('workspace queries', () => {
         workspaceHandle: 'secret-handle',
       })
     ).toEqual(['workspace', 'segment-content', 'ws_1', 'mem_1', 'seg_1']);
+  });
+
+  it('matches handle-scoped workspace content query keys', () => {
+    expect(
+      workspaceHandleScopedContentQueryBelongsToWorkspace(
+        ['workspace', 'memory-detail', 'ws_1', 'mem_1'],
+        'ws_1'
+      )
+    ).toBe(true);
+    expect(
+      workspaceHandleScopedContentQueryBelongsToWorkspace(
+        ['workspace', 'segment-content', 'ws_1', 'mem_1', 'seg_1'],
+        'ws_1'
+      )
+    ).toBe(true);
+    expect(
+      workspaceHandleScopedContentQueryBelongsToWorkspace(
+        ['workspace', 'segment-attachment-content', 'ws_1', 'mem_1', 'seg_1', 'att_1'],
+        'ws_1'
+      )
+    ).toBe(true);
+    expect(
+      workspaceHandleScopedContentQueryBelongsToWorkspace(['workspace', 'snapshot', 'ws_1'], 'ws_1')
+    ).toBe(false);
+    expect(
+      workspaceHandleScopedContentQueryBelongsToWorkspace(
+        ['workspace', 'memory-detail', 'ws_2', 'mem_1'],
+        'ws_1'
+      )
+    ).toBe(false);
   });
 });

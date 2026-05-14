@@ -1,10 +1,5 @@
 import { MemoryTitleDialog } from './MemoryTitleDialog';
-import type { WorkspaceMemoryDetail } from './workspaceApi';
-
-type SegmentRenameTarget = {
-  readonly memoryId: string;
-  readonly segment: WorkspaceMemoryDetail['segments'][number];
-};
+import type { SegmentRenameTarget } from './segmentActionTargets';
 
 type SegmentRenameDialogProps = {
   readonly onOpenChange: (open: boolean) => void;
@@ -36,5 +31,3 @@ export function SegmentRenameDialog({
     />
   );
 }
-
-export type { SegmentRenameTarget };

@@ -12,13 +12,14 @@
 - `src/renderer/src/index.css` 负责 Tailwind v4 import、`data-theme="dark"` dark variant、Electron drag/no-drag utility、全局不可选中文本和输入/转录类文本可选中规则。
 - `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x` 和 `scrollbar-hover`。它们用于可滚动内容边缘渐隐和 hover/focus 时才显露滚动条的文本容器，不由业务组件重复实现 gradient overlay、mask 或 scrollbar 规则。`edge-fade-*` 是滚动感知的：通过 `@property` 注册的边缘偏移变量 + scroll-driven animation，每个边缘只在该方向有内容被滚走时才渐隐，内容不溢出时无 fade。
 - 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme` 与 document 根节点 `data-theme` 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容也继承当前主题。侧边栏底部使用单按钮循环 `浅色 → 深色 → 跟随系统 → 浅色`，按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
-- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
+- 深色主题的 `accent` 是 popover 上的交互高光色，使用 `color-mix(in oklab, var(--foreground) 10%, var(--popover))`，不得与 `popover` 同色；DropdownMenu、ghost icon、secondary Button hover 和弹层内次要按钮 hover 都依赖它表达可见但克制的状态反馈。
+- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/alert-dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
 - `Waveform` 是当前 Reo audio UI primitive；它支持 canvas bars、静态 dots、播放进度双色切分和录音编辑 cursor，不包含 agent runtime、network/API key、demo feedback 或未实现文案。
 - 当前没有 shared local playback primitive；暂停态回听由 recording overlay 内部的隐藏 HTMLAudioElement 和 feature-local controls 承担。
-- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
+- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell。
@@ -30,7 +31,7 @@
 - 业务 TSX 不写硬编码颜色，不为单个组件新增设计系统 token，不把 feature-local geometry 提升成全局 token。
 - 同平面的 Card、Button、Input、列表项、tab、workspace panel 和内容区不用 border 分割；难以区分时增加间距或调整灰度填充。跨区域边界和浮在内容之上的局部 overlay control 可以使用 token 化细边框来维持可读性。
 - Button、Input、Textarea、Field、Memory card、Segment card 和普通 action 默认无阴影。
-- 只有 Tooltip、DropdownMenu、Dialog、Drawer 和 Toast 这类临时浮层使用 `shadow-float` 或 `shadow-modal`。
+- 只有 Tooltip、DropdownMenu、Dialog、AlertDialog、Drawer 和 Toast 这类临时浮层使用 `shadow-float` 或 `shadow-modal`。
 - Hover、active、selected 通过灰度阶梯表达：常态使用透明或 `bg-card`，hover 使用 `bg-secondary` 或 `bg-accent`，选中使用 `bg-secondary` 并配合文字权重、状态点或黑色主动作。
 - `rounded-full` 只用于 FAB trigger、FAB action、录音主按钮、Segment strip overlay arrow、圆点、timeline marker 和 drawer/waveform handle。普通文本按钮使用 `rounded-lg`，compact 文本按钮使用 `rounded-md`，32px icon button 使用 `rounded-sm`，40px icon button 和菜单 action 使用 `rounded-md`，titlebar Breadcrumb trigger 使用 `rounded-sm`，输入框和卡片使用方圆角。
 - 常规交互动效使用 `duration-150 ease-out`；结构动效上限 `duration-200 ease-out`；reduced motion 下关闭。
@@ -39,13 +40,13 @@
 
 ## Primitive 当前形态
 
-- Button：radius 由 size variant 决定，文本动作用 `rounded-lg` / `rounded-md`，icon action 用 `rounded-sm` / `rounded-md` / `rounded-lg`；通用 Button primitive 不提供全圆 variant；`border-0`、`shadow-none`、focus ring；primary 使用黑色 `bg-primary` 并避免 hover 色相跳变；destructive 使用 `bg-destructive`；secondary/ghost 使用灰度填充。FAB 使用 `bg-brand-ember`；录音主 CTA 使用 `bg-brand-ember`。FAB 和录音主 CTA 的全圆例外保留在各自 owner component。
+- Button：radius 由 size variant 决定，文本动作用 `rounded-lg` / `rounded-md`，icon action 用 `rounded-sm` / `rounded-md` / `rounded-lg`；通用 Button primitive 不提供全圆 variant；`border-0`、`shadow-none`、focus ring；primary 使用 `bg-primary`，hover 只降到 `bg-primary/90`；destructive 使用 `bg-destructive`，hover 使用 `bg-destructive-hover`，该 token 通过 `color-mix` 将 destructive 轻微推亮，保证红色危险按钮 hover 可见且保持扁平；secondary 默认 `bg-card`，hover 用 `bg-accent text-accent-foreground`；ghost icon 默认透明，hover 用同一 `accent` 高光。FAB 使用 `bg-brand-ember`；录音主 CTA 使用 `bg-brand-ember`。FAB 和录音主 CTA 的全圆例外保留在各自 owner component。
 - Input 与 Textarea：`bg-input`、`border-0`、`shadow-none`；focus 与 invalid 只用 ring。
 - Field：字段行通过留白分隔，不使用 row divider。
-- DropdownMenu：Radix mechanics，`bg-popover text-popover-foreground shadow-float`，item 使用 compact density 和灰度 focus 状态，默认 `modal={false}`。
+- DropdownMenu：Radix mechanics，`bg-popover text-popover-foreground shadow-float`，item 使用 compact density，并同时响应 Radix `data-highlighted` 和 focus 状态；highlight 使用 `bg-accent text-accent-foreground`，默认 `modal={false}`。
 - Tooltip：Radix mechanics，`bg-popover text-popover-foreground shadow-float`。
-- Dialog 与 Drawer：使用 `bg-popover text-popover-foreground shadow-modal`，由 Radix/Vaul 承担 overlay mechanics。
-- Toast：root 只挂载一次，toast surface 使用 `bg-popover text-popover-foreground shadow-float`。
+- Dialog、AlertDialog 与 Drawer：使用 `bg-popover text-popover-foreground shadow-modal`，由 Radix/Vaul 承担 overlay mechanics。危险确认统一通过 workspace-level `WorkspaceDangerConfirmDialog` 使用 AlertDialog 的 title / description / footer 线性结构；Memory delete、Segment delete 和 Memory space remove 不在确认弹层内嵌套重内容卡，确认按钮不得让 Radix 自动关闭弹层，是否关闭由对应业务 flow 的成功/失败状态决定。
+- Toast：root 只挂载一次，toast surface 使用 `bg-popover text-popover-foreground shadow-float`。所有 toast action 使用同一 action button 结构；默认态透明、无边框、无填充底色，hover/active 只用 `color-mix` 填充高光，不画描边，focus-visible 保留键盘可达 ring。恢复 action 使用 icon+文字，不使用裸文字按钮。可撤销删除 toast 统一通过 `showReoUndoToast` 使用同一 neutral surface、目标标题、icon+文字恢复 action、无 close button、`dismissible: false` 和底部 2px 进度条；Memory delete 的 undo 调用 main restore，Segment delete 的 undo 只回滚 renderer pending projection。10 秒 toast duration 是 Segment delete grace-period 唯一时钟。
 - Separator：保留语义和命中区，不默认画可见线。
 - Breadcrumb：用于 AppShell panel titlebar；trigger 使用 `rounded-sm` 方圆角，层级之间使用圆点 separator，不使用 chevron。
 - Floating Action Button Speed Dial：用于底部表达入口；trigger 使用 `bg-brand-ember` 红色，trigger 和 action 都是全圆 FAB 控件；普通菜单 action 不继承该例外。PrimeReact action 自带圆形样式，Reo primitive 在该层明确保留 `rounded-full`，不能让业务 consumer 处理；结构展开动效不表达基础阴影。
@@ -68,7 +69,7 @@
 - 当前 loaded workspace frame 使用 AppShell panel titlebar、中央 Workspace Stage 或 Memory Studio、右侧可折叠 MemoryRail 和底部 ExpressionDock。
 - Titlebar 使用 shadcn/ui Breadcrumb 组合当前记忆空间标题和当前 Memory 标题，两个层级都用 DropdownMenu 提供重命名入口，中间 separator 使用 4px 圆点；titlebar 内容使用 `px-28`，右侧 icon controls 额外内收 `mr-16`。
 - 右侧 MemoryRail 读取当前 workspace snapshot 的 Memory 容器，按 Memory 投影 `updatedAt` 倒序展示 title、最近更新时间和片段数，并通过 DropdownMenu More 操作打开 memory rename Dialog 或 Memory delete confirmation Dialog。
-- Memory space、Memory 和 Segment rename Dialog 提交后立即关闭并更新本地投影；后台 IPC 保存失败时只在当前 title 仍是本次提交值时回滚，并通过 root toast 显示错误。
+- Memory space、Memory 和 Segment rename Dialog 提交后立即关闭并更新本地投影；后台 IPC 保存失败时只在当前 title 仍是本次提交值时回滚，并通过 root toast 显示错误。Memory delete Dialog 确认后触发 IPC，成功后更新 Query projection，并通过同一 undo toast surface 提供本次恢复入口。Segment delete 使用 AlertDialog 确认；确认后立即关闭弹层、乐观移除 renderer 投影并显示可撤销 toast，toast 的 icon+文字恢复 action 走统一 toast action 样式，toast 自动关闭时才触发 `workspace:deleteSegment`。Segment delete pending projection 绑定原 `workspaceHandle`；旧 handle 的 toast auto-close、undo 或 in-flight response 不能改写新 session。Memory space remove 复用同一危险确认结构，但不提供 undo，不删除本地文件夹。
 - 底部 ExpressionDock 使用 Floating Action Button Speed Dial，录音是唯一可执行 action，其他 action-shaped 位置只表达展开态布局。
 - WorkspaceFrame 使用 `h-full min-h-0 overflow-hidden bg-background`，避免内容把 AppShell panel 撑出页面滚动。
 - WorkspaceFrame 持有页面级内容轨道：stage shell 只负责外侧 padding，`workspace-stage-content` 使用 `mx-auto w-full max-w-[var(--workspace-stage-max-width)]` 居中，当前 `--workspace-stage-max-width` 为 `1120px`；Expression FAB track 使用同一最大宽度。WorkspaceStage 和 MemoryStudio 只填满该轨道，页面级宽度和偏移由 WorkspaceFrame 统一持有。
@@ -84,7 +85,7 @@
 - Memory Studio 展示空态、按 Segment 投影 `updatedAt` 倒序排列的 Segment 横向预览流、横向浏览按钮、时间轴和当前片段内容区；不重复渲染 Memory 标题、片段数量或总时长 meta。
 - Segment card、时间轴点、播放区、内容 tab 和内容区通过 feature-local `selectedSegmentId` 同步，只作用于当前 Memory 内的 Segment。
 - Segment card 使用紧凑正方形比例、无描边填充状态、静态 waveform glyph 和等宽时间；preview waveform 低振幅为圆点、高振幅为圆角竖柱，常态使用 `muted-foreground`，选中态使用 `foreground`；card 常态为 `bg-card`，选中为 `bg-secondary`。
-- Segment card 的选择 button 和 More trigger 是同一 item 内的 sibling controls。More trigger 只在 item hover、focus-within 或 menu open 时可见，使用 DropdownMenu 承载 `重命名` 操作，并打开 `SegmentRenameDialog`。
+- Segment card 的选择 button 和 More trigger 是同一 item 内的 sibling controls。More trigger 只在 item hover、focus-within 或 menu open 时可见，使用 DropdownMenu 承载 `重命名` 和 `删除` 操作；`重命名` 打开 `SegmentRenameDialog`，`删除` 打开 `SegmentDeleteDialog`。
 - Segment card width 使用 `--memory-studio-segment-card-min-size: 136px` 和 `--memory-studio-segment-card-size: clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)`，Segment item 与 card 都保留同一最小尺寸，窄窗口通过 strip 横向滚动承载，不压缩卡片内容。
 - Segment 横向预览流使用 `edge-fade-x` 表达左右边缘裁切；不在业务层创建独立 gradient overlay。
 - Timeline marker 是无描边实心圆点，时间轴线穿过圆点中心，时间标签显示 Segment 创建时间并在圆点下方持续可见；三者固定在对应卡片下方居中，并随同一个 Segment item 横向滚动。
@@ -114,6 +115,7 @@
 
 - TanStack Query 和 React Hook Form 已安装，并已有真实 memory space creation consumer。
 - 当前 QueryClient provider 服务 memory space list、记忆空间 snapshot cache、Memory detail cache、selected Segment content cache 和 selected SegmentAttachment audio content cache。
+- Segment delete 确认后 App 先更新 Workspace snapshot cache、对应 Memory detail cache 和当前 session projection，使被删 Segment 立即从 Memory Studio 消失；同一次 toast 的 `恢复` action 只把目标 Segment 重新插回当前投影，保留期间发生的 Memory title 或 summary 投影变化，并用一次性 Segment focus intent 选中恢复 Segment，不调用 `workspace:restoreDeletedSegment`。toast duration 为 10 秒，底部进度条与该 duration 同步，toast 不显示 close button 且不可手动 dismiss。toast lifecycle 使用单向 phase，重复 auto-close 不重复提交，commit 已开始后恢复 action 不再回滚。Grace period 内的 Workspace refresh 会重放 pending delete projection，只保护目标 Memory detail 和目标 Segment content/attachment content，其它同 workspace 查询照常 invalidate。Pending replay 使用 pending Segment identity 和 additive delta，不用 Workspace summary 的 aggregate count 猜测实体身份；refresh 对带 pending 的 Memory 必须读取 identity-bearing Memory detail 后再投影，并且只在当前 session request/revision 仍有效时写 Memory detail cache。toast 自动关闭后，只有当前 workspace session 仍匹配原 handle 时 App 才调用 `workspace:deleteSegment`；成功后先重放仍 pending 的其它 Segment delete projections，再移除被删 Segment 的 content cache，并按 Segment attachment content query prefix 移除该 Segment 下所有 attachment audio cache。`dataRetention: "previous-file-preserved"` 失败用同一局部恢复路径回滚 projection 并显示 root toast；`dataRetention: "file-written-index-stale"` 失败保持删除投影，不把已经移动到文件真源恢复区的 Segment 重新显示。因为 Query key 不含 `workspaceHandle`，App 在进入新的 workspace session 前和关闭当前 session 成功后，会清理同 workspace 的 Memory detail、Segment content 与 SegmentAttachment content cache，避免重新打开同一 workspaceId 时复用旧 handle 内容。
 - Active recording lifecycle、overlay close protection、recording controls、local playback state 和 Blob URL 不进入 Query。
 - Zustand 已选型，但当前未安装；没有跨 component subtree state owner 前，不创建 Zustand store。
 - 表单使用 React Hook Form + Zod；Memory space create、Memory create、Memory rename、Segment rename 和 memory space rename Dialog 的提交前 title draft 都由表单持有。

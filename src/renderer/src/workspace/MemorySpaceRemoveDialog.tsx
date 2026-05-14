@@ -1,11 +1,4 @@
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
 type MemorySpaceRemoveDialogProps = {
   readonly disabled?: boolean;
@@ -22,33 +15,17 @@ export function MemorySpaceRemoveDialog({
   open,
   workspaceTitle,
 }: MemorySpaceRemoveDialogProps) {
+  const targetTitle = workspaceTitle ?? '这个记忆空间';
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>移除记忆空间</DialogTitle>
-          <DialogDescription>
-            是否从 Reo 的记忆空间列表中移除
-            {workspaceTitle ? `「${workspaceTitle}」` : '这个记忆空间'}？
-          </DialogDescription>
-        </DialogHeader>
-
-        <p className="text-ui-sm leading-ui-sm text-muted-foreground">本地文件夹不会被删除。</p>
-
-        <div className="flex justify-end gap-8">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={disabled}
-            onClick={() => onOpenChange(false)}
-          >
-            取消
-          </Button>
-          <Button type="button" variant="destructive" disabled={disabled} onClick={onConfirm}>
-            移除
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <WorkspaceDangerConfirmDialog
+      confirmLabel="移除"
+      description={`从 Reo 的记忆空间列表中移除“${targetTitle}”？本地文件夹不会被删除。`}
+      disabled={disabled}
+      onConfirm={onConfirm}
+      onOpenChange={onOpenChange}
+      open={open}
+      title="移除记忆空间"
+    />
   );
 }

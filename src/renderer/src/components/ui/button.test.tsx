@@ -36,6 +36,8 @@ describe('Button primitive', () => {
 
     const button = screen.getByRole('button', { name: '浏览' });
     expect(button).toHaveClass('min-h-32', 'rounded-md', 'px-12', 'text-ui-sm');
+    expect(button).toHaveClass('bg-card', 'hover:bg-accent', 'hover:text-accent-foreground');
+    expect(button).not.toHaveClass('hover:bg-secondary');
     expect(button).not.toHaveClass('rounded-full', 'rounded-lg');
   });
 
@@ -45,8 +47,10 @@ describe('Button primitive', () => {
     expect(screen.getByRole('button', { name: '删除' })).toHaveClass(
       'bg-destructive',
       'text-destructive-foreground',
-      'hover:bg-destructive'
+      'hover:bg-destructive-hover'
     );
+    expect(screen.getByRole('button', { name: '删除' })).not.toHaveClass('hover:bg-destructive/90');
+    expect(screen.getByRole('button', { name: '删除' })).not.toHaveClass('hover:bg-destructive');
   });
 
   it('keeps large icon actions square-rounded by default', () => {
@@ -62,7 +66,7 @@ describe('Button primitive', () => {
       'rounded-lg',
       'border-0',
       'bg-primary',
-      'hover:bg-primary',
+      'hover:bg-primary/90',
       'shadow-none'
     );
     expect(button).not.toHaveClass('rounded-full');

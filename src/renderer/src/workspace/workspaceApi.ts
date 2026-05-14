@@ -56,6 +56,16 @@ export function restoreDeletedMemory(
   return window.reoWorkspace.restoreDeletedMemory(payload);
 }
 
+export function deleteSegment(payload: Parameters<Window['reoWorkspace']['deleteSegment']>[0]) {
+  return window.reoWorkspace.deleteSegment(payload);
+}
+
+export function restoreDeletedSegment(
+  payload: Parameters<Window['reoWorkspace']['restoreDeletedSegment']>[0]
+) {
+  return window.reoWorkspace.restoreDeletedSegment(payload);
+}
+
 export function readMemoryDetail(
   payload: Parameters<Window['reoWorkspace']['readMemoryDetail']>[0]
 ) {

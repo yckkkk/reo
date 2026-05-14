@@ -75,11 +75,13 @@ Memory rail 宽度收敛到 `240px`，列表 surface 使用全高 `bg-background
 
 Memory Studio 必须是首屏可理解的 studio surface：Segment card、timeline、playback、tab 和 transcript 不靠页面纵向滚动才能看完整主体验；中间舞台、播放器和内容区在窄视口内保持在 panel 内，Segment strip 只在自身横向滚动，不制造页面级横向滚动。
 
-Audio Segment card 使用紧凑正方形比例、无描边纯填充、`rounded-xl`、标题直入、静态 waveform bars 和 mono duration。卡片用 `bg-card` 或透明表达常态、`bg-secondary` 表达选中；浅色模式下卡片比页面更灰，深色模式下卡片比页面更亮，不用边框或阴影制造层级。卡片不展示 `一个补充`、`已有转录` 或 `本地音频` 这类状态标签。卡片 More 入口只在 hover、focus 或菜单打开时显示，并提供片段重命名。
+Audio Segment card 使用紧凑正方形比例、无描边纯填充、`rounded-xl`、标题直入、静态 waveform bars 和 mono duration。卡片用 `bg-card` 或透明表达常态、`bg-secondary` 表达选中；浅色模式下卡片比页面更灰，深色模式下卡片比页面更亮，不用边框或阴影制造层级。卡片不展示 `一个补充`、`已有转录` 或 `本地音频` 这类状态标签。卡片 More 入口只在 hover、focus 或菜单打开时显示，并提供片段重命名和片段删除。
 
 当前 Memory Studio 不是完整详情页。内容 tab 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，只有 selected Segment 存在 finalized SegmentAttachment 时才显示 `补充` tab，笔记、视频和图片不会作为常驻禁用 tab 出现。`+` 菜单显示录音补充项并以 `补充录音N` 命名，写入 selected Segment attachment，不新建 Memory，也不创建同级 Segment。
 
 Memory 删除是当前 Memory 容器的危险操作。用户只能从 Memory rail 的 More 菜单进入删除确认；确认后 main process 按 `memory.json.memoryId` 找到当前 Memory 目录并移入 `.reo/trash/memories/`，再刷新 Workspace snapshot。删除成功后 renderer 移除该 Memory 的 detail cache，若当前 Memory 被删除则切换到剩余第一条 Memory 或回到 Workspace Stage，并通过 toast 提供本次恢复动作。恢复只把同一 `restoreToken` 对应的 Memory 从恢复区移回 active memories，不恢复为 Segment 或 SegmentAttachment，也不暴露本地路径。
+
+Segment 删除是当前 Memory Studio 内 audio Segment 的危险操作。用户只能从 Segment card 的 More 菜单进入删除确认；确认后 renderer 立即从当前 Memory Studio 移除该 Segment，当前选中项回到剩余 Segment 或空态，并显示带进度条的可撤销 toast。Segment 删除 toast 使用统一 toast surface，`恢复` 是带 icon+文字和 hover 状态的 action；倒计时为 10 秒。用户在 toast 关闭前点击 `恢复` 时，Segment 直接回到当前 Memory Studio 并重新选中，不触发后端恢复请求。toast 自动关闭后，main process 才按 `segment.json.segmentId` 找到当前 Memory 下的 Segment 目录并移入 `.reo/trash/segments/`，其 `attachments/` 子树随 Segment 一起进入恢复区。删除或撤销过程不暴露本地路径。
 
 ## AI 边界
 

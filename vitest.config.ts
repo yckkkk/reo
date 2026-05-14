@@ -13,6 +13,11 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://127.0.0.1/',
+      },
+    },
     include: ['src/renderer/**/*.test.{ts,tsx}'],
     setupFiles: ['src/renderer/src/test/setup.ts'],
   },

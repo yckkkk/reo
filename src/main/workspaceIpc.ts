@@ -16,6 +16,7 @@ import {
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
@@ -33,6 +34,7 @@ import {
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -45,6 +47,8 @@ import {
   workspaceChooseDirectoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
+  workspaceDeleteSegmentRequestSchema,
+  workspaceDeleteSegmentResponseSchema,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
@@ -75,6 +79,8 @@ import {
   workspaceRecordingAppendResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
+  workspaceRestoreDeletedSegmentRequestSchema,
+  workspaceRestoreDeletedSegmentResponseSchema,
   workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
   workspaceSegmentAttachmentRecordingAppendResponseSchema,
   workspaceRecordingDraftPrefixCloneRequestSchema,
@@ -143,8 +149,10 @@ import {
 import {
   createMemoryFromFileTruth,
   deleteMemoryFromFileTruth,
+  deleteSegmentFromFileTruth,
   readMemoryDetailFromFileTruth,
   restoreDeletedMemoryFromFileTruth,
+  restoreDeletedSegmentFromFileTruth,
   updateMemoryTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from './memoryFiles.js';
@@ -1710,6 +1718,70 @@ function handleRestoreDeletedMemoryCore(
   });
 }
 
+function handleDeleteSegmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteSegmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_DELETE_SEGMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceDeleteSegmentRequestSchema,
+    invalidMessage: 'deleteSegment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment delete workspace does not match the active handle'
+          );
+        }
+
+        const result = await deleteSegmentFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceDeleteSegmentResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
+function handleRestoreDeletedSegmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRestoreDeletedSegmentRequestSchema,
+    invalidMessage: 'restoreDeletedSegment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment restore workspace does not match the active handle'
+          );
+        }
+
+        const result = await restoreDeletedSegmentFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          restoreToken: request.restoreToken,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRestoreDeletedSegmentResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
 function handleCreateRecordingDraftCore({
   createSegmentId: createSegmentIdOption = createSegmentId,
   now = nowIso,
@@ -1851,6 +1923,30 @@ export async function handleRestoreDeletedMemoryForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceRestoreDeletedMemoryResponseSchema>> {
   return handleRestoreDeletedMemoryCore(options);
+}
+
+export async function handleDeleteSegment(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteSegmentResponseSchema>> {
+  return handleDeleteSegmentCore(options);
+}
+
+export async function handleDeleteSegmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteSegmentResponseSchema>> {
+  return handleDeleteSegmentCore(options);
+}
+
+export async function handleRestoreDeletedSegment(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentResponseSchema>> {
+  return handleRestoreDeletedSegmentCore(options);
+}
+
+export async function handleRestoreDeletedSegmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentResponseSchema>> {
+  return handleRestoreDeletedSegmentCore(options);
 }
 
 function handleReadMemoryDetailCore(
@@ -2418,6 +2514,26 @@ export function registerWorkspaceIpc({
   );
   electronMain.ipcMain.handle(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
     handleRestoreDeletedMemory({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_DELETE_SEGMENT_CHANNEL, (event, input) =>
+    handleDeleteSegment({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  electronMain.ipcMain.handle(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, (event, input) =>
+    handleRestoreDeletedSegment({
       event,
       input,
       expectedSession,

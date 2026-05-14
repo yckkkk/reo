@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import {
   mkdir,
+  lstat,
   mkdtemp,
   readFile,
   readdir,
@@ -38,15 +46,21 @@ import {
   createMemoryFromFileTruth,
   createMemoryWithRecordingForTest as createMemoryWithRecording,
   deleteMemoryFromFileTruth,
+  deleteSegmentFromFileTruth,
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
   readMemoryDetailFromFileTruth,
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   restoreDeletedMemoryFromFileTruth,
+  restoreDeletedSegmentFromFileTruth,
   setAfterReadModelReplaceReadForTest,
+  setBeforeFileSpaceNodeMoveForTest,
+  setBeforeMemoryIndexEntryReadForTest,
   setBeforeReadModelReaddirForTest,
   setBeforeReadModelPersistForTest,
+  setBeforeSegmentDirectoryCandidateScanForTest,
+  setBeforeSegmentFileTruthListForTest,
   updateMemoryTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from '../../src/main/memoryFiles.js';
@@ -465,6 +479,1093 @@ test('renames a segment when memory segmentIds mirror is missing the valid file-
     ).segmentIds,
     [segmentId]
   );
+});
+
+test('delete and restore keep externally renamed segment directories addressable by metadata id', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_restore';
+  const segmentId = 'seg_delete_restore';
+  const keepSegmentId = 'seg_keep_after_delete';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '片段删除恢复',
+    segmentIds: [segmentId, keepSegmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Metadata segment title',
+    directoryName: `${segmentId}--Finder segment title`,
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: keepSegmentId,
+    title: 'Keep segment',
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, true);
+  if (deleted.ok) {
+    assert.equal(deleted.value.segmentId, segmentId);
+    assert.equal(deleted.value.restoreToken, segmentId);
+    assert.equal(deleted.value.memory.segmentCount, 1);
+  }
+  await assert.rejects(
+    stat(
+      path.join(rootPath, 'memories', memoryId, 'segments', `${segmentId}--Finder segment title`)
+    )
+  );
+  await stat(
+    path.join(rootPath, '.reo', 'trash', 'segments', `${segmentId}--Finder segment title`)
+  );
+  assert.deepEqual(
+    (
+      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
+        readonly segmentIds: readonly string[];
+      }
+    ).segmentIds,
+    [keepSegmentId]
+  );
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+  });
+
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal(restored.value.segment.segmentId, segmentId);
+    assert.equal(restored.value.segment.title, 'Finder segment title');
+    assert.equal(restored.value.memory.segmentCount, 2);
+  }
+  await stat(
+    path.join(rootPath, 'memories', memoryId, 'segments', `${segmentId}--Finder segment title`)
+  );
+  const restoredSegmentIds = (
+    (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
+      readonly segmentIds: readonly string[];
+    }
+  ).segmentIds;
+  assert.equal(restoredSegmentIds.includes(segmentId), true);
+  assert.equal(restoredSegmentIds.includes(keepSegmentId), true);
+});
+
+test('delete and restore move Segment attachments with the parent Segment directory', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_attachment';
+  const segmentId = 'seg_delete_attachment';
+  const attachmentId = 'att_delete_attachment';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '片段补充删除',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音补充',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, true);
+  await stat(
+    path.join(
+      rootPath,
+      '.reo',
+      'trash',
+      'segments',
+      segmentId,
+      'attachments',
+      attachmentId,
+      'audio.webm'
+    )
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: [
+      {
+        memoryId,
+        title: '片段补充删除',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:08:00.000Z',
+        segmentCount: 0,
+        durationMs: 0,
+        audioByteLength: 0,
+        hasTranscript: false,
+        attachmentCount: 0,
+      },
+    ],
+  });
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+  });
+
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal(restored.value.segment.attachmentCount, 1);
+    assert.equal(restored.value.segment.attachments[0]?.attachmentId, attachmentId);
+    assert.equal(restored.value.memory.attachmentCount, 1);
+  }
+  await stat(
+    path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'attachments', attachmentId)
+  );
+});
+
+test('restore deleted Segment returns a typed error when the parent Memory is missing', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_parent_missing';
+  const segmentId = 'seg_restore_parent_missing';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '父记忆缺失',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '待恢复录音',
+  });
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  await rm(path.join(rootPath, 'memories', memoryId), { recursive: true, force: true });
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_SEGMENT_RESTORE_PARENT_MISSING');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId)));
+});
+
+test('delete Segment rejects symlinked segment directories without following them', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_symlink';
+  const segmentId = 'seg_delete_symlink';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '不安全片段',
+    segmentIds: [segmentId],
+  });
+  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-outside-'));
+  await mkdir(path.join(rootPath, 'memories', memoryId, 'segments'), { recursive: true });
+  await symlink(outsideDirectory, path.join(rootPath, 'memories', memoryId, 'segments', segmentId));
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  await stat(outsideDirectory);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('delete Segment rejects source directory replacement after validating file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_replaced_source';
+  const segmentId = 'seg_delete_replaced_source';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除替换源',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '原始片段',
+  });
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const preservedOriginalDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--preserved-original`
+  );
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    setBeforeFileSpaceNodeMoveForTest(null);
+    await rename(activeDirectory, preservedOriginalDirectory);
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: '替换片段',
+    });
+  });
+
+  try {
+    const deleted = await deleteSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(deleted.ok, false);
+    if (!deleted.ok) {
+      assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+      assert.equal(deleted.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  await stat(path.join(activeDirectory, 'audio.webm'));
+  await stat(path.join(preservedOriginalDirectory, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('delete Segment reports unsafe finalized metadata leaf instead of treating it as missing', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_unsafe_metadata_leaf';
+  const segmentId = 'seg_delete_unsafe_metadata_leaf';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '不安全 metadata',
+    segmentIds: [segmentId],
+  });
+  const recordingDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  await mkdir(recordingDirectory, { recursive: true });
+  await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2, 3]));
+  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
+  const outsideMetadata = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-segment-meta-')),
+    'segment.json'
+  );
+  await writeFile(
+    outsideMetadata,
+    JSON.stringify({
+      schemaVersion: 1,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      type: 'audio',
+      status: 'finalized',
+      title: '不安全 metadata',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      finalizedAt: '2026-05-06T13:09:00.000Z',
+      durationMs: 1000,
+      nextSequence: 1,
+      audioByteLength: 3,
+      transcriptPath: 'transcript.md',
+    })
+  );
+  await symlink(outsideMetadata, path.join(recordingDirectory, 'segment.json'));
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    assert.equal(deleted.error.dataRetention, 'previous-file-preserved');
+  }
+  assert.equal((await lstat(path.join(recordingDirectory, 'segment.json'))).isSymbolicLink(), true);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('delete Segment rejects renamed symlink candidates without falling back to the default directory', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_renamed_symlink';
+  const segmentId = 'seg_delete_renamed_symlink';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '不安全片段外部改名',
+    segmentIds: [segmentId],
+  });
+  const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
+  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-renamed-outside-'));
+  const renamedCandidate = `${segmentId}--Finder segment title`;
+  const renamedCandidatePath = path.join(segmentsDirectory, renamedCandidate);
+  await mkdir(segmentsDirectory, { recursive: true });
+  await symlink(outsideDirectory, renamedCandidatePath);
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal((await lstat(renamedCandidatePath)).isSymbolicLink(), true);
+  await stat(outsideDirectory);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', renamedCandidate)));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('delete Segment rejects renamed non-directory candidates without falling back to the default directory', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_renamed_file';
+  const segmentId = 'seg_delete_renamed_file';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '不安全片段文件',
+    segmentIds: [segmentId],
+  });
+  const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
+  const renamedCandidate = `${segmentId}--Finder segment title`;
+  const renamedCandidatePath = path.join(segmentsDirectory, renamedCandidate);
+  await mkdir(segmentsDirectory, { recursive: true });
+  await writeFile(renamedCandidatePath, 'not a segment directory');
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal((await lstat(renamedCandidatePath)).isFile(), true);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', renamedCandidate)));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('restore Segment rejects renamed unsafe trash candidates without falling back to the default directory', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_renamed_symlink';
+  const segmentId = 'seg_restore_renamed_symlink';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '不安全恢复片段',
+    segmentIds: [],
+  });
+  await mkdir(path.join(rootPath, 'memories', memoryId, 'segments'), { recursive: true });
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments');
+  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-trash-outside-'));
+  const renamedCandidate = `${segmentId}--Finder segment title`;
+  const renamedCandidatePath = path.join(trashDirectory, renamedCandidate);
+  await mkdir(trashDirectory, { recursive: true });
+  await symlink(outsideDirectory, renamedCandidatePath);
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal((await lstat(renamedCandidatePath)).isSymbolicLink(), true);
+  await stat(outsideDirectory);
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
+});
+
+test('restore Segment rejects trash directory replacement after validating file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_replaced_source';
+  const segmentId = 'seg_restore_replaced_source';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复替换源',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '原始待恢复片段',
+  });
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+  const preservedOriginalTrashDirectory = path.join(
+    rootPath,
+    '.reo',
+    'trash',
+    'segments',
+    `${segmentId}--preserved-original`
+  );
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    setBeforeFileSpaceNodeMoveForTest(null);
+    await rename(trashDirectory, preservedOriginalTrashDirectory);
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: '替换待恢复片段',
+    });
+    await rename(activeDirectory, trashDirectory);
+  });
+
+  try {
+    const restored = await restoreDeletedSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      restoreToken: segmentId,
+    });
+
+    assert.equal(restored.ok, false);
+    if (!restored.ok) {
+      assert.equal(restored.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+      assert.equal(restored.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  await stat(path.join(trashDirectory, 'audio.webm'));
+  await stat(path.join(preservedOriginalTrashDirectory, 'audio.webm'));
+  await assert.rejects(stat(activeDirectory));
+});
+
+test('delete Segment rolls back the directory move and segmentIds mirror when index refresh fails', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_index_rollback';
+  const segmentId = 'seg_delete_index_rollback';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除索引失败恢复',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '索引失败片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const previousIndex = await readWorkspaceIndex(rootPath);
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    throw new Error('index refresh failed');
+  });
+
+  try {
+    const deleted = await deleteSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(deleted.ok, false);
+    if (!deleted.ok) {
+      assert.equal(deleted.error.code, 'ERR_SEGMENT_DELETE_FAILED');
+      assert.equal(deleted.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  await stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+  assert.deepEqual(
+    (
+      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
+        readonly segmentIds: readonly string[];
+      }
+    ).segmentIds,
+    [segmentId]
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), previousIndex);
+});
+
+test('delete Segment does not move a replacement trash directory during rollback', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_rollback_replaced_source';
+  const segmentId = 'seg_delete_rollback_replaced_source';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除回滚替换源',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '删除回滚原始片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+  const preservedOriginalTrashDirectory = path.join(
+    rootPath,
+    '.reo',
+    'trash',
+    'segments',
+    `${segmentId}--preserved-original`
+  );
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    throw new Error('index refresh failed');
+  });
+  let moveAttempt = 0;
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    moveAttempt += 1;
+    if (moveAttempt !== 2) {
+      return;
+    }
+    setBeforeFileSpaceNodeMoveForTest(null);
+    await rename(trashDirectory, preservedOriginalTrashDirectory);
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: '删除回滚替换片段',
+    });
+    await rename(activeDirectory, trashDirectory);
+  });
+
+  try {
+    const deleted = await deleteSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(deleted.ok, false);
+    if (!deleted.ok) {
+      assert.equal(deleted.error.code, 'ERR_SEGMENT_DELETE_FAILED');
+      assert.equal(deleted.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  await stat(path.join(trashDirectory, 'audio.webm'));
+  await stat(path.join(preservedOriginalTrashDirectory, 'audio.webm'));
+  await assert.rejects(stat(activeDirectory));
+});
+
+test('restore Segment rolls back to trash and preserves the active mirror when index refresh fails', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_index_rollback';
+  const segmentId = 'seg_restore_index_rollback';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复索引失败',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '恢复失败片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  const previousIndex = await readWorkspaceIndex(rootPath);
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    throw new Error('index refresh failed');
+  });
+
+  try {
+    const restored = await restoreDeletedSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      restoreToken: segmentId,
+    });
+
+    assert.equal(restored.ok, false);
+    if (!restored.ok) {
+      assert.equal(restored.error.code, 'ERR_SEGMENT_RESTORE_FAILED');
+      assert.equal(restored.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
+  assert.deepEqual(
+    (
+      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
+        readonly segmentIds: readonly string[];
+      }
+    ).segmentIds,
+    []
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), previousIndex);
+});
+
+test('restore Segment does not move a replacement active directory during rollback', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_rollback_replaced_source';
+  const segmentId = 'seg_restore_rollback_replaced_source';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复回滚替换源',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '恢复回滚原始片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+  const preservedOriginalActiveDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--preserved-original`
+  );
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    throw new Error('index refresh failed');
+  });
+  let moveAttempt = 0;
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    moveAttempt += 1;
+    if (moveAttempt !== 2) {
+      return;
+    }
+    setBeforeFileSpaceNodeMoveForTest(null);
+    await rename(activeDirectory, preservedOriginalActiveDirectory);
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: '恢复回滚替换片段',
+    });
+  });
+
+  try {
+    const restored = await restoreDeletedSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      restoreToken: segmentId,
+    });
+
+    assert.equal(restored.ok, false);
+    if (!restored.ok) {
+      assert.equal(restored.error.code, 'ERR_SEGMENT_RESTORE_FAILED');
+      assert.equal(restored.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  await stat(path.join(activeDirectory, 'audio.webm'));
+  await stat(path.join(preservedOriginalActiveDirectory, 'audio.webm'));
+  await assert.rejects(stat(trashDirectory));
+});
+
+test('delete Segment does not rollback after index failure if the workspace lock is lost', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_index_then_lock_lost';
+  const segmentId = 'seg_delete_index_then_lock_lost';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除索引失败后锁失效',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '索引失败锁失效片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+  let usable = true;
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    usable = false;
+    throw new Error('index refresh failed');
+  });
+
+  try {
+    const deleted = await deleteSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
+    });
+
+    assert.equal(deleted.ok, false);
+    if (!deleted.ok) {
+      assert.equal(deleted.error.code, 'ERR_SEGMENT_DELETE_FAILED');
+      assert.equal(deleted.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  await stat(path.join(trashDirectory, 'audio.webm'));
+  await assert.rejects(stat(activeDirectory));
+});
+
+test('restore Segment does not rollback after index failure if the workspace lock is lost', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_index_then_lock_lost';
+  const segmentId = 'seg_restore_index_then_lock_lost';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复索引失败后锁失效',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '恢复索引失败锁失效片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  const activeDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+  let usable = true;
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    setBeforeMemoryIndexEntryReadForTest(null);
+    usable = false;
+    throw new Error('index refresh failed');
+  });
+
+  try {
+    const restored = await restoreDeletedSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      restoreToken: segmentId,
+      assertWorkspaceUsable: () => (usable ? { ok: true } : workspaceLockLost()),
+    });
+
+    assert.equal(restored.ok, false);
+    if (!restored.ok) {
+      assert.equal(restored.error.code, 'ERR_SEGMENT_RESTORE_FAILED');
+      assert.equal(restored.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  await stat(path.join(activeDirectory, 'audio.webm'));
+  await assert.rejects(stat(trashDirectory));
+});
+
+test('delete Segment refreshes segmentIds mirror and index from one file-truth scan', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_single_scan';
+  const segmentId = 'seg_delete_single_scan';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除单次扫描',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '删除单次扫描片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  let scanCount = 0;
+  setBeforeSegmentFileTruthListForTest(() => {
+    scanCount += 1;
+  });
+
+  try {
+    const deleted = await deleteSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(deleted.ok, true);
+    assert.equal(scanCount, 1);
+  } finally {
+    setBeforeSegmentFileTruthListForTest(null);
+  }
+});
+
+test('restore Segment refreshes segmentIds mirror and index from one file-truth scan', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_single_scan';
+  const segmentId = 'seg_restore_single_scan';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复单次扫描',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '恢复单次扫描片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  let activeCandidateLookupCount = 0;
+  let scanCount = 0;
+  setBeforeSegmentDirectoryCandidateScanForTest(({ parentDirectory }) => {
+    if (parentDirectory.endsWith(path.join('memories', memoryId, 'segments'))) {
+      activeCandidateLookupCount += 1;
+    }
+  });
+  setBeforeSegmentFileTruthListForTest(() => {
+    scanCount += 1;
+  });
+
+  try {
+    const restored = await restoreDeletedSegmentFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      restoreToken: segmentId,
+    });
+
+    assert.equal(restored.ok, true);
+    assert.equal(activeCandidateLookupCount, 0);
+    assert.equal(scanCount, 1);
+  } finally {
+    setBeforeSegmentDirectoryCandidateScanForTest(null);
+    setBeforeSegmentFileTruthListForTest(null);
+  }
+});
+
+test('restore Segment rolls back when the active tree already has a renamed duplicate id', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_active_duplicate';
+  const segmentId = 'seg_restore_active_duplicate';
+  const renamedActiveDirectory = `${segmentId}--active duplicate`;
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复 active 重复',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '待恢复原始片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    directoryName: renamedActiveDirectory,
+    title: '已存在 active 片段',
+    audioBytes: [9, 9, 9],
+  });
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复 active 重复',
+    segmentIds: [segmentId],
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_SEGMENT_RESTORE_FAILED');
+    assert.equal(restored.error.dataRetention, 'previous-file-preserved');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId, 'audio.webm'));
+  await stat(
+    path.join(rootPath, 'memories', memoryId, 'segments', renamedActiveDirectory, 'audio.webm')
+  );
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
+});
+
+test('delete Segment stops before moving files when the workspace lock is lost', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_lock_lost';
+  const segmentId = 'seg_delete_lock_lost';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除锁失效',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '锁失效片段',
+  });
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    assertWorkspaceUsable: () => workspaceLockLost(),
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  await stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
+});
+
+test('delete Segment reports stale file truth when the workspace lock is lost after moving files', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_delete_lock_lost_after_move';
+  const segmentId = 'seg_delete_lock_lost_after_move';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '删除移动后锁失效',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '移动后锁失效片段',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const activeSegmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashedSegmentDirectory = path.join(rootPath, '.reo', 'trash', 'segments', segmentId);
+
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    assertWorkspaceUsable: () =>
+      !existsSync(activeSegmentDirectory) && existsSync(trashedSegmentDirectory)
+        ? workspaceLockLost()
+        : { ok: true },
+  });
+
+  assert.equal(deleted.ok, false);
+  if (!deleted.ok) {
+    assert.equal(deleted.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+    assert.equal(deleted.error.dataRetention, 'file-written-index-stale');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
+});
+
+test('restore Segment stops before moving files when the workspace lock is lost', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_restore_lock_lost';
+  const segmentId = 'seg_restore_lock_lost';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '恢复锁失效',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '锁失效恢复片段',
+  });
+  const deleted = await deleteSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(deleted.ok, true);
+
+  const restored = await restoreDeletedSegmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    restoreToken: segmentId,
+    assertWorkspaceUsable: () => workspaceLockLost(),
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId, 'audio.webm'));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
 });
 
 test('reads externally renamed segment directories as the segment title source of truth', async () => {

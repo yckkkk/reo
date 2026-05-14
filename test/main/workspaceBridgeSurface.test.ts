@@ -15,6 +15,8 @@ const workspaceBridgeKeys = [
   'createMemory',
   'deleteMemory',
   'restoreDeletedMemory',
+  'deleteSegment',
+  'restoreDeletedSegment',
   'readMemoryDetail',
   'readFinalizedAudioSegment',
   'readFinalizedAudioSegmentAttachment',
@@ -65,6 +67,18 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
   await bridge.restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
+  await bridge.deleteSegment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  await bridge.restoreDeletedSegment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    restoreToken: 'seg_1',
+  });
   await bridge.readMemoryDetail({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -129,6 +143,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
+    'workspace:deleteSegment',
+    'workspace:restoreDeletedSegment',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentAttachment',

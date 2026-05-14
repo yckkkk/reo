@@ -12,13 +12,15 @@ import {
   writeThemePreference,
   type ThemePreference,
 } from './app-shell/themePreference';
-import { ReoToaster, toast } from './components/ui/toaster';
+import { ReoToaster, showReoUndoToast, toast } from './components/ui/toaster';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
-import { SegmentRenameDialog, type SegmentRenameTarget } from './workspace/SegmentRenameDialog';
+import { SegmentDeleteDialog } from './workspace/SegmentDeleteDialog';
+import { SegmentRenameDialog } from './workspace/SegmentRenameDialog';
+import type { SegmentDeleteTarget, SegmentRenameTarget } from './workspace/segmentActionTargets';
 import {
   RecordingOverlay,
   type RecordingTarget,
@@ -31,15 +33,27 @@ import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
 import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
 import {
+  memorySummaryAfterSegmentRemoval,
+  memorySummaryAfterSegmentRestore,
+  memorySummaryWithPendingSegmentDelete,
+  memorySummaryWithVisibleSegments,
+  pendingSegmentDeleteBelongsToSession,
+  pendingSegmentDeleteKey,
+  queryKeyMatchesPendingSegmentDelete,
+  type PendingSegmentDeleteProjection,
+} from './workspace/segmentDeleteProjection';
+import {
   closeWorkspace,
   createMemory,
   deleteMemory,
+  deleteSegment,
   discardRecordingDraft,
   discardSegmentAttachmentRecordingDraft,
   finalizeRecordingDraft,
   finalizeSegmentAttachmentRecordingDraft,
   openWorkspace,
   openMemorySpace,
+  readMemoryDetail,
   readWorkspaceSnapshot,
   removeMemorySpace,
   restoreDeletedMemory,
@@ -70,7 +84,9 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  segmentAttachmentContentQueryPrefix,
   segmentContentQueryKey,
+  workspaceHandleScopedContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
@@ -88,6 +104,8 @@ type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
 };
+
+type SegmentDeleteToastPhase = 'pending' | 'committing' | 'undone' | 'settled';
 type MemoryDetailQueryData = {
   readonly requestId: string;
   readonly detail: WorkspaceMemoryDetail;
@@ -109,6 +127,8 @@ const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
 const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
 const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
+const SEGMENT_DELETE_ERROR = '无法删除片段。';
+const SEGMENT_DELETE_UNDO_DURATION_MS = 10000;
 const WORKSPACE_MEMORY_RAIL_INLINE_QUERY = '(min-width: 1100px)';
 
 function canShowInlineMemoryRail(): boolean {
@@ -288,6 +308,97 @@ function mergeSegmentIntoMemoryDetailIfCurrentTitle(
   return mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, workspaceId);
 }
 
+function removeSegmentFromMemoryDetail(
+  currentDetail: MemoryDetailQueryData | undefined,
+  memory: WorkspaceMemorySummary,
+  workspaceId: string,
+  segmentId: string
+): MemoryDetailQueryData | undefined {
+  if (
+    !currentDetail ||
+    currentDetail.detail.workspaceId !== workspaceId ||
+    currentDetail.detail.memoryId !== memory.memoryId
+  ) {
+    return currentDetail;
+  }
+
+  return {
+    ...currentDetail,
+    detail: {
+      ...currentDetail.detail,
+      ...memory,
+      workspaceId: currentDetail.detail.workspaceId,
+      segments: currentDetail.detail.segments.filter((segment) => segment.segmentId !== segmentId),
+    },
+  };
+}
+
+function memorySummaryWithDetailTranscriptWhenAdditiveFieldsMatch(
+  memory: WorkspaceMemorySummary,
+  currentDetail: MemoryDetailQueryData | undefined,
+  workspaceId: string
+): WorkspaceMemorySummary {
+  if (
+    !currentDetail ||
+    currentDetail.detail.workspaceId !== workspaceId ||
+    currentDetail.detail.memoryId !== memory.memoryId
+  ) {
+    return memory;
+  }
+
+  const detailSummary = memorySummaryWithVisibleSegments(memory, currentDetail.detail.segments);
+  const detailMatchesProjectedAdditiveFields =
+    detailSummary.audioByteLength === memory.audioByteLength &&
+    detailSummary.attachmentCount === memory.attachmentCount &&
+    detailSummary.durationMs === memory.durationMs &&
+    detailSummary.segmentCount === memory.segmentCount;
+
+  return detailMatchesProjectedAdditiveFields
+    ? { ...memory, hasTranscript: detailSummary.hasTranscript }
+    : memory;
+}
+
+function memorySummaryWithVisibleDetail(
+  memory: WorkspaceMemorySummary,
+  currentDetail: MemoryDetailQueryData | undefined,
+  workspaceId: string,
+  pendingSegmentIds: ReadonlySet<string>
+): WorkspaceMemorySummary | null {
+  if (
+    !currentDetail ||
+    currentDetail.detail.workspaceId !== workspaceId ||
+    currentDetail.detail.memoryId !== memory.memoryId
+  ) {
+    return null;
+  }
+
+  return memorySummaryWithVisibleSegments(
+    memory,
+    currentDetail.detail.segments.filter((segment) => !pendingSegmentIds.has(segment.segmentId))
+  );
+}
+
+function memorySummaryPreservingExternalNonAdditiveChanges({
+  memory,
+  pendingProjections,
+  visibleSegments,
+}: {
+  readonly memory: WorkspaceMemorySummary;
+  readonly pendingProjections: readonly PendingSegmentDeleteProjection[];
+  readonly visibleSegments: readonly WorkspaceMemoryDetail['segments'][number][];
+}): WorkspaceMemorySummary {
+  const projectedMemory = memorySummaryWithVisibleSegments(memory, visibleSegments);
+  const hasExternalNonAdditiveChange = pendingProjections.some(
+    (projection) =>
+      projection.memoryBeforeDelete.updatedAt !== memory.updatedAt ||
+      projection.memoryBeforeDelete.hasTranscript !== memory.hasTranscript
+  );
+
+  return hasExternalNonAdditiveChange
+    ? { ...projectedMemory, hasTranscript: memory.hasTranscript }
+    : projectedMemory;
+}
+
 function replaceSessionMemories(
   current: WorkspaceSession,
   memories: readonly WorkspaceMemorySummary[]
@@ -312,6 +423,7 @@ export function App() {
   const [memoryCreateIntent, setMemoryCreateIntent] = useState<MemoryCreateIntent | null>(null);
   const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
+  const [segmentDeleteTarget, setSegmentDeleteTarget] = useState<SegmentDeleteTarget | null>(null);
   const [segmentRenameTarget, setSegmentRenameTarget] = useState<SegmentRenameTarget | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
@@ -335,6 +447,10 @@ export function App() {
   const effectiveTheme = resolveEffectiveTheme(themePreference, isSystemDark);
   const [segmentFocusIntent, setSegmentFocusIntent] = useState<SegmentFocusIntent | null>(null);
   const lastWorkspaceErrorToastRef = useRef<string | null>(null);
+  const pendingSegmentDeleteProjectionsRef = useRef<Map<string, PendingSegmentDeleteProjection>>(
+    new Map()
+  );
+  const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
   const setWorkspaceSession = useCallback(
@@ -344,10 +460,23 @@ export function App() {
         | null
         | ((currentSession: WorkspaceSession | null) => WorkspaceSession | null)
     ) => {
-      workspaceSessionRevisionRef.current += 1;
-      setWorkspaceSessionState((currentSession) =>
-        typeof nextSession === 'function' ? nextSession(currentSession) : nextSession
-      );
+      const currentSession = workspaceSessionRef.current;
+      const resolvedSession =
+        typeof nextSession === 'function' ? nextSession(currentSession) : nextSession;
+      if (resolvedSession !== currentSession) {
+        workspaceSessionRevisionRef.current += 1;
+      }
+      workspaceSessionRef.current = resolvedSession;
+      if (!resolvedSession) {
+        pendingSegmentDeleteProjectionsRef.current.clear();
+      } else {
+        for (const [key, projection] of pendingSegmentDeleteProjectionsRef.current.entries()) {
+          if (!pendingSegmentDeleteBelongsToSession(projection, resolvedSession)) {
+            pendingSegmentDeleteProjectionsRef.current.delete(key);
+          }
+        }
+      }
+      setWorkspaceSessionState(resolvedSession);
     },
     []
   );
@@ -428,6 +557,19 @@ export function App() {
   }, [recordingTarget, workspaceSession]);
 
   useEffect(() => {
+    if (!workspaceSession) {
+      pendingSegmentDeleteProjectionsRef.current.clear();
+      return;
+    }
+
+    for (const [key, projection] of pendingSegmentDeleteProjectionsRef.current.entries()) {
+      if (!pendingSegmentDeleteBelongsToSession(projection, workspaceSession)) {
+        pendingSegmentDeleteProjectionsRef.current.delete(key);
+      }
+    }
+  }, [workspaceSession]);
+
+  useEffect(() => {
     if (!workspaceSession || recordingTarget) {
       return;
     }
@@ -477,14 +619,119 @@ export function App() {
         return;
       }
 
-      if (sameWorkspaceSnapshot(activeSession.snapshot, response.value)) {
+      const pendingSegmentDeleteProjections = [
+        ...pendingSegmentDeleteProjectionsRef.current.values(),
+      ].filter((projection) => pendingSegmentDeleteBelongsToSession(projection, activeSession));
+      const pendingProjectionsByMemory = new Map<string, PendingSegmentDeleteProjection[]>();
+      for (const projection of pendingSegmentDeleteProjections) {
+        pendingProjectionsByMemory.set(projection.memoryId, [
+          ...(pendingProjectionsByMemory.get(projection.memoryId) ?? []),
+          projection,
+        ]);
+      }
+      const pendingDetailCacheUpdates: {
+        readonly queryKey: ReturnType<typeof memoryDetailQueryKey>;
+        readonly data: MemoryDetailQueryData;
+      }[] = [];
+      const projectedMemories = await Promise.all(
+        response.value.memories.map(async (memory) => {
+          const pendingForMemory = pendingProjectionsByMemory.get(memory.memoryId) ?? [];
+          if (pendingForMemory.length === 0) {
+            return memory;
+          }
+
+          const pendingSegmentIds = new Set(
+            pendingForMemory.map((projection) => projection.segmentId)
+          );
+          const detailQueryKey = memoryDetailQueryKey({
+            workspaceId: response.value.workspaceId,
+            memoryId: memory.memoryId,
+          });
+          const requestId = `memory-detail-refresh:${response.value.workspaceId}:${
+            memory.memoryId
+          }:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+          const detailResponse = await readMemoryDetail({
+            workspaceHandle: activeSession.workspaceHandle,
+            workspaceId: response.value.workspaceId,
+            memoryId: memory.memoryId,
+            requestId,
+          }).catch(() => null);
+          if (
+            detailResponse?.ok &&
+            detailResponse.value.requestId === requestId &&
+            detailResponse.value.detail.workspaceId === response.value.workspaceId &&
+            detailResponse.value.detail.memoryId === memory.memoryId
+          ) {
+            const visibleSegments = detailResponse.value.detail.segments.filter(
+              (segment) => !pendingSegmentIds.has(segment.segmentId)
+            );
+            const projectedMemory = memorySummaryPreservingExternalNonAdditiveChanges({
+              memory,
+              pendingProjections: pendingForMemory,
+              visibleSegments,
+            });
+            pendingDetailCacheUpdates.push({
+              queryKey: detailQueryKey,
+              data: {
+                requestId,
+                detail: {
+                  ...detailResponse.value.detail,
+                  ...projectedMemory,
+                  workspaceId: detailResponse.value.detail.workspaceId,
+                  segments: visibleSegments,
+                },
+              },
+            });
+            return projectedMemory;
+          }
+
+          const projectedMemoryFromCurrentDetail = memorySummaryWithVisibleDetail(
+            memory,
+            queryClient.getQueryData<MemoryDetailQueryData | undefined>(detailQueryKey),
+            response.value.workspaceId,
+            pendingSegmentIds
+          );
+          if (projectedMemoryFromCurrentDetail) {
+            return projectedMemoryFromCurrentDetail;
+          }
+
+          return (
+            workspaceSessionRef.current?.snapshot.memories.find(
+              (candidate) => candidate.memoryId === memory.memoryId
+            ) ??
+            activeSession.snapshot.memories.find(
+              (candidate) => candidate.memoryId === memory.memoryId
+            ) ??
+            memory
+          );
+        })
+      );
+      if (
+        disposed ||
+        requestId !== workspaceSnapshotRefreshRequestRef.current ||
+        sessionRevision !== workspaceSessionRevisionRef.current
+      ) {
+        return;
+      }
+      for (const cacheUpdate of pendingDetailCacheUpdates) {
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          cacheUpdate.queryKey,
+          cacheUpdate.data
+        );
+      }
+      const projectedSnapshot = {
+        ...response.value,
+        memories: projectedMemories,
+      };
+
+      if (sameWorkspaceSnapshot(activeSession.snapshot, projectedSnapshot)) {
         setWorkspaceEntryError(null);
         return;
       }
 
       const refreshedSession: WorkspaceSession = {
         ...activeSession,
-        snapshot: response.value,
+        snapshot: projectedSnapshot,
       };
 
       seedWorkspaceSnapshot(queryClient, refreshedSession);
@@ -497,22 +744,23 @@ export function App() {
       setSelectedMemoryId((currentMemoryId) => {
         if (
           currentMemoryId &&
-          response.value.memories.some((memory) => memory.memoryId === currentMemoryId)
+          projectedSnapshot.memories.some((memory) => memory.memoryId === currentMemoryId)
         ) {
           return currentMemoryId;
         }
 
-        return response.value.memories[0]?.memoryId ?? null;
+        return projectedSnapshot.memories[0]?.memoryId ?? null;
       });
       void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
       void queryClient.invalidateQueries({
-        queryKey: ['workspace', 'memory-detail', response.value.workspaceId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ['workspace', 'segment-content', response.value.workspaceId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ['workspace', 'segment-attachment-content', response.value.workspaceId],
+        predicate: (query) =>
+          workspaceHandleScopedContentQueryBelongsToWorkspace(
+            query.queryKey,
+            response.value.workspaceId
+          ) &&
+          !pendingSegmentDeleteProjections.some((projection) =>
+            queryKeyMatchesPendingSegmentDelete(query.queryKey, projection)
+          ),
       });
     }
 
@@ -540,6 +788,13 @@ export function App() {
   }
 
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
+    queryClient.removeQueries({
+      predicate: (query) =>
+        workspaceHandleScopedContentQueryBelongsToWorkspace(
+          query.queryKey,
+          nextWorkspaceSession.workspaceId
+        ),
+    });
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     setWorkspaceCreateOpen(false);
@@ -547,6 +802,7 @@ export function App() {
     setMemoryCreateIntent(null);
     setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
+    setSegmentDeleteTarget(null);
     setMemorySpaceRenameTarget(null);
     setSelectedMemoryId(nextWorkspaceSession.snapshot.memories[0]?.memoryId ?? null);
     setWorkspaceSession(nextWorkspaceSession);
@@ -678,6 +934,13 @@ export function App() {
       setMemoryRenameTarget(null);
       setMemorySpaceRenameTarget(null);
       setSelectedMemoryId(null);
+      queryClient.removeQueries({
+        predicate: (query) =>
+          workspaceHandleScopedContentQueryBelongsToWorkspace(
+            query.queryKey,
+            workspaceSession.workspaceId
+          ),
+      });
       setWorkspaceSession(null);
       setTopLevelWorkspaceView(nextView);
     } catch (error) {
@@ -1704,6 +1967,7 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setMemoryCreateIntent(null);
     setMemoryRenameTarget(null);
+    setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
     setMemoryDeleteTarget(memory);
@@ -1716,6 +1980,31 @@ export function App() {
 
     if (!nextOpen) {
       setMemoryDeleteTarget(null);
+    }
+  }
+
+  function openSegmentDeleteDialog(target: SegmentDeleteTarget) {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setSegmentRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+    setSegmentDeleteTarget(target);
+  }
+
+  function handleSegmentDeleteOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+
+    if (!nextOpen) {
+      setSegmentDeleteTarget(null);
     }
   }
 
@@ -1783,14 +2072,12 @@ export function App() {
         setSelectedMemoryId(response.value.memories[0]?.memoryId ?? null);
       }
       setMemoryDeleteTarget(null);
-      toast.success('已删除记忆', {
-        description: '可以从这次提示恢复。',
-        action: {
-          label: '恢复',
-          onClick: () => {
-            void restoreDeletedMemoryFromUndo(response.value.restoreToken);
-          },
+      showReoUndoToast({
+        description: target.title,
+        onUndo: () => {
+          void restoreDeletedMemoryFromUndo(response.value.restoreToken);
         },
+        title: '已删除记忆',
       });
     } catch (error) {
       toast.error(MEMORY_DELETE_ERROR, {
@@ -1799,6 +2086,300 @@ export function App() {
     } finally {
       finishWorkspaceAction();
     }
+  }
+
+  function confirmDeleteSegment() {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    const target = segmentDeleteTarget;
+    if (!target || workspaceActionPending) {
+      return;
+    }
+
+    const session = activeWorkspaceSession;
+    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
+    const memoryDetailKey = memoryDetailQueryKey({
+      workspaceId: session.workspaceId,
+      memoryId: target.memoryId,
+    });
+    const previousSnapshot =
+      queryClient.getQueryData<WorkspaceSession['snapshot']>(snapshotQueryKey) ?? session.snapshot;
+    const previousDetail = queryClient.getQueryData<MemoryDetailQueryData | undefined>(
+      memoryDetailKey
+    );
+    const memoryBeforeDelete = previousSnapshot.memories.find(
+      (memory) => memory.memoryId === target.memoryId
+    );
+
+    if (!memoryBeforeDelete) {
+      setSegmentDeleteTarget(null);
+      toast.error(SEGMENT_DELETE_ERROR);
+      return;
+    }
+
+    const remainingSegments = previousDetail?.detail.segments.filter(
+      (segment) => segment.segmentId !== target.segment.segmentId
+    );
+    const optimisticMemory = memorySummaryAfterSegmentRemoval({
+      memory: memoryBeforeDelete,
+      removedSegment: target.segment,
+      ...(remainingSegments ? { remainingSegments } : {}),
+    });
+    const pendingProjectionKey = pendingSegmentDeleteKey({
+      workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
+      memoryId: target.memoryId,
+      segmentId: target.segment.segmentId,
+    });
+    const clearPendingSegmentDeleteProjection = () => {
+      pendingSegmentDeleteProjectionsRef.current.delete(pendingProjectionKey);
+    };
+    const segmentDeleteSessionIsActive = () =>
+      workspaceSessionRef.current?.workspaceHandle === session.workspaceHandle &&
+      workspaceSessionRef.current.workspaceId === session.workspaceId;
+    const removeDeletedSegmentContentCaches = () => {
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: segmentContentQueryKey({
+          workspaceId: session.workspaceId,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+        }),
+      });
+      queryClient.removeQueries({
+        queryKey: segmentAttachmentContentQueryPrefix({
+          workspaceId: session.workspaceId,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+        }),
+      });
+    };
+    const memoryWithRemainingPendingDeletes = (memory: WorkspaceMemorySummary) =>
+      [...pendingSegmentDeleteProjectionsRef.current.values()]
+        .filter((projection) => pendingSegmentDeleteBelongsToSession(projection, session))
+        .reduce(
+          (currentMemory, projection) =>
+            memorySummaryWithPendingSegmentDelete(currentMemory, projection),
+          memory
+        );
+
+    const rollbackSegmentDelete = () => {
+      const currentDetailBeforeRollback = queryClient.getQueryData<
+        MemoryDetailQueryData | undefined
+      >(memoryDetailKey);
+      const segmentAlreadyProjected =
+        currentDetailBeforeRollback?.detail.segments.some(
+          (segment) => segment.segmentId === target.segment.segmentId
+        ) ?? false;
+
+      const restoreMemorySummary = (memory: WorkspaceMemorySummary) =>
+        segmentAlreadyProjected
+          ? memory
+          : memorySummaryAfterSegmentRestore({
+              memory,
+              restoredSegment: target.segment,
+            });
+
+      const restoreSnapshotMemory = (
+        snapshot: WorkspaceSession['snapshot']
+      ): {
+        readonly memory: WorkspaceMemorySummary | null;
+        readonly snapshot: WorkspaceSession['snapshot'];
+      } => {
+        const currentMemory = snapshot.memories.find(
+          (memory) => memory.memoryId === target.memoryId
+        );
+        if (!currentMemory) {
+          return { memory: null, snapshot };
+        }
+
+        const restoredMemory = restoreMemorySummary(currentMemory);
+        return {
+          memory: restoredMemory,
+          snapshot: mergeMemoryIntoSnapshot(snapshot, restoredMemory),
+        };
+      };
+
+      const snapshotBeforeRollback =
+        queryClient.getQueryData<WorkspaceSession['snapshot'] | undefined>(snapshotQueryKey) ??
+        previousSnapshot;
+      const { memory: restoredMemoryForDetail } = restoreSnapshotMemory(snapshotBeforeRollback);
+      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+        snapshotQueryKey,
+        (currentSnapshot) => restoreSnapshotMemory(currentSnapshot ?? previousSnapshot).snapshot
+      );
+      if (restoredMemoryForDetail && (previousDetail || currentDetailBeforeRollback)) {
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          memoryDetailKey,
+          (currentDetail) => {
+            const sourceDetail = currentDetail ?? previousDetail;
+            if (!sourceDetail) {
+              return currentDetail;
+            }
+
+            return mergeSegmentIntoMemoryDetail(
+              sourceDetail,
+              restoredMemoryForDetail,
+              target.segment,
+              session.workspaceId
+            );
+          }
+        );
+      }
+      setWorkspaceSession((currentSession) =>
+        currentSession?.workspaceHandle === session.workspaceHandle &&
+        currentSession.workspaceId === session.workspaceId
+          ? { ...currentSession, snapshot: restoreSnapshotMemory(currentSession.snapshot).snapshot }
+          : currentSession
+      );
+      if (restoredMemoryForDetail) {
+        setSelectedMemoryId(target.memoryId);
+        setSegmentFocusIntent({
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+        });
+      }
+    };
+
+    const commitSegmentDelete = async () => {
+      try {
+        const response = await deleteSegment({
+          workspaceHandle: session.workspaceHandle,
+          workspaceId: session.workspaceId,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+        });
+
+        clearPendingSegmentDeleteProjection();
+        if (!segmentDeleteSessionIsActive()) {
+          return;
+        }
+
+        if (!response.ok) {
+          if (response.error.dataRetention === 'file-written-index-stale') {
+            removeDeletedSegmentContentCaches();
+          } else {
+            rollbackSegmentDelete();
+          }
+          toast.error(SEGMENT_DELETE_ERROR, {
+            description: workspaceErrorDisplayMessage(response.error, SEGMENT_DELETE_ERROR),
+          });
+          return;
+        }
+
+        const remainingPendingSegmentIds = new Set(
+          [...pendingSegmentDeleteProjectionsRef.current.values()]
+            .filter((projection) => pendingSegmentDeleteBelongsToSession(projection, session))
+            .map((projection) => projection.segmentId)
+        );
+        const committedMemory =
+          memorySummaryWithVisibleDetail(
+            response.value.memory,
+            queryClient.getQueryData<MemoryDetailQueryData | undefined>(memoryDetailKey),
+            session.workspaceId,
+            remainingPendingSegmentIds
+          ) ??
+          memorySummaryWithDetailTranscriptWhenAdditiveFieldsMatch(
+            memoryWithRemainingPendingDeletes(response.value.memory),
+            queryClient.getQueryData<MemoryDetailQueryData | undefined>(memoryDetailKey),
+            session.workspaceId
+          );
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) =>
+            mergeMemoryIntoSnapshot(currentSnapshot ?? previousSnapshot, committedMemory)
+        );
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          memoryDetailKey,
+          (currentDetail) =>
+            removeSegmentFromMemoryDetail(
+              currentDetail,
+              committedMemory,
+              session.workspaceId,
+              target.segment.segmentId
+            )
+        );
+        removeDeletedSegmentContentCaches();
+        setWorkspaceSession((currentSession) =>
+          currentSession?.workspaceHandle === session.workspaceHandle &&
+          currentSession.workspaceId === session.workspaceId
+            ? mergeMemoryIntoSession(currentSession, committedMemory)
+            : currentSession
+        );
+      } catch (error) {
+        clearPendingSegmentDeleteProjection();
+        if (!segmentDeleteSessionIsActive()) {
+          return;
+        }
+        rollbackSegmentDelete();
+        toast.error(SEGMENT_DELETE_ERROR, {
+          description: unknownErrorDisplayMessage(error, SEGMENT_DELETE_ERROR),
+        });
+      }
+    };
+
+    pendingSegmentDeleteProjectionsRef.current.set(pendingProjectionKey, {
+      memoryBeforeDelete,
+      memoryId: target.memoryId,
+      optimisticMemory,
+      segment: target.segment,
+      segmentId: target.segment.segmentId,
+      workspaceHandle: session.workspaceHandle,
+      workspaceId: session.workspaceId,
+    });
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeMemoryIntoSnapshot(currentSnapshot ?? previousSnapshot, optimisticMemory)
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(memoryDetailKey, (currentDetail) =>
+      removeSegmentFromMemoryDetail(
+        currentDetail,
+        optimisticMemory,
+        session.workspaceId,
+        target.segment.segmentId
+      )
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
+        ? mergeMemoryIntoSession(currentSession, optimisticMemory)
+        : currentSession
+    );
+    setSegmentDeleteTarget(null);
+
+    let toastPhase: SegmentDeleteToastPhase = 'pending';
+    showReoUndoToast({
+      description: target.segment.title,
+      durationMs: SEGMENT_DELETE_UNDO_DURATION_MS,
+      onAutoClose: () => {
+        if (toastPhase !== 'pending') {
+          return;
+        }
+        toastPhase = 'committing';
+        if (!segmentDeleteSessionIsActive()) {
+          toastPhase = 'settled';
+          clearPendingSegmentDeleteProjection();
+          return;
+        }
+        void commitSegmentDelete();
+      },
+      onUndo: () => {
+        if (toastPhase !== 'pending') {
+          return;
+        }
+        toastPhase = 'undone';
+        if (!segmentDeleteSessionIsActive()) {
+          clearPendingSegmentDeleteProjection();
+          return;
+        }
+        clearPendingSegmentDeleteProjection();
+        rollbackSegmentDelete();
+      },
+      title: '已删除片段',
+    });
   }
 
   function openRecording(
@@ -1835,6 +2416,10 @@ export function App() {
   }
 
   function requestStartRecording() {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
     if (currentMemoryId) {
       openRecording({ kind: 'existing-memory', memoryId: currentMemoryId });
       return;
@@ -1985,6 +2570,7 @@ export function App() {
             memoryRailOpen={memoryRailOpen}
             memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
             onDeleteMemory={openMemoryDeleteDialog}
+            onDeleteSegment={openSegmentDeleteDialog}
             onSegmentFocusConsumed={(segmentId) => {
               setSegmentFocusIntent((currentIntent) =>
                 currentIntent?.segmentId === segmentId ? null : currentIntent
@@ -2052,6 +2638,15 @@ export function App() {
         }}
         onOpenChange={handleMemoryDeleteOpenChange}
         open={memoryDeleteTarget !== null}
+      />
+      <SegmentDeleteDialog
+        disabled={workspaceActionPending}
+        target={segmentDeleteTarget}
+        onConfirm={() => {
+          void confirmDeleteSegment();
+        }}
+        onOpenChange={handleSegmentDeleteOpenChange}
+        open={segmentDeleteTarget !== null}
       />
       <MemoryCreateDialog
         description={

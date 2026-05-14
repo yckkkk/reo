@@ -114,6 +114,55 @@
   }
 }
 
+@keyframes reo-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.reo-undo-toast {
+  position: relative;
+  overflow: hidden;
+}
+
+.reo-toast-action {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.reo-toast-action:hover {
+  background-color: color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+.reo-toast-action:active {
+  background-color: color-mix(in oklab, var(--foreground) 24%, transparent);
+}
+
+.reo-toast-action:focus-visible {
+  background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+}
+
+.reo-undo-toast::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  content: '';
+  background: color-mix(in oklab, var(--foreground) 54%, transparent);
+  transform-origin: left center;
+  animation: reo-toast-progress var(--reo-toast-duration, 5000ms) linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reo-undo-toast::after {
+    animation: none;
+  }
+}
+
 @utility edge-fade-y {
   --edge-fade-size: var(--spacing-24);
   -webkit-mask-image: linear-gradient(

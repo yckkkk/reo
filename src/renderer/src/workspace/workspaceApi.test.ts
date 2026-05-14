@@ -8,6 +8,7 @@ import {
   closeWorkspace,
   createMemory,
   deleteMemory,
+  deleteSegment,
   createRecordingDraft,
   createSegmentAttachmentRecordingDraft,
   discardRecordingDraft,
@@ -25,6 +26,7 @@ import {
   readRecordingDraftAudio,
   removeMemorySpace,
   restoreDeletedMemory,
+  restoreDeletedSegment,
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
@@ -44,6 +46,8 @@ describe('workspace renderer API wrapper', () => {
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
+    deleteSegment: vi.fn(),
+    restoreDeletedSegment: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
     readFinalizedAudioSegmentAttachment: vi.fn(),
@@ -144,6 +148,54 @@ describe('workspace renderer API wrapper', () => {
           attachmentCount: 0,
         },
         memories: [],
+      },
+    });
+    reoWorkspace.deleteSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: '产品灵感与思考',
+          createdAt: '2026-05-08T14:42:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          segmentCount: 0,
+          durationMs: 0,
+          audioByteLength: 0,
+          hasTranscript: false,
+          attachmentCount: 0,
+        },
+        segmentId: 'seg_1',
+        restoreToken: 'seg_1',
+      },
+    });
+    reoWorkspace.restoreDeletedSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: '产品灵感与思考',
+          createdAt: '2026-05-08T14:42:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          segmentCount: 1,
+          durationMs: 1,
+          audioByteLength: 1,
+          hasTranscript: false,
+          attachmentCount: 0,
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          type: 'audio',
+          title: '录音',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 1,
+          audioByteLength: 1,
+          transcript: { exists: false },
+          attachmentCount: 0,
+          attachments: [],
+        },
       },
     });
     reoWorkspace.readMemoryDetail.mockResolvedValue({
@@ -352,6 +404,18 @@ describe('workspace renderer API wrapper', () => {
     await createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
     await deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
     await restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
+    await deleteSegment({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
+    await restoreDeletedSegment({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      restoreToken: 'seg_1',
+    });
     await readMemoryDetail({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -468,6 +532,18 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.restoreDeletedMemory).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       restoreToken: 'mem_1',
+    });
+    expect(reoWorkspace.deleteSegment).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
+    expect(reoWorkspace.restoreDeletedSegment).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      restoreToken: 'seg_1',
     });
     expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
