@@ -51,22 +51,92 @@
   }
 }
 
+/* Edge fade is a scroll affordance: each edge fades only while content is
+   scrolled past it. The mask offsets are driven by scroll-driven animations,
+   so a non-overflowing container has an inactive timeline and shows no fade. */
+@property --edge-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --edge-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --edge-fade-left {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --edge-fade-right {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes edge-fade-top {
+  from {
+    --edge-fade-top: 0px;
+  }
+  to {
+    --edge-fade-top: var(--edge-fade-size);
+  }
+}
+
+@keyframes edge-fade-bottom {
+  from {
+    --edge-fade-bottom: var(--edge-fade-size);
+  }
+  to {
+    --edge-fade-bottom: 0px;
+  }
+}
+
+@keyframes edge-fade-left {
+  from {
+    --edge-fade-left: 0px;
+  }
+  to {
+    --edge-fade-left: var(--edge-fade-size);
+  }
+}
+
+@keyframes edge-fade-right {
+  from {
+    --edge-fade-right: var(--edge-fade-size);
+  }
+  to {
+    --edge-fade-right: 0px;
+  }
+}
+
 @utility edge-fade-y {
   --edge-fade-size: var(--spacing-24);
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black var(--edge-fade-size),
-    black calc(100% - var(--edge-fade-size)),
+    black var(--edge-fade-top),
+    black calc(100% - var(--edge-fade-bottom)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black var(--edge-fade-size),
-    black calc(100% - var(--edge-fade-size)),
+    black var(--edge-fade-top),
+    black calc(100% - var(--edge-fade-bottom)),
     transparent 100%
   );
+  animation-name: edge-fade-top, edge-fade-bottom;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(self block);
+  animation-range:
+    0 var(--edge-fade-size),
+    calc(100% - var(--edge-fade-size)) 100%;
 }
 
 @utility edge-fade-x {
@@ -74,17 +144,24 @@
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0,
-    black var(--edge-fade-size),
-    black calc(100% - var(--edge-fade-size)),
+    black var(--edge-fade-left),
+    black calc(100% - var(--edge-fade-right)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to right,
     transparent 0,
-    black var(--edge-fade-size),
-    black calc(100% - var(--edge-fade-size)),
+    black var(--edge-fade-left),
+    black calc(100% - var(--edge-fade-right)),
     transparent 100%
   );
+  animation-name: edge-fade-left, edge-fade-right;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-timeline: scroll(self inline);
+  animation-range:
+    0 var(--edge-fade-size),
+    calc(100% - var(--edge-fade-size)) 100%;
 }
 
 @utility scrollbar-hover {

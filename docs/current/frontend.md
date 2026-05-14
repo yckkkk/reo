@@ -10,7 +10,7 @@
 - Reo 设计系统源文件位于 `docs/current/design-system/`；renderer 可执行主题文件是 `src/renderer/src/theme.css`；renderer 样式入口是 `src/renderer/src/index.css`。
 - 当前设计系统是黑色为主、红色为辅的 Soft Flat Design System：纯白或极深灰画布、低对比灰度容器、无同平面描边、基础组件无阴影、浮层使用克制 Z 轴投影、黑色用于核心动作和明确状态，红色用于表达入口、录音主按钮和危险/高注意力状态。
 - `src/renderer/src/index.css` 负责 Tailwind v4 import、`data-theme="dark"` dark variant、Electron drag/no-drag utility、全局不可选中文本和输入/转录类文本可选中规则。
-- `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x` 和 `scrollbar-hover`。它们用于可滚动内容边缘渐隐和 hover/focus 时才显露滚动条的文本容器，不由业务组件重复实现 gradient overlay、mask 或 scrollbar 规则。
+- `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x` 和 `scrollbar-hover`。它们用于可滚动内容边缘渐隐和 hover/focus 时才显露滚动条的文本容器，不由业务组件重复实现 gradient overlay、mask 或 scrollbar 规则。`edge-fade-*` 是滚动感知的：通过 `@property` 注册的边缘偏移变量 + scroll-driven animation，每个边缘只在该方向有内容被滚走时才渐隐，内容不溢出时无 fade。
 - 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme` 与 document 根节点 `data-theme` 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容也继承当前主题。侧边栏底部使用单按钮循环 `浅色 → 深色 → 跟随系统 → 浅色`，按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
 - 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
@@ -50,7 +50,7 @@
 - Breadcrumb：用于 AppShell panel titlebar；trigger 使用 `rounded-sm` 方圆角，层级之间使用圆点 separator，不使用 chevron。
 - Floating Action Button Speed Dial：用于底部表达入口；trigger 使用 `bg-brand-ember` 红色，trigger 和 action 都是全圆 FAB 控件；普通菜单 action 不继承该例外。PrimeReact action 自带圆形样式，Reo primitive 在该层明确保留 `rounded-full`，不能让业务 consumer 处理；结构展开动效不表达基础阴影。
 - Waveform：保留 canvas waveform renderer、静态 dots、动态 bars、播放进度双色切分和录音编辑 cursor；当 data 为空或样本为零时不绘制占位 bars。
-- Edge Fade：`edge-fade-y` 用于纵向 scroll surface 的上下渐隐，`edge-fade-x` 用于横向 scroll surface 的左右渐隐；`scrollbar-hover` 默认隐藏滚动条，在 hover 或 focus-within 时显示。可滚动转写文本和横向片段流必须复用这些 utilities。
+- Edge Fade：`edge-fade-y` 用于纵向 scroll surface 的上下渐隐，`edge-fade-x` 用于横向 scroll surface 的左右渐隐；渐隐是滚动感知的——每个边缘只在该方向有内容被滚走时出现，未滚动或内容不溢出时该边缘清晰无遮挡。`scrollbar-hover` 默认隐藏滚动条，在 hover 或 focus-within 时显示。可滚动转写文本和横向片段流必须复用这些 utilities。
 
 ## App Shell
 
