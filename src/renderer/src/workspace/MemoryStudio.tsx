@@ -809,14 +809,14 @@ export function MemoryStudio({
                         type="button"
                         aria-current={isSelected ? 'true' : undefined}
                         aria-label={`选择片段 ${segment.title}`}
-                        className="flex w-full flex-col rounded-xl text-left outline-none"
+                        className="group/segment-card flex w-full flex-col rounded-xl text-left outline-none"
                         onClick={() => setSelectedSegmentId(segment.segmentId)}
                       >
                         <span className="block min-w-0">
                           <span
                             data-slot="memory-studio-segment-card"
                             className={[
-                              'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-within:ring-2 group-focus-within:ring-ring group-focus-within:ring-offset-2 group-focus-within:ring-offset-background',
+                              'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background',
                               isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
                             ].join(' ')}
                           >
