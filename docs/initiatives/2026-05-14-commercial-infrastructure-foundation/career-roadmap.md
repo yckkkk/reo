@@ -6,6 +6,8 @@ Reo 的求职主线是 AI 产品经理，增长产品经理作为副线证明，
 
 Reo 不是为了面试而做完整商业化 SaaS。Reo 要证明候选人能把 AI 能力变成可用、可评估、可增长、可商业化的产品。
 
+Reo 的产品差异化是把记录变成 agent 可使用的创作上下文。记忆空间不是静态资料夹，而是可以被 Codex-style agent 使用的 workspace；Reo 通过初始化 `AGENTS.md`、skills、plugins 和任务模板，让普通用户也能用自己的记录生成可追溯的 PRD、增长实验、报告和设计系统约束 HTML artifact。
+
 AI 产品经理的证明方式不再只是写 PRD。Reo 要展示 AI-native PM 工作方式：短周期 demo、eval-first、内测反馈、模型能力复盘、简单实现和快速 shipping。
 
 第一阶段只服务一个主 ICP：需要整理用户访谈、会议复盘或研究材料的早期产品经理。创业者、研究型 PM、独立产品人和转行 AI PM 可以作为扩展画像，不进入第一版主叙事。
@@ -21,6 +23,8 @@ Reo 必须能回答这些面试问题：
 - 增长漏斗在哪里，如何验证获客、激活和留存。
 - 如何进入用户真实工作流，把现场反馈转成可复用产品模式。
 - 如何设计人机协作边界、AI 自主度、用户确认点和失败恢复。
+- 如何把长期记录变成 agent 可使用的创作上下文。
+- 如何让普通用户在设计系统和 workspace 规则约束下使用 agent 创作。
 - 哪些能力必须先做，哪些商业化基础设施可以后置。
 
 ## 最高性价比交付物
@@ -32,12 +36,14 @@ Reo 必须能回答这些面试问题：
 | P0 | 产品 case study | 用户洞察、取舍、路线图、跨职能表达 |
 | P1 | 内测群与反馈闭环 | 用户运营、用户研究、需求优先级、留存验证 |
 | P1 | 增长漏斗与指标树 | Growth PM 副线、数据意识、实验设计 |
-| P1 | FDE 式 field loop | 用户现场理解、快速原型、部署边界、pattern codification |
+| P1 | FDE 式 field loop | 用户现场理解、快速原型、部署边界、pattern codification，合并进内测反馈包 |
 | P1 | 5 分钟演示视频 | 表达能力、产品叙事、面试效率 |
 | P2 | 公开 landing page 或 waitlist | 获客验证、SEO 起点、商业化意识 |
 | P2 | 商业化基础设施蓝图 | 会员、计费、云资源和合规认知 |
 
 只要某个交付物不能提升 AI 产品经理面试通过率，就写进 case study 或 public release gate，不进入第一批开发。
+
+主交付物最多 5 个。AI-native PM operating model、human-AI collaboration map、FDE-shaped field loop、model release review 只能作为 demo、eval、内测包或 case study 的组成部分，不单独膨胀成主交付物。
 
 ## 核心产品切片
 
@@ -145,12 +151,11 @@ Reo 必须能回答这些面试问题：
 - 8 到 12 页 case study。
 - 简历项目 bullet。
 - 面试讲稿：AI PM 主线、Growth PM 副线、商业化基础设施后续计划。
-- 一页 AI-native PM operating model：问题、demo、eval、内测、路线图、模型复盘。
-- 一页 FDE-shaped field loop：用户现场、原型、部署边界、反馈、playbook、产品路线图。
+- Appendix：AI-native PM operating model、FDE-shaped field loop、model release review 和商业化 release gate。
 
 完成标准：
 
-- 每个材料都能映射到岗位能力：用户洞察、AI 产品设计、指标、商业化、跨职能协作。
+- 5 个主交付物都能映射到岗位能力：用户洞察、AI 产品设计、指标、商业化、跨职能协作。
 
 ## 商业化与求职的关系
 
@@ -171,12 +176,13 @@ Reo 必须能回答这些面试问题：
 
 1. 我没有把 Reo 做成大而全 SaaS，因为转行阶段最重要的是证明 AI 产品判断。
 2. 我选择一个高频 PM 场景：从访谈、会议和资料中提取可追溯产品洞察。
-3. 我设计了本地优先架构，降低隐私风险，并为未来商业化保留服务端边界。
-4. 我用 eval 样本评估 AI 输出质量，而不是只依赖主观 demo。
-5. 我用内测群做用户招募、任务验证和反馈闭环，把真实反馈转成路线图决策。
-6. 我用 FDE 式 field loop 理解用户现场，把一次性反馈沉淀成可复用模板、eval set 和 playbook。
-7. 我设计了增长漏斗和 waitlist 验证路径，证明这个产品可以进入市场。
-8. 我把会员、支付、登录、云资源和成本治理放入商业化 initiative，等需求和分发信号成立后再做。
+3. 我把 Reo 定位成记录到创作的 AI workflow：记忆空间沉淀上下文，Codex-style agent 在 `AGENTS.md`、skills、plugins 和设计系统约束下生成新 artifact。
+4. 我设计了本地优先架构，降低隐私风险，并为未来商业化保留服务端边界。
+5. 我用 eval 样本评估 AI 输出质量，而不是只依赖主观 demo。
+6. 我用内测群做用户招募、任务验证和反馈闭环，把真实反馈转成路线图决策。
+7. 我用 FDE 式 field loop 理解用户现场，把一次性反馈沉淀成可复用模板、eval set 和 playbook。
+8. 我设计了增长漏斗和 waitlist 验证路径，证明这个产品可以进入市场。
+9. 我把会员、支付、登录、云资源和成本治理放入商业化 initiative，等需求和分发信号成立后再做。
 
 ## 成功标准
 
@@ -190,6 +196,10 @@ Reo 必须能回答这些面试问题：
 - 一个 FDE 式用户现场与部署边界说明。
 - 一份商业化基础设施路线图。
 - 一套能直接用于简历、作品集和面试的叙事材料。
+
+主叙事只讲：用户真实工作流、快速 demo、eval-first、human-AI collaboration、内测 field signal、路线图取舍。
+
+产品差异化叙事只讲：记录、agent-ready memory space、Codex-style 创作、设计系统约束 artifact、普通用户可用。
 
 ## 范围控制
 

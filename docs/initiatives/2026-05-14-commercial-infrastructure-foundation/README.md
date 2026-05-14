@@ -45,6 +45,7 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 
 - `career-roadmap.md`：AI 产品经理主线、增长产品经理副线、作品集交付物和阶段路线。
 - `interview-readiness.md`：求职 ROI 准则、最小作品集、内测运营、2/4/8 周路线和风险修正。
+- `product-thesis.md`：Reo 的产品创新主张，包括 agent-ready memory space、Codex-style 创作、设计系统约束 HTML 和功能更新纪律。
 - `role-evolution.md`：AI-native PM、FDE、增长和工程协作能力变化，以及 Reo 的能力映射。
 - `plan.md`：商业化基础设施架构、阶段和数据模型草案。
 - `reuse-evaluation.md`：成熟开源方案复用评估。
@@ -53,6 +54,7 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 ## 非目标
 
 - 不在本 initiative 中直接安装依赖或改 runtime。
+- 不把 agent、skills、plugins 或生成式 AI surface 写成已完成实现；只有代码和 `docs/current/*` 已确认的能力才能作为当前产品事实。
 - 不把 Electron renderer 变成 provider client。
 - 不把火山引擎账单当作实时权益判断真源。
 - 不以单个 SaaS boilerplate 替代 Reo 当前架构。
@@ -61,6 +63,7 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 ## 完成条件
 
 - 完成 AI 产品经理求职作品集路线图，并明确增长产品经理副线的展示边界。
+- 完成 Reo 产品创新主张，明确记录平台、agent-ready memory space、Codex-style 创作和设计系统约束 artifact 的关系。
 - 选定商业化基础设施的复用优先方案和拒绝原因。
 - 完成账号、会员、用量、支付、云资源、遥测、后台和合规的边界设计。
 - 明确公开付费发布前必须完成的合规、备案、支付、打包、更新和运维门禁。
