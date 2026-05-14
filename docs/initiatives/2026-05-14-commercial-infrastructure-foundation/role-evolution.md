@@ -38,15 +38,15 @@ Anthropic Economic Index 的信号说明，理解 AI 工作影响时不能只看
 
 Reo 求职材料应该证明 7 类能力。
 
-| 能力 | 证明方式 |
-| --- | --- |
-| AI workflow design | 把访谈/会议材料转成可追溯洞察、PRD 草案和增长实验假设 |
-| Eval literacy | 样本集、rubric、baseline、失败案例、成本和延迟 |
-| Prototype-first execution | 用短周期 demo 替代长期抽象方案 |
-| Human-AI collaboration design | 明确用户控制点、证据引用、置信度、人工修正和失败恢复 |
-| Field discovery | 内测群、任务脚本、用户反馈、回访和现场问题 taxonomy |
-| Deployment sense | 本地优先、provider 调用边界、密钥边界、发布风险和最小运维 |
-| Pattern codification | 把内测反馈和部署经验沉淀成模板、playbook、eval set 和 roadmap decision |
+| 能力                          | 证明方式                                                               |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| AI workflow design            | 把访谈/会议材料转成可追溯洞察、PRD 草案和增长实验假设                  |
+| Eval literacy                 | 样本集、rubric、baseline、失败案例、成本和延迟                         |
+| Prototype-first execution     | 用短周期 demo 替代长期抽象方案                                         |
+| Human-AI collaboration design | 明确用户控制点、证据引用、置信度、人工修正和失败恢复                   |
+| Field discovery               | 内测群、任务脚本、用户反馈、回访和现场问题 taxonomy                    |
+| Deployment sense              | 本地优先、provider 调用边界、密钥边界、发布风险和最小运维              |
+| Pattern codification          | 把内测反馈和部署经验沉淀成模板、playbook、eval set 和 roadmap decision |
 
 ## Reo 应该新增的作品集证据
 
@@ -94,12 +94,12 @@ Demo 中必须展示：
 
 ## 角色边界
 
-| 角色 | Reo 如何体现 | 不做什么 |
-| --- | --- | --- |
-| AI PM | 用户问题、AI workflow、eval、路线图、取舍 | 不把作品集变成纯技术架构 |
-| Growth PM | 内测招募、activation、retention、waitlist、实验 backlog | 不做虚假的大规模增长指标 |
-| FDE-shaped PM | 用户现场、快速原型、部署边界、playbook、field signal | 不宣称自己是资深 FDE |
-| 前端部署协作 | Electron、本地优先、发布风险、错误恢复、基础部署理解 | 不主投前端或平台工程师 |
+| 角色          | Reo 如何体现                                            | 不做什么                 |
+| ------------- | ------------------------------------------------------- | ------------------------ |
+| AI PM         | 用户问题、AI workflow、eval、路线图、取舍               | 不把作品集变成纯技术架构 |
+| Growth PM     | 内测招募、activation、retention、waitlist、实验 backlog | 不做虚假的大规模增长指标 |
+| FDE-shaped PM | 用户现场、快速原型、部署边界、playbook、field signal    | 不宣称自己是资深 FDE     |
+| 前端部署协作  | Electron、本地优先、发布风险、错误恢复、基础部署理解    | 不主投前端或平台工程师   |
 
 ## Reo 的新增面试叙事
 

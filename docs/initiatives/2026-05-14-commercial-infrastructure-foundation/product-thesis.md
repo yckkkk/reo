@@ -85,13 +85,13 @@ Reo 的长期价值链是：
 
 这些创新点必须服务现有 5 个主交付物，不新增第 6 个主交付物。
 
-| 创新点 | 放入哪个主交付物 |
-| --- | --- |
-| Agent-ready Memory Space | Product case study、Demo video |
+| 创新点                              | 放入哪个主交付物                                  |
+| ----------------------------------- | ------------------------------------------------- |
+| Agent-ready Memory Space            | Product case study、Demo video                    |
 | 初始化 `AGENTS.md`、skills、plugins | Product case study appendix、Beta field loop pack |
-| 主页和记忆空间生成式 AI 入口 | Demo video、Product case study |
-| 设计系统约束 HTML 创作 | Demo video 的未来扩展示例或 appendix |
-| Record to Create Loop | Product case study 主叙事 |
+| 主页和记忆空间生成式 AI 入口        | Demo video、Product case study                    |
+| 设计系统约束 HTML 创作              | Demo video 的未来扩展示例或 appendix              |
+| Record to Create Loop               | Product case study 主叙事                         |
 
 求职主叙事可以升级为：
 
