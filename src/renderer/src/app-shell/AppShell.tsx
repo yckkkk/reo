@@ -382,9 +382,6 @@ export function AppShell({
                     >
                       <Folder className="size-16" aria-hidden="true" />
                       <span className="min-w-0 flex-1 truncate text-left">{memorySpace.title}</span>
-                      {memorySpaceCurrent ? (
-                        <span className="size-4 rounded-full bg-primary" aria-hidden="true" />
-                      ) : null}
                     </Button>
                     {onRenameMemorySpace || onRemoveMemorySpace ? (
                       <DropdownMenu
