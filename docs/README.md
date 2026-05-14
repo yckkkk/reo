@@ -47,7 +47,9 @@ docs/
 docs/initiatives/YYYY-MM-DD-slug/
 ```
 
-`docs/initiatives/README.md` 只记录 active initiative 索引和读取入口。默认最多 1 个 active initiative。
+`docs/initiatives/README.md` 只记录 active initiative 索引和读取入口。默认最多 1 个产品或代码开发 active initiative。
+
+商业化基础设施 initiative 属于横切长期轨道，可以与一个产品或代码开发 active initiative 并行，但不改变每个 session 只推进一个可验证 spec 工作单元的规则。
 
 Initiative 必须有明确完成条件。完成、取消或失效后移入：
 

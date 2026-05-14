@@ -4,13 +4,19 @@
 
 ## 当前状态
 
-当前 active initiative：无。
+当前商业化横切长期轨道：
+
+- `2026-05-14-commercial-infrastructure-foundation`
+
+当前产品或代码开发 active initiative：无。
 
 ## 使用规则
 
 - 只有跨多个 session 的任务才创建 initiative。
 - 一个 initiative 必须有明确完成条件。
-- 默认最多 1 个 active initiative；超过 1 个时先收口、取消或归档。
+- 默认最多 1 个产品或代码开发 active initiative；商业化基础设施 initiative 属于横切长期轨道，可以与一个产品或代码开发 active initiative 并行。
+- 商业化并行例外不改变 spec 纪律：每个 session 仍然只推进一个可验证工作单元。
+- 超过上述边界时先收口、取消或归档。
 - 每个 session 仍然只执行一个可验证工作单元。
 - 当前工作单元记录在 `docs/specs/*`；没有进行中的工作单元时该目录应为空。
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
