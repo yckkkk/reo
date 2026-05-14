@@ -546,6 +546,52 @@ Reo 的采用边界：
   - `docs/current/frontend.md`：写入 toast lifecycle phase、pending refresh detail 投影和 session-gated cache 写入。
   - `docs/current/quality.md`：写入新增 renderer/main protection coverage。
 
+**中断修复：记忆空间重命名同步真实文件夹**
+
+- 用户在 Step 1 提交后指出当前实现缺陷：重命名记忆空间只改 UI / metadata，Finder 中真实文件夹名没有同步修改。该问题属于文件真源模型错误，先于 Step 2 修复。
+- 根因审查：
+  - 旧模型把 `.reo/workspace.json.title` 当作记忆空间 title 真源，只在 Finder 改名后的 open flow 中把 root basename 写回 metadata；这与创建时 title 创建同名 child folder、空文件夹 open 用 basename 作为 title、Memory/Segment 目录 basename 作为可见名称真源的规则不一致。
+  - `workspace:updateMemorySpaceTitle` 旧实现只调用 `updateWorkspaceTitleFromFileTruth` 写 `.reo/workspace.json` 并更新 registry projection，没有移动 root folder。
+  - active handle 和 lock 都保存旧 canonical root；如果只移动目录而不迁移 handle/lock，后续 snapshot read 和 close 会失效。
+- RED：
+  - `npm run test:main` 新增 `updateMemorySpaceTitle updates workspace file truth and registry projection` 后失败：旧 root folder 未消失，真实 folder basename 没有改成提交 title。
+  - 同批新增 active handle 用例失败：重命名后 root folder 未移动；后续同 handle snapshot read / close 仍缺保护。
+  - 新增同名 sibling conflict 用例失败：旧实现返回成功，没有保护目标 folder 已存在。
+  - 新增 contract 用例失败：`workspace:updateMemorySpaceTitle` 仍接受 `/`、`\`、NUL、`.`、`..` 等不安全 folder title。
+  - 子代理 `$review` / `$ycksimplify` 后补 RED：direct `workspace:open` 选择 Finder 已改名 root 时仍显示旧 metadata title；root rename 先写 metadata 再移动 folder，metadata mirror 写入阶段失败时会声明 `none-written`，无法表达 root folder 已经移动的提交点。
+  - 复审后补 RED：registered `workspace:openMemorySpace` 在 stored root 仍存在但 registry / metadata title 陈旧时仍显示旧 title；root move 后 finalization 失败会误报旧文件保留；目标 sibling folder 在最终 preflight 后出现时可能被裸 rename 覆盖；active `workspace:readWorkspaceSnapshot` 会把 stale `.reo/workspace.json.title` 回灌 UI；registered open 的 title mirror repair 晚于 recovery/index 写入；macOS 默认大小写不敏感文件系统上 case-only root rename 会误报失败。
+- GREEN / REFACTOR：
+  - `workspaceUpdateMemorySpaceTitleRequestSchema` 的 title 改为 safe folder title，与 memory space initialize 的 folder-name 约束一致。
+  - 新增 `renameWorkspaceRootFromFileTruth`：在 single-writer lock 下把 root folder rename 到同父目录的目标 title，以 root move 作为提交点；随后迁移 lock/handle canonical root 并写 `.reo/workspace.json.title` mirror。目标 sibling 已存在返回 `ERR_WORKSPACE_ALREADY_EXISTS`，不改 root、metadata 或 registry。
+  - `WorkspaceLock` 支持同一 directory identity 下的 canonical root relocation；`WorkspaceHandleStore` 增加 `relocateHandleRoot`，active rename 后同一个 opaque handle 继续可用于 snapshot read 和 close。
+  - inactive rename 的临时 lock 也在 root move 后 relocation，确保 finally release 释放的是新 root 下同一个 lock directory；root move 后 metadata mirror 失败返回 `file-written-index-stale`，不再误报旧文件保留。
+  - direct `workspace:open` existing folder 时把 selected root basename 作为 expected title，在 lock 内确认 workspaceId 后修复 `.reo/workspace.json.title` mirror 和 registry projection。
+  - inactive registry projection 在 root move 成功后写入失败时返回 `ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED` + `file-written-index-stale`，不再让 renderer 误回滚已提交的文件真源改名。
+  - renderer 对 memory space rename 的 `file-written-index-stale` 错误保持 optimistic title，只显示 root toast；普通失败仍回滚。
+  - registry projection 写入使用新 canonical root；active path 仍保持 registry best-effort，不因 projection failure 阻断已成功的文件真源 rename。
+  - registered open 和 direct open 都以 canonical root basename 作为 expected title；`.reo/index.json` 不承载 memory space title，只保留 `memories[]` summary 投影。
+  - root move final step 使用 no-overwrite platform move，并用 directory identity 判定 move 成功、目标冲突或异常；root move 后立即迁移 handle/lock canonical root，finalization 或 mirror 写入失败均返回 `file-written-index-stale`。
+  - open path 在 single-writer lock 内、任何 recovery/index 写入前只修 `.reo/workspace.json.title` mirror，不再复用会读取/rebuild `.reo/index.json` 的旧 title update helper。
+  - active snapshot refresh 在 rebuild read model 或写 `.reo/index.json` 前按 root basename 修复 title mirror，response title 不再来自 stale metadata。
+  - case-only rename 在大小写不敏感文件系统上以目标 path 解析到原 root identity 且 platform move 成功作为成功，避免误报 `previous-file-preserved`。
+  - 删除 metadata-only `updateWorkspaceTitleFromFileTruth` 旧 helper；memory space title 更新只剩 root rename 和 root-basename mirror repair 两条语义。
+  - root rename 在 root move 与 metadata mirror 提交前不读取或重建 `.reo/index.json`；同名目标冲突等 pre-move 失败不得改变 index projection。
+  - 删除 `openWorkspaceRoot` 的无实际 false 语义控制参数；existing-root open 统一在 lock 后、open/recovery/index 前执行 root-basename title mirror repair。
+- 保护测试：
+  - RED：`npm run test:main` 新增 `workspace root rename conflict does not rebuild the memory index` 时失败，失败输出显示 corrupt `.reo/index.json` 被改写成空 `memories[]`。
+  - GREEN：`npm run test:main`：373 个 main/preload/CSS/token 测试通过。
+  - `npm run test:renderer`：29 个文件、277 个 renderer 测试通过。
+  - `npm run typecheck`、`npm run lint`、touched-file `npx prettier --check ...`、`git diff --check HEAD` 均通过。
+  - 最新 subagent 复核：`$review` PASS；`$ycksimplify` 仅提出低优先级控制参数和 fsync helper 重复，控制参数已删除；最终复核 PASS。
+  - `npm run verify:quick` 已运行：typecheck、main、renderer、lint 阶段通过；最后 `format:check` 因 4 个无关且当前 clean 的 initiative 文档未按 Prettier 格式失败（`career-roadmap.md`、`interview-readiness.md`、`product-thesis.md`、`role-evolution.md`）。本修复未修改或格式化这些文件。
+- 文档同步：
+  - `docs/current/architecture.md`：写入 memory space root basename 是 title 文件真源，metadata 是 mirror，registry 是 projection。
+  - `docs/current/data.md`：写入 rename 同步 root folder、metadata mirror、registry projection、active handle/lock relocation 和 conflict 保留边界。
+  - `docs/current/flow.md`：写入 active / inactive rename 时序和 lock relocation。
+  - `docs/current/electron.md`：写入 IPC payload 的 safe title、真实 root folder rename 和 response 不暴露 path。
+  - `docs/current/frontend.md`：写入 renderer 只提交 trimmed title，安全校验和 root move 由 main 执行，并记录 `file-written-index-stale` 不回滚 title。
+  - `docs/current/quality.md`：写入新增 main test coverage。
+
 ### Step 2 — SegmentAttachment 可见标题 + 时间展示
 
 - **范围**：纯 Renderer（`MemoryStudio.tsx`）。`SegmentAttachmentAudioPlayer` 当前 `title` 只作 `aria-label`，从不可见渲染。加可见 header——title + 创建时间，镜像 Segment card 的 title + `createdTimeLabel` pattern；用现有语义 token，无描边，按设计系统表达内容单元。建立 attachment row 结构，为 Step 3/4 的 More 菜单提供落点。

@@ -59,6 +59,7 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
       lock: {
         isHeld: () => true,
         isUsable: () => true,
+        relocate: () => ({ ok: true }),
         release: async () => {},
       },
       sender: {

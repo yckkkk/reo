@@ -6,6 +6,7 @@ import type { TrustedSenderIdentity } from './trustedSender.js';
 export interface WorkspaceHandleLock {
   readonly isHeld: () => boolean;
   readonly isUsable: () => boolean;
+  readonly relocate: (canonicalRoot: string) => { readonly ok: true } | WorkspaceErrorEnvelope;
   readonly release: () => Promise<void>;
 }
 
@@ -60,6 +61,12 @@ export interface WorkspaceHandleStore {
     readonly workspaceHandle: string;
     readonly sender: TrustedSenderIdentity;
   }): Promise<{ readonly ok: true; readonly closed: true } | WorkspaceErrorEnvelope>;
+  relocateHandleRoot(options: {
+    readonly workspaceHandle: string;
+    readonly sender: TrustedSenderIdentity;
+    readonly workspaceId: string;
+    readonly canonicalRoot: string;
+  }): { readonly ok: true } | WorkspaceErrorEnvelope;
   closeAllHandles(): Promise<void>;
 }
 
@@ -172,6 +179,31 @@ export function createWorkspaceHandleStore({
 
       handles.delete(workspaceHandle);
       return { ok: true, closed: true };
+    },
+
+    relocateHandleRoot({ workspaceHandle, sender, workspaceId, canonicalRoot }) {
+      const entry = handles.get(workspaceHandle);
+      if (!entry) {
+        return workspaceError('ERR_WORKSPACE_HANDLE_NOT_FOUND', 'Workspace handle not found');
+      }
+      if (!sameSender(entry.sender, sender)) {
+        return workspaceError('ERR_WORKSPACE_HANDLE_UNTRUSTED', 'Workspace handle sender mismatch');
+      }
+      if (workspaceId !== entry.workspaceId) {
+        return workspaceError(
+          'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+          'Workspace handle workspace mismatch'
+        );
+      }
+      const relocated = entry.lock.relocate(canonicalRoot);
+      if (!relocated.ok) {
+        return relocated;
+      }
+      handles.set(workspaceHandle, {
+        ...entry,
+        canonicalRoot,
+      });
+      return { ok: true };
     },
 
     async closeAllHandles() {

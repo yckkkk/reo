@@ -999,6 +999,74 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '灵感 记忆操作' })).toBeInTheDocument();
   });
 
+  it('keeps the optimistic memory space title when rename reports stale projections', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: '生活记录',
+          description: 'Private notes',
+          memories: [],
+        },
+      },
+    });
+    reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_LOCK_LOST',
+        dataRetention: 'file-written-index-stale',
+        message: 'Workspace lock was lost',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), '生活记录');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await user.click(within(titlebar).getByRole('button', { name: '生活记录 记忆空间操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
+    const titleInput = within(dialog).getByLabelText('记忆空间名称');
+    await user.clear(titleInput);
+    await user.type(titleInput, '生活记');
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '生活记',
+      })
+    );
+    expect(
+      within(titlebar).getByRole('button', { name: '生活记 记忆空间操作' })
+    ).toBeInTheDocument();
+    expect(
+      within(titlebar).queryByRole('button', { name: '生活记录 记忆空间操作' })
+    ).not.toBeInTheDocument();
+  });
+
   it('refreshes the active workspace once after open and ignores focus-only events', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({

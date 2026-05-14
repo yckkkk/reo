@@ -1108,7 +1108,9 @@ export function App() {
         );
 
         if (!response.ok) {
-          rollback();
+          if (response.error.dataRetention !== 'file-written-index-stale') {
+            rollback();
+          }
           toast.error('无法保存记忆空间名称', {
             description: workspaceErrorDisplayMessage(response.error, '无法重命名记忆空间。'),
           });

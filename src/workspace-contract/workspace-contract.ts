@@ -13,6 +13,10 @@ const memoryIdSchema = z.string().regex(MEMORY_ID_PATTERN);
 const segmentIdSchema = z.string().regex(SEGMENT_ID_PATTERN);
 const attachmentIdSchema = z.string().regex(ATTACHMENT_ID_PATTERN);
 const workspaceTitleTextSchema = z.string().trim().min(1).max(WORKSPACE_TITLE_MAX_LENGTH);
+const workspaceMemorySpaceTitleSchema = workspaceTitleTextSchema.refine(
+  isSafeWorkspaceDirectoryName,
+  'Workspace title must be a safe folder name'
+);
 
 export const workspaceNoInputSchema = z.undefined();
 
@@ -344,14 +348,14 @@ export const workspaceReadWorkspaceSnapshotResponseSchema = z.discriminatedUnion
 
 export const workspaceUpdateActiveMemorySpaceTitleRequestSchema = workspaceHandleSchema
   .extend({
-    title: workspaceTitleTextSchema,
+    title: workspaceMemorySpaceTitleSchema,
   })
   .strict();
 
 export const workspaceUpdateRegisteredMemorySpaceTitleRequestSchema =
   workspaceMemorySpaceIdRequestSchema
     .extend({
-      title: workspaceTitleTextSchema,
+      title: workspaceMemorySpaceTitleSchema,
     })
     .strict();
 

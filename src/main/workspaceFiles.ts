@@ -1,10 +1,20 @@
+import { spawnSync } from 'node:child_process';
+import { closeSync, fsyncSync, lstatSync, openSync, realpathSync, renameSync } from 'node:fs';
 import { lstat, opendir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
+  isUnsupportedDirectoryFsync,
   writeWorkspaceFileNoReplaceAtomic,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
+import {
+  assertSameCurrentDirectoryIdentity as assertSameCurrentDirectory,
+  assertSameDirectoryIdentitySync as assertSameDirectoryPath,
+  readSafeDirectoryIdentitySync as readDirectoryIdentitySync,
+  sameDirectoryIdentity,
+  type DirectoryIdentity,
+} from './directoryIdentity.js';
 import {
   rebuildMemoryIndex,
   rebuildWorkspaceReadModel,
@@ -30,12 +40,15 @@ import {
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
+import { isSafeWorkspaceDirectoryName } from '../workspace-contract/workspace-name.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
 
 const WORKSPACE_SCHEMA_VERSION = 1;
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
 const EMPTY_WORKSPACE_IGNORED_ENTRIES = new Set(['.DS_Store']);
 const EMPTY_WORKSPACE_LOCK_REO_ENTRIES = new Set(['workspace.lock', 'workspace.lock.lock']);
+const DARWIN_MOVE_ITEM_NO_REPLACE_SCRIPT =
+  'function run(argv) { ObjC.import("Foundation"); const ok = $.NSFileManager.defaultManager.moveItemAtPathToPathError(argv[0], argv[1], null); if (!ok) throw new Error("move failed"); }';
 
 const workspaceMetadataSchema = z
   .object({
@@ -68,10 +81,19 @@ interface OpenWorkspaceFilesOptions {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
-interface UpdateWorkspaceTitleOptions {
+interface RenameWorkspaceRootTitleOptions {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly title: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly relocateWorkspaceRoot: (
+    canonicalRoot: string
+  ) => { readonly ok: true } | WorkspaceErrorEnvelope;
+}
+
+interface RepairWorkspaceTitleMirrorOptions {
+  readonly rootPath: string;
+  readonly workspaceId?: string | undefined;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }
 
@@ -111,6 +133,23 @@ type WorkspaceFilesResult =
     }
   | WorkspaceErrorEnvelope;
 
+type WorkspaceRootRenameResult =
+  | {
+      readonly ok: true;
+      readonly canonicalRoot: string;
+      readonly snapshot: WorkspaceSnapshot;
+    }
+  | WorkspaceErrorEnvelope;
+
+type WorkspaceTitleMirrorRepairResult =
+  | {
+      readonly ok: true;
+      readonly workspaceId: string;
+      readonly title: string;
+      readonly description: string;
+    }
+  | WorkspaceErrorEnvelope;
+
 export type WorkspaceInitializeTarget =
   | {
       readonly ok: true;
@@ -140,6 +179,18 @@ export function setBeforeWorkspaceIndexReconciliationPersistForTest(
   beforeWorkspaceIndexReconciliationPersistForTest = hook;
 }
 
+let beforeWorkspaceRootRenameCommitForTest: (() => void) | null = null;
+
+export function setBeforeWorkspaceRootRenameCommitForTest(hook: (() => void) | null): void {
+  beforeWorkspaceRootRenameCommitForTest = hook;
+}
+
+let beforeWorkspaceRootRenameFinalizeForTest: (() => void) | null = null;
+
+export function setBeforeWorkspaceRootRenameFinalizeForTest(hook: (() => void) | null): void {
+  beforeWorkspaceRootRenameFinalizeForTest = hook;
+}
+
 async function exists(filePath: string): Promise<boolean> {
   try {
     await lstat(filePath);
@@ -149,6 +200,250 @@ async function exists(filePath: string): Promise<boolean> {
       return false;
     }
     throw error;
+  }
+}
+
+function workspaceAlreadyExists(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_ALREADY_EXISTS',
+    'Workspace directory already exists',
+    'previous-file-preserved'
+  );
+}
+
+function workspaceInvalidFolderName(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_INVALID_REQUEST',
+    'Workspace folder name is invalid',
+    'previous-file-preserved'
+  );
+}
+
+function workspaceErrorAfterRootRename(error: WorkspaceErrorEnvelope): WorkspaceErrorEnvelope {
+  return workspaceError(error.error.code, error.error.message, 'file-written-index-stale');
+}
+
+function fsyncCurrentDirectoryBestEffort(): void {
+  let directoryFd: number | null = null;
+  try {
+    directoryFd = openSync('.', 'r');
+    fsyncSync(directoryFd);
+  } catch (error) {
+    if (!isUnsupportedDirectoryFsync(error)) {
+      throw error;
+    }
+  } finally {
+    if (directoryFd !== null) {
+      closeSync(directoryFd);
+    }
+  }
+}
+
+function targetDirectoryIdentityForRename(
+  targetName: string
+): DirectoryIdentity | 'exists-with-different-identity' | null {
+  try {
+    const entry = lstatSync(targetName);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      return 'exists-with-different-identity';
+    }
+    return { dev: entry.dev, ino: entry.ino };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function assertWorkspaceRootRenameTargetAvailable(
+  targetName: string,
+  sourceIdentity: DirectoryIdentity
+): void {
+  const targetIdentity = targetDirectoryIdentityForRename(targetName);
+  if (
+    targetIdentity !== null &&
+    (targetIdentity === 'exists-with-different-identity' ||
+      !sameDirectoryIdentity(targetIdentity, sourceIdentity))
+  ) {
+    throw new WorkspaceOpenAborted(workspaceAlreadyExists());
+  }
+}
+
+type WorkspaceRootMoveResult =
+  | {
+      readonly ok: true;
+      readonly canonicalRoot: string;
+    }
+  | WorkspaceErrorEnvelope;
+
+function workspaceRootMoveFailed(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_UPDATE_FAILED',
+    'Workspace title could not be updated',
+    'previous-file-preserved'
+  );
+}
+
+function workspaceRootPostMoveFailed(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_UPDATE_FAILED',
+    'Workspace title could not be updated',
+    'file-written-index-stale'
+  );
+}
+
+function renameDirectoryNoReplaceSync({
+  parentDirectory,
+  sourceName,
+  targetName,
+  sourceIdentity,
+}: {
+  readonly parentDirectory: string;
+  readonly sourceName: string;
+  readonly targetName: string;
+  readonly sourceIdentity: DirectoryIdentity;
+}): void {
+  const sourcePath = path.join(parentDirectory, sourceName);
+  const targetPath = path.join(parentDirectory, targetName);
+  const result =
+    process.platform === 'darwin'
+      ? spawnSync(
+          '/usr/bin/osascript',
+          ['-l', 'JavaScript', '-e', DARWIN_MOVE_ITEM_NO_REPLACE_SCRIPT, sourcePath, targetPath],
+          {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            windowsHide: true,
+          }
+        )
+      : process.platform === 'linux'
+        ? spawnSync('/bin/mv', ['-T', '-n', sourcePath, targetPath], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            windowsHide: true,
+          })
+        : null;
+
+  if (result === null) {
+    throw new Error('No no-replace directory rename primitive is available on this platform');
+  }
+
+  const sourceAfter = targetDirectoryIdentityForRename(sourceName);
+  const targetAfter = targetDirectoryIdentityForRename(targetName);
+  if (
+    !result.error &&
+    result.status === 0 &&
+    targetAfter !== null &&
+    targetAfter !== 'exists-with-different-identity' &&
+    sameDirectoryIdentity(targetAfter, sourceIdentity)
+  ) {
+    return;
+  }
+
+  const nestedSourceAfter = targetDirectoryIdentityForRename(path.join(targetName, sourceName));
+  if (
+    sourceAfter === null &&
+    nestedSourceAfter !== null &&
+    nestedSourceAfter !== 'exists-with-different-identity' &&
+    sameDirectoryIdentity(nestedSourceAfter, sourceIdentity)
+  ) {
+    renameSync(path.join(targetName, sourceName), sourceName);
+    throw new WorkspaceOpenAborted(workspaceAlreadyExists());
+  }
+  if (
+    sourceAfter !== null &&
+    sourceAfter !== 'exists-with-different-identity' &&
+    sameDirectoryIdentity(sourceAfter, sourceIdentity) &&
+    targetAfter !== null &&
+    (targetAfter === 'exists-with-different-identity' ||
+      !sameDirectoryIdentity(targetAfter, sourceIdentity))
+  ) {
+    throw new WorkspaceOpenAborted(workspaceAlreadyExists());
+  }
+  if (
+    sourceAfter !== null &&
+    sourceAfter !== 'exists-with-different-identity' &&
+    sameDirectoryIdentity(sourceAfter, sourceIdentity) &&
+    targetAfter === null &&
+    !result.error &&
+    result.status === 0
+  ) {
+    throw new WorkspaceOpenAborted(workspaceAlreadyExists());
+  }
+  if (result.error) {
+    throw result.error;
+  }
+  throw new Error(result.stderr || 'Workspace root directory could not be renamed');
+}
+
+function moveWorkspaceRootDirectory({
+  canonicalRoot,
+  targetName,
+  expectedRootIdentity,
+  assertWorkspaceUsable: assertUsable,
+}: {
+  readonly canonicalRoot: string;
+  readonly targetName: string;
+  readonly expectedRootIdentity: DirectoryIdentity;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): WorkspaceRootMoveResult {
+  const sourceName = path.basename(canonicalRoot);
+  const parentDirectory = path.dirname(canonicalRoot);
+  const parentIdentity = readDirectoryIdentitySync(parentDirectory);
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(parentDirectory);
+    assertSameCurrentDirectory(parentIdentity);
+    assertSameDirectoryPath(sourceName, expectedRootIdentity, 'Workspace root path changed');
+    assertWorkspaceRootRenameTargetAvailable(targetName, expectedRootIdentity);
+    assertWorkspaceUsable(assertUsable);
+    assertSameCurrentDirectory(parentIdentity);
+    assertSameDirectoryPath(parentDirectory, parentIdentity);
+    assertSameDirectoryPath(sourceName, expectedRootIdentity, 'Workspace root path changed');
+    assertWorkspaceRootRenameTargetAvailable(targetName, expectedRootIdentity);
+    if (sourceName !== targetName) {
+      beforeWorkspaceRootRenameCommitForTest?.();
+      renameDirectoryNoReplaceSync({
+        parentDirectory,
+        sourceName,
+        targetName,
+        sourceIdentity: expectedRootIdentity,
+      });
+    }
+    return { ok: true, canonicalRoot: path.join(parentDirectory, targetName) };
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceRootMoveFailed();
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+function finalizeWorkspaceRootDirectoryRename({
+  canonicalRoot,
+  expectedRootIdentity,
+}: {
+  readonly canonicalRoot: string;
+  readonly expectedRootIdentity: DirectoryIdentity;
+}): WorkspaceRootMoveResult {
+  const targetName = path.basename(canonicalRoot);
+  const parentDirectory = path.dirname(canonicalRoot);
+  const parentIdentity = readDirectoryIdentitySync(parentDirectory);
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(parentDirectory);
+    beforeWorkspaceRootRenameFinalizeForTest?.();
+    assertSameCurrentDirectory(parentIdentity);
+    assertSameDirectoryPath(targetName, expectedRootIdentity, 'Workspace root target changed');
+    fsyncCurrentDirectoryBestEffort();
+    return { ok: true, canonicalRoot: realpathSync(targetName) };
+  } catch {
+    return workspaceRootPostMoveFailed();
+  } finally {
+    process.chdir(previousCwd);
   }
 }
 
@@ -162,6 +457,28 @@ function snapshotFrom(
     description: metadata.description,
     memories: index.memories,
   };
+}
+
+async function repairWorkspaceTitleMetadataMirror({
+  canonicalRoot,
+  metadata,
+  assertWorkspaceUsable: assertUsable,
+}: {
+  readonly canonicalRoot: string;
+  readonly metadata: z.infer<typeof workspaceMetadataSchema>;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<z.infer<typeof workspaceMetadataSchema>> {
+  const rootTitle = path.basename(canonicalRoot);
+  if (metadata.title === rootTitle) {
+    return metadata;
+  }
+
+  const nextMetadata = { ...metadata, title: rootTitle };
+  await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), nextMetadata, () =>
+    assertWorkspaceUsable(assertUsable)
+  );
+  assertWorkspaceUsable(assertUsable);
+  return nextMetadata;
 }
 
 function sameMemorySummaries(
@@ -602,12 +919,64 @@ export async function openWorkspaceFiles({
   };
 }
 
-export async function updateWorkspaceTitleFromFileTruth({
+export async function repairWorkspaceTitleMirrorFromRootName({
+  rootPath,
+  workspaceId,
+  assertWorkspaceUsable: assertUsable,
+}: RepairWorkspaceTitleMirrorOptions): Promise<WorkspaceTitleMirrorRepairResult> {
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceOpenTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+
+    const { canonicalRoot } = target;
+    const metadata = await readMetadata(canonicalRoot);
+    assertWorkspaceUsable(assertUsable);
+    if (!metadata || (workspaceId !== undefined && metadata.workspaceId !== workspaceId)) {
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'previous-file-preserved'
+      );
+    }
+
+    const nextMetadata = await repairWorkspaceTitleMetadataMirror({
+      canonicalRoot,
+      metadata,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
+    return {
+      ok: true,
+      workspaceId: nextMetadata.workspaceId,
+      title: nextMetadata.title,
+      description: nextMetadata.description,
+    };
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_UPDATE_FAILED',
+      'Workspace title could not be updated',
+      'previous-file-preserved'
+    );
+  }
+}
+
+export async function renameWorkspaceRootFromFileTruth({
   rootPath,
   workspaceId,
   title,
   assertWorkspaceUsable: assertUsable,
-}: UpdateWorkspaceTitleOptions): Promise<WorkspaceFilesResult> {
+  relocateWorkspaceRoot,
+}: RenameWorkspaceRootTitleOptions): Promise<WorkspaceRootRenameResult> {
+  if (!isSafeWorkspaceDirectoryName(title)) {
+    return workspaceInvalidFolderName();
+  }
+
   try {
     assertWorkspaceUsable(assertUsable);
     const target = await validateWorkspaceOpenTarget(rootPath);
@@ -616,6 +985,7 @@ export async function updateWorkspaceTitleFromFileTruth({
       return target;
     }
     const { canonicalRoot } = target;
+    const rootIdentity = readDirectoryIdentitySync(canonicalRoot);
     const metadata = await readMetadata(canonicalRoot);
     assertWorkspaceUsable(assertUsable);
     if (!metadata || metadata.workspaceId !== workspaceId) {
@@ -625,17 +995,85 @@ export async function updateWorkspaceTitleFromFileTruth({
         'previous-file-preserved'
       );
     }
-    const index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
+
+    const moved = moveWorkspaceRootDirectory({
+      canonicalRoot,
+      targetName: title,
+      expectedRootIdentity: rootIdentity,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
-    assertWorkspaceUsable(assertUsable);
+    if (!moved.ok) {
+      return moved;
+    }
+
+    let nextCanonicalRoot = moved.canonicalRoot;
+    try {
+      const relocated = relocateWorkspaceRoot(nextCanonicalRoot);
+      if (!relocated.ok) {
+        return workspaceErrorAfterRootRename(relocated);
+      }
+    } catch {
+      return workspaceRootPostMoveFailed();
+    }
+
+    const finalized = finalizeWorkspaceRootDirectoryRename({
+      canonicalRoot: nextCanonicalRoot,
+      expectedRootIdentity: rootIdentity,
+    });
+    if (!finalized.ok) {
+      return finalized;
+    }
+    if (finalized.canonicalRoot !== nextCanonicalRoot) {
+      try {
+        const relocated = relocateWorkspaceRoot(finalized.canonicalRoot);
+        if (!relocated.ok) {
+          return workspaceErrorAfterRootRename(relocated);
+        }
+      } catch {
+        return workspaceRootPostMoveFailed();
+      }
+      nextCanonicalRoot = finalized.canonicalRoot;
+    }
+    nextCanonicalRoot = finalized.canonicalRoot;
+
     const nextMetadata = { ...metadata, title };
-    await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), nextMetadata, () =>
-      assertWorkspaceUsable(assertUsable)
-    );
-    assertWorkspaceUsable(assertUsable);
+    try {
+      await writeWorkspaceJsonAtomic(
+        getWorkspaceMetadataPath(nextCanonicalRoot),
+        nextMetadata,
+        () => assertWorkspaceUsable(assertUsable)
+      );
+    } catch (error) {
+      if (error instanceof WorkspaceOpenAborted) {
+        return workspaceErrorAfterRootRename(error.envelope);
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_UPDATE_FAILED',
+        'Workspace title could not be updated',
+        'file-written-index-stale'
+      );
+    }
+
+    let index: z.infer<typeof workspaceIndexSchema>;
+    try {
+      index = await readOrRebuildIndex(nextCanonicalRoot, {
+        assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
+      });
+      assertWorkspaceUsable(assertUsable);
+    } catch (error) {
+      if (error instanceof WorkspaceOpenAborted) {
+        return workspaceErrorAfterRootRename(error.envelope);
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_UPDATE_FAILED',
+        'Workspace title could not be updated',
+        'file-written-index-stale'
+      );
+    }
+
     return {
       ok: true,
+      canonicalRoot: nextCanonicalRoot,
       snapshot: snapshotFrom(nextMetadata, index),
     };
   } catch (error) {
@@ -664,7 +1102,7 @@ export async function readWorkspaceSnapshotFromFileTruth({
     }
 
     const { canonicalRoot } = target;
-    const metadata = await readMetadata(canonicalRoot);
+    let metadata = await readMetadata(canonicalRoot);
     assertWorkspaceUsable(assertUsable);
     if (!metadata || metadata.workspaceId !== workspaceId) {
       return workspaceError(
@@ -674,6 +1112,11 @@ export async function readWorkspaceSnapshotFromFileTruth({
       );
     }
 
+    metadata = await repairWorkspaceTitleMetadataMirror({
+      canonicalRoot,
+      metadata,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
     const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
     assertWorkspaceUsable(assertUsable);
     const index = await readOrRebuildIndex(canonicalRoot, {

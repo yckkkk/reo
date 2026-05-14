@@ -229,7 +229,7 @@ function createLockWithinDirectory(
 ):
   | {
       readonly lockDirectoryIdentity: DirectoryIdentity;
-      readonly release: () => void;
+      readonly release: (currentReoDirectory: string) => void;
     }
   | WorkspaceErrorEnvelope {
   const previousCwd = process.cwd();
@@ -262,10 +262,10 @@ function createLockWithinDirectory(
     fsyncCurrentDirectoryBestEffort();
     return {
       lockDirectoryIdentity,
-      release: () => {
+      release: (currentReoDirectory: string) => {
         const releaseCwd = process.cwd();
         try {
-          process.chdir(reoDirectory);
+          process.chdir(currentReoDirectory);
           assertSameCurrentDirectory(identity);
           if (
             !sameDirectoryIdentity(
@@ -311,6 +311,7 @@ export function setAfterWorkspaceLockDirectoryCreateForTest(hook: (() => void) |
 export interface WorkspaceLock {
   readonly isHeld: () => boolean;
   readonly isUsable: () => boolean;
+  readonly relocate: (canonicalRoot: string) => { readonly ok: true } | WorkspaceErrorEnvelope;
   readonly release: () => Promise<void>;
 }
 
@@ -366,15 +367,17 @@ export async function acquireWorkspaceLock({
 
   let held = true;
   let lost = false;
+  let currentCanonicalRoot = canonicalRoot;
+  let currentReoDirectory = reoDirectory;
 
   const isCurrentLockOwner = () => {
     try {
       return (
-        sameDirectoryIdentity(readDirectoryIdentitySync(canonicalRoot), rootIdentity) &&
-        sameDirectoryIdentity(readDirectoryIdentitySync(reoDirectory), initialReoIdentity) &&
+        sameDirectoryIdentity(readDirectoryIdentitySync(currentCanonicalRoot), rootIdentity) &&
+        sameDirectoryIdentity(readDirectoryIdentitySync(currentReoDirectory), initialReoIdentity) &&
         sameDirectoryIdentity(
           readDirectoryIdentitySync(
-            path.join(reoDirectory, 'workspace.lock.lock'),
+            path.join(currentReoDirectory, 'workspace.lock.lock'),
             'Workspace lock path is unsafe'
           ),
           acquiredLock.lockDirectoryIdentity
@@ -390,12 +393,43 @@ export async function acquireWorkspaceLock({
     lock: {
       isHeld: () => held,
       isUsable: () => held && !lost && isCurrentLockOwner(),
+      relocate: (nextCanonicalRoot: string) => {
+        if (!held || lost) {
+          return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
+        }
+        const nextReoDirectory = path.join(nextCanonicalRoot, '.reo');
+        try {
+          if (
+            !sameDirectoryIdentity(readDirectoryIdentitySync(nextCanonicalRoot), rootIdentity) ||
+            !sameDirectoryIdentity(
+              readDirectoryIdentitySync(nextReoDirectory),
+              initialReoIdentity
+            ) ||
+            !sameDirectoryIdentity(
+              readDirectoryIdentitySync(
+                path.join(nextReoDirectory, 'workspace.lock.lock'),
+                'Workspace lock path is unsafe'
+              ),
+              acquiredLock.lockDirectoryIdentity
+            )
+          ) {
+            lost = true;
+            return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
+          }
+          currentCanonicalRoot = nextCanonicalRoot;
+          currentReoDirectory = nextReoDirectory;
+          return { ok: true };
+        } catch {
+          lost = true;
+          return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
+        }
+      },
       release: async () => {
         if (!held) {
           return;
         }
         try {
-          acquiredLock.release();
+          acquiredLock.release(currentReoDirectory);
           held = false;
           lost = false;
         } catch (error) {

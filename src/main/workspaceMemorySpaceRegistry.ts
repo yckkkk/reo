@@ -171,11 +171,13 @@ export function createWorkspaceMemorySpaceRegistry({
     memorySpace: WorkspaceMemorySpaceRegistryEntry
   ): Promise<WorkspaceMemorySpaceRegistryEntry> {
     if (await isSafeDirectory(memorySpace.rootPath)) {
-      const metadata = await readWorkspaceMetadata(memorySpace.rootPath);
+      const canonicalRoot = await realpath(memorySpace.rootPath);
+      const metadata = await readWorkspaceMetadata(canonicalRoot);
       if (metadata?.workspaceId === memorySpace.workspaceId) {
         return {
           ...memorySpace,
-          title: boundedRegistryText(metadata.title),
+          rootPath: canonicalRoot,
+          title: boundedRegistryText(path.basename(canonicalRoot)),
           description: boundedRegistryText(metadata.description),
         };
       }

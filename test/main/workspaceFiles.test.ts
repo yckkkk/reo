@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import {
   chmod,
   lstat,
@@ -7,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
   stat,
@@ -20,12 +22,18 @@ import {
   initializeWorkspaceFiles,
   openWorkspaceFiles,
   readWorkspaceSnapshotFromFileTruth,
+  repairWorkspaceTitleMirrorFromRootName,
+  renameWorkspaceRootFromFileTruth,
+  setBeforeWorkspaceRootRenameCommitForTest,
+  setBeforeWorkspaceRootRenameFinalizeForTest,
   setBeforeWorkspaceJsonNoFollowFinalAssertForTest,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
-  updateWorkspaceTitleFromFileTruth,
   updateWorkspaceIndex,
 } from '../../src/main/workspaceFiles.js';
-import { setAfterAtomicWorkspaceFileTempOpenForTest } from '../../src/main/atomicWorkspaceFile.js';
+import {
+  setAfterAtomicWorkspaceFileTempOpenForTest,
+  setBeforeAtomicWorkspaceFileCommitForTest,
+} from '../../src/main/atomicWorkspaceFile.js';
 import { setBeforeReadModelReaddirForTest } from '../../src/main/memoryFiles.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 
@@ -482,11 +490,15 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
       ok: true,
       snapshot: {
         workspaceId: 'ws_stale_index',
-        title: '合法但陈旧索引',
+        title: path.basename(root),
         description: '',
         memories: [expectedMemory],
       },
     }
+  );
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
+    path.basename(root)
   );
   assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {
     schemaVersion: 1,
@@ -568,8 +580,10 @@ test('workspace snapshot refresh preserves the existing index when memories root
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });
 
-test('workspace title update uses a valid index without rebuilding memory file truth', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-title-reconcile-swap-'));
+test('workspace title mirror repair does not rebuild memory file truth', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-title-mirror-repair-'));
+  const root = path.join(parent, 'Renamed title');
+  await mkdir(root, { recursive: true });
   await initializeWorkspaceFiles({
     rootPath: root,
     title: 'Title reconcile swap',
@@ -586,26 +600,21 @@ test('workspace title update uses a valid index without rebuilding memory file t
     audio: new Uint8Array([1, 2, 3]),
     durationMs: 3000,
   });
-  await readWorkspaceSnapshotFromFileTruth({
-    rootPath: root,
-    workspaceId: 'ws_title_reconcile_swap',
-  });
-  const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+  await writeFile(path.join(root, '.reo', 'index.json'), '{not json');
+  const previousIndex = '{not json';
   setBeforeWorkspaceIndexReconciliationPersistForTest(async () => {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
-    throw new Error('workspace title update should not rebuild a valid index');
+    throw new Error('workspace title mirror repair should not rebuild memory file truth');
   });
 
   try {
-    const updated = await updateWorkspaceTitleFromFileTruth({
+    const repaired = await repairWorkspaceTitleMirrorFromRootName({
       rootPath: root,
       workspaceId: 'ws_title_reconcile_swap',
-      title: 'Renamed title',
     });
-    assert.equal(updated.ok, true);
-    if (updated.ok) {
-      assert.equal(updated.snapshot.title, 'Renamed title');
-      assert.equal(updated.snapshot.memories[0]?.memoryId, 'mem_title_reconcile_swap');
+    assert.equal(repaired.ok, true);
+    if (repaired.ok) {
+      assert.equal(repaired.title, 'Renamed title');
     }
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
@@ -615,6 +624,261 @@ test('workspace title update uses a valid index without rebuilding memory file t
     JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
     'Renamed title'
   );
+});
+
+test('workspace root rename commits the folder before metadata mirror writes', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-rename-commit-'));
+  const root = path.join(parent, '生活记录');
+  const renamedRoot = path.join(parent, '生活记');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '生活记录',
+    description: '',
+    createWorkspaceId: () => 'ws_root_rename_commit',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+
+  let usable = true;
+  let relocatedRoot: string | null = null;
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    usable = false;
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  });
+
+  try {
+    const renamed = await renameWorkspaceRootFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_root_rename_commit',
+      title: '生活记',
+      assertWorkspaceUsable: () =>
+        usable
+          ? { ok: true as const }
+          : {
+              ok: false as const,
+              error: {
+                code: 'ERR_WORKSPACE_LOCK_LOST',
+                dataRetention: 'none-written',
+                message: 'Workspace lock was lost',
+              },
+            },
+      relocateWorkspaceRoot: (nextCanonicalRoot) => {
+        relocatedRoot = nextCanonicalRoot;
+        return { ok: true };
+      },
+    });
+
+    assert.equal(renamed.ok, false);
+    if (!renamed.ok) {
+      assert.equal(renamed.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+      assert.equal(renamed.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+
+  await assert.rejects(stat(root), { code: 'ENOENT' });
+  assert.equal((await stat(renamedRoot)).isDirectory(), true);
+  assert.equal(relocatedRoot, await realpath(renamedRoot));
+  assert.equal(
+    JSON.parse(await readFile(path.join(renamedRoot, '.reo', 'workspace.json'), 'utf8')).title,
+    '生活记录'
+  );
+});
+
+test('workspace root rename reports stale state after post-move finalization failure', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-rename-finalize-'));
+  const root = path.join(parent, '生活记录');
+  const renamedRoot = path.join(parent, '生活记');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '生活记录',
+    description: '',
+    createWorkspaceId: () => 'ws_root_rename_finalize',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+
+  let relocatedRoot: string | null = null;
+  setBeforeWorkspaceRootRenameFinalizeForTest(() => {
+    setBeforeWorkspaceRootRenameFinalizeForTest(null);
+    throw new Error('parent directory fsync failed');
+  });
+
+  try {
+    const renamed = await renameWorkspaceRootFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_root_rename_finalize',
+      title: '生活记',
+      relocateWorkspaceRoot: (nextCanonicalRoot) => {
+        relocatedRoot = nextCanonicalRoot;
+        return { ok: true };
+      },
+    });
+
+    assert.equal(renamed.ok, false);
+    if (!renamed.ok) {
+      assert.equal(renamed.error.code, 'ERR_WORKSPACE_UPDATE_FAILED');
+      assert.equal(renamed.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeWorkspaceRootRenameFinalizeForTest(null);
+  }
+
+  await assert.rejects(stat(root), { code: 'ENOENT' });
+  assert.equal((await stat(renamedRoot)).isDirectory(), true);
+  assert.equal(relocatedRoot, await realpath(renamedRoot));
+  assert.equal(
+    JSON.parse(await readFile(path.join(renamedRoot, '.reo', 'workspace.json'), 'utf8')).title,
+    '生活记录'
+  );
+});
+
+test('workspace root rename preserves both roots when target appears after final preflight', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-rename-race-'));
+  const root = path.join(parent, '旧空间');
+  const conflictingRoot = path.join(parent, '新空间');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '旧空间',
+    description: '',
+    createWorkspaceId: () => 'ws_root_rename_race',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+
+  setBeforeWorkspaceRootRenameCommitForTest(() => {
+    setBeforeWorkspaceRootRenameCommitForTest(null);
+    mkdirSync(conflictingRoot);
+  });
+
+  try {
+    const renamed = await renameWorkspaceRootFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_root_rename_race',
+      title: '新空间',
+      relocateWorkspaceRoot: () => {
+        throw new Error('rename should not relocate after conflict');
+      },
+    });
+
+    assert.equal(renamed.ok, false);
+    if (!renamed.ok) {
+      assert.equal(renamed.error.code, 'ERR_WORKSPACE_ALREADY_EXISTS');
+      assert.equal(renamed.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeWorkspaceRootRenameCommitForTest(null);
+  }
+
+  assert.equal((await stat(root)).isDirectory(), true);
+  assert.equal((await stat(conflictingRoot)).isDirectory(), true);
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
+    '旧空间'
+  );
+});
+
+test('workspace root rename conflict does not rebuild the memory index', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-rename-index-conflict-'));
+  const root = path.join(parent, '旧空间');
+  const conflictingRoot = path.join(parent, '新空间');
+  await mkdir(root, { recursive: true });
+  await mkdir(conflictingRoot);
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '旧空间',
+    description: '',
+    createWorkspaceId: () => 'ws_root_rename_index_conflict',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFile(path.join(root, '.reo', 'index.json'), '{not json');
+
+  const renamed = await renameWorkspaceRootFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_root_rename_index_conflict',
+    title: '新空间',
+    relocateWorkspaceRoot: () => {
+      throw new Error('rename should not relocate after conflict');
+    },
+  });
+
+  assert.equal(renamed.ok, false);
+  if (!renamed.ok) {
+    assert.equal(renamed.error.code, 'ERR_WORKSPACE_ALREADY_EXISTS');
+    assert.equal(renamed.error.dataRetention, 'previous-file-preserved');
+  }
+  assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), '{not json');
+});
+
+test('workspace root rename supports case-only title changes on case-insensitive filesystems', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-rename-case-'));
+  const probe = path.join(parent, 'case-probe');
+  await mkdir(probe);
+  const caseInsensitive = await stat(path.join(parent, 'CASE-PROBE')).then(
+    () => true,
+    () => false
+  );
+  if (!caseInsensitive) {
+    return;
+  }
+
+  const root = path.join(parent, 'caseonly');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'caseonly',
+    description: '',
+    createWorkspaceId: () => 'ws_root_rename_case',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+
+  const renamed = await renameWorkspaceRootFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_root_rename_case',
+    title: 'CASEONLY',
+    relocateWorkspaceRoot: () => ({ ok: true }),
+  });
+
+  assert.equal(renamed.ok, true);
+  if (renamed.ok) {
+    assert.equal(renamed.snapshot.title, 'CASEONLY');
+  }
+  assert.equal((await readdir(parent)).includes('CASEONLY'), true);
+  assert.equal(
+    JSON.parse(await readFile(path.join(parent, 'CASEONLY', '.reo', 'workspace.json'), 'utf8'))
+      .title,
+    'CASEONLY'
+  );
+});
+
+test('workspace snapshot refresh uses root folder basename when metadata title is stale', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-root-title-stale-'));
+  const root = path.join(parent, '生活记呀啊');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '生活记录',
+    description: '',
+    createWorkspaceId: () => 'ws_root_title_stale',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+
+  const refreshed = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_root_title_stale',
+  });
+
+  assert.equal(refreshed.ok, true);
+  if (refreshed.ok) {
+    assert.equal(refreshed.snapshot.title, '生活记呀啊');
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
+    '生活记呀啊'
+  );
+  assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });
 
 test('open workspace reports lock lost before target revalidation errors', async () => {

@@ -1300,6 +1300,14 @@ test('memory space title update contract accepts either active handle or registr
       title: '',
     })
   );
+  for (const unsafeTitle of ['.', '..', 'bad/name', 'bad\\name', 'bad\0name']) {
+    assert.throws(() =>
+      workspaceUpdateMemorySpaceTitleRequestSchema.parse({
+        workspaceId: 'ws_1',
+        title: unsafeTitle,
+      })
+    );
+  }
   assert.deepEqual(
     workspaceUpdateMemorySpaceTitleResponseSchema.parse({
       ok: true,

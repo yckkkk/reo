@@ -28,6 +28,7 @@ test('workspace handle is opaque, sender-bound, and invalid after close or lock 
     lock: {
       isHeld: () => held,
       isUsable: () => held,
+      relocate: () => ({ ok: true }),
       release: async () => {
         released = true;
       },
@@ -78,6 +79,7 @@ test('workspace handle remains registered when lock release fails', async () => 
     lock: {
       isHeld: () => true,
       isUsable: () => true,
+      relocate: () => ({ ok: true }),
       release: async () => {
         throw new Error('release failed');
       },
@@ -109,6 +111,7 @@ test('required workspace handles can recheck lock usability before delayed files
     lock: {
       isHeld: () => true,
       isUsable: () => usable,
+      relocate: () => ({ ok: true }),
       release: async () => {},
     },
   });
@@ -137,6 +140,7 @@ test('workspace handle store releases all handles for window teardown', async ()
     lock: {
       isHeld: () => true,
       isUsable: () => true,
+      relocate: () => ({ ok: true }),
       release: async () => {
         releasedA = true;
       },
@@ -149,6 +153,7 @@ test('workspace handle store releases all handles for window teardown', async ()
     lock: {
       isHeld: () => true,
       isUsable: () => true,
+      relocate: () => ({ ok: true }),
       release: async () => {
         releasedB = true;
       },
@@ -179,6 +184,7 @@ test('workspace handle store keeps handles whose teardown release fails', async 
     lock: {
       isHeld: () => true,
       isUsable: () => usable,
+      relocate: () => ({ ok: true }),
       release: async () => {
         releaseAttempts += 1;
         usable = false;
