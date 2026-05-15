@@ -10,7 +10,7 @@
 
 当前产品或代码开发 active initiative：
 
-- `2026-05-15-memory-space-markdown-contract`
+- 无
 
 ## 使用规则
 

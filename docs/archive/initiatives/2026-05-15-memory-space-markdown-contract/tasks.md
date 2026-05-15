@@ -10,4 +10,4 @@
 - [x] 将 Reo-only 技术字段收敛到 `.reo`。
 - [x] 删除用户目录 JSON 读写分支、非当前术语和非当前测试假设。
 - [x] 覆盖任意普通文件、HTML untrusted、index rebuild、非法 frontmatter、资源路径 containment 和外部 agent 修改边界。
-- [ ] 完成 subagent 审查、漏洞修复和 `npm run verify:quick`。
+- [x] 完成第二轮文件合同残留审查、漏洞修复和 `npm run verify:quick`。

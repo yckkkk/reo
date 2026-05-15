@@ -62,3 +62,4 @@
 - `npm run typecheck` 已通过。
 - `npm run verify:quick` 已通过，包含 typecheck、main tests、renderer tests、lint 和 format:check。
 - `docs/current/*`、`AGENTS.md` 和 `.claude/CLAUDE.md` 已写入当前 Markdown/frontmatter 语义层、`.reo/objects/*` 技术完整性层、普通文件不自动成对象和 HTML untrusted 规则。
+- 第二轮只读审查结果为 PASS：`docs/current/electron.md` 使用 `supplement.md`，active docs/code/test 未发现旧 SegmentAttachment 或 finalized JSON 语义真源残留，`AGENTS.md` 与 `.claude/CLAUDE.md` 镜像一致。
