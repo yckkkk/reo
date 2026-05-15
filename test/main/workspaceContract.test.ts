@@ -4,6 +4,7 @@ import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
@@ -16,10 +17,12 @@ import {
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
+  WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
@@ -27,6 +30,8 @@ import {
   workspaceCreateMemoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
+  workspaceDeleteSegmentAttachmentRequestSchema,
+  workspaceDeleteSegmentAttachmentResponseSchema,
   workspaceDeleteSegmentRequestSchema,
   workspaceDeleteSegmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
@@ -35,6 +40,8 @@ import {
   workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
+  workspaceRestoreDeletedSegmentAttachmentRequestSchema,
+  workspaceRestoreDeletedSegmentAttachmentResponseSchema,
   workspaceRestoreDeletedSegmentRequestSchema,
   workspaceRestoreDeletedSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
@@ -62,6 +69,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
+  workspaceUpdateSegmentAttachmentTitleRequestSchema,
+  workspaceUpdateSegmentAttachmentTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
@@ -103,6 +112,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedMemory',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
+    'workspace:deleteSegmentAttachment',
+    'workspace:restoreDeletedSegmentAttachment',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentAttachment',
@@ -118,6 +129,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:discardSegmentAttachmentRecordingDraft',
     'workspace:updateMemoryTitle',
     'workspace:updateSegmentTitle',
+    'workspace:updateSegmentAttachmentTitle',
     'workspace:saveTranscript',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
@@ -137,6 +149,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory');
   assert.equal(WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment');
   assert.equal(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment');
+  assert.equal(WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL, 'workspace:deleteSegmentAttachment');
+  assert.equal(
+    WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
+    'workspace:restoreDeletedSegmentAttachment'
+  );
   assert.equal(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot');
   assert.equal(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail');
   assert.equal(
@@ -154,6 +171,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
   assert.equal(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle');
+  assert.equal(
+    WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
+    'workspace:updateSegmentAttachmentTitle'
+  );
   assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
   assert.equal(
     WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
@@ -171,6 +192,92 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
     'workspace:discardSegmentAttachmentRecordingDraft'
   );
+});
+
+test('segment attachment title update contract renames the file-space node without raw paths', () => {
+  assert.deepEqual(
+    workspaceUpdateSegmentAttachmentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      title: '现场补充',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      title: '现场补充',
+    }
+  );
+
+  const response = workspaceUpdateSegmentAttachmentTitleResponseSchema.parse({
+    ok: true,
+    value: {
+      memory: {
+        memoryId: 'mem_1',
+        title: 'Memory',
+        createdAt: '2026-05-10T13:00:00.000Z',
+        updatedAt: '2026-05-10T13:00:00.000Z',
+        segmentCount: 1,
+        durationMs: 1500,
+        audioByteLength: 7,
+        hasTranscript: false,
+        attachmentCount: 1,
+      },
+      segment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        type: 'audio',
+        title: 'Segment',
+        createdAt: '2026-05-10T13:00:00.000Z',
+        updatedAt: '2026-05-10T13:00:00.000Z',
+        durationMs: 1000,
+        audioByteLength: 3,
+        transcript: { exists: false },
+        attachmentCount: 1,
+        attachments: [
+          {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            attachmentId: 'att_1',
+            type: 'audio',
+            title: '现场补充',
+            createdAt: '2026-05-10T13:01:00.000Z',
+            updatedAt: '2026-05-10T13:01:00.000Z',
+            durationMs: 500,
+            audioByteLength: 4,
+            transcript: { exists: false },
+          },
+        ],
+      },
+      attachment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        type: 'audio',
+        title: '现场补充',
+        createdAt: '2026-05-10T13:01:00.000Z',
+        updatedAt: '2026-05-10T13:01:00.000Z',
+        durationMs: 500,
+        audioByteLength: 4,
+        transcript: { exists: false },
+      },
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal('rootPath' in response.value, false);
+    assert.equal('workspaceHandle' in response.value, false);
+    assert.equal('rootPath' in response.value.attachment, false);
+  }
 });
 
 test('workspace snapshot read contract refreshes file truth without exposing raw paths', () => {
@@ -384,6 +491,130 @@ test('segment dangerous operation contract keeps parent identity and restore tok
     assert.equal('rootPath' in restored.value, false);
     assert.equal('workspaceHandle' in restored.value, false);
   }
+});
+
+test('segment attachment dangerous operation contract keeps parent identity and restore token explicit', () => {
+  assert.deepEqual(
+    workspaceDeleteSegmentAttachmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+    }
+  );
+
+  const memory = {
+    memoryId: 'mem_1',
+    title: 'Memory',
+    createdAt: '2026-05-10T13:00:00.000Z',
+    updatedAt: '2026-05-10T13:00:00.000Z',
+    segmentCount: 1,
+    durationMs: 1000,
+    audioByteLength: 3,
+    hasTranscript: false,
+    attachmentCount: 0,
+  };
+  const attachment = {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    attachmentId: 'att_1',
+    type: 'audio',
+    title: '现场补充',
+    createdAt: '2026-05-10T13:15:00.000Z',
+    updatedAt: '2026-05-10T13:16:00.000Z',
+    durationMs: 1000,
+    audioByteLength: 3,
+    transcript: { exists: true },
+  };
+  const segment = {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    type: 'audio',
+    title: 'Segment',
+    createdAt: '2026-05-10T13:13:00.000Z',
+    updatedAt: '2026-05-10T13:14:00.000Z',
+    durationMs: 1000,
+    audioByteLength: 3,
+    transcript: { exists: false },
+    attachmentCount: 0,
+    attachments: [],
+  };
+
+  assert.deepEqual(
+    workspaceDeleteSegmentAttachmentResponseSchema.parse({
+      ok: true,
+      value: {
+        memory,
+        segment,
+        attachmentId: 'att_1',
+        restoreToken: 'att_1',
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        memory,
+        segment,
+        attachmentId: 'att_1',
+        restoreToken: 'att_1',
+      },
+    }
+  );
+
+  assert.deepEqual(
+    workspaceRestoreDeletedSegmentAttachmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      restoreToken: 'att_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      restoreToken: 'att_1',
+    }
+  );
+
+  const restored = workspaceRestoreDeletedSegmentAttachmentResponseSchema.parse({
+    ok: true,
+    value: {
+      memory: { ...memory, attachmentCount: 1 },
+      segment: {
+        ...segment,
+        attachmentCount: 1,
+        attachments: [attachment],
+      },
+      attachment,
+    },
+  });
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal('rootPath' in restored.value, false);
+    assert.equal('workspaceHandle' in restored.value, false);
+  }
+
+  const parentMissing = workspaceErrorEnvelopeSchema.parse({
+    ok: false,
+    error: {
+      code: 'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING',
+      message: 'Parent Memory or Segment no longer exists.',
+      dataRetention: 'previous-file-preserved',
+    },
+  });
+  assert.equal(parentMissing.ok, false);
 });
 
 test('segment attachment recording contract keeps parent identity explicit', () => {

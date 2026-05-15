@@ -79,6 +79,9 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_SEGMENT_DELETE_FAILED',
   'ERR_SEGMENT_RESTORE_FAILED',
   'ERR_SEGMENT_RESTORE_PARENT_MISSING',
+  'ERR_SEGMENT_ATTACHMENT_DELETE_FAILED',
+  'ERR_SEGMENT_ATTACHMENT_RESTORE_FAILED',
+  'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING',
   'ERR_MIC_INTENT_ALREADY_ACTIVE',
 ]);
 
@@ -447,6 +450,15 @@ export const workspaceUpdateSegmentTitleRequestSchema = workspaceMemoryIdRequest
   })
   .strict();
 
+export const workspaceUpdateSegmentAttachmentTitleRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    attachmentId: attachmentIdSchema,
+    title: workspaceRecordingTitleSchema,
+  })
+  .strict();
+
 export const workspaceCreateMemoryRequestSchema = workspaceHandleSchema
   .extend({
     title: workspaceMemoryTitleSchema,
@@ -472,6 +484,22 @@ export const workspaceRestoreDeletedSegmentRequestSchema = workspaceMemoryIdRequ
   .extend({
     workspaceId: z.string().min(1),
     restoreToken: segmentIdSchema,
+  })
+  .strict();
+
+export const workspaceDeleteSegmentAttachmentRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    attachmentId: attachmentIdSchema,
+  })
+  .strict();
+
+export const workspaceRestoreDeletedSegmentAttachmentRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    restoreToken: attachmentIdSchema,
   })
   .strict();
 
@@ -530,6 +558,18 @@ export const workspaceUpdateSegmentTitleResponseSchema = z.discriminatedUnion('o
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceUpdateSegmentAttachmentTitleResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+      attachment: workspaceSegmentAttachmentProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceCreateMemoryResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -579,6 +619,31 @@ export const workspaceRestoreDeletedSegmentResponseSchema = z.discriminatedUnion
     value: z.strictObject({
       memory: workspaceMemorySummarySchema,
       segment: workspaceSegmentProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceDeleteSegmentAttachmentResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+      attachmentId: attachmentIdSchema,
+      restoreToken: attachmentIdSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceRestoreDeletedSegmentAttachmentResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+      attachment: workspaceSegmentAttachmentProjectionSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -922,6 +987,9 @@ export type WorkspaceUpdateMemoryTitleRequest = z.infer<
 export type WorkspaceUpdateSegmentTitleRequest = z.infer<
   typeof workspaceUpdateSegmentTitleRequestSchema
 >;
+export type WorkspaceUpdateSegmentAttachmentTitleRequest = z.infer<
+  typeof workspaceUpdateSegmentAttachmentTitleRequestSchema
+>;
 export type WorkspaceCreateMemoryRequest = z.infer<typeof workspaceCreateMemoryRequestSchema>;
 export type WorkspaceDeleteMemoryRequest = z.infer<typeof workspaceDeleteMemoryRequestSchema>;
 export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
@@ -930,6 +998,12 @@ export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
 export type WorkspaceDeleteSegmentRequest = z.infer<typeof workspaceDeleteSegmentRequestSchema>;
 export type WorkspaceRestoreDeletedSegmentRequest = z.infer<
   typeof workspaceRestoreDeletedSegmentRequestSchema
+>;
+export type WorkspaceDeleteSegmentAttachmentRequest = z.infer<
+  typeof workspaceDeleteSegmentAttachmentRequestSchema
+>;
+export type WorkspaceRestoreDeletedSegmentAttachmentRequest = z.infer<
+  typeof workspaceRestoreDeletedSegmentAttachmentRequestSchema
 >;
 export type WorkspaceReadMemoryDetailRequest = z.infer<
   typeof workspaceReadMemoryDetailRequestSchema
@@ -946,6 +1020,9 @@ export type WorkspaceUpdateMemoryTitleResponse = z.infer<
 export type WorkspaceUpdateSegmentTitleResponse = z.infer<
   typeof workspaceUpdateSegmentTitleResponseSchema
 >;
+export type WorkspaceUpdateSegmentAttachmentTitleResponse = z.infer<
+  typeof workspaceUpdateSegmentAttachmentTitleResponseSchema
+>;
 export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemoryResponseSchema>;
 export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;
 export type WorkspaceRestoreDeletedMemoryResponse = z.infer<
@@ -954,6 +1031,12 @@ export type WorkspaceRestoreDeletedMemoryResponse = z.infer<
 export type WorkspaceDeleteSegmentResponse = z.infer<typeof workspaceDeleteSegmentResponseSchema>;
 export type WorkspaceRestoreDeletedSegmentResponse = z.infer<
   typeof workspaceRestoreDeletedSegmentResponseSchema
+>;
+export type WorkspaceDeleteSegmentAttachmentResponse = z.infer<
+  typeof workspaceDeleteSegmentAttachmentResponseSchema
+>;
+export type WorkspaceRestoreDeletedSegmentAttachmentResponse = z.infer<
+  typeof workspaceRestoreDeletedSegmentAttachmentResponseSchema
 >;
 export type WorkspaceReadMemoryDetailResponse = z.infer<
   typeof workspaceReadMemoryDetailResponseSchema

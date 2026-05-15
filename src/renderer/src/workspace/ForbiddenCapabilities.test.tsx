@@ -34,8 +34,10 @@ describe('forbidden first-slice capabilities', () => {
             workspaceSession={workspaceSession}
             onDeleteMemory={() => {}}
             onDeleteSegment={() => {}}
+            onDeleteSegmentAttachment={() => {}}
             onRenameMemory={() => {}}
             onRenameSegment={() => {}}
+            onRenameSegmentAttachment={() => {}}
             onSelectMemory={() => {}}
             onStartSegmentAttachmentRecording={() => {}}
             onStartRecording={() => {}}

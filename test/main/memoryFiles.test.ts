@@ -46,6 +46,7 @@ import {
   createMemoryFromFileTruth,
   createMemoryWithRecordingForTest as createMemoryWithRecording,
   deleteMemoryFromFileTruth,
+  deleteSegmentAttachmentFromFileTruth,
   deleteSegmentFromFileTruth,
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
@@ -53,6 +54,7 @@ import {
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   restoreDeletedMemoryFromFileTruth,
+  restoreDeletedSegmentAttachmentFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
@@ -62,6 +64,7 @@ import {
   setBeforeSegmentDirectoryCandidateScanForTest,
   setBeforeSegmentFileTruthListForTest,
   updateMemoryTitleFromFileTruth,
+  updateSegmentAttachmentTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
@@ -479,6 +482,579 @@ test('renames a segment when memory segmentIds mirror is missing the valid file-
     ).segmentIds,
     [segmentId]
   );
+});
+
+test('renames segment attachment file-space node and refreshes the parent memory index', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_title_update';
+  const segmentId = 'seg_20260514_attachment_title_update';
+  const attachmentId = 'att_20260514_attachment_title_update';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充命名',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音1',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  await writeFile(
+    path.join(rootPath, '.reo', 'index.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        memories: [
+          {
+            memoryId,
+            title: '补充命名',
+            createdAt: '2026-05-06T13:08:00.000Z',
+            updatedAt: '2026-05-06T13:09:00.000Z',
+            segmentCount: 1,
+            durationMs: 1000,
+            audioByteLength: 3,
+            hasTranscript: false,
+            attachmentCount: 0,
+          },
+        ],
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '现场补充',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.memory.attachmentCount, 1);
+    assert.equal(updated.value.segment.attachmentCount, 1);
+    assert.equal(updated.value.attachment.title, '现场补充');
+    assert.equal(updated.value.attachment.updatedAt, '2026-05-06T13:11:00.000Z');
+  }
+  await assert.rejects(
+    stat(
+      path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'attachments', attachmentId)
+    )
+  );
+  const renamedAttachmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments',
+    `${attachmentId}--现场补充`
+  );
+  await stat(renamedAttachmentDirectory);
+  assert.deepEqual(
+    (await readJson(path.join(renamedAttachmentDirectory, 'attachment.json'))) as {
+      readonly title: string;
+      readonly updatedAt?: string;
+    },
+    {
+      schemaVersion: 1,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      attachmentId,
+      type: 'audio',
+      status: 'finalized',
+      title: '现场补充',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      finalizedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 500,
+      nextSequence: 1,
+      audioByteLength: 3,
+      transcriptPath: 'transcript.md',
+    }
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: [
+      {
+        memoryId,
+        title: '补充命名',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:11:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: false,
+        attachmentCount: 1,
+      },
+    ],
+  });
+});
+
+test('segment attachment title update rejects workspace mismatch before moving files', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_workspace_mismatch';
+  const segmentId = 'seg_attachment_workspace_mismatch';
+  const attachmentId = 'att_attachment_workspace_mismatch';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充命名空间不匹配',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音1',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_other',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '不应写入',
+  });
+
+  assert.equal(updated.ok, false);
+  if (!updated.ok) {
+    assert.equal(updated.error.code, 'ERR_RECORDING_NOT_FOUND');
+    assert.equal(updated.error.dataRetention, 'none-written');
+  }
+  const attachmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments',
+    attachmentId
+  );
+  await stat(attachmentDirectory);
+  assert.equal(
+    (
+      (await readJson(path.join(attachmentDirectory, 'attachment.json'))) as {
+        readonly title: string;
+      }
+    ).title,
+    '补充录音1'
+  );
+  await assert.rejects(
+    stat(
+      path.join(
+        rootPath,
+        'memories',
+        memoryId,
+        'segments',
+        segmentId,
+        'attachments',
+        `${attachmentId}--不应写入`
+      )
+    )
+  );
+});
+
+test('segment attachment title update reports stale index when refresh fails after file write', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_title_index_stale';
+  const segmentId = 'seg_attachment_title_index_stale';
+  const attachmentId = 'att_attachment_title_index_stale';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充命名索引失败',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音1',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  await rm(path.join(rootPath, '.reo', 'index.json'));
+  await mkdir(path.join(rootPath, '.reo', 'index.json'));
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '现场补充',
+  });
+
+  assert.equal(updated.ok, false);
+  if (!updated.ok) {
+    assert.equal(updated.error.code, 'ERR_MEMORY_UPDATE_FAILED');
+    assert.equal(updated.error.dataRetention, 'file-written-index-stale');
+  }
+  const renamedAttachmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments',
+    `${attachmentId}--现场补充`
+  );
+  await stat(renamedAttachmentDirectory);
+  assert.equal(
+    (
+      (await readJson(path.join(renamedAttachmentDirectory, 'attachment.json'))) as {
+        readonly title: string;
+      }
+    ).title,
+    '现场补充'
+  );
+});
+
+test('segment attachment title update rejects renamed symlink candidates without fallback', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_renamed_symlink';
+  const segmentId = 'seg_attachment_renamed_symlink';
+  const attachmentId = 'att_attachment_renamed_symlink';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充不安全候选',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  const attachmentsDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments'
+  );
+  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-attachment-outside-'));
+  const renamedCandidate = `${attachmentId}--Finder title`;
+  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
+  await mkdir(attachmentsDirectory, { recursive: true });
+  await symlink(outsideDirectory, renamedCandidatePath);
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '不应写入',
+  });
+
+  assert.equal(updated.ok, false);
+  if (!updated.ok) {
+    assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal((await lstat(renamedCandidatePath)).isSymbolicLink(), true);
+  await stat(outsideDirectory);
+  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+});
+
+test('segment attachment title update rejects renamed non-directory candidates without fallback', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_renamed_file';
+  const segmentId = 'seg_attachment_renamed_file';
+  const attachmentId = 'att_attachment_renamed_file';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充不安全文件候选',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  const attachmentsDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments'
+  );
+  const renamedCandidate = `${attachmentId}--Finder title`;
+  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
+  await mkdir(attachmentsDirectory, { recursive: true });
+  await writeFile(renamedCandidatePath, 'not an attachment directory');
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '不应写入',
+  });
+
+  assert.equal(updated.ok, false);
+  if (!updated.ok) {
+    assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal((await lstat(renamedCandidatePath)).isFile(), true);
+  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+});
+
+test('segment attachment title update rejects unsafe metadata leaf candidates without fallback', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_unsafe_metadata';
+  const segmentId = 'seg_attachment_unsafe_metadata';
+  const attachmentId = 'att_attachment_unsafe_metadata';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充不安全 metadata',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  const attachmentsDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments'
+  );
+  const renamedCandidate = `${attachmentId}--Finder title`;
+  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
+  const outsideMetadata = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-attachment-metadata-outside-')),
+    'attachment.json'
+  );
+  await mkdir(renamedCandidatePath, { recursive: true });
+  await writeFile(path.join(renamedCandidatePath, 'audio.webm'), new Uint8Array([4, 5]));
+  await writeFile(path.join(renamedCandidatePath, 'transcript.md'), '');
+  await writeFile(outsideMetadata, '{}');
+  await symlink(outsideMetadata, path.join(renamedCandidatePath, 'attachment.json'));
+
+  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '不应写入',
+  });
+
+  assert.equal(updated.ok, false);
+  if (!updated.ok) {
+    assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.equal(
+    (await lstat(path.join(renamedCandidatePath, 'attachment.json'))).isSymbolicLink(),
+    true
+  );
+  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+});
+
+test('delete and restore move SegmentAttachment files through the attachment trash', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_delete_restore';
+  const segmentId = 'seg_attachment_delete_restore';
+  const attachmentId = 'att_attachment_delete_restore';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充删除恢复',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音1',
+    directoryName: `${attachmentId}--补充录音1`,
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+    audioBytes: [4, 5, 6, 7],
+  });
+  const activeAttachmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'attachments',
+    `${attachmentId}--补充录音1`
+  );
+  const trashedAttachmentDirectory = path.join(
+    rootPath,
+    '.reo',
+    'trash',
+    'attachments',
+    `${attachmentId}--补充录音1`
+  );
+
+  const deleted = await deleteSegmentAttachmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+  });
+
+  assert.equal(deleted.ok, true);
+  if (deleted.ok) {
+    assert.equal(deleted.value.attachmentId, attachmentId);
+    assert.equal(deleted.value.restoreToken, attachmentId);
+    assert.equal(deleted.value.memory.attachmentCount, 0);
+    assert.equal(deleted.value.segment.attachmentCount, 0);
+    assert.deepEqual(deleted.value.segment.attachments, []);
+  }
+  await assert.rejects(stat(activeAttachmentDirectory));
+  await stat(path.join(trashedAttachmentDirectory, 'audio.webm'));
+  await stat(path.join(trashedAttachmentDirectory, 'transcript.md'));
+  assert.equal(
+    (
+      (await readJson(path.join(trashedAttachmentDirectory, 'attachment.json'))) as {
+        readonly attachmentId: string;
+      }
+    ).attachmentId,
+    attachmentId
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: [
+      {
+        memoryId,
+        title: '补充删除恢复',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: false,
+        attachmentCount: 0,
+      },
+    ],
+  });
+
+  const restored = await restoreDeletedSegmentAttachmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    restoreToken: attachmentId,
+  });
+
+  assert.equal(restored.ok, true);
+  if (restored.ok) {
+    assert.equal(restored.value.memory.attachmentCount, 1);
+    assert.equal(restored.value.segment.attachmentCount, 1);
+    assert.equal(restored.value.attachment.attachmentId, attachmentId);
+    assert.equal(restored.value.attachment.title, '补充录音1');
+  }
+  await stat(path.join(activeAttachmentDirectory, 'audio.webm'));
+  await stat(path.join(activeAttachmentDirectory, 'transcript.md'));
+  await assert.rejects(stat(trashedAttachmentDirectory));
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: [
+      {
+        memoryId,
+        title: '补充删除恢复',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:11:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: false,
+        attachmentCount: 1,
+      },
+    ],
+  });
+});
+
+test('restore SegmentAttachment returns parent missing and leaves trash recoverable', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_attachment_restore_parent_missing';
+  const segmentId = 'seg_attachment_restore_parent_missing';
+  const attachmentId = 'att_attachment_restore_parent_missing';
+  await writeMemoryJsonForTest(rootPath, {
+    memoryId,
+    title: '补充恢复父级缺失',
+    segmentIds: [segmentId],
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioAttachmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    attachmentId,
+    title: '补充录音1',
+    directoryName: `${attachmentId}--补充录音1`,
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  const activeSegmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const trashedAttachmentDirectory = path.join(
+    rootPath,
+    '.reo',
+    'trash',
+    'attachments',
+    `${attachmentId}--补充录音1`
+  );
+
+  const deleted = await deleteSegmentAttachmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    attachmentId,
+  });
+  assert.equal(deleted.ok, true);
+  await rm(activeSegmentDirectory, { recursive: true, force: true });
+
+  const restored = await restoreDeletedSegmentAttachmentFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    restoreToken: attachmentId,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING');
+    assert.equal(restored.error.dataRetention, 'previous-file-preserved');
+  }
+  await stat(path.join(trashedAttachmentDirectory, 'audio.webm'));
+  await stat(path.join(trashedAttachmentDirectory, 'attachment.json'));
 });
 
 test('delete and restore keep externally renamed segment directories addressable by metadata id', async () => {

@@ -66,6 +66,18 @@ export function restoreDeletedSegment(
   return window.reoWorkspace.restoreDeletedSegment(payload);
 }
 
+export function deleteSegmentAttachment(
+  payload: Parameters<Window['reoWorkspace']['deleteSegmentAttachment']>[0]
+) {
+  return window.reoWorkspace.deleteSegmentAttachment(payload);
+}
+
+export function restoreDeletedSegmentAttachment(
+  payload: Parameters<Window['reoWorkspace']['restoreDeletedSegmentAttachment']>[0]
+) {
+  return window.reoWorkspace.restoreDeletedSegmentAttachment(payload);
+}
+
 export function readMemoryDetail(
   payload: Parameters<Window['reoWorkspace']['readMemoryDetail']>[0]
 ) {
@@ -156,6 +168,12 @@ export function updateSegmentTitle(
   return window.reoWorkspace.updateSegmentTitle(payload);
 }
 
+export function updateSegmentAttachmentTitle(
+  payload: Parameters<Window['reoWorkspace']['updateSegmentAttachmentTitle']>[0]
+) {
+  return window.reoWorkspace.updateSegmentAttachmentTitle(payload);
+}
+
 export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveTranscript']>[0]) {
   return window.reoWorkspace.saveTranscript(payload);
 }
@@ -216,6 +234,18 @@ export type FinalizedSegmentAttachmentRecording = Extract<
 >['value'];
 export type RenamedSegment = Extract<
   Awaited<ReturnType<typeof updateSegmentTitle>>,
+  { readonly ok: true }
+>['value'];
+export type RenamedSegmentAttachment = Extract<
+  Awaited<ReturnType<typeof updateSegmentAttachmentTitle>>,
+  { readonly ok: true }
+>['value'];
+export type DeletedSegmentAttachment = Extract<
+  Awaited<ReturnType<typeof deleteSegmentAttachment>>,
+  { readonly ok: true }
+>['value'];
+export type RestoredSegmentAttachment = Extract<
+  Awaited<ReturnType<typeof restoreDeletedSegmentAttachment>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceMemorySpace = Extract<

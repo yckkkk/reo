@@ -7,6 +7,8 @@ import type {
   WorkspaceCreateMemoryResponse,
   WorkspaceDeleteMemoryRequest,
   WorkspaceDeleteMemoryResponse,
+  WorkspaceDeleteSegmentAttachmentRequest,
+  WorkspaceDeleteSegmentAttachmentResponse,
   WorkspaceDeleteSegmentRequest,
   WorkspaceDeleteSegmentResponse,
   WorkspaceCreateRecordingDraftResponse,
@@ -33,6 +35,8 @@ import type {
   WorkspaceReadWorkspaceSnapshotResponse,
   WorkspaceRestoreDeletedMemoryRequest,
   WorkspaceRestoreDeletedMemoryResponse,
+  WorkspaceRestoreDeletedSegmentAttachmentRequest,
+  WorkspaceRestoreDeletedSegmentAttachmentResponse,
   WorkspaceRestoreDeletedSegmentRequest,
   WorkspaceRestoreDeletedSegmentResponse,
   WorkspaceRecordingAppendRequest,
@@ -59,6 +63,8 @@ import type {
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
+  WorkspaceUpdateSegmentAttachmentTitleRequest,
+  WorkspaceUpdateSegmentAttachmentTitleResponse,
   WorkspaceUpdateSegmentTitleRequest,
   WorkspaceUpdateSegmentTitleResponse,
 } from './workspace-contract.js';
@@ -98,6 +104,12 @@ export interface ReoWorkspaceBridge {
   readonly restoreDeletedSegment: (
     payload: WorkspaceRestoreDeletedSegmentRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentResponse>;
+  readonly deleteSegmentAttachment: (
+    payload: WorkspaceDeleteSegmentAttachmentRequest
+  ) => Promise<WorkspaceDeleteSegmentAttachmentResponse>;
+  readonly restoreDeletedSegmentAttachment: (
+    payload: WorkspaceRestoreDeletedSegmentAttachmentRequest
+  ) => Promise<WorkspaceRestoreDeletedSegmentAttachmentResponse>;
   readonly readMemoryDetail: (
     payload: WorkspaceReadMemoryDetailRequest
   ) => Promise<WorkspaceReadMemoryDetailResponse>;
@@ -143,6 +155,9 @@ export interface ReoWorkspaceBridge {
   readonly updateSegmentTitle: (
     payload: WorkspaceUpdateSegmentTitleRequest
   ) => Promise<WorkspaceUpdateSegmentTitleResponse>;
+  readonly updateSegmentAttachmentTitle: (
+    payload: WorkspaceUpdateSegmentAttachmentTitleRequest
+  ) => Promise<WorkspaceUpdateSegmentAttachmentTitleResponse>;
   readonly saveTranscript: (
     payload: WorkspaceRecordingMarkdownSaveRequest
   ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;

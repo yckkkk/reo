@@ -11,6 +11,7 @@ import {
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
@@ -28,6 +29,7 @@ import {
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
@@ -35,6 +37,7 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   type WorkspaceIpcChannel,
   type WorkspaceRendererEventChannel,
@@ -103,6 +106,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     restoreDeletedSegment: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreDeletedSegment'>>(
         WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
+        payload
+      ),
+    deleteSegmentAttachment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'deleteSegmentAttachment'>>(
+        WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
+        payload
+      ),
+    restoreDeletedSegmentAttachment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'restoreDeletedSegmentAttachment'>>(
+        WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
         payload
       ),
     readMemoryDetail: (payload) =>
@@ -178,6 +191,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     updateSegmentTitle: (payload) =>
       invoke<WorkspaceBridgeResponse<'updateSegmentTitle'>>(
         WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
+        payload
+      ),
+    updateSegmentAttachmentTitle: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateSegmentAttachmentTitle'>>(
+        WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
         payload
       ),
     saveTranscript: (payload) =>
