@@ -1,5 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
@@ -107,6 +115,50 @@ function audioAttachment(
     transcript: { exists: false },
     ...overrides,
   };
+}
+
+function createDragDataTransfer() {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'move',
+    getData: vi.fn((format: string) => store.get(format) ?? ''),
+    setData: vi.fn((format: string, value: string) => {
+      store.set(format, value);
+    }),
+  };
+}
+
+function mockContentTabRect(element: HTMLElement) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      bottom: 34,
+      height: 34,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function fireContentTabDragOver(
+  element: HTMLElement,
+  input: {
+    readonly clientX: number;
+    readonly dataTransfer: ReturnType<typeof createDragDataTransfer>;
+  }
+) {
+  const event = createEvent.dragOver(element, { dataTransfer: input.dataTransfer });
+  Object.defineProperty(event, 'clientX', {
+    configurable: true,
+    value: input.clientX,
+  });
+  fireEvent(element, event);
 }
 
 function birthdayDetailWithAttachments(
@@ -1477,6 +1529,139 @@ describe('LoadedWorkspaceFrame', () => {
     expect(createObjectURL).toHaveBeenCalledTimes(2);
   });
 
+  it('reorders transcript and SegmentAttachment tabs with drag and drop', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
+    const detailWithSupplements = birthdayDetailWithAttachments([
+      audioAttachment(),
+      audioAttachment({
+        attachmentId: 'att_birthday_context',
+        title: '现场补充',
+        createdAt: '2026-05-06T13:12:00.000',
+        updatedAt: '2026-05-06T13:12:05.000',
+        durationMs: 7_000,
+        audioByteLength: 5,
+      }),
+    ]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_dnd_tabs',
+      detail: detailWithSupplements,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const tabNames = () =>
+      within(tabs)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent);
+
+    expect(tabNames()).toEqual(['转录', '补充录音', '现场补充']);
+
+    const transcriptTab = within(tabs).getByRole('tab', { name: '转录' });
+    const firstAttachmentTab = within(tabs).getByRole('tab', { name: '补充录音' });
+    const secondAttachmentTab = within(tabs).getByRole('tab', { name: '现场补充' });
+    const transcriptTabItem = transcriptTab.closest(
+      '[data-slot="memory-studio-transcript-tab-item"]'
+    ) as HTMLElement;
+    const firstAttachmentTabItem = firstAttachmentTab.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    ) as HTMLElement;
+    const secondAttachmentTabItem = secondAttachmentTab.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    ) as HTMLElement;
+    const firstAttachmentMore = firstAttachmentTabItem.querySelector(
+      '[data-slot="memory-studio-attachment-more-anchor"]'
+    ) as HTMLButtonElement;
+    const secondAttachmentMore = secondAttachmentTabItem.querySelector(
+      '[data-slot="memory-studio-attachment-more-anchor"]'
+    ) as HTMLButtonElement;
+    mockContentTabRect(transcriptTabItem);
+    const dataTransfer = createDragDataTransfer();
+
+    fireEvent.pointerEnter(secondAttachmentTabItem);
+    expect(secondAttachmentMore).not.toHaveAttribute('aria-hidden');
+    fireEvent.dragStart(secondAttachmentTabItem, { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      'application/x-reo-content-tab',
+      JSON.stringify({
+        segmentId: 'seg_birthday_voice',
+        value: 'attachment:att_birthday_context',
+      })
+    );
+    fireEvent.pointerEnter(firstAttachmentTabItem);
+    fireEvent.dragEnter(firstAttachmentTabItem, { dataTransfer });
+    expect(secondAttachmentMore).not.toHaveAttribute('aria-hidden');
+    expect(secondAttachmentMore).toHaveClass('max-w-20');
+    expect(secondAttachmentMore).toHaveClass('opacity-100');
+    expect(firstAttachmentMore).toHaveAttribute('aria-hidden', 'true');
+    expect(firstAttachmentMore).toHaveAttribute('tabindex', '-1');
+    expect(firstAttachmentMore).toHaveClass('max-w-0');
+    expect(firstAttachmentMore).toHaveClass('opacity-0');
+    expect(firstAttachmentMore).not.toHaveClass('group-hover/attachment-tab:max-w-20');
+    expect(firstAttachmentMore).not.toHaveClass('group-hover/attachment-tab:opacity-100');
+    expect(tabNames()).toEqual(['转录', '补充录音', '现场补充']);
+
+    fireEvent.dragEnter(transcriptTabItem, { dataTransfer });
+    expect(tabNames()).toEqual(['转录', '补充录音', '现场补充']);
+
+    fireContentTabDragOver(transcriptTabItem, { clientX: -10, dataTransfer });
+    fireEvent.drop(transcriptTabItem, { dataTransfer });
+
+    await waitFor(() => expect(tabNames()).toEqual(['现场补充', '转录', '补充录音']));
+
+    const transcriptTabItemAfterStableMove = within(tabs)
+      .getByRole('tab', { name: '转录' })
+      .closest('[data-slot="memory-studio-transcript-tab-item"]') as HTMLElement;
+    mockContentTabRect(transcriptTabItemAfterStableMove);
+    fireEvent.dragEnter(transcriptTabItemAfterStableMove, { dataTransfer });
+    fireContentTabDragOver(transcriptTabItemAfterStableMove, { clientX: -10, dataTransfer });
+
+    fireContentTabDragOver(transcriptTabItemAfterStableMove, { clientX: 90, dataTransfer });
+    await waitFor(() => expect(tabNames()).toEqual(['转录', '现场补充', '补充录音']));
+
+    fireContentTabDragOver(transcriptTabItemAfterStableMove, { clientX: -10, dataTransfer });
+    fireEvent.dragEnd(secondAttachmentTabItem, { dataTransfer });
+    expect(secondAttachmentMore).toHaveAttribute('aria-hidden', 'true');
+    expect(secondAttachmentMore).toHaveAttribute('tabindex', '-1');
+
+    await waitFor(() => expect(tabNames()).toEqual(['现场补充', '转录', '补充录音']));
+
+    const transcriptTabItemAfterFirstMove = within(tabs)
+      .getByRole('tab', { name: '转录' })
+      .closest('[data-slot="memory-studio-transcript-tab-item"]') as HTMLElement;
+    const firstAttachmentTabItemAfterFirstMove = within(tabs)
+      .getByRole('tab', { name: '现场补充' })
+      .closest('[data-slot="memory-studio-attachment-tab-item"]') as HTMLElement;
+    mockContentTabRect(firstAttachmentTabItemAfterFirstMove);
+    const secondMoveDataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(transcriptTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
+    fireEvent.dragEnter(firstAttachmentTabItemAfterFirstMove, {
+      dataTransfer: secondMoveDataTransfer,
+    });
+    fireContentTabDragOver(firstAttachmentTabItemAfterFirstMove, {
+      clientX: -10,
+      dataTransfer: secondMoveDataTransfer,
+    });
+    fireEvent.drop(firstAttachmentTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
+    fireEvent.dragEnd(transcriptTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
+
+    await waitFor(() => expect(tabNames()).toEqual(['转录', '现场补充', '补充录音']));
+
+    await userEvent.click(within(tabs).getByRole('tab', { name: '现场补充' }));
+    expect(within(tabs).getByRole('tab', { name: '现场补充' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(
+      within(content).getByRole('button', { name: '播放补充录音 现场补充' })
+    ).toBeInTheDocument();
+  });
+
   it('does not keep the SegmentAttachment More affordance expanded after selection or menu open', async () => {
     const user = userEvent.setup();
     const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
@@ -1532,8 +1717,8 @@ describe('LoadedWorkspaceFrame', () => {
     await user.click(attachmentTab);
     expect(attachmentTab).toHaveAttribute('aria-selected', 'true');
     await user.hover(within(content).getByRole('tab', { name: '转录' }));
-    expect(moreButton).not.toHaveAttribute('aria-hidden');
-    expect(moreButton).toHaveAttribute('tabindex', '0');
+    expect(moreButton).toHaveAttribute('aria-hidden', 'true');
+    expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('pointer-events-none');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('opacity-0');
@@ -1556,8 +1741,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveFocus();
 
     await user.unhover(attachmentTabItem);
-    expect(moreButton).not.toHaveAttribute('aria-hidden');
-    expect(moreButton).toHaveAttribute('tabindex', '0');
+    expect(moreButton).toHaveAttribute('aria-hidden', 'true');
+    expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('pointer-events-none');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('opacity-0');

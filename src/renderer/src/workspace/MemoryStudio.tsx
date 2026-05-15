@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
@@ -88,6 +89,10 @@ type SegmentAttachmentAudioResource = {
   workspaceId: string;
 };
 type ActiveContentTab = 'transcript' | `attachment:${string}`;
+type DraggedContentTab = {
+  readonly segmentId: string;
+  readonly value: ActiveContentTab;
+};
 type MemoryStudioContentTab =
   | {
       readonly kind: 'transcript';
@@ -107,6 +112,7 @@ type MemoryStudioContentTab =
 
 const CONTENT_TAB_MOTION_CLASS =
   'duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none';
+const CONTENT_TAB_DRAG_MIME = 'application/x-reo-content-tab';
 
 function durationLabel(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -146,6 +152,55 @@ function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
     panelId: `${baseId}-panel`,
     tabId: `${baseId}-tab`,
   };
+}
+
+function orderContentTabs(
+  tabs: readonly MemoryStudioContentTab[],
+  order: readonly ActiveContentTab[] | undefined
+) {
+  if (!order || order.length === 0) {
+    return tabs;
+  }
+
+  const remainingTabs = new Map(tabs.map((tab) => [tab.value, tab]));
+  const orderedTabs: MemoryStudioContentTab[] = [];
+
+  for (const value of order) {
+    const tab = remainingTabs.get(value);
+    if (!tab) {
+      continue;
+    }
+    orderedTabs.push(tab);
+    remainingTabs.delete(value);
+  }
+
+  return [...orderedTabs, ...remainingTabs.values()];
+}
+
+function insertContentTabValue(
+  values: readonly ActiveContentTab[],
+  draggedValue: ActiveContentTab,
+  targetValue: ActiveContentTab,
+  placement: 'before' | 'after'
+) {
+  if (draggedValue === targetValue) {
+    return values;
+  }
+
+  if (!values.includes(draggedValue) || !values.includes(targetValue)) {
+    return values;
+  }
+
+  const remainingValues = values.filter((value) => value !== draggedValue);
+  const targetIndex = remainingValues.indexOf(targetValue);
+  if (targetIndex === -1) {
+    return values;
+  }
+
+  const insertionIndex = placement === 'before' ? targetIndex : targetIndex + 1;
+  const nextValues = [...remainingValues];
+  nextValues.splice(insertionIndex, 0, draggedValue);
+  return nextValues;
 }
 
 function segmentAttachmentAudioResourceKey(
@@ -337,15 +392,21 @@ function contentTabButtonClassName(hasActions = false) {
   ].join(' ');
 }
 
-function contentTabMoreClassName() {
+function contentTabMoreClassName(revealMode: 'drag-source' | 'drag-suppressed' | 'normal') {
+  const revealClassName =
+    revealMode === 'drag-source'
+      ? 'pointer-events-auto ml-[6px] max-w-20 scale-100 opacity-100'
+      : revealMode === 'drag-suppressed'
+        ? ''
+        : 'group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100';
+
   return [
     'inline-flex items-center justify-center overflow-hidden',
     'transition-[max-width,margin-left,opacity,transform]',
     CONTENT_TAB_MOTION_CLASS,
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'pointer-events-none ml-0 max-w-0 scale-75 opacity-0',
-    'group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100',
-    'focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100',
+    revealClassName,
   ].join(' ');
 }
 
@@ -367,24 +428,36 @@ function SegmentAttachmentTab({
   tabId,
   onActionsHidden,
   onActionsVisible,
+  onDragEnd,
+  onDragEnter,
+  onDragOver,
+  onDragStart,
   onKeyDown,
   onMenuOpenChange,
   onDelete,
   onRename,
   onSelect,
+  dragging,
+  revealMode,
   menuOpen,
 }: {
   readonly active: boolean;
   readonly actionsVisible: boolean;
   readonly attachment: MemorySegmentAttachment;
   readonly attachmentIndex: number;
+  readonly dragging: boolean;
   readonly menuOpen: boolean;
   readonly panelId: string;
+  readonly revealMode: 'drag-source' | 'drag-suppressed' | 'normal';
   readonly tabIndex: number;
   readonly tabId: string;
   readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   readonly onActionsHidden: () => void;
   readonly onActionsVisible: () => void;
+  readonly onDragEnd: (event: DragEvent<HTMLDivElement>) => void;
+  readonly onDragEnter: (event: DragEvent<HTMLDivElement>) => void;
+  readonly onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDelete: () => void;
   readonly onMenuOpenChange: (open: boolean) => void;
   readonly onRename: () => void;
@@ -392,7 +465,7 @@ function SegmentAttachmentTab({
 }) {
   const tabButtonRef = useRef<HTMLButtonElement | null>(null);
   const moreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const actionsAccessible = actionsVisible || active;
+  const actionsAccessible = actionsVisible || menuOpen;
 
   useEffect(() => {
     if (actionsVisible || menuOpen || document.activeElement !== moreButtonRef.current) {
@@ -408,7 +481,16 @@ function SegmentAttachmentTab({
       data-attachment-id={attachment.attachmentId}
       data-attachment-index={attachmentIndex}
       data-attachment-type={attachment.type}
-      className={[contentTabPillClassName(active), 'group/attachment-tab pr-[14px]'].join(' ')}
+      draggable
+      className={[
+        contentTabPillClassName(active),
+        'group/attachment-tab cursor-grab pr-[14px] active:cursor-grabbing',
+        dragging ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border' : '',
+      ].join(' ')}
+      onDragEnd={onDragEnd}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragStart={onDragStart}
       onPointerEnter={onActionsVisible}
       onPointerLeave={onActionsHidden}
       onMouseEnter={onActionsVisible}
@@ -446,7 +528,7 @@ function SegmentAttachmentTab({
             aria-hidden={actionsAccessible ? undefined : true}
             data-slot="memory-studio-attachment-more-anchor"
             tabIndex={actionsAccessible ? 0 : -1}
-            className={contentTabMoreClassName()}
+            className={contentTabMoreClassName(revealMode)}
           >
             <span className="inline-flex size-20 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground">
               <Ellipsis className="size-16" strokeWidth={2.5} />
@@ -852,6 +934,11 @@ export function MemoryStudio({
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [segmentAudioUrl, setSegmentAudioUrl] = useState<string | null>(null);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
+  const [contentTabOrderBySegmentId, setContentTabOrderBySegmentId] = useState<
+    Record<string, readonly ActiveContentTab[]>
+  >({});
+  const draggedContentTabRef = useRef<DraggedContentTab | null>(null);
+  const [draggedContentTab, setDraggedContentTab] = useState<DraggedContentTab | null>(null);
   const segmentAttachmentPresenceRef = useRef<{
     readonly segmentId: string | null;
     readonly attachmentIds: readonly string[];
@@ -880,6 +967,12 @@ export function MemoryStudio({
   );
   const selectedSegmentAttachmentIdsKey = selectedSegmentAttachmentIds.join('\0');
   const activeAttachmentId = attachmentIdFromContentTab(activeContentTab);
+  const draggedAttachmentId =
+    draggedContentTab &&
+    selectedSegment &&
+    draggedContentTab.segmentId === selectedSegment.segmentId
+      ? attachmentIdFromContentTab(draggedContentTab.value)
+      : null;
   const activeSegmentAttachment =
     activeAttachmentId === null
       ? null
@@ -909,10 +1002,21 @@ export function MemoryStudio({
       ...contentTabDomIds(selectedSegmentDomId, value),
     };
   });
-  const contentTabs: readonly MemoryStudioContentTab[] = [
+  const baseContentTabs: readonly MemoryStudioContentTab[] = [
     transcriptContentTab,
     ...attachmentContentTabs,
   ];
+  const contentTabs: readonly MemoryStudioContentTab[] = selectedSegment
+    ? orderContentTabs(baseContentTabs, contentTabOrderBySegmentId[selectedSegment.segmentId])
+    : baseContentTabs;
+  const visibleAttachmentIndexByTabValue = new Map<ActiveContentTab, number>();
+  let visibleAttachmentIndex = 0;
+  for (const contentTab of contentTabs) {
+    if (contentTab.kind === 'attachment') {
+      visibleAttachmentIndexByTabValue.set(contentTab.value, visibleAttachmentIndex);
+      visibleAttachmentIndex += 1;
+    }
+  }
   const activeContentTabModel =
     contentTabs.find((contentTab) => contentTab.value === resolvedActiveContentTab) ??
     transcriptContentTab;
@@ -1004,6 +1108,8 @@ export function MemoryStudio({
     setAttachmentMenuOpen(false);
     setOpenAttachmentActionMenuId(null);
     setHoveredAttachmentActionId(null);
+    draggedContentTabRef.current = null;
+    setDraggedContentTab(null);
     setActiveContentTab('transcript');
     setPlaybackTimeMs(0);
     setPlayingSegmentId(null);
@@ -1095,6 +1201,112 @@ export function MemoryStudio({
 
     setActiveContentTab(nextTab.value);
     window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+  }
+
+  function readDraggedContentTab(event: DragEvent<HTMLElement>) {
+    if (draggedContentTabRef.current) {
+      return draggedContentTabRef.current;
+    }
+
+    try {
+      const encodedValue = event.dataTransfer.getData(CONTENT_TAB_DRAG_MIME);
+      if (!encodedValue) {
+        return null;
+      }
+
+      const parsedValue = JSON.parse(encodedValue) as Partial<DraggedContentTab>;
+      if (
+        typeof parsedValue.segmentId === 'string' &&
+        (parsedValue.value === 'transcript' ||
+          (typeof parsedValue.value === 'string' && parsedValue.value.startsWith('attachment:')))
+      ) {
+        return {
+          segmentId: parsedValue.segmentId,
+          value: parsedValue.value,
+        };
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  function moveContentTab(
+    draggedTab: DraggedContentTab,
+    targetValue: ActiveContentTab,
+    targetRect: DOMRect,
+    pointerClientX: number
+  ) {
+    const draggedValue = draggedTab.value;
+    if (!selectedSegment || draggedValue === targetValue) {
+      return;
+    }
+
+    const segmentId = selectedSegment.segmentId;
+    setContentTabOrderBySegmentId((currentOrderBySegmentId) => {
+      const orderedValues = orderContentTabs(
+        baseContentTabs,
+        currentOrderBySegmentId[segmentId]
+      ).map((contentTab) => contentTab.value);
+      const draggedIndex = orderedValues.indexOf(draggedValue);
+      const targetIndex = orderedValues.indexOf(targetValue);
+      if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) {
+        return currentOrderBySegmentId;
+      }
+
+      const targetMidpoint = targetRect.left + targetRect.width / 2;
+      const placement = pointerClientX < targetMidpoint ? 'before' : 'after';
+      const nextValues = insertContentTabValue(orderedValues, draggedValue, targetValue, placement);
+
+      if (nextValues === orderedValues || nextValues.join('\0') === orderedValues.join('\0')) {
+        return currentOrderBySegmentId;
+      }
+
+      return {
+        ...currentOrderBySegmentId,
+        [segmentId]: nextValues,
+      };
+    });
+  }
+
+  function handleContentTabDragStart(event: DragEvent<HTMLElement>, value: ActiveContentTab) {
+    if (!selectedSegment) {
+      return;
+    }
+
+    const draggedTab = { segmentId: selectedSegment.segmentId, value };
+    draggedContentTabRef.current = draggedTab;
+    setHoveredAttachmentActionId(null);
+    setDraggedContentTab(draggedTab);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(CONTENT_TAB_DRAG_MIME, JSON.stringify(draggedTab));
+  }
+
+  function handleContentTabDragEnter(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+  }
+
+  function handleContentTabDragOver(event: DragEvent<HTMLElement>, targetValue: ActiveContentTab) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const draggedTab = readDraggedContentTab(event);
+    if (!draggedTab || !selectedSegment || draggedTab.segmentId !== selectedSegment.segmentId) {
+      return;
+    }
+
+    moveContentTab(
+      draggedTab,
+      targetValue,
+      event.currentTarget.getBoundingClientRect(),
+      event.clientX
+    );
+  }
+
+  function handleContentTabDragEnd() {
+    draggedContentTabRef.current = null;
+    setHoveredAttachmentActionId(null);
+    setDraggedContentTab(null);
   }
 
   useEffect(() => {
@@ -1480,72 +1692,115 @@ export function MemoryStudio({
                   data-slot="memory-studio-content-tab-rail"
                   className="edge-fade-x flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
-                  <span
-                    data-slot="memory-studio-transcript-tab-item"
-                    className={contentTabPillClassName(resolvedActiveContentTab === 'transcript')}
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      id={transcriptContentTab.tabId}
-                      aria-controls={transcriptContentTab.panelId}
-                      aria-selected={resolvedActiveContentTab === 'transcript'}
-                      data-slot="memory-studio-transcript-tab"
-                      tabIndex={resolvedActiveContentTab === 'transcript' ? 0 : -1}
-                      className={contentTabButtonClassName()}
-                      onClick={() => setActiveContentTab('transcript')}
-                      onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
-                    >
-                      <FileText aria-hidden="true" className="size-16 shrink-0" strokeWidth={2} />
-                      <span>转录</span>
-                    </button>
-                  </span>
-                  {attachmentContentTabs.map((contentTab, attachmentIndex) => (
-                    <SegmentAttachmentTab
-                      key={contentTab.attachment.attachmentId}
-                      active={resolvedActiveContentTab === contentTab.value}
-                      actionsVisible={
-                        hoveredAttachmentActionId === contentTab.attachment.attachmentId
-                      }
-                      attachment={contentTab.attachment}
-                      attachmentIndex={attachmentIndex}
-                      menuOpen={openAttachmentActionMenuId === contentTab.attachment.attachmentId}
-                      tabId={contentTab.tabId}
-                      panelId={contentTab.panelId}
-                      tabIndex={resolvedActiveContentTab === contentTab.value ? 0 : -1}
-                      onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
-                      onActionsVisible={() =>
-                        setHoveredAttachmentActionId(contentTab.attachment.attachmentId)
-                      }
-                      onActionsHidden={() =>
-                        setHoveredAttachmentActionId((currentAttachmentId) =>
-                          currentAttachmentId === contentTab.attachment.attachmentId
-                            ? null
-                            : currentAttachmentId
-                        )
-                      }
-                      onMenuOpenChange={(open) =>
-                        setOpenAttachmentActionMenuId(
-                          open ? contentTab.attachment.attachmentId : null
-                        )
-                      }
-                      onDelete={() =>
-                        onDeleteSegmentAttachment({
-                          memoryId: memory.memoryId,
-                          segment: selectedSegment,
-                          attachment: contentTab.attachment,
-                        })
-                      }
-                      onRename={() =>
-                        onRenameSegmentAttachment({
-                          memoryId: memory.memoryId,
-                          segment: selectedSegment,
-                          attachment: contentTab.attachment,
-                        })
-                      }
-                      onSelect={() => setActiveContentTab(contentTab.value)}
-                    />
-                  ))}
+                  {contentTabs.map((contentTab) =>
+                    contentTab.kind === 'transcript' ? (
+                      <span
+                        key={contentTab.value}
+                        data-slot="memory-studio-transcript-tab-item"
+                        draggable
+                        className={[
+                          contentTabPillClassName(resolvedActiveContentTab === 'transcript'),
+                          'cursor-grab active:cursor-grabbing',
+                          draggedContentTab?.segmentId === selectedSegment.segmentId &&
+                          draggedContentTab.value === contentTab.value
+                            ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border'
+                            : '',
+                        ].join(' ')}
+                        onDragEnd={handleContentTabDragEnd}
+                        onDragEnter={handleContentTabDragEnter}
+                        onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
+                        onDragStart={(event) => handleContentTabDragStart(event, contentTab.value)}
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          id={contentTab.tabId}
+                          aria-controls={contentTab.panelId}
+                          aria-selected={resolvedActiveContentTab === 'transcript'}
+                          data-slot="memory-studio-transcript-tab"
+                          tabIndex={resolvedActiveContentTab === 'transcript' ? 0 : -1}
+                          className={contentTabButtonClassName()}
+                          onClick={() => setActiveContentTab('transcript')}
+                          onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
+                        >
+                          <FileText
+                            aria-hidden="true"
+                            className="size-16 shrink-0"
+                            strokeWidth={2}
+                          />
+                          <span>转录</span>
+                        </button>
+                      </span>
+                    ) : (
+                      <SegmentAttachmentTab
+                        key={contentTab.attachment.attachmentId}
+                        active={resolvedActiveContentTab === contentTab.value}
+                        actionsVisible={
+                          (draggedContentTab === null &&
+                            hoveredAttachmentActionId === contentTab.attachment.attachmentId) ||
+                          draggedAttachmentId === contentTab.attachment.attachmentId
+                        }
+                        attachment={contentTab.attachment}
+                        attachmentIndex={
+                          visibleAttachmentIndexByTabValue.get(contentTab.value) ?? 0
+                        }
+                        dragging={
+                          draggedContentTab?.segmentId === selectedSegment.segmentId &&
+                          draggedContentTab.value === contentTab.value
+                        }
+                        menuOpen={openAttachmentActionMenuId === contentTab.attachment.attachmentId}
+                        revealMode={
+                          draggedContentTab === null
+                            ? 'normal'
+                            : draggedAttachmentId === contentTab.attachment.attachmentId
+                              ? 'drag-source'
+                              : 'drag-suppressed'
+                        }
+                        tabId={contentTab.tabId}
+                        panelId={contentTab.panelId}
+                        tabIndex={resolvedActiveContentTab === contentTab.value ? 0 : -1}
+                        onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
+                        onActionsVisible={() =>
+                          draggedContentTab === null
+                            ? setHoveredAttachmentActionId(contentTab.attachment.attachmentId)
+                            : undefined
+                        }
+                        onActionsHidden={() =>
+                          draggedContentTab === null
+                            ? setHoveredAttachmentActionId((currentAttachmentId) =>
+                                currentAttachmentId === contentTab.attachment.attachmentId
+                                  ? null
+                                  : currentAttachmentId
+                              )
+                            : undefined
+                        }
+                        onDragEnd={handleContentTabDragEnd}
+                        onDragEnter={handleContentTabDragEnter}
+                        onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
+                        onDragStart={(event) => handleContentTabDragStart(event, contentTab.value)}
+                        onMenuOpenChange={(open) =>
+                          setOpenAttachmentActionMenuId(
+                            open ? contentTab.attachment.attachmentId : null
+                          )
+                        }
+                        onDelete={() =>
+                          onDeleteSegmentAttachment({
+                            memoryId: memory.memoryId,
+                            segment: selectedSegment,
+                            attachment: contentTab.attachment,
+                          })
+                        }
+                        onRename={() =>
+                          onRenameSegmentAttachment({
+                            memoryId: memory.memoryId,
+                            segment: selectedSegment,
+                            attachment: contentTab.attachment,
+                          })
+                        }
+                        onSelect={() => setActiveContentTab(contentTab.value)}
+                      />
+                    )
+                  )}
                 </div>
                 <DropdownMenu open={attachmentMenuOpen} onOpenChange={setAttachmentMenuOpen}>
                   <DropdownMenuTrigger asChild>
