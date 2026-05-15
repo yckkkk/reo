@@ -195,6 +195,7 @@ import {
   createRecordingTranscriptionSessionRegistry,
   type RecordingTranscriptionSessionRegistry,
 } from './recordingTranscriptionSessions.js';
+import { withDiagnosticSpan } from './diagnostics.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, dialog, ipcMain } = nodeRequire('electron') as Partial<typeof import('electron')>;
@@ -219,6 +220,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
+  readonly withDiagnostics?: typeof withDiagnosticSpan;
 }
 
 interface WorkspaceIpcBaseOptions {
@@ -2502,10 +2504,26 @@ export function registerWorkspaceIpc({
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
+  withDiagnostics = withDiagnosticSpan,
 }: RegisterWorkspaceIpcOptions): void {
   const electronMain = requireElectronMainApi();
+  const registerWorkspaceIpcHandler = (
+    channel: string,
+    handler: (event: TrustedSenderEventAdapter, input: unknown) => unknown
+  ): void => {
+    electronMain.ipcMain.handle(channel, (event, input) =>
+      withDiagnostics(
+        {
+          area: 'workspace-ipc',
+          event: 'request',
+          fields: { channel },
+        },
+        () => handler(event as TrustedSenderEventAdapter, input)
+      )
+    );
+  };
 
-  electronMain.ipcMain.handle(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
       event,
       input,
@@ -2516,7 +2534,7 @@ export function registerWorkspaceIpc({
       showOpenDirectoryDialog,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_LIST_MEMORY_SPACES_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_LIST_MEMORY_SPACES_CHANNEL, (event, input) =>
     handleListWorkspaceMemorySpaces({
       event,
       input,
@@ -2526,7 +2544,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
     handleInitializeWorkspace({
       event,
       input,
@@ -2538,7 +2556,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_OPEN_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_CHANNEL, (event, input) =>
     handleOpenWorkspace({
       event,
       input,
@@ -2550,7 +2568,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, (event, input) =>
     handleOpenWorkspaceMemorySpace({
       event,
       input,
@@ -2561,7 +2579,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL, (event, input) =>
     handleRemoveMemorySpace({
       event,
       input,
@@ -2571,7 +2589,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemorySpaceTitle({
       event,
       input,
@@ -2582,7 +2600,7 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL, (event, input) =>
     handleBeginMicrophoneIntent({
       event,
       input,
@@ -2593,7 +2611,7 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL, (event, input) =>
     handleClearMicrophoneIntent({
       event,
       input,
@@ -2604,7 +2622,7 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
     withWorkspaceHandleRequest({
       event,
       input,
@@ -2629,7 +2647,7 @@ export function registerWorkspaceIpc({
         ),
     })
   );
-  electronMain.ipcMain.handle(
+  registerWorkspaceIpcHandler(
     WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
     (event, input) =>
       withWorkspaceHandleRequest({
@@ -2657,7 +2675,7 @@ export function registerWorkspaceIpc({
           ),
       })
   );
-  electronMain.ipcMain.handle(WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
     finishRecordingTranscriptionCore({
       event,
       input,
@@ -2668,7 +2686,7 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL, (event, input) =>
     closeRecordingTranscriptionCore({
       event,
       input,
@@ -2679,7 +2697,7 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemoryTitle({
       event,
       input,
@@ -2689,7 +2707,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, (event, input) =>
     handleUpdateSegmentTitle({
       event,
       input,
@@ -2699,7 +2717,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, (event, input) =>
     handleUpdateSegmentSupplementTitle({
       event,
       input,
@@ -2709,7 +2727,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
       input,
@@ -2719,7 +2737,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_DELETE_MEMORY_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_MEMORY_CHANNEL, (event, input) =>
     handleDeleteMemory({
       event,
       input,
@@ -2729,7 +2747,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
     handleRestoreDeletedMemory({
       event,
       input,
@@ -2739,7 +2757,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_DELETE_SEGMENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_SEGMENT_CHANNEL, (event, input) =>
     handleDeleteSegment({
       event,
       input,
@@ -2749,7 +2767,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, (event, input) =>
     handleRestoreDeletedSegment({
       event,
       input,
@@ -2759,7 +2777,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
     handleDeleteSegmentSupplement({
       event,
       input,
@@ -2769,7 +2787,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(
+  registerWorkspaceIpcHandler(
     WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
     (event, input) =>
       handleRestoreDeletedSegmentSupplement({
@@ -2781,7 +2799,7 @@ export function registerWorkspaceIpc({
         handleStore,
       })
   );
-  electronMain.ipcMain.handle(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleReadMemoryDetail({
       event,
       input,
@@ -2791,7 +2809,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, (event, input) =>
     handleReadFinalizedAudioSegment({
       event,
       input,
@@ -2801,7 +2819,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(
+  registerWorkspaceIpcHandler(
     WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
     (event, input) =>
       handleReadFinalizedAudioSegmentSupplement({
@@ -2813,7 +2831,7 @@ export function registerWorkspaceIpc({
         handleStore,
       })
   );
-  electronMain.ipcMain.handle(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
     handleCloseWorkspace({
       event,
       input,
@@ -2824,7 +2842,7 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, (event, input) =>
     handleReadWorkspaceSnapshot({
       event,
       input,
@@ -2848,7 +2866,7 @@ export function registerWorkspaceIpc({
       assertUsable: AssertWorkspaceHandleUsable
     ) => MaybePromise<Result | WorkspaceErrorEnvelope>
   ): void {
-    electronMain.ipcMain.handle(channel, (event, input) =>
+    registerWorkspaceIpcHandler(channel, (event, input) =>
       withWorkspaceHandleRequest({
         event,
         input,
@@ -2864,7 +2882,7 @@ export function registerWorkspaceIpc({
     );
   }
 
-  electronMain.ipcMain.handle(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, (event, input) =>
+  registerWorkspaceIpcHandler(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, (event, input) =>
     handleCreateRecordingDraft({
       event,
       input,
@@ -2874,7 +2892,7 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(
+  registerWorkspaceIpcHandler(
     WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
     (event, input) =>
       handleCreateSegmentSupplementRecordingDraft({

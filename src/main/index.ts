@@ -8,6 +8,8 @@ import {
   type WebContentsWillRedirectEventParams,
 } from 'electron';
 import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from './appProtocol.js';
+import { recordDiagnosticEvent } from './diagnostics.js';
+import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
@@ -20,6 +22,7 @@ import { closeAllWorkspaceHandles, registerWorkspaceIpc } from './workspaceIpc.j
 import { bindWorkspaceHandleLifecycle } from './workspaceHandleLifecycle.js';
 
 app.enableSandbox();
+initializeElectronDiagnostics(app);
 registerAppShellScheme();
 
 const DEV_SERVER_URL = getDevServerUrl();
@@ -45,6 +48,15 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Main] Renderer process gone', details.reason);
+    recordDiagnosticEvent({
+      area: 'app',
+      event: 'renderer.gone',
+      fields: { reason: details.reason },
+      level: 'error',
+    });
   });
 
   if (DEV_SERVER_URL) {
@@ -91,6 +103,12 @@ app.on('web-contents-created', (_event, contents) => {
 app
   .whenReady()
   .then(() => {
+    console.info('[Main] App ready');
+    recordDiagnosticEvent({
+      area: 'app',
+      event: 'ready',
+      fields: { mode: DEV_SERVER_URL ? 'development' : 'production' },
+    });
     setupContentSecurityPolicy();
     setupPermissionRequestHandler();
     registerWorkspaceIpc({
@@ -108,7 +126,16 @@ app
     });
   })
   .catch((error: unknown) => {
-    console.error('[Main] Failed to bootstrap application', error);
+    console.error(
+      '[Main] Failed to bootstrap application',
+      error instanceof Error ? error.name : typeof error
+    );
+    recordDiagnosticEvent({
+      area: 'app',
+      event: 'bootstrap.failed',
+      fields: { errorName: error instanceof Error ? error.name : typeof error },
+      level: 'error',
+    });
     app.quit();
   });
 
@@ -119,7 +146,13 @@ app.on('window-all-closed', () => {
 });
 
 process.on('uncaughtException', (error: Error) => {
-  console.error('[Main] Uncaught Exception', error);
+  console.error('[Main] Uncaught Exception', error.name);
+  recordDiagnosticEvent({
+    area: 'app',
+    event: 'uncaughtException',
+    fields: { errorName: error.name },
+    level: 'error',
+  });
   void closeAllWorkspaceHandles().finally(() => {
     app.exit(1);
   });

@@ -19,8 +19,9 @@
 - TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 memory space creation form、memory rename form、memory space list 和记忆空间 snapshot cache。
 - `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、AlertDialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、App shell、recording audio controls 和 icon controls。
 - Workspace single-writer lock 使用 `.reo/workspace.lock` no-follow leaf file 和同目录 `.reo/workspace.lock.lock` 目录锁，owner 文件写入 pid 与进程启动指纹，不依赖通用 lock service。
-- Sentry 和 `electron-log` 已选型，但当前未安装。
-- 当前没有 logging owner、diagnostic event contract、Sentry DSN、release environment、source map upload 或 privacy/scrubbing policy。
+- `electron-log` 已安装，当前只服务 main-owned 本地诊断日志。
+- 当前 logging owner 是 main process diagnostics；diagnostic event contract 位于 `src/main/diagnostics.ts`，本地 Electron file transport 初始化位于 `src/main/electronDiagnostics.ts`。
+- 当前没有 Sentry DSN、release environment、source map upload、sampling 或 privacy/scrubbing policy。
 - 当前没有 posthook 或 pre-commit flow。
 
 ## 类型系统
@@ -131,12 +132,16 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 
 ## 可观测性
 
-- 当前不安装 `electron-log` 或 Sentry。
-- 没有真实 diagnostic owner 前，不创建 logging subsystem。
-- 引入 logging 时，本地诊断使用 `electron-log`。
+- 当前本地诊断使用 `electron-log/main`，只在 main process 内初始化。
+- 当前诊断事件写入 Electron logs path 下的 `main.log`，事件前缀为 `[reo-diagnostic]`，内容是经过脱敏的 JSON。
+- 当前日志 retention 使用 `electron-log` file rotation：`main.log` 单文件大小上限为 1 MiB，超过后轮转为 `main.old.log`。
+- 当前诊断覆盖 app diagnostics ready、app ready、bootstrap failed、renderer process gone、uncaught exception 和 workspace IPC request start/finish。
+- Workspace IPC diagnostic span 只记录 channel、status、duration 和脱敏字段，不记录 request payload、root path、file path、display path、title、token、handle、transcript、正文或 secret。
+- Diagnostic fields 默认不展开对象、数组或未知字符串；只有 `channel`、`status`、`mode`、`processType`、`reason`、`phase`、`errorName`、`errorCode` 和 `dataRetention` 这类固定枚举短字段保留原始字符串。
+- `REO_DIAGNOSTICS_CONSOLE=1` 只允许在本机开发时把同一诊断事件同步到 console；默认 console transport 关闭。
+- Renderer error capture、preload logging bridge、IPC logging channel、generic diagnostic IPC 和远程 telemetry 当前都不存在。
 - 引入 crash/error reporting 时，使用 Sentry。
 - 没有 DSN、release/environment、source map upload、privacy/scrubbing 和 sampling 计划前，不初始化 Sentry。
-- Renderer error capture、preload logging bridge 或 IPC logging channel 必须在真实 diagnostics 能力中设计，不得先创建 bridge 等 consumer。
 - Background work 必须暴露足够状态，用于排查时序和失败。
 
 ## 变更门禁

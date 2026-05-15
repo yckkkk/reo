@@ -71,6 +71,7 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
       workspaceId: 'ws_1',
     });
     const closedHandles: string[] = [];
+    const diagnosticEvents: Array<{ readonly event: string; readonly channel: string }> = [];
 
     registerWorkspaceIpc({
       expectedSession,
@@ -82,6 +83,26 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
           closedHandles.push(workspaceHandle);
         },
       } as never,
+      async withDiagnostics<Result>(
+        event: {
+          readonly area: string;
+          readonly event: string;
+          readonly fields?: Record<string, unknown>;
+          readonly level?: 'info' | 'warn' | 'error';
+        },
+        run: () => Promise<Result> | Result
+      ): Promise<Result> {
+        diagnosticEvents.push({
+          channel: String(event.fields?.['channel'] ?? ''),
+          event: `${event.event}.start`,
+        });
+        const result = await run();
+        diagnosticEvents.push({
+          channel: String(event.fields?.['channel'] ?? ''),
+          event: `${event.event}.finish`,
+        });
+        return result;
+      },
     });
 
     const closeHandler = handlers.get(WORKSPACE_CLOSE_CHANNEL);
@@ -90,6 +111,10 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
 
     assert.deepEqual(response, { ok: true, value: { closed: true } });
     assert.deepEqual(closedHandles, ['wh_ipc']);
+    assert.deepEqual(diagnosticEvents, [
+      { channel: WORKSPACE_CLOSE_CHANNEL, event: 'request.start' },
+      { channel: WORKSPACE_CLOSE_CHANNEL, event: 'request.finish' },
+    ]);
   } finally {
     moduleWithLoad._load = originalLoad;
   }

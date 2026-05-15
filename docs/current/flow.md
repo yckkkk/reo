@@ -23,8 +23,8 @@
 - 当前 optimistic update 用于命名类 mutation 和 Segment delete renderer projection；命名 rollback 必须检查当前 UI 仍停留在本次 optimistic title，避免覆盖后续用户输入；Segment delete rollback 只恢复目标 Segment，不写回整份旧 snapshot，不重建已保留的 content cache；多个 pending Segment delete 必须按当前仍 pending 的集合重放 projection，不能让单个 delayed response 复活其他待删除 Segment。Pending replay 只按 pending Segment identity 和 additive delta 调整 summary；Workspace snapshot summary 没有 Segment ids，不用 `segmentCount` 这类 aggregate equality 判断实体是否已被删除。
 - 当前 memory space entry flow 覆盖 create 记忆空间 title/description/folder selection validation、创建时在所选父目录下新建同名记忆空间文件夹、sidebar 持续显示已导入记忆空间、sidebar `打开本地记忆空间` 打开现有 Reo 记忆空间或初始化空文件夹、点击已导入记忆空间打开该记忆空间、sidebar 记忆空间更多菜单移除 registry entry、open failure 可见错误反馈、submit failure 保留 create draft 和成功后 route state 切换。
 - 当前没有 persisted client-state migration flow。
-- 当前 main process 有最小 fatal exception path：`uncaughtException` 写入 `console.error`，先释放当前记忆空间 handles，再退出。
-- 当前没有 structured diagnostic lifecycle 或 background error reporting flow。
+- 当前 main process 有最小 fatal exception path：`uncaughtException` 写入本地诊断日志和 `console.error`，先释放当前记忆空间 handles，再退出。
+- 当前 structured diagnostic lifecycle 只在 main process 内运行：app startup、renderer process gone、fatal exception 和 workspace IPC request completion 写入本地 `electron-log` 文件。Workspace IPC 诊断以 request start/finish span 表达，finish 记录 status 和 duration；诊断字段经过脱敏，不记录 root path、file path、display path、title、token、handle、payload、transcript、正文或 secret。诊断字段默认不展开对象、数组或未知字符串；只有固定枚举类字段允许保留短字符串。当前没有 background error reporting flow、renderer/preload logging bridge、诊断 IPC 或远程 telemetry。
 - 当前没有 package、make、publish、release 或 update lifecycle。
 
 ## 技术方向

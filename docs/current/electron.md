@@ -11,7 +11,9 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前 preload bundle 输出为 `out/preload/index.cjs`；sandbox preload source 不运行时引入 Zod-backed contract 或普通 Node package。
 - 当前 IPC API 只有显式 workspace product channels，不存在 generic `invoke/send` bridge。
 - 当前 main process 持有 memory space registry，真实 memory space root 只存放在 main-owned app state file 中，不进入 renderer、preload DTO、DOM、URL 或 Query key。
-- 当前没有 renderer error capture、preload logging bridge 或 IPC logging channel。
+- 当前 main process 使用 `electron-log/main` 写入本地结构化诊断日志；日志目录由 `app.setAppLogsPath()` 交给 Electron 管理，当前文件为 Electron logs path 下的 `main.log`。
+- 当前本地诊断覆盖 app diagnostics ready、app ready、bootstrap failed、renderer process gone、uncaught exception 和 workspace IPC request start/finish。Workspace IPC 诊断只记录 channel、status、duration 和脱敏字段，不记录 root path、file path、display path、title、token、handle、payload、transcript、正文或 secret。诊断字段默认不展开对象、数组或未知字符串；只有固定枚举类字段允许保留短字符串。
+- 当前没有 renderer error capture、preload logging bridge、IPC logging channel、generic diagnostic IPC 或远程 telemetry。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
@@ -60,8 +62,9 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 需要 Node/OS 权限的未来 runtime integration 必须进入 main process、utility process 或独立受控后端边界。
 - 如果未来引入 custom session 或 partition，custom protocol 和 permission policy 必须注册到同一个 session。
 - Better Auth Electron 只能在真实 auth 能力中引入，并且必须同批设计 custom protocol、trusted origin、preload bundle、IPC bridges、token/session exposure 和 renderer visibility。
-- `electron-log` 或 Sentry 的 renderer/preload bridge 只能在真实 diagnostics 能力中引入。
-- Diagnostics 能力必须同批定义 process boundary、sensitive data rules、redaction、retention、DSN/release/privacy/source-map 计划和 renderer visibility。
+- `electron-log` 当前只允许在 main process 本地日志中使用；renderer/preload bridge 只能在真实 renderer diagnostics 能力中引入。
+- Sentry 只能在真实 crash/error reporting 能力中引入。
+- Diagnostics 能力必须同批定义 process boundary、sensitive data rules、redaction、retention、DSN/release/privacy/source-map 计划和 renderer visibility。当前本地日志只保留 `main.log` 与一次 rotation 的 `main.old.log`，单文件大小上限为 1 MiB。
 
 ## IPC 设计纪律
 
@@ -112,7 +115,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前 permission policy 使用 one-shot microphone intent：renderer 必须先 await `workspace:beginMicrophoneIntent` 成功，再调用 `navigator.mediaDevices.getUserMedia`；main 的 `media` permission check 永远不授予也不消费 intent；permission request handler 先按 sender id 消费一个未过期 intent，再要求 trusted main-frame renderer 和 audio-only request。
 - `workspace:beginMicrophoneIntent` 只接受 `workspaceHandle` 与 `recordingFlowSessionId`，handler 使用 `event.sender.id` 作为 sender identity，不信任 renderer sender id；同一 sender 已有未过期 intent 时返回 `ERR_MIC_INTENT_ALREADY_ACTIVE`。
 - `workspace:clearMicrophoneIntent` 要求 sender、记忆空间 handle 和 recording flow session owner 匹配；owner 匹配后即使记忆空间 lock 已 lost 也允许清理 pending intent。Memory space close 在 owner 匹配后先清理该 handle 的 pending microphone intents，再释放 lock；即使 release 失败也不得保留 pending microphone authorization。Window teardown 清理全部 pending microphone intents。Video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
-- 当前不使用 `shell.openExternal`、generic command bus、generic IPC bridge、logging bridge、Sentry bridge、Forge 或 updater。
+- 当前不使用 `shell.openExternal`、generic command bus、generic IPC bridge、renderer/preload logging bridge、Sentry bridge、Forge 或 updater。
 
 ## Forge 与 electron-vite 边界
 
