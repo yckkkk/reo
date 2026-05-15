@@ -27,8 +27,11 @@ describe('App', () => {
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
+    deleteSegmentAttachment: vi.fn(),
+    restoreDeletedSegmentAttachment: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
+    readFinalizedAudioSegmentAttachment: vi.fn(),
     createRecordingDraft: vi.fn(),
     createSegmentAttachmentRecordingDraft: vi.fn(),
     readRecordingDraftAudio: vi.fn(),
@@ -43,6 +46,7 @@ describe('App', () => {
     readWorkspaceSnapshot: vi.fn(),
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
+    updateSegmentAttachmentTitle: vi.fn(),
     saveTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
@@ -137,6 +141,20 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_SEGMENT_RESTORE_FAILED', message: 'Segment could not be restored' },
     });
+    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_ATTACHMENT_DELETE_FAILED',
+        message: 'SegmentAttachment could not be deleted',
+      },
+    });
+    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_ATTACHMENT_RESTORE_FAILED',
+        message: 'SegmentAttachment could not be restored',
+      },
+    });
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
@@ -144,6 +162,10 @@ describe('App', () => {
     reoWorkspace.updateSegmentTitle.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Segment not found' },
+    });
+    reoWorkspace.updateSegmentAttachmentTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
     });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
@@ -162,6 +184,10 @@ describe('App', () => {
     reoWorkspace.readMemoryDetail.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
+    });
+    reoWorkspace.readFinalizedAudioSegmentAttachment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment recording not found' },
     });
     reoWorkspace.readRecordingDraftAudio.mockResolvedValue({
       ok: false,
@@ -214,6 +240,145 @@ describe('App', () => {
   async function openCreateWorkspaceDialog(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
+  }
+
+  function createSegmentAttachmentFixture() {
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 6000,
+      audioByteLength: 2050,
+      hasTranscript: true,
+      attachmentCount: 1,
+    };
+    const attachment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      attachmentId: 'att_birthday_followup',
+      type: 'audio' as const,
+      title: '补充录音1',
+      createdAt: '2026-05-06T13:11:00.000Z',
+      updatedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 1000,
+      audioByteLength: 2,
+      transcript: { exists: false },
+    };
+    const segment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: '录音1',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 5000,
+      audioByteLength: 2048,
+      transcript: { exists: false },
+      attachmentCount: 1,
+      attachments: [attachment],
+    };
+
+    return { attachment, memory, segment };
+  }
+
+  function mockSegmentAttachmentWorkspace(
+    fixture: ReturnType<typeof createSegmentAttachmentFixture>
+  ) {
+    const { memory, segment } = fixture;
+
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+  }
+
+  async function createWorkspaceWithSegmentAttachment(user: ReturnType<typeof userEvent.setup>) {
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('tab', { name: '补充录音1' });
+  }
+
+  async function submitSegmentAttachmentRename(
+    user: ReturnType<typeof userEvent.setup>,
+    currentTitle: string,
+    nextTitle: string
+  ) {
+    const tab = screen.getByRole('tab', { name: currentTitle });
+    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    expect(tabItem).toBeInstanceOf(HTMLElement);
+    await user.click(tab);
+    await user.hover(tabItem as HTMLElement);
+    await user.click(screen.getByRole('button', { name: `${currentTitle} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名补充内容' });
+    const titleInput = within(dialog).getByLabelText('补充内容名称');
+    await user.clear(titleInput);
+    await user.type(titleInput, nextTitle);
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  }
+
+  async function openSegmentAttachmentDeleteDialog(
+    user: ReturnType<typeof userEvent.setup>,
+    title: string
+  ) {
+    await user.click(screen.getByRole('tab', { name: title }));
+    const attachmentTab = screen.getByRole('tab', { name: title });
+    const attachmentTabItem = attachmentTab.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    );
+    expect(attachmentTabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(attachmentTabItem as HTMLElement);
+    await user.click(screen.getByRole('button', { name: `${title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+    expect(screen.getByRole('alertdialog', { name: '删除补充内容' })).toBeInTheDocument();
   }
 
   async function expandMemoryRail(user: ReturnType<typeof userEvent.setup>) {
@@ -870,6 +1035,455 @@ describe('App', () => {
       await rename.promise;
     });
   }, 10_000);
+
+  it('renames a SegmentAttachment tab optimistically from the hover More menu', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const { attachment, memory, segment } = fixture;
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateSegmentAttachmentTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        attachmentId: 'att_birthday_followup',
+        title: '现场补充',
+      })
+    );
+    expect(screen.getByRole('tab', { name: '现场补充' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '重命名补充内容' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rename.resolve({
+        ok: true,
+        value: {
+          memory,
+          segment: {
+            ...segment,
+            attachments: [{ ...attachment, title: '现场补充' }],
+          },
+          attachment: {
+            ...attachment,
+            title: '现场补充',
+          },
+        },
+      });
+      await rename.promise;
+    });
+  }, 10_000);
+
+  it('ignores an in-flight SegmentAttachment rename failure after reopening the same workspace with a new handle', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const { memory, segment } = fixture;
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
+    const reopenedAttachment = { ...fixture.attachment, title: '现场补充' };
+    const reopenedSegment = { ...segment, attachments: [reopenedAttachment] };
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await screen.findByRole('tab', { name: '现场补充' });
+
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+
+    reoWorkspace.initializeWorkspace.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-2',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [reopenedSegment],
+        },
+      },
+    }));
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('tab', { name: '现场补充' });
+    expect(screen.queryByRole('tab', { name: '补充录音1' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rename.resolve({
+        ok: false,
+        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
+      });
+      await rename.promise;
+    });
+
+    expect(screen.getByRole('tab', { name: '现场补充' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '补充录音1' })).not.toBeInTheDocument();
+  }, 10_000);
+
+  it('rolls back a SegmentAttachment rename when saving fails and the submitted title is still current', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await screen.findByRole('tab', { name: '现场补充' });
+
+    await act(async () => {
+      rename.resolve({
+        ok: false,
+        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
+      });
+      await rename.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '补充录音1' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: '现场补充' })).not.toBeInTheDocument();
+    });
+  }, 10_000);
+
+  it('keeps the optimistic SegmentAttachment rename when saving reports stale projections', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await screen.findByRole('tab', { name: '现场补充' });
+
+    await act(async () => {
+      rename.resolve({
+        ok: false,
+        error: {
+          code: 'ERR_MEMORY_UPDATE_FAILED',
+          dataRetention: 'file-written-index-stale',
+          message: 'Memory index is stale',
+        },
+      });
+      await rename.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '现场补充' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: '补充录音1' })).not.toBeInTheDocument();
+    });
+  }, 10_000);
+
+  it('deletes a SegmentAttachment through confirmation and restores it from the toast action', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const { attachment, memory, segment } = fixture;
+    const memoryAfterDelete = { ...memory, attachmentCount: 0 };
+    const segmentAfterDelete = { ...segment, attachmentCount: 0, attachments: [] };
+    const attachmentContentKey = segmentAttachmentContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      attachmentId: attachment.attachmentId,
+    });
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.readFinalizedAudioSegmentAttachment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        attachmentId: payload.attachmentId,
+        audio: new Uint8Array([1, 2]),
+        audioByteLength: 2,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: memoryAfterDelete,
+        segment: segmentAfterDelete,
+        attachmentId: attachment.attachmentId,
+        restoreToken: attachment.attachmentId,
+      },
+    });
+    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory,
+        segment,
+        attachment,
+      },
+    });
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    queryClient.setQueryData(attachmentContentKey, {
+      requestId: 'cached_attachment_content',
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      attachmentId: attachment.attachmentId,
+      audio: new Uint8Array([1, 2]),
+      audioByteLength: 2,
+      transcript: { exists: false, text: '' },
+    });
+    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+
+    const dialog = screen.getByRole('alertdialog', { name: '删除补充内容' });
+    expect(dialog).toHaveTextContent(`删除“${attachment.title}”？`);
+    await user.click(within(dialog).getByRole('button', { name: '删除' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.deleteSegmentAttachment).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        attachmentId: attachment.attachmentId,
+      })
+    );
+    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '转录' })).toHaveAttribute('aria-selected', 'true');
+    expect(queryClient.getQueryData(attachmentContentKey)).toBeUndefined();
+    expect(
+      queryClient.getQueryData<{
+        readonly detail: typeof memory & { readonly segments: readonly [typeof segment] };
+      }>(memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: memory.memoryId }))?.detail
+        .segments[0].attachments
+    ).toEqual([]);
+    const deletedToastTitle = await screen.findByText('已删除补充内容');
+    expect(deletedToastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
+    expect(screen.getByText(attachment.title)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        restoreToken: attachment.attachmentId,
+      })
+    );
+    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+    expect(
+      queryClient.getQueryData<{
+        readonly detail: typeof memory & { readonly segments: readonly [typeof segment] };
+      }>(memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: memory.memoryId }))?.detail
+        .segments[0].attachments
+    ).toEqual([attachment]);
+  }, 20_000);
+
+  it('clears a pending SegmentAttachment delete target when leaving the workspace session', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    mockSegmentAttachmentWorkspace(fixture);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await openSegmentAttachmentDeleteDialog(user, fixture.attachment.title);
+
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    await createWorkspaceWithSegmentAttachment(user);
+    expect(screen.queryByRole('alertdialog', { name: '删除补充内容' })).not.toBeInTheDocument();
+  }, 10_000);
+
+  it('keeps a SegmentAttachment hidden with restore action when delete reports stale projection after moving files', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const { attachment, memory, segment } = fixture;
+    const attachmentContentKey = segmentAttachmentContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      attachmentId: attachment.attachmentId,
+    });
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_LOCK_LOST',
+        dataRetention: 'file-written-index-stale',
+        message: 'Workspace lock was lost',
+      },
+    });
+    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory,
+        segment,
+        attachment,
+      },
+    });
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    queryClient.setQueryData(attachmentContentKey, {
+      requestId: 'cached_attachment_content',
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      attachmentId: attachment.attachmentId,
+      audio: new Uint8Array([1, 2]),
+      audioByteLength: 2,
+      transcript: { exists: false, text: '' },
+    });
+    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除补充内容' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+
+    await waitFor(() => expect(reoWorkspace.deleteSegmentAttachment).toHaveBeenCalled());
+    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '转录' })).toHaveAttribute('aria-selected', 'true');
+    expect(queryClient.getQueryData(attachmentContentKey)).toBeUndefined();
+    expect((await screen.findAllByText('无法删除补充内容。')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('已删除补充内容')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        restoreToken: attachment.attachmentId,
+      })
+    );
+    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+  }, 20_000);
+
+  it('restores a SegmentAttachment projection when restore reports stale projection after moving files', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentAttachmentFixture();
+    const { attachment, memory, segment } = fixture;
+    const memoryAfterDelete = { ...memory, attachmentCount: 0 };
+    const segmentAfterDelete = { ...segment, attachmentCount: 0, attachments: [] };
+    mockSegmentAttachmentWorkspace(fixture);
+    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: memoryAfterDelete,
+        segment: segmentAfterDelete,
+        attachmentId: attachment.attachmentId,
+        restoreToken: attachment.attachmentId,
+      },
+    });
+    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_LOCK_LOST',
+        dataRetention: 'file-written-index-stale',
+        message: 'Workspace lock was lost',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentAttachment(user);
+    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: '删除补充内容' })).getByRole('button', {
+        name: '删除',
+      })
+    );
+    await screen.findByText('已删除补充内容');
+    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    await waitFor(() => expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalled());
+    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+    expect((await screen.findAllByText('无法恢复补充内容。')).length).toBeGreaterThan(0);
+  }, 20_000);
 
   it('uses titlebar breadcrumb dropdowns to rename the active memory space and Memory', async () => {
     const user = userEvent.setup();

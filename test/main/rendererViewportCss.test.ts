@@ -22,3 +22,12 @@ test('renderer root CSS defines reusable edge fade and hover scrollbar utilities
   assert.match(css, /scrollbar-hover[\s\S]*scrollbar-width:\s*none;/);
   assert.match(css, /scrollbar-hover[\s\S]*&:hover[\s\S]*scrollbar-width:\s*thin;/);
 });
+
+test('renderer tab and menu motion stays aligned with the tab demo', () => {
+  const css = readFileSync(join(process.cwd(), 'src/renderer/src/index.css'), 'utf8');
+
+  assert.match(css, /@keyframes\s+reo-dropdown-menu-enter\s*{/);
+  assert.match(css, /@utility\s+reo-dropdown-menu-enter\s*{/);
+  assert.match(css, /reo-dropdown-menu-enter[\s\S]*150ms\s+ease-out/);
+  assert.match(css, /reo-content-tab-panel-motion[\s\S]*300ms\s+cubic-bezier/);
+});

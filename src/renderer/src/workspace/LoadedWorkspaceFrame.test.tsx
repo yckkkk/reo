@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
 import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
-import type { WorkspaceSession } from './workspaceApi';
+import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import { seedWorkspaceSnapshot, workspaceSnapshotQueryKey } from './workspaceQueries';
 
 function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}): WorkspaceSession {
@@ -33,7 +33,7 @@ const birthdayMemory = {
   attachmentCount: 0,
 };
 
-const birthdayDetail = {
+const birthdayDetail: WorkspaceMemoryDetail = {
   workspaceId: 'ws_1',
   memoryId: 'mem_birthday',
   title: 'My seventh birthday',
@@ -90,6 +90,47 @@ const birthdayDetailWithTwoSegments = {
   ],
 };
 
+function audioAttachment(
+  overrides: Partial<WorkspaceMemoryDetail['segments'][number]['attachments'][number]> = {}
+): WorkspaceMemoryDetail['segments'][number]['attachments'][number] {
+  return {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_birthday',
+    segmentId: 'seg_birthday_voice',
+    attachmentId: 'att_birthday_followup',
+    type: 'audio',
+    title: '补充录音',
+    createdAt: '2026-05-06T13:11:00.000',
+    updatedAt: '2026-05-06T13:11:05.000',
+    durationMs: 5_000,
+    audioByteLength: 3,
+    transcript: { exists: false },
+    ...overrides,
+  };
+}
+
+function birthdayDetailWithAttachments(
+  attachments: readonly WorkspaceMemoryDetail['segments'][number]['attachments'][number][]
+): WorkspaceMemoryDetail {
+  const firstSegment = birthdayDetail.segments[0];
+
+  if (!firstSegment) {
+    throw new Error('birthdayDetail fixture must include a segment');
+  }
+
+  return {
+    ...birthdayDetail,
+    attachmentCount: attachments.length,
+    segments: [
+      {
+        ...firstSegment,
+        attachmentCount: attachments.length,
+        attachments: [...attachments],
+      },
+    ],
+  };
+}
+
 function setScrollMetrics(
   element: HTMLElement,
   metrics: {
@@ -145,8 +186,10 @@ function renderLoadedWorkspaceFrame({
   memoryRailOpen,
   onDeleteMemory = vi.fn(),
   onDeleteSegment = vi.fn(),
+  onDeleteSegmentAttachment = vi.fn(),
   onRenameMemory = vi.fn(),
   onRenameSegment = vi.fn(),
+  onRenameSegmentAttachment = vi.fn(),
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentAttachmentRecording = vi.fn(),
@@ -170,8 +213,10 @@ function renderLoadedWorkspaceFrame({
   readonly memoryRailOpen?: boolean;
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onDeleteSegment?: () => void;
+  readonly onDeleteSegmentAttachment?: () => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegment?: () => void;
+  readonly onRenameSegmentAttachment?: () => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
   readonly onStartSegmentAttachmentRecording?: (target: {
@@ -211,8 +256,10 @@ function renderLoadedWorkspaceFrame({
         workspaceSession={session}
         onDeleteMemory={onDeleteMemory}
         onDeleteSegment={onDeleteSegment}
+        onDeleteSegmentAttachment={onDeleteSegmentAttachment}
         onRenameMemory={onRenameMemory}
         onRenameSegment={onRenameSegment}
+        onRenameSegmentAttachment={onRenameSegmentAttachment}
         onSelectMemory={onSelectMemory}
         onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}
         onStartRecording={onStartRecording}
@@ -520,7 +567,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(stripScroll).not.toHaveClass('px-44');
     expect(stripScroll).toHaveClass('edge-fade-x');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
+    expect(contentPanel).not.toHaveClass('rounded-2xl', 'border', 'bg-card');
     expect(transcriptScroll).toHaveClass(
+      'reo-content-tab-panel-motion',
       'edge-fade-y',
       'min-h-0',
       'overflow-y-auto',
@@ -1209,7 +1258,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
   });
 
-  it('shows finalized recording supplements in a Supplement tab with playback and waveform controls', async () => {
+  it('shows finalized recording supplements as content rail tabs with visible attachment identity', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:attachment-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
@@ -1227,31 +1276,7 @@ describe('LoadedWorkspaceFrame', () => {
       },
     }));
     const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = {
-      ...birthdayDetail,
-      attachmentCount: 1,
-      segments: [
-        {
-          ...birthdayDetail.segments[0],
-          attachmentCount: 1,
-          attachments: [
-            {
-              workspaceId: 'ws_1',
-              memoryId: 'mem_birthday',
-              segmentId: 'seg_birthday_voice',
-              attachmentId: 'att_birthday_followup',
-              type: 'audio',
-              title: '补充录音',
-              createdAt: '2026-05-06T13:11:00.000',
-              updatedAt: '2026-05-06T13:11:05.000',
-              durationMs: 5_000,
-              audioByteLength: 3,
-              transcript: { exists: false },
-            },
-          ],
-        },
-      ],
-    };
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       readFinalizedAudioSegmentAttachment,
@@ -1266,37 +1291,72 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const primaryPlayback = content.querySelector('[data-slot="memory-studio-player"]');
+    const tabRailRow = content.querySelector('[data-slot="memory-studio-content-tab-rail-row"]');
     const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
 
+    expect(tabRailRow).toBeInstanceOf(HTMLElement);
+    expect(tabRailRow).toContainElement(tabs);
     expect(primaryPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(within(tabs).getByRole('tab', { name: '转录' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    await userEvent.click(within(tabs).getByRole('tab', { name: '补充' }));
-
-    const supplements = await within(content).findByRole('region', { name: '片段补充内容' });
-    expect(within(supplements).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
+    const transcriptPanel = within(content).getByRole('tabpanel', { name: '转录' });
+    expect(within(tabs).getByRole('tab', { name: '转录' })).toHaveAttribute(
+      'aria-controls',
+      transcriptPanel.id
+    );
+    const supplementItem = within(tabs).getByRole('tab', {
+      name: '补充录音',
+    });
+    expect(supplementItem).toBeVisible();
+    await userEvent.click(supplementItem);
+    expect(supplementItem).toHaveAttribute('aria-selected', 'true');
+    expect(supplementItem).toHaveAttribute('data-attachment-type', 'audio');
+    const supplementTabItem = supplementItem.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    );
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
+    expect(supplementItem.parentElement).toBe(supplementTabItem);
+    const moreAnchor = (supplementTabItem as HTMLElement).querySelector(
+      '[data-slot="memory-studio-attachment-more-anchor"]'
+    );
+    expect(moreAnchor).toBeInstanceOf(HTMLButtonElement);
+    const moreButton = moreAnchor as HTMLButtonElement;
+    expect(moreButton).toHaveAttribute('data-slot', 'memory-studio-attachment-more-anchor');
+    expect(moreButton.parentElement).toBe(supplementTabItem);
+    expect(moreButton).not.toBeDisabled();
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+    expect(moreButton).not.toHaveAttribute('aria-disabled');
+    expect(moreButton).not.toHaveAttribute('data-more-state');
+    expect(moreButton).toHaveClass('duration-[400ms]');
+    expect(moreButton).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
     expect(
-      within(supplements).getByRole('button', { name: '播放补充录音 补充录音' })
+      supplementItem.querySelector('[data-slot="memory-studio-attachment-reorder-anchor"]')
+    ).toBeInstanceOf(HTMLElement);
+    expect(content.querySelector('[data-slot="memory-studio-player"]')).toHaveAttribute(
+      'data-component',
+      'memory-studio-audio-player'
+    );
+    expect(within(content).queryByText('13:11')).not.toBeInTheDocument();
+    expect(within(content).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
+    expect(
+      within(content).getByRole('button', { name: '播放补充录音 补充录音' })
     ).toBeInTheDocument();
-    const supplementPlayback = supplements.querySelector(
+    const attachmentPanel = within(content).getByRole('tabpanel', { name: '补充录音' });
+    expect(attachmentPanel).toHaveAttribute('data-slot', 'memory-studio-attachment-panel');
+    expect(supplementItem).toHaveAttribute('aria-controls', attachmentPanel.id);
+    expect(attachmentPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
+    expect(attachmentPanel).toHaveClass('reo-content-tab-panel-motion');
+    const supplementPlayback = content.querySelector(
       '[data-slot="memory-studio-attachment-player"]'
     );
     expect(supplementPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
-    expect(supplementPlayback).toHaveClass(
-      'grid',
-      'w-full',
-      'min-w-0',
-      'grid-cols-[40px_minmax(64px,1fr)_max-content]',
-      'items-center',
-      'gap-12'
-    );
-    expect(within(supplements).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
+    expect(within(content).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
       'aria-valuetext',
       '00:00 / 00:05'
     );
-    expect(within(supplements).getByText('00:00 / 00:05')).toBeInTheDocument();
+    expect(within(content).getByText('00:00 / 00:05')).toBeInTheDocument();
     expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-secret',
@@ -1308,14 +1368,457 @@ describe('LoadedWorkspaceFrame', () => {
     );
 
     play.mockClear();
-    await userEvent.click(
-      within(supplements).getByRole('button', { name: '播放补充录音 补充录音' })
-    );
+    await userEvent.click(within(content).getByRole('button', { name: '播放补充录音 补充录音' }));
 
     expect(play).toHaveBeenCalledOnce();
     expect(
-      within(supplements).getByRole('button', { name: '暂停补充录音 补充录音' })
+      within(content).getByRole('button', { name: '暂停补充录音 补充录音' })
     ).toBeInTheDocument();
+  });
+
+  it('switches between multiple SegmentAttachment panels without using created time labels', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:attachment-audio-${createObjectURL.mock.calls.length}`);
+    createObjectURL.mockClear();
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        attachmentId: request.attachmentId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
+    const detailWithSupplements = birthdayDetailWithAttachments([
+      audioAttachment(),
+      audioAttachment({
+        attachmentId: 'att_birthday_context',
+        title: '现场补充',
+        createdAt: '2026-05-06T13:12:00.000',
+        updatedAt: '2026-05-06T13:12:05.000',
+        durationMs: 7_000,
+        audioByteLength: 5,
+      }),
+    ]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_two_attachments',
+      detail: detailWithSupplements,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const firstAttachmentItem = within(content).getByRole('tab', { name: '补充录音' });
+    const secondAttachmentItem = within(content).getByRole('tab', { name: '现场补充' });
+
+    await userEvent.click(firstAttachmentItem);
+    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'true');
+    expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'false');
+    expect(within(content).queryByText('13:12')).not.toBeInTheDocument();
+
+    firstAttachmentItem.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'true');
+    });
+    expect(secondAttachmentItem).toHaveFocus();
+
+    const secondAttachmentMore = (
+      secondAttachmentItem.closest('[data-slot="memory-studio-attachment-tab-item"]') as HTMLElement
+    ).querySelector('[data-slot="memory-studio-attachment-more-anchor"]');
+    expect(secondAttachmentMore).toBeInstanceOf(HTMLButtonElement);
+    const secondAttachmentMoreButton = secondAttachmentMore as HTMLButtonElement;
+    const firstAttachmentTabItem = firstAttachmentItem.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    );
+    const secondAttachmentTabItem = secondAttachmentItem.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    );
+    expect(firstAttachmentTabItem).toHaveAttribute('data-attachment-id', 'att_birthday_followup');
+    expect(firstAttachmentTabItem).toHaveAttribute('data-attachment-index', '0');
+    expect(secondAttachmentTabItem).toHaveAttribute('data-attachment-id', 'att_birthday_context');
+    expect(secondAttachmentTabItem).toHaveAttribute('data-attachment-index', '1');
+    expect(secondAttachmentMoreButton).not.toBeDisabled();
+    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'false');
+    expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'true');
+    expect(
+      within(content).getByRole('button', { name: '播放补充录音 现场补充' })
+    ).toBeInTheDocument();
+    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: 'att_birthday_context',
+      })
+    );
+
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    await userEvent.click(within(content).getByRole('button', { name: '播放补充录音 现场补充' }));
+    const pauseCallCountBeforeTabSwitch = pause.mock.calls.length;
+    await userEvent.click(firstAttachmentItem);
+
+    expect(pause.mock.calls.length).toBeGreaterThan(pauseCallCountBeforeTabSwitch);
+    expect(within(content).queryByRole('button', { name: '暂停补充录音 现场补充' })).toBeNull();
+
+    await userEvent.click(firstAttachmentItem);
+
+    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'true');
+    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledTimes(2);
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not keep the SegmentAttachment More affordance expanded after selection or menu open', async () => {
+    const user = userEvent.setup();
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_hover',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const attachmentTab = within(content).getByRole('tab', { name: '补充录音' });
+    const attachmentTabItem = attachmentTab.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    ) as HTMLElement;
+    const moreAnchor = attachmentTabItem.querySelector(
+      '[data-slot="memory-studio-attachment-more-anchor"]'
+    );
+    expect(moreAnchor).toBeInstanceOf(HTMLButtonElement);
+    const moreButton = moreAnchor as HTMLButtonElement;
+
+    expect(attachmentTabItem).toHaveClass('group/attachment-tab');
+    expect(attachmentTabItem).not.toHaveAttribute('data-actions-visible');
+    expect(moreButton).toHaveAttribute('aria-hidden', 'true');
+    expect(moreButton).toHaveAttribute('tabindex', '-1');
+    expect(moreButton).toHaveClass('pointer-events-none');
+    expect(moreButton).toHaveClass('max-w-0');
+    expect(moreButton).toHaveClass('opacity-0');
+    expect(attachmentTabItem).toHaveClass('duration-[400ms]');
+    expect(attachmentTabItem).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
+    expect(moreButton).toHaveClass('duration-[400ms]');
+    expect(moreButton).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
+    expect(moreButton).toHaveClass('group-hover/attachment-tab:pointer-events-auto');
+    expect(moreButton).toHaveClass('group-hover/attachment-tab:ml-[6px]');
+    expect(moreButton).toHaveClass('group-hover/attachment-tab:max-w-20');
+    expect(moreButton).toHaveClass('group-hover/attachment-tab:opacity-100');
+    expect(moreButton).toHaveClass('group-hover/attachment-tab:scale-100');
+    expect(moreButton).not.toHaveClass('group-focus-within/attachment-tab:max-w-20');
+    expect(moreButton).toHaveClass('focus-visible:pointer-events-auto');
+    expect(moreButton).toHaveClass('focus-visible:ml-[6px]');
+    expect(moreButton).toHaveClass('focus-visible:max-w-20');
+    expect(moreButton).toHaveClass('focus-visible:opacity-100');
+    expect(moreButton).toHaveClass('focus-visible:scale-100');
+    expect(moreButton).not.toHaveClass('data-[state=open]:max-w-20');
+    expect(moreButton).not.toHaveClass('data-[state=open]:opacity-100');
+    expect(moreButton).not.toHaveClass('data-[state=open]:scale-100');
+
+    await user.click(attachmentTab);
+    expect(attachmentTab).toHaveAttribute('aria-selected', 'true');
+    await user.hover(within(content).getByRole('tab', { name: '转录' }));
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+    expect(moreButton).toHaveAttribute('tabindex', '0');
+    expect(moreButton).toHaveClass('pointer-events-none');
+    expect(moreButton).toHaveClass('max-w-0');
+    expect(moreButton).toHaveClass('opacity-0');
+
+    moreButton.focus();
+    expect(moreButton).toHaveFocus();
+    expect(moreButton).toHaveClass('focus-visible:max-w-20');
+
+    attachmentTab.focus();
+
+    await user.hover(attachmentTabItem);
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+    expect(moreButton).not.toHaveAttribute('tabindex', '-1');
+    expect(moreButton).not.toHaveClass('pointer-events-auto');
+    expect(moreButton).not.toHaveClass('ml-[6px]');
+    expect(moreButton).not.toHaveClass('max-w-20');
+    expect(moreButton).not.toHaveClass('opacity-100');
+
+    moreButton.focus();
+    expect(moreButton).toHaveFocus();
+
+    await user.unhover(attachmentTabItem);
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+    expect(moreButton).toHaveAttribute('tabindex', '0');
+    expect(moreButton).toHaveClass('pointer-events-none');
+    expect(moreButton).toHaveClass('max-w-0');
+    expect(moreButton).toHaveClass('opacity-0');
+    expect(attachmentTab).toHaveFocus();
+
+    await user.hover(attachmentTabItem);
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+
+    await user.click(moreButton);
+    expect(screen.getByRole('menu', { name: '补充录音 操作' })).toBeInTheDocument();
+
+    await user.unhover(attachmentTabItem);
+    expect(attachmentTab).toHaveAttribute('aria-selected', 'true');
+    expect(moreButton).toHaveAttribute('data-state', 'open');
+    expect(moreButton).not.toHaveAttribute('aria-hidden');
+    expect(moreButton).toHaveAttribute('tabindex', '0');
+    expect(moreButton).toHaveClass('pointer-events-none');
+    expect(moreButton).toHaveClass('max-w-0');
+    expect(moreButton).toHaveClass('opacity-0');
+
+    await user.keyboard('{Escape}');
+    expect(attachmentTab).toHaveFocus();
+  });
+
+  it('closes the SegmentAttachment More menu when the selected Segment changes', async () => {
+    const user = userEvent.setup();
+    const firstAttachment = audioAttachment({ title: '现场补充' });
+    const baseSegments =
+      birthdayDetailWithTwoSegments.segments as readonly WorkspaceMemoryDetail['segments'][number][];
+    const firstSegment = baseSegments[0];
+    const secondSegment = baseSegments[1];
+    if (!firstSegment || !secondSegment) {
+      throw new Error('two segment fixture must include two segments');
+    }
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
+    const detailWithSegmentAttachments: WorkspaceMemoryDetail = {
+      ...birthdayDetailWithTwoSegments,
+      attachmentCount: 2,
+      segments: [
+        {
+          ...firstSegment,
+          attachmentCount: 1,
+          attachments: [firstAttachment],
+        },
+        {
+          ...secondSegment,
+          attachmentCount: 1,
+          attachments: [
+            audioAttachment({
+              attachmentId: 'att_birthday_song_followup',
+              segmentId: 'seg_birthday_song',
+              title: '歌曲补充',
+            }),
+          ],
+        },
+      ],
+    };
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_menu_lifecycle',
+      detail: detailWithSegmentAttachments,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const attachmentTab = within(content).getByRole('tab', { name: '现场补充' });
+    const attachmentTabItem = attachmentTab.closest(
+      '[data-slot="memory-studio-attachment-tab-item"]'
+    );
+    expect(attachmentTabItem).toBeInstanceOf(HTMLElement);
+
+    await user.hover(attachmentTabItem as HTMLElement);
+    await user.click(within(content).getByRole('button', { name: '现场补充 更多操作' }));
+    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
+
+    await user.click(within(strip).getByRole('button', { name: '选择片段 Birthday song' }));
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '歌曲补充' })).toHaveAttribute(
+        'aria-selected',
+        'false'
+      );
+    });
+    expect(screen.queryByRole('menu', { name: '现场补充 操作' })).not.toBeInTheDocument();
+
+    await user.click(within(strip).getByRole('button', { name: '选择片段 Birthday candles' }));
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '现场补充' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('menu', { name: '现场补充 操作' })).not.toBeInTheDocument();
+  });
+
+  it('opens the SegmentAttachment sibling More menu and emits a rename intent', async () => {
+    const user = userEvent.setup();
+    const onRenameSegmentAttachment = vi.fn();
+    const attachment = audioAttachment({ title: '现场补充' });
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([attachment]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onRenameSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_rename',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(within(content).getByRole('tab', { name: '现场补充' }));
+    const tab = within(content).getByRole('tab', { name: '现场补充' });
+    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    expect(tabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(tabItem as HTMLElement);
+    const more = within(content).getByRole('button', { name: '现场补充 更多操作' });
+    expect(more.parentElement).toBe(tabItem);
+
+    await user.click(more);
+    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
+
+    expect(onRenameSegmentAttachment).toHaveBeenCalledWith({
+      memoryId: 'mem_birthday',
+      segment: detailWithSupplement.segments[0],
+      attachment,
+    });
+  });
+
+  it('opens the SegmentAttachment sibling More menu and emits a delete intent', async () => {
+    const user = userEvent.setup();
+    const onDeleteSegmentAttachment = vi.fn();
+    const attachment = audioAttachment({ title: '现场补充' });
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([attachment]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onDeleteSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_delete',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(within(content).getByRole('tab', { name: '现场补充' }));
+    const tab = within(content).getByRole('tab', { name: '现场补充' });
+    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    expect(tabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(tabItem as HTMLElement);
+
+    await user.click(within(content).getByRole('button', { name: '现场补充 更多操作' }));
+    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+
+    expect(onDeleteSegmentAttachment).toHaveBeenCalledWith({
+      memoryId: 'mem_birthday',
+      segment: detailWithSupplement.segments[0],
+      attachment,
+    });
+  });
+
+  it('falls back to the transcript panel when the selected SegmentAttachment disappears', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_before_remove',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    expect(within(content).getByRole('tab', { name: '补充录音' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    act(() => {
+      queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+        requestId: 'request_mem_birthday_attachment_after_remove',
+        detail: birthdayDetail,
+      });
+    });
+
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '转录' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+    });
+    expect(within(content).queryByRole('tab', { name: '补充录音' })).toBeNull();
+    expect(within(content).getByRole('tabpanel', { name: '转录' })).toBeInTheDocument();
+  });
+
+  it('releases cached SegmentAttachment audio resources when an attachment disappears', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:removed-attachment');
+    createObjectURL.mockClear();
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    revokeObjectURL.mockClear();
+    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        attachmentId: request.attachmentId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_before_prune',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalledOnce();
+    });
+
+    act(() => {
+      queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+        requestId: 'request_mem_birthday_attachment_after_prune',
+        detail: birthdayDetail,
+      });
+    });
+
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '转录' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+    });
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:removed-attachment');
   });
 
   it('ignores supplement waveform pointer movement until a scrub starts on the waveform', async () => {
@@ -1334,31 +1837,7 @@ describe('LoadedWorkspaceFrame', () => {
       },
     }));
     const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = {
-      ...birthdayDetail,
-      attachmentCount: 1,
-      segments: [
-        {
-          ...birthdayDetail.segments[0],
-          attachmentCount: 1,
-          attachments: [
-            {
-              workspaceId: 'ws_1',
-              memoryId: 'mem_birthday',
-              segmentId: 'seg_birthday_voice',
-              attachmentId: 'att_birthday_followup',
-              type: 'audio',
-              title: '补充录音',
-              createdAt: '2026-05-06T13:11:00.000',
-              updatedAt: '2026-05-06T13:11:05.000',
-              durationMs: 5_000,
-              audioByteLength: 3,
-              transcript: { exists: false },
-            },
-          ],
-        },
-      ],
-    };
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       readFinalizedAudioSegmentAttachment,
@@ -1372,9 +1851,8 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    await userEvent.click(within(content).getByRole('tab', { name: '补充' }));
-    const supplements = await within(content).findByRole('region', { name: '片段补充内容' });
-    const slider = await within(supplements).findByRole('slider', { name: '补充录音播放进度' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    const slider = await within(content).findByRole('slider', { name: '补充录音播放进度' });
     vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({
       bottom: 42,
       height: 42,
@@ -1394,7 +1872,72 @@ describe('LoadedWorkspaceFrame', () => {
     expect(slider).toHaveAttribute('data-waveform-progress', '0');
   });
 
-  it('moves newly created SegmentAttachment recordings into the Supplement tab when they first appear', async () => {
+  it('keeps SegmentAttachment playback position when only its title changes', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:attachment-audio');
+    createObjectURL.mockClear();
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        attachmentId: request.attachmentId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentAttachment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_attachment_title_before',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    const slider = await within(content).findByRole('slider', { name: '补充录音播放进度' });
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('tabindex', '0');
+    });
+
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('aria-valuetext', '00:05 / 00:05');
+    });
+
+    act(() => {
+      queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+        requestId: 'request_mem_birthday_attachment_title_after',
+        detail: birthdayDetailWithAttachments([audioAttachment({ title: '现场补充' })]),
+      });
+    });
+
+    await waitFor(() => {
+      expect(within(content).getByRole('tab', { name: '现场补充' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+    });
+    expect(within(content).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
+      'aria-valuetext',
+      '00:05 / 00:05'
+    );
+    expect(createObjectURL).toHaveBeenCalledOnce();
+  });
+
+  it('moves newly created SegmentAttachment recordings into the content tab rail when they first appear', async () => {
     const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
@@ -1412,46 +1955,30 @@ describe('LoadedWorkspaceFrame', () => {
       'aria-selected',
       'true'
     );
-    expect(within(content).queryByRole('tab', { name: '补充' })).toBeNull();
+    expect(within(content).queryByRole('tab', { name: '补充录音' })).toBeNull();
 
     act(() => {
       queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
         requestId: 'request_mem_birthday_after_attachment',
-        detail: {
-          ...birthdayDetail,
-          attachmentCount: 1,
-          segments: [
-            {
-              ...birthdayDetail.segments[0],
-              attachmentCount: 1,
-              attachments: [
-                {
-                  workspaceId: 'ws_1',
-                  memoryId: 'mem_birthday',
-                  segmentId: 'seg_birthday_voice',
-                  attachmentId: 'att_new_followup',
-                  type: 'audio',
-                  title: '补充录音',
-                  createdAt: '2026-05-06T13:12:00.000',
-                  updatedAt: '2026-05-06T13:12:04.000',
-                  durationMs: 4_000,
-                  audioByteLength: 4,
-                  transcript: { exists: false },
-                },
-              ],
-            },
-          ],
-        },
+        detail: birthdayDetailWithAttachments([
+          audioAttachment({
+            attachmentId: 'att_new_followup',
+            createdAt: '2026-05-06T13:12:00.000',
+            updatedAt: '2026-05-06T13:12:04.000',
+            durationMs: 4_000,
+            audioByteLength: 4,
+          }),
+        ]),
       });
     });
 
     await waitFor(() => {
-      expect(within(content).getByRole('tab', { name: '补充' })).toHaveAttribute(
+      expect(within(content).getByRole('tab', { name: '补充录音' })).toHaveAttribute(
         'aria-selected',
         'true'
       );
     });
-    expect(within(content).getByRole('region', { name: '片段补充内容' })).toBeInTheDocument();
+    expect(within(content).getByRole('tabpanel', { name: '补充录音' })).toBeInTheDocument();
     expect(within(content).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
     expect(await within(content).findByRole('status')).toHaveTextContent('补充录音加载失败。');
   });

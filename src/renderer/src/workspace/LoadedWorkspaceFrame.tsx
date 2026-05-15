@@ -2,7 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
 import { MemoryStudio, type SegmentAttachmentRecordingTarget } from './MemoryStudio';
 import { MemoryRail } from './MemoryRail';
-import type { SegmentDeleteTarget, SegmentRenameTarget } from './segmentActionTargets';
+import type {
+  SegmentAttachmentDeleteTarget,
+  SegmentAttachmentRenameTarget,
+  SegmentDeleteTarget,
+  SegmentRenameTarget,
+} from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
 import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
@@ -14,8 +19,10 @@ type LoadedWorkspaceFrameProps = {
   readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
+  readonly onDeleteSegmentAttachment: (target: SegmentAttachmentDeleteTarget) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
+  readonly onRenameSegmentAttachment: (target: SegmentAttachmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
@@ -30,8 +37,10 @@ export function LoadedWorkspaceFrame({
   memoryRailMode = 'inline',
   onDeleteMemory,
   onDeleteSegment,
+  onDeleteSegmentAttachment,
   onRenameMemory,
   onRenameSegment,
+  onRenameSegmentAttachment,
   onSegmentFocusConsumed,
   onSelectMemory,
   onStartSegmentAttachmentRecording,
@@ -63,6 +72,8 @@ export function LoadedWorkspaceFrame({
           key={currentMemory.memoryId}
           memory={currentMemory}
           onDeleteSegment={onDeleteSegment}
+          onDeleteSegmentAttachment={onDeleteSegmentAttachment}
+          onRenameSegmentAttachment={onRenameSegmentAttachment}
           onRenameSegment={onRenameSegment}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}

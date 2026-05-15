@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Ellipsis, Mic, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Ellipsis, FileText, Mic, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,12 @@ import {
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
-import type { SegmentDeleteTarget, SegmentRenameTarget } from './segmentActionTargets';
+import type {
+  SegmentAttachmentDeleteTarget,
+  SegmentAttachmentRenameTarget,
+  SegmentDeleteTarget,
+  SegmentRenameTarget,
+} from './segmentActionTargets';
 import type {
   WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
@@ -36,6 +42,8 @@ import {
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
+  readonly onDeleteSegmentAttachment: (target: SegmentAttachmentDeleteTarget) => void;
+  readonly onRenameSegmentAttachment: (target: SegmentAttachmentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
@@ -67,7 +75,38 @@ const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentAttachment = MemorySegment['attachments'][number];
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
-type ActiveContentTab = 'transcript' | 'supplements';
+type SegmentAttachmentAudioResource = {
+  attachmentId: string;
+  audioUrl: string;
+  decodePromise: Promise<void>;
+  memoryId: string;
+  requestId: string;
+  segmentId: string;
+  waveformData: readonly number[];
+  waveformSource: PlaybackWaveformSource;
+  workspaceHandle: string;
+  workspaceId: string;
+};
+type ActiveContentTab = 'transcript' | `attachment:${string}`;
+type MemoryStudioContentTab =
+  | {
+      readonly kind: 'transcript';
+      readonly panelId: string;
+      readonly tabId: string;
+      readonly title: string;
+      readonly value: 'transcript';
+    }
+  | {
+      readonly attachment: MemorySegmentAttachment;
+      readonly kind: 'attachment';
+      readonly panelId: string;
+      readonly tabId: string;
+      readonly title: string;
+      readonly value: `attachment:${string}`;
+    };
+
+const CONTENT_TAB_MOTION_CLASS =
+  'duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none';
 
 function durationLabel(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -82,6 +121,83 @@ function createdTimeLabel(createdAt: string) {
     return '时间未知';
   }
   return format(date, 'HH:mm');
+}
+
+function attachmentContentTabValue(attachmentId: string): `attachment:${string}` {
+  return `attachment:${attachmentId}`;
+}
+
+function attachmentIdFromContentTab(activeContentTab: ActiveContentTab) {
+  return activeContentTab.startsWith('attachment:')
+    ? activeContentTab.slice('attachment:'.length)
+    : null;
+}
+
+function domIdPart(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
+  const valueDomId =
+    value === 'transcript' ? 'transcript' : domIdPart(attachmentIdFromContentTab(value) ?? value);
+  const baseId = `memory-studio-${segmentDomId}-${valueDomId}`;
+
+  return {
+    panelId: `${baseId}-panel`,
+    tabId: `${baseId}-tab`,
+  };
+}
+
+function segmentAttachmentAudioResourceKey(
+  input: Pick<
+    SegmentAttachmentAudioResource,
+    'attachmentId' | 'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
+  > & {
+    readonly audioByteLength: number;
+  }
+) {
+  return [
+    input.workspaceHandle,
+    input.workspaceId,
+    input.memoryId,
+    input.segmentId,
+    input.attachmentId,
+    input.requestId,
+    input.audioByteLength,
+  ].join('\0');
+}
+
+function clearSegmentAttachmentAudioResources(
+  audioResourceCache: Map<string, SegmentAttachmentAudioResource>
+) {
+  for (const resource of audioResourceCache.values()) {
+    URL.revokeObjectURL(resource.audioUrl);
+  }
+  audioResourceCache.clear();
+}
+
+function revokeSegmentAttachmentAudioResource(
+  audioResourceCache: Map<string, SegmentAttachmentAudioResource>,
+  resourceKey: string
+) {
+  const resource = audioResourceCache.get(resourceKey);
+  if (!resource) {
+    return;
+  }
+
+  URL.revokeObjectURL(resource.audioUrl);
+  audioResourceCache.delete(resourceKey);
+}
+
+function pruneSegmentAttachmentAudioResources(
+  audioResourceCache: Map<string, SegmentAttachmentAudioResource>,
+  shouldKeep: (resource: SegmentAttachmentAudioResource) => boolean
+) {
+  for (const [resourceKey, resource] of audioResourceCache) {
+    if (!shouldKeep(resource)) {
+      revokeSegmentAttachmentAudioResource(audioResourceCache, resourceKey);
+    }
+  }
 }
 
 type MemoryStudioAudioPlaybackRowProps = {
@@ -202,15 +318,190 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   );
 }
 
+function contentTabPillClassName(active: boolean) {
+  return [
+    'relative inline-flex h-[34px] max-w-[260px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors',
+    CONTENT_TAB_MOTION_CLASS,
+    active
+      ? 'bg-secondary text-foreground'
+      : 'bg-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
+  ].join(' ');
+}
+
+function contentTabButtonClassName(hasActions = false) {
+  return [
+    'inline-flex h-full min-w-0 items-center justify-center gap-[6px] text-[13.5px] font-medium leading-none transition-colors',
+    CONTENT_TAB_MOTION_CLASS,
+    hasActions ? 'pl-[14px] pr-0' : 'px-[14px]',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+  ].join(' ');
+}
+
+function contentTabMoreClassName() {
+  return [
+    'inline-flex items-center justify-center overflow-hidden',
+    'transition-[max-width,margin-left,opacity,transform]',
+    CONTENT_TAB_MOTION_CLASS,
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    'pointer-events-none ml-0 max-w-0 scale-75 opacity-0',
+    'group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100',
+    'focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100',
+  ].join(' ');
+}
+
+function SegmentAttachmentTypeIcon({ type }: { readonly type: MemorySegmentAttachment['type'] }) {
+  if (type === 'audio') {
+    return <Mic aria-hidden="true" className="size-16 shrink-0" strokeWidth={2} />;
+  }
+
+  return null;
+}
+
+function SegmentAttachmentTab({
+  active,
+  attachment,
+  attachmentIndex,
+  actionsVisible,
+  panelId,
+  tabIndex,
+  tabId,
+  onActionsHidden,
+  onActionsVisible,
+  onKeyDown,
+  onMenuOpenChange,
+  onDelete,
+  onRename,
+  onSelect,
+  menuOpen,
+}: {
+  readonly active: boolean;
+  readonly actionsVisible: boolean;
+  readonly attachment: MemorySegmentAttachment;
+  readonly attachmentIndex: number;
+  readonly menuOpen: boolean;
+  readonly panelId: string;
+  readonly tabIndex: number;
+  readonly tabId: string;
+  readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  readonly onActionsHidden: () => void;
+  readonly onActionsVisible: () => void;
+  readonly onDelete: () => void;
+  readonly onMenuOpenChange: (open: boolean) => void;
+  readonly onRename: () => void;
+  readonly onSelect: () => void;
+}) {
+  const tabButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const actionsAccessible = actionsVisible || active;
+
+  useEffect(() => {
+    if (actionsVisible || menuOpen || document.activeElement !== moreButtonRef.current) {
+      return;
+    }
+
+    tabButtonRef.current?.focus();
+  }, [actionsVisible, menuOpen]);
+
+  return (
+    <div
+      data-slot="memory-studio-attachment-tab-item"
+      data-attachment-id={attachment.attachmentId}
+      data-attachment-index={attachmentIndex}
+      data-attachment-type={attachment.type}
+      className={[contentTabPillClassName(active), 'group/attachment-tab pr-[14px]'].join(' ')}
+      onPointerEnter={onActionsVisible}
+      onPointerLeave={onActionsHidden}
+      onMouseEnter={onActionsVisible}
+      onMouseLeave={onActionsHidden}
+    >
+      <button
+        ref={tabButtonRef}
+        type="button"
+        role="tab"
+        id={tabId}
+        aria-controls={panelId}
+        aria-selected={active}
+        data-attachment-id={attachment.attachmentId}
+        data-attachment-type={attachment.type}
+        data-slot="memory-studio-attachment-tab"
+        tabIndex={tabIndex}
+        className={contentTabButtonClassName(true)}
+        onClick={onSelect}
+        onKeyDown={onKeyDown}
+      >
+        <span
+          data-slot="memory-studio-attachment-reorder-anchor"
+          className="inline-flex min-w-0 items-center gap-[6px]"
+        >
+          <SegmentAttachmentTypeIcon type={attachment.type} />
+          <span className="truncate">{attachment.title}</span>
+        </span>
+      </button>
+      <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={moreButtonRef}
+            type="button"
+            aria-label={`${attachment.title} 更多操作`}
+            aria-hidden={actionsAccessible ? undefined : true}
+            data-slot="memory-studio-attachment-more-anchor"
+            tabIndex={actionsAccessible ? 0 : -1}
+            className={contentTabMoreClassName()}
+          >
+            <span className="inline-flex size-20 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground">
+              <Ellipsis className="size-16" strokeWidth={2.5} />
+            </span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          aria-label={`${attachment.title} 操作`}
+          aria-labelledby={undefined}
+          align="center"
+          onCloseAutoFocus={(event) => {
+            if (!actionsVisible) {
+              event.preventDefault();
+              tabButtonRef.current?.focus();
+            }
+          }}
+        >
+          <DropdownMenuItem
+            onSelect={() => {
+              onMenuOpenChange(false);
+              onRename();
+            }}
+          >
+            <Pencil aria-hidden="true" className="size-16" />
+            重命名
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive focus:bg-destructive/10 focus:text-destructive"
+            onSelect={() => {
+              onMenuOpenChange(false);
+              onDelete();
+            }}
+          >
+            <Trash2 aria-hidden="true" className="size-16" />
+            删除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function SegmentAttachmentAudioPlayer({
   attachment,
+  audioResourceCache,
   workspaceSession,
 }: {
   readonly attachment: MemorySegmentAttachment;
+  readonly audioResourceCache: Map<string, SegmentAttachmentAudioResource>;
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioResourceKeyRef = useRef<string | null>(null);
   const pointerScrubbingRef = useRef(false);
+  const playingRef = useRef(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -225,32 +516,44 @@ function SegmentAttachmentAudioPlayer({
     )
   );
   const attachmentContent = attachmentContentQuery.data;
+  const attachmentId = attachment.attachmentId;
+  const attachmentMemoryId = attachment.memoryId;
+  const attachmentSegmentId = attachment.segmentId;
+  const attachmentAudio = attachmentContent?.audio ?? null;
+  const attachmentAudioByteLength = attachmentContent?.audioByteLength ?? null;
+  const attachmentRequestId = attachmentContent?.requestId ?? null;
+  const workspaceHandle = workspaceSession.workspaceHandle;
+  const workspaceId = workspaceSession.workspaceId;
   const playbackProgress =
     attachment.durationMs > 0 ? Math.min(1, playbackTimeMs / attachment.durationMs) : 0;
 
   useEffect(() => {
-    if (!attachmentContent) {
-      setAudioUrl(null);
-      setPlaybackTimeMs(0);
-      setWaveformData([]);
-      setWaveformSource('pending');
-      return undefined;
-    }
+    playingRef.current = playing;
+  }, [playing]);
 
-    const nextAudioUrl = URL.createObjectURL(
-      new Blob([attachmentContent.audio as BlobPart], { type: 'audio/webm' })
-    );
-    setAudioUrl(nextAudioUrl);
+  useEffect(() => {
+    const audio = audioRef.current;
 
     return () => {
-      URL.revokeObjectURL(nextAudioUrl);
+      pointerScrubbingRef.current = false;
+      if (playingRef.current) {
+        playingRef.current = false;
+        audio?.pause();
+      }
     };
-  }, [attachmentContent]);
+  }, [attachmentId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!attachmentContent) {
+    if (
+      attachmentAudio === null ||
+      attachmentAudioByteLength === null ||
+      attachmentRequestId === null
+    ) {
+      currentAudioResourceKeyRef.current = null;
+      setAudioUrl(null);
+      setPlaybackTimeMs(0);
       setWaveformData([]);
       setWaveformSource('pending');
       return () => {
@@ -258,34 +561,115 @@ function SegmentAttachmentAudioPlayer({
       };
     }
 
-    setWaveformData([]);
-    setWaveformSource('pending');
+    const audioResourceKey = segmentAttachmentAudioResourceKey({
+      attachmentId,
+      audioByteLength: attachmentAudioByteLength,
+      memoryId: attachmentMemoryId,
+      requestId: attachmentRequestId,
+      segmentId: attachmentSegmentId,
+      workspaceHandle,
+      workspaceId,
+    });
+    const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
+    currentAudioResourceKeyRef.current = audioResourceKey;
+    const cachedResource = audioResourceCache.get(audioResourceKey);
 
-    void decodeAudioBytesToWaveformData(
-      attachmentContent.audio,
+    if (cachedResource) {
+      setAudioUrl(cachedResource.audioUrl);
+      if (resourceChanged) {
+        setPlaybackTimeMs(0);
+      }
+      setWaveformData(cachedResource.waveformData);
+      setWaveformSource(cachedResource.waveformSource);
+
+      if (cachedResource.waveformSource === 'pending') {
+        void cachedResource.decodePromise.finally(() => {
+          if (cancelled) {
+            return;
+          }
+
+          setWaveformData(cachedResource.waveformData);
+          setWaveformSource(cachedResource.waveformSource);
+        });
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const nextAudioUrl = URL.createObjectURL(
+      new Blob([attachmentAudio as BlobPart], { type: 'audio/webm' })
+    );
+    const nextResource: SegmentAttachmentAudioResource = {
+      attachmentId,
+      audioUrl: nextAudioUrl,
+      decodePromise: Promise.resolve(),
+      memoryId: attachmentMemoryId,
+      requestId: attachmentRequestId,
+      segmentId: attachmentSegmentId,
+      waveformData: [],
+      waveformSource: 'pending',
+      workspaceHandle,
+      workspaceId,
+    };
+    pruneSegmentAttachmentAudioResources(
+      audioResourceCache,
+      (resource) =>
+        resource.workspaceHandle !== workspaceHandle ||
+        resource.workspaceId !== workspaceId ||
+        resource.memoryId !== attachmentMemoryId ||
+        resource.segmentId !== attachmentSegmentId ||
+        resource.attachmentId !== attachmentId
+    );
+    audioResourceCache.set(audioResourceKey, nextResource);
+
+    setAudioUrl(nextAudioUrl);
+    setPlaybackTimeMs(0);
+    setWaveformData(nextResource.waveformData);
+    setWaveformSource(nextResource.waveformSource);
+
+    nextResource.decodePromise = decodeAudioBytesToWaveformData(
+      attachmentAudio,
       MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
     )
       .then((nextWaveformData) => {
+        nextResource.waveformData = nextWaveformData;
+        nextResource.waveformSource = 'decoded-audio';
+
         if (cancelled) {
           return;
         }
 
-        setWaveformData(nextWaveformData);
-        setWaveformSource('decoded-audio');
+        setWaveformData(nextResource.waveformData);
+        setWaveformSource(nextResource.waveformSource);
       })
       .catch(() => {
+        nextResource.waveformData = [];
+        nextResource.waveformSource = 'unavailable';
+
         if (cancelled) {
           return;
         }
 
-        setWaveformData([]);
-        setWaveformSource('unavailable');
+        setWaveformData(nextResource.waveformData);
+        setWaveformSource(nextResource.waveformSource);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [attachmentContent]);
+  }, [
+    attachmentAudio,
+    attachmentAudioByteLength,
+    attachmentId,
+    attachmentMemoryId,
+    attachmentRequestId,
+    attachmentSegmentId,
+    audioResourceCache,
+    workspaceHandle,
+    workspaceId,
+  ]);
 
   function setPlaybackPosition(nextPlaybackTimeMs: number) {
     if (!audioUrl) {
@@ -368,14 +752,17 @@ function SegmentAttachmentAudioPlayer({
 
     if (playing) {
       audio.pause();
+      playingRef.current = false;
       setPlaying(false);
       return;
     }
 
     try {
       await audio.play();
+      playingRef.current = true;
       setPlaying(true);
     } catch {
+      playingRef.current = false;
       setPlaying(false);
     }
   }
@@ -411,10 +798,14 @@ function SegmentAttachmentAudioPlayer({
         ref={audioRef}
         src={audioUrl ?? undefined}
         onEnded={() => {
+          playingRef.current = false;
           setPlaying(false);
           setPlaybackTimeMs(attachment.durationMs);
         }}
-        onPause={() => setPlaying(false)}
+        onPause={() => {
+          playingRef.current = false;
+          setPlaying(false);
+        }}
         onTimeUpdate={(event) => {
           setPlaybackTimeMs(
             Math.min(attachment.durationMs, Math.round(event.currentTarget.currentTime * 1000))
@@ -437,6 +828,8 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
 export function MemoryStudio({
   memory,
   onDeleteSegment,
+  onDeleteSegmentAttachment,
+  onRenameSegmentAttachment,
   onRenameSegment,
   onSegmentFocusConsumed,
   onStartSegmentAttachmentRecording,
@@ -444,8 +837,11 @@ export function MemoryStudio({
   workspaceSession,
 }: MemoryStudioProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const attachmentAudioResourceCacheRef = useRef(new Map<string, SegmentAttachmentAudioResource>());
   const pointerScrubbingRef = useRef(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [openAttachmentActionMenuId, setOpenAttachmentActionMenuId] = useState<string | null>(null);
+  const [hoveredAttachmentActionId, setHoveredAttachmentActionId] = useState<string | null>(null);
   const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const [audioPlaybackError, setAudioPlaybackError] = useState<string | null>(null);
@@ -458,8 +854,8 @@ export function MemoryStudio({
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
   const segmentAttachmentPresenceRef = useRef<{
     readonly segmentId: string | null;
-    readonly attachmentCount: number;
-  }>({ segmentId: null, attachmentCount: 0 });
+    readonly attachmentIds: readonly string[];
+  }>({ segmentId: null, attachmentIds: [] });
   const [stripScrollState, setStripScrollState] = useState<SegmentStripScrollState>(
     hiddenSegmentStripScrollState
   );
@@ -479,7 +875,47 @@ export function MemoryStudio({
   });
   const segmentContent = selectedSegment ? segmentContentQuery.data : undefined;
   const selectedSegmentAttachments = selectedSegment?.attachments ?? [];
-  const hasSelectedSegmentAttachments = selectedSegmentAttachments.length > 0;
+  const selectedSegmentAttachmentIds = selectedSegmentAttachments.map(
+    (attachment) => attachment.attachmentId
+  );
+  const selectedSegmentAttachmentIdsKey = selectedSegmentAttachmentIds.join('\0');
+  const activeAttachmentId = attachmentIdFromContentTab(activeContentTab);
+  const activeSegmentAttachment =
+    activeAttachmentId === null
+      ? null
+      : (selectedSegmentAttachments.find(
+          (attachment) => attachment.attachmentId === activeAttachmentId
+        ) ?? null);
+  const resolvedActiveContentTab =
+    activeAttachmentId === null || activeSegmentAttachment ? activeContentTab : 'transcript';
+  const selectedSegmentDomId = selectedSegment ? domIdPart(selectedSegment.segmentId) : 'pending';
+  const transcriptContentTab: Extract<MemoryStudioContentTab, { readonly kind: 'transcript' }> = {
+    kind: 'transcript',
+    title: '转录',
+    value: 'transcript',
+    ...contentTabDomIds(selectedSegmentDomId, 'transcript'),
+  };
+  const attachmentContentTabs: readonly Extract<
+    MemoryStudioContentTab,
+    { readonly kind: 'attachment' }
+  >[] = selectedSegmentAttachments.map((attachment) => {
+    const value = attachmentContentTabValue(attachment.attachmentId);
+
+    return {
+      attachment,
+      kind: 'attachment',
+      title: attachment.title,
+      value,
+      ...contentTabDomIds(selectedSegmentDomId, value),
+    };
+  });
+  const contentTabs: readonly MemoryStudioContentTab[] = [
+    transcriptContentTab,
+    ...attachmentContentTabs,
+  ];
+  const activeContentTabModel =
+    contentTabs.find((contentTab) => contentTab.value === resolvedActiveContentTab) ??
+    transcriptContentTab;
   const isSelectedSegmentPlaying = playingSegmentId === selectedSegment?.segmentId;
   const selectedSegmentDurationMs = selectedSegment?.durationMs ?? 0;
   const playbackProgress =
@@ -532,22 +968,33 @@ export function MemoryStudio({
 
   useEffect(() => {
     const segmentId = selectedSegment?.segmentId ?? null;
-    const attachmentCount = selectedSegmentAttachments.length;
     const previousPresence = segmentAttachmentPresenceRef.current;
 
     if (!segmentId || previousPresence.segmentId !== segmentId) {
-      segmentAttachmentPresenceRef.current = { segmentId, attachmentCount };
+      segmentAttachmentPresenceRef.current = {
+        segmentId,
+        attachmentIds: selectedSegmentAttachmentIds,
+      };
       return;
     }
 
-    if (previousPresence.attachmentCount === 0 && attachmentCount > 0) {
-      setActiveContentTab('supplements');
+    const addedAttachmentId = selectedSegmentAttachmentIds.find(
+      (attachmentId) => !previousPresence.attachmentIds.includes(attachmentId)
+    );
+    if (addedAttachmentId) {
+      setActiveContentTab(attachmentContentTabValue(addedAttachmentId));
     }
 
-    if (previousPresence.attachmentCount !== attachmentCount) {
-      segmentAttachmentPresenceRef.current = { segmentId, attachmentCount };
+    if (
+      previousPresence.attachmentIds.length !== selectedSegmentAttachmentIds.length ||
+      addedAttachmentId
+    ) {
+      segmentAttachmentPresenceRef.current = {
+        segmentId,
+        attachmentIds: selectedSegmentAttachmentIds,
+      };
     }
-  }, [selectedSegment?.segmentId, selectedSegmentAttachments.length]);
+  }, [selectedSegment?.segmentId, selectedSegmentAttachmentIdsKey]);
 
   useEffect(() => {
     if (audioRef.current && !audioRef.current.paused) {
@@ -555,16 +1002,100 @@ export function MemoryStudio({
     }
     setAudioPlaybackError(null);
     setAttachmentMenuOpen(false);
+    setOpenAttachmentActionMenuId(null);
+    setHoveredAttachmentActionId(null);
     setActiveContentTab('transcript');
     setPlaybackTimeMs(0);
     setPlayingSegmentId(null);
   }, [selectedSegment?.segmentId]);
 
   useEffect(() => {
-    if (activeContentTab === 'supplements' && !hasSelectedSegmentAttachments) {
+    if (activeAttachmentId !== null && !selectedSegmentAttachmentIds.includes(activeAttachmentId)) {
       setActiveContentTab('transcript');
     }
-  }, [activeContentTab, hasSelectedSegmentAttachments]);
+  }, [activeAttachmentId, selectedSegmentAttachmentIdsKey]);
+
+  useEffect(() => {
+    if (
+      openAttachmentActionMenuId !== null &&
+      !selectedSegmentAttachmentIds.includes(openAttachmentActionMenuId)
+    ) {
+      setOpenAttachmentActionMenuId(null);
+    }
+
+    if (
+      hoveredAttachmentActionId !== null &&
+      !selectedSegmentAttachmentIds.includes(hoveredAttachmentActionId)
+    ) {
+      setHoveredAttachmentActionId(null);
+    }
+  }, [hoveredAttachmentActionId, openAttachmentActionMenuId, selectedSegmentAttachmentIdsKey]);
+
+  useEffect(() => {
+    const audioResourceCache = attachmentAudioResourceCacheRef.current;
+
+    return () => {
+      clearSegmentAttachmentAudioResources(audioResourceCache);
+    };
+  }, [
+    memory.memoryId,
+    selectedSegment?.segmentId,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+
+  useEffect(() => {
+    const selectedSegmentId = selectedSegment?.segmentId ?? null;
+    const liveAttachmentIds = new Set(selectedSegmentAttachmentIds);
+
+    pruneSegmentAttachmentAudioResources(
+      attachmentAudioResourceCacheRef.current,
+      (resource) =>
+        resource.workspaceHandle !== workspaceSession.workspaceHandle ||
+        resource.workspaceId !== workspaceSession.workspaceId ||
+        resource.memoryId !== memory.memoryId ||
+        resource.segmentId !== selectedSegmentId ||
+        liveAttachmentIds.has(resource.attachmentId)
+    );
+  }, [
+    memory.memoryId,
+    selectedSegment?.segmentId,
+    selectedSegmentAttachmentIdsKey,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+
+  function handleContentTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentValue: ActiveContentTab
+  ) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+
+    const currentIndex = contentTabs.findIndex((contentTab) => contentTab.value === currentValue);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? contentTabs.length - 1
+          : event.key === 'ArrowRight'
+            ? (currentIndex + 1) % contentTabs.length
+            : (currentIndex - 1 + contentTabs.length) % contentTabs.length;
+    const nextTab = contentTabs[nextIndex];
+    if (!nextTab) {
+      return;
+    }
+
+    setActiveContentTab(nextTab.value);
+    window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+  }
 
   useEffect(() => {
     if (!segmentContent) {
@@ -939,52 +1470,94 @@ export function MemoryStudio({
                 waveformSource={playbackWaveformSource}
               />
 
-              <div className="mt-32 flex shrink-0 items-center justify-between gap-8">
+              <div
+                data-slot="memory-studio-content-tab-rail-row"
+                className="mt-32 flex shrink-0 items-center justify-between gap-8"
+              >
                 <div
                   role="tablist"
                   aria-label="片段内容类型"
-                  className="flex min-w-0 items-center gap-4"
+                  data-slot="memory-studio-content-tab-rail"
+                  className="edge-fade-x flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeContentTab === 'transcript'}
-                    className={[
-                      'min-h-32 rounded-lg px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                      activeContentTab === 'transcript'
-                        ? 'bg-secondary text-foreground'
-                        : 'bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground',
-                    ].join(' ')}
-                    onClick={() => setActiveContentTab('transcript')}
+                  <span
+                    data-slot="memory-studio-transcript-tab-item"
+                    className={contentTabPillClassName(resolvedActiveContentTab === 'transcript')}
                   >
-                    转录
-                  </button>
-                  {hasSelectedSegmentAttachments ? (
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={activeContentTab === 'supplements'}
-                      className={[
-                        'min-h-32 rounded-lg px-12 text-ui-sm font-medium leading-ui-sm transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                        activeContentTab === 'supplements'
-                          ? 'bg-secondary text-foreground'
-                          : 'bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground',
-                      ].join(' ')}
-                      onClick={() => setActiveContentTab('supplements')}
+                      id={transcriptContentTab.tabId}
+                      aria-controls={transcriptContentTab.panelId}
+                      aria-selected={resolvedActiveContentTab === 'transcript'}
+                      data-slot="memory-studio-transcript-tab"
+                      tabIndex={resolvedActiveContentTab === 'transcript' ? 0 : -1}
+                      className={contentTabButtonClassName()}
+                      onClick={() => setActiveContentTab('transcript')}
+                      onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
                     >
-                      补充
+                      <FileText aria-hidden="true" className="size-16 shrink-0" strokeWidth={2} />
+                      <span>转录</span>
                     </button>
-                  ) : null}
+                  </span>
+                  {attachmentContentTabs.map((contentTab, attachmentIndex) => (
+                    <SegmentAttachmentTab
+                      key={contentTab.attachment.attachmentId}
+                      active={resolvedActiveContentTab === contentTab.value}
+                      actionsVisible={
+                        hoveredAttachmentActionId === contentTab.attachment.attachmentId
+                      }
+                      attachment={contentTab.attachment}
+                      attachmentIndex={attachmentIndex}
+                      menuOpen={openAttachmentActionMenuId === contentTab.attachment.attachmentId}
+                      tabId={contentTab.tabId}
+                      panelId={contentTab.panelId}
+                      tabIndex={resolvedActiveContentTab === contentTab.value ? 0 : -1}
+                      onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
+                      onActionsVisible={() =>
+                        setHoveredAttachmentActionId(contentTab.attachment.attachmentId)
+                      }
+                      onActionsHidden={() =>
+                        setHoveredAttachmentActionId((currentAttachmentId) =>
+                          currentAttachmentId === contentTab.attachment.attachmentId
+                            ? null
+                            : currentAttachmentId
+                        )
+                      }
+                      onMenuOpenChange={(open) =>
+                        setOpenAttachmentActionMenuId(
+                          open ? contentTab.attachment.attachmentId : null
+                        )
+                      }
+                      onDelete={() =>
+                        onDeleteSegmentAttachment({
+                          memoryId: memory.memoryId,
+                          segment: selectedSegment,
+                          attachment: contentTab.attachment,
+                        })
+                      }
+                      onRename={() =>
+                        onRenameSegmentAttachment({
+                          memoryId: memory.memoryId,
+                          segment: selectedSegment,
+                          attachment: contentTab.attachment,
+                        })
+                      }
+                      onSelect={() => setActiveContentTab(contentTab.value)}
+                    />
+                  ))}
                 </div>
                 <DropdownMenu open={attachmentMenuOpen} onOpenChange={setAttachmentMenuOpen}>
                   <DropdownMenuTrigger asChild>
-                    <button
+                    <Button
+                      variant="ghostIcon"
+                      size="icon"
                       type="button"
                       aria-label="添加片段补充内容"
-                      className="mb-2 inline-flex size-32 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+                      className="text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                     >
                       <Plus aria-hidden="true" className="size-16" />
-                    </button>
+                    </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     aria-label="片段补充内容"
@@ -1024,11 +1597,15 @@ export function MemoryStudio({
                   );
                 }}
               />
-              {activeContentTab === 'transcript' ? (
+              {resolvedActiveContentTab === 'transcript' ? (
                 <section
+                  key="transcript"
                   aria-label="片段转录"
+                  role="tabpanel"
+                  id={transcriptContentTab.panelId}
+                  aria-labelledby={transcriptContentTab.tabId}
                   data-slot="memory-studio-transcript-scroll"
-                  className="edge-fade-y scrollbar-hover mt-4 min-h-0 flex-1 overflow-y-auto pl-8 pr-8 pb-6"
+                  className="reo-content-tab-panel-motion edge-fade-y scrollbar-hover mt-4 min-h-0 flex-1 overflow-y-auto pl-8 pr-8 pb-6"
                 >
                   {segmentContentQuery.isLoading ? (
                     <p className="text-body leading-body text-muted-foreground">
@@ -1048,21 +1625,23 @@ export function MemoryStudio({
                     </p>
                   )}
                 </section>
-              ) : (
+              ) : activeSegmentAttachment ? (
                 <section
-                  aria-label="片段补充内容"
-                  data-slot="memory-studio-supplements-scroll"
-                  className="mt-4 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
+                  key={activeSegmentAttachment.attachmentId}
+                  aria-label={activeSegmentAttachment.title}
+                  role="tabpanel"
+                  id={activeContentTabModel.panelId}
+                  aria-labelledby={activeContentTabModel.tabId}
+                  data-slot="memory-studio-attachment-panel"
+                  className="reo-content-tab-panel-motion mt-4 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
                 >
-                  {selectedSegmentAttachments.map((attachment) => (
-                    <SegmentAttachmentAudioPlayer
-                      key={attachment.attachmentId}
-                      attachment={attachment}
-                      workspaceSession={workspaceSession}
-                    />
-                  ))}
+                  <SegmentAttachmentAudioPlayer
+                    attachment={activeSegmentAttachment}
+                    audioResourceCache={attachmentAudioResourceCacheRef.current}
+                    workspaceSession={workspaceSession}
+                  />
                 </section>
-              )}
+              ) : null}
               {audioPlaybackError ? (
                 <p
                   role="status"

@@ -22,7 +22,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 min-w-160 overflow-hidden rounded-lg border-0 bg-popover p-4 text-popover-foreground shadow-float outline-none',
+          'reo-dropdown-menu-enter z-50 min-w-160 overflow-hidden rounded-lg border-0 bg-popover p-4 text-popover-foreground shadow-float outline-none',
           className
         )}
         {...props}

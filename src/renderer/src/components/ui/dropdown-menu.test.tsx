@@ -24,7 +24,8 @@ describe('DropdownMenu primitive', () => {
       'bg-popover',
       'text-popover-foreground',
       'shadow-float',
-      'p-4'
+      'p-4',
+      'reo-dropdown-menu-enter'
     );
     expect(screen.getByRole('menu')).not.toHaveClass('border-border', 'bg-card');
     expect(screen.getByRole('menuitem', { name: '重命名记忆' })).toHaveClass(
