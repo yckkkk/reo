@@ -14,6 +14,8 @@ const PROD_CSP_DIRECTIVES = [
   "frame-ancestors 'none'",
 ];
 
+const DEV_AGENTATION_MCP_ENDPOINT = 'http://localhost:4747';
+
 export function createContentSecurityPolicy({
   devConnectSources = [],
   usesDevServer,
@@ -33,7 +35,7 @@ export function createContentSecurityPolicy({
     "font-src 'self' data:",
     "media-src 'self' blob:",
     "worker-src 'none'",
-    `connect-src 'self' ${devConnectSources.join(' ')}`.trim(),
+    `connect-src 'self' ${[...devConnectSources, DEV_AGENTATION_MCP_ENDPOINT].join(' ')}`.trim(),
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",

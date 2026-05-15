@@ -23,7 +23,7 @@
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 renderer route state 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell。
-- Agentation 作为 dev-only renderer feedback toolbar 挂载在 renderer root，只在 Vite development 且非 test mode 下 lazy-load；它连接本机 `http://localhost:4747` MCP endpoint，保留点击标注、文本选择、多选、复制输出、本地持久化和 MCP sync 能力，不进入 product App tree、product runtime state、Query、preload 或 IPC。
+- Agentation 作为 dev-only renderer feedback toolbar 挂载在 renderer root，只在 Vite development 且非 test mode 下 lazy-load；它连接本机 `http://localhost:4747` MCP endpoint，保留点击标注、文本选择、多选、复制输出、本地持久化和 MCP sync 能力，不进入 product App tree、product runtime state、Query、preload 或 IPC。DevAgentation 对 Agentation copy output 执行 renderer-only fallback copy，避免 Electron runtime 拒绝 `navigator.clipboard` 时静默丢失复制结果；DevAgentation 会读取 Agentation 的本地 Layout Mode state，把 `section.note` 补入复制输出，并用 Agentation 的本地 session id 补发或更新 MCP rearrange annotation，确保只写注释、不移动或缩放的 Layout Mode feedback 也能进入复制文本和 MCP pending annotations。
 
 ## 设计系统规则
 

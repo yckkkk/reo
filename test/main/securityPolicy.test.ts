@@ -22,7 +22,17 @@ test('production content security policy allows local blob audio media only', ()
   assert.match(policy, /media-src 'self' blob:/);
   assert.match(policy, /default-src 'self'/);
   assert.match(policy, /worker-src 'none'/);
+  assert.doesNotMatch(policy, /localhost:4747/);
   assert.doesNotMatch(policy, /media-src \*/);
+});
+
+test('development content security policy allows Agentation MCP sync endpoint', () => {
+  const policy = createContentSecurityPolicy({
+    devConnectSources: ['ws://127.0.0.1:5173'],
+    usesDevServer: true,
+  });
+
+  assert.match(policy, /connect-src 'self' ws:\/\/127\.0\.0\.1:5173 http:\/\/localhost:4747/);
 });
 
 test('denies microphone permission without a one-shot renderer intent', () => {
