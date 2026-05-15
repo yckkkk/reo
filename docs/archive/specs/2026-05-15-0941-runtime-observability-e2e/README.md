@@ -40,10 +40,21 @@
 
 - [x] targeted main tests
 - [x] `npm run verify:quick`
-- [ ] `npm run dev` runtime E2E
+- [x] `npm run dev` runtime E2E
 
 ## 当前证据
 
-- `npm run test:main -- diagnostics.test.ts workspaceIpcRegistration.test.ts` 执行了 main test runner，覆盖新增 diagnostics tests 与 workspace IPC registration diagnostic hook，全部通过。
-- `npm run verify:quick` 覆盖 typecheck、main tests、renderer tests、lint 和 format check，全部通过。
-- `npm run dev` runtime 已观察到 `app diagnostics.ready`、`app ready` 和 `workspace:listMemorySpaces` diagnostic console event；目录选择 native dialog automation 尚未完成，因此真实创建记忆空间、创建 Memory 和普通文件加入目录后的 runtime E2E 仍是本工作单元剩余验证项。
+- `npm run test:main`：402 个 main/preload/contract 测试通过，覆盖 diagnostic span、字段脱敏、`electron-log` 本地文件写入和默认 console transport 关闭。
+- `npm run verify:quick`：typecheck、402 个 main tests、297 个 renderer tests、lint 和 format check 全部通过。
+- `npm run dev`：使用 `REMOTE_DEBUGGING_PORT=9233 REO_DIAGNOSTICS_CONSOLE=1` 启动真实 Electron runtime。
+- Runtime E2E：
+  - 通过 UI 打开“创建本地记忆空间”表单。
+  - 通过 macOS 文件夹选择面板选择父目录。
+  - 创建记忆空间和一个 Memory。
+  - 在记忆空间 root 与 Memory 目录内新增普通 `.json`、`.md`、`.html`、`.txt` 文件。
+  - 关闭并重新打开记忆空间后，Workspace snapshot 仍只投影 1 个 Memory，普通文件没有成为 Reo 对象。
+  - UI 重新打开后仍显示目标 Memory，普通文件名没有出现在界面中。
+  - 本地诊断日志包含 `workspace:initialize`、`workspace:createMemory`、`workspace:openMemorySpace`、`workspace:readWorkspaceSnapshot` 和 `workspace:close` 的 `status: ok` 事件，且未包含 E2E 路径或标题。
+- E2E artifact：
+  - `artifacts/e2e-result.json`
+  - `artifacts/e2e-workspace.png`

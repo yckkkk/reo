@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "parentDirectory": "/tmp/reo-e2e-parent-iIA5em",
+  "workspaceRoot": "/tmp/reo-e2e-parent-iIA5em/Reo E2E Space 20260515170710",
+  "workspaceTitle": "Reo E2E Space 20260515170710",
+  "memoryTitle": "E2E Memory 20260515171017",
+  "memoryDirectoryName": "mem_20260515170857_7bf79aef--E2E Memory 20260515171017",
+  "ordinaryFiles": [
+    "loose-root.json",
+    "loose-root.md",
+    "loose-root.html",
+    "loose-root.txt",
+    "memories/mem_20260515170857_7bf79aef--E2E Memory 20260515171017/loose-memory.json",
+    "memories/mem_20260515170857_7bf79aef--E2E Memory 20260515171017/loose-memory.md",
+    "memories/mem_20260515170857_7bf79aef--E2E Memory 20260515171017/loose-memory.html",
+    "memories/mem_20260515170857_7bf79aef--E2E Memory 20260515171017/loose-memory.txt"
+  ],
+  "snapshotMemoryCount": 1,
+  "projectedTitles": ["E2E Memory 20260515171017"],
+  "uiMemoryRailItemCount": 0,
+  "logPath": "/Users/yck/Library/Logs/Electron/main.log",
+  "logChannelsChecked": [
+    "workspace:initialize",
+    "workspace:createMemory",
+    "workspace:openMemorySpace",
+    "workspace:readWorkspaceSnapshot",
+    "workspace:close"
+  ],
+  "logLeakCheck": "passed",
+  "screenshot": "artifacts/e2e-workspace.png"
+}
