@@ -8,7 +8,7 @@ import {
   sameDirectoryIdentity,
 } from './directoryIdentity.js';
 import {
-  ATTACHMENT_ID_PATTERN,
+  SUPPLEMENT_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   workspaceError,
   type WorkspaceErrorEnvelope,
@@ -270,7 +270,7 @@ export async function ensureWorkspaceDraftsDirectory(
   }
 }
 
-export async function ensureWorkspaceAttachmentDraftsDirectory(
+export async function ensureWorkspaceSupplementDraftsDirectory(
   canonicalRoot: string,
   assertUsable?: AssertWorkspacePathUsable
 ): Promise<string | WorkspaceErrorEnvelope> {
@@ -283,7 +283,7 @@ export async function ensureWorkspaceAttachmentDraftsDirectory(
     if (typeof draftsDirectory !== 'string') {
       return draftsDirectory;
     }
-    return ensureWorkspaceChildDirectory(draftsDirectory, 'attachments', assertUsable);
+    return ensureWorkspaceChildDirectory(draftsDirectory, 'supplements', assertUsable);
   } catch (error) {
     return workspacePathError(error);
   }
@@ -310,12 +310,12 @@ export function createSafeSegmentId(segmentId: string): string {
   return segmentId;
 }
 
-export function createSafeAttachmentId(attachmentId: string): string {
-  if (!ATTACHMENT_ID_PATTERN.test(attachmentId)) {
-    throw new Error('Invalid attachment id');
+export function createSafeSupplementId(supplementId: string): string {
+  if (!SUPPLEMENT_ID_PATTERN.test(supplementId)) {
+    throw new Error('Invalid supplement id');
   }
 
-  return attachmentId;
+  return supplementId;
 }
 
 export function resolveWorkspaceDraftSegmentDirectory(
@@ -351,28 +351,28 @@ export function resolveWorkspaceDraftSegmentDirectory(
   return segmentDirectory;
 }
 
-export function resolveWorkspaceDraftAttachmentDirectory(
+export function resolveWorkspaceDraftSupplementDirectory(
   canonicalRoot: string,
-  attachmentId: string
+  supplementId: string
 ): string {
-  const safeId = createSafeAttachmentId(attachmentId);
-  const attachmentsRoot = path.join(canonicalRoot, '.reo', 'drafts', 'attachments');
-  const attachmentDirectory = path.join(attachmentsRoot, safeId);
-  const relative = path.relative(attachmentsRoot, attachmentDirectory);
+  const safeId = createSafeSupplementId(supplementId);
+  const supplementsRoot = path.join(canonicalRoot, '.reo', 'drafts', 'supplements');
+  const supplementDirectory = path.join(supplementsRoot, safeId);
+  const relative = path.relative(supplementsRoot, supplementDirectory);
 
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Attachment path escapes workspace');
+    throw new Error('Supplement path escapes workspace');
   }
 
   for (const candidate of [
     path.join(canonicalRoot, '.reo'),
     path.join(canonicalRoot, '.reo', 'drafts'),
-    attachmentsRoot,
-    attachmentDirectory,
+    supplementsRoot,
+    supplementDirectory,
   ]) {
     try {
       if (lstatSync(candidate).isSymbolicLink()) {
-        throw new Error('Attachment path crosses a symlink');
+        throw new Error('Supplement path crosses a symlink');
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -381,7 +381,7 @@ export function resolveWorkspaceDraftAttachmentDirectory(
     }
   }
 
-  return attachmentDirectory;
+  return supplementDirectory;
 }
 
 export function setAfterWorkspaceReoDirectoryCheckForTest(

@@ -10,56 +10,56 @@ import {
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
-  WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
-  WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
-  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
-  WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
-  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
-  WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
-  workspaceDeleteSegmentAttachmentRequestSchema,
-  workspaceDeleteSegmentAttachmentResponseSchema,
+  workspaceDeleteSegmentSupplementRequestSchema,
+  workspaceDeleteSegmentSupplementResponseSchema,
   workspaceDeleteSegmentRequestSchema,
   workspaceDeleteSegmentResponseSchema,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
-  workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
-  workspaceCreateSegmentAttachmentRecordingDraftResponseSchema,
+  workspaceCreateSegmentSupplementRecordingDraftRequestSchema,
+  workspaceCreateSegmentSupplementRecordingDraftResponseSchema,
   workspaceDiscardRecordingDraftResponseSchema,
   workspaceError,
   workspaceInitializeRequestSchema,
@@ -73,8 +73,8 @@ import {
   workspaceOpenMemorySpaceRequestSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
-  workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
-  workspaceReadFinalizedAudioSegmentAttachmentResponseSchema,
+  workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
@@ -85,29 +85,29 @@ import {
   workspaceRecordingAppendResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
-  workspaceRestoreDeletedSegmentAttachmentRequestSchema,
-  workspaceRestoreDeletedSegmentAttachmentResponseSchema,
+  workspaceRestoreDeletedSegmentSupplementRequestSchema,
+  workspaceRestoreDeletedSegmentSupplementResponseSchema,
   workspaceRestoreDeletedSegmentRequestSchema,
   workspaceRestoreDeletedSegmentResponseSchema,
-  workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
-  workspaceSegmentAttachmentRecordingAppendResponseSchema,
+  workspaceAppendSegmentSupplementRecordingAudioRequestSchema,
+  workspaceSegmentSupplementRecordingAppendResponseSchema,
   workspaceRecordingDraftPrefixCloneRequestSchema,
   workspaceRecordingDraftPrefixCloneResponseSchema,
   workspaceRecordingDraftAudioResponseSchema,
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeResponseSchema,
   workspaceRecordingFinalizeRequestSchema,
-  workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
-  workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema,
+  workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
+  workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema,
   workspaceRecordingTranscriptionAudioRequestSchema,
   workspaceRecordingTranscriptionCloseRequestSchema,
   workspaceRecordingTranscriptionControlResponseSchema,
   workspaceRecordingTranscriptionEventSchema,
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceSegmentIdRequestSchema,
-  workspaceSegmentAttachmentIdRequestSchema,
-  workspaceSegmentAttachmentMarkdownSaveRequestSchema,
-  workspaceSegmentAttachmentMarkdownSaveResponseSchema,
+  workspaceSegmentSupplementIdRequestSchema,
+  workspaceSegmentSupplementMarkdownSaveRequestSchema,
+  workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
@@ -116,8 +116,8 @@ import {
   workspaceUpdateMemorySpaceTitleResponseSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
-  workspaceUpdateSegmentAttachmentTitleRequestSchema,
-  workspaceUpdateSegmentAttachmentTitleResponseSchema,
+  workspaceUpdateSegmentSupplementTitleRequestSchema,
+  workspaceUpdateSegmentSupplementTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
   type WorkspaceInitializeResponse,
@@ -143,33 +143,33 @@ import {
 } from './trustedSender.js';
 import {
   appendRecordingAudioChunk,
-  appendSegmentAttachmentRecordingAudioChunk,
+  appendSegmentSupplementRecordingAudioChunk,
   cloneRecordingDraftPrefix,
   clearRecordingRuntimeState,
   clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
-  createSegmentAttachmentRecordingDraft,
+  createSegmentSupplementRecordingDraft,
   discardRecordingDraft,
-  discardSegmentAttachmentRecordingDraft,
+  discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
-  finalizeSegmentAttachmentRecordingDraft,
+  finalizeSegmentSupplementRecordingDraft,
   readFinalizedAudioSegmentContent,
-  readFinalizedAudioSegmentAttachmentContent,
+  readFinalizedAudioSegmentSupplementContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
-  saveSegmentAttachmentMarkdown,
+  saveSegmentSupplementMarkdown,
 } from './recordingDrafts.js';
 import {
   createMemoryFromFileTruth,
   deleteMemoryFromFileTruth,
-  deleteSegmentAttachmentFromFileTruth,
+  deleteSegmentSupplementFromFileTruth,
   deleteSegmentFromFileTruth,
   readMemoryDetailFromFileTruth,
   restoreDeletedMemoryFromFileTruth,
-  restoreDeletedSegmentAttachmentFromFileTruth,
+  restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   updateMemoryTitleFromFileTruth,
-  updateSegmentAttachmentTitleFromFileTruth,
+  updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from './memoryFiles.js';
 import {
@@ -267,7 +267,7 @@ export interface HandleUpdateSegmentTitleOptions extends HandleWorkspaceRequestO
   readonly now?: () => string;
 }
 
-export type HandleUpdateSegmentAttachmentTitleOptions = HandleWorkspaceRequestOptions;
+export type HandleUpdateSegmentSupplementTitleOptions = HandleWorkspaceRequestOptions;
 
 export interface HandleCreateMemoryOptions extends HandleWorkspaceRequestOptions {
   readonly createMemoryId?: () => string;
@@ -279,12 +279,12 @@ export interface HandleCreateRecordingDraftOptions extends HandleWorkspaceReques
   readonly now?: () => string;
 }
 
-export interface HandleCreateSegmentAttachmentRecordingDraftOptions extends HandleWorkspaceRequestOptions {
-  readonly createAttachmentId?: () => string;
+export interface HandleCreateSegmentSupplementRecordingDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly createSupplementId?: () => string;
   readonly now?: () => string;
 }
 
-export interface HandleFinalizeSegmentAttachmentRecordingDraftOptions extends HandleWorkspaceRequestOptions {
+export interface HandleFinalizeSegmentSupplementRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
 
@@ -703,12 +703,12 @@ function createSegmentId(): string {
   return `seg_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
-function createAttachmentId(): string {
+function createSupplementId(): string {
   const timestamp = new Date()
     .toISOString()
     .replace(/[-:TZ.]/g, '')
     .slice(0, 14);
-  return `att_${timestamp}_${randomUUID().slice(0, 8)}`;
+  return `sup_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
 function createMemoryId(): string {
@@ -1661,48 +1661,48 @@ export async function handleUpdateSegmentTitleForTest(
   return handleUpdateSegmentTitleCore(options);
 }
 
-function handleUpdateSegmentAttachmentTitleCore(
-  options: HandleUpdateSegmentAttachmentTitleOptions
-): Promise<z.infer<typeof workspaceUpdateSegmentAttachmentTitleResponseSchema>> {
+function handleUpdateSegmentSupplementTitleCore(
+  options: HandleUpdateSegmentSupplementTitleOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
+    channel: WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceUpdateSegmentAttachmentTitleRequestSchema,
-    invalidMessage: 'updateSegmentAttachmentTitle request is invalid',
+    schema: workspaceUpdateSegmentSupplementTitleRequestSchema,
+    invalidMessage: 'updateSegmentSupplementTitle request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment attachment title workspace does not match the active handle'
+            'Segment supplement title workspace does not match the active handle'
           );
         }
 
-        const result = await updateSegmentAttachmentTitleFromFileTruth({
+        const result = await updateSegmentSupplementTitleFromFileTruth({
           rootPath: handle.canonicalRoot,
           workspaceId: request.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           title: request.title,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceUpdateSegmentAttachmentTitleResponseSchema.parse(result);
+        return workspaceUpdateSegmentSupplementTitleResponseSchema.parse(result);
       }),
   });
 }
 
-export async function handleUpdateSegmentAttachmentTitle(
-  options: HandleUpdateSegmentAttachmentTitleOptions
-): Promise<z.infer<typeof workspaceUpdateSegmentAttachmentTitleResponseSchema>> {
-  return handleUpdateSegmentAttachmentTitleCore(options);
+export async function handleUpdateSegmentSupplementTitle(
+  options: HandleUpdateSegmentSupplementTitleOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
+  return handleUpdateSegmentSupplementTitleCore(options);
 }
 
-export async function handleUpdateSegmentAttachmentTitleForTest(
-  options: HandleUpdateSegmentAttachmentTitleOptions
-): Promise<z.infer<typeof workspaceUpdateSegmentAttachmentTitleResponseSchema>> {
-  return handleUpdateSegmentAttachmentTitleCore(options);
+export async function handleUpdateSegmentSupplementTitleForTest(
+  options: HandleUpdateSegmentSupplementTitleOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
+  return handleUpdateSegmentSupplementTitleCore(options);
 }
 
 function handleCreateMemoryCore({
@@ -1842,58 +1842,58 @@ function handleRestoreDeletedSegmentCore(
   });
 }
 
-function handleDeleteSegmentAttachmentCore(
+function handleDeleteSegmentSupplementCore(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceDeleteSegmentAttachmentResponseSchema>> {
+): Promise<z.infer<typeof workspaceDeleteSegmentSupplementResponseSchema>> {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
+    channel: WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceDeleteSegmentAttachmentRequestSchema,
-    invalidMessage: 'deleteSegmentAttachment request is invalid',
+    schema: workspaceDeleteSegmentSupplementRequestSchema,
+    invalidMessage: 'deleteSegmentSupplement request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'SegmentAttachment delete workspace does not match the active handle'
+            'SegmentSupplement delete workspace does not match the active handle'
           );
         }
 
-        const result = await deleteSegmentAttachmentFromFileTruth({
+        const result = await deleteSegmentSupplementFromFileTruth({
           rootPath: handle.canonicalRoot,
           workspaceId: request.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceDeleteSegmentAttachmentResponseSchema.parse(
+        return workspaceDeleteSegmentSupplementResponseSchema.parse(
           result.ok ? { ok: true, value: result.value } : result
         );
       }),
   });
 }
 
-function handleRestoreDeletedSegmentAttachmentCore(
+function handleRestoreDeletedSegmentSupplementCore(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceRestoreDeletedSegmentAttachmentResponseSchema>> {
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentSupplementResponseSchema>> {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
+    channel: WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceRestoreDeletedSegmentAttachmentRequestSchema,
-    invalidMessage: 'restoreDeletedSegmentAttachment request is invalid',
+    schema: workspaceRestoreDeletedSegmentSupplementRequestSchema,
+    invalidMessage: 'restoreDeletedSegmentSupplement request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'SegmentAttachment restore workspace does not match the active handle'
+            'SegmentSupplement restore workspace does not match the active handle'
           );
         }
 
-        const result = await restoreDeletedSegmentAttachmentFromFileTruth({
+        const result = await restoreDeletedSegmentSupplementFromFileTruth({
           rootPath: handle.canonicalRoot,
           workspaceId: request.workspaceId,
           memoryId: request.memoryId,
@@ -1901,7 +1901,7 @@ function handleRestoreDeletedSegmentAttachmentCore(
           restoreToken: request.restoreToken,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceRestoreDeletedSegmentAttachmentResponseSchema.parse(
+        return workspaceRestoreDeletedSegmentSupplementResponseSchema.parse(
           result.ok ? { ok: true, value: result.value } : result
         );
       }),
@@ -1945,43 +1945,43 @@ function handleCreateRecordingDraftCore({
   });
 }
 
-function handleCreateSegmentAttachmentRecordingDraftCore({
-  createAttachmentId: createAttachmentIdOption = createAttachmentId,
+function handleCreateSegmentSupplementRecordingDraftCore({
+  createSupplementId: createSupplementIdOption = createSupplementId,
   now = nowIso,
   ...options
-}: HandleCreateSegmentAttachmentRecordingDraftOptions): Promise<
-  z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>
+}: HandleCreateSegmentSupplementRecordingDraftOptions): Promise<
+  z.infer<typeof workspaceCreateSegmentSupplementRecordingDraftResponseSchema>
 > {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    channel: WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
-    invalidMessage: 'createSegmentAttachmentRecordingDraft request is invalid',
+    schema: workspaceCreateSegmentSupplementRecordingDraftRequestSchema,
+    invalidMessage: 'createSegmentSupplementRecordingDraft request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment attachment draft workspace does not match the active handle'
+            'Segment supplement draft workspace does not match the active handle'
           );
         }
 
-        const result = await createSegmentAttachmentRecordingDraft({
+        const result = await createSegmentSupplementRecordingDraft({
           rootPath: handle.canonicalRoot,
           workspaceId: handle.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          createAttachmentId: createAttachmentIdOption,
+          createSupplementId: createSupplementIdOption,
           now,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceCreateSegmentAttachmentRecordingDraftResponseSchema.parse(
+        return workspaceCreateSegmentSupplementRecordingDraftResponseSchema.parse(
           result.ok
             ? {
                 ok: true,
                 value: {
-                  attachmentId: result.attachmentId,
+                  supplementId: result.supplementId,
                   nextSequence: result.nextSequence,
                 },
               }
@@ -2003,16 +2003,16 @@ export async function handleCreateRecordingDraftForTest(
   return handleCreateRecordingDraftCore(options);
 }
 
-export async function handleCreateSegmentAttachmentRecordingDraft(
-  options: HandleCreateSegmentAttachmentRecordingDraftOptions
-): Promise<z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>> {
-  return handleCreateSegmentAttachmentRecordingDraftCore(options);
+export async function handleCreateSegmentSupplementRecordingDraft(
+  options: HandleCreateSegmentSupplementRecordingDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentSupplementRecordingDraftResponseSchema>> {
+  return handleCreateSegmentSupplementRecordingDraftCore(options);
 }
 
-export async function handleCreateSegmentAttachmentRecordingDraftForTest(
-  options: HandleCreateSegmentAttachmentRecordingDraftOptions
-): Promise<z.infer<typeof workspaceCreateSegmentAttachmentRecordingDraftResponseSchema>> {
-  return handleCreateSegmentAttachmentRecordingDraftCore(options);
+export async function handleCreateSegmentSupplementRecordingDraftForTest(
+  options: HandleCreateSegmentSupplementRecordingDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentSupplementRecordingDraftResponseSchema>> {
+  return handleCreateSegmentSupplementRecordingDraftCore(options);
 }
 
 export async function handleCreateMemory(
@@ -2075,28 +2075,28 @@ export async function handleRestoreDeletedSegmentForTest(
   return handleRestoreDeletedSegmentCore(options);
 }
 
-export async function handleDeleteSegmentAttachment(
+export async function handleDeleteSegmentSupplement(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceDeleteSegmentAttachmentResponseSchema>> {
-  return handleDeleteSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceDeleteSegmentSupplementResponseSchema>> {
+  return handleDeleteSegmentSupplementCore(options);
 }
 
-export async function handleDeleteSegmentAttachmentForTest(
+export async function handleDeleteSegmentSupplementForTest(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceDeleteSegmentAttachmentResponseSchema>> {
-  return handleDeleteSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceDeleteSegmentSupplementResponseSchema>> {
+  return handleDeleteSegmentSupplementCore(options);
 }
 
-export async function handleRestoreDeletedSegmentAttachment(
+export async function handleRestoreDeletedSegmentSupplement(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceRestoreDeletedSegmentAttachmentResponseSchema>> {
-  return handleRestoreDeletedSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentSupplementResponseSchema>> {
+  return handleRestoreDeletedSegmentSupplementCore(options);
 }
 
-export async function handleRestoreDeletedSegmentAttachmentForTest(
+export async function handleRestoreDeletedSegmentSupplementForTest(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceRestoreDeletedSegmentAttachmentResponseSchema>> {
-  return handleRestoreDeletedSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceRestoreDeletedSegmentSupplementResponseSchema>> {
+  return handleRestoreDeletedSegmentSupplementCore(options);
 }
 
 function handleReadMemoryDetailCore(
@@ -2235,34 +2235,34 @@ function handleReadFinalizedAudioSegmentCore(
   });
 }
 
-function handleReadFinalizedAudioSegmentAttachmentCore(
+function handleReadFinalizedAudioSegmentSupplementCore(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema>> {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
-    invalidMessage: 'readFinalizedAudioSegmentAttachment request is invalid',
+    schema: workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
+    invalidMessage: 'readFinalizedAudioSegmentSupplement request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Finalized segment attachment audio workspace does not match the active handle'
+            'Finalized segment supplement audio workspace does not match the active handle'
           );
         }
 
-        const result = await readFinalizedAudioSegmentAttachmentContent({
+        const result = await readFinalizedAudioSegmentSupplementContent({
           ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
           rootPath: handle.canonicalRoot,
           workspaceId: request.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceReadFinalizedAudioSegmentAttachmentResponseSchema.parse(
+        return workspaceReadFinalizedAudioSegmentSupplementResponseSchema.parse(
           result.ok
             ? {
                 ok: true,
@@ -2271,7 +2271,7 @@ function handleReadFinalizedAudioSegmentAttachmentCore(
                   workspaceId: handle.workspaceId,
                   memoryId: request.memoryId,
                   segmentId: request.segmentId,
-                  attachmentId: request.attachmentId,
+                  supplementId: request.supplementId,
                   audio: result.audio,
                   audioByteLength: result.audioByteLength,
                 },
@@ -2294,58 +2294,58 @@ export async function handleReadFinalizedAudioSegmentForTest(
   return handleReadFinalizedAudioSegmentCore(options);
 }
 
-export async function handleReadFinalizedAudioSegmentAttachment(
+export async function handleReadFinalizedAudioSegmentSupplement(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
-  return handleReadFinalizedAudioSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema>> {
+  return handleReadFinalizedAudioSegmentSupplementCore(options);
 }
 
-export async function handleReadFinalizedAudioSegmentAttachmentForTest(
+export async function handleReadFinalizedAudioSegmentSupplementForTest(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAttachmentResponseSchema>> {
-  return handleReadFinalizedAudioSegmentAttachmentCore(options);
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema>> {
+  return handleReadFinalizedAudioSegmentSupplementCore(options);
 }
 
-function handleFinalizeSegmentAttachmentRecordingDraftCore({
+function handleFinalizeSegmentSupplementRecordingDraftCore({
   now = nowIso,
   ...options
-}: HandleFinalizeSegmentAttachmentRecordingDraftOptions): Promise<
-  z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>
+}: HandleFinalizeSegmentSupplementRecordingDraftOptions): Promise<
+  z.infer<typeof workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema>
 > {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    channel: WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
-    invalidMessage: 'finalizeSegmentAttachmentRecordingDraft request is invalid',
+    schema: workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
+    invalidMessage: 'finalizeSegmentSupplementRecordingDraft request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment attachment finalize workspace does not match the active handle'
+            'Segment supplement finalize workspace does not match the active handle'
           );
         }
 
-        const result = await finalizeSegmentAttachmentRecordingDraft({
+        const result = await finalizeSegmentSupplementRecordingDraft({
           rootPath: handle.canonicalRoot,
           workspaceId: handle.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           title: request.title,
           durationMs: request.durationMs,
           now,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse(
+        return workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema.parse(
           result.ok
             ? {
                 ok: true,
                 value: {
                   memory: result.memory,
                   segment: result.segment,
-                  attachment: result.attachment,
+                  supplement: result.supplement,
                 },
               }
             : result
@@ -2354,62 +2354,61 @@ function handleFinalizeSegmentAttachmentRecordingDraftCore({
   });
 }
 
-export async function handleFinalizeSegmentAttachmentRecordingDraft(
-  options: HandleFinalizeSegmentAttachmentRecordingDraftOptions
-): Promise<z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>> {
-  return handleFinalizeSegmentAttachmentRecordingDraftCore(options);
+export async function handleFinalizeSegmentSupplementRecordingDraft(
+  options: HandleFinalizeSegmentSupplementRecordingDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema>> {
+  return handleFinalizeSegmentSupplementRecordingDraftCore(options);
 }
 
-export async function handleFinalizeSegmentAttachmentRecordingDraftForTest(
-  options: HandleFinalizeSegmentAttachmentRecordingDraftOptions
-): Promise<z.infer<typeof workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema>> {
-  return handleFinalizeSegmentAttachmentRecordingDraftCore(options);
+export async function handleFinalizeSegmentSupplementRecordingDraftForTest(
+  options: HandleFinalizeSegmentSupplementRecordingDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema>> {
+  return handleFinalizeSegmentSupplementRecordingDraftCore(options);
 }
 
-function handleSaveSegmentAttachmentTranscriptCore(
+function handleSaveSegmentSupplementTranscriptCore(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
+): Promise<z.infer<typeof workspaceSegmentSupplementMarkdownSaveResponseSchema>> {
   return withWorkspaceHandleRequest({
     ...options,
-    channel: WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+    channel: WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
     handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceSegmentAttachmentMarkdownSaveRequestSchema,
-    invalidMessage: 'save segment attachment transcript request is invalid',
+    schema: workspaceSegmentSupplementMarkdownSaveRequestSchema,
+    invalidMessage: 'save segment supplement transcript request is invalid',
     run: (request, handle, assertUsable) =>
-      saveSegmentAttachmentTranscriptWithHandle(request, handle, assertUsable),
+      saveSegmentSupplementTranscriptWithHandle(request, handle, assertUsable),
   });
 }
 
-function saveSegmentAttachmentTranscriptWithHandle(
-  request: z.infer<typeof workspaceSegmentAttachmentMarkdownSaveRequestSchema>,
+function saveSegmentSupplementTranscriptWithHandle(
+  request: z.infer<typeof workspaceSegmentSupplementMarkdownSaveRequestSchema>,
   handle: RequiredWorkspaceHandle,
   assertUsable: AssertWorkspaceHandleUsable
-): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
+): Promise<z.infer<typeof workspaceSegmentSupplementMarkdownSaveResponseSchema>> {
   return withUsableWorkspaceHandle(assertUsable, async () => {
     if (request.workspaceId !== handle.workspaceId) {
       return workspaceError(
         'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-        'Segment attachment transcript workspace does not match the active handle'
+        'Segment supplement transcript workspace does not match the active handle'
       );
     }
-    const result = await saveSegmentAttachmentMarkdown({
+    const result = await saveSegmentSupplementMarkdown({
       rootPath: handle.canonicalRoot,
       workspaceId: request.workspaceId,
       memoryId: request.memoryId,
       segmentId: request.segmentId,
-      attachmentId: request.attachmentId,
-      fileName: 'transcript.md',
+      supplementId: request.supplementId,
       markdown: request.markdown,
       assertWorkspaceUsable: assertUsable,
     });
-    return workspaceSegmentAttachmentMarkdownSaveResponseSchema.parse(
+    return workspaceSegmentSupplementMarkdownSaveResponseSchema.parse(
       result.ok
         ? {
             ok: true,
             value: {
               memory: result.memory,
               segment: result.segment,
-              attachment: result.attachment,
+              supplement: result.supplement,
               saved: true,
             },
           }
@@ -2418,10 +2417,10 @@ function saveSegmentAttachmentTranscriptWithHandle(
   });
 }
 
-export async function handleSaveSegmentAttachmentTranscriptForTest(
+export async function handleSaveSegmentSupplementTranscriptForTest(
   options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
-  return handleSaveSegmentAttachmentTranscriptCore(options);
+): Promise<z.infer<typeof workspaceSegmentSupplementMarkdownSaveResponseSchema>> {
+  return handleSaveSegmentSupplementTranscriptCore(options);
 }
 
 function closeRecordingTranscriptionCore({
@@ -2700,8 +2699,8 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL, (event, input) =>
-    handleUpdateSegmentAttachmentTitle({
+  electronMain.ipcMain.handle(WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, (event, input) =>
+    handleUpdateSegmentSupplementTitle({
       event,
       input,
       expectedSession,
@@ -2760,8 +2759,8 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
-  electronMain.ipcMain.handle(WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL, (event, input) =>
-    handleDeleteSegmentAttachment({
+  electronMain.ipcMain.handle(WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
+    handleDeleteSegmentSupplement({
       event,
       input,
       expectedSession,
@@ -2771,9 +2770,9 @@ export function registerWorkspaceIpc({
     })
   );
   electronMain.ipcMain.handle(
-    WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
+    WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
     (event, input) =>
-      handleRestoreDeletedSegmentAttachment({
+      handleRestoreDeletedSegmentSupplement({
         event,
         input,
         expectedSession,
@@ -2803,9 +2802,9 @@ export function registerWorkspaceIpc({
     })
   );
   electronMain.ipcMain.handle(
-    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
     (event, input) =>
-      handleReadFinalizedAudioSegmentAttachment({
+      handleReadFinalizedAudioSegmentSupplement({
         event,
         input,
         expectedSession,
@@ -2876,9 +2875,9 @@ export function registerWorkspaceIpc({
     })
   );
   electronMain.ipcMain.handle(
-    WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+    WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
     (event, input) =>
-      handleCreateSegmentAttachmentRecordingDraft({
+      handleCreateSegmentSupplementRecordingDraft({
         event,
         input,
         expectedSession,
@@ -2932,19 +2931,19 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
-    WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
-    workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
-    'appendSegmentAttachmentRecordingAudioChunk request is invalid',
+    WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+    workspaceAppendSegmentSupplementRecordingAudioRequestSchema,
+    'appendSegmentSupplementRecordingAudioChunk request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await appendSegmentAttachmentRecordingAudioChunk({
+        const result = await appendSegmentSupplementRecordingAudioChunk({
           rootPath: handle.canonicalRoot,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           sequence: request.sequence,
           chunk: request.chunk,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceSegmentAttachmentRecordingAppendResponseSchema.parse(
+        return workspaceSegmentSupplementRecordingAppendResponseSchema.parse(
           result.ok ? { ok: true, value: { nextSequence: result.nextSequence } } : result
         );
       })
@@ -3000,37 +2999,37 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
-    WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-    workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
-    'finalizeSegmentAttachmentRecordingDraft request is invalid',
+    WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+    workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
+    'finalizeSegmentSupplementRecordingDraft request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
         if (request.workspaceId !== handle.workspaceId) {
           return workspaceError(
             'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment attachment finalize workspace does not match the active handle'
+            'Segment supplement finalize workspace does not match the active handle'
           );
         }
 
-        const result = await finalizeSegmentAttachmentRecordingDraft({
+        const result = await finalizeSegmentSupplementRecordingDraft({
           rootPath: handle.canonicalRoot,
           workspaceId: handle.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           title: request.title,
           durationMs: request.durationMs,
           now: nowIso,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse(
+        return workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema.parse(
           result.ok
             ? {
                 ok: true,
                 value: {
                   memory: result.memory,
                   segment: result.segment,
-                  attachment: result.attachment,
+                  supplement: result.supplement,
                 },
               }
             : result
@@ -3054,14 +3053,14 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
-    WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-    workspaceSegmentAttachmentIdRequestSchema,
-    'discardSegmentAttachmentRecordingDraft request is invalid',
+    WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+    workspaceSegmentSupplementIdRequestSchema,
+    'discardSegmentSupplementRecordingDraft request is invalid',
     (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await discardSegmentAttachmentRecordingDraft({
+        const result = await discardSegmentSupplementRecordingDraft({
           rootPath: handle.canonicalRoot,
-          attachmentId: request.attachmentId,
+          supplementId: request.supplementId,
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceDiscardRecordingDraftResponseSchema.parse(
@@ -3089,9 +3088,9 @@ export function registerWorkspaceIpc({
       })
   );
   registerWorkspaceHandleRequest(
-    WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
-    workspaceSegmentAttachmentMarkdownSaveRequestSchema,
-    'save segment attachment transcript request is invalid',
-    saveSegmentAttachmentTranscriptWithHandle
+    WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
+    workspaceSegmentSupplementMarkdownSaveRequestSchema,
+    'save segment supplement transcript request is invalid',
+    saveSegmentSupplementTranscriptWithHandle
   );
 }

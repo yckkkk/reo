@@ -2,9 +2,9 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   listMemorySpaces,
   readFinalizedAudioSegment,
-  readFinalizedAudioSegmentAttachment,
+  readFinalizedAudioSegmentSupplement,
   readMemoryDetail,
-  type WorkspaceFinalizedAudioSegmentAttachmentContent,
+  type WorkspaceFinalizedAudioSegmentSupplementContent,
   type WorkspaceFinalizedAudioSegmentContent,
   type WorkspaceMemorySpace,
   type WorkspaceMemoryDetail,
@@ -58,13 +58,13 @@ function createSegmentContentRequestId(workspaceId: string, memoryId: string, se
     .slice(2)}`;
 }
 
-function createSegmentAttachmentContentRequestId(
+function createSegmentSupplementContentRequestId(
   workspaceId: string,
   memoryId: string,
   segmentId: string,
-  attachmentId: string
+  supplementId: string
 ) {
-  return `segment-attachment-content:${workspaceId}:${memoryId}:${segmentId}:${attachmentId}:${Date.now()}:${Math.random()
+  return `segment-supplement-content:${workspaceId}:${memoryId}:${segmentId}:${supplementId}:${Date.now()}:${Math.random()
     .toString(36)
     .slice(2)}`;
 }
@@ -157,29 +157,29 @@ export function segmentContentQueryOptions(
   });
 }
 
-export function segmentAttachmentContentQueryKey({
+export function segmentSupplementContentQueryKey({
   workspaceId,
   memoryId,
   segmentId,
-  attachmentId,
+  supplementId,
 }: {
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly attachmentId: string;
+  readonly supplementId: string;
   readonly workspaceHandle?: string;
 }) {
   return [
     'workspace',
-    'segment-attachment-content',
+    'segment-supplement-content',
     workspaceId,
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
   ] as const;
 }
 
-export function segmentAttachmentContentQueryPrefix({
+export function segmentSupplementContentQueryPrefix({
   workspaceId,
   memoryId,
   segmentId,
@@ -188,35 +188,35 @@ export function segmentAttachmentContentQueryPrefix({
   readonly memoryId: string;
   readonly segmentId: string;
 }) {
-  return ['workspace', 'segment-attachment-content', workspaceId, memoryId, segmentId] as const;
+  return ['workspace', 'segment-supplement-content', workspaceId, memoryId, segmentId] as const;
 }
 
-export function segmentAttachmentContentQueryOptions(
+export function segmentSupplementContentQueryOptions(
   session: WorkspaceSession,
   memoryId: string,
   segmentId: string,
-  attachmentId: string
+  supplementId: string
 ) {
   return queryOptions({
-    queryKey: segmentAttachmentContentQueryKey({
+    queryKey: segmentSupplementContentQueryKey({
       workspaceId: session.workspaceId,
       memoryId,
       segmentId,
-      attachmentId,
+      supplementId,
     }),
-    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentAttachmentContent> => {
-      const requestId = createSegmentAttachmentContentRequestId(
+    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentSupplementContent> => {
+      const requestId = createSegmentSupplementContentRequestId(
         session.workspaceId,
         memoryId,
         segmentId,
-        attachmentId
+        supplementId
       );
-      const result = await readFinalizedAudioSegmentAttachment({
+      const result = await readFinalizedAudioSegmentSupplement({
         workspaceHandle: session.workspaceHandle,
         workspaceId: session.workspaceId,
         memoryId,
         segmentId,
-        attachmentId,
+        supplementId,
         requestId,
       });
 
@@ -229,9 +229,9 @@ export function segmentAttachmentContentQueryOptions(
         result.value.workspaceId !== session.workspaceId ||
         result.value.memoryId !== memoryId ||
         result.value.segmentId !== segmentId ||
-        result.value.attachmentId !== attachmentId
+        result.value.supplementId !== supplementId
       ) {
-        throw new Error('Stale segment attachment content response');
+        throw new Error('Stale segment supplement content response');
       }
 
       return result.value;
@@ -251,7 +251,7 @@ export function workspaceHandleScopedContentQueryBelongsToWorkspace(
     queryWorkspaceId === workspaceId &&
     (kind === 'memory-detail' ||
       kind === 'segment-content' ||
-      kind === 'segment-attachment-content')
+      kind === 'segment-supplement-content')
   );
 }
 

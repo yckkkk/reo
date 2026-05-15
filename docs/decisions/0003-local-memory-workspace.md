@@ -7,49 +7,56 @@
 
 Reo 的记忆空间是用户选择的本地文件夹。
 
-记忆空间文件夹是真实产物源。用户记忆内容以普通文件保存，供用户、文件系统工具、Codex CLI 和未来 Reo 内置 AI 直接读取。Reo 可以使用 DB 作为索引、关系、查询和处理状态层，但 DB 不替代记忆空间文件夹作为用户记忆内容真源。
+用户可读写的语义真源是普通 Markdown 和普通资源文件。Reo 的技术完整性、事务、恢复和可重建索引放在 `.reo/` 中。DB 只能作为索引、关系、查询和处理状态层，不能替代记忆空间文件夹成为用户记忆内容真源。
 
 每个记忆空间 root 必须包含 `AGENTS.md`，用于说明记忆空间目的、文件结构、Reo 管理路径和 AI 协作规则。Reo 不覆盖已有 `AGENTS.md`。
 
-Reo 自己的 workspace metadata 放在隐藏目录：
+当前文件合同：
 
 ```text
+AGENTS.md
 .reo/workspace.json
+.reo/index.json
+.reo/objects/memories/<memoryId>.json
+.reo/objects/segments/<segmentId>.json
+.reo/objects/supplements/<supplementId>.json
+memories/<memoryDirectory>/memory.md
+memories/<memoryDirectory>/segments/<segmentDirectory>/segment.md
+memories/<memoryDirectory>/segments/<segmentDirectory>/audio.webm
+memories/<memoryDirectory>/segments/<segmentDirectory>/supplements/<supplementDirectory>/supplement.md
+memories/<memoryDirectory>/segments/<segmentDirectory>/supplements/<supplementDirectory>/audio.webm
 ```
 
-用户内容使用 Workspace、Memory、Segment 和 SegmentAttachment 四层结构。当前 runtime 已实现的主体记录是 audio segment。Audio segment 产物使用普通文件：
+`memory.md`、`segment.md` 和 `supplement.md` 的 Markdown 正文与 YAML frontmatter 是用户和 agent 可编辑语义层。`.reo/objects/*/*.json` 是 Reo-only 技术 manifest。`.reo/index.json` 是可删除、可重建的 UI index。
 
-```text
-memories/<memoryId>/segments/<segmentId>/audio.webm
-memories/<memoryId>/segments/<segmentId>/transcript.md
-memories/<memoryId>/segments/<segmentId>/segment.json
-```
-
-Draft audio segment 产物保存在 Reo 管理路径：
+Draft audio segment 和 draft audio SegmentSupplement 保存在 Reo 管理路径：
 
 ```text
 .reo/drafts/segments/<segmentId>/audio.webm
-.reo/drafts/segments/<segmentId>/transcript.md
 .reo/drafts/segments/<segmentId>/segment.json
+.reo/drafts/segments/<segmentId>/transcript.md
+.reo/drafts/supplements/<supplementId>/audio.webm
+.reo/drafts/supplements/<supplementId>/supplement.json
+.reo/drafts/supplements/<supplementId>/transcript.md
 ```
+
+用户可在记忆空间内容目录中放入任意普通文件，包括 `.json`、`.md`、`.html`、图片、PDF 或其它资源。未被当前对象合同识别的文件不自动进入 Reo 对象图。HTML 默认是不可信资源，只有在隔离预览能力实现后才允许渲染。
 
 ## 原因
 
 - 用户拥有本地文件夹和普通文件，能用 Finder、Git、备份工具和编辑器管理。
 - Codex CLI 这类 AI 可以直接进入记忆空间 folder 工作，不依赖 Reo 私有数据库上下文。
-- Obsidian 的 vault 模型证明了本地文件夹、隐藏配置目录和普通附件文件是可维护的用户数据边界。
-- Zettlr 的 project folder 模型证明本地文件夹可以承载比当前产品 UI 更多的文件。
+- Markdown + YAML frontmatter 适合作为用户和 agent 可编辑的轻量语义层。
+- 隐藏 `.reo/` 目录适合承载 Reo 的技术完整性、事务、恢复和可重建索引。
 - Reo 是 Electron 一等宿主，应该显式管理本地记忆空间，而不是退化为只读 UI shell。
 
 ## 影响
 
-- First product slice 必须设计窄 preload/IPC 文件能力，renderer 不得直接访问 Node 或 Electron API。
+- Renderer 不得直接访问 Node 或 Electron API；文件能力必须通过窄 preload/IPC 进入 main process。
 - 记忆空间创建必须在用户选择的父目录下创建 title 同名 child folder；同名 child 已存在时失败。打开本地记忆空间时，现有 Reo 记忆空间直接打开，空文件夹原地初始化，非空非 Reo 文件夹失败。
-- 记忆空间初始化必须处理已有 `AGENTS.md`、已有 `.reo/workspace.json`、权限失败、schema version 和 unsafe managed path。
-- 文件路径使用稳定 id，不依赖用户可改标题。
+- 文件路径使用稳定 id 和安全 basename；用户可见命名来自目录 basename 和 Markdown title frontmatter。
 - DB 引入必须证明真实查询、索引、恢复或性能需求，且不能成为唯一用户内容真源。
 - `AGENTS.md` 是产品契约，不是附属文档。
-- 用户可放入任意文件；Reo UI 第一版只产品化录音记录。
 
 ## 参考
 

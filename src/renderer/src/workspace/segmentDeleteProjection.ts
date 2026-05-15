@@ -42,7 +42,7 @@ export function memorySummaryAfterSegmentRemoval({
   return {
     ...memory,
     audioByteLength: Math.max(0, memory.audioByteLength - removedSegment.audioByteLength),
-    attachmentCount: Math.max(0, memory.attachmentCount - removedSegment.attachmentCount),
+    supplementCount: Math.max(0, memory.supplementCount - removedSegment.supplementCount),
     durationMs: Math.max(0, memory.durationMs - removedSegment.durationMs),
     segmentCount: Math.max(0, memory.segmentCount - 1),
   };
@@ -55,7 +55,7 @@ export function memorySummaryWithVisibleSegments(
   return {
     ...memory,
     audioByteLength: visibleSegments.reduce((total, segment) => total + segment.audioByteLength, 0),
-    attachmentCount: visibleSegments.reduce((total, segment) => total + segment.attachmentCount, 0),
+    supplementCount: visibleSegments.reduce((total, segment) => total + segment.supplementCount, 0),
     durationMs: visibleSegments.reduce((total, segment) => total + segment.durationMs, 0),
     hasTranscript: visibleSegments.some((segment) => segment.transcript.exists),
     segmentCount: visibleSegments.length,
@@ -72,7 +72,7 @@ export function memorySummaryAfterSegmentRestore({
   return {
     ...memory,
     audioByteLength: memory.audioByteLength + restoredSegment.audioByteLength,
-    attachmentCount: memory.attachmentCount + restoredSegment.attachmentCount,
+    supplementCount: memory.supplementCount + restoredSegment.supplementCount,
     durationMs: memory.durationMs + restoredSegment.durationMs,
     hasTranscript: memory.hasTranscript || restoredSegment.transcript.exists,
     segmentCount: memory.segmentCount + 1,
@@ -111,7 +111,7 @@ export function memorySummaryWithPendingSegmentDelete(
   });
   const memoryMatchesDeleteBase =
     memory.audioByteLength === projection.memoryBeforeDelete.audioByteLength &&
-    memory.attachmentCount === projection.memoryBeforeDelete.attachmentCount &&
+    memory.supplementCount === projection.memoryBeforeDelete.supplementCount &&
     memory.durationMs === projection.memoryBeforeDelete.durationMs &&
     memory.segmentCount === projection.memoryBeforeDelete.segmentCount &&
     memory.updatedAt === projection.memoryBeforeDelete.updatedAt;
@@ -178,7 +178,7 @@ export function queryKeyMatchesPendingSegmentDelete(
     return memoryId === projection.memoryId && segmentId === projection.segmentId;
   }
 
-  if (kind === 'segment-attachment-content') {
+  if (kind === 'segment-supplement-content') {
     return memoryId === projection.memoryId && segmentId === projection.segmentId;
   }
 

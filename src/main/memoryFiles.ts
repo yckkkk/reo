@@ -23,8 +23,8 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
   isUnsupportedDirectoryFsync,
+  writeWorkspaceFileAtomic,
   writeWorkspaceFileAtomicInKnownDirectory,
-  writeWorkspaceJsonAtomicInKnownDirectory,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
 import {
@@ -37,26 +37,26 @@ import {
 } from './directoryIdentity.js';
 import {
   getWorkspaceIndexPath,
-  resolveWorkspaceDraftAttachmentDirectory,
+  resolveWorkspaceDraftSupplementDirectory,
   resolveWorkspaceDraftSegmentDirectory,
 } from './workspacePaths.js';
 import {
-  draftSegmentAttachmentMetadataSchema,
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from './workspaceMarkdownObjects.js';
+import {
+  draftSegmentSupplementMetadataSchema,
   draftSegmentMetadataSchema,
-  finalizedSegmentAttachmentMetadataSchema,
-  finalizedSegmentMetadataSchema,
-  ATTACHMENT_ID_PATTERN,
+  SUPPLEMENT_ID_PATTERN,
   MEMORY_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   isSafeWorkspaceDirectoryName,
   workspaceError,
   workspaceMemorySummarySchema,
-  type FinalizedSegmentAttachmentMetadata,
-  type FinalizedSegmentMetadata,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
   type WorkspaceMemoryDetailProjection,
-  type WorkspaceSegmentAttachmentProjection,
+  type WorkspaceSegmentSupplementProjection,
   type WorkspaceSegmentProjection,
 } from '../workspace-contract/workspace-contract.js';
 
@@ -64,7 +64,7 @@ const FINALIZE_STAGING_PREFIX = '.reo-finalizing-';
 const FINALIZE_TRANSACTION_MARKER = '.reo-finalize-transaction.json';
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
 const DRAFT_RECORDING_FILES = new Set(['audio.webm', 'segment.json', 'transcript.md']);
-const DRAFT_ATTACHMENT_FILES = new Set(['audio.webm', 'attachment.json', 'transcript.md']);
+const DRAFT_SUPPLEMENT_FILES = new Set(['audio.webm', 'supplement.json', 'transcript.md']);
 const COPY_BUFFER_BYTES = 1_048_576;
 const fsyncDescriptor = promisify(fsyncCallback);
 const readDescriptor = promisify(readCallback);
@@ -94,12 +94,60 @@ function finalizeFailureRetention(error: unknown): WorkspaceError['dataRetention
     : 'draft-preserved';
 }
 
-export interface MemoryJson {
+export interface MemoryFileTruth {
   readonly memoryId: string;
   readonly title: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly segmentIds: readonly string[];
+}
+
+interface MemoryObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'memory';
+  readonly memoryId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+interface SegmentObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'segment';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly kind: 'audio';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly durationMs: number;
+  readonly nextSequence: number;
+  readonly audioByteLength: number;
+}
+
+interface SupplementObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'supplement';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly kind: 'audio';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly durationMs: number;
+  readonly nextSequence: number;
+  readonly audioByteLength: number;
+}
+
+interface FinalizedSegmentSemanticTruth extends SegmentObjectManifest {
+  readonly title: string;
+  readonly markdownContent: string;
+}
+
+interface FinalizedSupplementSemanticTruth extends SupplementObjectManifest {
+  readonly title: string;
+  readonly markdownContent: string;
 }
 
 export interface MemorySummary {
@@ -111,7 +159,7 @@ export interface MemorySummary {
   readonly durationMs: number;
   readonly audioByteLength: number;
   readonly hasTranscript: boolean;
-  readonly attachmentCount: number;
+  readonly supplementCount: number;
 }
 
 export interface MemorySegmentSummary {
@@ -125,12 +173,12 @@ interface FinalizedSegmentFileTruth {
   readonly segmentId: string;
   readonly recordingDirectory: string;
   readonly recordingDirectoryIdentity: DirectoryIdentity;
-  readonly metadata: FinalizedSegmentMetadata;
+  readonly metadata: FinalizedSegmentSemanticTruth;
   readonly audioByteLength: number;
 }
 
-export interface SegmentAttachmentSummary {
-  readonly attachmentId: string;
+export interface SegmentSupplementSummary {
+  readonly supplementId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly audioByteLength: number;
@@ -209,12 +257,12 @@ export interface CreateMemoryInput {
 
 export type AppendAudioSegmentToMemoryInput = CreateMemoryForAudioSegmentInput;
 
-export interface AppendAudioAttachmentToSegmentInput {
+export interface AppendAudioSupplementToSegmentInput {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly attachmentId: string;
+  readonly supplementId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly now: () => string;
@@ -248,10 +296,10 @@ export interface UpdateSegmentTitleInput extends MemoryTargetInput {
   readonly now: () => string;
 }
 
-export interface UpdateSegmentAttachmentTitleInput extends MemoryTargetInput {
+export interface UpdateSegmentSupplementTitleInput extends MemoryTargetInput {
   readonly workspaceId: string;
   readonly segmentId: string;
-  readonly attachmentId: string;
+  readonly supplementId: string;
   readonly title: string;
 }
 
@@ -260,8 +308,8 @@ export interface SegmentTargetInput extends MemoryTargetInput {
   readonly segmentId: string;
 }
 
-export interface SegmentAttachmentTargetInput extends SegmentTargetInput {
-  readonly attachmentId: string;
+export interface SegmentSupplementTargetInput extends SegmentTargetInput {
+  readonly supplementId: string;
 }
 
 type MemoryFilesResult<T> = { readonly ok: true; readonly value: T } | WorkspaceErrorEnvelope;
@@ -390,7 +438,7 @@ function updateSegmentTitleError(error: unknown): WorkspaceErrorEnvelope {
   );
 }
 
-function updateSegmentAttachmentTitleError(error: unknown): WorkspaceErrorEnvelope {
+function updateSegmentSupplementTitleError(error: unknown): WorkspaceErrorEnvelope {
   if (error instanceof WorkspaceHandleLost) {
     return error.envelope;
   }
@@ -398,7 +446,7 @@ function updateSegmentAttachmentTitleError(error: unknown): WorkspaceErrorEnvelo
   if (error instanceof FileWrittenIndexStale) {
     return workspaceError(
       'ERR_MEMORY_UPDATE_FAILED',
-      'Segment attachment title was updated but the memory index is stale',
+      'Segment supplement title was updated but the memory index is stale',
       'file-written-index-stale'
     );
   }
@@ -406,12 +454,12 @@ function updateSegmentAttachmentTitleError(error: unknown): WorkspaceErrorEnvelo
   if (
     isMissingFileError(error) ||
     (error instanceof Error &&
-      (error.message === 'Invalid segment attachment id' ||
-        error.message === 'Finalized segment attachment projection does not match file truth'))
+      (error.message === 'Invalid segment supplement id' ||
+        error.message === 'Finalized segment supplement projection does not match file truth'))
   ) {
     return workspaceError(
       'ERR_RECORDING_NOT_FOUND',
-      'Segment attachment not found',
+      'Segment supplement not found',
       'none-written'
     );
   }
@@ -419,14 +467,14 @@ function updateSegmentAttachmentTitleError(error: unknown): WorkspaceErrorEnvelo
   if (isUnsafeWorkspacePathError(error)) {
     return workspaceError(
       'ERR_WORKSPACE_UNSAFE_PATH',
-      'Segment attachment path is unsafe',
+      'Segment supplement path is unsafe',
       'previous-file-preserved'
     );
   }
 
   return workspaceError(
     'ERR_MEMORY_UPDATE_FAILED',
-    'Segment attachment title could not be updated',
+    'Segment supplement title could not be updated',
     'previous-file-preserved'
   );
 }
@@ -498,7 +546,7 @@ function segmentRestoreError(
   );
 }
 
-function segmentAttachmentDeleteError(
+function segmentSupplementDeleteError(
   error: unknown,
   dataRetention: WorkspaceError['dataRetention']
 ): WorkspaceErrorEnvelope {
@@ -515,12 +563,12 @@ function segmentAttachmentDeleteError(
   if (
     isMissingFileError(error) ||
     (error instanceof Error &&
-      (error.message === 'Invalid segment attachment id' ||
-        error.message === 'Finalized segment attachment projection does not match file truth'))
+      (error.message === 'Invalid segment supplement id' ||
+        error.message === 'Finalized segment supplement projection does not match file truth'))
   ) {
     return workspaceError(
       'ERR_RECORDING_NOT_FOUND',
-      'Segment attachment not found',
+      'Segment supplement not found',
       'none-written'
     );
   }
@@ -528,19 +576,19 @@ function segmentAttachmentDeleteError(
   if (isUnsafeWorkspacePathError(error)) {
     return workspaceError(
       'ERR_WORKSPACE_UNSAFE_PATH',
-      'Segment attachment path is unsafe',
+      'Segment supplement path is unsafe',
       dataRetention
     );
   }
 
   return workspaceError(
-    'ERR_SEGMENT_ATTACHMENT_DELETE_FAILED',
-    'Segment attachment could not be deleted',
+    'ERR_SEGMENT_SUPPLEMENT_DELETE_FAILED',
+    'Segment supplement could not be deleted',
     dataRetention
   );
 }
 
-function segmentAttachmentRestoreError(
+function segmentSupplementRestoreError(
   error: unknown,
   dataRetention: WorkspaceError['dataRetention']
 ): WorkspaceErrorEnvelope {
@@ -554,18 +602,18 @@ function segmentAttachmentRestoreError(
     };
   }
 
-  if (error instanceof Error && error.message === 'Segment attachment restore parent missing') {
+  if (error instanceof Error && error.message === 'Segment supplement restore parent missing') {
     return workspaceError(
-      'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING',
-      'Deleted SegmentAttachment parent Memory or Segment is missing',
+      'ERR_SEGMENT_SUPPLEMENT_RESTORE_PARENT_MISSING',
+      'Deleted SegmentSupplement parent Memory or Segment is missing',
       'previous-file-preserved'
     );
   }
 
-  if (error instanceof Error && error.message === 'Invalid segment attachment id') {
+  if (error instanceof Error && error.message === 'Invalid segment supplement id') {
     return workspaceError(
       'ERR_RECORDING_NOT_FOUND',
-      'Segment attachment not found',
+      'Segment supplement not found',
       'none-written'
     );
   }
@@ -573,25 +621,60 @@ function segmentAttachmentRestoreError(
   if (isUnsafeWorkspacePathError(error)) {
     return workspaceError(
       'ERR_WORKSPACE_UNSAFE_PATH',
-      'Segment attachment path is unsafe',
+      'Segment supplement path is unsafe',
       dataRetention
     );
   }
 
   return workspaceError(
-    'ERR_SEGMENT_ATTACHMENT_RESTORE_FAILED',
-    'Deleted SegmentAttachment could not be restored',
+    'ERR_SEGMENT_SUPPLEMENT_RESTORE_FAILED',
+    'Deleted SegmentSupplement could not be restored',
     dataRetention
   );
 }
 
-const memoryJsonSchema = z
+const memoryObjectManifestSchema = z
   .object({
+    schemaVersion: z.literal(1),
+    objectType: z.literal('memory'),
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
-    title: z.string(),
     createdAt: z.string(),
     updatedAt: z.string(),
-    segmentIds: z.array(z.string().regex(SEGMENT_ID_PATTERN)),
+  })
+  .strict();
+
+const segmentObjectManifestSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    objectType: z.literal('segment'),
+    workspaceId: z.string().min(1),
+    memoryId: z.string().regex(MEMORY_ID_PATTERN),
+    segmentId: z.string().regex(SEGMENT_ID_PATTERN),
+    kind: z.literal('audio'),
+    createdAt: z.string(),
+    finalizedAt: z.string(),
+    updatedAt: z.string(),
+    durationMs: z.number().int().nonnegative(),
+    nextSequence: z.number().int().nonnegative(),
+    audioByteLength: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const supplementObjectManifestSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    objectType: z.literal('supplement'),
+    workspaceId: z.string().min(1),
+    memoryId: z.string().regex(MEMORY_ID_PATTERN),
+    segmentId: z.string().regex(SEGMENT_ID_PATTERN),
+    supplementId: z.string().regex(SUPPLEMENT_ID_PATTERN),
+    kind: z.literal('audio'),
+    createdAt: z.string(),
+    finalizedAt: z.string(),
+    updatedAt: z.string(),
+    durationMs: z.number().int().nonnegative(),
+    nextSequence: z.number().int().nonnegative(),
+    audioByteLength: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -830,6 +913,10 @@ function fileSpaceNodeDirectoryName(nodeId: string, title: string): string {
   return `${nodeId}--${trimmedTitle}`;
 }
 
+function fileSpaceNodeDirectoryNameMatchesId(directoryName: string, nodeId: string): boolean {
+  return directoryName === nodeId || directoryName.startsWith(`${nodeId}--`);
+}
+
 function titleFromFileSpaceDirectoryName({
   nodeId,
   directoryName,
@@ -848,6 +935,227 @@ function titleFromFileSpaceDirectoryName({
     return title || metadataTitle;
   }
   return directoryName;
+}
+
+async function ensureWorkspaceObjectsDirectory(
+  rootPath: string,
+  assertUsable?: AssertWorkspaceUsable
+): Promise<string> {
+  const reoDirectory = await resolveSafeWorkspaceChild(rootPath, path.join(rootPath, '.reo'));
+  await assertSafeExistingDirectory(reoDirectory, 'Workspace .reo directory is not safe');
+  assertWorkspaceUsable(assertUsable);
+  createWorkspaceDirectoryWithinParent({
+    parentDirectory: reoDirectory,
+    directoryName: 'objects',
+    allowExisting: true,
+    ...(assertUsable ? { beforeCommit: () => assertWorkspaceUsable(assertUsable) } : {}),
+  });
+  return path.join(reoDirectory, 'objects');
+}
+
+async function ensureWorkspaceObjectKindDirectory({
+  assertUsable,
+  kind,
+  rootPath,
+}: {
+  readonly assertUsable?: AssertWorkspaceUsable;
+  readonly kind: 'memories' | 'segments' | 'supplements';
+  readonly rootPath: string;
+}): Promise<string> {
+  const objectsDirectory = await ensureWorkspaceObjectsDirectory(rootPath, assertUsable);
+  assertWorkspaceUsable(assertUsable);
+  createWorkspaceDirectoryWithinParent({
+    parentDirectory: objectsDirectory,
+    directoryName: kind,
+    allowExisting: true,
+    ...(assertUsable ? { beforeCommit: () => assertWorkspaceUsable(assertUsable) } : {}),
+  });
+  return path.join(objectsDirectory, kind);
+}
+
+async function workspaceObjectManifestPath(
+  rootPath: string,
+  kind: 'memories' | 'segments' | 'supplements',
+  objectId: string
+): Promise<string> {
+  const objectsDirectory = await resolveSafeWorkspaceChild(
+    rootPath,
+    path.join(rootPath, '.reo', 'objects', kind)
+  );
+  return resolveSafeWorkspaceChild(rootPath, path.join(objectsDirectory, `${objectId}.json`));
+}
+
+async function memoryObjectManifestPath(rootPath: string, memoryId: string): Promise<string> {
+  return workspaceObjectManifestPath(rootPath, 'memories', memoryId);
+}
+
+async function segmentObjectManifestPath(rootPath: string, segmentId: string): Promise<string> {
+  return workspaceObjectManifestPath(rootPath, 'segments', segmentId);
+}
+
+async function supplementObjectManifestPath(
+  rootPath: string,
+  supplementId: string
+): Promise<string> {
+  return workspaceObjectManifestPath(rootPath, 'supplements', supplementId);
+}
+
+function renderMemoryMarkdown(title: string): string {
+  return renderWorkspaceMarkdownObject({
+    objectType: 'memory',
+    data: { title },
+    content: `# ${title}\n`,
+  });
+}
+
+function segmentMarkdownContent({
+  title,
+  transcript = '',
+}: {
+  readonly title: string;
+  readonly transcript?: string;
+}): string {
+  return `# ${title}\n\n## Transcript\n\n${transcript}`;
+}
+
+function renderSegmentMarkdown({
+  title,
+  transcript,
+}: {
+  readonly title: string;
+  readonly transcript?: string;
+}): string {
+  return renderWorkspaceMarkdownObject({
+    objectType: 'segment',
+    data: { title, kind: 'audio' },
+    content: segmentMarkdownContent({
+      title,
+      ...(transcript !== undefined ? { transcript } : {}),
+    }),
+  });
+}
+
+function renderSupplementMarkdown({
+  title,
+  transcript,
+}: {
+  readonly title: string;
+  readonly transcript?: string;
+}): string {
+  return renderWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    data: { title, kind: 'audio' },
+    content: segmentMarkdownContent({
+      title,
+      ...(transcript !== undefined ? { transcript } : {}),
+    }),
+  });
+}
+
+export function extractSegmentTranscript(markdownContent: string): string {
+  const heading = /^## Transcript[ \t]*(?:\r?\n|$)/m.exec(markdownContent);
+  if (!heading) {
+    return '';
+  }
+  const bodyStart = heading.index + heading[0].length;
+  const remaining = markdownContent.slice(bodyStart);
+  const nextHeading = /^##\s+/m.exec(remaining);
+  const body = nextHeading ? remaining.slice(0, nextHeading.index) : remaining;
+  return body.replace(/^\r?\n/, '').replace(/\s+$/, '');
+}
+
+export function replaceSegmentTranscript(markdownContent: string, transcript: string): string {
+  const replacement = `## Transcript\n\n${transcript}`;
+  const heading = /^## Transcript[ \t]*(?:\r?\n|$)/m.exec(markdownContent);
+  if (heading) {
+    const bodyStart = heading.index + heading[0].length;
+    const remaining = markdownContent.slice(bodyStart);
+    const nextHeading = /^##\s+/m.exec(remaining);
+    const bodyEnd = nextHeading ? bodyStart + nextHeading.index : markdownContent.length;
+    return `${markdownContent.slice(0, heading.index)}${replacement}${markdownContent.slice(bodyEnd)}`;
+  }
+  const trimmed = markdownContent.replace(/\s+$/, '');
+  return `${trimmed}\n\n${replacement}`;
+}
+
+async function writeMemoryMarkdownAndManifest({
+  assertUsable,
+  memory,
+  memoryDirectoryPath,
+  rootPath,
+}: {
+  readonly assertUsable?: AssertWorkspaceUsable;
+  readonly memory: MemoryObjectManifest & { readonly title: string };
+  readonly memoryDirectoryPath: string;
+  readonly rootPath: string;
+}): Promise<void> {
+  await ensureWorkspaceObjectKindDirectory({
+    rootPath,
+    kind: 'memories',
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceFileAtomic(
+    path.join(memoryDirectoryPath, 'memory.md'),
+    renderMemoryMarkdown(memory.title),
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceJsonAtomic(
+    await memoryObjectManifestPath(rootPath, memory.memoryId),
+    {
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId: memory.memoryId,
+      createdAt: memory.createdAt,
+      updatedAt: memory.updatedAt,
+    },
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
+}
+
+async function writeSegmentObjectManifest({
+  rootPath,
+  segment,
+  assertUsable,
+}: {
+  readonly rootPath: string;
+  readonly segment: SegmentObjectManifest;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<void> {
+  await ensureWorkspaceObjectKindDirectory({
+    rootPath,
+    kind: 'segments',
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceJsonAtomic(
+    await segmentObjectManifestPath(rootPath, segment.segmentId),
+    segment,
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
+}
+
+async function writeSupplementObjectManifest({
+  rootPath,
+  supplement,
+  assertUsable,
+}: {
+  readonly rootPath: string;
+  readonly supplement: SupplementObjectManifest;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<void> {
+  await ensureWorkspaceObjectKindDirectory({
+    rootPath,
+    kind: 'supplements',
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceJsonAtomic(
+    await supplementObjectManifestPath(rootPath, supplement.supplementId),
+    supplement,
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
 }
 
 function latestIsoTimestamp(...timestamps: readonly string[]): string {
@@ -876,57 +1184,6 @@ async function touchWorkspacePathBestEffort(targetPath: string, timestamp: strin
   await utimes(targetPath, date, date).catch(() => {});
 }
 
-function mergeSegmentIdsFromFileTruth(
-  metadataSegmentIds: readonly string[],
-  fileTruthSegmentIds: readonly string[]
-): string[] {
-  const fileTruthSet = new Set(fileTruthSegmentIds);
-  const merged = metadataSegmentIds.filter((segmentId) => fileTruthSet.has(segmentId));
-  const mergedSet = new Set(merged);
-  for (const segmentId of fileTruthSegmentIds) {
-    if (!mergedSet.has(segmentId)) {
-      merged.push(segmentId);
-      mergedSet.add(segmentId);
-    }
-  }
-  return merged;
-}
-
-function sameSegmentIds(first: readonly string[], second: readonly string[]): boolean {
-  return (
-    first.length === second.length && first.every((segmentId, index) => segmentId === second[index])
-  );
-}
-
-async function writeMemorySegmentIdsMirror({
-  rootPath,
-  memoryId,
-  memory,
-  segmentIds,
-  assertUsable,
-}: {
-  readonly rootPath: string;
-  readonly memoryId: string;
-  readonly memory: MemoryJson;
-  readonly segmentIds: readonly string[];
-  readonly assertUsable?: AssertWorkspaceUsable;
-}): Promise<MemoryJson> {
-  if (sameSegmentIds(memory.segmentIds, segmentIds)) {
-    return memory;
-  }
-
-  const nextMemory = {
-    ...memory,
-    segmentIds,
-  };
-  await writeWorkspaceJsonAtomic(
-    path.join(await memoryDirectory(rootPath, memoryId), 'memory.json'),
-    nextMemory,
-    () => assertWorkspaceUsable(assertUsable)
-  );
-  return nextMemory;
-}
-
 async function hasFinalizeTransactionMarker(recordingDirectory: string): Promise<boolean> {
   try {
     const marker = await lstat(path.join(recordingDirectory, FINALIZE_TRANSACTION_MARKER));
@@ -938,14 +1195,14 @@ async function hasFinalizeTransactionMarker(recordingDirectory: string): Promise
 
 async function finalizedPayloadExists(directory: string): Promise<boolean> {
   return (
-    (await exists(path.join(directory, 'segment.json'))) ||
+    (await exists(path.join(directory, 'segment.md'))) ||
     (await exists(path.join(directory, 'audio.webm')))
   );
 }
 
-async function finalizedAttachmentPayloadExists(directory: string): Promise<boolean> {
+async function finalizedSupplementPayloadExists(directory: string): Promise<boolean> {
   return (
-    (await exists(path.join(directory, 'attachment.json'))) ||
+    (await exists(path.join(directory, 'supplement.md'))) ||
     (await exists(path.join(directory, 'audio.webm')))
   );
 }
@@ -1040,17 +1297,30 @@ async function fsyncDirectoryTree(directoryPath: string): Promise<void> {
   await fsyncWorkspaceDirectory(directoryPath);
 }
 
-async function readMemoryJsonFromDirectory(directory: string): Promise<MemoryJson> {
-  const memory = memoryJsonSchema.parse(
-    JSON.parse(await readWorkspaceTextFile(path.join(directory, 'memory.json')))
+async function readMemoryFileTruthFromDirectory(
+  rootPath: string,
+  directory: string
+): Promise<MemoryFileTruth> {
+  const directoryName = path.basename(directory);
+  const memoryId = directoryName.split('--')[0] ?? '';
+  if (!MEMORY_ID_PATTERN.test(memoryId)) {
+    throw new Error('Invalid memory id');
+  }
+  const manifest = memoryObjectManifestSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(await memoryObjectManifestPath(rootPath, memoryId)))
   );
+  if (manifest.memoryId !== memoryId) {
+    throw new Error('Memory manifest does not match file truth');
+  }
+  const object = parseWorkspaceMarkdownObject({
+    objectType: 'memory',
+    markdown: await readWorkspaceTextFile(path.join(directory, 'memory.md')),
+  });
   return {
-    ...memory,
-    title: titleFromFileSpaceDirectoryName({
-      nodeId: memory.memoryId,
-      directoryName: path.basename(directory),
-      metadataTitle: memory.title,
-    }),
+    memoryId: manifest.memoryId,
+    title: object.data.title,
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt,
   };
 }
 
@@ -1075,12 +1345,15 @@ async function memoryDirectoryInParent({
     if (!entry.isDirectory()) {
       continue;
     }
+    if (!fileSpaceNodeDirectoryNameMatchesId(entry.name, memoryId)) {
+      continue;
+    }
     const candidate = await resolveSafeWorkspaceChild(
       rootPath,
       path.join(safeParentDirectory, entry.name)
     );
     try {
-      const memory = await readMemoryJsonFromDirectory(candidate);
+      const memory = await readMemoryFileTruthFromDirectory(rootPath, candidate);
       if (memory.memoryId === memoryId) {
         matches.push(candidate);
       }
@@ -1364,13 +1637,13 @@ async function ensureSegmentTrashDirectory(
   });
 }
 
-async function ensureSegmentAttachmentTrashDirectory(
+async function ensureSegmentSupplementTrashDirectory(
   rootPath: string,
   assertUsable?: AssertWorkspaceUsable
 ): Promise<string> {
   return ensureTrashNodeDirectory({
-    directoryName: 'attachments',
-    directoryUnsafeMessage: 'Workspace segment attachment trash directory is not safe',
+    directoryName: 'supplements',
+    directoryUnsafeMessage: 'Workspace segment supplement trash directory is not safe',
     rootPath,
     ...(assertUsable ? { assertUsable } : {}),
   });
@@ -1543,10 +1816,10 @@ async function draftSegmentDirectory(rootPath: string, segmentId: string): Promi
   );
 }
 
-async function draftAttachmentDirectory(rootPath: string, attachmentId: string): Promise<string> {
+async function draftSupplementDirectory(rootPath: string, supplementId: string): Promise<string> {
   return resolveSafeWorkspaceChild(
     rootPath,
-    resolveWorkspaceDraftAttachmentDirectory(rootPath, attachmentId)
+    resolveWorkspaceDraftSupplementDirectory(rootPath, supplementId)
   );
 }
 
@@ -1668,7 +1941,7 @@ async function segmentDirectoryInParent({
     defaultDirectoryName,
     duplicateMessage: 'Duplicate finalized segment id',
     matchesCandidate: async (candidate, candidateIdentity) => {
-      const segment = await readFinalizedSegmentMetadata(candidate, candidateIdentity);
+      const segment = await readFinalizedSegmentMetadata(rootPath, candidate, candidateIdentity);
       return segment.memoryId === memoryId && segment.segmentId === segmentId;
     },
     nodeId: segmentId,
@@ -1705,7 +1978,7 @@ async function memorySegmentDirectoryForNewNode(
   );
 }
 
-async function ensureSegmentAttachmentsDirectory({
+async function ensureSegmentSupplementsDirectory({
   rootPath,
   memoryId,
   segmentId,
@@ -1721,19 +1994,19 @@ async function ensureSegmentAttachmentsDirectory({
   assertWorkspaceUsable(assertUsable);
   createWorkspaceDirectoryWithinParent({
     parentDirectory: recordingDirectory,
-    directoryName: 'attachments',
+    directoryName: 'supplements',
     allowExisting: true,
     ...(assertUsable ? { beforeCommit: () => assertWorkspaceUsable(assertUsable) } : {}),
   });
-  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(recordingDirectory, 'attachments')
+    path.join(recordingDirectory, 'supplements')
   );
   await assertSafeExistingDirectory(
-    attachmentsDirectory,
-    'Workspace segment attachments directory is not safe'
+    supplementsDirectory,
+    'Workspace segment supplements directory is not safe'
   );
-  return attachmentsDirectory;
+  return supplementsDirectory;
 }
 
 async function segmentDirectoryExistsInAnyMemory(
@@ -1753,7 +2026,10 @@ async function segmentDirectoryExistsInAnyMemory(
       continue;
     }
     try {
-      const memory = await readMemoryJsonFromDirectory(path.join(memoriesDirectory, entry.name));
+      const memory = await readMemoryFileTruthFromDirectory(
+        rootPath,
+        path.join(memoriesDirectory, entry.name)
+      );
       if (await exists(await memorySegmentDirectory(rootPath, memory.memoryId, segmentId))) {
         return true;
       }
@@ -1782,9 +2058,12 @@ export async function assertNoDuplicateSegmentDirectoryById(
     if (!entry.isDirectory()) {
       continue;
     }
-    let memory: MemoryJson;
+    let memory: MemoryFileTruth;
     try {
-      memory = await readMemoryJsonFromDirectory(path.join(memoriesDirectory, entry.name));
+      memory = await readMemoryFileTruthFromDirectory(
+        rootPath,
+        path.join(memoriesDirectory, entry.name)
+      );
     } catch {
       continue;
     }
@@ -1815,9 +2094,9 @@ export async function assertNoDuplicateSegmentDirectoryById(
   }
 }
 
-async function readMemoryJson(rootPath: string, memoryId: string): Promise<MemoryJson> {
+async function readMemoryFileTruth(rootPath: string, memoryId: string): Promise<MemoryFileTruth> {
   const directory = await memoryDirectory(rootPath, memoryId);
-  const memory = await readMemoryJsonFromDirectory(directory);
+  const memory = await readMemoryFileTruthFromDirectory(rootPath, directory);
   if (memory.memoryId !== memoryId) {
     throw new Error('Memory metadata does not match directory id');
   }
@@ -1847,15 +2126,34 @@ function readFileSizeInKnownDirectory(
   }
 }
 
-function hasNonEmptyFileInKnownDirectory(
+function unlinkFileInKnownDirectory(
   directory: string,
   directoryIdentity: DirectoryIdentity,
   fileName: string
-): boolean {
+): void {
+  const previousCwd = process.cwd();
   try {
-    return readFileSizeInKnownDirectory(directory, directoryIdentity, fileName) > 0;
-  } catch {
-    return false;
+    process.chdir(directory);
+    assertSameCurrentDirectory(directoryIdentity);
+    unlinkSync(fileName);
+    assertSameCurrentDirectory(directoryIdentity);
+    fsyncCurrentDirectoryBestEffort();
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+function unlinkFileInKnownDirectoryIfExists(
+  directory: string,
+  directoryIdentity: DirectoryIdentity,
+  fileName: string
+): void {
+  try {
+    unlinkFileInKnownDirectory(directory, directoryIdentity, fileName);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
   }
 }
 
@@ -1871,11 +2169,7 @@ async function summarizeRecording(
 
   return {
     segmentId,
-    title: titleFromFileSpaceDirectoryName({
-      nodeId: segmentId,
-      directoryName: path.basename(fileTruth.recordingDirectory),
-      metadataTitle: fileTruth.metadata.title,
-    }),
+    title: fileTruth.metadata.title,
     durationMs: fileTruth.metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
   };
@@ -1894,169 +2188,348 @@ async function summarizeValidFinalizedSegmentDirectory(
 }
 
 async function readFinalizedSegmentMetadata(
+  rootPath: string,
   recordingDirectory: string,
   recordingDirectoryIdentity?: DirectoryIdentity
-): Promise<FinalizedSegmentMetadata> {
+): Promise<FinalizedSegmentSemanticTruth> {
   const directoryIdentity =
     recordingDirectoryIdentity ?? (await readDirectoryIdentity(recordingDirectory));
-  return finalizedSegmentMetadataSchema.parse(
+  const directorySegmentId = path.basename(recordingDirectory).split('--')[0] ?? '';
+  if (!SEGMENT_ID_PATTERN.test(directorySegmentId)) {
+    throw new Error('Finalized segment directory does not expose a stable segment id');
+  }
+  const manifest = segmentObjectManifestSchema.parse(
     JSON.parse(
-      readWorkspaceTextFileInKnownDirectory(recordingDirectory, directoryIdentity, 'segment.json')
+      await readWorkspaceTextFile(await segmentObjectManifestPath(rootPath, directorySegmentId))
     )
   );
+  if (
+    manifest.segmentId !== directorySegmentId ||
+    !fileSpaceNodeDirectoryNameMatchesId(path.basename(recordingDirectory), manifest.segmentId)
+  ) {
+    throw new Error('Finalized segment manifest does not match file-space node');
+  }
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: readWorkspaceTextFileInKnownDirectory(
+      recordingDirectory,
+      directoryIdentity,
+      'segment.md'
+    ),
+  });
+  if ('kind' in markdown.data && markdown.data.kind && markdown.data.kind !== 'audio') {
+    throw new Error('Finalized segment markdown kind is unsupported');
+  }
+  return {
+    ...manifest,
+    title: markdown.data.title,
+    markdownContent: markdown.content,
+  };
 }
 
-function readFinalizedSegmentAttachmentMetadata(
-  attachmentDirectory: string,
-  attachmentDirectoryIdentity?: DirectoryIdentity
-): FinalizedSegmentAttachmentMetadata {
+async function writeSegmentMarkdownInKnownDirectory({
+  directory,
+  directoryIdentity,
+  title,
+  transcript,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly title: string;
+  readonly transcript?: string;
+}): Promise<void> {
+  await writeWorkspaceFileAtomicInKnownDirectory({
+    directory,
+    directoryIdentity,
+    fileName: 'segment.md',
+    data: renderSegmentMarkdown({
+      title,
+      ...(transcript !== undefined ? { transcript } : {}),
+    }),
+  });
+}
+
+async function updateSegmentMarkdownInKnownDirectory({
+  directory,
+  directoryIdentity,
+  update,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly update: (current: { readonly title: string; readonly content: string }) => {
+    readonly title: string;
+    readonly content: string;
+  };
+}): Promise<void> {
+  const current = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: readWorkspaceTextFileInKnownDirectory(directory, directoryIdentity, 'segment.md'),
+  });
+  if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
+    throw new Error('Finalized segment markdown kind is unsupported');
+  }
+  const next = update({ title: current.data.title, content: current.content });
+  const currentData = current.data as { readonly kind?: 'audio' };
+  await writeWorkspaceFileAtomicInKnownDirectory({
+    directory,
+    directoryIdentity,
+    fileName: 'segment.md',
+    data: renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: {
+        ...current.data,
+        title: next.title,
+        kind: currentData.kind ?? 'audio',
+      },
+      content: next.content,
+    }),
+  });
+}
+
+async function writeSupplementMarkdownInKnownDirectory({
+  directory,
+  directoryIdentity,
+  title,
+  transcript,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly title: string;
+  readonly transcript?: string;
+}): Promise<void> {
+  await writeWorkspaceFileAtomicInKnownDirectory({
+    directory,
+    directoryIdentity,
+    fileName: 'supplement.md',
+    data: renderSupplementMarkdown({
+      title,
+      ...(transcript !== undefined ? { transcript } : {}),
+    }),
+  });
+}
+
+async function updateSupplementMarkdownInKnownDirectory({
+  directory,
+  directoryIdentity,
+  update,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly update: (current: { readonly title: string; readonly content: string }) => {
+    readonly title: string;
+    readonly content: string;
+  };
+}): Promise<void> {
+  const current = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: readWorkspaceTextFileInKnownDirectory(directory, directoryIdentity, 'supplement.md'),
+  });
+  if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
+    throw new Error('Finalized supplement markdown kind is unsupported');
+  }
+  const next = update({ title: current.data.title, content: current.content });
+  const currentData = current.data as { readonly kind?: 'audio' };
+  await writeWorkspaceFileAtomicInKnownDirectory({
+    directory,
+    directoryIdentity,
+    fileName: 'supplement.md',
+    data: renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: {
+        ...current.data,
+        title: next.title,
+        kind: currentData.kind ?? 'audio',
+      },
+      content: next.content,
+    }),
+  });
+}
+
+async function readFinalizedSegmentSupplementMetadata(
+  rootPath: string,
+  supplementDirectory: string,
+  supplementDirectoryIdentity?: DirectoryIdentity
+): Promise<FinalizedSupplementSemanticTruth> {
   const directoryIdentity =
-    attachmentDirectoryIdentity ?? readDirectoryIdentitySync(attachmentDirectory);
-  return finalizedSegmentAttachmentMetadataSchema.parse(
+    supplementDirectoryIdentity ?? readDirectoryIdentitySync(supplementDirectory);
+  const directorySupplementId = path.basename(supplementDirectory).split('--')[0] ?? '';
+  if (!SUPPLEMENT_ID_PATTERN.test(directorySupplementId)) {
+    throw new Error(
+      'Finalized segment supplement directory does not expose a stable supplement id'
+    );
+  }
+  const manifest = supplementObjectManifestSchema.parse(
     JSON.parse(
-      readWorkspaceTextFileInKnownDirectory(
-        attachmentDirectory,
-        directoryIdentity,
-        'attachment.json'
+      await readWorkspaceTextFile(
+        await supplementObjectManifestPath(rootPath, directorySupplementId)
       )
     )
   );
+  if (
+    manifest.supplementId !== directorySupplementId ||
+    !fileSpaceNodeDirectoryNameMatchesId(path.basename(supplementDirectory), manifest.supplementId)
+  ) {
+    throw new Error('Finalized supplement manifest does not match file-space node');
+  }
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: readWorkspaceTextFileInKnownDirectory(
+      supplementDirectory,
+      directoryIdentity,
+      'supplement.md'
+    ),
+  });
+  if ('kind' in markdown.data && markdown.data.kind && markdown.data.kind !== 'audio') {
+    throw new Error('Finalized supplement markdown kind is unsupported');
+  }
+  return {
+    ...manifest,
+    title: markdown.data.title,
+    markdownContent: markdown.content,
+  };
 }
 
-async function segmentAttachmentsDirectory(
+async function segmentSupplementsDirectory(
   rootPath: string,
   memoryId: string,
   segmentId: string
 ): Promise<string> {
   const recordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
-  return path.join(recordingDirectory, 'attachments');
+  return path.join(recordingDirectory, 'supplements');
 }
 
-export async function segmentAttachmentDirectory(
+export async function segmentSupplementDirectory(
   rootPath: string,
   memoryId: string,
   segmentId: string,
-  attachmentId: string
+  supplementId: string
 ): Promise<string> {
-  if (!ATTACHMENT_ID_PATTERN.test(attachmentId)) {
-    throw new Error('Invalid segment attachment id');
+  if (!SUPPLEMENT_ID_PATTERN.test(supplementId)) {
+    throw new Error('Invalid segment supplement id');
   }
-  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    await segmentAttachmentsDirectory(rootPath, memoryId, segmentId)
+    await segmentSupplementsDirectory(rootPath, memoryId, segmentId)
   );
   return findFileSpaceNodeDirectoryInParent({
-    defaultDirectoryName: attachmentId,
-    duplicateMessage: 'Duplicate segment attachment id',
-    matchesCandidate: (candidate, candidateIdentity) => {
-      const attachment = readFinalizedSegmentAttachmentMetadata(candidate, candidateIdentity);
+    defaultDirectoryName: supplementId,
+    duplicateMessage: 'Duplicate segment supplement id',
+    matchesCandidate: async (candidate, candidateIdentity) => {
+      const supplement = await readFinalizedSegmentSupplementMetadata(
+        rootPath,
+        candidate,
+        candidateIdentity
+      );
       return (
-        attachment.memoryId === memoryId &&
-        attachment.segmentId === segmentId &&
-        attachment.attachmentId === attachmentId
+        supplement.memoryId === memoryId &&
+        supplement.segmentId === segmentId &&
+        supplement.supplementId === supplementId
       );
     },
-    nodeId: attachmentId,
-    parentDirectory: attachmentsDirectory,
+    nodeId: supplementId,
+    parentDirectory: supplementsDirectory,
     rootPath,
-    unsafeMessage: 'Workspace segment attachment directory is not safe',
+    unsafeMessage: 'Workspace segment supplement directory is not safe',
   });
 }
 
-async function trashedSegmentAttachmentDirectory(
+async function trashedSegmentSupplementDirectory(
   rootPath: string,
   memoryId: string,
   segmentId: string,
-  attachmentId: string
+  supplementId: string
 ): Promise<string> {
-  if (!ATTACHMENT_ID_PATTERN.test(attachmentId)) {
-    throw new Error('Invalid segment attachment id');
+  if (!SUPPLEMENT_ID_PATTERN.test(supplementId)) {
+    throw new Error('Invalid segment supplement id');
   }
   return findFileSpaceNodeDirectoryInParent({
-    defaultDirectoryName: attachmentId,
-    duplicateMessage: 'Duplicate deleted segment attachment id',
-    matchesCandidate: (candidate, candidateIdentity) => {
-      const attachment = readFinalizedSegmentAttachmentMetadata(candidate, candidateIdentity);
+    defaultDirectoryName: supplementId,
+    duplicateMessage: 'Duplicate deleted segment supplement id',
+    matchesCandidate: async (candidate, candidateIdentity) => {
+      const supplement = await readFinalizedSegmentSupplementMetadata(
+        rootPath,
+        candidate,
+        candidateIdentity
+      );
       return (
-        attachment.memoryId === memoryId &&
-        attachment.segmentId === segmentId &&
-        attachment.attachmentId === attachmentId
+        supplement.memoryId === memoryId &&
+        supplement.segmentId === segmentId &&
+        supplement.supplementId === supplementId
       );
     },
-    nodeId: attachmentId,
-    parentDirectory: path.join(rootPath, '.reo', 'trash', 'attachments'),
+    nodeId: supplementId,
+    parentDirectory: path.join(rootPath, '.reo', 'trash', 'supplements'),
     rootPath,
-    unsafeMessage: 'Workspace segment attachment trash directory is not safe',
+    unsafeMessage: 'Workspace segment supplement trash directory is not safe',
   });
 }
 
-async function segmentAttachmentDirectoryForNewNode(
+async function segmentSupplementDirectoryForNewNode(
   rootPath: string,
   memoryId: string,
   segmentId: string,
-  attachmentId: string,
+  supplementId: string,
   title: string
 ): Promise<string> {
-  const attachmentsDirectory = await segmentAttachmentsDirectory(rootPath, memoryId, segmentId);
+  const supplementsDirectory = await segmentSupplementsDirectory(rootPath, memoryId, segmentId);
   return resolveSafeWorkspaceChild(
     rootPath,
-    path.join(attachmentsDirectory, fileSpaceNodeDirectoryName(attachmentId, title))
+    path.join(supplementsDirectory, fileSpaceNodeDirectoryName(supplementId, title))
   );
 }
 
-function readValidFinalizedAttachmentProjection({
-  attachmentDirectory,
-  attachmentDirectoryIdentity,
+async function readValidFinalizedSupplementProjection({
+  supplementDirectory,
+  supplementDirectoryIdentity,
+  rootPath,
   workspaceId,
   memoryId,
   segmentId,
 }: {
-  readonly attachmentDirectory: string;
-  readonly attachmentDirectoryIdentity: DirectoryIdentity;
+  readonly supplementDirectory: string;
+  readonly supplementDirectoryIdentity: DirectoryIdentity;
+  readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-}): WorkspaceSegmentAttachmentProjection | null {
+}): Promise<WorkspaceSegmentSupplementProjection | null> {
   try {
-    const attachment = readFinalizedSegmentAttachmentMetadata(
-      attachmentDirectory,
-      attachmentDirectoryIdentity
+    const supplement = await readFinalizedSegmentSupplementMetadata(
+      rootPath,
+      supplementDirectory,
+      supplementDirectoryIdentity
     );
     const audioByteLength = readFileSizeInKnownDirectory(
-      attachmentDirectory,
-      attachmentDirectoryIdentity,
+      supplementDirectory,
+      supplementDirectoryIdentity,
       'audio.webm'
     );
     if (
-      attachment.workspaceId !== workspaceId ||
-      attachment.memoryId !== memoryId ||
-      attachment.segmentId !== segmentId ||
-      attachment.audioByteLength !== audioByteLength
+      supplement.workspaceId !== workspaceId ||
+      supplement.memoryId !== memoryId ||
+      supplement.segmentId !== segmentId ||
+      supplement.audioByteLength !== audioByteLength
     ) {
       return null;
     }
-    const updatedAt = attachment.updatedAt ?? attachment.finalizedAt;
+    const updatedAt = supplement.updatedAt ?? supplement.finalizedAt;
     return {
       workspaceId,
       memoryId,
       segmentId,
-      attachmentId: attachment.attachmentId,
+      supplementId: supplement.supplementId,
       type: 'audio',
       title: titleFromFileSpaceDirectoryName({
-        nodeId: attachment.attachmentId,
-        directoryName: path.basename(attachmentDirectory),
-        metadataTitle: attachment.title,
+        nodeId: supplement.supplementId,
+        directoryName: path.basename(supplementDirectory),
+        metadataTitle: supplement.title,
       }),
-      createdAt: attachment.createdAt,
+      createdAt: supplement.createdAt,
       updatedAt,
-      durationMs: attachment.durationMs,
+      durationMs: supplement.durationMs,
       audioByteLength,
       transcript: {
-        exists: hasNonEmptyFileInKnownDirectory(
-          attachmentDirectory,
-          attachmentDirectoryIdentity,
-          'transcript.md'
-        ),
+        exists: extractSegmentTranscript(supplement.markdownContent).trim().length > 0,
       },
     };
   } catch {
@@ -2064,21 +2537,24 @@ function readValidFinalizedAttachmentProjection({
   }
 }
 
-async function readValidFinalizedAttachmentProjectionFromDirectory({
-  attachmentDirectory,
+async function readValidFinalizedSupplementProjectionFromDirectory({
+  supplementDirectory,
+  rootPath,
   workspaceId,
   memoryId,
   segmentId,
 }: {
-  readonly attachmentDirectory: string;
+  readonly supplementDirectory: string;
+  readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-}): Promise<WorkspaceSegmentAttachmentProjection | null> {
+}): Promise<WorkspaceSegmentSupplementProjection | null> {
   try {
-    return readValidFinalizedAttachmentProjection({
-      attachmentDirectory,
-      attachmentDirectoryIdentity: await readDirectoryIdentity(attachmentDirectory),
+    return readValidFinalizedSupplementProjection({
+      supplementDirectory,
+      supplementDirectoryIdentity: await readDirectoryIdentity(supplementDirectory),
+      rootPath,
       workspaceId,
       memoryId,
       segmentId,
@@ -2088,7 +2564,7 @@ async function readValidFinalizedAttachmentProjectionFromDirectory({
   }
 }
 
-async function listValidSegmentAttachmentsFromDirectory({
+async function listValidSegmentSupplementsFromDirectory({
   rootPath,
   workspaceId,
   memoryId,
@@ -2100,18 +2576,18 @@ async function listValidSegmentAttachmentsFromDirectory({
   readonly memoryId: string;
   readonly segmentId: string;
   readonly recordingDirectory: string;
-}): Promise<WorkspaceSegmentAttachmentProjection[]> {
-  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+}): Promise<WorkspaceSegmentSupplementProjection[]> {
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(recordingDirectory, 'attachments')
+    path.join(recordingDirectory, 'supplements')
   );
   let entries: Dirent[];
   try {
-    entries = await readExistingDirectoryEntries(attachmentsDirectory);
+    entries = await readExistingDirectoryEntries(supplementsDirectory);
   } catch {
     return [];
   }
-  const attachments: WorkspaceSegmentAttachmentProjection[] = [];
+  const supplements: WorkspaceSegmentSupplementProjection[] = [];
   const seen = new Set<string>();
   const duplicated = new Set<string>();
   for (const entry of entries) {
@@ -2119,37 +2595,38 @@ async function listValidSegmentAttachmentsFromDirectory({
       continue;
     }
     try {
-      const attachmentDirectory = await resolveSafeWorkspaceChild(
+      const supplementDirectory = await resolveSafeWorkspaceChild(
         rootPath,
-        path.join(attachmentsDirectory, entry.name)
+        path.join(supplementsDirectory, entry.name)
       );
-      await assertSafeExistingDirectory(attachmentDirectory, 'Segment attachment path is not safe');
-      const attachmentDirectoryIdentity = await readDirectoryIdentity(attachmentDirectory);
-      const projection = readValidFinalizedAttachmentProjection({
-        attachmentDirectory,
-        attachmentDirectoryIdentity,
+      await assertSafeExistingDirectory(supplementDirectory, 'Segment supplement path is not safe');
+      const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
+      const projection = await readValidFinalizedSupplementProjection({
+        supplementDirectory,
+        supplementDirectoryIdentity,
+        rootPath,
         workspaceId,
         memoryId,
         segmentId,
       });
       if (projection) {
-        if (seen.has(projection.attachmentId)) {
-          duplicated.add(projection.attachmentId);
+        if (seen.has(projection.supplementId)) {
+          duplicated.add(projection.supplementId);
           continue;
         }
-        seen.add(projection.attachmentId);
-        attachments.push(projection);
+        seen.add(projection.supplementId);
+        supplements.push(projection);
       }
     } catch {
       continue;
     }
   }
   return sortByProjectedUpdatedAt(
-    attachments.filter((attachment) => !duplicated.has(attachment.attachmentId))
+    supplements.filter((supplement) => !duplicated.has(supplement.supplementId))
   );
 }
 
-async function recoverSegmentAttachmentFinalizeTransactions({
+async function recoverSegmentSupplementFinalizeTransactions({
   rootPath,
   workspaceId,
   memoryId,
@@ -2168,62 +2645,64 @@ async function recoverSegmentAttachmentFinalizeTransactions({
   readonly afterDraftCleanup?: () => MaybePromise<void>;
   readonly assertWorkspaceUsable?: () => MaybePromise<void>;
 }): Promise<void> {
-  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(recordingDirectory, 'attachments')
+    path.join(recordingDirectory, 'supplements')
   );
-  const attachmentEntries = await readExistingDirectoryEntries(attachmentsDirectory);
-  for (const attachmentEntry of attachmentEntries) {
-    if (!attachmentEntry.isDirectory()) {
+  const supplementEntries = await readExistingDirectoryEntries(supplementsDirectory);
+  for (const supplementEntry of supplementEntries) {
+    if (!supplementEntry.isDirectory()) {
       continue;
     }
-    const attachmentDirectory = await resolveSafeWorkspaceChild(
+    const supplementDirectory = await resolveSafeWorkspaceChild(
       rootPath,
-      path.join(attachmentsDirectory, attachmentEntry.name)
+      path.join(supplementsDirectory, supplementEntry.name)
     );
-    if (attachmentEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
-      const projection = await readValidFinalizedAttachmentProjectionFromDirectory({
-        attachmentDirectory,
+    if (supplementEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
+      const projection = await readValidFinalizedSupplementProjectionFromDirectory({
+        supplementDirectory,
+        rootPath,
         workspaceId,
         memoryId,
         segmentId,
       });
-      const hasMarker = await hasFinalizeTransactionMarker(attachmentDirectory);
-      const hasPayload = await finalizedAttachmentPayloadExists(attachmentDirectory);
+      const hasMarker = await hasFinalizeTransactionMarker(supplementDirectory);
+      const hasPayload = await finalizedSupplementPayloadExists(supplementDirectory);
       if (projection || (!hasMarker && hasPayload)) {
         continue;
       }
       await beforeRecordingRecoveryRemove?.();
       await assertWorkspaceUsable?.();
-      const removed = await removeSafeWorkspaceDirectory(rootPath, attachmentDirectory);
+      const removed = await removeSafeWorkspaceDirectory(rootPath, supplementDirectory);
       if (removed) {
         await assertWorkspaceUsable?.();
-        await fsyncWorkspaceDirectory(attachmentsDirectory).catch(() => {});
+        await fsyncWorkspaceDirectory(supplementsDirectory).catch(() => {});
       }
       continue;
     }
-    if (!(await hasFinalizeTransactionMarker(attachmentDirectory))) {
+    if (!(await hasFinalizeTransactionMarker(supplementDirectory))) {
       continue;
     }
 
-    const projection = await readValidFinalizedAttachmentProjectionFromDirectory({
-      attachmentDirectory,
+    const projection = await readValidFinalizedSupplementProjectionFromDirectory({
+      supplementDirectory,
+      rootPath,
       workspaceId,
       memoryId,
       segmentId,
     });
-    const attachmentId =
-      projection?.attachmentId ??
-      (await readFinalizedAttachmentIdFromMetadata(attachmentDirectory)) ??
-      (ATTACHMENT_ID_PATTERN.test(attachmentEntry.name) ? attachmentEntry.name : null);
-    const hasPayload = await finalizedAttachmentPayloadExists(attachmentDirectory);
-    if (!projection || !attachmentId) {
+    const supplementId =
+      projection?.supplementId ??
+      (await readFinalizedSupplementIdFromMetadata(rootPath, supplementDirectory)) ??
+      (SUPPLEMENT_ID_PATTERN.test(supplementEntry.name) ? supplementEntry.name : null);
+    const hasPayload = await finalizedSupplementPayloadExists(supplementDirectory);
+    if (!projection || !supplementId) {
       if (hasPayload) {
         continue;
       }
       await beforeRecordingRecoveryRemove?.();
       await assertWorkspaceUsable?.();
-      await removeSafeWorkspaceDirectory(rootPath, attachmentDirectory);
+      await removeSafeWorkspaceDirectory(rootPath, supplementDirectory);
       continue;
     }
 
@@ -2231,49 +2710,49 @@ async function recoverSegmentAttachmentFinalizeTransactions({
       await assertWorkspaceUsable?.();
       const removed = await removeSafeWorkspaceDirectory(
         rootPath,
-        await draftAttachmentDirectory(rootPath, attachmentId),
+        await draftSupplementDirectory(rootPath, supplementId),
         { allowMissing: true }
       );
       if (!removed) {
-        throw new Error('Segment attachment draft cleanup path is not safe');
+        throw new Error('Segment supplement draft cleanup path is not safe');
       }
       await afterDraftCleanup?.();
       await assertWorkspaceUsable?.();
-      await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'attachments')).catch(
+      await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'supplements')).catch(
         () => {}
       );
       await assertWorkspaceUsable?.();
-      await unlinkFinalizeTransactionMarkerInDirectory(attachmentDirectory);
+      await unlinkFinalizeTransactionMarkerInDirectory(supplementDirectory);
     } catch {
       continue;
     }
   }
 }
 
-async function segmentAttachmentRecoveryWorkExists({
+async function segmentSupplementRecoveryWorkExists({
   rootPath,
   recordingDirectory,
 }: {
   readonly rootPath: string;
   readonly recordingDirectory: string;
 }): Promise<boolean> {
-  const attachmentsDirectory = await resolveSafeWorkspaceChild(
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(recordingDirectory, 'attachments')
+    path.join(recordingDirectory, 'supplements')
   );
-  const attachmentEntries = await readExistingDirectoryEntries(attachmentsDirectory);
-  for (const attachmentEntry of attachmentEntries) {
-    if (!attachmentEntry.isDirectory()) {
+  const supplementEntries = await readExistingDirectoryEntries(supplementsDirectory);
+  for (const supplementEntry of supplementEntries) {
+    if (!supplementEntry.isDirectory()) {
       continue;
     }
-    if (attachmentEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
+    if (supplementEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
       return true;
     }
-    const attachmentDirectory = await resolveSafeWorkspaceChild(
+    const supplementDirectory = await resolveSafeWorkspaceChild(
       rootPath,
-      path.join(attachmentsDirectory, attachmentEntry.name)
+      path.join(supplementsDirectory, supplementEntry.name)
     );
-    if (await hasFinalizeTransactionMarker(attachmentDirectory)) {
+    if (await hasFinalizeTransactionMarker(supplementDirectory)) {
       return true;
     }
   }
@@ -2281,10 +2760,12 @@ async function segmentAttachmentRecoveryWorkExists({
 }
 
 async function readValidFinalizedSegmentFileTruthFromDirectory({
+  rootPath,
   recordingDirectory,
   memoryId,
   strictUnsafePath = false,
 }: {
+  readonly rootPath: string;
   readonly recordingDirectory: string;
   readonly memoryId: string;
   readonly strictUnsafePath?: boolean;
@@ -2293,6 +2774,7 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
     await assertSafeExistingDirectory(recordingDirectory, 'Segment directory is not safe');
     const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
     const recording = await readFinalizedSegmentMetadata(
+      rootPath,
       recordingDirectory,
       recordingDirectoryIdentity
     );
@@ -2320,11 +2802,13 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
 }
 
 async function readFinalizedSegmentIdFromMetadata(
+  rootPath: string,
   recordingDirectory: string
 ): Promise<string | null> {
   try {
     const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
     const recording = await readFinalizedSegmentMetadata(
+      rootPath,
       recordingDirectory,
       recordingDirectoryIdentity
     );
@@ -2334,16 +2818,18 @@ async function readFinalizedSegmentIdFromMetadata(
   }
 }
 
-async function readFinalizedAttachmentIdFromMetadata(
-  attachmentDirectory: string
+async function readFinalizedSupplementIdFromMetadata(
+  rootPath: string,
+  supplementDirectory: string
 ): Promise<string | null> {
   try {
-    const attachmentDirectoryIdentity = await readDirectoryIdentity(attachmentDirectory);
-    const attachment = readFinalizedSegmentAttachmentMetadata(
-      attachmentDirectory,
-      attachmentDirectoryIdentity
+    const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
+    const supplement = await readFinalizedSegmentSupplementMetadata(
+      rootPath,
+      supplementDirectory,
+      supplementDirectoryIdentity
     );
-    return attachment.attachmentId;
+    return supplement.supplementId;
   } catch {
     return null;
   }
@@ -2373,6 +2859,7 @@ async function listValidFinalizedSegmentFileTruths(
       path.join(segmentsDirectory, entry.name)
     );
     const fileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+      rootPath,
       recordingDirectory,
       memoryId,
     });
@@ -2404,6 +2891,7 @@ async function readValidFinalizedSegmentFileTruth(
 ): Promise<FinalizedSegmentFileTruth | null> {
   const recordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const fileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+    rootPath,
     recordingDirectory,
     memoryId,
   });
@@ -2416,19 +2904,19 @@ async function summarizeMemoryFromFileTruths({
   rootPath,
 }: {
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
-  readonly memory: MemoryJson;
+  readonly memory: MemoryFileTruth;
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   let segmentCount = 0;
   let durationMs = 0;
   let audioByteLength = 0;
   let hasTranscript = false;
-  let attachmentCount = 0;
+  let supplementCount = 0;
   let updatedAt = memory.updatedAt;
 
   for (const fileTruth of fileTruths) {
     try {
-      const attachments = await listValidSegmentAttachmentsFromDirectory({
+      const supplements = await listValidSegmentSupplementsFromDirectory({
         rootPath,
         workspaceId: fileTruth.metadata.workspaceId,
         memoryId: memory.memoryId,
@@ -2438,19 +2926,14 @@ async function summarizeMemoryFromFileTruths({
       updatedAt = latestIsoTimestamp(
         updatedAt,
         fileTruth.metadata.updatedAt ?? fileTruth.metadata.finalizedAt,
-        ...attachments.map((attachment) => attachment.updatedAt)
+        ...supplements.map((supplement) => supplement.updatedAt)
       );
       segmentCount += 1;
       durationMs += fileTruth.metadata.durationMs;
       audioByteLength += fileTruth.audioByteLength;
       hasTranscript =
-        hasTranscript ||
-        hasNonEmptyFileInKnownDirectory(
-          fileTruth.recordingDirectory,
-          fileTruth.recordingDirectoryIdentity,
-          'transcript.md'
-        );
-      attachmentCount += attachments.length;
+        hasTranscript || extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0;
+      supplementCount += supplements.length;
     } catch {
       continue;
     }
@@ -2465,11 +2948,11 @@ async function summarizeMemoryFromFileTruths({
     durationMs,
     audioByteLength,
     hasTranscript,
-    attachmentCount,
+    supplementCount,
   };
 }
 
-async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<MemorySummary> {
+async function summarizeMemory(rootPath: string, memory: MemoryFileTruth): Promise<MemorySummary> {
   return summarizeMemoryFromFileTruths({
     fileTruths: await listValidFinalizedSegmentFileTruths(rootPath, memory.memoryId),
     memory,
@@ -2478,21 +2961,21 @@ async function summarizeMemory(rootPath: string, memory: MemoryJson): Promise<Me
 }
 
 function summarizeMemoryFromSegments(
-  memory: MemoryJson,
+  memory: MemoryFileTruth,
   segments: readonly WorkspaceSegmentProjection[]
 ): MemorySummary {
   let updatedAt = memory.updatedAt;
   let durationMs = 0;
   let audioByteLength = 0;
   let hasTranscript = false;
-  let attachmentCount = 0;
+  let supplementCount = 0;
 
   for (const segment of segments) {
     updatedAt = latestIsoTimestamp(updatedAt, segment.updatedAt);
     durationMs += segment.durationMs;
     audioByteLength += segment.audioByteLength;
     hasTranscript = hasTranscript || segment.transcript.exists;
-    attachmentCount += segment.attachmentCount;
+    supplementCount += segment.supplementCount;
   }
 
   return {
@@ -2504,7 +2987,7 @@ function summarizeMemoryFromSegments(
     durationMs,
     audioByteLength,
     hasTranscript,
-    attachmentCount,
+    supplementCount,
   };
 }
 
@@ -2539,11 +3022,11 @@ async function finalizedSegmentProjectionFromFileTruth({
   readonly workspaceId: string;
   readonly fileTruth: FinalizedSegmentFileTruth;
 }): Promise<WorkspaceSegmentProjection | null> {
-  const { metadata, recordingDirectory, recordingDirectoryIdentity, segmentId } = fileTruth;
+  const { metadata, recordingDirectory, segmentId } = fileTruth;
   if (metadata.workspaceId !== workspaceId) {
     return null;
   }
-  const attachments = await listValidSegmentAttachmentsFromDirectory({
+  const supplements = await listValidSegmentSupplementsFromDirectory({
     rootPath,
     workspaceId,
     memoryId: metadata.memoryId,
@@ -2552,7 +3035,7 @@ async function finalizedSegmentProjectionFromFileTruth({
   });
   const updatedAt = latestIsoTimestamp(
     metadata.updatedAt ?? metadata.finalizedAt,
-    ...attachments.map((attachment) => attachment.updatedAt)
+    ...supplements.map((supplement) => supplement.updatedAt)
   );
 
   return {
@@ -2560,24 +3043,16 @@ async function finalizedSegmentProjectionFromFileTruth({
     memoryId: metadata.memoryId,
     segmentId,
     type: 'audio',
-    title: titleFromFileSpaceDirectoryName({
-      nodeId: segmentId,
-      directoryName: path.basename(recordingDirectory),
-      metadataTitle: metadata.title,
-    }),
+    title: metadata.title,
     createdAt: metadata.createdAt,
     updatedAt,
     durationMs: metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
     transcript: {
-      exists: hasNonEmptyFileInKnownDirectory(
-        recordingDirectory,
-        recordingDirectoryIdentity,
-        'transcript.md'
-      ),
+      exists: extractSegmentTranscript(metadata.markdownContent).length > 0,
     },
-    attachmentCount: attachments.length,
-    attachments,
+    supplementCount: supplements.length,
+    supplements,
   };
 }
 
@@ -2604,7 +3079,7 @@ export async function readMemoryDetailFromFileTruth(input: {
 }): Promise<MemoryFilesResult<WorkspaceMemoryDetailProjection>> {
   try {
     assertWorkspaceUsable(input.assertWorkspaceUsable);
-    const memory = await readMemoryJson(input.rootPath, input.memoryId);
+    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
     const segments: WorkspaceSegmentProjection[] = [];
 
     assertWorkspaceUsable(input.assertWorkspaceUsable);
@@ -2671,7 +3146,10 @@ export async function rebuildWorkspaceReadModel(
     }
     try {
       await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
-      const memory = await readMemoryJsonFromDirectory(path.join(memoriesDirectory, entry.name));
+      const memory = await readMemoryFileTruthFromDirectory(
+        rootPath,
+        path.join(memoriesDirectory, entry.name)
+      );
       memories.push(await summarizeMemory(rootPath, memory));
     } catch {
       continue;
@@ -2731,7 +3209,7 @@ export async function refreshMemoryIndexEntry(
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(rootPath, async () => {
     assertWorkspaceUsable(assertUsable);
-    const summary = await summarizeMemory(rootPath, await readMemoryJson(rootPath, memoryId));
+    const summary = await summarizeMemory(rootPath, await readMemoryFileTruth(rootPath, memoryId));
     assertWorkspaceUsable(assertUsable);
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
@@ -2758,29 +3236,19 @@ async function refreshMemoryIndexEntryFromKnownFileTruths({
   memory,
   memoryId,
   rootPath,
-  segmentIds,
 }: {
   readonly assertUsable?: AssertWorkspaceUsable;
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
-  readonly memory: MemoryJson;
+  readonly memory: MemoryFileTruth;
   readonly memoryId: string;
   readonly rootPath: string;
-  readonly segmentIds: readonly string[];
-}): Promise<{ readonly memory: MemorySummary; readonly memoryJson: MemoryJson }> {
+}): Promise<{ readonly memory: MemorySummary; readonly memoryFileTruth: MemoryFileTruth }> {
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(rootPath, async () => {
     assertWorkspaceUsable(assertUsable);
-    const memoryWithSegmentIds = await writeMemorySegmentIdsMirror({
-      rootPath,
-      memoryId,
-      memory,
-      segmentIds,
-      ...(assertUsable ? { assertUsable } : {}),
-    });
-    assertWorkspaceUsable(assertUsable);
     const summary = await summarizeMemoryFromFileTruths({
       fileTruths,
-      memory: memoryWithSegmentIds,
+      memory,
       rootPath,
     });
     assertWorkspaceUsable(assertUsable);
@@ -2799,7 +3267,7 @@ async function refreshMemoryIndexEntryFromKnownFileTruths({
       },
       () => assertWorkspaceUsable(assertUsable)
     );
-    return { memory: summary, memoryJson: memoryWithSegmentIds };
+    return { memory: summary, memoryFileTruth: memory };
   });
 }
 
@@ -2871,9 +3339,9 @@ export async function recoverRecordingFinalizeTransactions(
     let memoryId = memoryEntry.name;
     let segmentsDirectory: string | null = null;
     let recordingEntries: Dirent[] = [];
-    let memory: MemoryJson | null = null;
+    let memory: MemoryFileTruth | null = null;
     try {
-      memory = await readMemoryJsonFromDirectory(memoryDirectoryPath);
+      memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath);
       memoryId = memory.memoryId;
     } catch {
       // Invalid memory metadata is ignored during transaction recovery.
@@ -2901,6 +3369,7 @@ export async function recoverRecordingFinalizeTransactions(
       }
       if (recordingEntry.name.startsWith(FINALIZE_STAGING_PREFIX)) {
         const finalizedSegmentFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+          rootPath,
           memoryId,
           recordingDirectory,
         });
@@ -2925,7 +3394,7 @@ export async function recoverRecordingFinalizeTransactions(
       }
       if (!(await hasFinalizeTransactionMarker(recordingDirectory))) {
         if (memory) {
-          needsFileTruthRecovery ||= await segmentAttachmentRecoveryWorkExists({
+          needsFileTruthRecovery ||= await segmentSupplementRecoveryWorkExists({
             rootPath,
             recordingDirectory,
           }).catch(() => false);
@@ -2934,12 +3403,14 @@ export async function recoverRecordingFinalizeTransactions(
       }
       needsFileTruthRecovery = true;
       const finalizedSegmentFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath,
         memoryId,
         recordingDirectory,
       });
       const finalizedSegmentId = finalizedSegmentFileTruth?.segmentId ?? null;
       const metadataSegmentId =
-        finalizedSegmentId ?? (await readFinalizedSegmentIdFromMetadata(recordingDirectory));
+        finalizedSegmentId ??
+        (await readFinalizedSegmentIdFromMetadata(rootPath, recordingDirectory));
       const recordingSegmentId =
         metadataSegmentId ??
         (SEGMENT_ID_PATTERN.test(recordingEntry.name) ? recordingEntry.name : null);
@@ -2958,9 +3429,7 @@ export async function recoverRecordingFinalizeTransactions(
         );
         continue;
       }
-      const memoryReferencesRecording =
-        validFinalizedSegment ||
-        (recordingSegmentId !== null && memory.segmentIds.includes(recordingSegmentId));
+      const memoryReferencesRecording = validFinalizedSegment || recordingSegmentId !== null;
       if (memoryReferencesRecording) {
         if (recordingSegmentId === null) {
           continue;
@@ -3022,7 +3491,7 @@ export async function recoverRecordingFinalizeTransactions(
       (): FinalizedSegmentFileTruth[] => []
     );
     for (const fileTruth of fileTruthSegments) {
-      await recoverSegmentAttachmentFinalizeTransactions({
+      await recoverSegmentSupplementFinalizeTransactions({
         rootPath,
         workspaceId: fileTruth.metadata.workspaceId,
         memoryId,
@@ -3034,30 +3503,6 @@ export async function recoverRecordingFinalizeTransactions(
           ? { assertWorkspaceUsable: assertRecoveryWorkspaceUsable }
           : {}),
       });
-    }
-    const fileTruthSegmentIds = fileTruthSegments.map((fileTruth) => fileTruth.segmentId);
-    for (const segmentId of memory.segmentIds) {
-      if (fileTruthSegmentIds.includes(segmentId)) {
-        validSegmentIds.add(segmentId);
-      }
-    }
-    for (const segmentId of fileTruthSegmentIds) {
-      validSegmentIds.add(segmentId);
-    }
-    const repairedSegmentIds = mergeSegmentIdsFromFileTruth(memory.segmentIds, [
-      ...validSegmentIds,
-    ]);
-    if (!sameSegmentIds(repairedSegmentIds, memory.segmentIds)) {
-      try {
-        await assertRecoveryWorkspaceUsable?.();
-        const currentMemoryDirectory = await memoryDirectory(rootPath, memoryId);
-        await writeWorkspaceJsonAtomic(path.join(currentMemoryDirectory, 'memory.json'), {
-          ...memory,
-          segmentIds: repairedSegmentIds,
-        });
-      } catch {
-        continue;
-      }
     }
   }
 }
@@ -3371,7 +3816,7 @@ async function removeMetadataLessEmptyMemoryDirectory(
   assertWorkspaceUsable?: () => MaybePromise<void>
 ): Promise<void> {
   const directory = await memoryDirectory(rootPath, memoryId).catch(() => null);
-  if (!directory || (await exists(path.join(directory, 'memory.json')))) {
+  if (!directory || (await exists(path.join(directory, 'memory.md')))) {
     return;
   }
   const entries = await readExistingDirectoryNames(directory);
@@ -3429,14 +3874,14 @@ async function cleanupPreExposeFinalizeArtifacts({
     return;
   }
 
-  let hasMemoryJson: boolean;
+  let hasMemoryMarkdown: boolean;
   try {
-    hasMemoryJson = await exists(path.join(safeMemoryDirectory, 'memory.json'));
+    hasMemoryMarkdown = await exists(path.join(safeMemoryDirectory, 'memory.md'));
   } catch {
-    hasMemoryJson = true;
+    hasMemoryMarkdown = true;
   }
 
-  if (!hasMemoryJson) {
+  if (!hasMemoryMarkdown) {
     await removeSafeWorkspaceDirectory(rootPath, safeMemoryDirectory, hooks);
   }
 }
@@ -3566,7 +4011,7 @@ async function writeFinalizedSegmentFiles({
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
-}): Promise<number> {
+}): Promise<SegmentObjectManifest> {
   const targetIdentity = await readDirectoryIdentity(
     targetRecordingDirectory,
     'Recording finalize path crosses a symlink'
@@ -3598,56 +4043,54 @@ async function writeFinalizedSegmentFiles({
   ) {
     throw new Error('Draft segment metadata does not match file truth');
   }
-  await writeWorkspaceJsonAtomicInKnownDirectory({
+  await writeSegmentMarkdownInKnownDirectory({
     directory: targetRecordingDirectory,
     directoryIdentity: targetIdentity,
-    fileName: 'segment.json',
-    value: {
-      schemaVersion: 1,
-      workspaceId,
-      memoryId,
-      segmentId,
-      type: 'audio',
-      status: 'finalized',
-      title,
-      createdAt: draftMetadata.createdAt,
-      finalizedAt,
-      updatedAt: finalizedAt,
-      durationMs,
-      nextSequence: draftMetadata.nextSequence,
-      audioByteLength: audio.size,
-      transcriptPath: 'transcript.md',
-    },
+    title,
   });
-  await ensureMarkdownFileInDirectory(targetRecordingDirectory, targetIdentity, 'transcript.md');
-  return audio.size;
+  unlinkFileInKnownDirectory(targetRecordingDirectory, targetIdentity, 'segment.json');
+  unlinkFileInKnownDirectoryIfExists(targetRecordingDirectory, targetIdentity, 'transcript.md');
+  return {
+    schemaVersion: 1,
+    objectType: 'segment',
+    workspaceId,
+    memoryId,
+    segmentId,
+    kind: 'audio',
+    createdAt: draftMetadata.createdAt,
+    finalizedAt,
+    updatedAt: finalizedAt,
+    durationMs,
+    nextSequence: draftMetadata.nextSequence,
+    audioByteLength: audio.size,
+  };
 }
 
-async function writeFinalizedAttachmentFiles({
-  targetAttachmentDirectory,
+async function writeFinalizedSupplementFiles({
+  targetSupplementDirectory,
   workspaceId,
   memoryId,
   segmentId,
-  attachmentId,
+  supplementId,
   title,
   durationMs,
   finalizedAt,
 }: {
-  readonly targetAttachmentDirectory: string;
+  readonly targetSupplementDirectory: string;
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly attachmentId: string;
+  readonly supplementId: string;
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
-}): Promise<number> {
+}): Promise<SupplementObjectManifest> {
   const targetIdentity = await readDirectoryIdentity(
-    targetAttachmentDirectory,
-    'Segment attachment finalize path crosses a symlink'
+    targetSupplementDirectory,
+    'Segment supplement finalize path crosses a symlink'
   );
   const audioFd = openFileInDirectory({
-    directory: targetAttachmentDirectory,
+    directory: targetSupplementDirectory,
     directoryIdentity: targetIdentity,
     fileName: 'audio.webm',
     flags: constants.O_RDONLY | constants.O_NOFOLLOW,
@@ -3655,14 +4098,14 @@ async function writeFinalizedAttachmentFiles({
   const audio = fstatSync(audioFd);
   closeSync(audioFd);
   if (!audio.isFile()) {
-    throw new Error('Segment attachment audio path is unsafe');
+    throw new Error('Segment supplement audio path is unsafe');
   }
-  const draftMetadata = draftSegmentAttachmentMetadataSchema.parse(
+  const draftMetadata = draftSegmentSupplementMetadataSchema.parse(
     JSON.parse(
       readWorkspaceTextFileInKnownDirectory(
-        targetAttachmentDirectory,
+        targetSupplementDirectory,
         targetIdentity,
-        'attachment.json'
+        'supplement.json'
       )
     )
   );
@@ -3670,65 +4113,33 @@ async function writeFinalizedAttachmentFiles({
     draftMetadata.workspaceId !== workspaceId ||
     draftMetadata.memoryId !== memoryId ||
     draftMetadata.segmentId !== segmentId ||
-    draftMetadata.attachmentId !== attachmentId ||
+    draftMetadata.supplementId !== supplementId ||
     draftMetadata.audioByteLength !== audio.size
   ) {
-    throw new Error('Draft segment attachment metadata does not match file truth');
+    throw new Error('Draft segment supplement metadata does not match file truth');
   }
-  await writeWorkspaceJsonAtomicInKnownDirectory({
-    directory: targetAttachmentDirectory,
+  await writeSupplementMarkdownInKnownDirectory({
+    directory: targetSupplementDirectory,
     directoryIdentity: targetIdentity,
-    fileName: 'attachment.json',
-    value: {
-      schemaVersion: 1,
-      workspaceId,
-      memoryId,
-      segmentId,
-      attachmentId,
-      type: 'audio',
-      status: 'finalized',
-      title,
-      createdAt: draftMetadata.createdAt,
-      finalizedAt,
-      updatedAt: finalizedAt,
-      durationMs,
-      nextSequence: draftMetadata.nextSequence,
-      audioByteLength: audio.size,
-      transcriptPath: 'transcript.md',
-    },
+    title,
   });
-  await ensureMarkdownFileInDirectory(targetAttachmentDirectory, targetIdentity, 'transcript.md');
-  return audio.size;
-}
-
-async function ensureMarkdownFileInDirectory(
-  directory: string,
-  directoryIdentity: DirectoryIdentity,
-  fileName: 'transcript.md'
-): Promise<void> {
-  try {
-    const fd = openFileInDirectory({
-      directory,
-      directoryIdentity,
-      fileName,
-      flags: constants.O_RDONLY | constants.O_NOFOLLOW,
-    });
-    const entry = fstatSync(fd);
-    closeSync(fd);
-    if (!entry.isFile()) {
-      throw new Error('Recording markdown path is unsafe');
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw error;
-    }
-    await writeWorkspaceFileAtomicInKnownDirectory({
-      directory,
-      directoryIdentity,
-      fileName,
-      data: '',
-    });
-  }
+  unlinkFileInKnownDirectory(targetSupplementDirectory, targetIdentity, 'supplement.json');
+  unlinkFileInKnownDirectoryIfExists(targetSupplementDirectory, targetIdentity, 'transcript.md');
+  return {
+    schemaVersion: 1,
+    objectType: 'supplement',
+    workspaceId,
+    memoryId,
+    segmentId,
+    supplementId,
+    kind: 'audio',
+    createdAt: draftMetadata.createdAt,
+    finalizedAt,
+    updatedAt: finalizedAt,
+    durationMs,
+    nextSequence: draftMetadata.nextSequence,
+    audioByteLength: audio.size,
+  };
 }
 
 async function finishFinalizeTransaction({
@@ -3751,8 +4162,8 @@ async function finishFinalizeTransaction({
   readonly stagingSegmentDirectory: string;
   readonly targetRecordingDirectory: string;
   readonly memoryId: string;
-  readonly nextMemory: MemoryJson;
-  readonly previousMemory: MemoryJson | null;
+  readonly nextMemory: MemoryFileTruth;
+  readonly previousMemory: MemoryFileTruth | null;
   readonly segmentId: string;
   readonly workspaceId: string;
   readonly title: string;
@@ -3768,9 +4179,10 @@ async function finishFinalizeTransaction({
     : targetMemoryDirectory;
   let rollbackDurableRecording = true;
   let rollbackMemory = true;
+  let segmentManifestWritten = false;
   try {
     assertWorkspaceUsable(assertUsable);
-    await writeFinalizedSegmentFiles({
+    const segmentManifest = await writeFinalizedSegmentFiles({
       targetRecordingDirectory: stagingSegmentDirectory,
       workspaceId,
       memoryId,
@@ -3819,12 +4231,30 @@ async function finishFinalizeTransaction({
       finalTargetRecordingDirectory,
       'Recording target path is not safe'
     );
+    await writeSegmentObjectManifest({
+      rootPath,
+      segment: segmentManifest,
+      ...(assertUsable ? { assertUsable } : {}),
+    });
+    segmentManifestWritten = true;
     await hooks?.afterParentFsync?.();
     assertWorkspaceUsable(assertUsable);
     const currentMemoryDirectory = previousMemory
       ? await memoryDirectory(rootPath, memoryId)
       : targetMemoryDirectory;
-    await writeWorkspaceJsonAtomic(path.join(currentMemoryDirectory, 'memory.json'), nextMemory);
+    await writeMemoryMarkdownAndManifest({
+      rootPath,
+      memoryDirectoryPath: currentMemoryDirectory,
+      memory: {
+        schemaVersion: 1,
+        objectType: 'memory',
+        memoryId: nextMemory.memoryId,
+        title: nextMemory.title,
+        createdAt: nextMemory.createdAt,
+        updatedAt: nextMemory.updatedAt,
+      },
+      ...(assertUsable ? { assertUsable } : {}),
+    });
     assertWorkspaceUsable(assertUsable);
     await rebuildIndex(rootPath);
     await hooks?.beforeDraftCleanup?.();
@@ -3857,17 +4287,47 @@ async function finishFinalizeTransaction({
         );
       }
     }
+    if (segmentManifestWritten && rollbackDurableRecording) {
+      const manifestPath = await segmentObjectManifestPath(rootPath, segmentId).catch(() => null);
+      if (manifestPath) {
+        try {
+          unlinkSync(manifestPath);
+        } catch (unlinkError) {
+          if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            // Rollback will report the original finalize failure below.
+          }
+        }
+      }
+    }
     if (rollbackMemory) {
       if (previousMemory) {
         const rollbackMemoryDirectory = await memoryDirectory(rootPath, memoryId).catch(() => null);
         if (rollbackMemoryDirectory) {
-          await writeWorkspaceJsonAtomic(
-            path.join(rollbackMemoryDirectory, 'memory.json'),
-            previousMemory
-          ).catch(() => {});
+          await writeMemoryMarkdownAndManifest({
+            rootPath,
+            memoryDirectoryPath: rollbackMemoryDirectory,
+            memory: {
+              schemaVersion: 1,
+              objectType: 'memory',
+              memoryId: previousMemory.memoryId,
+              title: previousMemory.title,
+              createdAt: previousMemory.createdAt,
+              updatedAt: previousMemory.updatedAt,
+            },
+          }).catch(() => {});
         }
       } else {
         await removeSafeWorkspaceDirectory(rootPath, directory, hooks).catch(() => {});
+        const manifestPath = await memoryObjectManifestPath(rootPath, memoryId).catch(() => null);
+        if (manifestPath) {
+          try {
+            unlinkSync(manifestPath);
+          } catch (unlinkError) {
+            if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+              // Rollback will report the original finalize failure below.
+            }
+          }
+        }
       }
       await rebuildIndex(rootPath).catch(() => {});
     }
@@ -3898,12 +4358,11 @@ async function createMemoryWithRecordingForTestFixture(
         throw new Error('Memory target already exists');
       }
       const createdAt = input.now();
-      const memory: MemoryJson = {
+      const memory: MemoryFileTruth = {
         memoryId: input.memoryId,
         title: input.title,
         createdAt,
         updatedAt: createdAt,
-        segmentIds: [input.segmentId],
       };
       const { stagingSegmentDirectory, targetRecordingDirectory } =
         await copyDraftRecordingIntoMemory({
@@ -3962,6 +4421,7 @@ export async function createMemoryFromFileTruth(
 ): Promise<MemoryFilesResult<MemorySummary>> {
   let createdDirectory: string | null = null;
   let memoryFileWritten = false;
+  let manifestPath: string | null = null;
 
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
@@ -3997,21 +4457,27 @@ export async function createMemoryFromFileTruth(
       await assertSafeExistingDirectory(createdDirectory, 'Workspace memory directory is not safe');
 
       const createdAt = input.now();
-      const memory: MemoryJson = {
+      const memory: MemoryFileTruth = {
         memoryId: input.memoryId,
         title: input.title,
         createdAt,
         updatedAt: createdAt,
-        segmentIds: [],
       };
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      await writeWorkspaceJsonAtomic(
-        path.join(createdDirectory, 'memory.json'),
-        memory,
-        input.assertWorkspaceUsable
-          ? () => assertWorkspaceUsable(input.assertWorkspaceUsable)
-          : undefined
-      );
+      await writeMemoryMarkdownAndManifest({
+        rootPath: input.rootPath,
+        memoryDirectoryPath: createdDirectory,
+        memory: {
+          schemaVersion: 1,
+          objectType: 'memory',
+          memoryId: memory.memoryId,
+          title: memory.title,
+          createdAt: memory.createdAt,
+          updatedAt: memory.updatedAt,
+        },
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
+      manifestPath = await memoryObjectManifestPath(input.rootPath, input.memoryId);
       memoryFileWritten = true;
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       if (input.rebuildIndex) {
@@ -4028,6 +4494,15 @@ export async function createMemoryFromFileTruth(
       cleanupSucceeded = await removeSafeWorkspaceDirectory(input.rootPath, createdDirectory, {
         allowMissing: true,
       }).catch(() => false);
+    }
+    if (manifestPath && !(error instanceof WorkspaceHandleLost)) {
+      try {
+        unlinkSync(manifestPath);
+      } catch (unlinkError) {
+        if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+          cleanupSucceeded = false;
+        }
+      }
     }
     if (memoryFileWritten && !(error instanceof WorkspaceHandleLost)) {
       cleanupSucceeded =
@@ -4098,7 +4573,7 @@ export async function deleteMemoryFromFileTruth(input: MemoryTargetInput): Promi
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const memory = await readMemoryJson(input.rootPath, input.memoryId);
+      const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const memoriesDirectory = await resolveSafeWorkspaceChild(
         input.rootPath,
@@ -4273,13 +4748,13 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
   }>
 > {
   let movedToTrash = false;
-  let previousMemory: MemoryJson | null = null;
+  let previousMemory: MemoryFileTruth | null = null;
   let movedSegmentDirectoryIdentity: DirectoryIdentity | null = null;
   let movedSegmentDirectoryName: string | null = null;
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      previousMemory = await readMemoryJson(input.rootPath, input.memoryId);
+      previousMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
       const sourceDirectory = await memorySegmentDirectory(
         input.rootPath,
         input.memoryId,
@@ -4287,6 +4762,7 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
       );
       await assertSafeExistingDirectory(sourceDirectory, 'Workspace segment directory is not safe');
       const sourceFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
         recordingDirectory: sourceDirectory,
         memoryId: input.memoryId,
         strictUnsafePath: true,
@@ -4332,15 +4808,11 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         memory: previousMemory,
-        segmentIds: mergeSegmentIdsFromFileTruth(
-          previousMemory.segmentIds.filter((segmentId) => segmentId !== input.segmentId),
-          activeSegmentFileTruths.map((fileTruth) => fileTruth.segmentId)
-        ),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
       });
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      previousMemory = refreshed.memoryJson;
+      previousMemory = refreshed.memoryFileTruth;
       return {
         ok: true,
         value: {
@@ -4352,7 +4824,8 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
     });
   } catch (error) {
     let rollbackSucceeded = !movedToTrash;
-    if (movedToTrash && previousMemory && !(error instanceof WorkspaceHandleLost)) {
+    const rollbackMemory = previousMemory as MemoryFileTruth | null;
+    if (movedToTrash && rollbackMemory && !(error instanceof WorkspaceHandleLost)) {
       try {
         assertWorkspaceUsable(input.assertWorkspaceUsable);
         const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
@@ -4381,13 +4854,19 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
             : {}),
         });
-        await writeWorkspaceJsonAtomic(
-          path.join(memoryDirectoryPath, 'memory.json'),
-          previousMemory,
-          input.assertWorkspaceUsable
-            ? () => assertWorkspaceUsable(input.assertWorkspaceUsable)
-            : undefined
-        );
+        await writeMemoryMarkdownAndManifest({
+          rootPath: input.rootPath,
+          memoryDirectoryPath,
+          memory: {
+            schemaVersion: 1,
+            objectType: 'memory',
+            memoryId: rollbackMemory.memoryId,
+            title: rollbackMemory.title,
+            createdAt: rollbackMemory.createdAt,
+            updatedAt: rollbackMemory.updatedAt,
+          },
+          ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+        });
         await rebuildMemoryIndex(input.rootPath, {
           ...(input.assertWorkspaceUsable
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
@@ -4418,7 +4897,7 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
   }>
 > {
   let movedToActive = false;
-  let previousMemory: MemoryJson | null = null;
+  let previousMemory: MemoryFileTruth | null = null;
   let movedSegmentDirectoryIdentity: DirectoryIdentity | null = null;
   let movedSegmentDirectoryName: string | null = null;
   const segmentId = input.restoreToken;
@@ -4440,7 +4919,7 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
         }
         throw error;
       }
-      previousMemory = await readMemoryJson(input.rootPath, input.memoryId);
+      previousMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
 
       const segmentsDirectory = await ensureMemorySegmentsDirectory({
         memoryDirectoryPath,
@@ -4458,6 +4937,7 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
       );
       await assertSafeExistingDirectory(sourceDirectory, 'Workspace segment directory is not safe');
       const sourceFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
         recordingDirectory: sourceDirectory,
         memoryId: input.memoryId,
         strictUnsafePath: true,
@@ -4507,15 +4987,11 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         memory: previousMemory,
-        segmentIds: mergeSegmentIdsFromFileTruth(
-          previousMemory.segmentIds,
-          activeSegmentFileTruths.map((fileTruth) => fileTruth.segmentId)
-        ),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
       });
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      previousMemory = refreshed.memoryJson;
+      previousMemory = refreshed.memoryFileTruth;
       return {
         ok: true,
         value: {
@@ -4526,7 +5002,8 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
     });
   } catch (error) {
     let rollbackSucceeded = !movedToActive;
-    if (movedToActive && previousMemory && !(error instanceof WorkspaceHandleLost)) {
+    const rollbackMemory = previousMemory as MemoryFileTruth | null;
+    if (movedToActive && rollbackMemory && !(error instanceof WorkspaceHandleLost)) {
       try {
         assertWorkspaceUsable(input.assertWorkspaceUsable);
         const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
@@ -4555,13 +5032,19 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
             : {}),
         });
-        await writeWorkspaceJsonAtomic(
-          path.join(memoryDirectoryPath, 'memory.json'),
-          previousMemory,
-          input.assertWorkspaceUsable
-            ? () => assertWorkspaceUsable(input.assertWorkspaceUsable)
-            : undefined
-        );
+        await writeMemoryMarkdownAndManifest({
+          rootPath: input.rootPath,
+          memoryDirectoryPath,
+          memory: {
+            schemaVersion: 1,
+            objectType: 'memory',
+            memoryId: rollbackMemory.memoryId,
+            title: rollbackMemory.title,
+            createdAt: rollbackMemory.createdAt,
+            updatedAt: rollbackMemory.updatedAt,
+          },
+          ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+        });
         await rebuildMemoryIndex(input.rootPath, {
           ...(input.assertWorkspaceUsable
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
@@ -4579,60 +5062,61 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
   }
 }
 
-export async function deleteSegmentAttachmentFromFileTruth(
-  input: SegmentAttachmentTargetInput
+export async function deleteSegmentSupplementFromFileTruth(
+  input: SegmentSupplementTargetInput
 ): Promise<
   MemoryFilesResult<{
     readonly memory: MemorySummary;
     readonly segment: WorkspaceSegmentProjection;
-    readonly attachmentId: string;
+    readonly supplementId: string;
     readonly restoreToken: string;
   }>
 > {
   let movedToTrash = false;
-  let movedAttachmentDirectoryIdentity: DirectoryIdentity | null = null;
-  let movedAttachmentDirectoryName: string | null = null;
+  let movedSupplementDirectoryIdentity: DirectoryIdentity | null = null;
+  let movedSupplementDirectoryName: string | null = null;
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const memory = await readMemoryJson(input.rootPath, input.memoryId);
-      const sourceDirectory = await segmentAttachmentDirectory(
+      const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+      const sourceDirectory = await segmentSupplementDirectory(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        input.attachmentId
+        input.supplementId
       );
       await assertSafeExistingDirectory(
         sourceDirectory,
-        'Workspace segment attachment directory is not safe'
+        'Workspace segment supplement directory is not safe'
       );
       const sourceDirectoryIdentity = await readDirectoryIdentity(sourceDirectory);
-      const sourceAttachment = readValidFinalizedAttachmentProjection({
-        attachmentDirectory: sourceDirectory,
-        attachmentDirectoryIdentity: sourceDirectoryIdentity,
+      const sourceSupplement = await readValidFinalizedSupplementProjection({
+        supplementDirectory: sourceDirectory,
+        supplementDirectoryIdentity: sourceDirectoryIdentity,
+        rootPath: input.rootPath,
         workspaceId: input.workspaceId,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      if (!sourceAttachment || sourceAttachment.attachmentId !== input.attachmentId) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+      if (!sourceSupplement || sourceSupplement.supplementId !== input.supplementId) {
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
 
-      const attachmentsDirectory = path.dirname(sourceDirectory);
+      const supplementsDirectory = path.dirname(sourceDirectory);
       await assertSafeExistingDirectory(
-        attachmentsDirectory,
-        'Workspace segment attachments directory is not safe'
+        supplementsDirectory,
+        'Workspace segment supplements directory is not safe'
       );
-      const trashDirectory = await ensureSegmentAttachmentTrashDirectory(
+      const trashDirectory = await ensureSegmentSupplementTrashDirectory(
         input.rootPath,
         input.assertWorkspaceUsable
       );
       const sourceName = path.basename(sourceDirectory);
-      movedAttachmentDirectoryIdentity = sourceDirectoryIdentity;
-      movedAttachmentDirectoryName = sourceName;
+      movedSupplementDirectoryIdentity = sourceDirectoryIdentity;
+      movedSupplementDirectoryName = sourceName;
       await moveFileSpaceNodeDirectory({
         sourceName,
-        sourceParentDirectory: attachmentsDirectory,
+        sourceParentDirectory: supplementsDirectory,
         targetName: sourceName,
         targetParentDirectory: trashDirectory,
         expectedSourceIdentity: sourceDirectoryIdentity,
@@ -4658,16 +5142,12 @@ export async function deleteSegmentAttachmentFromFileTruth(
           })
         : null;
       if (!parentSegment || parentSegment.segmentId !== input.segmentId) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         memory,
-        segmentIds: mergeSegmentIdsFromFileTruth(
-          memory.segmentIds,
-          activeSegmentFileTruths.map((fileTruth) => fileTruth.segmentId)
-        ),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
       });
@@ -4677,8 +5157,8 @@ export async function deleteSegmentAttachmentFromFileTruth(
         value: {
           memory: refreshed.memory,
           segment: parentSegment,
-          attachmentId: input.attachmentId,
-          restoreToken: input.attachmentId,
+          supplementId: input.supplementId,
+          restoreToken: input.supplementId,
         },
       };
     });
@@ -4687,27 +5167,27 @@ export async function deleteSegmentAttachmentFromFileTruth(
     if (movedToTrash && !(error instanceof WorkspaceHandleLost)) {
       try {
         assertWorkspaceUsable(input.assertWorkspaceUsable);
-        const attachmentsDirectory = await ensureSegmentAttachmentsDirectory({
+        const supplementsDirectory = await ensureSegmentSupplementsDirectory({
           rootPath: input.rootPath,
           memoryId: input.memoryId,
           segmentId: input.segmentId,
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
-        const trashDirectory = await ensureSegmentAttachmentTrashDirectory(
+        const trashDirectory = await ensureSegmentSupplementTrashDirectory(
           input.rootPath,
           input.assertWorkspaceUsable
         );
-        const sourceName = movedAttachmentDirectoryName;
+        const sourceName = movedSupplementDirectoryName;
         if (!sourceName) {
-          throw new Error('Moved segment attachment directory name is missing', { cause: error });
+          throw new Error('Moved segment supplement directory name is missing', { cause: error });
         }
         await moveFileSpaceNodeDirectory({
           sourceName,
           sourceParentDirectory: trashDirectory,
           targetName: sourceName,
-          targetParentDirectory: attachmentsDirectory,
-          ...(movedAttachmentDirectoryIdentity
-            ? { expectedSourceIdentity: movedAttachmentDirectoryIdentity }
+          targetParentDirectory: supplementsDirectory,
+          ...(movedSupplementDirectoryIdentity
+            ? { expectedSourceIdentity: movedSupplementDirectoryIdentity }
             : {}),
           ...(input.assertWorkspaceUsable
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
@@ -4723,14 +5203,14 @@ export async function deleteSegmentAttachmentFromFileTruth(
         rollbackSucceeded = false;
       }
     }
-    return segmentAttachmentDeleteError(
+    return segmentSupplementDeleteError(
       error,
       rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
     );
   }
 }
 
-export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
+export async function restoreDeletedSegmentSupplementFromFileTruth(input: {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
@@ -4741,23 +5221,23 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
   MemoryFilesResult<{
     readonly memory: MemorySummary;
     readonly segment: WorkspaceSegmentProjection;
-    readonly attachment: WorkspaceSegmentAttachmentProjection;
+    readonly supplement: WorkspaceSegmentSupplementProjection;
   }>
 > {
   let movedToActive = false;
-  let movedAttachmentDirectoryIdentity: DirectoryIdentity | null = null;
-  let movedAttachmentDirectoryName: string | null = null;
-  const attachmentId = input.restoreToken;
+  let movedSupplementDirectoryIdentity: DirectoryIdentity | null = null;
+  let movedSupplementDirectoryName: string | null = null;
+  const supplementId = input.restoreToken;
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
-      if (!ATTACHMENT_ID_PATTERN.test(attachmentId)) {
-        throw new Error('Invalid segment attachment id');
+      if (!SUPPLEMENT_ID_PATTERN.test(supplementId)) {
+        throw new Error('Invalid segment supplement id');
       }
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      let memory: MemoryJson;
+      let memory: MemoryFileTruth;
       let parentSegmentDirectory: string;
       try {
-        memory = await readMemoryJson(input.rootPath, input.memoryId);
+        memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
         parentSegmentDirectory = await memorySegmentDirectory(
           input.rootPath,
           input.memoryId,
@@ -4769,11 +5249,12 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
         );
       } catch (error) {
         if (isMissingFileError(error)) {
-          throw new Error('Segment attachment restore parent missing', { cause: error });
+          throw new Error('Segment supplement restore parent missing', { cause: error });
         }
         throw error;
       }
       const parentSegmentFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
         recordingDirectory: parentSegmentDirectory,
         memoryId: input.memoryId,
         strictUnsafePath: true,
@@ -4783,49 +5264,50 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
         parentSegmentFileTruth.segmentId !== input.segmentId ||
         parentSegmentFileTruth.metadata.workspaceId !== input.workspaceId
       ) {
-        throw new Error('Segment attachment restore parent missing');
+        throw new Error('Segment supplement restore parent missing');
       }
 
-      const attachmentsDirectory = await ensureSegmentAttachmentsDirectory({
+      const supplementsDirectory = await ensureSegmentSupplementsDirectory({
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
-      const trashDirectory = await ensureSegmentAttachmentTrashDirectory(
+      const trashDirectory = await ensureSegmentSupplementTrashDirectory(
         input.rootPath,
         input.assertWorkspaceUsable
       );
-      const sourceDirectory = await trashedSegmentAttachmentDirectory(
+      const sourceDirectory = await trashedSegmentSupplementDirectory(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        attachmentId
+        supplementId
       );
       await assertSafeExistingDirectory(
         sourceDirectory,
-        'Workspace segment attachment trash directory is not safe'
+        'Workspace segment supplement trash directory is not safe'
       );
       const sourceDirectoryIdentity = await readDirectoryIdentity(sourceDirectory);
-      const sourceAttachment = readValidFinalizedAttachmentProjection({
-        attachmentDirectory: sourceDirectory,
-        attachmentDirectoryIdentity: sourceDirectoryIdentity,
+      const sourceSupplement = await readValidFinalizedSupplementProjection({
+        supplementDirectory: sourceDirectory,
+        supplementDirectoryIdentity: sourceDirectoryIdentity,
+        rootPath: input.rootPath,
         workspaceId: input.workspaceId,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      if (!sourceAttachment || sourceAttachment.attachmentId !== attachmentId) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+      if (!sourceSupplement || sourceSupplement.supplementId !== supplementId) {
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
 
       const sourceName = path.basename(sourceDirectory);
-      movedAttachmentDirectoryIdentity = sourceDirectoryIdentity;
-      movedAttachmentDirectoryName = sourceName;
+      movedSupplementDirectoryIdentity = sourceDirectoryIdentity;
+      movedSupplementDirectoryName = sourceName;
       await moveFileSpaceNodeDirectory({
         sourceName,
         sourceParentDirectory: trashDirectory,
         targetName: sourceName,
-        targetParentDirectory: attachmentsDirectory,
+        targetParentDirectory: supplementsDirectory,
         expectedSourceIdentity: sourceDirectoryIdentity,
         ...(input.assertWorkspaceUsable
           ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
@@ -4848,21 +5330,17 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
             fileTruth: restoredSegmentFileTruth,
           })
         : null;
-      const restoredAttachment =
-        restoredSegment?.attachments.find(
-          (attachment) => attachment.attachmentId === attachmentId
+      const restoredSupplement =
+        restoredSegment?.supplements.find(
+          (supplement) => supplement.supplementId === supplementId
         ) ?? null;
-      if (!restoredSegment || !restoredAttachment) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+      if (!restoredSegment || !restoredSupplement) {
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         memory,
-        segmentIds: mergeSegmentIdsFromFileTruth(
-          memory.segmentIds,
-          activeSegmentFileTruths.map((fileTruth) => fileTruth.segmentId)
-        ),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
       });
@@ -4872,7 +5350,7 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
         value: {
           memory: refreshed.memory,
           segment: restoredSegment,
-          attachment: restoredAttachment,
+          supplement: restoredSupplement,
         },
       };
     });
@@ -4881,27 +5359,27 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
     if (movedToActive && !(error instanceof WorkspaceHandleLost)) {
       try {
         assertWorkspaceUsable(input.assertWorkspaceUsable);
-        const attachmentsDirectory = await ensureSegmentAttachmentsDirectory({
+        const supplementsDirectory = await ensureSegmentSupplementsDirectory({
           rootPath: input.rootPath,
           memoryId: input.memoryId,
           segmentId: input.segmentId,
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
-        const trashDirectory = await ensureSegmentAttachmentTrashDirectory(
+        const trashDirectory = await ensureSegmentSupplementTrashDirectory(
           input.rootPath,
           input.assertWorkspaceUsable
         );
-        const sourceName = movedAttachmentDirectoryName;
+        const sourceName = movedSupplementDirectoryName;
         if (!sourceName) {
-          throw new Error('Moved segment attachment directory name is missing', { cause: error });
+          throw new Error('Moved segment supplement directory name is missing', { cause: error });
         }
         await moveFileSpaceNodeDirectory({
           sourceName,
-          sourceParentDirectory: attachmentsDirectory,
+          sourceParentDirectory: supplementsDirectory,
           targetName: sourceName,
           targetParentDirectory: trashDirectory,
-          ...(movedAttachmentDirectoryIdentity
-            ? { expectedSourceIdentity: movedAttachmentDirectoryIdentity }
+          ...(movedSupplementDirectoryIdentity
+            ? { expectedSourceIdentity: movedSupplementDirectoryIdentity }
             : {}),
           ...(input.assertWorkspaceUsable
             ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
@@ -4917,7 +5395,7 @@ export async function restoreDeletedSegmentAttachmentFromFileTruth(input: {
         rollbackSucceeded = false;
       }
     }
-    return segmentAttachmentRestoreError(
+    return segmentSupplementRestoreError(
       error,
       rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
     );
@@ -4931,15 +5409,11 @@ async function appendAudioSegmentToMemoryWithHooks(
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const current = await readMemoryJson(input.rootPath, input.memoryId);
+      const current = await readMemoryFileTruth(input.rootPath, input.memoryId);
       const updatedAt = input.now();
-      const next: MemoryJson = {
+      const next: MemoryFileTruth = {
         ...current,
         updatedAt,
-        segmentIds: [
-          ...current.segmentIds.filter((segmentId) => segmentId !== input.segmentId),
-          input.segmentId,
-        ],
       };
       const { stagingSegmentDirectory, targetRecordingDirectory } =
         await copyDraftRecordingIntoMemory({
@@ -4998,25 +5472,25 @@ export async function appendAudioSegmentToMemoryForTest(
   return appendAudioSegmentToMemoryWithHooks(productionInput, transactionHooks);
 }
 
-export async function appendAudioAttachmentToSegment(
-  input: AppendAudioAttachmentToSegmentInput
+export async function appendAudioSupplementToSegment(
+  input: AppendAudioSupplementToSegmentInput
 ): Promise<
   MemoryFilesResult<{
     readonly memory: MemorySummary;
     readonly segment: WorkspaceSegmentProjection;
-    readonly attachment: WorkspaceSegmentAttachmentProjection;
+    readonly supplement: WorkspaceSegmentSupplementProjection;
   }>
 > {
   try {
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const current = await readMemoryJson(input.rootPath, input.memoryId);
+      const current = await readMemoryFileTruth(input.rootPath, input.memoryId);
       const fileTruthSegmentIds = await listValidFinalizedSegmentIds(
         input.rootPath,
         input.memoryId
       );
       if (!fileTruthSegmentIds.includes(input.segmentId)) {
-        throw new Error('Segment attachment parent is not part of memory');
+        throw new Error('Segment supplement parent is not part of memory');
       }
       const parentSegment = await readValidFinalizedSegmentProjection({
         rootPath: input.rootPath,
@@ -5025,109 +5499,124 @@ export async function appendAudioAttachmentToSegment(
         segmentId: input.segmentId,
       });
       if (!parentSegment) {
-        throw new Error('Segment attachment parent is not finalized');
+        throw new Error('Segment supplement parent is not finalized');
       }
 
       const updatedAt = input.now();
       const nextMemory = {
         ...current,
         updatedAt,
-        segmentIds: mergeSegmentIdsFromFileTruth(current.segmentIds, fileTruthSegmentIds),
       };
-      const attachmentsDirectory = await ensureSegmentAttachmentsDirectory({
+      const supplementsDirectory = await ensureSegmentSupplementsDirectory({
         rootPath: input.rootPath,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
-      const targetAttachmentDirectory = await segmentAttachmentDirectoryForNewNode(
+      const targetSupplementDirectory = await segmentSupplementDirectoryForNewNode(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        input.attachmentId,
+        input.supplementId,
         input.title
       );
-      const relativeTarget = path.relative(attachmentsDirectory, targetAttachmentDirectory);
+      const relativeTarget = path.relative(supplementsDirectory, targetSupplementDirectory);
       if (relativeTarget.startsWith('..') || path.isAbsolute(relativeTarget)) {
-        throw new Error('Segment attachment target escapes parent');
+        throw new Error('Segment supplement target escapes parent');
       }
-      const existingAttachmentDirectory = await segmentAttachmentDirectory(
+      const existingSupplementDirectory = await segmentSupplementDirectory(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        input.attachmentId
+        input.supplementId
       );
-      if (await exists(existingAttachmentDirectory)) {
-        throw new Error('Segment attachment target already exists');
+      if (await exists(existingSupplementDirectory)) {
+        throw new Error('Segment supplement target already exists');
       }
-      if (await exists(targetAttachmentDirectory)) {
-        throw new Error('Segment attachment target already exists');
+      if (await exists(targetSupplementDirectory)) {
+        throw new Error('Segment supplement target already exists');
       }
 
-      const stagingName = `${FINALIZE_STAGING_PREFIX}${input.attachmentId}.${process.pid}.${Date.now()}`;
+      const stagingName = `${FINALIZE_STAGING_PREFIX}${input.supplementId}.${process.pid}.${Date.now()}`;
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       createWorkspaceDirectoryWithinParent({
-        parentDirectory: attachmentsDirectory,
+        parentDirectory: supplementsDirectory,
         directoryName: stagingName,
         ...(input.assertWorkspaceUsable
           ? { beforeCommit: () => assertWorkspaceUsable(input.assertWorkspaceUsable) }
           : {}),
       });
-      const stagingAttachmentDirectory = path.join(attachmentsDirectory, stagingName);
+      const stagingSupplementDirectory = path.join(supplementsDirectory, stagingName);
       await writeWorkspaceJsonAtomic(
-        path.join(stagingAttachmentDirectory, FINALIZE_TRANSACTION_MARKER),
+        path.join(stagingSupplementDirectory, FINALIZE_TRANSACTION_MARKER),
         {
           schemaVersion: 1,
           memoryId: input.memoryId,
           segmentId: input.segmentId,
-          attachmentId: input.attachmentId,
-          draftPath: `.reo/drafts/attachments/${input.attachmentId}`,
+          supplementId: input.supplementId,
+          draftPath: `.reo/drafts/supplements/${input.supplementId}`,
         }
       );
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       await copyDirectoryContents(
-        await draftAttachmentDirectory(input.rootPath, input.attachmentId),
-        stagingAttachmentDirectory,
-        DRAFT_ATTACHMENT_FILES
+        await draftSupplementDirectory(input.rootPath, input.supplementId),
+        stagingSupplementDirectory,
+        DRAFT_SUPPLEMENT_FILES
       );
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      await writeFinalizedAttachmentFiles({
-        targetAttachmentDirectory: stagingAttachmentDirectory,
+      const supplementManifest = await writeFinalizedSupplementFiles({
+        targetSupplementDirectory: stagingSupplementDirectory,
         workspaceId: input.workspaceId,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
-        attachmentId: input.attachmentId,
+        supplementId: input.supplementId,
         title: input.title,
         durationMs: input.durationMs,
         finalizedAt: updatedAt,
       });
-      await fsyncDirectoryTree(stagingAttachmentDirectory);
+      await fsyncDirectoryTree(stagingSupplementDirectory);
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       renameWorkspaceDirectoryWithinParent({
-        parentDirectory: attachmentsDirectory,
+        parentDirectory: supplementsDirectory,
         sourceName: stagingName,
-        targetName: path.basename(targetAttachmentDirectory),
+        targetName: path.basename(targetSupplementDirectory),
         ...(input.assertWorkspaceUsable
           ? { beforeCommit: () => assertWorkspaceUsable(input.assertWorkspaceUsable) }
           : {}),
       });
 
-      const finalAttachmentDirectory = await segmentAttachmentDirectory(
-        input.rootPath,
-        input.memoryId,
-        input.segmentId,
-        input.attachmentId
+      const finalSupplementDirectory = targetSupplementDirectory;
+      await assertSafeExistingDirectory(
+        finalSupplementDirectory,
+        'Workspace segment supplement directory is not safe'
       );
-      const finalAttachmentDirectoryIdentity =
-        await readDirectoryIdentity(finalAttachmentDirectory);
+      const finalSupplementDirectoryIdentity =
+        await readDirectoryIdentity(finalSupplementDirectory);
       removeFileInDirectory(
-        finalAttachmentDirectory,
-        finalAttachmentDirectoryIdentity,
+        finalSupplementDirectory,
+        finalSupplementDirectoryIdentity,
         FINALIZE_TRANSACTION_MARKER
       );
+      await writeSupplementObjectManifest({
+        rootPath: input.rootPath,
+        supplement: supplementManifest,
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const currentMemoryDirectory = await memoryDirectory(input.rootPath, input.memoryId);
-      await writeWorkspaceJsonAtomic(path.join(currentMemoryDirectory, 'memory.json'), nextMemory);
+      await writeMemoryMarkdownAndManifest({
+        rootPath: input.rootPath,
+        memoryDirectoryPath: currentMemoryDirectory,
+        memory: {
+          schemaVersion: 1,
+          objectType: 'memory',
+          memoryId: nextMemory.memoryId,
+          title: nextMemory.title,
+          createdAt: nextMemory.createdAt,
+          updatedAt: nextMemory.updatedAt,
+        },
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const memories = input.rebuildIndex
         ? await input.rebuildIndex(input.rootPath)
@@ -5138,7 +5627,7 @@ export async function appendAudioAttachmentToSegment(
           });
       const memory = memories.find((candidate) => candidate.memoryId === input.memoryId);
       if (!memory) {
-        throw new Error('Segment attachment memory summary missing');
+        throw new Error('Segment supplement memory summary missing');
       }
       const segment = await readValidFinalizedSegmentProjection({
         rootPath: input.rootPath,
@@ -5146,22 +5635,23 @@ export async function appendAudioAttachmentToSegment(
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      const attachment = readValidFinalizedAttachmentProjection({
-        attachmentDirectory: finalAttachmentDirectory,
-        attachmentDirectoryIdentity: await readDirectoryIdentity(finalAttachmentDirectory),
+      const supplement = await readValidFinalizedSupplementProjection({
+        supplementDirectory: finalSupplementDirectory,
+        supplementDirectoryIdentity: await readDirectoryIdentity(finalSupplementDirectory),
+        rootPath: input.rootPath,
         workspaceId: input.workspaceId,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      if (!segment || !attachment) {
-        throw new Error('Segment attachment projection missing');
+      if (!segment || !supplement) {
+        throw new Error('Segment supplement projection missing');
       }
       return {
         ok: true,
         value: {
           memory,
           segment,
-          attachment,
+          supplement,
         },
       };
     });
@@ -5169,7 +5659,7 @@ export async function appendAudioAttachmentToSegment(
     return memoryFilesError(
       error,
       'ERR_RECORDING_FINALIZE_FAILED',
-      'Segment attachment recording could not be finalized',
+      'Segment supplement recording could not be finalized',
       finalizeFailureRetention(error)
     );
   }
@@ -5182,7 +5672,7 @@ export async function updateMemoryTitleFromFileTruth(
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const current = await readMemoryJson(input.rootPath, input.memoryId);
+      const current = await readMemoryFileTruth(input.rootPath, input.memoryId);
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const renamedAt = input.now();
       const next = { ...current, title: input.title };
@@ -5209,7 +5699,19 @@ export async function updateMemoryTitleFromFileTruth(
         });
       }
       const directory = await memoryDirectory(input.rootPath, input.memoryId);
-      await writeWorkspaceJsonAtomic(path.join(directory, 'memory.json'), next);
+      await writeMemoryMarkdownAndManifest({
+        rootPath: input.rootPath,
+        memoryDirectoryPath: directory,
+        memory: {
+          schemaVersion: 1,
+          objectType: 'memory',
+          memoryId: next.memoryId,
+          title: next.title,
+          createdAt: next.createdAt,
+          updatedAt: next.updatedAt,
+        },
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
       await touchWorkspacePathBestEffort(directory, renamedAt);
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const summary = await refreshMemoryIndexEntry(
@@ -5235,7 +5737,7 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const currentMemory = await readMemoryJson(input.rootPath, input.memoryId);
+      const currentMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
       const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId);
       const sourceFileTruth = fileTruths.find(
         (fileTruth) => fileTruth.segmentId === input.segmentId
@@ -5243,7 +5745,6 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
       if (!sourceFileTruth) {
         throw new Error('Finalized segment projection does not match file truth');
       }
-      const fileTruthSegmentIds = fileTruths.map((fileTruth) => fileTruth.segmentId);
       const renamedAt = input.now();
       const sourceDirectory = sourceFileTruth.recordingDirectory;
       const targetDirectory = await memorySegmentDirectoryForNewNode(
@@ -5275,30 +5776,14 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
           ? sourceDirectory
           : targetDirectory;
       const finalDirectoryIdentity = await readDirectoryIdentity(finalDirectory);
-      const segment = await readFinalizedSegmentMetadata(finalDirectory, finalDirectoryIdentity);
-      await writeWorkspaceJsonAtomicInKnownDirectory({
+      await updateSegmentMarkdownInKnownDirectory({
         directory: finalDirectory,
         directoryIdentity: finalDirectoryIdentity,
-        fileName: 'segment.json',
-        value: {
-          ...segment,
+        update: ({ content }) => ({
           title: input.title,
-        },
+          content: content.replace(/^# .*(\r?\n)?/, `# ${input.title}\n`),
+        }),
       });
-      const repairedSegmentIds = mergeSegmentIdsFromFileTruth(
-        currentMemory.segmentIds,
-        fileTruthSegmentIds
-      );
-      if (!sameSegmentIds(currentMemory.segmentIds, repairedSegmentIds)) {
-        await writeWorkspaceJsonAtomic(
-          path.join(await memoryDirectory(input.rootPath, input.memoryId), 'memory.json'),
-          {
-            ...currentMemory,
-            segmentIds: repairedSegmentIds,
-          }
-        );
-      }
-
       const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
       await touchWorkspacePathBestEffort(finalDirectory, renamedAt);
       await touchWorkspacePathBestEffort(memoryDirectoryPath, renamedAt);
@@ -5309,6 +5794,7 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
         input.assertWorkspaceUsable
       ).catch(() => summarizeMemory(input.rootPath, currentMemory));
       const refreshedFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
         recordingDirectory: finalDirectory,
         memoryId: input.memoryId,
       });
@@ -5335,48 +5821,49 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
   }
 }
 
-export async function updateSegmentAttachmentTitleFromFileTruth(
-  input: UpdateSegmentAttachmentTitleInput
+export async function updateSegmentSupplementTitleFromFileTruth(
+  input: UpdateSegmentSupplementTitleInput
 ): Promise<
   MemoryFilesResult<{
     readonly memory: MemorySummary;
     readonly segment: WorkspaceSegmentProjection;
-    readonly attachment: WorkspaceSegmentAttachmentProjection;
+    readonly supplement: WorkspaceSegmentSupplementProjection;
   }>
 > {
   try {
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const sourceDirectory = await segmentAttachmentDirectory(
+      const sourceDirectory = await segmentSupplementDirectory(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        input.attachmentId
+        input.supplementId
       );
       const sourceDirectoryIdentity = await readDirectoryIdentity(sourceDirectory);
-      const sourceAttachmentMetadata = readFinalizedSegmentAttachmentMetadata(
+      const sourceSupplementMetadata = await readFinalizedSegmentSupplementMetadata(
+        input.rootPath,
         sourceDirectory,
         sourceDirectoryIdentity
       );
       if (
-        sourceAttachmentMetadata.workspaceId !== input.workspaceId ||
-        sourceAttachmentMetadata.memoryId !== input.memoryId ||
-        sourceAttachmentMetadata.segmentId !== input.segmentId ||
-        sourceAttachmentMetadata.attachmentId !== input.attachmentId
+        sourceSupplementMetadata.workspaceId !== input.workspaceId ||
+        sourceSupplementMetadata.memoryId !== input.memoryId ||
+        sourceSupplementMetadata.segmentId !== input.segmentId ||
+        sourceSupplementMetadata.supplementId !== input.supplementId
       ) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
-      const targetDirectory = await segmentAttachmentDirectoryForNewNode(
+      const targetDirectory = await segmentSupplementDirectoryForNewNode(
         input.rootPath,
         input.memoryId,
         input.segmentId,
-        input.attachmentId,
+        input.supplementId,
         input.title
       );
       const parentDirectory = path.dirname(sourceDirectory);
       if (path.dirname(targetDirectory) !== parentDirectory) {
-        throw new Error('Segment attachment rename target parent changed');
+        throw new Error('Segment supplement rename target parent changed');
       }
 
       assertWorkspaceUsable(input.assertWorkspaceUsable);
@@ -5398,27 +5885,27 @@ export async function updateSegmentAttachmentTitleFromFileTruth(
           ? sourceDirectory
           : targetDirectory;
       const finalDirectoryIdentity = await readDirectoryIdentity(finalDirectory);
-      const attachmentMetadata = readFinalizedSegmentAttachmentMetadata(
+      const supplementMetadata = await readFinalizedSegmentSupplementMetadata(
+        input.rootPath,
         finalDirectory,
         finalDirectoryIdentity
       );
       if (
-        attachmentMetadata.workspaceId !== input.workspaceId ||
-        attachmentMetadata.memoryId !== input.memoryId ||
-        attachmentMetadata.segmentId !== input.segmentId ||
-        attachmentMetadata.attachmentId !== input.attachmentId
+        supplementMetadata.workspaceId !== input.workspaceId ||
+        supplementMetadata.memoryId !== input.memoryId ||
+        supplementMetadata.segmentId !== input.segmentId ||
+        supplementMetadata.supplementId !== input.supplementId
       ) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
 
-      await writeWorkspaceJsonAtomicInKnownDirectory({
+      await updateSupplementMarkdownInKnownDirectory({
         directory: finalDirectory,
         directoryIdentity: finalDirectoryIdentity,
-        fileName: 'attachment.json',
-        value: {
-          ...attachmentMetadata,
+        update: ({ content }) => ({
           title: input.title,
-        },
+          content: content.replace(/^# .*(\r?\n)?/, `# ${input.title}\n`),
+        }),
       });
 
       assertWorkspaceUsable(input.assertWorkspaceUsable);
@@ -5438,27 +5925,28 @@ export async function updateSegmentAttachmentTitleFromFileTruth(
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      const attachment = readValidFinalizedAttachmentProjection({
-        attachmentDirectory: finalDirectory,
-        attachmentDirectoryIdentity: await readDirectoryIdentity(finalDirectory),
+      const supplement = await readValidFinalizedSupplementProjection({
+        supplementDirectory: finalDirectory,
+        supplementDirectoryIdentity: await readDirectoryIdentity(finalDirectory),
+        rootPath: input.rootPath,
         workspaceId: input.workspaceId,
         memoryId: input.memoryId,
         segmentId: input.segmentId,
       });
-      if (!segment || !attachment || attachment.attachmentId !== input.attachmentId) {
-        throw new Error('Finalized segment attachment projection does not match file truth');
+      if (!segment || !supplement || supplement.supplementId !== input.supplementId) {
+        throw new Error('Finalized segment supplement projection does not match file truth');
       }
       return {
         ok: true,
         value: {
           memory,
           segment,
-          attachment,
+          supplement,
         },
       };
     });
   } catch (error) {
-    return updateSegmentAttachmentTitleError(error);
+    return updateSegmentSupplementTitleError(error);
   }
 }
 
@@ -5483,9 +5971,12 @@ export async function lookupSegmentDirectoryById(
     if (!memoryEntry.isDirectory()) {
       continue;
     }
-    let memory: MemoryJson;
+    let memory: MemoryFileTruth;
     try {
-      memory = await readMemoryJsonFromDirectory(path.join(memoriesDirectory, memoryEntry.name));
+      memory = await readMemoryFileTruthFromDirectory(
+        rootPath,
+        path.join(memoriesDirectory, memoryEntry.name)
+      );
     } catch {
       continue;
     }

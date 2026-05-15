@@ -17,28 +17,28 @@ import {
 import { toast } from '@/components/ui/toaster';
 import {
   appendRecordingAudioChunk,
-  appendSegmentAttachmentRecordingAudioChunk,
+  appendSegmentSupplementRecordingAudioChunk,
   beginMicrophoneIntent,
   clearMicrophoneIntent,
   cloneRecordingDraftPrefix,
   closeRecordingTranscription,
   createRecordingDraft,
-  createSegmentAttachmentRecordingDraft,
+  createSegmentSupplementRecordingDraft,
   discardRecordingDraft,
-  discardSegmentAttachmentRecordingDraft,
+  discardSegmentSupplementRecordingDraft,
   finishRecordingTranscription,
   finalizeRecordingDraft,
-  finalizeSegmentAttachmentRecordingDraft,
+  finalizeSegmentSupplementRecordingDraft,
   onRecordingTranscriptionEvent,
   readRecordingDraftAudio,
-  saveSegmentAttachmentTranscript,
+  saveSegmentSupplementTranscript,
   saveTranscript,
   sendRecordingTranscriptionAudio,
   startRecordingTranscription,
 } from './workspaceApi';
 import type {
   FinalizedAudioSegment,
-  FinalizedSegmentAttachmentRecording,
+  FinalizedSegmentSupplementRecording,
   WorkspaceMemorySummary,
   WorkspaceSession,
 } from './workspaceApi';
@@ -88,7 +88,7 @@ type RecordingOverlayProps = {
   readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
   readonly onAudioSegmentFinalized: (recording: FinalizedAudioSegment) => void;
   readonly onRecordingFlowSettled?: () => void;
-  readonly onSegmentAttachmentFinalized?: (recording: FinalizedSegmentAttachmentRecording) => void;
+  readonly onSegmentSupplementFinalized?: (recording: FinalizedSegmentSupplementRecording) => void;
   readonly open: boolean;
   readonly recoveredDraft?: RecordingRecoveryDraft | null;
   readonly recordingTarget: RecordingTarget;
@@ -98,7 +98,7 @@ type RecordingOverlayProps = {
 export type RecordingTarget =
   | { readonly kind: 'existing-memory'; readonly memoryId: string; readonly title?: string }
   | {
-      readonly kind: 'segment-attachment';
+      readonly kind: 'segment-supplement';
       readonly memoryId: string;
       readonly segmentId: string;
       readonly title: string;
@@ -179,7 +179,7 @@ function titleForRecordingTarget(target: RecordingTarget, workspaceSession: Work
   if (target.title) {
     return target.title;
   }
-  if (target.kind === 'segment-attachment') {
+  if (target.kind === 'segment-supplement') {
     return target.title;
   }
   const memory = workspaceSession.snapshot.memories.find(
@@ -305,7 +305,7 @@ export function RecordingOverlay({
   onRecordingContentSaved,
   onAudioSegmentFinalized,
   onRecordingFlowSettled,
-  onSegmentAttachmentFinalized,
+  onSegmentSupplementFinalized,
   open,
   recoveredDraft = null,
   recordingTarget,
@@ -1375,11 +1375,11 @@ export function RecordingOverlay({
     }: { readonly recordingSessionId?: string; readonly revisionId?: string } = {}
   ) {
     const targetFields =
-      recordingTarget.kind === 'segment-attachment'
+      recordingTarget.kind === 'segment-supplement'
         ? {
             memoryId: recordingTarget.memoryId,
             parentSegmentId: recordingTarget.segmentId,
-            targetKind: 'segment-attachment' as const,
+            targetKind: 'segment-supplement' as const,
           }
         : {
             memoryId: recordingTarget.memoryId,
@@ -1458,9 +1458,9 @@ export function RecordingOverlay({
 
   async function discardDraftAndClearRecoveryOnSuccess(segmentId: string) {
     const response =
-      recordingTarget.kind === 'segment-attachment'
-        ? await discardSegmentAttachmentRecordingDraft({
-            attachmentId: segmentId,
+      recordingTarget.kind === 'segment-supplement'
+        ? await discardSegmentSupplementRecordingDraft({
+            supplementId: segmentId,
             workspaceHandle: workspaceSession.workspaceHandle,
           })
         : await discardRecordingDraft({
@@ -1592,9 +1592,9 @@ export function RecordingOverlay({
           return;
         }
         const response =
-          recordingTarget.kind === 'segment-attachment'
-            ? await appendSegmentAttachmentRecordingAudioChunk({
-                attachmentId: segmentId,
+          recordingTarget.kind === 'segment-supplement'
+            ? await appendSegmentSupplementRecordingAudioChunk({
+                supplementId: segmentId,
                 chunk,
                 sequence: sequenceRef.current,
                 workspaceHandle: workspaceSession.workspaceHandle,
@@ -1748,8 +1748,8 @@ export function RecordingOverlay({
 
     let nextSegmentId: string;
     let nextSequence: number;
-    if (recordingTarget.kind === 'segment-attachment') {
-      const draft = await createSegmentAttachmentRecordingDraft({
+    if (recordingTarget.kind === 'segment-supplement') {
+      const draft = await createSegmentSupplementRecordingDraft({
         memoryId: recordingTarget.memoryId,
         segmentId: recordingTarget.segmentId,
         workspaceHandle: workspaceSession.workspaceHandle,
@@ -1763,7 +1763,7 @@ export function RecordingOverlay({
         );
         return;
       }
-      nextSegmentId = draft.value.attachmentId;
+      nextSegmentId = draft.value.supplementId;
       nextSequence = draft.value.nextSequence;
     } else {
       const draft = await createRecordingDraft({
@@ -1795,10 +1795,10 @@ export function RecordingOverlay({
           durationMs: 0,
           memoryId: recordingTarget.memoryId,
           nextSequence,
-          ...(recordingTarget.kind === 'segment-attachment'
+          ...(recordingTarget.kind === 'segment-supplement'
             ? {
                 parentSegmentId: recordingTarget.segmentId,
-                targetKind: 'segment-attachment' as const,
+                targetKind: 'segment-supplement' as const,
               }
             : { targetKind: 'segment' as const }),
           recordingSessionId: recordingFlowSessionId,
@@ -2161,7 +2161,7 @@ export function RecordingOverlay({
 
   function handleResume() {
     if (state.status === 'paused' && hasTailAfterCursor(timeline)) {
-      if (recordingTarget.kind === 'segment-attachment') {
+      if (recordingTarget.kind === 'segment-supplement') {
         notifyRecordingError('补充录音暂不支持从中间替换，可以保存后再补充一段。');
         return;
       }
@@ -2323,13 +2323,13 @@ export function RecordingOverlay({
     }
   }
 
-  async function saveFinalSegmentAttachmentTranscript({
-    attachmentId,
+  async function saveFinalSegmentSupplementTranscript({
+    supplementId,
     memoryId,
     recordingSession,
     segmentId,
   }: {
-    readonly attachmentId: string;
+    readonly supplementId: string;
     readonly memoryId: string;
     readonly recordingSession: number;
     readonly segmentId: string;
@@ -2340,8 +2340,8 @@ export function RecordingOverlay({
     }
 
     try {
-      const response = await saveSegmentAttachmentTranscript({
-        attachmentId,
+      const response = await saveSegmentSupplementTranscript({
+        supplementId,
         markdown,
         memoryId,
         segmentId,
@@ -2353,8 +2353,8 @@ export function RecordingOverlay({
       }
       if (response.ok) {
         clearRecordingError();
-        onSegmentAttachmentFinalized?.({
-          attachment: response.value.attachment,
+        onSegmentSupplementFinalized?.({
+          supplement: response.value.supplement,
           memory: response.value.memory,
           segment: response.value.segment,
         });
@@ -2551,9 +2551,9 @@ export function RecordingOverlay({
 
     const title = titleForRecordingTarget(recordingTarget, workspaceSession);
     try {
-      if (recordingTarget.kind === 'segment-attachment') {
-        const finalizedAttachment = await finalizeSegmentAttachmentRecordingDraft({
-          attachmentId: segmentId,
+      if (recordingTarget.kind === 'segment-supplement') {
+        const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+          supplementId: segmentId,
           durationMs,
           memoryId: recordingTarget.memoryId,
           segmentId: recordingTarget.segmentId,
@@ -2561,25 +2561,25 @@ export function RecordingOverlay({
           workspaceHandle: workspaceSession.workspaceHandle,
           workspaceId: workspaceSession.workspaceId,
         });
-        if (!finalizedAttachment.ok) {
+        if (!finalizedSupplement.ok) {
           failActiveRecording(
-            workspaceErrorDisplayMessage(finalizedAttachment.error, '无法完成补充录音保存。'),
+            workspaceErrorDisplayMessage(finalizedSupplement.error, '无法完成补充录音保存。'),
             recordingSession
           );
           return;
         }
         controllerRef.current = null;
         activeDraftRef.current = null;
-        onSegmentAttachmentFinalized?.(finalizedAttachment.value);
+        onSegmentSupplementFinalized?.(finalizedSupplement.value);
         updateRecordingRecoverySnapshot({
-          patch: { finalizedAttachment: finalizedAttachment.value },
+          patch: { finalizedSupplement: finalizedSupplement.value },
           segmentId,
           workspaceId: workspaceSession.workspaceId,
         });
         await backfillFinalTranscript(recordingSession);
         persistRecoveryTranscriptSnapshot(segmentId);
-        const transcriptSaved = await saveFinalSegmentAttachmentTranscript({
-          attachmentId: finalizedAttachment.value.attachment.attachmentId,
+        const transcriptSaved = await saveFinalSegmentSupplementTranscript({
+          supplementId: finalizedSupplement.value.supplement.supplementId,
           memoryId: recordingTarget.memoryId,
           recordingSession,
           segmentId: recordingTarget.segmentId,
@@ -2703,9 +2703,9 @@ export function RecordingOverlay({
       activeDraftRef.current = null;
       try {
         const discarded =
-          recordingTarget.kind === 'segment-attachment'
-            ? await discardSegmentAttachmentRecordingDraft({
-                attachmentId: activeDraft.segmentId,
+          recordingTarget.kind === 'segment-supplement'
+            ? await discardSegmentSupplementRecordingDraft({
+                supplementId: activeDraft.segmentId,
                 workspaceHandle: workspaceSession.workspaceHandle,
               })
             : await discardRecordingDraft({

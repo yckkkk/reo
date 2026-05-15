@@ -8,7 +8,7 @@ import type { WorkspaceMemoryDetail, WorkspaceMemorySummary } from './workspaceA
 
 function memory(overrides: Partial<WorkspaceMemorySummary> = {}): WorkspaceMemorySummary {
   return {
-    attachmentCount: 0,
+    supplementCount: 0,
     audioByteLength: 600,
     createdAt: '2026-05-06T13:08:00.000Z',
     durationMs: 6000,
@@ -33,8 +33,8 @@ function segment({
   readonly title: string;
 }): WorkspaceMemoryDetail['segments'][number] {
   return {
-    attachmentCount: 0,
-    attachments: [],
+    supplementCount: 0,
+    supplements: [],
     audioByteLength,
     createdAt: '2026-05-06T13:08:00.000Z',
     durationMs,

@@ -66,16 +66,16 @@ export function restoreDeletedSegment(
   return window.reoWorkspace.restoreDeletedSegment(payload);
 }
 
-export function deleteSegmentAttachment(
-  payload: Parameters<Window['reoWorkspace']['deleteSegmentAttachment']>[0]
+export function deleteSegmentSupplement(
+  payload: Parameters<Window['reoWorkspace']['deleteSegmentSupplement']>[0]
 ) {
-  return window.reoWorkspace.deleteSegmentAttachment(payload);
+  return window.reoWorkspace.deleteSegmentSupplement(payload);
 }
 
-export function restoreDeletedSegmentAttachment(
-  payload: Parameters<Window['reoWorkspace']['restoreDeletedSegmentAttachment']>[0]
+export function restoreDeletedSegmentSupplement(
+  payload: Parameters<Window['reoWorkspace']['restoreDeletedSegmentSupplement']>[0]
 ) {
-  return window.reoWorkspace.restoreDeletedSegmentAttachment(payload);
+  return window.reoWorkspace.restoreDeletedSegmentSupplement(payload);
 }
 
 export function readMemoryDetail(
@@ -90,10 +90,10 @@ export function readFinalizedAudioSegment(
   return window.reoWorkspace.readFinalizedAudioSegment(payload);
 }
 
-export function readFinalizedAudioSegmentAttachment(
-  payload: Parameters<Window['reoWorkspace']['readFinalizedAudioSegmentAttachment']>[0]
+export function readFinalizedAudioSegmentSupplement(
+  payload: Parameters<Window['reoWorkspace']['readFinalizedAudioSegmentSupplement']>[0]
 ) {
-  return window.reoWorkspace.readFinalizedAudioSegmentAttachment(payload);
+  return window.reoWorkspace.readFinalizedAudioSegmentSupplement(payload);
 }
 
 export function createRecordingDraft(
@@ -102,10 +102,10 @@ export function createRecordingDraft(
   return window.reoWorkspace.createRecordingDraft(payload);
 }
 
-export function createSegmentAttachmentRecordingDraft(
-  payload: Parameters<Window['reoWorkspace']['createSegmentAttachmentRecordingDraft']>[0]
+export function createSegmentSupplementRecordingDraft(
+  payload: Parameters<Window['reoWorkspace']['createSegmentSupplementRecordingDraft']>[0]
 ) {
-  return window.reoWorkspace.createSegmentAttachmentRecordingDraft(payload);
+  return window.reoWorkspace.createSegmentSupplementRecordingDraft(payload);
 }
 
 export function readRecordingDraftAudio(
@@ -120,10 +120,10 @@ export function appendRecordingAudioChunk(
   return window.reoWorkspace.appendRecordingAudioChunk(payload);
 }
 
-export function appendSegmentAttachmentRecordingAudioChunk(
-  payload: Parameters<Window['reoWorkspace']['appendSegmentAttachmentRecordingAudioChunk']>[0]
+export function appendSegmentSupplementRecordingAudioChunk(
+  payload: Parameters<Window['reoWorkspace']['appendSegmentSupplementRecordingAudioChunk']>[0]
 ) {
-  return window.reoWorkspace.appendSegmentAttachmentRecordingAudioChunk(payload);
+  return window.reoWorkspace.appendSegmentSupplementRecordingAudioChunk(payload);
 }
 
 export function cloneRecordingDraftPrefix(
@@ -138,10 +138,10 @@ export function finalizeRecordingDraft(
   return window.reoWorkspace.finalizeRecordingDraft(payload);
 }
 
-export function finalizeSegmentAttachmentRecordingDraft(
-  payload: Parameters<Window['reoWorkspace']['finalizeSegmentAttachmentRecordingDraft']>[0]
+export function finalizeSegmentSupplementRecordingDraft(
+  payload: Parameters<Window['reoWorkspace']['finalizeSegmentSupplementRecordingDraft']>[0]
 ) {
-  return window.reoWorkspace.finalizeSegmentAttachmentRecordingDraft(payload);
+  return window.reoWorkspace.finalizeSegmentSupplementRecordingDraft(payload);
 }
 
 export function discardRecordingDraft(
@@ -150,10 +150,10 @@ export function discardRecordingDraft(
   return window.reoWorkspace.discardRecordingDraft(payload);
 }
 
-export function discardSegmentAttachmentRecordingDraft(
-  payload: Parameters<Window['reoWorkspace']['discardSegmentAttachmentRecordingDraft']>[0]
+export function discardSegmentSupplementRecordingDraft(
+  payload: Parameters<Window['reoWorkspace']['discardSegmentSupplementRecordingDraft']>[0]
 ) {
-  return window.reoWorkspace.discardSegmentAttachmentRecordingDraft(payload);
+  return window.reoWorkspace.discardSegmentSupplementRecordingDraft(payload);
 }
 
 export function updateMemoryTitle(
@@ -168,20 +168,20 @@ export function updateSegmentTitle(
   return window.reoWorkspace.updateSegmentTitle(payload);
 }
 
-export function updateSegmentAttachmentTitle(
-  payload: Parameters<Window['reoWorkspace']['updateSegmentAttachmentTitle']>[0]
+export function updateSegmentSupplementTitle(
+  payload: Parameters<Window['reoWorkspace']['updateSegmentSupplementTitle']>[0]
 ) {
-  return window.reoWorkspace.updateSegmentAttachmentTitle(payload);
+  return window.reoWorkspace.updateSegmentSupplementTitle(payload);
 }
 
 export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveTranscript']>[0]) {
   return window.reoWorkspace.saveTranscript(payload);
 }
 
-export function saveSegmentAttachmentTranscript(
-  payload: Parameters<Window['reoWorkspace']['saveSegmentAttachmentTranscript']>[0]
+export function saveSegmentSupplementTranscript(
+  payload: Parameters<Window['reoWorkspace']['saveSegmentSupplementTranscript']>[0]
 ) {
-  return window.reoWorkspace.saveSegmentAttachmentTranscript(payload);
+  return window.reoWorkspace.saveSegmentSupplementTranscript(payload);
 }
 
 export function beginMicrophoneIntent(
@@ -234,24 +234,24 @@ export type FinalizedAudioSegment = Extract<
   Awaited<ReturnType<typeof finalizeRecordingDraft>>,
   { readonly ok: true }
 >['value'];
-export type FinalizedSegmentAttachmentRecording = Extract<
-  Awaited<ReturnType<typeof finalizeSegmentAttachmentRecordingDraft>>,
+export type FinalizedSegmentSupplementRecording = Extract<
+  Awaited<ReturnType<typeof finalizeSegmentSupplementRecordingDraft>>,
   { readonly ok: true }
 >['value'];
 export type RenamedSegment = Extract<
   Awaited<ReturnType<typeof updateSegmentTitle>>,
   { readonly ok: true }
 >['value'];
-export type RenamedSegmentAttachment = Extract<
-  Awaited<ReturnType<typeof updateSegmentAttachmentTitle>>,
+export type RenamedSegmentSupplement = Extract<
+  Awaited<ReturnType<typeof updateSegmentSupplementTitle>>,
   { readonly ok: true }
 >['value'];
-export type DeletedSegmentAttachment = Extract<
-  Awaited<ReturnType<typeof deleteSegmentAttachment>>,
+export type DeletedSegmentSupplement = Extract<
+  Awaited<ReturnType<typeof deleteSegmentSupplement>>,
   { readonly ok: true }
 >['value'];
-export type RestoredSegmentAttachment = Extract<
-  Awaited<ReturnType<typeof restoreDeletedSegmentAttachment>>,
+export type RestoredSegmentSupplement = Extract<
+  Awaited<ReturnType<typeof restoreDeletedSegmentSupplement>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceMemorySpace = Extract<
@@ -267,8 +267,8 @@ export type WorkspaceFinalizedAudioSegmentContent = Extract<
   Awaited<ReturnType<typeof readFinalizedAudioSegment>>,
   { readonly ok: true }
 >['value'];
-export type WorkspaceFinalizedAudioSegmentAttachmentContent = Extract<
-  Awaited<ReturnType<typeof readFinalizedAudioSegmentAttachment>>,
+export type WorkspaceFinalizedAudioSegmentSupplementContent = Extract<
+  Awaited<ReturnType<typeof readFinalizedAudioSegmentSupplement>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;

@@ -22,12 +22,12 @@ import {
   handleCloseRecordingTranscriptionForTest,
   handleCloseWorkspaceForTest,
   handleCreateRecordingDraftForTest,
-  handleCreateSegmentAttachmentRecordingDraftForTest,
+  handleCreateSegmentSupplementRecordingDraftForTest,
   handleCreateMemoryForTest,
   handleDeleteMemoryForTest,
-  handleDeleteSegmentAttachmentForTest,
+  handleDeleteSegmentSupplementForTest,
   handleDeleteSegmentForTest,
-  handleFinalizeSegmentAttachmentRecordingDraftForTest,
+  handleFinalizeSegmentSupplementRecordingDraftForTest,
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
@@ -36,27 +36,31 @@ import {
   handleOpenWorkspaceMemorySpaceForTest,
   handleReadWorkspaceSnapshotForTest,
   handleReadFinalizedAudioSegmentForTest,
-  handleReadFinalizedAudioSegmentAttachmentForTest,
+  handleReadFinalizedAudioSegmentSupplementForTest,
   handleReadMemoryDetailForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
   handleRestoreDeletedMemoryForTest,
-  handleRestoreDeletedSegmentAttachmentForTest,
+  handleRestoreDeletedSegmentSupplementForTest,
   handleRestoreDeletedSegmentForTest,
-  handleSaveSegmentAttachmentTranscriptForTest,
+  handleSaveSegmentSupplementTranscriptForTest,
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
-  handleUpdateSegmentAttachmentTitleForTest,
+  handleUpdateSegmentSupplementTitleForTest,
   handleUpdateSegmentTitleForTest,
 } from '../../src/main/workspaceIpc.js';
-import { appendSegmentAttachmentRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
+import { appendSegmentSupplementRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
 import {
   initializeWorkspaceFiles,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
 } from '../../src/main/workspaceFiles.js';
+import {
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from '../../src/main/workspaceMarkdownObjects.js';
 import {
   createMicrophoneIntent,
   decideMediaPermissionRequest,
@@ -149,44 +153,60 @@ async function writeFinalizedMemoryRecording({
   const memoryDirectory = path.join(root, 'memories', memoryId);
   const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'memories'), { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
   await writeFile(
-    path.join(memoryDirectory, 'memory.json'),
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title },
+      content: `# ${title}\n`,
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'memories', `${memoryId}.json`),
     `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'memory',
       memoryId,
-      title,
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      segmentIds: [segmentId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2, 3]));
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'segment.json'),
+    path.join(recordingDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\n## Transcript\n\n`,
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', `${segmentId}.json`),
     `${JSON.stringify({
       schemaVersion: 1,
+      objectType: 'segment',
       workspaceId,
       memoryId,
       segmentId,
-      type: 'audio',
-      status: 'finalized',
-      title,
+      kind: 'audio',
       createdAt: '2026-05-06T13:08:00.000Z',
       finalizedAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
       durationMs: 1000,
       nextSequence: 1,
       audioByteLength: 3,
-      transcriptPath: 'transcript.md',
     })}\n`
   );
 }
 
-async function writeFinalizedSegmentAttachment({
+async function writeFinalizedSegmentSupplement({
   root,
   workspaceId,
   memoryId,
   segmentId,
-  attachmentId,
+  supplementId,
   title,
   directoryTitle = title,
 }: {
@@ -194,39 +214,94 @@ async function writeFinalizedSegmentAttachment({
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly attachmentId: string;
+  readonly supplementId: string;
   readonly title: string;
   readonly directoryTitle?: string;
 }): Promise<string> {
   const segmentDirectory = await findSegmentDirectoryById(root, segmentId);
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     segmentDirectory,
-    'attachments',
-    `${attachmentId}--${directoryTitle}`
+    'supplements',
+    `${supplementId}--${directoryTitle}`
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '补充转录');
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root,
+    directory: supplementDirectory,
+    workspaceId,
+    memoryId,
+    segmentId,
+    supplementId,
+    title,
+    content: '补充转录',
+  });
+  return supplementDirectory;
+}
+
+async function writeFinalizedSupplementFiles({
+  root,
+  directory,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  title,
+  content = '',
+  audioBytes = [4, 5],
+}: {
+  readonly root: string;
+  readonly directory: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly title: string;
+  readonly content?: string;
+  readonly audioBytes?: readonly number[];
+}): Promise<void> {
+  await writeFile(path.join(directory, 'audio.webm'), new Uint8Array(audioBytes));
   await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
+    path.join(directory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title, kind: 'audio' },
+      content,
+    })
+  );
+  await mkdir(path.join(root, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'supplements', `${supplementId}.json`),
     `${JSON.stringify({
       schemaVersion: 1,
+      objectType: 'supplement',
       workspaceId,
       memoryId,
       segmentId,
-      attachmentId,
-      type: 'audio',
-      status: 'finalized',
-      title,
+      supplementId,
+      kind: 'audio',
       createdAt: '2026-05-06T13:10:00.000Z',
       finalizedAt: '2026-05-06T13:11:00.000Z',
+      updatedAt: '2026-05-06T13:11:00.000Z',
       durationMs: 500,
       nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
+      audioByteLength: audioBytes.length,
     })}\n`
   );
-  return attachmentDirectory;
+}
+
+async function readSupplementTitle(directory: string): Promise<string> {
+  const parsed = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: await readFile(path.join(directory, 'supplement.md'), 'utf8'),
+  });
+  return (parsed.data as { readonly title: string }).title;
+}
+
+async function readSupplementContent(directory: string): Promise<string> {
+  return parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: await readFile(path.join(directory, 'supplement.md'), 'utf8'),
+  }).content;
 }
 
 function createRegisteredHandleStore(
@@ -847,22 +922,34 @@ test('createMemory creates an empty Memory container through file truth', async 
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     });
   }
   assert.deepEqual(
+    parseWorkspaceMarkdownObject({
+      objectType: 'memory',
+      markdown: await readFile(
+        path.join(rootPath, 'memories', 'mem_ipc_created--产品灵感与思考', 'memory.md'),
+        'utf8'
+      ),
+    }).data,
+    {
+      title: '产品灵感与思考',
+    }
+  );
+  assert.deepEqual(
     JSON.parse(
       await readFile(
-        path.join(rootPath, 'memories', 'mem_ipc_created--产品灵感与思考', 'memory.json'),
+        path.join(rootPath, '.reo', 'objects', 'memories', 'mem_ipc_created.json'),
         'utf8'
       )
     ),
     {
+      schemaVersion: 1,
+      objectType: 'memory',
       memoryId: 'mem_ipc_created',
-      title: '产品灵感与思考',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
-      segmentIds: [],
     }
   );
   assert.deepEqual(
@@ -877,7 +964,7 @@ test('createMemory creates an empty Memory container through file truth', async 
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ]
   );
@@ -1029,13 +1116,17 @@ test('deleteSegment hides a Segment from its Memory and restoreDeletedSegment re
     assert.equal('rootPath' in deleted.value, false);
   }
   await assert.rejects(stat(segmentDirectory));
-  assert.deepEqual(JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')), {
-    memoryId: 'mem_segment_delete',
-    title: 'Segment delete',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:09:00.000Z',
-    segmentIds: [],
-  });
+  assert.equal(
+    parseWorkspaceMarkdownObject({
+      objectType: 'memory',
+      markdown: await readFile(path.join(memoryDirectory, 'memory.md'), 'utf8'),
+    }).data.title,
+    'Segment delete'
+  );
+  await readFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', 'mem_segment_delete.json'),
+    'utf8'
+  );
 
   const detailAfterDelete = await handleReadMemoryDetailForTest({
     event,
@@ -1077,14 +1168,17 @@ test('deleteSegment hides a Segment from its Memory and restoreDeletedSegment re
     assert.equal('rootPath' in restored.value, false);
   }
   await stat(segmentDirectory);
-  assert.deepEqual(
-    JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')).segmentIds,
-    ['seg_segment_delete']
+  assert.equal(
+    parseWorkspaceMarkdownObject({
+      objectType: 'segment',
+      markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    }).data.title,
+    'Segment delete'
   );
 });
 
-test('deleteSegmentAttachment hides an attachment from its parent Segment and restoreDeletedSegmentAttachment restores it', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-attachment-'));
+test('deleteSegmentSupplement hides an supplement from its parent Segment and restoreDeletedSegmentSupplement restores it', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-supplement-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 删除补充',
@@ -1095,35 +1189,35 @@ test('deleteSegmentAttachment hides an attachment from its parent Segment and re
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_delete',
-    segmentId: 'seg_attachment_delete',
+    memoryId: 'mem_supplement_delete',
+    segmentId: 'seg_supplement_delete',
     title: 'Parent segment',
   });
-  const attachmentDirectory = await writeFinalizedSegmentAttachment({
+  const supplementDirectory = await writeFinalizedSegmentSupplement({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_delete',
-    segmentId: 'seg_attachment_delete',
-    attachmentId: 'att_attachment_delete',
+    memoryId: 'mem_supplement_delete',
+    segmentId: 'seg_supplement_delete',
+    supplementId: 'sup_supplement_delete',
     title: '现场补充',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
-  const trashedAttachmentDirectory = path.join(
+  const trashedSupplementDirectory = path.join(
     rootPath,
     '.reo',
     'trash',
-    'attachments',
-    'att_attachment_delete--现场补充'
+    'supplements',
+    'sup_supplement_delete--现场补充'
   );
 
-  const deleted = await handleDeleteSegmentAttachmentForTest({
+  const deleted = await handleDeleteSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_attachment_delete',
-      segmentId: 'seg_attachment_delete',
-      attachmentId: 'att_attachment_delete',
+      memoryId: 'mem_supplement_delete',
+      segmentId: 'seg_supplement_delete',
+      supplementId: 'sup_supplement_delete',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1133,29 +1227,25 @@ test('deleteSegmentAttachment hides an attachment from its parent Segment and re
 
   assert.equal(deleted.ok, true);
   if (deleted.ok) {
-    assert.equal(deleted.value.attachmentId, 'att_attachment_delete');
-    assert.equal(deleted.value.restoreToken, 'att_attachment_delete');
-    assert.equal(deleted.value.memory.attachmentCount, 0);
-    assert.equal(deleted.value.segment.attachmentCount, 0);
-    assert.deepEqual(deleted.value.segment.attachments, []);
+    assert.equal(deleted.value.supplementId, 'sup_supplement_delete');
+    assert.equal(deleted.value.restoreToken, 'sup_supplement_delete');
+    assert.equal(deleted.value.memory.supplementCount, 0);
+    assert.equal(deleted.value.segment.supplementCount, 0);
+    assert.deepEqual(deleted.value.segment.supplements, []);
     assert.equal('rootPath' in deleted.value, false);
     assert.equal('workspaceHandle' in deleted.value, false);
   }
-  await assert.rejects(stat(attachmentDirectory));
-  await stat(path.join(trashedAttachmentDirectory, 'audio.webm'));
-  assert.equal(
-    JSON.parse(await readFile(path.join(trashedAttachmentDirectory, 'attachment.json'), 'utf8'))
-      .title,
-    '现场补充'
-  );
+  await assert.rejects(stat(supplementDirectory));
+  await stat(path.join(trashedSupplementDirectory, 'audio.webm'));
+  assert.equal(await readSupplementTitle(trashedSupplementDirectory), '现场补充');
 
   const detailAfterDelete = await handleReadMemoryDetailForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_attachment_delete',
-      requestId: 'request_attachment_deleted',
+      memoryId: 'mem_supplement_delete',
+      requestId: 'request_supplement_deleted',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1164,18 +1254,18 @@ test('deleteSegmentAttachment hides an attachment from its parent Segment and re
   });
   assert.equal(detailAfterDelete.ok, true);
   if (detailAfterDelete.ok) {
-    assert.equal(detailAfterDelete.value.detail.attachmentCount, 0);
-    assert.deepEqual(detailAfterDelete.value.detail.segments[0]?.attachments, []);
+    assert.equal(detailAfterDelete.value.detail.supplementCount, 0);
+    assert.deepEqual(detailAfterDelete.value.detail.segments[0]?.supplements, []);
   }
 
-  const restored = await handleRestoreDeletedSegmentAttachmentForTest({
+  const restored = await handleRestoreDeletedSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_attachment_delete',
-      segmentId: 'seg_attachment_delete',
-      restoreToken: 'att_attachment_delete',
+      memoryId: 'mem_supplement_delete',
+      segmentId: 'seg_supplement_delete',
+      restoreToken: 'sup_supplement_delete',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1185,19 +1275,19 @@ test('deleteSegmentAttachment hides an attachment from its parent Segment and re
 
   assert.equal(restored.ok, true);
   if (restored.ok) {
-    assert.equal(restored.value.memory.attachmentCount, 1);
-    assert.equal(restored.value.segment.attachmentCount, 1);
-    assert.equal(restored.value.attachment.attachmentId, 'att_attachment_delete');
-    assert.equal(restored.value.attachment.title, '现场补充');
+    assert.equal(restored.value.memory.supplementCount, 1);
+    assert.equal(restored.value.segment.supplementCount, 1);
+    assert.equal(restored.value.supplement.supplementId, 'sup_supplement_delete');
+    assert.equal(restored.value.supplement.title, '现场补充');
     assert.equal('rootPath' in restored.value, false);
     assert.equal('workspaceHandle' in restored.value, false);
   }
-  await stat(attachmentDirectory);
-  await assert.rejects(stat(trashedAttachmentDirectory));
+  await stat(supplementDirectory);
+  await assert.rejects(stat(trashedSupplementDirectory));
 });
 
-test('restoreDeletedSegmentAttachment returns parent missing and leaves trash recoverable', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-restore-attachment-parent-'));
+test('restoreDeletedSegmentSupplement returns parent missing and leaves trash recoverable', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-restore-supplement-parent-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充恢复父级缺失',
@@ -1208,28 +1298,28 @@ test('restoreDeletedSegmentAttachment returns parent missing and leaves trash re
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_parent_missing',
-    segmentId: 'seg_attachment_parent_missing',
+    memoryId: 'mem_supplement_parent_missing',
+    segmentId: 'seg_supplement_parent_missing',
     title: 'Parent segment',
   });
-  await writeFinalizedSegmentAttachment({
+  await writeFinalizedSegmentSupplement({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_parent_missing',
-    segmentId: 'seg_attachment_parent_missing',
-    attachmentId: 'att_attachment_parent_missing',
+    memoryId: 'mem_supplement_parent_missing',
+    segmentId: 'seg_supplement_parent_missing',
+    supplementId: 'sup_supplement_parent_missing',
     title: '现场补充',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const deleted = await handleDeleteSegmentAttachmentForTest({
+  const deleted = await handleDeleteSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_attachment_parent_missing',
-      segmentId: 'seg_attachment_parent_missing',
-      attachmentId: 'att_attachment_parent_missing',
+      memoryId: 'mem_supplement_parent_missing',
+      segmentId: 'seg_supplement_parent_missing',
+      supplementId: 'sup_supplement_parent_missing',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1237,19 +1327,19 @@ test('restoreDeletedSegmentAttachment returns parent missing and leaves trash re
     handleStore,
   });
   assert.equal(deleted.ok, true);
-  await rm(await findSegmentDirectoryById(rootPath, 'seg_attachment_parent_missing'), {
+  await rm(await findSegmentDirectoryById(rootPath, 'seg_supplement_parent_missing'), {
     recursive: true,
     force: true,
   });
 
-  const restored = await handleRestoreDeletedSegmentAttachmentForTest({
+  const restored = await handleRestoreDeletedSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_attachment_parent_missing',
-      segmentId: 'seg_attachment_parent_missing',
-      restoreToken: 'att_attachment_parent_missing',
+      memoryId: 'mem_supplement_parent_missing',
+      segmentId: 'seg_supplement_parent_missing',
+      restoreToken: 'sup_supplement_parent_missing',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1259,7 +1349,7 @@ test('restoreDeletedSegmentAttachment returns parent missing and leaves trash re
 
   assert.equal(restored.ok, false);
   if (!restored.ok) {
-    assert.equal(restored.error.code, 'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING');
+    assert.equal(restored.error.code, 'ERR_SEGMENT_SUPPLEMENT_RESTORE_PARENT_MISSING');
     assert.equal(restored.error.dataRetention, 'previous-file-preserved');
   }
   await stat(
@@ -1267,15 +1357,15 @@ test('restoreDeletedSegmentAttachment returns parent missing and leaves trash re
       rootPath,
       '.reo',
       'trash',
-      'attachments',
-      'att_attachment_parent_missing--现场补充',
-      'attachment.json'
+      'supplements',
+      'sup_supplement_parent_missing--现场补充',
+      'supplement.md'
     )
   );
 });
 
-test('deleteSegmentAttachment rejects workspace mismatches before file writes', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-attachment-mismatch-'));
+test('deleteSegmentSupplement rejects workspace mismatches before file writes', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-supplement-mismatch-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充删除不匹配',
@@ -1286,28 +1376,28 @@ test('deleteSegmentAttachment rejects workspace mismatches before file writes', 
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_delete_mismatch',
-    segmentId: 'seg_attachment_delete_mismatch',
+    memoryId: 'mem_supplement_delete_mismatch',
+    segmentId: 'seg_supplement_delete_mismatch',
     title: 'Parent segment',
   });
-  const attachmentDirectory = await writeFinalizedSegmentAttachment({
+  const supplementDirectory = await writeFinalizedSegmentSupplement({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_attachment_delete_mismatch',
-    segmentId: 'seg_attachment_delete_mismatch',
-    attachmentId: 'att_attachment_delete_mismatch',
+    memoryId: 'mem_supplement_delete_mismatch',
+    segmentId: 'seg_supplement_delete_mismatch',
+    supplementId: 'sup_supplement_delete_mismatch',
     title: '现场补充',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleDeleteSegmentAttachmentForTest({
+  const result = await handleDeleteSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_other',
-      memoryId: 'mem_attachment_delete_mismatch',
-      segmentId: 'seg_attachment_delete_mismatch',
-      attachmentId: 'att_attachment_delete_mismatch',
+      memoryId: 'mem_supplement_delete_mismatch',
+      segmentId: 'seg_supplement_delete_mismatch',
+      supplementId: 'sup_supplement_delete_mismatch',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1319,8 +1409,8 @@ test('deleteSegmentAttachment rejects workspace mismatches before file writes', 
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
   }
-  await stat(attachmentDirectory);
-  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'attachments')));
+  await stat(supplementDirectory);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'supplements')));
 });
 
 test('readMemoryDetail returns current Memory segments without exposing handle or root path', async () => {
@@ -1374,8 +1464,8 @@ test('readMemoryDetail returns current Memory segments without exposing handle o
         durationMs: 1000,
         audioByteLength: 3,
         transcript: { exists: false },
-        attachmentCount: 0,
-        attachments: [],
+        supplementCount: 0,
+        supplements: [],
       },
     ]);
     assert.equal('workspaceHandle' in result.value.detail, false);
@@ -1400,8 +1490,12 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     title: '生日录音',
   });
   await writeFile(
-    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'transcript.md'),
-    '大家一起唱生日快乐。'
+    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '生日录音', kind: 'audio' },
+      content: '# 生日录音\n\n## Transcript\n\n大家一起唱生日快乐。',
+    })
   );
   const handleStore = createRegisteredHandleStore(rootPath);
 
@@ -1437,8 +1531,8 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
   }
 });
 
-test('readFinalizedAudioSegmentAttachment returns parent-scoped audio bytes without transcript text or paths', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-attachment-audio-'));
+test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes without transcript text or paths', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-supplement-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充播放',
@@ -1453,48 +1547,36 @@ test('readFinalizedAudioSegmentAttachment returns parent-scoped audio bytes with
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
   });
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
     'mem_ipc_audio',
     'segments',
     'seg_ipc_audio',
-    'attachments',
-    'att_ipc_followup'
+    'supplements',
+    'sup_ipc_followup'
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_audio',
-      segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+  });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleReadFinalizedAudioSegmentAttachmentForTest({
+  const result = await handleReadFinalizedAudioSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
       memoryId: 'mem_ipc_audio',
       segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
-      requestId: 'request_att_ipc_followup',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1504,11 +1586,11 @@ test('readFinalizedAudioSegmentAttachment returns parent-scoped audio bytes with
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.value.requestId, 'request_att_ipc_followup');
+    assert.equal(result.value.requestId, 'request_sup_ipc_followup');
     assert.equal(result.value.workspaceId, 'ws_ipc');
     assert.equal(result.value.memoryId, 'mem_ipc_audio');
     assert.equal(result.value.segmentId, 'seg_ipc_audio');
-    assert.equal(result.value.attachmentId, 'att_ipc_followup');
+    assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
     assert.equal('transcript' in result.value, false);
@@ -1517,8 +1599,8 @@ test('readFinalizedAudioSegmentAttachment returns parent-scoped audio bytes with
   }
 });
 
-test('readFinalizedAudioSegmentAttachment reads renamed attachment file-space nodes', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-renamed-attachment-audio-'));
+test('readFinalizedAudioSegmentSupplement reads renamed supplement file-space nodes', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-renamed-supplement-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充播放',
@@ -1533,48 +1615,37 @@ test('readFinalizedAudioSegmentAttachment reads renamed attachment file-space no
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
   });
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
     'mem_ipc_audio',
     'segments',
     'seg_ipc_audio',
-    'attachments',
-    'att_ipc_followup--补充录音'
+    'supplements',
+    'sup_ipc_followup--补充录音'
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([7, 8, 9]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_audio',
-      segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 3,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+    audioBytes: [7, 8, 9],
+  });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleReadFinalizedAudioSegmentAttachmentForTest({
+  const result = await handleReadFinalizedAudioSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
       memoryId: 'mem_ipc_audio',
       segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
-      requestId: 'request_att_ipc_followup',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1591,9 +1662,9 @@ test('readFinalizedAudioSegmentAttachment reads renamed attachment file-space no
   }
 });
 
-test('readFinalizedAudioSegmentAttachment rejects a symlinked attachments parent', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-parent-symlink-'));
-  const outsideRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-outside-'));
+test('readFinalizedAudioSegmentSupplement rejects a symlinked supplements parent', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-parent-symlink-'));
+  const outsideRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-outside-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充父目录',
@@ -1608,44 +1679,32 @@ test('readFinalizedAudioSegmentAttachment rejects a symlinked attachments parent
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
   });
-  const outsideAttachmentDirectory = path.join(outsideRoot, 'att_outside_followup');
-  await mkdir(outsideAttachmentDirectory, { recursive: true });
-  await writeFile(path.join(outsideAttachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(outsideAttachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(outsideAttachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_audio',
-      segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_outside_followup',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  const outsideSupplementDirectory = path.join(outsideRoot, 'sup_outside_followup');
+  await mkdir(outsideSupplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: outsideSupplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_outside_followup',
+    title: '补充录音',
+  });
   await symlink(
     outsideRoot,
-    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'attachments')
+    path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'supplements')
   );
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleReadFinalizedAudioSegmentAttachmentForTest({
+  const result = await handleReadFinalizedAudioSegmentSupplementForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
       memoryId: 'mem_ipc_audio',
       segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_outside_followup',
-      requestId: 'request_att_symlink',
+      supplementId: 'sup_outside_followup',
+      requestId: 'request_sup_symlink',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -1659,8 +1718,8 @@ test('readFinalizedAudioSegmentAttachment rejects a symlinked attachments parent
   }
 });
 
-test('saveSegmentAttachmentTranscript writes the attachment transcript without exposing paths', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-save-attachment-transcript-'));
+test('saveSegmentSupplementTranscript writes the supplement transcript without exposing paths', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-save-supplement-transcript-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充转写',
@@ -1675,47 +1734,35 @@ test('saveSegmentAttachmentTranscript writes the attachment transcript without e
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
   });
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
     'mem_ipc_audio',
     'segments',
     'seg_ipc_audio',
-    'attachments',
-    'att_ipc_followup--补充录音'
+    'supplements',
+    'sup_ipc_followup--补充录音'
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_audio',
-      segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+  });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleSaveSegmentAttachmentTranscriptForTest({
+  const result = await handleSaveSegmentSupplementTranscriptForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
       memoryId: 'mem_ipc_audio',
       segmentId: 'seg_ipc_audio',
-      attachmentId: 'att_ipc_followup',
+      supplementId: 'sup_ipc_followup',
       markdown: '补充录音的真实转写',
     },
     expectedSession,
@@ -1726,14 +1773,14 @@ test('saveSegmentAttachmentTranscript writes the attachment transcript without e
 
   assert.equal(result.ok, true);
   assert.equal(
-    await readFile(path.join(attachmentDirectory, 'transcript.md'), 'utf8'),
-    '补充录音的真实转写'
+    await readSupplementContent(supplementDirectory),
+    '\n\n## Transcript\n\n补充录音的真实转写\n'
   );
   if (result.ok) {
     assert.equal(result.value.saved, true);
-    assert.equal(result.value.memory.attachmentCount, 1);
-    assert.equal(result.value.segment.attachments[0]?.transcript.exists, true);
-    assert.equal(result.value.attachment.transcript.exists, true);
+    assert.equal(result.value.memory.supplementCount, 1);
+    assert.equal(result.value.segment.supplements[0]?.transcript.exists, true);
+    assert.equal(result.value.supplement.transcript.exists, true);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
@@ -1772,8 +1819,8 @@ test('createRecordingDraft returns a flat IPC response value', async () => {
   });
 });
 
-test('segment attachment recording IPC keeps the finalized audio under the parent segment', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-draft-'));
+test('segment supplement recording IPC keeps the finalized audio under the parent segment', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-draft-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充录音',
@@ -1784,50 +1831,50 @@ test('segment attachment recording IPC keeps the finalized audio under the paren
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_ipc_attachment',
-    segmentId: 'seg_ipc_attachment_parent',
+    memoryId: 'mem_ipc_supplement',
+    segmentId: 'seg_ipc_supplement_parent',
     title: '父级录音',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const created = await handleCreateSegmentAttachmentRecordingDraftForTest({
+  const created = await handleCreateSegmentSupplementRecordingDraftForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_attachment',
-      segmentId: 'seg_ipc_attachment_parent',
+      memoryId: 'mem_ipc_supplement',
+      segmentId: 'seg_ipc_supplement_parent',
     },
     expectedSession,
     expectedSessionKey: 'default',
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     handleStore,
-    createAttachmentId: () => 'att_ipc_attachment_child',
+    createSupplementId: () => 'sup_ipc_supplement_child',
     now: () => '2026-05-08T14:42:00.000Z',
   });
 
   assert.deepEqual(created, {
     ok: true,
     value: {
-      attachmentId: 'att_ipc_attachment_child',
+      supplementId: 'sup_ipc_supplement_child',
       nextSequence: 0,
     },
   });
-  await appendSegmentAttachmentRecordingAudioChunk({
+  await appendSegmentSupplementRecordingAudioChunk({
     rootPath,
-    attachmentId: 'att_ipc_attachment_child',
+    supplementId: 'sup_ipc_supplement_child',
     sequence: 0,
     chunk: new Uint8Array([4, 5]),
   });
 
-  const finalized = await handleFinalizeSegmentAttachmentRecordingDraftForTest({
+  const finalized = await handleFinalizeSegmentSupplementRecordingDraftForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_attachment',
-      segmentId: 'seg_ipc_attachment_parent',
-      attachmentId: 'att_ipc_attachment_child',
+      memoryId: 'mem_ipc_supplement',
+      segmentId: 'seg_ipc_supplement_parent',
+      supplementId: 'sup_ipc_supplement_child',
       title: '补充录音',
       durationMs: 500,
     },
@@ -1840,29 +1887,29 @@ test('segment attachment recording IPC keeps the finalized audio under the paren
   assert.equal(finalized.ok, true);
   if (finalized.ok) {
     assert.equal(finalized.value.memory.segmentCount, 1);
-    assert.equal(finalized.value.memory.attachmentCount, 1);
-    assert.equal(finalized.value.segment.segmentId, 'seg_ipc_attachment_parent');
-    assert.equal(finalized.value.segment.attachmentCount, 1);
-    assert.equal(finalized.value.attachment.attachmentId, 'att_ipc_attachment_child');
-    assert.equal(finalized.value.attachment.segmentId, 'seg_ipc_attachment_parent');
-    assert.equal(finalized.value.attachment.audioByteLength, 2);
-    assert.equal('workspaceHandle' in finalized.value.attachment, false);
-    assert.equal('rootPath' in finalized.value.attachment, false);
+    assert.equal(finalized.value.memory.supplementCount, 1);
+    assert.equal(finalized.value.segment.segmentId, 'seg_ipc_supplement_parent');
+    assert.equal(finalized.value.segment.supplementCount, 1);
+    assert.equal(finalized.value.supplement.supplementId, 'sup_ipc_supplement_child');
+    assert.equal(finalized.value.supplement.segmentId, 'seg_ipc_supplement_parent');
+    assert.equal(finalized.value.supplement.audioByteLength, 2);
+    assert.equal('workspaceHandle' in finalized.value.supplement, false);
+    assert.equal('rootPath' in finalized.value.supplement, false);
   }
   await assert.rejects(
     stat(
-      path.join(rootPath, 'memories', 'mem_ipc_attachment', 'segments', 'att_ipc_attachment_child')
+      path.join(rootPath, 'memories', 'mem_ipc_supplement', 'segments', 'sup_ipc_supplement_child')
     )
   );
-  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_attachment_parent');
-  const attachmentDirectoryName = (await readdir(path.join(segmentDirectory, 'attachments'))).find(
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_supplement_parent');
+  const supplementDirectoryName = (await readdir(path.join(segmentDirectory, 'supplements'))).find(
     (entry) =>
-      entry === 'att_ipc_attachment_child' || entry.startsWith('att_ipc_attachment_child--')
+      entry === 'sup_ipc_supplement_child' || entry.startsWith('sup_ipc_supplement_child--')
   );
-  assert.ok(attachmentDirectoryName);
+  assert.ok(supplementDirectoryName);
   assert.equal(
     (
-      await stat(path.join(segmentDirectory, 'attachments', attachmentDirectoryName, 'audio.webm'))
+      await stat(path.join(segmentDirectory, 'supplements', supplementDirectoryName, 'audio.webm'))
     ).isFile(),
     true
   );
@@ -1911,17 +1958,21 @@ test('updateMemoryTitle renames the memory node through file truth', async () =>
   }
   const memoryDirectory = path.join(rootPath, 'memories', 'mem_ipc--产品灵感与思考');
   await assert.rejects(stat(path.join(rootPath, 'memories', 'mem_ipc')));
-  assert.deepEqual(JSON.parse(await readFile(path.join(memoryDirectory, 'memory.json'), 'utf8')), {
-    memoryId: 'mem_ipc',
-    title: '产品灵感与思考',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:09:00.000Z',
-    segmentIds: ['seg_ipc'],
-  });
   assert.equal(
-    JSON.parse(
-      await readFile(path.join(memoryDirectory, 'segments', 'seg_ipc', 'segment.json'), 'utf8')
-    ).title,
+    parseWorkspaceMarkdownObject({
+      objectType: 'memory',
+      markdown: await readFile(path.join(memoryDirectory, 'memory.md'), 'utf8'),
+    }).data.title,
+    '产品灵感与思考'
+  );
+  assert.equal(
+    parseWorkspaceMarkdownObject({
+      objectType: 'segment',
+      markdown: await readFile(
+        path.join(memoryDirectory, 'segments', 'seg_ipc', 'segment.md'),
+        'utf8'
+      ),
+    }).data.title,
     '旧标题'
   );
 });
@@ -1972,19 +2023,25 @@ test('updateSegmentTitle renames the segment node through file truth', async () 
   const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_segment');
   assert.equal(path.basename(segmentDirectory), 'seg_ipc_segment--录音1');
   assert.equal(
-    JSON.parse(await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')).title,
+    parseWorkspaceMarkdownObject({
+      objectType: 'segment',
+      markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    }).data.title,
     '录音1'
   );
   assert.equal(
     JSON.parse(
-      await readFile(path.join(rootPath, 'memories', 'mem_ipc_segment', 'memory.json'), 'utf8')
+      await readFile(
+        path.join(rootPath, '.reo', 'objects', 'memories', 'mem_ipc_segment.json'),
+        'utf8'
+      )
     ).updatedAt,
     '2026-05-06T13:09:00.000Z'
   );
 });
 
-test('updateSegmentAttachmentTitle renames the attachment node through file truth', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-title-'));
+test('updateSegmentSupplementTitle renames the supplement node through file truth', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-title-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充命名',
@@ -1995,48 +2052,36 @@ test('updateSegmentAttachmentTitle renames the attachment node through file trut
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_ipc_attachment_title',
-    segmentId: 'seg_ipc_attachment_title',
+    memoryId: 'mem_ipc_supplement_title',
+    segmentId: 'seg_ipc_supplement_title',
     title: '父级录音',
   });
-  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_attachment_title');
-  const attachmentDirectory = path.join(
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_supplement_title');
+  const supplementDirectory = path.join(
     segmentDirectory,
-    'attachments',
-    'att_ipc_attachment_title'
+    'supplements',
+    'sup_ipc_supplement_title'
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_attachment_title',
-      segmentId: 'seg_ipc_attachment_title',
-      attachmentId: 'att_ipc_attachment_title',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音1',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_supplement_title',
+    segmentId: 'seg_ipc_supplement_title',
+    supplementId: 'sup_ipc_supplement_title',
+    title: '补充录音1',
+  });
   const handleStore = createRegisteredHandleStore(rootPath);
 
-  const result = await handleUpdateSegmentAttachmentTitleForTest({
+  const result = await handleUpdateSegmentSupplementTitleForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_attachment_title',
-      segmentId: 'seg_ipc_attachment_title',
-      attachmentId: 'att_ipc_attachment_title',
+      memoryId: 'mem_ipc_supplement_title',
+      segmentId: 'seg_ipc_supplement_title',
+      supplementId: 'sup_ipc_supplement_title',
       title: '现场补充',
     },
     expectedSession,
@@ -2047,33 +2092,29 @@ test('updateSegmentAttachmentTitle renames the attachment node through file trut
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.value.memory.memoryId, 'mem_ipc_attachment_title');
-    assert.equal(result.value.memory.attachmentCount, 1);
-    assert.equal(result.value.segment.segmentId, 'seg_ipc_attachment_title');
-    assert.equal(result.value.segment.attachmentCount, 1);
-    assert.equal(result.value.attachment.attachmentId, 'att_ipc_attachment_title');
-    assert.equal(result.value.attachment.title, '现场补充');
-    assert.equal(result.value.attachment.updatedAt, '2026-05-06T13:11:00.000Z');
-    assert.equal('rootPath' in result.value.attachment, false);
-    assert.equal('workspaceHandle' in result.value.attachment, false);
+    assert.equal(result.value.memory.memoryId, 'mem_ipc_supplement_title');
+    assert.equal(result.value.memory.supplementCount, 1);
+    assert.equal(result.value.segment.segmentId, 'seg_ipc_supplement_title');
+    assert.equal(result.value.segment.supplementCount, 1);
+    assert.equal(result.value.supplement.supplementId, 'sup_ipc_supplement_title');
+    assert.equal(result.value.supplement.title, '现场补充');
+    assert.equal(result.value.supplement.updatedAt, '2026-05-06T13:11:00.000Z');
+    assert.equal('rootPath' in result.value.supplement, false);
+    assert.equal('workspaceHandle' in result.value.supplement, false);
   }
 
-  const renamedAttachmentDirectory = path.join(
+  const renamedSupplementDirectory = path.join(
     segmentDirectory,
-    'attachments',
-    'att_ipc_attachment_title--现场补充'
+    'supplements',
+    'sup_ipc_supplement_title--现场补充'
   );
-  await assert.rejects(stat(attachmentDirectory));
-  await stat(renamedAttachmentDirectory);
-  assert.equal(
-    JSON.parse(await readFile(path.join(renamedAttachmentDirectory, 'attachment.json'), 'utf8'))
-      .title,
-    '现场补充'
-  );
+  await assert.rejects(stat(supplementDirectory));
+  await stat(renamedSupplementDirectory);
+  assert.equal(await readSupplementTitle(renamedSupplementDirectory), '现场补充');
 });
 
-test('updateSegmentAttachmentTitle rejects workspace mismatches before file writes', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-attachment-title-mismatch-'));
+test('updateSegmentSupplementTitle rejects workspace mismatches before file writes', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-title-mismatch-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: 'IPC 补充命名不匹配',
@@ -2084,47 +2125,35 @@ test('updateSegmentAttachmentTitle rejects workspace mismatches before file writ
   await writeFinalizedMemoryRecording({
     root: rootPath,
     workspaceId: 'ws_ipc',
-    memoryId: 'mem_ipc_attachment_mismatch',
-    segmentId: 'seg_ipc_attachment_mismatch',
+    memoryId: 'mem_ipc_supplement_mismatch',
+    segmentId: 'seg_ipc_supplement_mismatch',
     title: '父级录音',
   });
-  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_attachment_mismatch');
-  const attachmentDirectory = path.join(
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_supplement_mismatch');
+  const supplementDirectory = path.join(
     segmentDirectory,
-    'attachments',
-    'att_ipc_attachment_mismatch'
+    'supplements',
+    'sup_ipc_supplement_mismatch'
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_ipc',
-      memoryId: 'mem_ipc_attachment_mismatch',
-      segmentId: 'seg_ipc_attachment_mismatch',
-      attachmentId: 'att_ipc_attachment_mismatch',
-      type: 'audio',
-      status: 'finalized',
-      title: '补充录音1',
-      createdAt: '2026-05-06T13:10:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })}\n`
-  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_supplement_mismatch',
+    segmentId: 'seg_ipc_supplement_mismatch',
+    supplementId: 'sup_ipc_supplement_mismatch',
+    title: '补充录音1',
+  });
 
-  const result = await handleUpdateSegmentAttachmentTitleForTest({
+  const result = await handleUpdateSegmentSupplementTitleForTest({
     event,
     input: {
       workspaceHandle: 'wh_ipc',
       workspaceId: 'ws_other',
-      memoryId: 'mem_ipc_attachment_mismatch',
-      segmentId: 'seg_ipc_attachment_mismatch',
-      attachmentId: 'att_ipc_attachment_mismatch',
+      memoryId: 'mem_ipc_supplement_mismatch',
+      segmentId: 'seg_ipc_supplement_mismatch',
+      supplementId: 'sup_ipc_supplement_mismatch',
       title: '不应写入',
     },
     expectedSession,
@@ -2137,13 +2166,10 @@ test('updateSegmentAttachmentTitle rejects workspace mismatches before file writ
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
   }
-  await stat(attachmentDirectory);
-  assert.equal(
-    JSON.parse(await readFile(path.join(attachmentDirectory, 'attachment.json'), 'utf8')).title,
-    '补充录音1'
-  );
+  await stat(supplementDirectory);
+  assert.equal(await readSupplementTitle(supplementDirectory), '补充录音1');
   await assert.rejects(
-    stat(path.join(segmentDirectory, 'attachments', 'att_ipc_attachment_mismatch--不应写入'))
+    stat(path.join(segmentDirectory, 'supplements', 'sup_ipc_supplement_mismatch--不应写入'))
   );
 });
 
@@ -2602,7 +2628,7 @@ test('updateMemorySpaceTitle rejects untrusted senders before parsing payloads',
   assert.equal(payloadRead, false);
 });
 
-test('readWorkspaceSnapshot reflects external workspace and memory JSON edits', async () => {
+test('readWorkspaceSnapshot reflects external workspace and memory Markdown edits', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-snapshot-refresh-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -2634,22 +2660,34 @@ test('readWorkspaceSnapshot reflects external workspace and memory JSON edits', 
     )}\n`
   );
   await writeFile(
-    path.join(rootPath, 'memories', 'mem_ipc', 'memory.json'),
+    path.join(rootPath, 'memories', 'mem_ipc', 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: '外部记忆' },
+      content: '# 外部记忆\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', 'mem_ipc.json'),
     `${JSON.stringify(
       {
+        schemaVersion: 1,
+        objectType: 'memory',
         memoryId: 'mem_ipc',
-        title: '外部记忆',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
-        segmentIds: ['seg_ipc'],
       },
       null,
       2
     )}\n`
   );
   await writeFile(
-    path.join(rootPath, 'memories', 'mem_ipc', 'segments', 'seg_ipc', 'transcript.md'),
-    '外部转写内容\n'
+    path.join(rootPath, 'memories', 'mem_ipc', 'segments', 'seg_ipc', 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '旧记忆', kind: 'audio' },
+      content: '# 旧记忆\n\n## Transcript\n\n外部转写内容\n',
+    })
   );
 
   const result = await handleReadWorkspaceSnapshotForTest({
@@ -2677,7 +2715,7 @@ test('readWorkspaceSnapshot reflects external workspace and memory JSON edits', 
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: true,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ]);
     assert.equal('rootPath' in result.value, false);

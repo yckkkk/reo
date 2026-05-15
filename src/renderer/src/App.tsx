@@ -19,12 +19,12 @@ import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
 import { SegmentDeleteDialog } from './workspace/SegmentDeleteDialog';
-import { SegmentAttachmentDeleteDialog } from './workspace/SegmentAttachmentDeleteDialog';
-import { SegmentAttachmentRenameDialog } from './workspace/SegmentAttachmentRenameDialog';
+import { SegmentSupplementDeleteDialog } from './workspace/SegmentSupplementDeleteDialog';
+import { SegmentSupplementRenameDialog } from './workspace/SegmentSupplementRenameDialog';
 import { SegmentRenameDialog } from './workspace/SegmentRenameDialog';
 import type {
-  SegmentAttachmentDeleteTarget,
-  SegmentAttachmentRenameTarget,
+  SegmentSupplementDeleteTarget,
+  SegmentSupplementRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './workspace/segmentActionTargets';
@@ -54,26 +54,26 @@ import {
   createMemory,
   deleteMemory,
   deleteSegment,
-  deleteSegmentAttachment,
+  deleteSegmentSupplement,
   discardRecordingDraft,
-  discardSegmentAttachmentRecordingDraft,
+  discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
-  finalizeSegmentAttachmentRecordingDraft,
+  finalizeSegmentSupplementRecordingDraft,
   openWorkspace,
   openMemorySpace,
   readMemoryDetail,
   readWorkspaceSnapshot,
   removeMemorySpace,
   restoreDeletedMemory,
-  restoreDeletedSegmentAttachment,
-  saveSegmentAttachmentTranscript,
+  restoreDeletedSegmentSupplement,
+  saveSegmentSupplementTranscript,
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
-  updateSegmentAttachmentTitle,
+  updateSegmentSupplementTitle,
   updateSegmentTitle,
   type FinalizedAudioSegment,
-  type FinalizedSegmentAttachmentRecording,
+  type FinalizedSegmentSupplementRecording,
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
   type WorkspaceSession,
@@ -95,8 +95,8 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
-  segmentAttachmentContentQueryKey,
-  segmentAttachmentContentQueryPrefix,
+  segmentSupplementContentQueryKey,
+  segmentSupplementContentQueryPrefix,
   segmentContentQueryKey,
   workspaceHandleScopedContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
@@ -116,8 +116,8 @@ type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
 };
-type SegmentAttachmentRestoreContext = {
-  readonly attachment: WorkspaceMemoryDetail['segments'][number]['attachments'][number];
+type SegmentSupplementRestoreContext = {
+  readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
   readonly memoryId: string;
   readonly restoreToken: string;
   readonly segment: WorkspaceMemoryDetail['segments'][number];
@@ -149,8 +149,8 @@ const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
 const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
 const SEGMENT_DELETE_ERROR = '无法删除片段。';
-const SEGMENT_ATTACHMENT_DELETE_ERROR = '无法删除补充内容。';
-const SEGMENT_ATTACHMENT_RESTORE_ERROR = '无法恢复补充内容。';
+const SEGMENT_SUPPLEMENT_DELETE_ERROR = '无法删除补充内容。';
+const SEGMENT_SUPPLEMENT_RESTORE_ERROR = '无法恢复补充内容。';
 const SEGMENT_DELETE_UNDO_DURATION_MS = 10000;
 const WORKSPACE_MEMORY_RAIL_INLINE_QUERY = '(min-width: 1100px)';
 
@@ -211,7 +211,7 @@ function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemor
     first.durationMs === second.durationMs &&
     first.audioByteLength === second.audioByteLength &&
     first.hasTranscript === second.hasTranscript &&
-    first.attachmentCount === second.attachmentCount
+    first.supplementCount === second.supplementCount
   );
 }
 
@@ -331,11 +331,11 @@ function mergeSegmentIntoMemoryDetailIfCurrentTitle(
   return mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, workspaceId);
 }
 
-function mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
+function mergeSegmentSupplementIntoMemoryDetailIfCurrentTitle(
   currentDetail: MemoryDetailQueryData | undefined,
   memory: WorkspaceMemorySummary,
   segment: WorkspaceMemoryDetail['segments'][number],
-  attachment: WorkspaceMemoryDetail['segments'][number]['attachments'][number],
+  supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number],
   workspaceId: string,
   expectedTitle: string
 ): MemoryDetailQueryData | undefined {
@@ -345,9 +345,9 @@ function mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
     currentDetail.detail.memoryId !== memory.memoryId ||
     segment.workspaceId !== workspaceId ||
     segment.memoryId !== memory.memoryId ||
-    attachment.workspaceId !== workspaceId ||
-    attachment.memoryId !== memory.memoryId ||
-    attachment.segmentId !== segment.segmentId
+    supplement.workspaceId !== workspaceId ||
+    supplement.memoryId !== memory.memoryId ||
+    supplement.segmentId !== segment.segmentId
   ) {
     return currentDetail;
   }
@@ -355,54 +355,54 @@ function mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
   const currentSegment = currentDetail.detail.segments.find(
     (candidate) => candidate.segmentId === segment.segmentId
   );
-  const currentAttachment = currentSegment?.attachments.find(
-    (candidate) => candidate.attachmentId === attachment.attachmentId
+  const currentSupplement = currentSegment?.supplements.find(
+    (candidate) => candidate.supplementId === supplement.supplementId
   );
-  if (!currentSegment || currentAttachment?.title !== expectedTitle) {
+  if (!currentSegment || currentSupplement?.title !== expectedTitle) {
     return currentDetail;
   }
 
   const nextSegment = {
     ...currentSegment,
-    attachments: currentSegment.attachments.map((candidate) =>
-      candidate.attachmentId === attachment.attachmentId ? attachment : candidate
+    supplements: currentSegment.supplements.map((candidate) =>
+      candidate.supplementId === supplement.supplementId ? supplement : candidate
     ),
   };
   return mergeSegmentIntoMemoryDetail(currentDetail, memory, nextSegment, workspaceId);
 }
 
-function segmentWithAttachmentRemoved(
+function segmentWithSupplementRemoved(
   segment: WorkspaceMemoryDetail['segments'][number],
-  attachmentId: string
+  supplementId: string
 ): WorkspaceMemoryDetail['segments'][number] {
-  const attachments = segment.attachments.filter(
-    (attachment) => attachment.attachmentId !== attachmentId
+  const supplements = segment.supplements.filter(
+    (supplement) => supplement.supplementId !== supplementId
   );
 
   return {
     ...segment,
-    attachmentCount: attachments.length,
-    attachments,
+    supplementCount: supplements.length,
+    supplements,
   };
 }
 
-function segmentWithAttachmentRestored(
+function segmentWithSupplementRestored(
   segment: WorkspaceMemoryDetail['segments'][number],
-  attachment: WorkspaceMemoryDetail['segments'][number]['attachments'][number]
+  supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number]
 ): WorkspaceMemoryDetail['segments'][number] {
-  const attachmentExists = segment.attachments.some(
-    (candidate) => candidate.attachmentId === attachment.attachmentId
+  const supplementExists = segment.supplements.some(
+    (candidate) => candidate.supplementId === supplement.supplementId
   );
-  const attachments = attachmentExists
-    ? segment.attachments.map((candidate) =>
-        candidate.attachmentId === attachment.attachmentId ? attachment : candidate
+  const supplements = supplementExists
+    ? segment.supplements.map((candidate) =>
+        candidate.supplementId === supplement.supplementId ? supplement : candidate
       )
-    : sortByProjectedUpdatedAt([...segment.attachments, attachment]);
+    : sortByProjectedUpdatedAt([...segment.supplements, supplement]);
 
   return {
     ...segment,
-    attachmentCount: attachments.length,
-    attachments,
+    supplementCount: supplements.length,
+    supplements,
   };
 }
 
@@ -447,7 +447,7 @@ function memorySummaryWithDetailTranscriptWhenAdditiveFieldsMatch(
   const detailSummary = memorySummaryWithVisibleSegments(memory, currentDetail.detail.segments);
   const detailMatchesProjectedAdditiveFields =
     detailSummary.audioByteLength === memory.audioByteLength &&
-    detailSummary.attachmentCount === memory.attachmentCount &&
+    detailSummary.supplementCount === memory.supplementCount &&
     detailSummary.durationMs === memory.durationMs &&
     detailSummary.segmentCount === memory.segmentCount;
 
@@ -523,10 +523,10 @@ export function App() {
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [segmentDeleteTarget, setSegmentDeleteTarget] = useState<SegmentDeleteTarget | null>(null);
   const [segmentRenameTarget, setSegmentRenameTarget] = useState<SegmentRenameTarget | null>(null);
-  const [segmentAttachmentDeleteTarget, setSegmentAttachmentDeleteTarget] =
-    useState<SegmentAttachmentDeleteTarget | null>(null);
-  const [segmentAttachmentRenameTarget, setSegmentAttachmentRenameTarget] =
-    useState<SegmentAttachmentRenameTarget | null>(null);
+  const [segmentSupplementDeleteTarget, setSegmentSupplementDeleteTarget] =
+    useState<SegmentSupplementDeleteTarget | null>(null);
+  const [segmentSupplementRenameTarget, setSegmentSupplementRenameTarget] =
+    useState<SegmentSupplementRenameTarget | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
@@ -915,8 +915,8 @@ export function App() {
     setMemorySpaceRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
-    setSegmentAttachmentDeleteTarget(null);
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
     setSegmentFocusIntent(null);
   }
 
@@ -1551,7 +1551,7 @@ export function App() {
     );
   }
 
-  function handleSegmentAttachmentFinalized(finalized: FinalizedSegmentAttachmentRecording) {
+  function handleSegmentSupplementFinalized(finalized: FinalizedSegmentSupplementRecording) {
     const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
       snapshotQueryKey,
@@ -1609,17 +1609,17 @@ export function App() {
     setRecordingRecoveryActionPending(true);
     try {
       let finalizedAudio = draft.finalizedAudio ?? null;
-      if (draft.targetKind === 'segment-attachment') {
-        let finalizedAttachment = draft.finalizedAttachment ?? null;
-        if (!finalizedAttachment) {
+      if (draft.targetKind === 'segment-supplement') {
+        let finalizedSupplement = draft.finalizedSupplement ?? null;
+        if (!finalizedSupplement) {
           if (!draft.parentSegmentId) {
             toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
               description: '无法确认补充录音所属片段。',
             });
             return;
           }
-          const response = await finalizeSegmentAttachmentRecordingDraft({
-            attachmentId: draft.segmentId,
+          const response = await finalizeSegmentSupplementRecordingDraft({
+            supplementId: draft.segmentId,
             durationMs: draft.durationMs,
             memoryId: draft.memoryId,
             segmentId: draft.parentSegmentId,
@@ -1636,16 +1636,16 @@ export function App() {
             });
             return;
           }
-          finalizedAttachment = response.value;
-          handleSegmentAttachmentFinalized(finalizedAttachment);
+          finalizedSupplement = response.value;
+          handleSegmentSupplementFinalized(finalizedSupplement);
           updateRecordingRecoverySnapshot({
-            patch: { finalizedAttachment },
+            patch: { finalizedSupplement },
             segmentId: draft.segmentId,
             workspaceId: activeWorkspaceSession.workspaceId,
           });
-          setRecordingRecoveryDraft({ ...draft, finalizedAttachment });
+          setRecordingRecoveryDraft({ ...draft, finalizedSupplement });
         } else {
-          handleSegmentAttachmentFinalized(finalizedAttachment);
+          handleSegmentSupplementFinalized(finalizedSupplement);
         }
         const recoveredTranscript =
           draft.transcriptMarkdown ??
@@ -1653,17 +1653,17 @@ export function App() {
         let transcriptSaved = true;
         if (recoveredTranscript.length > 0) {
           try {
-            const transcriptResponse = await saveSegmentAttachmentTranscript({
-              attachmentId: finalizedAttachment.attachment.attachmentId,
+            const transcriptResponse = await saveSegmentSupplementTranscript({
+              supplementId: finalizedSupplement.supplement.supplementId,
               markdown: recoveredTranscript,
-              memoryId: finalizedAttachment.attachment.memoryId,
-              segmentId: draft.parentSegmentId ?? finalizedAttachment.attachment.segmentId,
+              memoryId: finalizedSupplement.supplement.memoryId,
+              segmentId: draft.parentSegmentId ?? finalizedSupplement.supplement.segmentId,
               workspaceHandle: activeWorkspaceSession.workspaceHandle,
               workspaceId: activeWorkspaceSession.workspaceId,
             });
             if (transcriptResponse.ok) {
-              handleSegmentAttachmentFinalized({
-                attachment: transcriptResponse.value.attachment,
+              handleSegmentSupplementFinalized({
+                supplement: transcriptResponse.value.supplement,
                 memory: transcriptResponse.value.memory,
                 segment: transcriptResponse.value.segment,
               });
@@ -1788,7 +1788,7 @@ export function App() {
 
     setRecordingRecoveryActionPending(true);
     try {
-      if (draft.finalizedAudio || draft.finalizedAttachment) {
+      if (draft.finalizedAudio || draft.finalizedSupplement) {
         clearRecordingRecoveryDraft({
           segmentId: draft.segmentId,
           workspaceId: activeWorkspaceSession.workspaceId,
@@ -1799,9 +1799,9 @@ export function App() {
       }
 
       const response =
-        draft.targetKind === 'segment-attachment'
-          ? await discardSegmentAttachmentRecordingDraft({
-              attachmentId: draft.segmentId,
+        draft.targetKind === 'segment-supplement'
+          ? await discardSegmentSupplementRecordingDraft({
+              supplementId: draft.segmentId,
               workspaceHandle: activeWorkspaceSession.workspaceHandle,
             })
           : await discardRecordingDraft({
@@ -1845,7 +1845,7 @@ export function App() {
     setMemorySpaceRenameTarget(null);
     setMemoryRenameTarget(null);
     setSegmentRenameTarget(null);
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementRenameTarget(null);
     setMemoryCreateIntent(intent);
   }
 
@@ -2096,12 +2096,12 @@ export function App() {
     return null;
   }
 
-  async function saveRenamedSegmentAttachment(
-    target: SegmentAttachmentRenameTarget,
+  async function saveRenamedSegmentSupplement(
+    target: SegmentSupplementRenameTarget,
     title: string
   ) {
     const nextTitle = title.trim();
-    if (nextTitle === target.attachment.title.trim()) {
+    if (nextTitle === target.supplement.title.trim()) {
       return null;
     }
 
@@ -2117,20 +2117,20 @@ export function App() {
       return '无法确认补充内容所属记忆。';
     }
 
-    const optimisticAttachment = { ...target.attachment, title: nextTitle };
+    const optimisticSupplement = { ...target.supplement, title: nextTitle };
     const detailQueryKey = memoryDetailQueryKey({
       workspaceId: mutationSession.workspaceId,
       memoryId: target.memoryId,
     });
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementRenameTarget(null);
     queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
-      mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
+      mergeSegmentSupplementIntoMemoryDetailIfCurrentTitle(
         currentDetail,
         memory,
         target.segment,
-        optimisticAttachment,
+        optimisticSupplement,
         mutationSession.workspaceId,
-        target.attachment.title
+        target.supplement.title
       )
     );
     setSegmentFocusIntent({
@@ -2143,11 +2143,11 @@ export function App() {
         queryClient.setQueryData<MemoryDetailQueryData | undefined>(
           detailQueryKey,
           (currentDetail) =>
-            mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
+            mergeSegmentSupplementIntoMemoryDetailIfCurrentTitle(
               currentDetail,
               memory,
               target.segment,
-              target.attachment,
+              target.supplement,
               mutationSession.workspaceId,
               nextTitle
             )
@@ -2155,12 +2155,12 @@ export function App() {
       };
 
       try {
-        const response = await updateSegmentAttachmentTitle({
+        const response = await updateSegmentSupplementTitle({
           workspaceHandle: mutationSession.workspaceHandle,
           workspaceId: mutationSession.workspaceId,
           memoryId: target.memoryId,
           segmentId: target.segment.segmentId,
-          attachmentId: target.attachment.attachmentId,
+          supplementId: target.supplement.supplementId,
           title: nextTitle,
         });
 
@@ -2190,11 +2190,11 @@ export function App() {
         queryClient.setQueryData<MemoryDetailQueryData | undefined>(
           detailQueryKey,
           (currentDetail) =>
-            mergeSegmentAttachmentIntoMemoryDetailIfCurrentTitle(
+            mergeSegmentSupplementIntoMemoryDetailIfCurrentTitle(
               currentDetail,
               response.value.memory,
               response.value.segment,
-              response.value.attachment,
+              response.value.supplement,
               mutationSession.workspaceId,
               nextTitle
             )
@@ -2251,8 +2251,8 @@ export function App() {
     setMemoryRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
-    setSegmentAttachmentDeleteTarget(null);
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
     setMemoryDeleteTarget(memory);
   }
@@ -2278,8 +2278,8 @@ export function App() {
     setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
     setSegmentRenameTarget(null);
-    setSegmentAttachmentDeleteTarget(null);
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
     setSegmentDeleteTarget(target);
   }
@@ -2294,7 +2294,7 @@ export function App() {
     }
   }
 
-  function openSegmentAttachmentDeleteDialog(target: SegmentAttachmentDeleteTarget) {
+  function openSegmentSupplementDeleteDialog(target: SegmentSupplementDeleteTarget) {
     if (blockRecordingFlowInterruption()) {
       return;
     }
@@ -2306,22 +2306,22 @@ export function App() {
     setMemoryRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
-    setSegmentAttachmentRenameTarget(null);
+    setSegmentSupplementRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
-    setSegmentAttachmentDeleteTarget(target);
+    setSegmentSupplementDeleteTarget(target);
   }
 
-  function handleSegmentAttachmentDeleteOpenChange(nextOpen: boolean) {
+  function handleSegmentSupplementDeleteOpenChange(nextOpen: boolean) {
     if (!nextOpen && workspaceActionPending) {
       return;
     }
 
     if (!nextOpen) {
-      setSegmentAttachmentDeleteTarget(null);
+      setSegmentSupplementDeleteTarget(null);
     }
   }
 
-  function projectRestoredSegmentAttachment(context: SegmentAttachmentRestoreContext) {
+  function projectRestoredSegmentSupplement(context: SegmentSupplementRestoreContext) {
     const currentSession = workspaceSessionRef.current;
     if (
       currentSession?.workspaceHandle !== context.workspaceHandle ||
@@ -2355,10 +2355,10 @@ export function App() {
     const detailSegment = currentDetail?.detail.segments.find(
       (segment) => segment.segmentId === context.segmentId
     );
-    const nextSegment = segmentWithAttachmentRestored(
+    const nextSegment = segmentWithSupplementRestored(
       detailSegment ??
-        segmentWithAttachmentRemoved(context.segment, context.attachment.attachmentId),
-      context.attachment
+        segmentWithSupplementRemoved(context.segment, context.supplement.supplementId),
+      context.supplement
     );
     const visibleSegments =
       currentDetail &&
@@ -2372,7 +2372,7 @@ export function App() {
       ? memorySummaryWithVisibleSegments(currentMemory, visibleSegments)
       : {
           ...currentMemory,
-          attachmentCount: currentMemory.attachmentCount + 1,
+          supplementCount: currentMemory.supplementCount + 1,
         };
 
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
@@ -2475,7 +2475,7 @@ export function App() {
     }
   }
 
-  async function restoreDeletedSegmentAttachmentFromUndo(context: SegmentAttachmentRestoreContext) {
+  async function restoreDeletedSegmentSupplementFromUndo(context: SegmentSupplementRestoreContext) {
     if (!beginWorkspaceAction()) {
       return;
     }
@@ -2485,7 +2485,7 @@ export function App() {
       workspaceSessionRef.current.workspaceId === context.workspaceId;
 
     try {
-      const response = await restoreDeletedSegmentAttachment({
+      const response = await restoreDeletedSegmentSupplement({
         workspaceHandle: context.workspaceHandle,
         workspaceId: context.workspaceId,
         memoryId: context.memoryId,
@@ -2499,12 +2499,12 @@ export function App() {
 
       if (!response.ok) {
         if (response.error.dataRetention === 'file-written-index-stale') {
-          projectRestoredSegmentAttachment(context);
+          projectRestoredSegmentSupplement(context);
         }
-        toast.error(SEGMENT_ATTACHMENT_RESTORE_ERROR, {
+        toast.error(SEGMENT_SUPPLEMENT_RESTORE_ERROR, {
           description: workspaceErrorDisplayMessage(
             response.error,
-            SEGMENT_ATTACHMENT_RESTORE_ERROR
+            SEGMENT_SUPPLEMENT_RESTORE_ERROR
           ),
         });
         return;
@@ -2551,20 +2551,20 @@ export function App() {
         return;
       }
 
-      toast.error(SEGMENT_ATTACHMENT_RESTORE_ERROR, {
-        description: unknownErrorDisplayMessage(error, SEGMENT_ATTACHMENT_RESTORE_ERROR),
+      toast.error(SEGMENT_SUPPLEMENT_RESTORE_ERROR, {
+        description: unknownErrorDisplayMessage(error, SEGMENT_SUPPLEMENT_RESTORE_ERROR),
       });
     } finally {
       finishWorkspaceAction();
     }
   }
 
-  async function confirmDeleteSegmentAttachment() {
+  async function confirmDeleteSegmentSupplement() {
     if (blockRecordingFlowInterruption()) {
       return;
     }
 
-    const target = segmentAttachmentDeleteTarget;
+    const target = segmentSupplementDeleteTarget;
     if (!target || !beginWorkspaceAction()) {
       return;
     }
@@ -2577,18 +2577,18 @@ export function App() {
       workspaceId: session.workspaceId,
       memoryId: target.memoryId,
     });
-    const attachmentContentKey = segmentAttachmentContentQueryKey({
+    const supplementContentKey = segmentSupplementContentQueryKey({
       workspaceId: session.workspaceId,
       memoryId: target.memoryId,
       segmentId: target.segment.segmentId,
-      attachmentId: target.attachment.attachmentId,
+      supplementId: target.supplement.supplementId,
     });
-    const showDeletedSegmentAttachmentToast = (restoreToken: string) => {
+    const showDeletedSegmentSupplementToast = (restoreToken: string) => {
       showReoUndoToast({
-        description: target.attachment.title,
+        description: target.supplement.title,
         onUndo: () => {
-          void restoreDeletedSegmentAttachmentFromUndo({
-            attachment: target.attachment,
+          void restoreDeletedSegmentSupplementFromUndo({
+            supplement: target.supplement,
             memoryId: target.memoryId,
             restoreToken,
             segment: target.segment,
@@ -2600,7 +2600,7 @@ export function App() {
         title: '已删除补充内容',
       });
     };
-    const projectDeletedSegmentAttachment = () => {
+    const projectDeletedSegmentSupplement = () => {
       const snapshotQueryKey = workspaceSnapshotQueryKey(session);
       const currentSnapshot =
         queryClient.getQueryData<WorkspaceSession['snapshot']>(snapshotQueryKey) ??
@@ -2610,8 +2610,8 @@ export function App() {
       );
 
       if (!currentMemory) {
-        queryClient.removeQueries({ exact: true, queryKey: attachmentContentKey });
-        setSegmentAttachmentDeleteTarget(null);
+        queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
+        setSegmentSupplementDeleteTarget(null);
         return;
       }
 
@@ -2621,9 +2621,9 @@ export function App() {
       const detailSegment = currentDetail?.detail.segments.find(
         (segment) => segment.segmentId === target.segment.segmentId
       );
-      const nextSegment = segmentWithAttachmentRemoved(
+      const nextSegment = segmentWithSupplementRemoved(
         detailSegment ?? target.segment,
-        target.attachment.attachmentId
+        target.supplement.supplementId
       );
       const visibleSegments =
         currentDetail &&
@@ -2637,7 +2637,7 @@ export function App() {
         ? memorySummaryWithVisibleSegments(currentMemory, visibleSegments)
         : {
             ...currentMemory,
-            attachmentCount: Math.max(0, currentMemory.attachmentCount - 1),
+            supplementCount: Math.max(0, currentMemory.supplementCount - 1),
           };
 
       queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
@@ -2647,14 +2647,14 @@ export function App() {
       queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (current) =>
         mergeSegmentIntoMemoryDetail(current, projectedMemory, nextSegment, session.workspaceId)
       );
-      queryClient.removeQueries({ exact: true, queryKey: attachmentContentKey });
+      queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
       setWorkspaceSession((currentSession) =>
         currentSession?.workspaceHandle === session.workspaceHandle &&
         currentSession.workspaceId === session.workspaceId
           ? mergeMemoryIntoSession(currentSession, projectedMemory)
           : currentSession
       );
-      setSegmentAttachmentDeleteTarget(null);
+      setSegmentSupplementDeleteTarget(null);
       setSegmentFocusIntent({
         memoryId: target.memoryId,
         segmentId: target.segment.segmentId,
@@ -2662,12 +2662,12 @@ export function App() {
     };
 
     try {
-      const response = await deleteSegmentAttachment({
+      const response = await deleteSegmentSupplement({
         workspaceHandle: session.workspaceHandle,
         workspaceId: session.workspaceId,
         memoryId: target.memoryId,
         segmentId: target.segment.segmentId,
-        attachmentId: target.attachment.attachmentId,
+        supplementId: target.supplement.supplementId,
       });
 
       if (!deleteSessionIsActive()) {
@@ -2676,13 +2676,13 @@ export function App() {
 
       if (!response.ok) {
         if (response.error.dataRetention === 'file-written-index-stale') {
-          projectDeletedSegmentAttachment();
-          showDeletedSegmentAttachmentToast(target.attachment.attachmentId);
+          projectDeletedSegmentSupplement();
+          showDeletedSegmentSupplementToast(target.supplement.supplementId);
         }
-        toast.error(SEGMENT_ATTACHMENT_DELETE_ERROR, {
+        toast.error(SEGMENT_SUPPLEMENT_DELETE_ERROR, {
           description: workspaceErrorDisplayMessage(
             response.error,
-            SEGMENT_ATTACHMENT_DELETE_ERROR
+            SEGMENT_SUPPLEMENT_DELETE_ERROR
           ),
         });
         return;
@@ -2702,26 +2702,26 @@ export function App() {
           session.workspaceId
         )
       );
-      queryClient.removeQueries({ exact: true, queryKey: attachmentContentKey });
+      queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
       setWorkspaceSession((currentSession) =>
         currentSession?.workspaceHandle === session.workspaceHandle &&
         currentSession.workspaceId === session.workspaceId
           ? mergeMemoryIntoSession(currentSession, response.value.memory)
           : currentSession
       );
-      setSegmentAttachmentDeleteTarget(null);
+      setSegmentSupplementDeleteTarget(null);
       setSegmentFocusIntent({
         memoryId: target.memoryId,
         segmentId: target.segment.segmentId,
       });
-      showDeletedSegmentAttachmentToast(response.value.restoreToken);
+      showDeletedSegmentSupplementToast(response.value.restoreToken);
     } catch (error) {
       if (!deleteSessionIsActive()) {
         return;
       }
 
-      toast.error(SEGMENT_ATTACHMENT_DELETE_ERROR, {
-        description: unknownErrorDisplayMessage(error, SEGMENT_ATTACHMENT_DELETE_ERROR),
+      toast.error(SEGMENT_SUPPLEMENT_DELETE_ERROR, {
+        description: unknownErrorDisplayMessage(error, SEGMENT_SUPPLEMENT_DELETE_ERROR),
       });
     } finally {
       finishWorkspaceAction();
@@ -2789,7 +2789,7 @@ export function App() {
         }),
       });
       queryClient.removeQueries({
-        queryKey: segmentAttachmentContentQueryPrefix({
+        queryKey: segmentSupplementContentQueryPrefix({
           workspaceId: session.workspaceId,
           memoryId: target.memoryId,
           segmentId: target.segment.segmentId,
@@ -3044,7 +3044,7 @@ export function App() {
       void saveRecoveredRecording();
       return;
     }
-    if (draft.targetKind === 'segment-attachment') {
+    if (draft.targetKind === 'segment-supplement') {
       void saveRecoveredRecording();
       return;
     }
@@ -3068,7 +3068,7 @@ export function App() {
     openMemoryCreateDialog({ afterCreate: 'record-memory' });
   }
 
-  function requestStartSegmentAttachmentRecording(target: {
+  function requestStartSegmentSupplementRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
     readonly title: string;
@@ -3079,7 +3079,7 @@ export function App() {
 
     setSelectedMemoryId(target.memoryId);
     openRecording({
-      kind: 'segment-attachment',
+      kind: 'segment-supplement',
       memoryId: target.memoryId,
       segmentId: target.segmentId,
       title: target.title,
@@ -3211,7 +3211,7 @@ export function App() {
             memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
             onDeleteMemory={openMemoryDeleteDialog}
             onDeleteSegment={openSegmentDeleteDialog}
-            onDeleteSegmentAttachment={openSegmentAttachmentDeleteDialog}
+            onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
             onSegmentFocusConsumed={(segmentId) => {
               setSegmentFocusIntent((currentIntent) =>
                 currentIntent?.segmentId === segmentId ? null : currentIntent
@@ -3220,8 +3220,8 @@ export function App() {
             onSelectMemory={selectMemory}
             onRenameMemory={setMemoryRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
-            onRenameSegmentAttachment={setSegmentAttachmentRenameTarget}
-            onStartSegmentAttachmentRecording={requestStartSegmentAttachmentRecording}
+            onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
+            onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
           />
         )}
@@ -3233,7 +3233,7 @@ export function App() {
           onOpenChange={handleRecordingOpenChange}
           onAudioSegmentFinalized={handleAudioSegmentFinalized}
           onRecordingFlowSettled={handleRecordingFlowSettled}
-          onSegmentAttachmentFinalized={handleSegmentAttachmentFinalized}
+          onSegmentSupplementFinalized={handleSegmentSupplementFinalized}
           open={recordingOverlayOpen}
           recoveredDraft={recordingRecoveryReviewDraft}
           recordingTarget={recordingTarget}
@@ -3241,7 +3241,7 @@ export function App() {
         />
       ) : null}
       <RecordingRecoveryDialog
-        canReview={recordingRecoveryDraft?.targetKind !== 'segment-attachment'}
+        canReview={recordingRecoveryDraft?.targetKind !== 'segment-supplement'}
         disabled={recordingRecoveryActionPending}
         draft={recordingRecoveryDraft}
         onDiscard={() => {
@@ -3272,24 +3272,24 @@ export function App() {
         onSave={saveRenamedSegment}
         open={segmentRenameTarget !== null}
       />
-      <SegmentAttachmentRenameDialog
-        target={segmentAttachmentRenameTarget}
+      <SegmentSupplementRenameDialog
+        target={segmentSupplementRenameTarget}
         onOpenChange={(open) => {
           if (!open) {
-            setSegmentAttachmentRenameTarget(null);
+            setSegmentSupplementRenameTarget(null);
           }
         }}
-        onSave={saveRenamedSegmentAttachment}
-        open={segmentAttachmentRenameTarget !== null}
+        onSave={saveRenamedSegmentSupplement}
+        open={segmentSupplementRenameTarget !== null}
       />
-      <SegmentAttachmentDeleteDialog
+      <SegmentSupplementDeleteDialog
         disabled={workspaceActionPending}
-        target={segmentAttachmentDeleteTarget}
+        target={segmentSupplementDeleteTarget}
         onConfirm={() => {
-          void confirmDeleteSegmentAttachment();
+          void confirmDeleteSegmentSupplement();
         }}
-        onOpenChange={handleSegmentAttachmentDeleteOpenChange}
-        open={segmentAttachmentDeleteTarget !== null}
+        onOpenChange={handleSegmentSupplementDeleteOpenChange}
+        open={segmentSupplementDeleteTarget !== null}
       />
       <MemoryDeleteDialog
         disabled={workspaceActionPending}

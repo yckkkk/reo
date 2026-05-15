@@ -4,26 +4,26 @@ import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
-  WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
-  WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
-  WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
-  WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
-  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
-  WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
-  WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
@@ -31,8 +31,8 @@ import {
   workspaceCreateMemoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
-  workspaceDeleteSegmentAttachmentRequestSchema,
-  workspaceDeleteSegmentAttachmentResponseSchema,
+  workspaceDeleteSegmentSupplementRequestSchema,
+  workspaceDeleteSegmentSupplementResponseSchema,
   workspaceDeleteSegmentRequestSchema,
   workspaceDeleteSegmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
@@ -41,21 +41,21 @@ import {
   workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
-  workspaceRestoreDeletedSegmentAttachmentRequestSchema,
-  workspaceRestoreDeletedSegmentAttachmentResponseSchema,
+  workspaceRestoreDeletedSegmentSupplementRequestSchema,
+  workspaceRestoreDeletedSegmentSupplementResponseSchema,
   workspaceRestoreDeletedSegmentRequestSchema,
   workspaceRestoreDeletedSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
-  workspaceReadFinalizedAudioSegmentAttachmentRequestSchema,
-  workspaceReadFinalizedAudioSegmentAttachmentResponseSchema,
+  workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
-  workspaceCreateSegmentAttachmentRecordingDraftRequestSchema,
-  workspaceCreateSegmentAttachmentRecordingDraftResponseSchema,
-  workspaceAppendSegmentAttachmentRecordingAudioRequestSchema,
-  workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema,
-  workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema,
-  workspaceSegmentAttachmentIdRequestSchema,
+  workspaceCreateSegmentSupplementRecordingDraftRequestSchema,
+  workspaceCreateSegmentSupplementRecordingDraftResponseSchema,
+  workspaceAppendSegmentSupplementRecordingAudioRequestSchema,
+  workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
+  workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema,
+  workspaceSegmentSupplementIdRequestSchema,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
@@ -70,8 +70,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
-  workspaceUpdateSegmentAttachmentTitleRequestSchema,
-  workspaceUpdateSegmentAttachmentTitleResponseSchema,
+  workspaceUpdateSegmentSupplementTitleRequestSchema,
+  workspaceUpdateSegmentSupplementTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
@@ -87,8 +87,8 @@ import {
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
-  workspaceSegmentAttachmentMarkdownSaveRequestSchema,
-  workspaceSegmentAttachmentMarkdownSaveResponseSchema,
+  workspaceSegmentSupplementMarkdownSaveRequestSchema,
+  workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
@@ -115,26 +115,26 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedMemory',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
-    'workspace:deleteSegmentAttachment',
-    'workspace:restoreDeletedSegmentAttachment',
+    'workspace:deleteSegmentSupplement',
+    'workspace:restoreDeletedSegmentSupplement',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
-    'workspace:readFinalizedAudioSegmentAttachment',
+    'workspace:readFinalizedAudioSegmentSupplement',
     'workspace:createRecordingDraft',
-    'workspace:createSegmentAttachmentRecordingDraft',
+    'workspace:createSegmentSupplementRecordingDraft',
     'workspace:readRecordingDraftAudio',
     'workspace:appendRecordingAudioChunk',
-    'workspace:appendSegmentAttachmentRecordingAudioChunk',
+    'workspace:appendSegmentSupplementRecordingAudioChunk',
     'workspace:cloneRecordingDraftPrefix',
     'workspace:finalizeRecordingDraft',
-    'workspace:finalizeSegmentAttachmentRecordingDraft',
+    'workspace:finalizeSegmentSupplementRecordingDraft',
     'workspace:discardRecordingDraft',
-    'workspace:discardSegmentAttachmentRecordingDraft',
+    'workspace:discardSegmentSupplementRecordingDraft',
     'workspace:updateMemoryTitle',
     'workspace:updateSegmentTitle',
-    'workspace:updateSegmentAttachmentTitle',
+    'workspace:updateSegmentSupplementTitle',
     'workspace:saveTranscript',
-    'workspace:saveSegmentAttachmentTranscript',
+    'workspace:saveSegmentSupplementTranscript',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
     'workspace:startRecordingTranscription',
@@ -153,10 +153,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory');
   assert.equal(WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment');
   assert.equal(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment');
-  assert.equal(WORKSPACE_DELETE_SEGMENT_ATTACHMENT_CHANNEL, 'workspace:deleteSegmentAttachment');
+  assert.equal(WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement');
   assert.equal(
-    WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
-    'workspace:restoreDeletedSegmentAttachment'
+    WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
+    'workspace:restoreDeletedSegmentSupplement'
   );
   assert.equal(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot');
   assert.equal(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail');
@@ -165,8 +165,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readFinalizedAudioSegment'
   );
   assert.equal(
-    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
-    'workspace:readFinalizedAudioSegmentAttachment'
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
+    'workspace:readFinalizedAudioSegmentSupplement'
   );
   assert.equal(WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio');
   assert.equal(
@@ -176,40 +176,40 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
   assert.equal(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle');
   assert.equal(
-    WORKSPACE_UPDATE_SEGMENT_ATTACHMENT_TITLE_CHANNEL,
-    'workspace:updateSegmentAttachmentTitle'
+    WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
+    'workspace:updateSegmentSupplementTitle'
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
   assert.equal(
-    WORKSPACE_CREATE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:createSegmentAttachmentRecordingDraft'
+    WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:createSegmentSupplementRecordingDraft'
   );
   assert.equal(
-    WORKSPACE_APPEND_SEGMENT_ATTACHMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
-    'workspace:appendSegmentAttachmentRecordingAudioChunk'
+    WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+    'workspace:appendSegmentSupplementRecordingAudioChunk'
   );
   assert.equal(
-    WORKSPACE_FINALIZE_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:finalizeSegmentAttachmentRecordingDraft'
+    WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:finalizeSegmentSupplementRecordingDraft'
   );
   assert.equal(
-    WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:discardSegmentAttachmentRecordingDraft'
+    WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+    'workspace:discardSegmentSupplementRecordingDraft'
   );
   assert.equal(
-    WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
-    'workspace:saveSegmentAttachmentTranscript'
+    WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
+    'workspace:saveSegmentSupplementTranscript'
   );
 });
 
-test('segment attachment title update contract renames the file-space node without raw paths', () => {
+test('segment supplement title update contract renames the file-space node without raw paths', () => {
   assert.deepEqual(
-    workspaceUpdateSegmentAttachmentTitleRequestSchema.parse({
+    workspaceUpdateSegmentSupplementTitleRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '现场补充',
     }),
     {
@@ -217,12 +217,12 @@ test('segment attachment title update contract renames the file-space node witho
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '现场补充',
     }
   );
 
-  const response = workspaceUpdateSegmentAttachmentTitleResponseSchema.parse({
+  const response = workspaceUpdateSegmentSupplementTitleResponseSchema.parse({
     ok: true,
     value: {
       memory: {
@@ -234,7 +234,7 @@ test('segment attachment title update contract renames the file-space node witho
         durationMs: 1500,
         audioByteLength: 7,
         hasTranscript: false,
-        attachmentCount: 1,
+        supplementCount: 1,
       },
       segment: {
         workspaceId: 'ws_1',
@@ -247,13 +247,13 @@ test('segment attachment title update contract renames the file-space node witho
         durationMs: 1000,
         audioByteLength: 3,
         transcript: { exists: false },
-        attachmentCount: 1,
-        attachments: [
+        supplementCount: 1,
+        supplements: [
           {
             workspaceId: 'ws_1',
             memoryId: 'mem_1',
             segmentId: 'seg_1',
-            attachmentId: 'att_1',
+            supplementId: 'sup_1',
             type: 'audio',
             title: '现场补充',
             createdAt: '2026-05-10T13:01:00.000Z',
@@ -264,11 +264,11 @@ test('segment attachment title update contract renames the file-space node witho
           },
         ],
       },
-      attachment: {
+      supplement: {
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         type: 'audio',
         title: '现场补充',
         createdAt: '2026-05-10T13:01:00.000Z',
@@ -284,7 +284,7 @@ test('segment attachment title update contract renames the file-space node witho
   if (response.ok) {
     assert.equal('rootPath' in response.value, false);
     assert.equal('workspaceHandle' in response.value, false);
-    assert.equal('rootPath' in response.value.attachment, false);
+    assert.equal('rootPath' in response.value.supplement, false);
   }
 });
 
@@ -313,7 +313,7 @@ test('workspace snapshot read contract refreshes file truth without exposing raw
           durationMs: 1000,
           audioByteLength: 3,
           hasTranscript: true,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
       ],
     },
@@ -377,7 +377,7 @@ test('memory dangerous operation contract keeps delete and restore path explicit
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
       memories: [
         {
@@ -389,7 +389,7 @@ test('memory dangerous operation contract keeps delete and restore path explicit
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
       ],
     },
@@ -425,7 +425,7 @@ test('segment dangerous operation contract keeps parent identity and restore tok
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segmentId: 'seg_1',
         restoreToken: 'seg_1',
@@ -443,7 +443,7 @@ test('segment dangerous operation contract keeps parent identity and restore tok
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segmentId: 'seg_1',
         restoreToken: 'seg_1',
@@ -476,7 +476,7 @@ test('segment dangerous operation contract keeps parent identity and restore tok
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
       segment: {
         workspaceId: 'ws_1',
@@ -489,8 +489,8 @@ test('segment dangerous operation contract keeps parent identity and restore tok
         durationMs: 1000,
         audioByteLength: 3,
         transcript: { exists: false },
-        attachmentCount: 0,
-        attachments: [],
+        supplementCount: 0,
+        supplements: [],
       },
     },
   });
@@ -501,21 +501,21 @@ test('segment dangerous operation contract keeps parent identity and restore tok
   }
 });
 
-test('segment attachment dangerous operation contract keeps parent identity and restore token explicit', () => {
+test('segment supplement dangerous operation contract keeps parent identity and restore token explicit', () => {
   assert.deepEqual(
-    workspaceDeleteSegmentAttachmentRequestSchema.parse({
+    workspaceDeleteSegmentSupplementRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     }),
     {
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     }
   );
 
@@ -528,13 +528,13 @@ test('segment attachment dangerous operation contract keeps parent identity and 
     durationMs: 1000,
     audioByteLength: 3,
     hasTranscript: false,
-    attachmentCount: 0,
+    supplementCount: 0,
   };
-  const attachment = {
+  const supplement = {
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
     type: 'audio',
     title: '现场补充',
     createdAt: '2026-05-10T13:15:00.000Z',
@@ -554,18 +554,18 @@ test('segment attachment dangerous operation contract keeps parent identity and 
     durationMs: 1000,
     audioByteLength: 3,
     transcript: { exists: false },
-    attachmentCount: 0,
-    attachments: [],
+    supplementCount: 0,
+    supplements: [],
   };
 
   assert.deepEqual(
-    workspaceDeleteSegmentAttachmentResponseSchema.parse({
+    workspaceDeleteSegmentSupplementResponseSchema.parse({
       ok: true,
       value: {
         memory,
         segment,
-        attachmentId: 'att_1',
-        restoreToken: 'att_1',
+        supplementId: 'sup_1',
+        restoreToken: 'sup_1',
       },
     }),
     {
@@ -573,39 +573,39 @@ test('segment attachment dangerous operation contract keeps parent identity and 
       value: {
         memory,
         segment,
-        attachmentId: 'att_1',
-        restoreToken: 'att_1',
+        supplementId: 'sup_1',
+        restoreToken: 'sup_1',
       },
     }
   );
 
   assert.deepEqual(
-    workspaceRestoreDeletedSegmentAttachmentRequestSchema.parse({
+    workspaceRestoreDeletedSegmentSupplementRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      restoreToken: 'att_1',
+      restoreToken: 'sup_1',
     }),
     {
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      restoreToken: 'att_1',
+      restoreToken: 'sup_1',
     }
   );
 
-  const restored = workspaceRestoreDeletedSegmentAttachmentResponseSchema.parse({
+  const restored = workspaceRestoreDeletedSegmentSupplementResponseSchema.parse({
     ok: true,
     value: {
-      memory: { ...memory, attachmentCount: 1 },
+      memory: { ...memory, supplementCount: 1 },
       segment: {
         ...segment,
-        attachmentCount: 1,
-        attachments: [attachment],
+        supplementCount: 1,
+        supplements: [supplement],
       },
-      attachment,
+      supplement,
     },
   });
   assert.equal(restored.ok, true);
@@ -617,7 +617,7 @@ test('segment attachment dangerous operation contract keeps parent identity and 
   const parentMissing = workspaceErrorEnvelopeSchema.parse({
     ok: false,
     error: {
-      code: 'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING',
+      code: 'ERR_SEGMENT_SUPPLEMENT_RESTORE_PARENT_MISSING',
       message: 'Parent Memory or Segment no longer exists.',
       dataRetention: 'previous-file-preserved',
     },
@@ -625,9 +625,9 @@ test('segment attachment dangerous operation contract keeps parent identity and 
   assert.equal(parentMissing.ok, false);
 });
 
-test('segment attachment recording contract keeps parent identity explicit', () => {
+test('segment supplement recording contract keeps parent identity explicit', () => {
   assert.deepEqual(
-    workspaceCreateSegmentAttachmentRecordingDraftRequestSchema.parse({
+    workspaceCreateSegmentSupplementRecordingDraftRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
@@ -641,36 +641,36 @@ test('segment attachment recording contract keeps parent identity explicit', () 
     }
   );
   assert.deepEqual(
-    workspaceCreateSegmentAttachmentRecordingDraftResponseSchema.parse({
+    workspaceCreateSegmentSupplementRecordingDraftResponseSchema.parse({
       ok: true,
       value: {
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         nextSequence: 0,
       },
     }),
     {
       ok: true,
       value: {
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         nextSequence: 0,
       },
     }
   );
   assert.deepEqual(
-    workspaceAppendSegmentAttachmentRecordingAudioRequestSchema.parse({
+    workspaceAppendSegmentSupplementRecordingAudioRequestSchema.parse({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       sequence: 0,
       chunk: new Uint8Array([1]),
     }),
     {
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       sequence: 0,
       chunk: new Uint8Array([1]),
     }
   );
-  const response = workspaceFinalizeSegmentAttachmentRecordingDraftResponseSchema.parse({
+  const response = workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema.parse({
     ok: true,
     value: {
       memory: {
@@ -682,7 +682,7 @@ test('segment attachment recording contract keeps parent identity explicit', () 
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 1,
+        supplementCount: 1,
       },
       segment: {
         workspaceId: 'ws_1',
@@ -695,15 +695,15 @@ test('segment attachment recording contract keeps parent identity explicit', () 
         durationMs: 1000,
         audioByteLength: 3,
         transcript: { exists: false },
-        attachmentCount: 1,
-        attachments: [
+        supplementCount: 1,
+        supplements: [
           {
             workspaceId: 'ws_1',
             memoryId: 'mem_1',
             segmentId: 'seg_1',
-            attachmentId: 'att_1',
+            supplementId: 'sup_1',
             type: 'audio',
-            title: 'Attachment',
+            title: 'Supplement',
             createdAt: '2026-05-10T13:14:00.000Z',
             updatedAt: '2026-05-10T13:15:00.000Z',
             durationMs: 500,
@@ -712,13 +712,13 @@ test('segment attachment recording contract keeps parent identity explicit', () 
           },
         ],
       },
-      attachment: {
+      supplement: {
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         type: 'audio',
-        title: 'Attachment',
+        title: 'Supplement',
         createdAt: '2026-05-10T13:14:00.000Z',
         updatedAt: '2026-05-10T13:15:00.000Z',
         durationMs: 500,
@@ -729,13 +729,13 @@ test('segment attachment recording contract keeps parent identity explicit', () 
   });
   assert.equal(response.ok, true);
   assert.deepEqual(
-    workspaceFinalizeSegmentAttachmentRecordingDraftRequestSchema.parse({
+    workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      title: 'Attachment',
+      supplementId: 'sup_1',
+      title: 'Supplement',
       durationMs: 500,
     }),
     {
@@ -743,48 +743,48 @@ test('segment attachment recording contract keeps parent identity explicit', () 
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      title: 'Attachment',
+      supplementId: 'sup_1',
+      title: 'Supplement',
       durationMs: 500,
     }
   );
   assert.deepEqual(
-    workspaceSegmentAttachmentIdRequestSchema.parse({
+    workspaceSegmentSupplementIdRequestSchema.parse({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     }),
     {
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     }
   );
   assert.deepEqual(
-    workspaceReadFinalizedAudioSegmentAttachmentRequestSchema.parse({
+    workspaceReadFinalizedAudioSegmentSupplementRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      requestId: 'request_att_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_1',
     }),
     {
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      requestId: 'request_att_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_1',
     }
   );
   assert.deepEqual(
-    workspaceReadFinalizedAudioSegmentAttachmentResponseSchema.parse({
+    workspaceReadFinalizedAudioSegmentSupplementResponseSchema.parse({
       ok: true,
       value: {
-        requestId: 'request_att_1',
+        requestId: 'request_sup_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
       },
@@ -792,11 +792,11 @@ test('segment attachment recording contract keeps parent identity explicit', () 
     {
       ok: true,
       value: {
-        requestId: 'request_att_1',
+        requestId: 'request_sup_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
       },
@@ -834,7 +834,7 @@ test('workspace memory detail contract keeps handle out of response data', () =>
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: true,
-        attachmentCount: 0,
+        supplementCount: 0,
         segments: [
           {
             workspaceId: 'ws_1',
@@ -847,8 +847,8 @@ test('workspace memory detail contract keeps handle out of response data', () =>
             durationMs: 1000,
             audioByteLength: 3,
             transcript: { exists: true },
-            attachmentCount: 0,
-            attachments: [],
+            supplementCount: 0,
+            supplements: [],
           },
         ],
       },
@@ -1016,7 +1016,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     }),
     {
       memoryId: 'mem_1',
@@ -1027,7 +1027,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     }
   );
   assert.throws(() =>
@@ -1040,7 +1040,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
       staleRecordingProjection: ['seg_old'],
     })
   );
@@ -1054,7 +1054,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       durationMs: 1000,
       audioByteLength: 2048,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     })
   );
 });
@@ -1422,7 +1422,7 @@ test('memory title update contract is scoped to a memory container and strips ra
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: true,
-        attachmentCount: 0,
+        supplementCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: ['seg_20260506_000001'],
       },
@@ -1478,7 +1478,7 @@ test('segment title update contract returns memory and segment projections witho
           durationMs: 1000,
           audioByteLength: 3,
           hasTranscript: true,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segment: {
           workspaceId: 'ws_1',
@@ -1491,8 +1491,8 @@ test('segment title update contract returns memory and segment projections witho
           durationMs: 1000,
           audioByteLength: 3,
           transcript: { exists: true },
-          attachmentCount: 0,
-          attachments: [],
+          supplementCount: 0,
+          supplements: [],
           rootPath: '/Users/example/Reo',
         },
       },
@@ -1625,7 +1625,7 @@ test('memory create contract creates a named Memory container without raw path a
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: [],
       },
@@ -1646,14 +1646,14 @@ test('microphone intent response exposes no token-like authority', () => {
   );
 });
 
-test('finalized audio segment attachment transcript save contract requires parent identity', () => {
+test('finalized audio segment supplement transcript save contract requires parent identity', () => {
   assert.deepEqual(
-    workspaceSegmentAttachmentMarkdownSaveRequestSchema.parse({
+    workspaceSegmentSupplementMarkdownSaveRequestSchema.parse({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       markdown: '补充录音转写',
     }),
     {
@@ -1661,12 +1661,12 @@ test('finalized audio segment attachment transcript save contract requires paren
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       markdown: '补充录音转写',
     }
   );
 
-  const response = workspaceSegmentAttachmentMarkdownSaveResponseSchema.parse({
+  const response = workspaceSegmentSupplementMarkdownSaveResponseSchema.parse({
     ok: true,
     value: {
       saved: true,
@@ -1679,7 +1679,7 @@ test('finalized audio segment attachment transcript save contract requires paren
         durationMs: 1500,
         audioByteLength: 7,
         hasTranscript: false,
-        attachmentCount: 1,
+        supplementCount: 1,
       },
       segment: {
         workspaceId: 'ws_1',
@@ -1692,13 +1692,13 @@ test('finalized audio segment attachment transcript save contract requires paren
         durationMs: 1500,
         audioByteLength: 7,
         transcript: { exists: false },
-        attachmentCount: 1,
-        attachments: [
+        supplementCount: 1,
+        supplements: [
           {
             workspaceId: 'ws_1',
             memoryId: 'mem_1',
             segmentId: 'seg_1',
-            attachmentId: 'att_1',
+            supplementId: 'sup_1',
             type: 'audio',
             title: '补充录音',
             createdAt: '2026-05-10T13:01:00.000Z',
@@ -1709,11 +1709,11 @@ test('finalized audio segment attachment transcript save contract requires paren
           },
         ],
       },
-      attachment: {
+      supplement: {
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         type: 'audio',
         title: '补充录音',
         createdAt: '2026-05-10T13:01:00.000Z',

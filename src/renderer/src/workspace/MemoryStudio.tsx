@@ -24,8 +24,8 @@ import {
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
 import type {
-  SegmentAttachmentDeleteTarget,
-  SegmentAttachmentRenameTarget,
+  SegmentSupplementDeleteTarget,
+  SegmentSupplementRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -36,23 +36,23 @@ import type {
 } from './workspaceApi';
 import {
   memoryDetailQueryOptions,
-  segmentAttachmentContentQueryOptions,
+  segmentSupplementContentQueryOptions,
   segmentContentQueryOptions,
 } from './workspaceQueries';
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
-  readonly onDeleteSegmentAttachment: (target: SegmentAttachmentDeleteTarget) => void;
-  readonly onRenameSegmentAttachment: (target: SegmentAttachmentRenameTarget) => void;
+  readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
-  readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
+  readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
 };
 
-export type SegmentAttachmentRecordingTarget = {
+export type SegmentSupplementRecordingTarget = {
   readonly memoryId: string;
   readonly segmentId: string;
   readonly title: string;
@@ -74,10 +74,10 @@ const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
 const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
-type MemorySegmentAttachment = MemorySegment['attachments'][number];
+type MemorySegmentSupplement = MemorySegment['supplements'][number];
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
-type SegmentAttachmentAudioResource = {
-  attachmentId: string;
+type SegmentSupplementAudioResource = {
+  supplementId: string;
   audioUrl: string;
   decodePromise: Promise<void>;
   memoryId: string;
@@ -88,7 +88,7 @@ type SegmentAttachmentAudioResource = {
   workspaceHandle: string;
   workspaceId: string;
 };
-type ActiveContentTab = 'transcript' | `attachment:${string}`;
+type ActiveContentTab = 'transcript' | `supplement:${string}`;
 type DraggedContentTab = {
   readonly segmentId: string;
   readonly value: ActiveContentTab;
@@ -102,12 +102,12 @@ type MemoryStudioContentTab =
       readonly value: 'transcript';
     }
   | {
-      readonly attachment: MemorySegmentAttachment;
-      readonly kind: 'attachment';
+      readonly supplement: MemorySegmentSupplement;
+      readonly kind: 'supplement';
       readonly panelId: string;
       readonly tabId: string;
       readonly title: string;
-      readonly value: `attachment:${string}`;
+      readonly value: `supplement:${string}`;
     };
 
 const CONTENT_TAB_MOTION_CLASS =
@@ -129,13 +129,13 @@ function createdTimeLabel(createdAt: string) {
   return format(date, 'HH:mm');
 }
 
-function attachmentContentTabValue(attachmentId: string): `attachment:${string}` {
-  return `attachment:${attachmentId}`;
+function supplementContentTabValue(supplementId: string): `supplement:${string}` {
+  return `supplement:${supplementId}`;
 }
 
-function attachmentIdFromContentTab(activeContentTab: ActiveContentTab) {
-  return activeContentTab.startsWith('attachment:')
-    ? activeContentTab.slice('attachment:'.length)
+function supplementIdFromContentTab(activeContentTab: ActiveContentTab) {
+  return activeContentTab.startsWith('supplement:')
+    ? activeContentTab.slice('supplement:'.length)
     : null;
 }
 
@@ -145,7 +145,7 @@ function domIdPart(value: string) {
 
 function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
   const valueDomId =
-    value === 'transcript' ? 'transcript' : domIdPart(attachmentIdFromContentTab(value) ?? value);
+    value === 'transcript' ? 'transcript' : domIdPart(supplementIdFromContentTab(value) ?? value);
   const baseId = `memory-studio-${segmentDomId}-${valueDomId}`;
 
   return {
@@ -203,10 +203,10 @@ function insertContentTabValue(
   return nextValues;
 }
 
-function segmentAttachmentAudioResourceKey(
+function segmentSupplementAudioResourceKey(
   input: Pick<
-    SegmentAttachmentAudioResource,
-    'attachmentId' | 'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
+    SegmentSupplementAudioResource,
+    'supplementId' | 'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
   > & {
     readonly audioByteLength: number;
   }
@@ -216,14 +216,14 @@ function segmentAttachmentAudioResourceKey(
     input.workspaceId,
     input.memoryId,
     input.segmentId,
-    input.attachmentId,
+    input.supplementId,
     input.requestId,
     input.audioByteLength,
   ].join('\0');
 }
 
-function clearSegmentAttachmentAudioResources(
-  audioResourceCache: Map<string, SegmentAttachmentAudioResource>
+function clearSegmentSupplementAudioResources(
+  audioResourceCache: Map<string, SegmentSupplementAudioResource>
 ) {
   for (const resource of audioResourceCache.values()) {
     URL.revokeObjectURL(resource.audioUrl);
@@ -231,8 +231,8 @@ function clearSegmentAttachmentAudioResources(
   audioResourceCache.clear();
 }
 
-function revokeSegmentAttachmentAudioResource(
-  audioResourceCache: Map<string, SegmentAttachmentAudioResource>,
+function revokeSegmentSupplementAudioResource(
+  audioResourceCache: Map<string, SegmentSupplementAudioResource>,
   resourceKey: string
 ) {
   const resource = audioResourceCache.get(resourceKey);
@@ -244,13 +244,13 @@ function revokeSegmentAttachmentAudioResource(
   audioResourceCache.delete(resourceKey);
 }
 
-function pruneSegmentAttachmentAudioResources(
-  audioResourceCache: Map<string, SegmentAttachmentAudioResource>,
-  shouldKeep: (resource: SegmentAttachmentAudioResource) => boolean
+function pruneSegmentSupplementAudioResources(
+  audioResourceCache: Map<string, SegmentSupplementAudioResource>,
+  shouldKeep: (resource: SegmentSupplementAudioResource) => boolean
 ) {
   for (const [resourceKey, resource] of audioResourceCache) {
     if (!shouldKeep(resource)) {
-      revokeSegmentAttachmentAudioResource(audioResourceCache, resourceKey);
+      revokeSegmentSupplementAudioResource(audioResourceCache, resourceKey);
     }
   }
 }
@@ -398,7 +398,7 @@ function contentTabMoreClassName(revealMode: 'drag-source' | 'drag-suppressed' |
       ? 'pointer-events-auto ml-[6px] max-w-20 scale-100 opacity-100'
       : revealMode === 'drag-suppressed'
         ? ''
-        : 'group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100';
+        : 'group-hover/supplement-tab:pointer-events-auto group-hover/supplement-tab:ml-[6px] group-hover/supplement-tab:max-w-20 group-hover/supplement-tab:scale-100 group-hover/supplement-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100';
 
   return [
     'inline-flex items-center justify-center overflow-hidden',
@@ -410,7 +410,7 @@ function contentTabMoreClassName(revealMode: 'drag-source' | 'drag-suppressed' |
   ].join(' ');
 }
 
-function SegmentAttachmentTypeIcon({ type }: { readonly type: MemorySegmentAttachment['type'] }) {
+function SegmentSupplementTypeIcon({ type }: { readonly type: MemorySegmentSupplement['type'] }) {
   if (type === 'audio') {
     return <Mic aria-hidden="true" className="size-16 shrink-0" strokeWidth={2} />;
   }
@@ -418,10 +418,10 @@ function SegmentAttachmentTypeIcon({ type }: { readonly type: MemorySegmentAttac
   return null;
 }
 
-function SegmentAttachmentTab({
+function SegmentSupplementTab({
   active,
-  attachment,
-  attachmentIndex,
+  supplement,
+  supplementIndex,
   actionsVisible,
   panelId,
   tabIndex,
@@ -443,8 +443,8 @@ function SegmentAttachmentTab({
 }: {
   readonly active: boolean;
   readonly actionsVisible: boolean;
-  readonly attachment: MemorySegmentAttachment;
-  readonly attachmentIndex: number;
+  readonly supplement: MemorySegmentSupplement;
+  readonly supplementIndex: number;
   readonly dragging: boolean;
   readonly menuOpen: boolean;
   readonly panelId: string;
@@ -477,14 +477,14 @@ function SegmentAttachmentTab({
 
   return (
     <div
-      data-slot="memory-studio-attachment-tab-item"
-      data-attachment-id={attachment.attachmentId}
-      data-attachment-index={attachmentIndex}
-      data-attachment-type={attachment.type}
+      data-slot="memory-studio-supplement-tab-item"
+      data-supplement-id={supplement.supplementId}
+      data-supplement-index={supplementIndex}
+      data-supplement-type={supplement.type}
       draggable
       className={[
         contentTabPillClassName(active),
-        'group/attachment-tab cursor-grab pr-[14px] active:cursor-grabbing',
+        'group/supplement-tab cursor-grab pr-[14px] active:cursor-grabbing',
         dragging ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border' : '',
       ].join(' ')}
       onDragEnd={onDragEnd}
@@ -503,20 +503,20 @@ function SegmentAttachmentTab({
         id={tabId}
         aria-controls={panelId}
         aria-selected={active}
-        data-attachment-id={attachment.attachmentId}
-        data-attachment-type={attachment.type}
-        data-slot="memory-studio-attachment-tab"
+        data-supplement-id={supplement.supplementId}
+        data-supplement-type={supplement.type}
+        data-slot="memory-studio-supplement-tab"
         tabIndex={tabIndex}
         className={contentTabButtonClassName(true)}
         onClick={onSelect}
         onKeyDown={onKeyDown}
       >
         <span
-          data-slot="memory-studio-attachment-reorder-anchor"
+          data-slot="memory-studio-supplement-reorder-anchor"
           className="inline-flex min-w-0 items-center gap-[6px]"
         >
-          <SegmentAttachmentTypeIcon type={attachment.type} />
-          <span className="truncate">{attachment.title}</span>
+          <SegmentSupplementTypeIcon type={supplement.type} />
+          <span className="truncate">{supplement.title}</span>
         </span>
       </button>
       <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
@@ -524,9 +524,9 @@ function SegmentAttachmentTab({
           <button
             ref={moreButtonRef}
             type="button"
-            aria-label={`${attachment.title} 更多操作`}
+            aria-label={`${supplement.title} 更多操作`}
             aria-hidden={actionsAccessible ? undefined : true}
-            data-slot="memory-studio-attachment-more-anchor"
+            data-slot="memory-studio-supplement-more-anchor"
             tabIndex={actionsAccessible ? 0 : -1}
             className={contentTabMoreClassName(revealMode)}
           >
@@ -536,7 +536,7 @@ function SegmentAttachmentTab({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          aria-label={`${attachment.title} 操作`}
+          aria-label={`${supplement.title} 操作`}
           aria-labelledby={undefined}
           align="center"
           onCloseAutoFocus={(event) => {
@@ -571,13 +571,13 @@ function SegmentAttachmentTab({
   );
 }
 
-function SegmentAttachmentAudioPlayer({
-  attachment,
+function SegmentSupplementAudioPlayer({
+  supplement,
   audioResourceCache,
   workspaceSession,
 }: {
-  readonly attachment: MemorySegmentAttachment;
-  readonly audioResourceCache: Map<string, SegmentAttachmentAudioResource>;
+  readonly supplement: MemorySegmentSupplement;
+  readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -589,25 +589,25 @@ function SegmentAttachmentAudioPlayer({
   const [playing, setPlaying] = useState(false);
   const [waveformData, setWaveformData] = useState<readonly number[]>([]);
   const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
-  const attachmentContentQuery = useQuery(
-    segmentAttachmentContentQueryOptions(
+  const supplementContentQuery = useQuery(
+    segmentSupplementContentQueryOptions(
       workspaceSession,
-      attachment.memoryId,
-      attachment.segmentId,
-      attachment.attachmentId
+      supplement.memoryId,
+      supplement.segmentId,
+      supplement.supplementId
     )
   );
-  const attachmentContent = attachmentContentQuery.data;
-  const attachmentId = attachment.attachmentId;
-  const attachmentMemoryId = attachment.memoryId;
-  const attachmentSegmentId = attachment.segmentId;
-  const attachmentAudio = attachmentContent?.audio ?? null;
-  const attachmentAudioByteLength = attachmentContent?.audioByteLength ?? null;
-  const attachmentRequestId = attachmentContent?.requestId ?? null;
+  const supplementContent = supplementContentQuery.data;
+  const supplementId = supplement.supplementId;
+  const supplementMemoryId = supplement.memoryId;
+  const supplementSegmentId = supplement.segmentId;
+  const supplementAudio = supplementContent?.audio ?? null;
+  const supplementAudioByteLength = supplementContent?.audioByteLength ?? null;
+  const supplementRequestId = supplementContent?.requestId ?? null;
   const workspaceHandle = workspaceSession.workspaceHandle;
   const workspaceId = workspaceSession.workspaceId;
   const playbackProgress =
-    attachment.durationMs > 0 ? Math.min(1, playbackTimeMs / attachment.durationMs) : 0;
+    supplement.durationMs > 0 ? Math.min(1, playbackTimeMs / supplement.durationMs) : 0;
 
   useEffect(() => {
     playingRef.current = playing;
@@ -623,15 +623,15 @@ function SegmentAttachmentAudioPlayer({
         audio?.pause();
       }
     };
-  }, [attachmentId]);
+  }, [supplementId]);
 
   useEffect(() => {
     let cancelled = false;
 
     if (
-      attachmentAudio === null ||
-      attachmentAudioByteLength === null ||
-      attachmentRequestId === null
+      supplementAudio === null ||
+      supplementAudioByteLength === null ||
+      supplementRequestId === null
     ) {
       currentAudioResourceKeyRef.current = null;
       setAudioUrl(null);
@@ -643,12 +643,12 @@ function SegmentAttachmentAudioPlayer({
       };
     }
 
-    const audioResourceKey = segmentAttachmentAudioResourceKey({
-      attachmentId,
-      audioByteLength: attachmentAudioByteLength,
-      memoryId: attachmentMemoryId,
-      requestId: attachmentRequestId,
-      segmentId: attachmentSegmentId,
+    const audioResourceKey = segmentSupplementAudioResourceKey({
+      supplementId,
+      audioByteLength: supplementAudioByteLength,
+      memoryId: supplementMemoryId,
+      requestId: supplementRequestId,
+      segmentId: supplementSegmentId,
       workspaceHandle,
       workspaceId,
     });
@@ -681,28 +681,28 @@ function SegmentAttachmentAudioPlayer({
     }
 
     const nextAudioUrl = URL.createObjectURL(
-      new Blob([attachmentAudio as BlobPart], { type: 'audio/webm' })
+      new Blob([supplementAudio as BlobPart], { type: 'audio/webm' })
     );
-    const nextResource: SegmentAttachmentAudioResource = {
-      attachmentId,
+    const nextResource: SegmentSupplementAudioResource = {
+      supplementId,
       audioUrl: nextAudioUrl,
       decodePromise: Promise.resolve(),
-      memoryId: attachmentMemoryId,
-      requestId: attachmentRequestId,
-      segmentId: attachmentSegmentId,
+      memoryId: supplementMemoryId,
+      requestId: supplementRequestId,
+      segmentId: supplementSegmentId,
       waveformData: [],
       waveformSource: 'pending',
       workspaceHandle,
       workspaceId,
     };
-    pruneSegmentAttachmentAudioResources(
+    pruneSegmentSupplementAudioResources(
       audioResourceCache,
       (resource) =>
         resource.workspaceHandle !== workspaceHandle ||
         resource.workspaceId !== workspaceId ||
-        resource.memoryId !== attachmentMemoryId ||
-        resource.segmentId !== attachmentSegmentId ||
-        resource.attachmentId !== attachmentId
+        resource.memoryId !== supplementMemoryId ||
+        resource.segmentId !== supplementSegmentId ||
+        resource.supplementId !== supplementId
     );
     audioResourceCache.set(audioResourceKey, nextResource);
 
@@ -712,7 +712,7 @@ function SegmentAttachmentAudioPlayer({
     setWaveformSource(nextResource.waveformSource);
 
     nextResource.decodePromise = decodeAudioBytesToWaveformData(
-      attachmentAudio,
+      supplementAudio,
       MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
     )
       .then((nextWaveformData) => {
@@ -742,12 +742,12 @@ function SegmentAttachmentAudioPlayer({
       cancelled = true;
     };
   }, [
-    attachmentAudio,
-    attachmentAudioByteLength,
-    attachmentId,
-    attachmentMemoryId,
-    attachmentRequestId,
-    attachmentSegmentId,
+    supplementAudio,
+    supplementAudioByteLength,
+    supplementId,
+    supplementMemoryId,
+    supplementRequestId,
+    supplementSegmentId,
     audioResourceCache,
     workspaceHandle,
     workspaceId,
@@ -758,7 +758,7 @@ function SegmentAttachmentAudioPlayer({
       return;
     }
 
-    const nextTimeMs = Math.min(attachment.durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
+    const nextTimeMs = Math.min(supplement.durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
     if (audioRef.current) {
       audioRef.current.currentTime = nextTimeMs / 1000;
     }
@@ -776,7 +776,7 @@ function SegmentAttachmentAudioPlayer({
     }
 
     const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setPlaybackPosition(progress * attachment.durationMs);
+    setPlaybackPosition(progress * supplement.durationMs);
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -821,7 +821,7 @@ function SegmentAttachmentAudioPlayer({
     }
     if (event.key === 'End') {
       event.preventDefault();
-      setPlaybackPosition(attachment.durationMs);
+      setPlaybackPosition(supplement.durationMs);
     }
   }
 
@@ -850,28 +850,28 @@ function SegmentAttachmentAudioPlayer({
   }
 
   return (
-    <article aria-label={attachment.title} className="py-12">
+    <article aria-label={supplement.title} className="py-12">
       <MemoryStudioAudioPlaybackRow
         audioAvailable={audioUrl !== null}
-        durationMs={attachment.durationMs}
-        loading={attachmentContentQuery.isLoading}
+        durationMs={supplement.durationMs}
+        loading={supplementContentQuery.isLoading}
         onKeyDown={handleKeyDown}
         onPointerCancel={endPointerScrub}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endPointerScrub}
         onTogglePlayback={togglePlayback}
-        playButtonLabel={`${playing ? '暂停' : '播放'}补充录音 ${attachment.title}`}
+        playButtonLabel={`${playing ? '暂停' : '播放'}补充录音 ${supplement.title}`}
         playbackTimeMs={playbackTimeMs}
         playbackProgress={playbackProgress}
         playing={playing}
-        rowSlot="memory-studio-attachment-player"
+        rowSlot="memory-studio-supplement-player"
         waveformData={waveformData}
         waveformLabel="补充录音播放进度"
-        waveformSlot="memory-studio-attachment-waveform"
+        waveformSlot="memory-studio-supplement-waveform"
         waveformSource={waveformSource}
       />
-      {attachmentContentQuery.isError ? (
+      {supplementContentQuery.isError ? (
         <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-muted-foreground">
           补充录音加载失败。
         </p>
@@ -882,7 +882,7 @@ function SegmentAttachmentAudioPlayer({
         onEnded={() => {
           playingRef.current = false;
           setPlaying(false);
-          setPlaybackTimeMs(attachment.durationMs);
+          setPlaybackTimeMs(supplement.durationMs);
         }}
         onPause={() => {
           playingRef.current = false;
@@ -890,7 +890,7 @@ function SegmentAttachmentAudioPlayer({
         }}
         onTimeUpdate={(event) => {
           setPlaybackTimeMs(
-            Math.min(attachment.durationMs, Math.round(event.currentTarget.currentTime * 1000))
+            Math.min(supplement.durationMs, Math.round(event.currentTarget.currentTime * 1000))
           );
         }}
       />
@@ -910,20 +910,20 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
 export function MemoryStudio({
   memory,
   onDeleteSegment,
-  onDeleteSegmentAttachment,
-  onRenameSegmentAttachment,
+  onDeleteSegmentSupplement,
+  onRenameSegmentSupplement,
   onRenameSegment,
   onSegmentFocusConsumed,
-  onStartSegmentAttachmentRecording,
+  onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
   workspaceSession,
 }: MemoryStudioProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const attachmentAudioResourceCacheRef = useRef(new Map<string, SegmentAttachmentAudioResource>());
+  const supplementAudioResourceCacheRef = useRef(new Map<string, SegmentSupplementAudioResource>());
   const pointerScrubbingRef = useRef(false);
-  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
-  const [openAttachmentActionMenuId, setOpenAttachmentActionMenuId] = useState<string | null>(null);
-  const [hoveredAttachmentActionId, setHoveredAttachmentActionId] = useState<string | null>(null);
+  const [supplementMenuOpen, setSupplementMenuOpen] = useState(false);
+  const [openSupplementActionMenuId, setOpenSupplementActionMenuId] = useState<string | null>(null);
+  const [hoveredSupplementActionId, setHoveredSupplementActionId] = useState<string | null>(null);
   const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const [audioPlaybackError, setAudioPlaybackError] = useState<string | null>(null);
@@ -939,10 +939,10 @@ export function MemoryStudio({
   >({});
   const draggedContentTabRef = useRef<DraggedContentTab | null>(null);
   const [draggedContentTab, setDraggedContentTab] = useState<DraggedContentTab | null>(null);
-  const segmentAttachmentPresenceRef = useRef<{
+  const segmentSupplementPresenceRef = useRef<{
     readonly segmentId: string | null;
-    readonly attachmentIds: readonly string[];
-  }>({ segmentId: null, attachmentIds: [] });
+    readonly supplementIds: readonly string[];
+  }>({ segmentId: null, supplementIds: [] });
   const [stripScrollState, setStripScrollState] = useState<SegmentStripScrollState>(
     hiddenSegmentStripScrollState
   );
@@ -961,26 +961,26 @@ export function MemoryStudio({
     enabled: selectedSegment !== null,
   });
   const segmentContent = selectedSegment ? segmentContentQuery.data : undefined;
-  const selectedSegmentAttachments = selectedSegment?.attachments ?? [];
-  const selectedSegmentAttachmentIds = selectedSegmentAttachments.map(
-    (attachment) => attachment.attachmentId
+  const selectedSegmentSupplements = selectedSegment?.supplements ?? [];
+  const selectedSegmentSupplementIds = selectedSegmentSupplements.map(
+    (supplement) => supplement.supplementId
   );
-  const selectedSegmentAttachmentIdsKey = selectedSegmentAttachmentIds.join('\0');
-  const activeAttachmentId = attachmentIdFromContentTab(activeContentTab);
-  const draggedAttachmentId =
+  const selectedSegmentSupplementIdsKey = selectedSegmentSupplementIds.join('\0');
+  const activeSupplementId = supplementIdFromContentTab(activeContentTab);
+  const draggedSupplementId =
     draggedContentTab &&
     selectedSegment &&
     draggedContentTab.segmentId === selectedSegment.segmentId
-      ? attachmentIdFromContentTab(draggedContentTab.value)
+      ? supplementIdFromContentTab(draggedContentTab.value)
       : null;
-  const activeSegmentAttachment =
-    activeAttachmentId === null
+  const activeSegmentSupplement =
+    activeSupplementId === null
       ? null
-      : (selectedSegmentAttachments.find(
-          (attachment) => attachment.attachmentId === activeAttachmentId
+      : (selectedSegmentSupplements.find(
+          (supplement) => supplement.supplementId === activeSupplementId
         ) ?? null);
   const resolvedActiveContentTab =
-    activeAttachmentId === null || activeSegmentAttachment ? activeContentTab : 'transcript';
+    activeSupplementId === null || activeSegmentSupplement ? activeContentTab : 'transcript';
   const selectedSegmentDomId = selectedSegment ? domIdPart(selectedSegment.segmentId) : 'pending';
   const transcriptContentTab: Extract<MemoryStudioContentTab, { readonly kind: 'transcript' }> = {
     kind: 'transcript',
@@ -988,33 +988,33 @@ export function MemoryStudio({
     value: 'transcript',
     ...contentTabDomIds(selectedSegmentDomId, 'transcript'),
   };
-  const attachmentContentTabs: readonly Extract<
+  const supplementContentTabs: readonly Extract<
     MemoryStudioContentTab,
-    { readonly kind: 'attachment' }
-  >[] = selectedSegmentAttachments.map((attachment) => {
-    const value = attachmentContentTabValue(attachment.attachmentId);
+    { readonly kind: 'supplement' }
+  >[] = selectedSegmentSupplements.map((supplement) => {
+    const value = supplementContentTabValue(supplement.supplementId);
 
     return {
-      attachment,
-      kind: 'attachment',
-      title: attachment.title,
+      supplement,
+      kind: 'supplement',
+      title: supplement.title,
       value,
       ...contentTabDomIds(selectedSegmentDomId, value),
     };
   });
   const baseContentTabs: readonly MemoryStudioContentTab[] = [
     transcriptContentTab,
-    ...attachmentContentTabs,
+    ...supplementContentTabs,
   ];
   const contentTabs: readonly MemoryStudioContentTab[] = selectedSegment
     ? orderContentTabs(baseContentTabs, contentTabOrderBySegmentId[selectedSegment.segmentId])
     : baseContentTabs;
-  const visibleAttachmentIndexByTabValue = new Map<ActiveContentTab, number>();
-  let visibleAttachmentIndex = 0;
+  const visibleSupplementIndexByTabValue = new Map<ActiveContentTab, number>();
+  let visibleSupplementIndex = 0;
   for (const contentTab of contentTabs) {
-    if (contentTab.kind === 'attachment') {
-      visibleAttachmentIndexByTabValue.set(contentTab.value, visibleAttachmentIndex);
-      visibleAttachmentIndex += 1;
+    if (contentTab.kind === 'supplement') {
+      visibleSupplementIndexByTabValue.set(contentTab.value, visibleSupplementIndex);
+      visibleSupplementIndex += 1;
     }
   }
   const activeContentTabModel =
@@ -1072,42 +1072,42 @@ export function MemoryStudio({
 
   useEffect(() => {
     const segmentId = selectedSegment?.segmentId ?? null;
-    const previousPresence = segmentAttachmentPresenceRef.current;
+    const previousPresence = segmentSupplementPresenceRef.current;
 
     if (!segmentId || previousPresence.segmentId !== segmentId) {
-      segmentAttachmentPresenceRef.current = {
+      segmentSupplementPresenceRef.current = {
         segmentId,
-        attachmentIds: selectedSegmentAttachmentIds,
+        supplementIds: selectedSegmentSupplementIds,
       };
       return;
     }
 
-    const addedAttachmentId = selectedSegmentAttachmentIds.find(
-      (attachmentId) => !previousPresence.attachmentIds.includes(attachmentId)
+    const addedSupplementId = selectedSegmentSupplementIds.find(
+      (supplementId) => !previousPresence.supplementIds.includes(supplementId)
     );
-    if (addedAttachmentId) {
-      setActiveContentTab(attachmentContentTabValue(addedAttachmentId));
+    if (addedSupplementId) {
+      setActiveContentTab(supplementContentTabValue(addedSupplementId));
     }
 
     if (
-      previousPresence.attachmentIds.length !== selectedSegmentAttachmentIds.length ||
-      addedAttachmentId
+      previousPresence.supplementIds.length !== selectedSegmentSupplementIds.length ||
+      addedSupplementId
     ) {
-      segmentAttachmentPresenceRef.current = {
+      segmentSupplementPresenceRef.current = {
         segmentId,
-        attachmentIds: selectedSegmentAttachmentIds,
+        supplementIds: selectedSegmentSupplementIds,
       };
     }
-  }, [selectedSegment?.segmentId, selectedSegmentAttachmentIdsKey]);
+  }, [selectedSegment?.segmentId, selectedSegmentSupplementIdsKey]);
 
   useEffect(() => {
     if (audioRef.current && !audioRef.current.paused) {
       audioRef.current.pause();
     }
     setAudioPlaybackError(null);
-    setAttachmentMenuOpen(false);
-    setOpenAttachmentActionMenuId(null);
-    setHoveredAttachmentActionId(null);
+    setSupplementMenuOpen(false);
+    setOpenSupplementActionMenuId(null);
+    setHoveredSupplementActionId(null);
     draggedContentTabRef.current = null;
     setDraggedContentTab(null);
     setActiveContentTab('transcript');
@@ -1116,32 +1116,32 @@ export function MemoryStudio({
   }, [selectedSegment?.segmentId]);
 
   useEffect(() => {
-    if (activeAttachmentId !== null && !selectedSegmentAttachmentIds.includes(activeAttachmentId)) {
+    if (activeSupplementId !== null && !selectedSegmentSupplementIds.includes(activeSupplementId)) {
       setActiveContentTab('transcript');
     }
-  }, [activeAttachmentId, selectedSegmentAttachmentIdsKey]);
+  }, [activeSupplementId, selectedSegmentSupplementIdsKey]);
 
   useEffect(() => {
     if (
-      openAttachmentActionMenuId !== null &&
-      !selectedSegmentAttachmentIds.includes(openAttachmentActionMenuId)
+      openSupplementActionMenuId !== null &&
+      !selectedSegmentSupplementIds.includes(openSupplementActionMenuId)
     ) {
-      setOpenAttachmentActionMenuId(null);
+      setOpenSupplementActionMenuId(null);
     }
 
     if (
-      hoveredAttachmentActionId !== null &&
-      !selectedSegmentAttachmentIds.includes(hoveredAttachmentActionId)
+      hoveredSupplementActionId !== null &&
+      !selectedSegmentSupplementIds.includes(hoveredSupplementActionId)
     ) {
-      setHoveredAttachmentActionId(null);
+      setHoveredSupplementActionId(null);
     }
-  }, [hoveredAttachmentActionId, openAttachmentActionMenuId, selectedSegmentAttachmentIdsKey]);
+  }, [hoveredSupplementActionId, openSupplementActionMenuId, selectedSegmentSupplementIdsKey]);
 
   useEffect(() => {
-    const audioResourceCache = attachmentAudioResourceCacheRef.current;
+    const audioResourceCache = supplementAudioResourceCacheRef.current;
 
     return () => {
-      clearSegmentAttachmentAudioResources(audioResourceCache);
+      clearSegmentSupplementAudioResources(audioResourceCache);
     };
   }, [
     memory.memoryId,
@@ -1152,21 +1152,21 @@ export function MemoryStudio({
 
   useEffect(() => {
     const selectedSegmentId = selectedSegment?.segmentId ?? null;
-    const liveAttachmentIds = new Set(selectedSegmentAttachmentIds);
+    const liveSupplementIds = new Set(selectedSegmentSupplementIds);
 
-    pruneSegmentAttachmentAudioResources(
-      attachmentAudioResourceCacheRef.current,
+    pruneSegmentSupplementAudioResources(
+      supplementAudioResourceCacheRef.current,
       (resource) =>
         resource.workspaceHandle !== workspaceSession.workspaceHandle ||
         resource.workspaceId !== workspaceSession.workspaceId ||
         resource.memoryId !== memory.memoryId ||
         resource.segmentId !== selectedSegmentId ||
-        liveAttachmentIds.has(resource.attachmentId)
+        liveSupplementIds.has(resource.supplementId)
     );
   }, [
     memory.memoryId,
     selectedSegment?.segmentId,
-    selectedSegmentAttachmentIdsKey,
+    selectedSegmentSupplementIdsKey,
     workspaceSession.workspaceHandle,
     workspaceSession.workspaceId,
   ]);
@@ -1218,7 +1218,7 @@ export function MemoryStudio({
       if (
         typeof parsedValue.segmentId === 'string' &&
         (parsedValue.value === 'transcript' ||
-          (typeof parsedValue.value === 'string' && parsedValue.value.startsWith('attachment:')))
+          (typeof parsedValue.value === 'string' && parsedValue.value.startsWith('supplement:')))
       ) {
         return {
           segmentId: parsedValue.segmentId,
@@ -1277,7 +1277,7 @@ export function MemoryStudio({
 
     const draggedTab = { segmentId: selectedSegment.segmentId, value };
     draggedContentTabRef.current = draggedTab;
-    setHoveredAttachmentActionId(null);
+    setHoveredSupplementActionId(null);
     setDraggedContentTab(draggedTab);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(CONTENT_TAB_DRAG_MIME, JSON.stringify(draggedTab));
@@ -1305,7 +1305,7 @@ export function MemoryStudio({
 
   function handleContentTabDragEnd() {
     draggedContentTabRef.current = null;
-    setHoveredAttachmentActionId(null);
+    setHoveredSupplementActionId(null);
     setDraggedContentTab(null);
   }
 
@@ -1732,27 +1732,27 @@ export function MemoryStudio({
                         </button>
                       </span>
                     ) : (
-                      <SegmentAttachmentTab
-                        key={contentTab.attachment.attachmentId}
+                      <SegmentSupplementTab
+                        key={contentTab.supplement.supplementId}
                         active={resolvedActiveContentTab === contentTab.value}
                         actionsVisible={
                           (draggedContentTab === null &&
-                            hoveredAttachmentActionId === contentTab.attachment.attachmentId) ||
-                          draggedAttachmentId === contentTab.attachment.attachmentId
+                            hoveredSupplementActionId === contentTab.supplement.supplementId) ||
+                          draggedSupplementId === contentTab.supplement.supplementId
                         }
-                        attachment={contentTab.attachment}
-                        attachmentIndex={
-                          visibleAttachmentIndexByTabValue.get(contentTab.value) ?? 0
+                        supplement={contentTab.supplement}
+                        supplementIndex={
+                          visibleSupplementIndexByTabValue.get(contentTab.value) ?? 0
                         }
                         dragging={
                           draggedContentTab?.segmentId === selectedSegment.segmentId &&
                           draggedContentTab.value === contentTab.value
                         }
-                        menuOpen={openAttachmentActionMenuId === contentTab.attachment.attachmentId}
+                        menuOpen={openSupplementActionMenuId === contentTab.supplement.supplementId}
                         revealMode={
                           draggedContentTab === null
                             ? 'normal'
-                            : draggedAttachmentId === contentTab.attachment.attachmentId
+                            : draggedSupplementId === contentTab.supplement.supplementId
                               ? 'drag-source'
                               : 'drag-suppressed'
                         }
@@ -1762,15 +1762,15 @@ export function MemoryStudio({
                         onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
                         onActionsVisible={() =>
                           draggedContentTab === null
-                            ? setHoveredAttachmentActionId(contentTab.attachment.attachmentId)
+                            ? setHoveredSupplementActionId(contentTab.supplement.supplementId)
                             : undefined
                         }
                         onActionsHidden={() =>
                           draggedContentTab === null
-                            ? setHoveredAttachmentActionId((currentAttachmentId) =>
-                                currentAttachmentId === contentTab.attachment.attachmentId
+                            ? setHoveredSupplementActionId((currentSupplementId) =>
+                                currentSupplementId === contentTab.supplement.supplementId
                                   ? null
-                                  : currentAttachmentId
+                                  : currentSupplementId
                               )
                             : undefined
                         }
@@ -1779,22 +1779,22 @@ export function MemoryStudio({
                         onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
                         onDragStart={(event) => handleContentTabDragStart(event, contentTab.value)}
                         onMenuOpenChange={(open) =>
-                          setOpenAttachmentActionMenuId(
-                            open ? contentTab.attachment.attachmentId : null
+                          setOpenSupplementActionMenuId(
+                            open ? contentTab.supplement.supplementId : null
                           )
                         }
                         onDelete={() =>
-                          onDeleteSegmentAttachment({
+                          onDeleteSegmentSupplement({
                             memoryId: memory.memoryId,
                             segment: selectedSegment,
-                            attachment: contentTab.attachment,
+                            supplement: contentTab.supplement,
                           })
                         }
                         onRename={() =>
-                          onRenameSegmentAttachment({
+                          onRenameSegmentSupplement({
                             memoryId: memory.memoryId,
                             segment: selectedSegment,
-                            attachment: contentTab.attachment,
+                            supplement: contentTab.supplement,
                           })
                         }
                         onSelect={() => setActiveContentTab(contentTab.value)}
@@ -1802,7 +1802,7 @@ export function MemoryStudio({
                     )
                   )}
                 </div>
-                <DropdownMenu open={attachmentMenuOpen} onOpenChange={setAttachmentMenuOpen}>
+                <DropdownMenu open={supplementMenuOpen} onOpenChange={setSupplementMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghostIcon"
@@ -1821,11 +1821,11 @@ export function MemoryStudio({
                   >
                     <DropdownMenuItem
                       onSelect={() => {
-                        setAttachmentMenuOpen(false);
-                        onStartSegmentAttachmentRecording({
+                        setSupplementMenuOpen(false);
+                        onStartSegmentSupplementRecording({
                           memoryId: memory.memoryId,
                           segmentId: selectedSegment.segmentId,
-                          title: `补充录音${selectedSegment.attachmentCount + 1}`,
+                          title: `补充录音${selectedSegment.supplementCount + 1}`,
                         });
                       }}
                     >
@@ -1880,19 +1880,19 @@ export function MemoryStudio({
                     </p>
                   )}
                 </section>
-              ) : activeSegmentAttachment ? (
+              ) : activeSegmentSupplement ? (
                 <section
-                  key={activeSegmentAttachment.attachmentId}
-                  aria-label={activeSegmentAttachment.title}
+                  key={activeSegmentSupplement.supplementId}
+                  aria-label={activeSegmentSupplement.title}
                   role="tabpanel"
                   id={activeContentTabModel.panelId}
                   aria-labelledby={activeContentTabModel.tabId}
-                  data-slot="memory-studio-attachment-panel"
+                  data-slot="memory-studio-supplement-panel"
                   className="reo-content-tab-panel-motion mt-4 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
                 >
-                  <SegmentAttachmentAudioPlayer
-                    attachment={activeSegmentAttachment}
-                    audioResourceCache={attachmentAudioResourceCacheRef.current}
+                  <SegmentSupplementAudioPlayer
+                    supplement={activeSegmentSupplement}
+                    audioResourceCache={supplementAudioResourceCacheRef.current}
                     workspaceSession={workspaceSession}
                   />
                 </section>

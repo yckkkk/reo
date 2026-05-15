@@ -501,7 +501,7 @@ function sameMemorySummaries(
       memory.durationMs === other.durationMs &&
       memory.audioByteLength === other.audioByteLength &&
       memory.hasTranscript === other.hasTranscript &&
-      memory.attachmentCount === other.attachmentCount
+      memory.supplementCount === other.supplementCount
     );
   });
 }

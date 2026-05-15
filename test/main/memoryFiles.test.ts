@@ -24,9 +24,9 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   appendRecordingAudioChunk,
-  appendSegmentAttachmentRecordingAudioChunk,
+  appendSegmentSupplementRecordingAudioChunk,
   createRecordingDraft,
-  createSegmentAttachmentRecordingDraft,
+  createSegmentSupplementRecordingDraft,
   finalizeRecordingDraftForTest as finalizeRecordingDraft,
   initializeRecordingDraftWorkspace,
 } from '../../src/main/recordingDrafts.js';
@@ -41,12 +41,12 @@ import {
   writeWorkspaceFileNoReplaceAtomicForTest,
 } from '../../src/main/atomicWorkspaceFile.js';
 import {
-  appendAudioAttachmentToSegment,
+  appendAudioSupplementToSegment,
   appendAudioSegmentToMemoryForTest as appendAudioSegmentToMemory,
   createMemoryFromFileTruth,
   createMemoryWithRecordingForTest as createMemoryWithRecording,
   deleteMemoryFromFileTruth,
-  deleteSegmentAttachmentFromFileTruth,
+  deleteSegmentSupplementFromFileTruth,
   deleteSegmentFromFileTruth,
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
@@ -54,7 +54,7 @@ import {
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   restoreDeletedMemoryFromFileTruth,
-  restoreDeletedSegmentAttachmentFromFileTruth,
+  restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
@@ -64,10 +64,14 @@ import {
   setBeforeSegmentDirectoryCandidateScanForTest,
   setBeforeSegmentFileTruthListForTest,
   updateMemoryTitleFromFileTruth,
-  updateSegmentAttachmentTitleFromFileTruth,
+  updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from '../../src/main/memoryFiles.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
+import {
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from '../../src/main/workspaceMarkdownObjects.js';
 
 async function workspaceRoot(): Promise<string> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-'));
@@ -93,16 +97,26 @@ async function createMemoryForDraftFinalize({
   readonly title: string;
   readonly now: string;
 }) {
-  await mkdir(path.join(rootPath, 'memories', memoryId), { recursive: true });
+  const directory = path.join(rootPath, 'memories', memoryId);
+  await mkdir(directory, { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'memories'), { recursive: true });
   await writeFile(
-    path.join(rootPath, 'memories', memoryId, 'memory.json'),
+    path.join(directory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title },
+      content: `# ${title}\n`,
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`),
     `${JSON.stringify(
       {
+        schemaVersion: 1,
+        objectType: 'memory',
         memoryId,
-        title,
         createdAt: now,
         updatedAt: now,
-        segmentIds: [],
       },
       null,
       2
@@ -113,6 +127,97 @@ async function createMemoryForDraftFinalize({
 
 async function readJson(filePath: string): Promise<unknown> {
   return JSON.parse(await readFile(filePath, 'utf8'));
+}
+
+async function readSupplementTitleForTest(supplementDirectory: string): Promise<string> {
+  return (
+    parseWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      markdown: await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    }).data as { readonly title: string }
+  ).title;
+}
+
+async function readSupplementManifestForTest(
+  rootPath: string,
+  supplementId: string
+): Promise<unknown> {
+  return readJson(path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`));
+}
+
+async function workspaceRootFromNodeDirectory(nodeDirectory: string): Promise<string> {
+  let current = nodeDirectory;
+  for (;;) {
+    if (existsSync(path.join(current, '.reo'))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      throw new Error('Workspace root not found for test node');
+    }
+    current = parent;
+  }
+}
+
+async function readMemoryFileTruthForTest(memoryDirectory: string): Promise<{
+  readonly memoryId: string;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}> {
+  const memoryId = path.basename(memoryDirectory).split('--')[0] ?? '';
+  const rootPath = await workspaceRootFromNodeDirectory(memoryDirectory);
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'memory',
+    markdown: await readFile(path.join(memoryDirectory, 'memory.md'), 'utf8'),
+  });
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`)
+  )) as {
+    readonly memoryId: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+  return {
+    memoryId: manifest.memoryId,
+    title: markdown.data.title,
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt,
+  };
+}
+
+async function readProjectedSegmentIdsFromMemoryDirectoryForTest(
+  memoryDirectory: string
+): Promise<readonly string[]> {
+  const segmentsDirectory = path.join(memoryDirectory, 'segments');
+  try {
+    const entries = await readdir(segmentsDirectory, { withFileTypes: true });
+    const projectedSegmentIds: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      try {
+        const segmentId = entry.name.split('--')[0] ?? '';
+        const rootPath = await workspaceRootFromNodeDirectory(memoryDirectory);
+        const manifest = (await readJson(
+          path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+        )) as { readonly segmentId?: unknown; readonly memoryId?: unknown };
+        await readFile(path.join(segmentsDirectory, entry.name, 'segment.md'), 'utf8');
+        if (
+          manifest.memoryId === path.basename(memoryDirectory).split('--')[0] &&
+          typeof manifest.segmentId === 'string'
+        ) {
+          projectedSegmentIds.push(manifest.segmentId);
+        }
+      } catch {
+        continue;
+      }
+    }
+    return projectedSegmentIds.sort();
+  } catch {
+    return [];
+  }
 }
 
 function createDeferred<T>() {
@@ -130,21 +235,31 @@ function workspaceLockLost() {
   } as const;
 }
 
-async function writeMemoryJsonForTest(
+async function writeMemoryForTest(
   rootPath: string,
   memory: {
     readonly memoryId: string;
     readonly title: string;
-    readonly segmentIds: readonly string[];
   }
 ): Promise<void> {
   const directory = path.join(rootPath, 'memories', memory.memoryId);
   await mkdir(directory, { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'memories'), { recursive: true });
   await writeFile(
-    path.join(directory, 'memory.json'),
+    path.join(directory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: memory.title },
+      content: `# ${memory.title}\n`,
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', `${memory.memoryId}.json`),
     `${JSON.stringify(
       {
-        ...memory,
+        schemaVersion: 1,
+        objectType: 'memory',
+        memoryId: memory.memoryId,
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
       },
@@ -175,71 +290,94 @@ async function writeFinalizedAudioSegmentForTest(
   );
   await mkdir(recordingDirectory, { recursive: true });
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array(audioBytes));
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'segment.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId: recording.memoryId,
-      segmentId: recording.segmentId,
-      type: 'audio',
-      status: 'finalized',
-      title: recording.title,
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: recording.finalizedAt ?? '2026-05-06T13:09:00.000Z',
-      durationMs: 1000,
-      nextSequence: 1,
-      audioByteLength: audioBytes.length,
-      transcriptPath: 'transcript.md',
+    path.join(recordingDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: recording.title, kind: 'audio' },
+      content: `# ${recording.title}\n\n## Transcript\n\n`,
     })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${recording.segmentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId: 'ws_memory',
+        memoryId: recording.memoryId,
+        segmentId: recording.segmentId,
+        kind: 'audio',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        finalizedAt: recording.finalizedAt ?? '2026-05-06T13:09:00.000Z',
+        updatedAt: recording.finalizedAt ?? '2026-05-06T13:09:00.000Z',
+        durationMs: 1000,
+        nextSequence: 1,
+        audioByteLength: audioBytes.length,
+      },
+      null,
+      2
+    )}\n`
   );
   return recordingDirectory;
 }
 
-async function writeFinalizedAudioAttachmentForTest(
+async function writeFinalizedAudioSupplementForTest(
   rootPath: string,
-  attachment: {
+  supplement: {
     readonly memoryId: string;
     readonly segmentId: string;
-    readonly attachmentId: string;
+    readonly supplementId: string;
     readonly title: string;
     readonly finalizedAt: string;
     readonly directoryName?: string;
     readonly audioBytes?: readonly number[];
+    readonly transcript?: string;
   }
 ): Promise<void> {
-  const audioBytes = attachment.audioBytes ?? [4, 5, 6];
-  const attachmentDirectory = path.join(
+  const audioBytes = supplement.audioBytes ?? [4, 5, 6];
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
-    attachment.memoryId,
+    supplement.memoryId,
     'segments',
-    attachment.segmentId,
-    'attachments',
-    attachment.directoryName ?? attachment.attachmentId
+    supplement.segmentId,
+    'supplements',
+    supplement.directoryName ?? supplement.supplementId
   );
-  await mkdir(attachmentDirectory, { recursive: true });
-  await writeFile(path.join(attachmentDirectory, 'audio.webm'), new Uint8Array(audioBytes));
-  await writeFile(path.join(attachmentDirectory, 'transcript.md'), '');
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'audio.webm'), new Uint8Array(audioBytes));
   await writeFile(
-    path.join(attachmentDirectory, 'attachment.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId: attachment.memoryId,
-      segmentId: attachment.segmentId,
-      attachmentId: attachment.attachmentId,
-      type: 'audio',
-      status: 'finalized',
-      title: attachment.title,
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: attachment.finalizedAt,
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: audioBytes.length,
-      transcriptPath: 'transcript.md',
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: supplement.title, kind: 'audio' },
+      content: `# ${supplement.title}\n\n## Transcript\n\n${supplement.transcript ?? ''}`,
     })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplement.supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId: 'ws_memory',
+        memoryId: supplement.memoryId,
+        segmentId: supplement.segmentId,
+        supplementId: supplement.supplementId,
+        kind: 'audio',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        finalizedAt: supplement.finalizedAt,
+        updatedAt: supplement.finalizedAt,
+        durationMs: 500,
+        nextSequence: 1,
+        audioByteLength: audioBytes.length,
+      },
+      null,
+      2
+    )}\n`
   );
 }
 
@@ -298,8 +436,8 @@ test('finalizes a draft into a durable memory directory', async () => {
       durationMs: 73_000,
       audioByteLength: 3,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     },
     memory: {
       memoryId: 'mem_20260506_000001',
@@ -310,40 +448,50 @@ test('finalizes a draft into a durable memory directory', async () => {
       durationMs: 73_000,
       audioByteLength: 3,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     },
   });
   assert.deepEqual(
-    await readJson(path.join(rootPath, 'memories', 'mem_20260506_000001', 'memory.json')),
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_20260506_000001')),
     {
       memoryId: 'mem_20260506_000001',
       title: 'My seventh birthday',
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      segmentIds: ['seg_20260506_000001'],
     }
   );
   const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_20260506_000001');
   assert.equal(path.basename(segmentDirectory), 'seg_20260506_000001--My seventh birthday');
   const audio = await stat(path.join(segmentDirectory, 'audio.webm'));
   assert.equal(audio.size, 3);
-  assert.deepEqual(await readJson(path.join(segmentDirectory, 'segment.json')), {
-    schemaVersion: 1,
-    workspaceId: 'ws_memory',
-    memoryId: 'mem_20260506_000001',
-    segmentId: 'seg_20260506_000001',
-    type: 'audio',
-    status: 'finalized',
-    title: 'My seventh birthday',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    finalizedAt: '2026-05-06T13:09:00.000Z',
-    updatedAt: '2026-05-06T13:09:00.000Z',
-    durationMs: 73_000,
-    nextSequence: 1,
-    audioByteLength: 3,
-    transcriptPath: 'transcript.md',
-  });
-  assert.equal(await readFile(path.join(segmentDirectory, 'transcript.md'), 'utf8'), '');
+  assert.deepEqual(
+    await readJson(path.join(rootPath, '.reo', 'objects', 'segments', 'seg_20260506_000001.json')),
+    {
+      schemaVersion: 1,
+      objectType: 'segment',
+      workspaceId: 'ws_memory',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      kind: 'audio',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      finalizedAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+      durationMs: 73_000,
+      nextSequence: 1,
+      audioByteLength: 3,
+    }
+  );
+  assert.equal(
+    (
+      parseWorkspaceMarkdownObject({
+        objectType: 'segment',
+        markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+      }).data as { readonly title: string }
+    ).title,
+    'My seventh birthday'
+  );
+  await assert.rejects(stat(path.join(segmentDirectory, 'segment.json')));
+  await assert.rejects(stat(path.join(segmentDirectory, 'transcript.md')));
   await assert.rejects(
     stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_000001'))
   );
@@ -351,10 +499,9 @@ test('finalizes a draft into a durable memory directory', async () => {
 
 test('updates titles through file truth before rebuilding the index projection', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_1',
     title: 'Original title',
-    segmentIds: ['seg_existing'],
   });
 
   const updated = await updateMemoryTitleFromFileTruth({
@@ -367,12 +514,11 @@ test('updates titles through file truth before rebuilding the index projection',
   assert.equal(updated.ok, true);
   await assert.rejects(stat(path.join(rootPath, 'memories', 'mem_1')));
   assert.deepEqual(
-    await readJson(path.join(rootPath, 'memories', 'mem_1--Renamed memory', 'memory.json')),
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_1--Renamed memory')),
     {
       memoryId: 'mem_1',
       title: 'Renamed memory',
       createdAt: '2026-05-06T13:08:00.000Z',
-      segmentIds: ['seg_existing'],
       updatedAt: '2026-05-06T13:08:00.000Z',
     }
   );
@@ -388,7 +534,7 @@ test('updates titles through file truth before rebuilding the index projection',
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
@@ -398,10 +544,9 @@ test('renames segment file-space node through file truth and returns refreshed p
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_title_update';
   const segmentId = 'seg_20260506_title_update';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '片段命名',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -427,30 +572,31 @@ test('renames segment file-space node through file truth and returns refreshed p
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
   await stat(path.join(rootPath, 'memories', memoryId, 'segments', `${segmentId}--晨间记录`));
   assert.equal(
-    (
-      (await readJson(
+    parseWorkspaceMarkdownObject({
+      objectType: 'segment',
+      markdown: await readFile(
         path.join(
           rootPath,
           'memories',
           memoryId,
           'segments',
           `${segmentId}--晨间记录`,
-          'segment.json'
-        )
-      )) as { readonly title: string; readonly updatedAt: string }
-    ).title,
+          'segment.md'
+        ),
+        'utf8'
+      ),
+    }).data.title,
     '晨间记录'
   );
 });
 
-test('renames a segment when memory segmentIds mirror is missing the valid file-space node', async () => {
+test('renames a segment when memory directory scan is missing no valid file-space node', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_title_missing_mirror';
   const segmentId = 'seg_20260512_missing_mirror';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '片段镜像修复',
-    segmentIds: [],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -475,34 +621,31 @@ test('renames a segment when memory segmentIds mirror is missing the valid file-
     assert.equal(updated.value.memory.segmentCount, 1);
   }
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     [segmentId]
   );
 });
 
-test('renames segment attachment file-space node and refreshes the parent memory index', async () => {
+test('renames segment supplement file-space node and refreshes the parent memory index', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_title_update';
-  const segmentId = 'seg_20260514_attachment_title_update';
-  const attachmentId = 'att_20260514_attachment_title_update';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_title_update';
+  const segmentId = 'seg_20260514_supplement_title_update';
+  const supplementId = 'sup_20260514_supplement_title_update';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充命名',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
     finalizedAt: '2026-05-06T13:11:00.000Z',
   });
@@ -521,7 +664,7 @@ test('renames segment attachment file-space node and refreshes the parent memory
             durationMs: 1000,
             audioByteLength: 3,
             hasTranscript: false,
-            attachmentCount: 0,
+            supplementCount: 0,
           },
         ],
       },
@@ -530,59 +673,53 @@ test('renames segment attachment file-space node and refreshes the parent memory
     )}\n`
   );
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '现场补充',
   });
 
   assert.equal(updated.ok, true);
   if (updated.ok) {
-    assert.equal(updated.value.memory.attachmentCount, 1);
-    assert.equal(updated.value.segment.attachmentCount, 1);
-    assert.equal(updated.value.attachment.title, '现场补充');
-    assert.equal(updated.value.attachment.updatedAt, '2026-05-06T13:11:00.000Z');
+    assert.equal(updated.value.memory.supplementCount, 1);
+    assert.equal(updated.value.segment.supplementCount, 1);
+    assert.equal(updated.value.supplement.title, '现场补充');
+    assert.equal(updated.value.supplement.updatedAt, '2026-05-06T13:11:00.000Z');
   }
   await assert.rejects(
     stat(
-      path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'attachments', attachmentId)
+      path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'supplements', supplementId)
     )
   );
-  const renamedAttachmentDirectory = path.join(
+  const renamedSupplementDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments',
-    `${attachmentId}--现场补充`
+    'supplements',
+    `${supplementId}--现场补充`
   );
-  await stat(renamedAttachmentDirectory);
-  assert.deepEqual(
-    (await readJson(path.join(renamedAttachmentDirectory, 'attachment.json'))) as {
-      readonly title: string;
-      readonly updatedAt?: string;
-    },
-    {
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId,
-      segmentId,
-      attachmentId,
-      type: 'audio',
-      status: 'finalized',
-      title: '现场补充',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: '2026-05-06T13:11:00.000Z',
-      durationMs: 500,
-      nextSequence: 1,
-      audioByteLength: 3,
-      transcriptPath: 'transcript.md',
-    }
-  );
+  await stat(renamedSupplementDirectory);
+  assert.equal(await readSupplementTitleForTest(renamedSupplementDirectory), '现场补充');
+  assert.deepEqual(await readSupplementManifestForTest(rootPath, supplementId), {
+    schemaVersion: 1,
+    objectType: 'supplement',
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    supplementId,
+    kind: 'audio',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+    updatedAt: '2026-05-06T13:11:00.000Z',
+    durationMs: 500,
+    nextSequence: 1,
+    audioByteLength: 3,
+  });
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
     memories: [
@@ -595,41 +732,40 @@ test('renames segment attachment file-space node and refreshes the parent memory
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 1,
+        supplementCount: 1,
       },
     ],
   });
 });
 
-test('segment attachment title update rejects workspace mismatch before moving files', async () => {
+test('segment supplement title update rejects workspace mismatch before moving files', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_workspace_mismatch';
-  const segmentId = 'seg_attachment_workspace_mismatch';
-  const attachmentId = 'att_attachment_workspace_mismatch';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_workspace_mismatch';
+  const segmentId = 'seg_supplement_workspace_mismatch';
+  const supplementId = 'sup_supplement_workspace_mismatch';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充命名空间不匹配',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
     finalizedAt: '2026-05-06T13:11:00.000Z',
   });
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_other',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '不应写入',
   });
 
@@ -638,24 +774,17 @@ test('segment attachment title update rejects workspace mismatch before moving f
     assert.equal(updated.error.code, 'ERR_RECORDING_NOT_FOUND');
     assert.equal(updated.error.dataRetention, 'none-written');
   }
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments',
-    attachmentId
+    'supplements',
+    supplementId
   );
-  await stat(attachmentDirectory);
-  assert.equal(
-    (
-      (await readJson(path.join(attachmentDirectory, 'attachment.json'))) as {
-        readonly title: string;
-      }
-    ).title,
-    '补充录音1'
-  );
+  await stat(supplementDirectory);
+  assert.equal(await readSupplementTitleForTest(supplementDirectory), '补充录音1');
   await assert.rejects(
     stat(
       path.join(
@@ -664,44 +793,43 @@ test('segment attachment title update rejects workspace mismatch before moving f
         memoryId,
         'segments',
         segmentId,
-        'attachments',
-        `${attachmentId}--不应写入`
+        'supplements',
+        `${supplementId}--不应写入`
       )
     )
   );
 });
 
-test('segment attachment title update reports stale index when refresh fails after file write', async () => {
+test('segment supplement title update reports stale index when refresh fails after file write', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_title_index_stale';
-  const segmentId = 'seg_attachment_title_index_stale';
-  const attachmentId = 'att_attachment_title_index_stale';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_title_index_stale';
+  const segmentId = 'seg_supplement_title_index_stale';
+  const supplementId = 'sup_supplement_title_index_stale';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充命名索引失败',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
     finalizedAt: '2026-05-06T13:11:00.000Z',
   });
   await rm(path.join(rootPath, '.reo', 'index.json'));
   await mkdir(path.join(rootPath, '.reo', 'index.json'));
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '现场补充',
   });
 
@@ -710,61 +838,53 @@ test('segment attachment title update reports stale index when refresh fails aft
     assert.equal(updated.error.code, 'ERR_MEMORY_UPDATE_FAILED');
     assert.equal(updated.error.dataRetention, 'file-written-index-stale');
   }
-  const renamedAttachmentDirectory = path.join(
+  const renamedSupplementDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments',
-    `${attachmentId}--现场补充`
+    'supplements',
+    `${supplementId}--现场补充`
   );
-  await stat(renamedAttachmentDirectory);
-  assert.equal(
-    (
-      (await readJson(path.join(renamedAttachmentDirectory, 'attachment.json'))) as {
-        readonly title: string;
-      }
-    ).title,
-    '现场补充'
-  );
+  await stat(renamedSupplementDirectory);
+  assert.equal(await readSupplementTitleForTest(renamedSupplementDirectory), '现场补充');
 });
 
-test('segment attachment title update rejects renamed symlink candidates without fallback', async () => {
+test('segment supplement title update rejects renamed symlink candidates without fallback', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_renamed_symlink';
-  const segmentId = 'seg_attachment_renamed_symlink';
-  const attachmentId = 'att_attachment_renamed_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_renamed_symlink';
+  const segmentId = 'seg_supplement_renamed_symlink';
+  const supplementId = 'sup_supplement_renamed_symlink';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充不安全候选',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  const attachmentsDirectory = path.join(
+  const supplementsDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments'
+    'supplements'
   );
-  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-attachment-outside-'));
-  const renamedCandidate = `${attachmentId}--Finder title`;
-  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
-  await mkdir(attachmentsDirectory, { recursive: true });
+  const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-supplement-outside-'));
+  const renamedCandidate = `${supplementId}--Finder title`;
+  const renamedCandidatePath = path.join(supplementsDirectory, renamedCandidate);
+  await mkdir(supplementsDirectory, { recursive: true });
   await symlink(outsideDirectory, renamedCandidatePath);
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '不应写入',
   });
 
@@ -774,43 +894,42 @@ test('segment attachment title update rejects renamed symlink candidates without
   }
   assert.equal((await lstat(renamedCandidatePath)).isSymbolicLink(), true);
   await stat(outsideDirectory);
-  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+  await assert.rejects(stat(path.join(supplementsDirectory, `${supplementId}--不应写入`)));
 });
 
-test('segment attachment title update rejects renamed non-directory candidates without fallback', async () => {
+test('segment supplement title update rejects renamed non-directory candidates without fallback', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_renamed_file';
-  const segmentId = 'seg_attachment_renamed_file';
-  const attachmentId = 'att_attachment_renamed_file';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_renamed_file';
+  const segmentId = 'seg_supplement_renamed_file';
+  const supplementId = 'sup_supplement_renamed_file';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充不安全文件候选',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  const attachmentsDirectory = path.join(
+  const supplementsDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments'
+    'supplements'
   );
-  const renamedCandidate = `${attachmentId}--Finder title`;
-  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
-  await mkdir(attachmentsDirectory, { recursive: true });
-  await writeFile(renamedCandidatePath, 'not an attachment directory');
+  const renamedCandidate = `${supplementId}--Finder title`;
+  const renamedCandidatePath = path.join(supplementsDirectory, renamedCandidate);
+  await mkdir(supplementsDirectory, { recursive: true });
+  await writeFile(renamedCandidatePath, 'not an supplement directory');
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '不应写入',
   });
 
@@ -819,50 +938,71 @@ test('segment attachment title update rejects renamed non-directory candidates w
     assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
   }
   assert.equal((await lstat(renamedCandidatePath)).isFile(), true);
-  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+  await assert.rejects(stat(path.join(supplementsDirectory, `${supplementId}--不应写入`)));
 });
 
-test('segment attachment title update rejects unsafe metadata leaf candidates without fallback', async () => {
+test('segment supplement title update rejects unsafe metadata leaf candidates without fallback', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_unsafe_metadata';
-  const segmentId = 'seg_attachment_unsafe_metadata';
-  const attachmentId = 'att_attachment_unsafe_metadata';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_unsafe_metadata';
+  const segmentId = 'seg_supplement_unsafe_metadata';
+  const supplementId = 'sup_supplement_unsafe_metadata';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充不安全 metadata',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  const attachmentsDirectory = path.join(
+  const supplementsDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments'
+    'supplements'
   );
-  const renamedCandidate = `${attachmentId}--Finder title`;
-  const renamedCandidatePath = path.join(attachmentsDirectory, renamedCandidate);
+  const renamedCandidate = `${supplementId}--Finder title`;
+  const renamedCandidatePath = path.join(supplementsDirectory, renamedCandidate);
   const outsideMetadata = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-attachment-metadata-outside-')),
-    'attachment.json'
+    await mkdtemp(path.join(os.tmpdir(), 'reo-supplement-metadata-outside-')),
+    'supplement.md'
   );
   await mkdir(renamedCandidatePath, { recursive: true });
   await writeFile(path.join(renamedCandidatePath, 'audio.webm'), new Uint8Array([4, 5]));
-  await writeFile(path.join(renamedCandidatePath, 'transcript.md'), '');
-  await writeFile(outsideMetadata, '{}');
-  await symlink(outsideMetadata, path.join(renamedCandidatePath, 'attachment.json'));
+  await writeFile(outsideMetadata, '---\ntitle: Outside\nkind: audio\n---\n# Outside\n');
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId: 'ws_memory',
+        memoryId,
+        segmentId,
+        supplementId,
+        kind: 'audio',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        finalizedAt: '2026-05-06T13:11:00.000Z',
+        updatedAt: '2026-05-06T13:11:00.000Z',
+        durationMs: 500,
+        nextSequence: 1,
+        audioByteLength: 2,
+      },
+      null,
+      2
+    )}\n`
+  );
+  await symlink(outsideMetadata, path.join(renamedCandidatePath, 'supplement.md'));
 
-  const updated = await updateSegmentAttachmentTitleFromFileTruth({
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '不应写入',
   });
 
@@ -871,79 +1011,78 @@ test('segment attachment title update rejects unsafe metadata leaf candidates wi
     assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
   }
   assert.equal(
-    (await lstat(path.join(renamedCandidatePath, 'attachment.json'))).isSymbolicLink(),
+    (await lstat(path.join(renamedCandidatePath, 'supplement.md'))).isSymbolicLink(),
     true
   );
-  await assert.rejects(stat(path.join(attachmentsDirectory, `${attachmentId}--不应写入`)));
+  await assert.rejects(stat(path.join(supplementsDirectory, `${supplementId}--不应写入`)));
 });
 
-test('delete and restore move SegmentAttachment files through the attachment trash', async () => {
+test('delete and restore move SegmentSupplement files through the supplement trash', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_delete_restore';
-  const segmentId = 'seg_attachment_delete_restore';
-  const attachmentId = 'att_attachment_delete_restore';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_delete_restore';
+  const segmentId = 'seg_supplement_delete_restore';
+  const supplementId = 'sup_supplement_delete_restore';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充删除恢复',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
-    directoryName: `${attachmentId}--补充录音1`,
+    directoryName: `${supplementId}--补充录音1`,
     finalizedAt: '2026-05-06T13:11:00.000Z',
     audioBytes: [4, 5, 6, 7],
   });
-  const activeAttachmentDirectory = path.join(
+  const activeSupplementDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments',
-    `${attachmentId}--补充录音1`
+    'supplements',
+    `${supplementId}--补充录音1`
   );
-  const trashedAttachmentDirectory = path.join(
+  const trashedSupplementDirectory = path.join(
     rootPath,
     '.reo',
     'trash',
-    'attachments',
-    `${attachmentId}--补充录音1`
+    'supplements',
+    `${supplementId}--补充录音1`
   );
 
-  const deleted = await deleteSegmentAttachmentFromFileTruth({
+  const deleted = await deleteSegmentSupplementFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
   });
 
   assert.equal(deleted.ok, true);
   if (deleted.ok) {
-    assert.equal(deleted.value.attachmentId, attachmentId);
-    assert.equal(deleted.value.restoreToken, attachmentId);
-    assert.equal(deleted.value.memory.attachmentCount, 0);
-    assert.equal(deleted.value.segment.attachmentCount, 0);
-    assert.deepEqual(deleted.value.segment.attachments, []);
+    assert.equal(deleted.value.supplementId, supplementId);
+    assert.equal(deleted.value.restoreToken, supplementId);
+    assert.equal(deleted.value.memory.supplementCount, 0);
+    assert.equal(deleted.value.segment.supplementCount, 0);
+    assert.deepEqual(deleted.value.segment.supplements, []);
   }
-  await assert.rejects(stat(activeAttachmentDirectory));
-  await stat(path.join(trashedAttachmentDirectory, 'audio.webm'));
-  await stat(path.join(trashedAttachmentDirectory, 'transcript.md'));
+  await assert.rejects(stat(activeSupplementDirectory));
+  await stat(path.join(trashedSupplementDirectory, 'audio.webm'));
+  await stat(path.join(trashedSupplementDirectory, 'supplement.md'));
   assert.equal(
     (
-      (await readJson(path.join(trashedAttachmentDirectory, 'attachment.json'))) as {
-        readonly attachmentId: string;
+      (await readSupplementManifestForTest(rootPath, supplementId)) as {
+        readonly supplementId: string;
       }
-    ).attachmentId,
-    attachmentId
+    ).supplementId,
+    supplementId
   );
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
@@ -957,29 +1096,29 @@ test('delete and restore move SegmentAttachment files through the attachment tra
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
 
-  const restored = await restoreDeletedSegmentAttachmentFromFileTruth({
+  const restored = await restoreDeletedSegmentSupplementFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    restoreToken: attachmentId,
+    restoreToken: supplementId,
   });
 
   assert.equal(restored.ok, true);
   if (restored.ok) {
-    assert.equal(restored.value.memory.attachmentCount, 1);
-    assert.equal(restored.value.segment.attachmentCount, 1);
-    assert.equal(restored.value.attachment.attachmentId, attachmentId);
-    assert.equal(restored.value.attachment.title, '补充录音1');
+    assert.equal(restored.value.memory.supplementCount, 1);
+    assert.equal(restored.value.segment.supplementCount, 1);
+    assert.equal(restored.value.supplement.supplementId, supplementId);
+    assert.equal(restored.value.supplement.title, '补充录音1');
   }
-  await stat(path.join(activeAttachmentDirectory, 'audio.webm'));
-  await stat(path.join(activeAttachmentDirectory, 'transcript.md'));
-  await assert.rejects(stat(trashedAttachmentDirectory));
+  await stat(path.join(activeSupplementDirectory, 'audio.webm'));
+  await stat(path.join(activeSupplementDirectory, 'supplement.md'));
+  await assert.rejects(stat(trashedSupplementDirectory));
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
     memories: [
@@ -992,69 +1131,68 @@ test('delete and restore move SegmentAttachment files through the attachment tra
         durationMs: 1000,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 1,
+        supplementCount: 1,
       },
     ],
   });
 });
 
-test('restore SegmentAttachment returns parent missing and leaves trash recoverable', async () => {
+test('restore SegmentSupplement returns parent missing and leaves trash recoverable', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_restore_parent_missing';
-  const segmentId = 'seg_attachment_restore_parent_missing';
-  const attachmentId = 'att_attachment_restore_parent_missing';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_restore_parent_missing';
+  const segmentId = 'seg_supplement_restore_parent_missing';
+  const supplementId = 'sup_supplement_restore_parent_missing';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充恢复父级缺失',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音1',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
-    directoryName: `${attachmentId}--补充录音1`,
+    directoryName: `${supplementId}--补充录音1`,
     finalizedAt: '2026-05-06T13:11:00.000Z',
   });
   const activeSegmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
-  const trashedAttachmentDirectory = path.join(
+  const trashedSupplementDirectory = path.join(
     rootPath,
     '.reo',
     'trash',
-    'attachments',
-    `${attachmentId}--补充录音1`
+    'supplements',
+    `${supplementId}--补充录音1`
   );
 
-  const deleted = await deleteSegmentAttachmentFromFileTruth({
+  const deleted = await deleteSegmentSupplementFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
   });
   assert.equal(deleted.ok, true);
   await rm(activeSegmentDirectory, { recursive: true, force: true });
 
-  const restored = await restoreDeletedSegmentAttachmentFromFileTruth({
+  const restored = await restoreDeletedSegmentSupplementFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    restoreToken: attachmentId,
+    restoreToken: supplementId,
   });
 
   assert.equal(restored.ok, false);
   if (!restored.ok) {
-    assert.equal(restored.error.code, 'ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING');
+    assert.equal(restored.error.code, 'ERR_SEGMENT_SUPPLEMENT_RESTORE_PARENT_MISSING');
     assert.equal(restored.error.dataRetention, 'previous-file-preserved');
   }
-  await stat(path.join(trashedAttachmentDirectory, 'audio.webm'));
-  await stat(path.join(trashedAttachmentDirectory, 'attachment.json'));
+  await stat(path.join(trashedSupplementDirectory, 'audio.webm'));
+  await stat(path.join(trashedSupplementDirectory, 'supplement.md'));
 });
 
 test('delete and restore keep externally renamed segment directories addressable by metadata id', async () => {
@@ -1062,10 +1200,9 @@ test('delete and restore keep externally renamed segment directories addressable
   const memoryId = 'mem_segment_delete_restore';
   const segmentId = 'seg_delete_restore';
   const keepSegmentId = 'seg_keep_after_delete';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '片段删除恢复',
-    segmentIds: [segmentId, keepSegmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1102,11 +1239,9 @@ test('delete and restore keep externally renamed segment directories addressable
     path.join(rootPath, '.reo', 'trash', 'segments', `${segmentId}--Finder segment title`)
   );
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     [keepSegmentId]
   );
 
@@ -1120,40 +1255,37 @@ test('delete and restore keep externally renamed segment directories addressable
   assert.equal(restored.ok, true);
   if (restored.ok) {
     assert.equal(restored.value.segment.segmentId, segmentId);
-    assert.equal(restored.value.segment.title, 'Finder segment title');
+    assert.equal(restored.value.segment.title, 'Metadata segment title');
     assert.equal(restored.value.memory.segmentCount, 2);
   }
   await stat(
     path.join(rootPath, 'memories', memoryId, 'segments', `${segmentId}--Finder segment title`)
   );
-  const restoredSegmentIds = (
-    (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-      readonly segmentIds: readonly string[];
-    }
-  ).segmentIds;
+  const restoredSegmentIds = await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+    path.join(rootPath, 'memories', memoryId)
+  );
   assert.equal(restoredSegmentIds.includes(segmentId), true);
   assert.equal(restoredSegmentIds.includes(keepSegmentId), true);
 });
 
-test('delete and restore move Segment attachments with the parent Segment directory', async () => {
+test('delete and restore move Segment supplements with the parent Segment directory', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_segment_delete_attachment';
-  const segmentId = 'seg_delete_attachment';
-  const attachmentId = 'att_delete_attachment';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_segment_delete_supplement';
+  const segmentId = 'seg_delete_supplement';
+  const supplementId = 'sup_delete_supplement';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '片段补充删除',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音补充',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音',
     finalizedAt: '2026-05-06T13:10:00.000Z',
   });
@@ -1174,8 +1306,8 @@ test('delete and restore move Segment attachments with the parent Segment direct
       'trash',
       'segments',
       segmentId,
-      'attachments',
-      attachmentId,
+      'supplements',
+      supplementId,
       'audio.webm'
     )
   );
@@ -1191,7 +1323,7 @@ test('delete and restore move Segment attachments with the parent Segment direct
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
@@ -1205,12 +1337,12 @@ test('delete and restore move Segment attachments with the parent Segment direct
 
   assert.equal(restored.ok, true);
   if (restored.ok) {
-    assert.equal(restored.value.segment.attachmentCount, 1);
-    assert.equal(restored.value.segment.attachments[0]?.attachmentId, attachmentId);
-    assert.equal(restored.value.memory.attachmentCount, 1);
+    assert.equal(restored.value.segment.supplementCount, 1);
+    assert.equal(restored.value.segment.supplements[0]?.supplementId, supplementId);
+    assert.equal(restored.value.memory.supplementCount, 1);
   }
   await stat(
-    path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'attachments', attachmentId)
+    path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'supplements', supplementId)
   );
 });
 
@@ -1218,10 +1350,9 @@ test('restore deleted Segment returns a typed error when the parent Memory is mi
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_parent_missing';
   const segmentId = 'seg_restore_parent_missing';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '父记忆缺失',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1257,10 +1388,9 @@ test('delete Segment rejects symlinked segment directories without following the
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_symlink';
   const segmentId = 'seg_delete_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '不安全片段',
-    segmentIds: [segmentId],
   });
   const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-outside-'));
   await mkdir(path.join(rootPath, 'memories', memoryId, 'segments'), { recursive: true });
@@ -1285,10 +1415,9 @@ test('delete Segment rejects source directory replacement after validating file 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_replaced_source';
   const segmentId = 'seg_delete_replaced_source';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除替换源',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1339,38 +1468,29 @@ test('delete Segment reports unsafe finalized metadata leaf instead of treating 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_unsafe_metadata_leaf';
   const segmentId = 'seg_delete_unsafe_metadata_leaf';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '不安全 metadata',
-    segmentIds: [segmentId],
   });
-  const recordingDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
-  await mkdir(recordingDirectory, { recursive: true });
-  await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2, 3]));
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
+  const recordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '不安全 metadata',
+  });
   const outsideMetadata = path.join(
-    await mkdtemp(path.join(os.tmpdir(), 'reo-segment-meta-')),
-    'segment.json'
+    await mkdtemp(path.join(os.tmpdir(), 'reo-segment-md-')),
+    'segment.md'
   );
   await writeFile(
     outsideMetadata,
-    JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId,
-      segmentId,
-      type: 'audio',
-      status: 'finalized',
-      title: '不安全 metadata',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: '2026-05-06T13:09:00.000Z',
-      durationMs: 1000,
-      nextSequence: 1,
-      audioByteLength: 3,
-      transcriptPath: 'transcript.md',
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '不安全 metadata', kind: 'audio' },
+      content: '# 不安全 metadata\n\n## Transcript\n\n',
     })
   );
-  await symlink(outsideMetadata, path.join(recordingDirectory, 'segment.json'));
+  await rm(path.join(recordingDirectory, 'segment.md'));
+  await symlink(outsideMetadata, path.join(recordingDirectory, 'segment.md'));
 
   const deleted = await deleteSegmentFromFileTruth({
     rootPath,
@@ -1384,7 +1504,7 @@ test('delete Segment reports unsafe finalized metadata leaf instead of treating 
     assert.equal(deleted.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
     assert.equal(deleted.error.dataRetention, 'previous-file-preserved');
   }
-  assert.equal((await lstat(path.join(recordingDirectory, 'segment.json'))).isSymbolicLink(), true);
+  assert.equal((await lstat(path.join(recordingDirectory, 'segment.md'))).isSymbolicLink(), true);
   await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
 });
 
@@ -1392,10 +1512,9 @@ test('delete Segment rejects renamed symlink candidates without falling back to 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_renamed_symlink';
   const segmentId = 'seg_delete_renamed_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '不安全片段外部改名',
-    segmentIds: [segmentId],
   });
   const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
   const outsideDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-renamed-outside-'));
@@ -1425,10 +1544,9 @@ test('delete Segment rejects renamed non-directory candidates without falling ba
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_renamed_file';
   const segmentId = 'seg_delete_renamed_file';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '不安全片段文件',
-    segmentIds: [segmentId],
   });
   const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
   const renamedCandidate = `${segmentId}--Finder segment title`;
@@ -1456,10 +1574,9 @@ test('restore Segment rejects renamed unsafe trash candidates without falling ba
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_renamed_symlink';
   const segmentId = 'seg_restore_renamed_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '不安全恢复片段',
-    segmentIds: [],
   });
   await mkdir(path.join(rootPath, 'memories', memoryId, 'segments'), { recursive: true });
   const trashDirectory = path.join(rootPath, '.reo', 'trash', 'segments');
@@ -1489,10 +1606,9 @@ test('restore Segment rejects trash directory replacement after validating file 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_replaced_source';
   const segmentId = 'seg_restore_replaced_source';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复替换源',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1548,14 +1664,13 @@ test('restore Segment rejects trash directory replacement after validating file 
   await assert.rejects(stat(activeDirectory));
 });
 
-test('delete Segment rolls back the directory move and segmentIds mirror when index refresh fails', async () => {
+test('delete Segment rolls back the directory move when index refresh fails', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_index_rollback';
   const segmentId = 'seg_delete_index_rollback';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除索引失败恢复',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1589,11 +1704,9 @@ test('delete Segment rolls back the directory move and segmentIds mirror when in
   await stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'audio.webm'));
   await assert.rejects(stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId)));
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     [segmentId]
   );
   assert.deepEqual(await readWorkspaceIndex(rootPath), previousIndex);
@@ -1603,10 +1716,9 @@ test('delete Segment does not move a replacement trash directory during rollback
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_rollback_replaced_source';
   const segmentId = 'seg_delete_rollback_replaced_source';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除回滚替换源',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1670,10 +1782,9 @@ test('restore Segment rolls back to trash and preserves the active mirror when i
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_index_rollback';
   const segmentId = 'seg_restore_index_rollback';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复索引失败',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1714,11 +1825,9 @@ test('restore Segment rolls back to trash and preserves the active mirror when i
   await stat(path.join(rootPath, '.reo', 'trash', 'segments', segmentId, 'audio.webm'));
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     []
   );
   assert.deepEqual(await readWorkspaceIndex(rootPath), previousIndex);
@@ -1728,10 +1837,9 @@ test('restore Segment does not move a replacement active directory during rollba
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_rollback_replaced_source';
   const segmentId = 'seg_restore_rollback_replaced_source';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复回滚替换源',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1801,10 +1909,9 @@ test('delete Segment does not rollback after index failure if the workspace lock
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_index_then_lock_lost';
   const segmentId = 'seg_delete_index_then_lock_lost';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除索引失败后锁失效',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1847,10 +1954,9 @@ test('restore Segment does not rollback after index failure if the workspace loc
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_index_then_lock_lost';
   const segmentId = 'seg_restore_index_then_lock_lost';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复索引失败后锁失效',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1896,14 +2002,13 @@ test('restore Segment does not rollback after index failure if the workspace loc
   await assert.rejects(stat(trashDirectory));
 });
 
-test('delete Segment refreshes segmentIds mirror and index from one file-truth scan', async () => {
+test('delete Segment refreshes file-truth index from one file-truth scan', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_single_scan';
   const segmentId = 'seg_delete_single_scan';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除单次扫描',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1931,14 +2036,13 @@ test('delete Segment refreshes segmentIds mirror and index from one file-truth s
   }
 });
 
-test('restore Segment refreshes segmentIds mirror and index from one file-truth scan', async () => {
+test('restore Segment refreshes file-truth index from one file-truth scan', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_single_scan';
   const segmentId = 'seg_restore_single_scan';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复单次扫描',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -1986,10 +2090,9 @@ test('restore Segment rolls back when the active tree already has a renamed dupl
   const memoryId = 'mem_segment_restore_active_duplicate';
   const segmentId = 'seg_restore_active_duplicate';
   const renamedActiveDirectory = `${segmentId}--active duplicate`;
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复 active 重复',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2011,10 +2114,9 @@ test('restore Segment rolls back when the active tree already has a renamed dupl
     title: '已存在 active 片段',
     audioBytes: [9, 9, 9],
   });
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复 active 重复',
-    segmentIds: [segmentId],
   });
   await rebuildMemoryIndex(rootPath);
 
@@ -2041,10 +2143,9 @@ test('delete Segment stops before moving files when the workspace lock is lost',
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_lock_lost';
   const segmentId = 'seg_delete_lock_lost';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除锁失效',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2072,10 +2173,9 @@ test('delete Segment reports stale file truth when the workspace lock is lost af
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_delete_lock_lost_after_move';
   const segmentId = 'seg_delete_lock_lost_after_move';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '删除移动后锁失效',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2110,10 +2210,9 @@ test('restore Segment stops before moving files when the workspace lock is lost'
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_restore_lock_lost';
   const segmentId = 'seg_restore_lock_lost';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '恢复锁失效',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2144,14 +2243,13 @@ test('restore Segment stops before moving files when the workspace lock is lost'
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
 });
 
-test('reads externally renamed segment directories as the segment title source of truth', async () => {
+test('reads segment markdown as the segment title source of truth', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_external_segment_title';
   const segmentId = 'seg_20260506_external_title';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '外部改名',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2160,7 +2258,7 @@ test('reads externally renamed segment directories as the segment title source o
   });
   await rename(
     path.join(rootPath, 'memories', memoryId, 'segments', segmentId),
-    path.join(rootPath, 'memories', memoryId, 'segments', '晚间散步')
+    path.join(rootPath, 'memories', memoryId, 'segments', `${segmentId}--晚间散步`)
   );
 
   const detail = await readMemoryDetailFromFileTruth({
@@ -2173,18 +2271,17 @@ test('reads externally renamed segment directories as the segment title source o
   if (detail.ok) {
     assert.equal(detail.value.segments.length, 1);
     assert.equal(detail.value.segments[0]?.segmentId, segmentId);
-    assert.equal(detail.value.segments[0]?.title, '晚间散步');
+    assert.equal(detail.value.segments[0]?.title, '录音1');
   }
 });
 
-test('memory detail projects valid segment file-space nodes missing from the segmentIds mirror', async () => {
+test('memory detail projects valid segment file-space nodes missing from the file-truth scan', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_detail_missing_segment_mirror';
   const segmentId = 'seg_20260512_detail_missing_mirror';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '文件真源详情',
-    segmentIds: [],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2209,15 +2306,64 @@ test('memory detail projects valid segment file-space nodes missing from the seg
   }
 });
 
-test('attachment finalize uses segment file-space node truth when segmentIds mirror is missing parent', async () => {
+test('workspace read model ignores unmanaged ordinary files including html and json', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_missing_segment_mirror';
-  const segmentId = 'seg_20260512_attachment_missing_mirror';
-  const attachmentId = 'att_20260512_attachment_missing_mirror';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_unmanaged_files';
+  const segmentId = 'seg_unmanaged_files';
+  const supplementId = 'sup_unmanaged_files';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '普通文件',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '补充录音1',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  const memoryDirectory = path.join(rootPath, 'memories', memoryId);
+  const segmentDirectory = path.join(memoryDirectory, 'segments', segmentId);
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', supplementId);
+  await writeFile(path.join(memoryDirectory, 'scratch.json'), '{"kind":"not-reo"}\n');
+  await writeFile(path.join(memoryDirectory, 'extra-note.md'), '# Not a Reo object\n');
+  await writeFile(path.join(segmentDirectory, 'context.html'), '<script>window.ran=true</script>');
+  await writeFile(path.join(segmentDirectory, 'source.json'), '{"title":"ignored"}\n');
+  await writeFile(path.join(supplementDirectory, 'reference.html'), '<h1>ordinary file</h1>');
+  await writeFile(path.join(supplementDirectory, 'reference.json'), '{"title":"ignored"}\n');
+
+  const summaries = await rebuildMemoryIndex(rootPath);
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.memoryId, memoryId);
+  assert.equal(summaries[0]?.segmentCount, 1);
+  assert.equal(summaries[0]?.supplementCount, 1);
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments.length, 1);
+    assert.equal(detail.value.segments[0]?.supplements.length, 1);
+    assert.equal(detail.value.segments[0]?.supplements[0]?.supplementId, supplementId);
+  }
+});
+
+test('supplement finalize uses segment file-space node truth when file-truth scan is missing parent', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_supplement_missing_segment_mirror';
+  const segmentId = 'seg_20260512_supplement_missing_mirror';
+  const supplementId = 'sup_20260512_supplement_missing_mirror';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充录音镜像修复',
-    segmentIds: [],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2226,28 +2372,28 @@ test('attachment finalize uses segment file-space node truth when segmentIds mir
     directoryName: `${segmentId}--录音25`,
     finalizedAt: '2026-05-12T16:27:09.824Z',
   });
-  const draft = await createSegmentAttachmentRecordingDraft({
+  const draft = await createSegmentSupplementRecordingDraft({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    createAttachmentId: () => attachmentId,
+    createSupplementId: () => supplementId,
     now: () => '2026-05-12T16:28:00.000Z',
   });
   assert.equal(draft.ok, true);
-  await appendSegmentAttachmentRecordingAudioChunk({
+  await appendSegmentSupplementRecordingAudioChunk({
     rootPath,
-    attachmentId,
+    supplementId,
     sequence: 0,
     chunk: new Uint8Array([4, 5, 6]),
   });
 
-  const finalized = await appendAudioAttachmentToSegment({
+  const finalized = await appendAudioSupplementToSegment({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
     durationMs: 1200,
     now: () => '2026-05-12T16:29:00.000Z',
@@ -2256,65 +2402,62 @@ test('attachment finalize uses segment file-space node truth when segmentIds mir
   assert.equal(finalized.ok, true);
   if (finalized.ok) {
     assert.equal(finalized.value.memory.segmentCount, 1);
-    assert.equal(finalized.value.memory.attachmentCount, 1);
+    assert.equal(finalized.value.memory.supplementCount, 1);
     assert.equal(finalized.value.segment.segmentId, segmentId);
-    assert.equal(finalized.value.segment.attachmentCount, 1);
-    assert.equal(finalized.value.attachment.attachmentId, attachmentId);
+    assert.equal(finalized.value.segment.supplementCount, 1);
+    assert.equal(finalized.value.supplement.supplementId, supplementId);
   }
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     [segmentId]
   );
 });
 
-test('attachment finalize rejects duplicate attachment ids even when the existing folder was renamed', async () => {
+test('supplement finalize rejects duplicate supplement ids even when the existing folder was renamed', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_attachment_duplicate';
-  const segmentId = 'seg_20260512_attachment_duplicate';
-  const attachmentId = 'att_20260512_duplicate';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_supplement_duplicate';
+  const segmentId = 'seg_20260512_supplement_duplicate';
+  const supplementId = 'sup_20260512_duplicate';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '补充录音重复',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音25',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '旧补充',
-    directoryName: `${attachmentId}--旧补充`,
+    directoryName: `${supplementId}--旧补充`,
     finalizedAt: '2026-05-12T16:27:09.824Z',
   });
-  await createSegmentAttachmentRecordingDraft({
+  await createSegmentSupplementRecordingDraft({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    createAttachmentId: () => attachmentId,
+    createSupplementId: () => supplementId,
     now: () => '2026-05-12T16:28:00.000Z',
   });
-  await appendSegmentAttachmentRecordingAudioChunk({
+  await appendSegmentSupplementRecordingAudioChunk({
     rootPath,
-    attachmentId,
+    supplementId,
     sequence: 0,
     chunk: new Uint8Array([7, 8, 9]),
   });
 
-  const finalized = await appendAudioAttachmentToSegment({
+  const finalized = await appendAudioSupplementToSegment({
     rootPath,
     workspaceId: 'ws_memory',
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '新补充',
     durationMs: 1200,
     now: () => '2026-05-12T16:29:00.000Z',
@@ -2322,33 +2465,29 @@ test('attachment finalize rejects duplicate attachment ids even when the existin
 
   assert.equal(finalized.ok, false);
   assert.equal(
-    (
-      (await readJson(
-        path.join(
-          rootPath,
-          'memories',
-          memoryId,
-          'segments',
-          segmentId,
-          'attachments',
-          `${attachmentId}--旧补充`,
-          'attachment.json'
-        )
-      )) as { readonly title: string }
-    ).title,
+    await readSupplementTitleForTest(
+      path.join(
+        rootPath,
+        'memories',
+        memoryId,
+        'segments',
+        segmentId,
+        'supplements',
+        `${supplementId}--旧补充`
+      )
+    ),
     '旧补充'
   );
 });
 
-test('projects attachment updates to segment and memory ordering', async () => {
+test('projects supplement updates to segment and memory ordering', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_projected_updates';
-  const oldSegmentId = 'seg_20260506_old_with_attachment';
-  const newSegmentId = 'seg_20260506_new_without_attachment';
-  await writeMemoryJsonForTest(rootPath, {
+  const oldSegmentId = 'seg_20260506_old_with_supplement';
+  const newSegmentId = 'seg_20260506_new_without_supplement';
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: '投影更新时间',
-    segmentIds: [newSegmentId, oldSegmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -2362,10 +2501,10 @@ test('projects attachment updates to segment and memory ordering', async () => {
     title: '录音2',
     finalizedAt: '2026-05-06T13:20:00.000Z',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId: oldSegmentId,
-    attachmentId: 'att_20260506_late_context',
+    supplementId: 'sup_20260506_late_context',
     title: '补充录音1',
     finalizedAt: '2026-05-06T13:30:00.000Z',
   });
@@ -2384,40 +2523,33 @@ test('projects attachment updates to segment and memory ordering', async () => {
       [oldSegmentId, newSegmentId]
     );
     assert.equal(detail.value.segments[0]?.updatedAt, '2026-05-06T13:30:00.000Z');
-    assert.equal(detail.value.segments[0]?.attachments[0]?.updatedAt, '2026-05-06T13:30:00.000Z');
+    assert.equal(detail.value.segments[0]?.supplements[0]?.updatedAt, '2026-05-06T13:30:00.000Z');
   }
 });
 
-test('rebuild index treats a renamed memory directory as the title source of truth', async () => {
+test('rebuild index uses memory markdown as the title source of truth', async () => {
   const rootPath = await workspaceRoot();
-  const mismatchedDirectory = path.join(rootPath, 'memories', 'mem_directory_id');
-  await mkdir(mismatchedDirectory, { recursive: true });
-  await writeFile(
-    path.join(mismatchedDirectory, 'memory.json'),
-    `${JSON.stringify(
-      {
-        memoryId: 'mem_declared_id',
-        title: 'Mismatched memory',
-        createdAt: '2026-05-06T13:08:00.000Z',
-        updatedAt: '2026-05-06T13:08:00.000Z',
-        segmentIds: [],
-      },
-      null,
-      2
-    )}\n`
+  const memoryId = 'mem_markdown_title_truth';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Markdown title',
+  });
+  await rename(
+    path.join(rootPath, 'memories', memoryId),
+    path.join(rootPath, 'memories', `${memoryId}--Finder title`)
   );
 
   assert.deepEqual(await rebuildMemoryIndex(rootPath, { persist: false }), [
     {
-      memoryId: 'mem_declared_id',
-      title: 'mem_directory_id',
+      memoryId,
+      title: 'Markdown title',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
       segmentCount: 0,
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     },
   ]);
 });
@@ -2425,10 +2557,9 @@ test('rebuild index treats a renamed memory directory as the title source of tru
 test('delete and restore keep externally renamed memory directories addressable by metadata id', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_external_rename_delete';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Metadata title',
-    segmentIds: [],
   });
   await rename(
     path.join(rootPath, 'memories', memoryId),
@@ -2447,20 +2578,20 @@ test('delete and restore keep externally renamed memory directories addressable 
   });
 
   assert.equal(restored.ok, true);
-  await stat(path.join(rootPath, 'memories', `${memoryId}--Finder title`, 'memory.json'));
+  await stat(path.join(rootPath, 'memories', `${memoryId}--Finder title`, 'memory.md'));
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
     memories: [
       {
         memoryId,
-        title: 'Finder title',
+        title: 'Metadata title',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
@@ -2472,24 +2603,33 @@ test('rebuild index rejects symlinked memory metadata leaf files', async () => {
   const memoryDirectory = path.join(rootPath, 'memories', memoryId);
   const outsideMetadata = path.join(
     await mkdtemp(path.join(os.tmpdir(), 'reo-memory-json-outside-')),
-    'memory.json'
+    'memory.md'
   );
   await mkdir(memoryDirectory);
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'memories'), { recursive: true });
   await writeFile(
     outsideMetadata,
-    JSON.stringify(
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: 'outside-title' },
+      content: '# outside-title\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`),
+    `${JSON.stringify(
       {
+        schemaVersion: 1,
+        objectType: 'memory',
         memoryId,
-        title: 'outside-title',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
-        segmentIds: [],
       },
       null,
       2
-    )
+    )}\n`
   );
-  await symlink(outsideMetadata, path.join(memoryDirectory, 'memory.json'));
+  await symlink(outsideMetadata, path.join(memoryDirectory, 'memory.md'));
 
   const memories = await rebuildMemoryIndex(rootPath, { persist: false });
 
@@ -2501,10 +2641,9 @@ test('rebuild index rejects symlinked memory metadata leaf files', async () => {
 
 test('rebuild skips finalized audio segment metadata with invalid projected fields', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_invalid_projection',
     title: 'Invalid projection',
-    segmentIds: ['seg_20260506_invalid_projection'],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId: 'mem_invalid_projection',
@@ -2513,28 +2652,20 @@ test('rebuild skips finalized audio segment metadata with invalid projected fiel
     audioBytes: [1, 2],
   });
   await writeFile(
-    path.join(
-      rootPath,
-      'memories',
-      'mem_invalid_projection',
-      'segments',
-      'seg_20260506_invalid_projection',
-      'segment.json'
-    ),
+    path.join(rootPath, '.reo', 'objects', 'segments', 'seg_20260506_invalid_projection.json'),
     JSON.stringify({
       schemaVersion: 1,
+      objectType: 'segment',
       workspaceId: 'ws_memory',
       memoryId: 'mem_invalid_projection',
       segmentId: 'seg_20260506_invalid_projection',
-      type: 'audio',
-      status: 'finalized',
-      title: 42,
+      kind: 'audio',
       createdAt: '2026-05-06T13:08:00.000Z',
       finalizedAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
       durationMs: -1,
       nextSequence: 1,
       audioByteLength: 2,
-      transcriptPath: 'transcript.md',
     })
   );
 
@@ -2548,17 +2679,16 @@ test('rebuild skips finalized audio segment metadata with invalid projected fiel
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     },
   ]);
 });
 
 test('rebuild preserves the existing index when memories root changes before scan', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_rebuild_swap',
     title: 'Rebuild swap',
-    segmentIds: ['seg_rebuild_swap'],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId: 'mem_rebuild_swap',
@@ -2583,10 +2713,9 @@ test('rebuild preserves the existing index when memories root changes before sca
 
 test('rebuild preserves the existing index when memories root changes before persist', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_rebuild_persist_swap',
     title: 'Rebuild persist swap',
-    segmentIds: ['seg_rebuild_persist_swap'],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId: 'mem_rebuild_persist_swap',
@@ -2611,10 +2740,9 @@ test('rebuild preserves the existing index when memories root changes before per
 
 test('rebuild preserves the existing index when memories root changes after replacement read', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_rebuild_after_read_swap',
     title: 'Rebuild after read swap',
-    segmentIds: ['seg_rebuild_after_read_swap'],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId: 'mem_rebuild_after_read_swap',
@@ -2641,10 +2769,9 @@ test('rebuild index rejects symlinked segment metadata leaf files', async () => 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recording_metadata_symlink';
   const segmentId = 'seg_recording_metadata_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recording metadata symlink',
-    segmentIds: [segmentId],
   });
   const recordingDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
   const outsideMetadata = path.join(
@@ -2684,10 +2811,9 @@ test('rebuild index rejects symlinked segment metadata leaf files', async () => 
 
 test('title update succeeds from file truth when index refresh fails', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_1',
     title: 'Original title',
-    segmentIds: ['seg_existing'],
   });
   await rm(path.join(rootPath, '.reo', 'index.json'));
   await mkdir(path.join(rootPath, '.reo', 'index.json'));
@@ -2701,20 +2827,19 @@ test('title update succeeds from file truth when index refresh fails', async () 
 
   assert.equal(updated.ok, true);
   assert.deepEqual(
-    await readJson(
-      path.join(rootPath, 'memories', 'mem_1--Renamed despite stale index', 'memory.json')
+    await readMemoryFileTruthForTest(
+      path.join(rootPath, 'memories', 'mem_1--Renamed despite stale index')
     ),
     {
       memoryId: 'mem_1',
       title: 'Renamed despite stale index',
       createdAt: '2026-05-06T13:08:00.000Z',
-      segmentIds: ['seg_existing'],
       updatedAt: '2026-05-06T13:08:00.000Z',
     }
   );
 });
 
-test('standalone memory create uses the file-space node basename as the visible truth', async () => {
+test('standalone memory create writes Markdown semantics and Reo-only manifest', async () => {
   const rootPath = await workspaceRoot();
 
   const created = await createMemoryFromFileTruth({
@@ -2726,14 +2851,24 @@ test('standalone memory create uses the file-space node basename as the visible 
 
   assert.equal(created.ok, true);
   assert.deepEqual(readdirSync(path.join(rootPath, 'memories')), ['mem_file_space_create--灵感']);
+  const memoryDirectory = path.join(rootPath, 'memories', 'mem_file_space_create--灵感');
+  await assert.rejects(stat(path.join(memoryDirectory, 'memory.json')));
+  const memoryMarkdown = parseWorkspaceMarkdownObject({
+    objectType: 'memory',
+    markdown: await readFile(path.join(memoryDirectory, 'memory.md'), 'utf8'),
+  });
+  assert.deepEqual(memoryMarkdown.data, { title: '灵感' });
+  assert.equal(memoryMarkdown.content, '# 灵感\n');
   assert.deepEqual(
-    await readJson(path.join(rootPath, 'memories', 'mem_file_space_create--灵感', 'memory.json')),
+    await readJson(
+      path.join(rootPath, '.reo', 'objects', 'memories', 'mem_file_space_create.json')
+    ),
     {
+      schemaVersion: 1,
+      objectType: 'memory',
       memoryId: 'mem_file_space_create',
-      title: '灵感',
       createdAt: '2026-05-12T13:10:00.000Z',
       updatedAt: '2026-05-12T13:10:00.000Z',
-      segmentIds: [],
     }
   );
 });
@@ -2857,10 +2992,9 @@ test('standalone memory create removes an empty directory when the handle is los
 
 test('standalone memory create keeps an existing memory directory unchanged', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_create_duplicate',
     title: 'Original memory',
-    segmentIds: [],
   });
 
   const created = await createMemoryFromFileTruth({
@@ -2873,7 +3007,9 @@ test('standalone memory create keeps an existing memory directory unchanged', as
   assert.equal(created.ok, false);
   assert.equal(
     (
-      (await readJson(path.join(rootPath, 'memories', 'mem_create_duplicate', 'memory.json'))) as {
+      (await readMemoryFileTruthForTest(
+        path.join(rootPath, 'memories', 'mem_create_duplicate')
+      )) as {
         readonly title: string;
       }
     ).title,
@@ -3088,10 +3224,9 @@ test('finalize keeps durable recording when the draft is already missing at clea
 
 test('rolls back an existing memory append when index rebuild fails', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_existing',
     title: 'Existing memory',
-    segmentIds: ['seg_existing'],
   });
   const draft = await createRecordingDraft({
     rootPath,
@@ -3115,13 +3250,15 @@ test('rolls back an existing memory append when index rebuild fails', async () =
   });
 
   assert.equal(appended.ok, false);
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', 'mem_existing', 'memory.json')), {
-    memoryId: 'mem_existing',
-    title: 'Existing memory',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: ['seg_existing'],
-  });
+  assert.deepEqual(
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_existing')),
+    {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:08:00.000Z',
+    }
+  );
   await stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_000003'));
   await assert.rejects(
     stat(path.join(rootPath, 'memories', 'mem_existing', 'segments', 'seg_20260506_000003'))
@@ -3130,39 +3267,16 @@ test('rolls back an existing memory append when index rebuild fails', async () =
 
 test('duplicate recording finalize cannot delete an existing durable recording', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_existing',
     title: 'Existing memory',
-    segmentIds: ['seg_existing'],
   });
-  const durableRecordingDirectory = path.join(
-    rootPath,
-    'memories',
-    'mem_existing',
-    'segments',
-    'seg_existing'
-  );
-  await mkdir(durableRecordingDirectory, { recursive: true });
-  await writeFile(path.join(durableRecordingDirectory, 'audio.webm'), new Uint8Array([8, 8, 8]));
-  await writeFile(path.join(durableRecordingDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(durableRecordingDirectory, 'segment.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId: 'mem_existing',
-      segmentId: 'seg_existing',
-      type: 'audio',
-      status: 'finalized',
-      title: 'Original',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: '2026-05-06T13:09:00.000Z',
-      durationMs: 1000,
-      nextSequence: 1,
-      audioByteLength: 3,
-      transcriptPath: 'transcript.md',
-    })
-  );
+  const durableRecordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId: 'mem_existing',
+    segmentId: 'seg_existing',
+    title: 'Original',
+    audioBytes: [8, 8, 8],
+  });
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_memory',
@@ -3191,13 +3305,15 @@ test('duplicate recording finalize cannot delete an existing durable recording',
     Array.from(await readFile(path.join(durableRecordingDirectory, 'audio.webm'))),
     [8, 8, 8]
   );
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', 'mem_existing', 'memory.json')), {
-    memoryId: 'mem_existing',
-    title: 'Existing memory',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: ['seg_existing'],
-  });
+  assert.deepEqual(
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_existing')),
+    {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:08:00.000Z',
+    }
+  );
 });
 
 test('recording finalize rejects durable segment id collisions across all memories', async () => {
@@ -3265,10 +3381,9 @@ test('recording finalize rejects durable segment id collisions across all memori
     )
   );
 
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_global_duplicate_existing_append',
     title: 'Existing target memory',
-    segmentIds: [],
   });
   const duplicateAppend = await appendAudioSegmentToMemory({
     rootPath,
@@ -3283,13 +3398,12 @@ test('recording finalize rejects durable segment id collisions across all memori
   await stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_global_duplicate'));
 });
 
-test('recording lookup rejects existing duplicate finalized ids instead of returning first match', async () => {
+test('recording lookup rejects duplicate finalized id directories as invalid durable state', async () => {
   const rootPath = await workspaceRoot();
   for (const memoryId of ['mem_duplicate_lookup_a', 'mem_duplicate_lookup_b']) {
-    await writeMemoryJsonForTest(rootPath, {
+    await writeMemoryForTest(rootPath, {
       memoryId,
       title: memoryId,
-      segmentIds: ['seg_20260506_duplicate_lookup'],
     });
     await writeFinalizedAudioSegmentForTest(rootPath, {
       memoryId,
@@ -3300,16 +3414,15 @@ test('recording lookup rejects existing duplicate finalized ids instead of retur
 
   await assert.rejects(
     findSegmentDirectoryById(rootPath, 'seg_20260506_duplicate_lookup'),
-    /Duplicate finalized segment id/
+    /Invalid durable recording/
   );
 });
 
 test('create memory finalize cannot replace an existing memory directory', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_existing',
     title: 'Existing memory',
-    segmentIds: ['seg_existing'],
   });
   await createRecordingDraft({
     rootPath,
@@ -3335,13 +3448,15 @@ test('create memory finalize cannot replace an existing memory directory', async
   });
 
   assert.equal(created.ok, false);
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', 'mem_existing', 'memory.json')), {
-    memoryId: 'mem_existing',
-    title: 'Existing memory',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: ['seg_existing'],
-  });
+  assert.deepEqual(
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_existing')),
+    {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:08:00.000Z',
+    }
+  );
   await stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_new_memory_collision'));
   await assert.rejects(
     stat(path.join(rootPath, 'memories', 'mem_existing', 'segments', 'seg_new_memory_collision'))
@@ -3365,7 +3480,7 @@ test('rejects symlinked durable memory directories', async () => {
   if (!updated.ok) {
     assert.equal(updated.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
   }
-  await assert.rejects(readFile(path.join(outside, 'memory.json'), 'utf8'));
+  await assert.rejects(readFile(path.join(outside, 'memory.md'), 'utf8'));
 });
 
 test('preserves a draft when the memory parent is swapped to a symlink before staging', async () => {
@@ -3704,7 +3819,7 @@ test('finalize rejects draft directory symlink swap before copying source files'
   }
   await stat(draftDirectory);
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects draft segments ancestor symlink swap before copying source files', async () => {
@@ -3773,7 +3888,7 @@ test('finalize rejects draft segments ancestor symlink swap before copying sourc
   }
   await stat(path.join(segmentsRoot, segmentId));
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects draft segments ancestor symlink swap after draft validation before copy', async () => {
@@ -3846,7 +3961,7 @@ test('finalize rejects draft segments ancestor symlink swap after draft validati
     assert.notDeepEqual([...copiedAudio], [9, 9, 9]);
   }
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects segments parent symlink swap before exposing staging', async () => {
@@ -3922,7 +4037,7 @@ test('finalize rejects segments parent symlink swap before exposing staging', as
     assert.equal(finalized.error.dataRetention, 'draft-preserved');
   }
   await assert.rejects(stat(path.join(outsideRecordingsDirectory, segmentId, 'audio.webm')));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects segments parent symlink swap before creating staging', async () => {
@@ -3971,7 +4086,7 @@ test('finalize rejects segments parent symlink swap before creating staging', as
     assert.equal(finalized.error.dataRetention, 'draft-preserved');
   }
   assert.deepEqual(await readdir(outsideRecordingsDirectory), []);
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects segments parent symlink swap after creating staging', async () => {
@@ -4032,7 +4147,7 @@ test('finalize rejects segments parent symlink swap after creating staging', asy
     outsideEntries.some((entry) => String(entry).includes('.reo-finalize-transaction.json')),
     false
   );
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects segments parent symlink swap after rename validation', async () => {
@@ -4091,7 +4206,7 @@ test('finalize rejects segments parent symlink swap after rename validation', as
     assert.equal(finalized.error.dataRetention, 'draft-preserved');
   }
   await assert.rejects(stat(path.join(outsideRecordingsDirectory, segmentId, 'audio.webm')));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize does not expose outside target after final rename validation', async () => {
@@ -4148,7 +4263,7 @@ test('finalize does not expose outside target after final rename validation', as
   }
   await assert.rejects(stat(path.join(outsideRecordingsDirectory, segmentId, 'audio.webm')));
   await assert.rejects(stat(path.join(displacedRecordingsDirectory, segmentId, 'audio.webm')));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('finalize rejects recording target created after duplicate preflight', async () => {
@@ -4489,7 +4604,7 @@ test('finalize rejects memory directory symlink swap before memory metadata writ
   });
 
   assert.equal(finalized.ok, false);
-  await assert.rejects(stat(path.join(outsideMemoryDirectory, 'memory.json')));
+  await assert.rejects(stat(path.join(outsideMemoryDirectory, 'memory.md')));
 });
 
 test('finalize rejects staging source swap before final expose', async () => {
@@ -4650,7 +4765,7 @@ test('finalize does not roll back files after the workspace handle is lost', asy
   await stat(path.join(segmentDirectory, '.reo-finalize-transaction.json'));
   assert.equal(
     (
-      (await readJson(path.join(path.dirname(path.dirname(segmentDirectory)), 'memory.json'))) as {
+      (await readMemoryFileTruthForTest(path.dirname(path.dirname(segmentDirectory)))) as {
         memoryId: string;
       }
     ).memoryId,
@@ -4760,7 +4875,15 @@ test('finalize rechecks the workspace handle before rebuilding the index', async
     assert.equal(finalized.error.code, 'ERR_WORKSPACE_LOCK_LOST');
   }
   assert.equal(indexRebuilt, false);
-  await stat(await findSegmentDirectoryById(rootPath, segmentId));
+  await stat(
+    path.join(
+      rootPath,
+      'memories',
+      `${memoryId}--Index lock lost`,
+      'segments',
+      `${segmentId}--Index lock lost`
+    )
+  );
 });
 
 test('finalize aborts when workspace handle is lost before memory parent writes', async () => {
@@ -4912,7 +5035,7 @@ test('atomic workspace writes fsync temp files and parent directories before suc
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-atomic-'));
   const calls: string[] = [];
   await writeWorkspaceFileAtomicForTest({
-    filePath: path.join(rootPath, 'memories', 'mem_1', 'memory.json'),
+    filePath: path.join(rootPath, 'memories', 'mem_1', 'memory.md'),
     data: '{}\n',
     openFile: async () => ({
       writeFile: async () => {
@@ -4957,7 +5080,7 @@ test('atomic workspace writes tolerate unsupported parent directory fsync after 
   unsupportedDirectoryFsync.code = 'EISDIR';
 
   await writeWorkspaceFileAtomicForTest({
-    filePath: path.join(rootPath, 'memories', 'mem_1', 'memory.json'),
+    filePath: path.join(rootPath, 'memories', 'mem_1', 'memory.md'),
     data: '{}\n',
     openFile: async () => ({
       writeFile: async () => {
@@ -5000,14 +5123,14 @@ test('atomic workspace writes keep final rename inside the validated parent dire
   });
   try {
     await assert.rejects(
-      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.json'), '{"secret":true}\n')
+      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.md'), '{"secret":true}\n')
     );
   } finally {
     setAfterAtomicWorkspaceFileValidationForTest(null);
   }
 
-  await assert.rejects(readFile(path.join(outsideParentDirectory, 'memory.json'), 'utf8'));
-  await assert.rejects(readFile(path.join(displacedParentDirectory, 'memory.json'), 'utf8'));
+  await assert.rejects(readFile(path.join(outsideParentDirectory, 'memory.md'), 'utf8'));
+  await assert.rejects(readFile(path.join(displacedParentDirectory, 'memory.md'), 'utf8'));
 });
 
 test('atomic workspace writes do not create temp files after parent swap before temp open', async () => {
@@ -5027,7 +5150,7 @@ test('atomic workspace writes do not create temp files after parent swap before 
 
   try {
     await assert.rejects(
-      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.json'), '{"secret":true}\n')
+      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.md'), '{"secret":true}\n')
     );
   } finally {
     setBeforeAtomicWorkspaceFileTempOpenForTest(null);
@@ -5045,7 +5168,7 @@ test('atomic replace restores existing target after final rename validation fail
   );
   const displacedParentDirectory = path.join(outsideParentDirectory, 'displaced-parent');
   await mkdir(parentDirectory, { recursive: true });
-  await writeFile(path.join(parentDirectory, 'memory.json'), '{"title":"old"}\n');
+  await writeFile(path.join(parentDirectory, 'memory.md'), '{"title":"old"}\n');
 
   setAfterAtomicWorkspaceFileValidationForTest(() => {
     renameSync(parentDirectory, displacedParentDirectory);
@@ -5053,23 +5176,23 @@ test('atomic replace restores existing target after final rename validation fail
   });
   try {
     await assert.rejects(
-      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.json'), '{"title":"new"}\n')
+      writeWorkspaceFileAtomic(path.join(parentDirectory, 'memory.md'), '{"title":"new"}\n')
     );
   } finally {
     setAfterAtomicWorkspaceFileValidationForTest(null);
   }
 
   assert.equal(
-    await readFile(path.join(displacedParentDirectory, 'memory.json'), 'utf8'),
+    await readFile(path.join(displacedParentDirectory, 'memory.md'), 'utf8'),
     '{"title":"old"}\n'
   );
-  await assert.rejects(readFile(path.join(outsideParentDirectory, 'memory.json'), 'utf8'));
+  await assert.rejects(readFile(path.join(outsideParentDirectory, 'memory.md'), 'utf8'));
 });
 
 test('atomic replace does not report failure after successful commit and backup removal', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-atomic-backup-cleanup-'));
   const parentDirectory = path.join(rootPath, 'memories', 'mem_backup_cleanup');
-  const targetPath = path.join(parentDirectory, 'memory.json');
+  const targetPath = path.join(parentDirectory, 'memory.md');
   await mkdir(parentDirectory, { recursive: true });
   await writeFile(targetPath, '{"title":"old"}\n');
 
@@ -5180,10 +5303,9 @@ test('finalize transaction directory fsync tolerates unsupported directory fsync
 
 test('rebuild skips finalized audio segment metadata missing detail-read required fields', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_incomplete_metadata',
     title: 'Incomplete metadata',
-    segmentIds: ['seg_20260506_incomplete_metadata'],
   });
   const recordingDirectory = path.join(
     rootPath,
@@ -5211,7 +5333,7 @@ test('rebuild skips finalized audio segment metadata missing detail-read require
       audioByteLength: 0,
       createdAt: '2026-05-06T13:08:00.000Z',
       durationMs: 0,
-      attachmentCount: 0,
+      supplementCount: 0,
       hasTranscript: false,
       memoryId: 'mem_incomplete_metadata',
       segmentCount: 0,
@@ -5403,39 +5525,16 @@ test('recovery removes stale drafts for finalized segments before clearing marke
     sequence: 0,
     chunk: new Uint8Array([1, 2]),
   });
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_stale_draft',
     title: 'Recovered memory',
-    segmentIds: ['seg_20260506_stale_draft'],
   });
-  const recordingDirectory = path.join(
-    rootPath,
-    'memories',
-    'mem_stale_draft',
-    'segments',
-    'seg_20260506_stale_draft'
-  );
-  await mkdir(recordingDirectory, { recursive: true });
-  await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1, 2]));
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
-  await writeFile(
-    path.join(recordingDirectory, 'segment.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      workspaceId: 'ws_memory',
-      memoryId: 'mem_stale_draft',
-      segmentId: 'seg_20260506_stale_draft',
-      type: 'audio',
-      status: 'finalized',
-      title: 'Recovered memory',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      finalizedAt: '2026-05-06T13:09:00.000Z',
-      durationMs: 1000,
-      nextSequence: 1,
-      audioByteLength: 2,
-      transcriptPath: 'transcript.md',
-    })
-  );
+  const recordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId: 'mem_stale_draft',
+    segmentId: 'seg_20260506_stale_draft',
+    title: 'Recovered memory',
+    audioBytes: [1, 2],
+  });
   await writeFile(
     path.join(recordingDirectory, '.reo-finalize-transaction.json'),
     '{"segmentId":"seg_20260506_stale_draft"}'
@@ -5446,28 +5545,29 @@ test('recovery removes stale drafts for finalized segments before clearing marke
   await assert.rejects(
     stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_stale_draft'))
   );
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   await assert.rejects(stat(path.join(recordingDirectory, '.reo-finalize-transaction.json')));
 });
 
-test('recovery leaves stale segmentIds mirror alone when no finalize marker exists', async () => {
+test('recovery ignores stale memory segment id input when no finalize marker exists', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_existing',
     title: 'Existing memory',
-    segmentIds: ['seg_missing'],
   });
 
   await recoverRecordingFinalizeTransactions(rootPath);
   await rebuildMemoryIndex(rootPath);
 
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', 'mem_existing', 'memory.json')), {
-    memoryId: 'mem_existing',
-    title: 'Existing memory',
-    createdAt: '2026-05-06T13:08:00.000Z',
-    updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: ['seg_missing'],
-  });
+  assert.deepEqual(
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_existing')),
+    {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:08:00.000Z',
+    }
+  );
   assert.deepEqual(await readWorkspaceIndex(rootPath), {
     schemaVersion: 1,
     memories: [
@@ -5480,20 +5580,19 @@ test('recovery leaves stale segmentIds mirror alone when no finalize marker exis
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
 });
 
-test('recovery does not scan file truth only to repair segmentIds mirror without a marker', async () => {
+test('recovery leaves markerless finalized file truth visible through detail scan', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_file_space_nodes';
   const segmentId = 'seg_20260512_recovery_file_space_node';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery file-space node',
-    segmentIds: [],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -5506,12 +5605,10 @@ test('recovery does not scan file truth only to repair segmentIds mirror without
   await recoverRecordingFinalizeTransactions(rootPath);
 
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
-    []
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
+    [segmentId]
   );
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
@@ -5524,14 +5621,13 @@ test('recovery does not scan file truth only to repair segmentIds mirror without
   }
 });
 
-test('recovery preserves marker-bearing valid segment file-space node missing from segmentIds mirror', async () => {
+test('recovery preserves marker-bearing valid segment file-space node missing from file-truth scan', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_marker_file_space_node';
   const segmentId = 'seg_20260512_recovery_marker_file_space_node';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery marker file-space node',
-    segmentIds: [],
   });
   const recordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -5544,14 +5640,12 @@ test('recovery preserves marker-bearing valid segment file-space node missing fr
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   await assert.rejects(stat(path.join(recordingDirectory, '.reo-finalize-transaction.json')));
   assert.deepEqual(
-    (
-      (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-        readonly segmentIds: readonly string[];
-      }
-    ).segmentIds,
+    await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+      path.join(rootPath, 'memories', memoryId)
+    ),
     [segmentId]
   );
 });
@@ -5560,22 +5654,21 @@ test('recovery preserves externally renamed valid segments whose title starts li
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_staging_named_segment';
   const segmentId = 'seg_20260512_recovery_staging_named_segment';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery staging named segment',
-    segmentIds: [],
   });
   const recordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '用户命名',
-    directoryName: `.reo-finalizing-${segmentId}.用户命名`,
+    directoryName: `${segmentId}--.reo-finalizing-用户命名`,
     finalizedAt: '2026-05-12T16:27:09.824Z',
   });
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
@@ -5587,55 +5680,53 @@ test('recovery preserves externally renamed valid segments whose title starts li
   }
 });
 
-test('recovery clears finalized attachment markers after stale draft cleanup', async () => {
+test('recovery clears finalized supplement markers after stale draft cleanup', async () => {
   const rootPath = await workspaceRoot();
-  const memoryId = 'mem_recovery_attachment_marker';
-  const segmentId = 'seg_20260512_recovery_attachment_marker';
-  const attachmentId = 'att_20260512_recovery_attachment_marker';
-  await writeMemoryJsonForTest(rootPath, {
+  const memoryId = 'mem_recovery_supplement_marker';
+  const segmentId = 'seg_20260512_recovery_supplement_marker';
+  const supplementId = 'sup_20260512_recovery_supplement_marker';
+  await writeMemoryForTest(rootPath, {
     memoryId,
-    title: 'Recovery attachment marker',
-    segmentIds: [segmentId],
+    title: 'Recovery supplement marker',
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
     segmentId,
     title: '录音25',
   });
-  await writeFinalizedAudioAttachmentForTest(rootPath, {
+  await writeFinalizedAudioSupplementForTest(rootPath, {
     memoryId,
     segmentId,
-    attachmentId,
+    supplementId,
     title: '补充录音1',
-    directoryName: `${attachmentId}--补充录音1`,
+    directoryName: `${supplementId}--补充录音1`,
     finalizedAt: '2026-05-12T16:27:09.824Z',
   });
-  const attachmentDirectory = path.join(
+  const supplementDirectory = path.join(
     rootPath,
     'memories',
     memoryId,
     'segments',
     segmentId,
-    'attachments',
-    `${attachmentId}--补充录音1`
+    'supplements',
+    `${supplementId}--补充录音1`
   );
-  await writeFile(path.join(attachmentDirectory, '.reo-finalize-transaction.json'), '{}');
-  await mkdir(path.join(rootPath, '.reo', 'drafts', 'attachments', attachmentId), {
+  await writeFile(path.join(supplementDirectory, '.reo-finalize-transaction.json'), '{}');
+  await mkdir(path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId), {
     recursive: true,
   });
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'attachments', attachmentId)));
-  await assert.rejects(stat(path.join(attachmentDirectory, '.reo-finalize-transaction.json')));
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId)));
+  await assert.rejects(stat(path.join(supplementDirectory, '.reo-finalize-transaction.json')));
 });
 
 test('rebuilds index only from finalized audio segment metadata that matches audio bytes and ownership', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_existing',
     title: 'Existing memory',
-    segmentIds: ['seg_mismatch'],
   });
   const recordingDirectory = path.join(
     rootPath,
@@ -5679,7 +5770,7 @@ test('rebuilds index only from finalized audio segment metadata that matches aud
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
@@ -5825,13 +5916,12 @@ test('finalize keeps durable marker once draft removal has completed but follow-
   );
   await stat(path.join(finalizedSegmentDirectory, '.reo-finalize-transaction.json'));
   assert.deepEqual(
-    await readJson(path.join(path.dirname(path.dirname(finalizedSegmentDirectory)), 'memory.json')),
+    await readMemoryFileTruthForTest(path.dirname(path.dirname(finalizedSegmentDirectory))),
     {
       memoryId: 'mem_cleanup_fsync_blocked',
       title: 'Cleanup fsync blocked',
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      segmentIds: ['seg_20260506_cleanup_fsync_blocked'],
     }
   );
 });
@@ -5901,10 +5991,9 @@ test('recovery keeps marker when stale draft cleanup cannot complete', async () 
     createSegmentId: () => 'seg_20260506_recovery_cleanup_blocked',
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_recovery_cleanup_blocked',
     title: 'Recovery cleanup blocked',
-    segmentIds: ['seg_20260506_recovery_cleanup_blocked'],
   });
   const recordingDirectory = path.join(
     rootPath,
@@ -5959,10 +6048,9 @@ test('recovery keeps marker when draft parent fsync cannot be confirmed', async 
     createSegmentId: () => 'seg_20260506_recovery_fsync_blocked',
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_recovery_fsync_blocked',
     title: 'Recovery fsync blocked',
-    segmentIds: ['seg_20260506_recovery_fsync_blocked'],
   });
   const recordingDirectory = path.join(
     rootPath,
@@ -5995,10 +6083,9 @@ test('recovery keeps marker when draft parent fsync cannot be confirmed', async 
 
 test('recovery clears marker when the stale draft is already missing', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_recovery_missing_draft',
     title: 'Recovery missing draft',
-    segmentIds: ['seg_20260506_recovery_missing_draft'],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId: 'mem_recovery_missing_draft',
@@ -6029,10 +6116,9 @@ test('recovery preserves marker-bearing durable recording when finalized files a
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_invalid_finalized';
   const segmentId = 'seg_20260506_recovery_invalid_finalized';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery invalid finalized',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -6046,14 +6132,13 @@ test('recovery preserves marker-bearing durable recording when finalized files a
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   await stat(path.join(recordingDirectory, '.reo-finalize-transaction.json'));
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json')), {
+  assert.deepEqual(await readMemoryFileTruthForTest(path.join(rootPath, 'memories', memoryId)), {
     memoryId,
     title: 'Recovery invalid finalized',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: [segmentId],
   });
 });
 
@@ -6061,10 +6146,9 @@ test('recovery preserves renamed marker-bearing durable recording when finalized
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_renamed_invalid_finalized';
   const segmentId = 'seg_20260512_recovery_renamed_invalid';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery renamed invalid finalized',
-    segmentIds: [segmentId],
   });
   const recordingDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -6078,14 +6162,13 @@ test('recovery preserves renamed marker-bearing durable recording when finalized
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   await stat(path.join(recordingDirectory, '.reo-finalize-transaction.json'));
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json')), {
+  assert.deepEqual(await readMemoryFileTruthForTest(path.join(rootPath, 'memories', memoryId)), {
     memoryId,
     title: 'Recovery renamed invalid finalized',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: [segmentId],
   });
 });
 
@@ -6093,10 +6176,9 @@ test('recovery ignores symlinked finalize markers without repairing invalid segm
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_marker_symlink';
   const segmentId = 'seg_20260506_recovery_marker_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery marker symlink',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -6105,19 +6187,18 @@ test('recovery ignores symlinked finalize markers without repairing invalid segm
     audioBytes: [1, 2, 3],
   });
   const recordingDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
-  await writeFile(path.join(recordingDirectory, 'segment.json'), '{');
+  await writeFile(path.join(recordingDirectory, 'segment.md'), '{');
   const outsideMarker = path.join(rootPath, '..', `reo-outside-marker-${Date.now()}.json`);
   await writeFile(outsideMarker, '{}');
   await symlink(outsideMarker, path.join(recordingDirectory, '.reo-finalize-transaction.json'));
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  assert.deepEqual(await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json')), {
+  assert.deepEqual(await readMemoryFileTruthForTest(path.join(rootPath, 'memories', memoryId)), {
     memoryId,
     title: 'Recovery marker symlink',
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:08:00.000Z',
-    segmentIds: [segmentId],
   });
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
@@ -6144,9 +6225,9 @@ test('recovery preserves metadata-less marker-bearing finalized segments', async
 
   await recoverRecordingFinalizeTransactions(rootPath);
 
-  await stat(path.join(recordingDirectory, 'segment.json'));
+  await stat(path.join(recordingDirectory, 'segment.md'));
   await stat(path.join(recordingDirectory, '.reo-finalize-transaction.json'));
-  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.json')));
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'memory.md')));
 });
 
 test('recovery does not unlink outside marker after draft cleanup validation', async () => {
@@ -6162,10 +6243,9 @@ test('recovery does not unlink outside marker after draft cleanup validation', a
     createSegmentId: () => segmentId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery marker swap',
-    segmentIds: [segmentId],
   });
   await writeFinalizedAudioSegmentForTest(rootPath, {
     memoryId,
@@ -6197,10 +6277,9 @@ test('recovery does not unlink outside marker after draft cleanup validation', a
 
 test('recovery ignores symlinked segments directories without deleting outside files', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_recovery_symlink_segments',
     title: 'Symlink segments',
-    segmentIds: [],
   });
   const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-segments-outside-'));
   const outsideStaging = path.join(outside, '.reo-finalizing-seg_external');
@@ -6222,10 +6301,9 @@ test('recovery leaves recording references whose leaf directory is a symlink to 
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_recovery_leaf_symlink';
   const segmentId = 'seg_recovery_leaf_symlink';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Leaf symlink',
-    segmentIds: [segmentId],
   });
   const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
   const outsideRecordingDirectory = await mkdtemp(path.join(os.tmpdir(), 'reo-recording-leaf-'));
@@ -6258,18 +6336,12 @@ test('recovery leaves recording references whose leaf directory is a symlink to 
   await recoverRecordingFinalizeTransactions(rootPath);
 
   await stat(path.join(outsideRecordingDirectory, 'audio.webm'));
-  assert.deepEqual(
-    (await readJson(path.join(rootPath, 'memories', memoryId, 'memory.json'))) as {
-      segmentIds: string[];
-    },
-    {
-      memoryId,
-      title: 'Leaf symlink',
-      createdAt: '2026-05-06T13:08:00.000Z',
-      updatedAt: '2026-05-06T13:08:00.000Z',
-      segmentIds: [segmentId],
-    }
-  );
+  assert.deepEqual(await readMemoryFileTruthForTest(path.join(rootPath, 'memories', memoryId)), {
+    memoryId,
+    title: 'Leaf symlink',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    updatedAt: '2026-05-06T13:08:00.000Z',
+  });
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
     workspaceId: 'ws_memory',
@@ -6288,10 +6360,9 @@ test('recovery does not delete outside staging after segments cleanup validation
     path.join(os.tmpdir(), 'reo-recovery-cleanup-outside-')
   );
   const stagingName = '.reo-finalizing-seg_20260506_recovery_cleanup_swap.1';
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery cleanup swap',
-    segmentIds: [],
   });
   const segmentsDirectory = path.join(rootPath, 'memories', memoryId, 'segments');
   await mkdir(path.join(segmentsDirectory, stagingName), { recursive: true });
@@ -6323,10 +6394,9 @@ test('recovery does not write memory repair outside after memory directory swap'
   const outsideMemoryDirectory = await mkdtemp(
     path.join(os.tmpdir(), 'reo-recovery-repair-outside-')
   );
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId,
     title: 'Recovery repair swap',
-    segmentIds: ['seg_20260506_missing_repair'],
   });
   const memoryDirectoryPath = path.join(rootPath, 'memories', memoryId);
   const segmentsDirectory = path.join(memoryDirectoryPath, 'segments');
@@ -6347,15 +6417,14 @@ test('recovery does not write memory repair outside after memory directory swap'
   });
 
   assert.equal(swapped, true);
-  await assert.rejects(stat(path.join(outsideMemoryDirectory, 'memory.json')));
+  await assert.rejects(stat(path.join(outsideMemoryDirectory, 'memory.md')));
 });
 
 test('rejects concurrent appends to the same memory without losing a draft', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_concurrent',
     title: 'Concurrent memory',
-    segmentIds: [],
   });
   for (const segmentId of ['seg_20260506_concurrent_a', 'seg_20260506_concurrent_b']) {
     await createRecordingDraft({
@@ -6388,18 +6457,17 @@ test('rejects concurrent appends to the same memory without losing a draft', asy
 
   assert.equal(results.filter((result) => result.ok).length, 1);
   assert.equal(results.filter((result) => !result.ok).length, 1);
-  const memory = (await readJson(
-    path.join(rootPath, 'memories', 'mem_concurrent', 'memory.json')
-  )) as { readonly segmentIds: readonly string[] };
-  assert.equal(memory.segmentIds.length, 1);
+  const projectedSegmentIds = await readProjectedSegmentIdsFromMemoryDirectoryForTest(
+    path.join(rootPath, 'memories', 'mem_concurrent')
+  );
+  assert.equal(projectedSegmentIds.length, 1);
 });
 
 test('title update is rejected while the same memory has an active append write', async () => {
   const rootPath = await workspaceRoot();
-  await writeMemoryJsonForTest(rootPath, {
+  await writeMemoryForTest(rootPath, {
     memoryId: 'mem_title_lock',
     title: 'Original title',
-    segmentIds: [],
   });
   await createRecordingDraft({
     rootPath,
@@ -6447,13 +6515,12 @@ test('title update is rejected while the same memory has an active append write'
   }
   assert.equal((await append).ok, true);
   assert.deepEqual(
-    await readJson(path.join(rootPath, 'memories', 'mem_title_lock', 'memory.json')),
+    await readMemoryFileTruthForTest(path.join(rootPath, 'memories', 'mem_title_lock')),
     {
       memoryId: 'mem_title_lock',
       title: 'Original title',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      segmentIds: ['seg_20260506_title_lock'],
     }
   );
 });

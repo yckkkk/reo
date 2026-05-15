@@ -17,7 +17,7 @@
 完成标准：
 
 - Reo 定位为本地优先的 AI-ready 记忆空间。
-- 核心实体是记忆空间（Workspace）、`Memory`、`Segment`、`SegmentAttachment`。
+- 核心实体是记忆空间（Workspace）、`Memory`、`Segment`、`SegmentSupplement`。
 - Home、Library、记忆空间的职责清楚。
 - 记忆空间三面板结构确定。
 - 记忆空间舞台与 `Memory Studio` 的关系确定。
@@ -67,7 +67,7 @@
 - 记忆空间三面板 shell：左侧 AppShell sidebar、中间 Workspace Stage 或 Memory Studio、右侧可折叠 MemoryRail。
 - 右侧 MemoryRail 展示当前 Workspace 的 Memory 容器列表，用于在 Memory 之间切换。
 - 中间未选中 Memory 时是 Workspace Stage 表达舞台；选中 Memory 后进入 `Memory Studio`。
-- `Memory Studio` 支持 Segment 横向预览流、时间轴、本地回放、已保存 transcript 和 SegmentAttachment 补充录音。
+- `Memory Studio` 支持 Segment 横向预览流、时间轴、本地回放、已保存 transcript 和 SegmentSupplement 补充录音。
 
 质量门槛：
 
@@ -119,7 +119,7 @@
 范围：
 
 - 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、结构和协作规则。
-- Memory、Segment、SegmentAttachment 文件结构清楚。
+- Memory、Segment、SegmentSupplement 文件结构清楚。
 - Codex CLI 可以进入记忆空间读取、解释和整理当前文件。
 - 验证不依赖 Reo runtime 内 AI。
 

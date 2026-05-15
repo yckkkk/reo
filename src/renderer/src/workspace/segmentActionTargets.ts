@@ -9,10 +9,10 @@ export type SegmentDeleteTarget = SegmentActionTarget;
 
 export type SegmentRenameTarget = SegmentActionTarget;
 
-export type SegmentAttachmentActionTarget = SegmentActionTarget & {
-  readonly attachment: WorkspaceMemoryDetail['segments'][number]['attachments'][number];
+export type SegmentSupplementActionTarget = SegmentActionTarget & {
+  readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
 };
 
-export type SegmentAttachmentDeleteTarget = SegmentAttachmentActionTarget;
+export type SegmentSupplementDeleteTarget = SegmentSupplementActionTarget;
 
-export type SegmentAttachmentRenameTarget = SegmentAttachmentActionTarget;
+export type SegmentSupplementRenameTarget = SegmentSupplementActionTarget;

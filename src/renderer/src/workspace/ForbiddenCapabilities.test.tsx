@@ -34,12 +34,12 @@ describe('forbidden first-slice capabilities', () => {
             workspaceSession={workspaceSession}
             onDeleteMemory={() => {}}
             onDeleteSegment={() => {}}
-            onDeleteSegmentAttachment={() => {}}
+            onDeleteSegmentSupplement={() => {}}
             onRenameMemory={() => {}}
             onRenameSegment={() => {}}
-            onRenameSegmentAttachment={() => {}}
+            onRenameSegmentSupplement={() => {}}
             onSelectMemory={() => {}}
-            onStartSegmentAttachmentRecording={() => {}}
+            onStartSegmentSupplementRecording={() => {}}
             onStartRecording={() => {}}
           />
         </AppShell>

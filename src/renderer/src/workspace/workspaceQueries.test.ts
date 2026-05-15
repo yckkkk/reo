@@ -54,7 +54,7 @@ describe('workspace queries', () => {
     ).toBe(true);
     expect(
       workspaceHandleScopedContentQueryBelongsToWorkspace(
-        ['workspace', 'segment-attachment-content', 'ws_1', 'mem_1', 'seg_1', 'att_1'],
+        ['workspace', 'segment-supplement-content', 'ws_1', 'mem_1', 'seg_1', 'sup_1'],
         'ws_1'
       )
     ).toBe(true);

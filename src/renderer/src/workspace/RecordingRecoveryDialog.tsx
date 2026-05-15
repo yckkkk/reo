@@ -25,8 +25,8 @@ export function RecordingRecoveryDialog({
   onReview,
   onSave,
 }: RecordingRecoveryDialogProps) {
-  const finalizedRecordingSaved = Boolean(draft?.finalizedAudio || draft?.finalizedAttachment);
-  const saveLabel = draft?.finalizedAttachment
+  const finalizedRecordingSaved = Boolean(draft?.finalizedAudio || draft?.finalizedSupplement);
+  const saveLabel = draft?.finalizedSupplement
     ? '完成恢复'
     : finalizedRecordingSaved
       ? '重试保存转写'

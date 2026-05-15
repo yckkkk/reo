@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
-import { MemoryStudio, type SegmentAttachmentRecordingTarget } from './MemoryStudio';
+import { MemoryStudio, type SegmentSupplementRecordingTarget } from './MemoryStudio';
 import { MemoryRail } from './MemoryRail';
 import type {
-  SegmentAttachmentDeleteTarget,
-  SegmentAttachmentRenameTarget,
+  SegmentSupplementDeleteTarget,
+  SegmentSupplementRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -19,13 +19,13 @@ type LoadedWorkspaceFrameProps = {
   readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
-  readonly onDeleteSegmentAttachment: (target: SegmentAttachmentDeleteTarget) => void;
+  readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
-  readonly onRenameSegmentAttachment: (target: SegmentAttachmentRenameTarget) => void;
+  readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
-  readonly onStartSegmentAttachmentRecording: (target: SegmentAttachmentRecordingTarget) => void;
+  readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
@@ -37,13 +37,13 @@ export function LoadedWorkspaceFrame({
   memoryRailMode = 'inline',
   onDeleteMemory,
   onDeleteSegment,
-  onDeleteSegmentAttachment,
+  onDeleteSegmentSupplement,
   onRenameMemory,
   onRenameSegment,
-  onRenameSegmentAttachment,
+  onRenameSegmentSupplement,
   onSegmentFocusConsumed,
   onSelectMemory,
-  onStartSegmentAttachmentRecording,
+  onStartSegmentSupplementRecording,
   onStartRecording,
   segmentFocusIntent = null,
   workspaceSession,
@@ -72,11 +72,11 @@ export function LoadedWorkspaceFrame({
           key={currentMemory.memoryId}
           memory={currentMemory}
           onDeleteSegment={onDeleteSegment}
-          onDeleteSegmentAttachment={onDeleteSegmentAttachment}
-          onRenameSegmentAttachment={onRenameSegmentAttachment}
+          onDeleteSegmentSupplement={onDeleteSegmentSupplement}
+          onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegment={onRenameSegment}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
-          onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}
+          onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}
           workspaceSession={workspaceSession}
         />

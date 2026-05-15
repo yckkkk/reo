@@ -1,24 +1,24 @@
 import { MemoryTitleDialog } from './MemoryTitleDialog';
-import type { SegmentAttachmentRenameTarget } from './segmentActionTargets';
+import type { SegmentSupplementRenameTarget } from './segmentActionTargets';
 
-type SegmentAttachmentRenameDialogProps = {
+type SegmentSupplementRenameDialogProps = {
   readonly onOpenChange: (open: boolean) => void;
-  readonly onSave: (target: SegmentAttachmentRenameTarget, title: string) => Promise<string | null>;
+  readonly onSave: (target: SegmentSupplementRenameTarget, title: string) => Promise<string | null>;
   readonly open: boolean;
-  readonly target: SegmentAttachmentRenameTarget | null;
+  readonly target: SegmentSupplementRenameTarget | null;
 };
 
-export function SegmentAttachmentRenameDialog({
+export function SegmentSupplementRenameDialog({
   onOpenChange,
   onSave,
   open,
   target,
-}: SegmentAttachmentRenameDialogProps) {
+}: SegmentSupplementRenameDialogProps) {
   return (
     <MemoryTitleDialog
       description="保持简短且易识别"
       fieldLabel="补充内容名称"
-      initialTitle={target?.attachment.title ?? ''}
+      initialTitle={target?.supplement.title ?? ''}
       labelClassName="sr-only"
       maxLengthMessage="补充内容名称过长"
       onOpenChange={onOpenChange}

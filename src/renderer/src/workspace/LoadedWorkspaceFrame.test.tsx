@@ -38,7 +38,7 @@ const birthdayMemory = {
   durationMs: 125_000,
   audioByteLength: 2048,
   hasTranscript: true,
-  attachmentCount: 0,
+  supplementCount: 0,
 };
 
 const birthdayDetail: WorkspaceMemoryDetail = {
@@ -51,7 +51,7 @@ const birthdayDetail: WorkspaceMemoryDetail = {
   durationMs: 125_000,
   audioByteLength: 2048,
   hasTranscript: true,
-  attachmentCount: 0,
+  supplementCount: 0,
   segments: [
     {
       workspaceId: 'ws_1',
@@ -66,8 +66,8 @@ const birthdayDetail: WorkspaceMemoryDetail = {
       transcript: {
         exists: true,
       },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     },
   ],
 };
@@ -92,20 +92,20 @@ const birthdayDetailWithTwoSegments = {
       transcript: {
         exists: false,
       },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     },
   ],
 };
 
-function audioAttachment(
-  overrides: Partial<WorkspaceMemoryDetail['segments'][number]['attachments'][number]> = {}
-): WorkspaceMemoryDetail['segments'][number]['attachments'][number] {
+function audioSupplement(
+  overrides: Partial<WorkspaceMemoryDetail['segments'][number]['supplements'][number]> = {}
+): WorkspaceMemoryDetail['segments'][number]['supplements'][number] {
   return {
     workspaceId: 'ws_1',
     memoryId: 'mem_birthday',
     segmentId: 'seg_birthday_voice',
-    attachmentId: 'att_birthday_followup',
+    supplementId: 'sup_birthday_followup',
     type: 'audio',
     title: '补充录音',
     createdAt: '2026-05-06T13:11:00.000',
@@ -161,8 +161,8 @@ function fireContentTabDragOver(
   fireEvent(element, event);
 }
 
-function birthdayDetailWithAttachments(
-  attachments: readonly WorkspaceMemoryDetail['segments'][number]['attachments'][number][]
+function birthdayDetailWithSupplements(
+  supplements: readonly WorkspaceMemoryDetail['segments'][number]['supplements'][number][]
 ): WorkspaceMemoryDetail {
   const firstSegment = birthdayDetail.segments[0];
 
@@ -172,12 +172,12 @@ function birthdayDetailWithAttachments(
 
   return {
     ...birthdayDetail,
-    attachmentCount: attachments.length,
+    supplementCount: supplements.length,
     segments: [
       {
         ...firstSegment,
-        attachmentCount: attachments.length,
-        attachments: [...attachments],
+        supplementCount: supplements.length,
+        supplements: [...supplements],
       },
     ],
   };
@@ -218,7 +218,7 @@ const morningMemory = {
   durationMs: 30_000,
   audioByteLength: 512,
   hasTranscript: false,
-  attachmentCount: 1,
+  supplementCount: 1,
 };
 
 const recitalMemory = {
@@ -230,7 +230,7 @@ const recitalMemory = {
   durationMs: 60_000,
   audioByteLength: 1024,
   hasTranscript: false,
-  attachmentCount: 0,
+  supplementCount: 0,
 };
 
 function renderLoadedWorkspaceFrame({
@@ -238,18 +238,18 @@ function renderLoadedWorkspaceFrame({
   memoryRailOpen,
   onDeleteMemory = vi.fn(),
   onDeleteSegment = vi.fn(),
-  onDeleteSegmentAttachment = vi.fn(),
+  onDeleteSegmentSupplement = vi.fn(),
   onRenameMemory = vi.fn(),
   onRenameSegment = vi.fn(),
-  onRenameSegmentAttachment = vi.fn(),
+  onRenameSegmentSupplement = vi.fn(),
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
-  onStartSegmentAttachmentRecording = vi.fn(),
-  readFinalizedAudioSegmentAttachment = vi.fn().mockResolvedValue({
+  onStartSegmentSupplementRecording = vi.fn(),
+  readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
       code: 'ERR_RECORDING_NOT_FOUND',
-      message: 'Attachment recording not found',
+      message: 'Supplement recording not found',
     },
   }),
   readFinalizedAudioSegment = vi.fn().mockResolvedValue({
@@ -265,24 +265,24 @@ function renderLoadedWorkspaceFrame({
   readonly memoryRailOpen?: boolean;
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onDeleteSegment?: () => void;
-  readonly onDeleteSegmentAttachment?: () => void;
+  readonly onDeleteSegmentSupplement?: () => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegment?: () => void;
-  readonly onRenameSegmentAttachment?: () => void;
+  readonly onRenameSegmentSupplement?: () => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
-  readonly onStartSegmentAttachmentRecording?: (target: {
+  readonly onStartSegmentSupplementRecording?: (target: {
     readonly memoryId: string;
     readonly segmentId: string;
   }) => void;
-  readonly readFinalizedAudioSegmentAttachment?: ReturnType<typeof vi.fn>;
+  readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
   readonly session?: WorkspaceSession;
 } = {}) {
   Object.defineProperty(window, 'reoWorkspace', {
     configurable: true,
     value: {
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       readFinalizedAudioSegment,
       readMemoryDetail: vi.fn().mockResolvedValue({
         ok: false,
@@ -308,12 +308,12 @@ function renderLoadedWorkspaceFrame({
         workspaceSession={session}
         onDeleteMemory={onDeleteMemory}
         onDeleteSegment={onDeleteSegment}
-        onDeleteSegmentAttachment={onDeleteSegmentAttachment}
+        onDeleteSegmentSupplement={onDeleteSegmentSupplement}
         onRenameMemory={onRenameMemory}
         onRenameSegment={onRenameSegment}
-        onRenameSegmentAttachment={onRenameSegmentAttachment}
+        onRenameSegmentSupplement={onRenameSegmentSupplement}
         onSelectMemory={onSelectMemory}
-        onStartSegmentAttachmentRecording={onStartSegmentAttachmentRecording}
+        onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}
         {...frameProps}
       />
@@ -1259,13 +1259,13 @@ describe('LoadedWorkspaceFrame', () => {
     vi.unstubAllGlobals();
   });
 
-  it('scopes the transcript tab and SegmentAttachment menu to the selected Segment', async () => {
+  it('scopes the transcript tab and SegmentSupplement menu to the selected Segment', async () => {
     const user = userEvent.setup();
-    const onStartSegmentAttachmentRecording = vi.fn();
+    const onStartSegmentSupplementRecording = vi.fn();
     const session = workspaceSession({ memories: [birthdayMemory] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
-      onStartSegmentAttachmentRecording,
+      onStartSegmentSupplementRecording,
       session,
     });
 
@@ -1289,11 +1289,11 @@ describe('LoadedWorkspaceFrame', () => {
     await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));
 
     const menu = await screen.findByRole('menu', { name: '片段补充内容' });
-    const recordingAttachmentAction = within(menu).getByRole('menuitem', { name: '录音补充' });
-    expect(recordingAttachmentAction).not.toHaveAttribute('data-disabled');
-    await user.click(recordingAttachmentAction);
+    const recordingSupplementAction = within(menu).getByRole('menuitem', { name: '录音补充' });
+    expect(recordingSupplementAction).not.toHaveAttribute('data-disabled');
+    await user.click(recordingSupplementAction);
 
-    expect(onStartSegmentAttachmentRecording).toHaveBeenCalledWith({
+    expect(onStartSegmentSupplementRecording).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
       title: '补充录音1',
@@ -1310,33 +1310,33 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
   });
 
-  it('shows finalized recording supplements as content rail tabs with visible attachment identity', async () => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:attachment-audio');
+  it('shows finalized recording supplements as content rail tabs with visible supplement identity', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:supplement-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
       ok: true,
       value: {
         requestId: request.requestId,
         workspaceId: request.workspaceId,
         memoryId: request.memoryId,
         segmentId: request.segmentId,
-        attachmentId: request.attachmentId,
+        supplementId: request.supplementId,
         audio: new Uint8Array([7, 8, 9]),
         audioByteLength: 3,
       },
     }));
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_tab',
+      requestId: 'request_mem_birthday_supplement_tab',
       detail: detailWithSupplement,
     });
 
@@ -1364,18 +1364,18 @@ describe('LoadedWorkspaceFrame', () => {
     expect(supplementItem).toBeVisible();
     await userEvent.click(supplementItem);
     expect(supplementItem).toHaveAttribute('aria-selected', 'true');
-    expect(supplementItem).toHaveAttribute('data-attachment-type', 'audio');
+    expect(supplementItem).toHaveAttribute('data-supplement-type', 'audio');
     const supplementTabItem = supplementItem.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+      '[data-slot="memory-studio-supplement-tab-item"]'
     );
     expect(supplementTabItem).toBeInstanceOf(HTMLElement);
     expect(supplementItem.parentElement).toBe(supplementTabItem);
     const moreAnchor = (supplementTabItem as HTMLElement).querySelector(
-      '[data-slot="memory-studio-attachment-more-anchor"]'
+      '[data-slot="memory-studio-supplement-more-anchor"]'
     );
     expect(moreAnchor).toBeInstanceOf(HTMLButtonElement);
     const moreButton = moreAnchor as HTMLButtonElement;
-    expect(moreButton).toHaveAttribute('data-slot', 'memory-studio-attachment-more-anchor');
+    expect(moreButton).toHaveAttribute('data-slot', 'memory-studio-supplement-more-anchor');
     expect(moreButton.parentElement).toBe(supplementTabItem);
     expect(moreButton).not.toBeDisabled();
     expect(moreButton).not.toHaveAttribute('aria-hidden');
@@ -1384,7 +1384,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveClass('duration-[400ms]');
     expect(moreButton).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
     expect(
-      supplementItem.querySelector('[data-slot="memory-studio-attachment-reorder-anchor"]')
+      supplementItem.querySelector('[data-slot="memory-studio-supplement-reorder-anchor"]')
     ).toBeInstanceOf(HTMLElement);
     expect(content.querySelector('[data-slot="memory-studio-player"]')).toHaveAttribute(
       'data-component',
@@ -1395,13 +1395,13 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(content).getByRole('button', { name: '播放补充录音 补充录音' })
     ).toBeInTheDocument();
-    const attachmentPanel = within(content).getByRole('tabpanel', { name: '补充录音' });
-    expect(attachmentPanel).toHaveAttribute('data-slot', 'memory-studio-attachment-panel');
-    expect(supplementItem).toHaveAttribute('aria-controls', attachmentPanel.id);
-    expect(attachmentPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
-    expect(attachmentPanel).toHaveClass('reo-content-tab-panel-motion');
+    const supplementPanel = within(content).getByRole('tabpanel', { name: '补充录音' });
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-supplement-panel');
+    expect(supplementItem).toHaveAttribute('aria-controls', supplementPanel.id);
+    expect(supplementPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
+    expect(supplementPanel).toHaveClass('reo-content-tab-panel-motion');
     const supplementPlayback = content.querySelector(
-      '[data-slot="memory-studio-attachment-player"]'
+      '[data-slot="memory-studio-supplement-player"]'
     );
     expect(supplementPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(within(content).getByRole('slider', { name: '补充录音播放进度' })).toHaveAttribute(
@@ -1409,13 +1409,13 @@ describe('LoadedWorkspaceFrame', () => {
       '00:00 / 00:05'
     );
     expect(within(content).getByText('00:00 / 00:05')).toBeInTheDocument();
-    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith(
+    expect(readFinalizedAudioSegmentSupplement).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-secret',
         workspaceId: 'ws_1',
         memoryId: 'mem_birthday',
         segmentId: 'seg_birthday_voice',
-        attachmentId: 'att_birthday_followup',
+        supplementId: 'sup_birthday_followup',
       })
     );
 
@@ -1428,29 +1428,29 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('switches between multiple SegmentAttachment panels without using created time labels', async () => {
+  it('switches between multiple SegmentSupplement panels without using created time labels', async () => {
     const createObjectURL = vi
       .spyOn(URL, 'createObjectURL')
-      .mockImplementation(() => `blob:attachment-audio-${createObjectURL.mock.calls.length}`);
+      .mockImplementation(() => `blob:supplement-audio-${createObjectURL.mock.calls.length}`);
     createObjectURL.mockClear();
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
       ok: true,
       value: {
         requestId: request.requestId,
         workspaceId: request.workspaceId,
         memoryId: request.memoryId,
         segmentId: request.segmentId,
-        attachmentId: request.attachmentId,
+        supplementId: request.supplementId,
         audio: new Uint8Array([7, 8, 9]),
         audioByteLength: 3,
       },
     }));
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
-    const detailWithSupplements = birthdayDetailWithAttachments([
-      audioAttachment(),
-      audioAttachment({
-        attachmentId: 'att_birthday_context',
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
+    const detailWithSupplements = birthdayDetailWithSupplements([
+      audioSupplement(),
+      audioSupplement({
+        supplementId: 'sup_birthday_context',
         title: '现场补充',
         createdAt: '2026-05-06T13:12:00.000',
         updatedAt: '2026-05-06T13:12:05.000',
@@ -1460,56 +1460,56 @@ describe('LoadedWorkspaceFrame', () => {
     ]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_two_attachments',
+      requestId: 'request_mem_birthday_two_supplements',
       detail: detailWithSupplements,
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    const firstAttachmentItem = within(content).getByRole('tab', { name: '补充录音' });
-    const secondAttachmentItem = within(content).getByRole('tab', { name: '现场补充' });
+    const firstSupplementItem = within(content).getByRole('tab', { name: '补充录音' });
+    const secondSupplementItem = within(content).getByRole('tab', { name: '现场补充' });
 
-    await userEvent.click(firstAttachmentItem);
-    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'true');
-    expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'false');
+    await userEvent.click(firstSupplementItem);
+    expect(firstSupplementItem).toHaveAttribute('aria-selected', 'true');
+    expect(secondSupplementItem).toHaveAttribute('aria-selected', 'false');
     expect(within(content).queryByText('13:12')).not.toBeInTheDocument();
 
-    firstAttachmentItem.focus();
+    firstSupplementItem.focus();
     await userEvent.keyboard('{ArrowRight}');
     await waitFor(() => {
-      expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'true');
+      expect(secondSupplementItem).toHaveAttribute('aria-selected', 'true');
     });
-    expect(secondAttachmentItem).toHaveFocus();
+    expect(secondSupplementItem).toHaveFocus();
 
-    const secondAttachmentMore = (
-      secondAttachmentItem.closest('[data-slot="memory-studio-attachment-tab-item"]') as HTMLElement
-    ).querySelector('[data-slot="memory-studio-attachment-more-anchor"]');
-    expect(secondAttachmentMore).toBeInstanceOf(HTMLButtonElement);
-    const secondAttachmentMoreButton = secondAttachmentMore as HTMLButtonElement;
-    const firstAttachmentTabItem = firstAttachmentItem.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const secondSupplementMore = (
+      secondSupplementItem.closest('[data-slot="memory-studio-supplement-tab-item"]') as HTMLElement
+    ).querySelector('[data-slot="memory-studio-supplement-more-anchor"]');
+    expect(secondSupplementMore).toBeInstanceOf(HTMLButtonElement);
+    const secondSupplementMoreButton = secondSupplementMore as HTMLButtonElement;
+    const firstSupplementTabItem = firstSupplementItem.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     );
-    const secondAttachmentTabItem = secondAttachmentItem.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const secondSupplementTabItem = secondSupplementItem.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     );
-    expect(firstAttachmentTabItem).toHaveAttribute('data-attachment-id', 'att_birthday_followup');
-    expect(firstAttachmentTabItem).toHaveAttribute('data-attachment-index', '0');
-    expect(secondAttachmentTabItem).toHaveAttribute('data-attachment-id', 'att_birthday_context');
-    expect(secondAttachmentTabItem).toHaveAttribute('data-attachment-index', '1');
-    expect(secondAttachmentMoreButton).not.toBeDisabled();
-    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'false');
-    expect(secondAttachmentItem).toHaveAttribute('aria-selected', 'true');
+    expect(firstSupplementTabItem).toHaveAttribute('data-supplement-id', 'sup_birthday_followup');
+    expect(firstSupplementTabItem).toHaveAttribute('data-supplement-index', '0');
+    expect(secondSupplementTabItem).toHaveAttribute('data-supplement-id', 'sup_birthday_context');
+    expect(secondSupplementTabItem).toHaveAttribute('data-supplement-index', '1');
+    expect(secondSupplementMoreButton).not.toBeDisabled();
+    expect(firstSupplementItem).toHaveAttribute('aria-selected', 'false');
+    expect(secondSupplementItem).toHaveAttribute('aria-selected', 'true');
     expect(
       within(content).getByRole('button', { name: '播放补充录音 现场补充' })
     ).toBeInTheDocument();
-    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith(
+    expect(readFinalizedAudioSegmentSupplement).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachmentId: 'att_birthday_context',
+        supplementId: 'sup_birthday_context',
       })
     );
 
@@ -1517,24 +1517,24 @@ describe('LoadedWorkspaceFrame', () => {
     const pause = vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     await userEvent.click(within(content).getByRole('button', { name: '播放补充录音 现场补充' }));
     const pauseCallCountBeforeTabSwitch = pause.mock.calls.length;
-    await userEvent.click(firstAttachmentItem);
+    await userEvent.click(firstSupplementItem);
 
     expect(pause.mock.calls.length).toBeGreaterThan(pauseCallCountBeforeTabSwitch);
     expect(within(content).queryByRole('button', { name: '暂停补充录音 现场补充' })).toBeNull();
 
-    await userEvent.click(firstAttachmentItem);
+    await userEvent.click(firstSupplementItem);
 
-    expect(firstAttachmentItem).toHaveAttribute('aria-selected', 'true');
-    expect(readFinalizedAudioSegmentAttachment).toHaveBeenCalledTimes(2);
+    expect(firstSupplementItem).toHaveAttribute('aria-selected', 'true');
+    expect(readFinalizedAudioSegmentSupplement).toHaveBeenCalledTimes(2);
     expect(createObjectURL).toHaveBeenCalledTimes(2);
   });
 
-  it('reorders transcript and SegmentAttachment tabs with drag and drop', async () => {
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
-    const detailWithSupplements = birthdayDetailWithAttachments([
-      audioAttachment(),
-      audioAttachment({
-        attachmentId: 'att_birthday_context',
+  it('reorders transcript and SegmentSupplement tabs with drag and drop', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
+    const detailWithSupplements = birthdayDetailWithSupplements([
+      audioSupplement(),
+      audioSupplement({
+        supplementId: 'sup_birthday_context',
         title: '现场补充',
         createdAt: '2026-05-06T13:12:00.000',
         updatedAt: '2026-05-06T13:12:05.000',
@@ -1563,47 +1563,47 @@ describe('LoadedWorkspaceFrame', () => {
     expect(tabNames()).toEqual(['转录', '补充录音', '现场补充']);
 
     const transcriptTab = within(tabs).getByRole('tab', { name: '转录' });
-    const firstAttachmentTab = within(tabs).getByRole('tab', { name: '补充录音' });
-    const secondAttachmentTab = within(tabs).getByRole('tab', { name: '现场补充' });
+    const firstSupplementTab = within(tabs).getByRole('tab', { name: '补充录音' });
+    const secondSupplementTab = within(tabs).getByRole('tab', { name: '现场补充' });
     const transcriptTabItem = transcriptTab.closest(
       '[data-slot="memory-studio-transcript-tab-item"]'
     ) as HTMLElement;
-    const firstAttachmentTabItem = firstAttachmentTab.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const firstSupplementTabItem = firstSupplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     ) as HTMLElement;
-    const secondAttachmentTabItem = secondAttachmentTab.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const secondSupplementTabItem = secondSupplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     ) as HTMLElement;
-    const firstAttachmentMore = firstAttachmentTabItem.querySelector(
-      '[data-slot="memory-studio-attachment-more-anchor"]'
+    const firstSupplementMore = firstSupplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
     ) as HTMLButtonElement;
-    const secondAttachmentMore = secondAttachmentTabItem.querySelector(
-      '[data-slot="memory-studio-attachment-more-anchor"]'
+    const secondSupplementMore = secondSupplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
     ) as HTMLButtonElement;
     mockContentTabRect(transcriptTabItem);
     const dataTransfer = createDragDataTransfer();
 
-    fireEvent.pointerEnter(secondAttachmentTabItem);
-    expect(secondAttachmentMore).not.toHaveAttribute('aria-hidden');
-    fireEvent.dragStart(secondAttachmentTabItem, { dataTransfer });
+    fireEvent.pointerEnter(secondSupplementTabItem);
+    expect(secondSupplementMore).not.toHaveAttribute('aria-hidden');
+    fireEvent.dragStart(secondSupplementTabItem, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith(
       'application/x-reo-content-tab',
       JSON.stringify({
         segmentId: 'seg_birthday_voice',
-        value: 'attachment:att_birthday_context',
+        value: 'supplement:sup_birthday_context',
       })
     );
-    fireEvent.pointerEnter(firstAttachmentTabItem);
-    fireEvent.dragEnter(firstAttachmentTabItem, { dataTransfer });
-    expect(secondAttachmentMore).not.toHaveAttribute('aria-hidden');
-    expect(secondAttachmentMore).toHaveClass('max-w-20');
-    expect(secondAttachmentMore).toHaveClass('opacity-100');
-    expect(firstAttachmentMore).toHaveAttribute('aria-hidden', 'true');
-    expect(firstAttachmentMore).toHaveAttribute('tabindex', '-1');
-    expect(firstAttachmentMore).toHaveClass('max-w-0');
-    expect(firstAttachmentMore).toHaveClass('opacity-0');
-    expect(firstAttachmentMore).not.toHaveClass('group-hover/attachment-tab:max-w-20');
-    expect(firstAttachmentMore).not.toHaveClass('group-hover/attachment-tab:opacity-100');
+    fireEvent.pointerEnter(firstSupplementTabItem);
+    fireEvent.dragEnter(firstSupplementTabItem, { dataTransfer });
+    expect(secondSupplementMore).not.toHaveAttribute('aria-hidden');
+    expect(secondSupplementMore).toHaveClass('max-w-20');
+    expect(secondSupplementMore).toHaveClass('opacity-100');
+    expect(firstSupplementMore).toHaveAttribute('aria-hidden', 'true');
+    expect(firstSupplementMore).toHaveAttribute('tabindex', '-1');
+    expect(firstSupplementMore).toHaveClass('max-w-0');
+    expect(firstSupplementMore).toHaveClass('opacity-0');
+    expect(firstSupplementMore).not.toHaveClass('group-hover/supplement-tab:max-w-20');
+    expect(firstSupplementMore).not.toHaveClass('group-hover/supplement-tab:opacity-100');
     expect(tabNames()).toEqual(['转录', '补充录音', '现场补充']);
 
     fireEvent.dragEnter(transcriptTabItem, { dataTransfer });
@@ -1625,29 +1625,29 @@ describe('LoadedWorkspaceFrame', () => {
     await waitFor(() => expect(tabNames()).toEqual(['转录', '现场补充', '补充录音']));
 
     fireContentTabDragOver(transcriptTabItemAfterStableMove, { clientX: -10, dataTransfer });
-    fireEvent.dragEnd(secondAttachmentTabItem, { dataTransfer });
-    expect(secondAttachmentMore).toHaveAttribute('aria-hidden', 'true');
-    expect(secondAttachmentMore).toHaveAttribute('tabindex', '-1');
+    fireEvent.dragEnd(secondSupplementTabItem, { dataTransfer });
+    expect(secondSupplementMore).toHaveAttribute('aria-hidden', 'true');
+    expect(secondSupplementMore).toHaveAttribute('tabindex', '-1');
 
     await waitFor(() => expect(tabNames()).toEqual(['现场补充', '转录', '补充录音']));
 
     const transcriptTabItemAfterFirstMove = within(tabs)
       .getByRole('tab', { name: '转录' })
       .closest('[data-slot="memory-studio-transcript-tab-item"]') as HTMLElement;
-    const firstAttachmentTabItemAfterFirstMove = within(tabs)
+    const firstSupplementTabItemAfterFirstMove = within(tabs)
       .getByRole('tab', { name: '现场补充' })
-      .closest('[data-slot="memory-studio-attachment-tab-item"]') as HTMLElement;
-    mockContentTabRect(firstAttachmentTabItemAfterFirstMove);
+      .closest('[data-slot="memory-studio-supplement-tab-item"]') as HTMLElement;
+    mockContentTabRect(firstSupplementTabItemAfterFirstMove);
     const secondMoveDataTransfer = createDragDataTransfer();
     fireEvent.dragStart(transcriptTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
-    fireEvent.dragEnter(firstAttachmentTabItemAfterFirstMove, {
+    fireEvent.dragEnter(firstSupplementTabItemAfterFirstMove, {
       dataTransfer: secondMoveDataTransfer,
     });
-    fireContentTabDragOver(firstAttachmentTabItemAfterFirstMove, {
+    fireContentTabDragOver(firstSupplementTabItemAfterFirstMove, {
       clientX: -10,
       dataTransfer: secondMoveDataTransfer,
     });
-    fireEvent.drop(firstAttachmentTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
+    fireEvent.drop(firstSupplementTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
     fireEvent.dragEnd(transcriptTabItemAfterFirstMove, { dataTransfer: secondMoveDataTransfer });
 
     await waitFor(() => expect(tabNames()).toEqual(['转录', '现场补充', '补充录音']));
@@ -1662,49 +1662,49 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not keep the SegmentAttachment More affordance expanded after selection or menu open', async () => {
+  it('does not keep the SegmentSupplement More affordance expanded after selection or menu open', async () => {
     const user = userEvent.setup();
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_hover',
+      requestId: 'request_mem_birthday_supplement_hover',
       detail: detailWithSupplement,
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    const attachmentTab = within(content).getByRole('tab', { name: '补充录音' });
-    const attachmentTabItem = attachmentTab.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const supplementTab = within(content).getByRole('tab', { name: '补充录音' });
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     ) as HTMLElement;
-    const moreAnchor = attachmentTabItem.querySelector(
-      '[data-slot="memory-studio-attachment-more-anchor"]'
+    const moreAnchor = supplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
     );
     expect(moreAnchor).toBeInstanceOf(HTMLButtonElement);
     const moreButton = moreAnchor as HTMLButtonElement;
 
-    expect(attachmentTabItem).toHaveClass('group/attachment-tab');
-    expect(attachmentTabItem).not.toHaveAttribute('data-actions-visible');
+    expect(supplementTabItem).toHaveClass('group/supplement-tab');
+    expect(supplementTabItem).not.toHaveAttribute('data-actions-visible');
     expect(moreButton).toHaveAttribute('aria-hidden', 'true');
     expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('pointer-events-none');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('opacity-0');
-    expect(attachmentTabItem).toHaveClass('duration-[400ms]');
-    expect(attachmentTabItem).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
+    expect(supplementTabItem).toHaveClass('duration-[400ms]');
+    expect(supplementTabItem).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
     expect(moreButton).toHaveClass('duration-[400ms]');
     expect(moreButton).toHaveClass('ease-[cubic-bezier(0.2,0.9,0.1,1)]');
-    expect(moreButton).toHaveClass('group-hover/attachment-tab:pointer-events-auto');
-    expect(moreButton).toHaveClass('group-hover/attachment-tab:ml-[6px]');
-    expect(moreButton).toHaveClass('group-hover/attachment-tab:max-w-20');
-    expect(moreButton).toHaveClass('group-hover/attachment-tab:opacity-100');
-    expect(moreButton).toHaveClass('group-hover/attachment-tab:scale-100');
-    expect(moreButton).not.toHaveClass('group-focus-within/attachment-tab:max-w-20');
+    expect(moreButton).toHaveClass('group-hover/supplement-tab:pointer-events-auto');
+    expect(moreButton).toHaveClass('group-hover/supplement-tab:ml-[6px]');
+    expect(moreButton).toHaveClass('group-hover/supplement-tab:max-w-20');
+    expect(moreButton).toHaveClass('group-hover/supplement-tab:opacity-100');
+    expect(moreButton).toHaveClass('group-hover/supplement-tab:scale-100');
+    expect(moreButton).not.toHaveClass('group-focus-within/supplement-tab:max-w-20');
     expect(moreButton).toHaveClass('focus-visible:pointer-events-auto');
     expect(moreButton).toHaveClass('focus-visible:ml-[6px]');
     expect(moreButton).toHaveClass('focus-visible:max-w-20');
@@ -1714,8 +1714,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).not.toHaveClass('data-[state=open]:opacity-100');
     expect(moreButton).not.toHaveClass('data-[state=open]:scale-100');
 
-    await user.click(attachmentTab);
-    expect(attachmentTab).toHaveAttribute('aria-selected', 'true');
+    await user.click(supplementTab);
+    expect(supplementTab).toHaveAttribute('aria-selected', 'true');
     await user.hover(within(content).getByRole('tab', { name: '转录' }));
     expect(moreButton).toHaveAttribute('aria-hidden', 'true');
     expect(moreButton).toHaveAttribute('tabindex', '-1');
@@ -1727,9 +1727,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveFocus();
     expect(moreButton).toHaveClass('focus-visible:max-w-20');
 
-    attachmentTab.focus();
+    supplementTab.focus();
 
-    await user.hover(attachmentTabItem);
+    await user.hover(supplementTabItem);
     expect(moreButton).not.toHaveAttribute('aria-hidden');
     expect(moreButton).not.toHaveAttribute('tabindex', '-1');
     expect(moreButton).not.toHaveClass('pointer-events-auto');
@@ -1740,22 +1740,22 @@ describe('LoadedWorkspaceFrame', () => {
     moreButton.focus();
     expect(moreButton).toHaveFocus();
 
-    await user.unhover(attachmentTabItem);
+    await user.unhover(supplementTabItem);
     expect(moreButton).toHaveAttribute('aria-hidden', 'true');
     expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('pointer-events-none');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('opacity-0');
-    expect(attachmentTab).toHaveFocus();
+    expect(supplementTab).toHaveFocus();
 
-    await user.hover(attachmentTabItem);
+    await user.hover(supplementTabItem);
     expect(moreButton).not.toHaveAttribute('aria-hidden');
 
     await user.click(moreButton);
     expect(screen.getByRole('menu', { name: '补充录音 操作' })).toBeInTheDocument();
 
-    await user.unhover(attachmentTabItem);
-    expect(attachmentTab).toHaveAttribute('aria-selected', 'true');
+    await user.unhover(supplementTabItem);
+    expect(supplementTab).toHaveAttribute('aria-selected', 'true');
     expect(moreButton).toHaveAttribute('data-state', 'open');
     expect(moreButton).not.toHaveAttribute('aria-hidden');
     expect(moreButton).toHaveAttribute('tabindex', '0');
@@ -1764,12 +1764,12 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveClass('opacity-0');
 
     await user.keyboard('{Escape}');
-    expect(attachmentTab).toHaveFocus();
+    expect(supplementTab).toHaveFocus();
   });
 
-  it('closes the SegmentAttachment More menu when the selected Segment changes', async () => {
+  it('closes the SegmentSupplement More menu when the selected Segment changes', async () => {
     const user = userEvent.setup();
-    const firstAttachment = audioAttachment({ title: '现场补充' });
+    const firstSupplement = audioSupplement({ title: '现场补充' });
     const baseSegments =
       birthdayDetailWithTwoSegments.segments as readonly WorkspaceMemoryDetail['segments'][number][];
     const firstSegment = baseSegments[0];
@@ -1777,22 +1777,22 @@ describe('LoadedWorkspaceFrame', () => {
     if (!firstSegment || !secondSegment) {
       throw new Error('two segment fixture must include two segments');
     }
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 2 }] });
-    const detailWithSegmentAttachments: WorkspaceMemoryDetail = {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
+    const detailWithSegmentSupplements: WorkspaceMemoryDetail = {
       ...birthdayDetailWithTwoSegments,
-      attachmentCount: 2,
+      supplementCount: 2,
       segments: [
         {
           ...firstSegment,
-          attachmentCount: 1,
-          attachments: [firstAttachment],
+          supplementCount: 1,
+          supplements: [firstSupplement],
         },
         {
           ...secondSegment,
-          attachmentCount: 1,
-          attachments: [
-            audioAttachment({
-              attachmentId: 'att_birthday_song_followup',
+          supplementCount: 1,
+          supplements: [
+            audioSupplement({
+              supplementId: 'sup_birthday_song_followup',
               segmentId: 'seg_birthday_song',
               title: '歌曲补充',
             }),
@@ -1806,20 +1806,20 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_menu_lifecycle',
-      detail: detailWithSegmentAttachments,
+      requestId: 'request_mem_birthday_supplement_menu_lifecycle',
+      detail: detailWithSegmentSupplements,
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
-    const attachmentTab = within(content).getByRole('tab', { name: '现场补充' });
-    const attachmentTabItem = attachmentTab.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const supplementTab = within(content).getByRole('tab', { name: '现场补充' });
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     );
-    expect(attachmentTabItem).toBeInstanceOf(HTMLElement);
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
 
-    await user.hover(attachmentTabItem as HTMLElement);
+    await user.hover(supplementTabItem as HTMLElement);
     await user.click(within(content).getByRole('button', { name: '现场补充 更多操作' }));
     expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
 
@@ -1839,20 +1839,20 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.queryByRole('menu', { name: '现场补充 操作' })).not.toBeInTheDocument();
   });
 
-  it('opens the SegmentAttachment sibling More menu and emits a rename intent', async () => {
+  it('opens the SegmentSupplement sibling More menu and emits a rename intent', async () => {
     const user = userEvent.setup();
-    const onRenameSegmentAttachment = vi.fn();
-    const attachment = audioAttachment({ title: '现场补充' });
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([attachment]);
+    const onRenameSegmentSupplement = vi.fn();
+    const supplement = audioSupplement({ title: '现场补充' });
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([supplement]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      onRenameSegmentAttachment,
+      onRenameSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_rename',
+      requestId: 'request_mem_birthday_supplement_rename',
       detail: detailWithSupplement,
     });
 
@@ -1860,7 +1860,7 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     await user.click(within(content).getByRole('tab', { name: '现场补充' }));
     const tab = within(content).getByRole('tab', { name: '现场补充' });
-    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    const tabItem = tab.closest('[data-slot="memory-studio-supplement-tab-item"]');
     expect(tabItem).toBeInstanceOf(HTMLElement);
     await user.hover(tabItem as HTMLElement);
     const more = within(content).getByRole('button', { name: '现场补充 更多操作' });
@@ -1870,27 +1870,27 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: '重命名' }));
 
-    expect(onRenameSegmentAttachment).toHaveBeenCalledWith({
+    expect(onRenameSegmentSupplement).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
       segment: detailWithSupplement.segments[0],
-      attachment,
+      supplement,
     });
   });
 
-  it('opens the SegmentAttachment sibling More menu and emits a delete intent', async () => {
+  it('opens the SegmentSupplement sibling More menu and emits a delete intent', async () => {
     const user = userEvent.setup();
-    const onDeleteSegmentAttachment = vi.fn();
-    const attachment = audioAttachment({ title: '现场补充' });
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([attachment]);
+    const onDeleteSegmentSupplement = vi.fn();
+    const supplement = audioSupplement({ title: '现场补充' });
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([supplement]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      onDeleteSegmentAttachment,
+      onDeleteSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_delete',
+      requestId: 'request_mem_birthday_supplement_delete',
       detail: detailWithSupplement,
     });
 
@@ -1898,7 +1898,7 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     await user.click(within(content).getByRole('tab', { name: '现场补充' }));
     const tab = within(content).getByRole('tab', { name: '现场补充' });
-    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    const tabItem = tab.closest('[data-slot="memory-studio-supplement-tab-item"]');
     expect(tabItem).toBeInstanceOf(HTMLElement);
     await user.hover(tabItem as HTMLElement);
 
@@ -1906,23 +1906,23 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
 
-    expect(onDeleteSegmentAttachment).toHaveBeenCalledWith({
+    expect(onDeleteSegmentSupplement).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
       segment: detailWithSupplement.segments[0],
-      attachment,
+      supplement,
     });
   });
 
-  it('falls back to the transcript panel when the selected SegmentAttachment disappears', async () => {
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+  it('falls back to the transcript panel when the selected SegmentSupplement disappears', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_before_remove',
+      requestId: 'request_mem_birthday_supplement_before_remove',
       detail: detailWithSupplement,
     });
 
@@ -1936,7 +1936,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     act(() => {
       queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-        requestId: 'request_mem_birthday_attachment_after_remove',
+        requestId: 'request_mem_birthday_supplement_after_remove',
         detail: birthdayDetail,
       });
     });
@@ -1951,35 +1951,35 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(content).getByRole('tabpanel', { name: '转录' })).toBeInTheDocument();
   });
 
-  it('releases cached SegmentAttachment audio resources when an attachment disappears', async () => {
+  it('releases cached SegmentSupplement audio resources when an supplement disappears', async () => {
     const createObjectURL = vi
       .spyOn(URL, 'createObjectURL')
-      .mockReturnValue('blob:removed-attachment');
+      .mockReturnValue('blob:removed-supplement');
     createObjectURL.mockClear();
     const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     revokeObjectURL.mockClear();
-    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
       ok: true,
       value: {
         requestId: request.requestId,
         workspaceId: request.workspaceId,
         memoryId: request.memoryId,
         segmentId: request.segmentId,
-        attachmentId: request.attachmentId,
+        supplementId: request.supplementId,
         audio: new Uint8Array([7, 8, 9]),
         audioByteLength: 3,
       },
     }));
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_before_prune',
+      requestId: 'request_mem_birthday_supplement_before_prune',
       detail: detailWithSupplement,
     });
 
@@ -1992,7 +1992,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     act(() => {
       queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-        requestId: 'request_mem_birthday_attachment_after_prune',
+        requestId: 'request_mem_birthday_supplement_after_prune',
         detail: birthdayDetail,
       });
     });
@@ -2003,34 +2003,34 @@ describe('LoadedWorkspaceFrame', () => {
         'true'
       );
     });
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:removed-attachment');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:removed-supplement');
   });
 
   it('ignores supplement waveform pointer movement until a scrub starts on the waveform', async () => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:attachment-audio');
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:supplement-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
       ok: true,
       value: {
         requestId: request.requestId,
         workspaceId: request.workspaceId,
         memoryId: request.memoryId,
         segmentId: request.segmentId,
-        attachmentId: request.attachmentId,
+        supplementId: request.supplementId,
         audio: new Uint8Array([7, 8, 9]),
         audioByteLength: 3,
       },
     }));
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_move_without_scrub',
+      requestId: 'request_mem_birthday_supplement_move_without_scrub',
       detail: detailWithSupplement,
     });
 
@@ -2057,34 +2057,34 @@ describe('LoadedWorkspaceFrame', () => {
     expect(slider).toHaveAttribute('data-waveform-progress', '0');
   });
 
-  it('keeps SegmentAttachment playback position when only its title changes', async () => {
+  it('keeps SegmentSupplement playback position when only its title changes', async () => {
     const createObjectURL = vi
       .spyOn(URL, 'createObjectURL')
-      .mockReturnValue('blob:attachment-audio');
+      .mockReturnValue('blob:supplement-audio');
     createObjectURL.mockClear();
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentAttachment = vi.fn(async (request) => ({
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
       ok: true,
       value: {
         requestId: request.requestId,
         workspaceId: request.workspaceId,
         memoryId: request.memoryId,
         segmentId: request.segmentId,
-        attachmentId: request.attachmentId,
+        supplementId: request.supplementId,
         audio: new Uint8Array([7, 8, 9]),
         audioByteLength: 3,
       },
     }));
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
-    const detailWithSupplement = birthdayDetailWithAttachments([audioAttachment()]);
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      readFinalizedAudioSegmentAttachment,
+      readFinalizedAudioSegmentSupplement,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_attachment_title_before',
+      requestId: 'request_mem_birthday_supplement_title_before',
       detail: detailWithSupplement,
     });
 
@@ -2104,8 +2104,8 @@ describe('LoadedWorkspaceFrame', () => {
 
     act(() => {
       queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-        requestId: 'request_mem_birthday_attachment_title_after',
-        detail: birthdayDetailWithAttachments([audioAttachment({ title: '现场补充' })]),
+        requestId: 'request_mem_birthday_supplement_title_after',
+        detail: birthdayDetailWithSupplements([audioSupplement({ title: '现场补充' })]),
       });
     });
 
@@ -2122,15 +2122,15 @@ describe('LoadedWorkspaceFrame', () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
   });
 
-  it('moves newly created SegmentAttachment recordings into the content tab rail when they first appear', async () => {
-    const session = workspaceSession({ memories: [{ ...birthdayMemory, attachmentCount: 1 }] });
+  it('moves newly created SegmentSupplement recordings into the content tab rail when they first appear', async () => {
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       session,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-      requestId: 'request_mem_birthday_before_attachment',
+      requestId: 'request_mem_birthday_before_supplement',
       detail: birthdayDetail,
     });
 
@@ -2144,10 +2144,10 @@ describe('LoadedWorkspaceFrame', () => {
 
     act(() => {
       queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
-        requestId: 'request_mem_birthday_after_attachment',
-        detail: birthdayDetailWithAttachments([
-          audioAttachment({
-            attachmentId: 'att_new_followup',
+        requestId: 'request_mem_birthday_after_supplement',
+        detail: birthdayDetailWithSupplements([
+          audioSupplement({
+            supplementId: 'sup_new_followup',
             createdAt: '2026-05-06T13:12:00.000',
             updatedAt: '2026-05-06T13:12:04.000',
             durationMs: 4_000,

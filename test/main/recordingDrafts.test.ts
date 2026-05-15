@@ -16,14 +16,14 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   appendRecordingAudioChunk,
-  appendSegmentAttachmentRecordingAudioChunk,
+  appendSegmentSupplementRecordingAudioChunk,
   cloneRecordingDraftPrefix,
   clearRecordingRuntimeStateForRoot,
   createRecordingDraft,
-  createSegmentAttachmentRecordingDraft,
+  createSegmentSupplementRecordingDraft,
   discardRecordingDraft,
   finalizeRecordingDraft,
-  finalizeSegmentAttachmentRecordingDraft,
+  finalizeSegmentSupplementRecordingDraft,
   initializeRecordingDraftWorkspace,
   readRecordingDraftAudio,
   setAfterDraftAudioReadForTest,
@@ -38,6 +38,10 @@ import {
   findSegmentDirectoryById,
   readMemoryDetailFromFileTruth,
 } from '../../src/main/memoryFiles.js';
+import {
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from '../../src/main/workspaceMarkdownObjects.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 
 async function writeFinalizedAudioSegmentForTest(
@@ -47,34 +51,50 @@ async function writeFinalizedAudioSegmentForTest(
   const memoryDirectory = path.join(rootPath, 'memories', 'mem_active_draft_clear');
   const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'memories'), { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'segments'), { recursive: true });
   await writeFile(
-    path.join(memoryDirectory, 'memory.json'),
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: 'Active draft clear' },
+      content: '# Active draft clear\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', 'mem_active_draft_clear.json'),
     `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'memory',
       memoryId: 'mem_active_draft_clear',
-      title: 'Active draft clear',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
-      segmentIds: [segmentId],
     })}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), new Uint8Array([1]));
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'segment.json'),
+    path.join(recordingDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Active draft clear', kind: 'audio' },
+      content: '# Active draft clear\n\n## Transcript\n\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`),
     `${JSON.stringify({
       schemaVersion: 1,
+      objectType: 'segment',
       workspaceId: 'ws_draft',
       memoryId: 'mem_active_draft_clear',
       segmentId,
-      type: 'audio',
-      status: 'finalized',
-      title: 'Active draft clear',
+      kind: 'audio',
       createdAt: '2026-05-06T13:08:00.000Z',
       finalizedAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
       durationMs: 1000,
       nextSequence: 1,
       audioByteLength: 1,
-      transcriptPath: 'transcript.md',
     })}\n`
   );
 }
@@ -102,16 +122,16 @@ function workspaceLockLost() {
   } as const;
 }
 
-async function findAttachmentDirectoryById(
+async function findSupplementDirectoryById(
   segmentDirectory: string,
-  attachmentId: string
+  supplementId: string
 ): Promise<string> {
-  const attachmentsDirectory = path.join(segmentDirectory, 'attachments');
-  const attachmentDirectoryName = (await readdir(attachmentsDirectory)).find(
-    (entry) => entry === attachmentId || entry.startsWith(`${attachmentId}--`)
+  const supplementsDirectory = path.join(segmentDirectory, 'supplements');
+  const supplementDirectoryName = (await readdir(supplementsDirectory)).find(
+    (entry) => entry === supplementId || entry.startsWith(`${supplementId}--`)
   );
-  assert.ok(attachmentDirectoryName);
-  return path.join(attachmentsDirectory, attachmentDirectoryName);
+  assert.ok(supplementDirectoryName);
+  return path.join(supplementsDirectory, supplementDirectoryName);
 }
 
 async function createMemoryForDraftFinalize({
@@ -211,8 +231,8 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         durationMs: 0,
         audioByteLength: 3,
         transcript: { exists: false },
-        attachmentCount: 0,
-        attachments: [],
+        supplementCount: 0,
+        supplements: [],
       },
       memory: {
         memoryId: 'mem_20260506_000001',
@@ -223,21 +243,28 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         durationMs: 0,
         audioByteLength: 3,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     }
   );
 
   const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_20260506_000001');
-  const finalizedMetadata = JSON.parse(
-    await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')
+  const finalizedMarkdown = await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8');
+  const finalizedSemantic = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: finalizedMarkdown,
+  });
+  const finalizedManifest = JSON.parse(
+    await readFile(
+      path.join(rootPath, '.reo', 'objects', 'segments', 'seg_20260506_000001.json'),
+      'utf8'
+    )
   );
   const audio = await stat(path.join(segmentDirectory, 'audio.webm'));
   const index = JSON.parse(await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8'));
-  assert.equal(finalizedMetadata.status, 'finalized');
-  assert.equal(finalizedMetadata.memoryId, 'mem_20260506_000001');
-  assert.equal(finalizedMetadata.title, '第一段录音');
-  assert.equal(finalizedMetadata.audioByteLength, 3);
+  assert.equal(finalizedManifest.memoryId, 'mem_20260506_000001');
+  assert.equal(finalizedManifest.audioByteLength, 3);
+  assert.equal(finalizedSemantic.data.title, '第一段录音');
   assert.equal(audio.size, 3);
   assert.deepEqual(index.memories, [
     {
@@ -249,7 +276,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       durationMs: 0,
       audioByteLength: 3,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     },
   ]);
 
@@ -264,69 +291,74 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
     assert.equal(lateAppend.error.code, 'ERR_RECORDING_FINALIZED');
   }
 
-  const metadataAfterLateAppend = JSON.parse(
-    await readFile(path.join(segmentDirectory, 'segment.json'), 'utf8')
+  const markdownAfterLateAppend = await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8');
+  const manifestAfterLateAppend = JSON.parse(
+    await readFile(
+      path.join(rootPath, '.reo', 'objects', 'segments', 'seg_20260506_000001.json'),
+      'utf8'
+    )
   );
-  assert.deepEqual(metadataAfterLateAppend, finalizedMetadata);
+  assert.equal(markdownAfterLateAppend, finalizedMarkdown);
+  assert.deepEqual(manifestAfterLateAppend, finalizedManifest);
 });
 
-test('segment attachment recording finalizes under the selected segment without creating a sibling segment', async () => {
+test('segment supplement recording finalizes under the selected segment without creating a sibling segment', async () => {
   const rootPath = await workspaceRoot();
   await createMemoryForDraftFinalize({
     rootPath,
-    memoryId: 'mem_attachment_parent',
-    title: 'Attachment parent',
+    memoryId: 'mem_supplement_parent',
+    title: 'Supplement parent',
     now: '2026-05-06T13:09:00.000Z',
   });
   await createRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    createSegmentId: () => 'seg_20260506_attachment_parent',
+    createSegmentId: () => 'seg_20260506_supplement_parent',
     now: () => '2026-05-06T13:10:00.000Z',
   });
   await appendRecordingAudioChunk({
     rootPath,
-    segmentId: 'seg_20260506_attachment_parent',
+    segmentId: 'seg_20260506_supplement_parent',
     sequence: 0,
     chunk: new Uint8Array([1, 2, 3]),
   });
   const parent = await finalizeRecordingDraft({
     durationMs: 3000,
     rootPath,
-    segmentId: 'seg_20260506_attachment_parent',
-    memoryId: 'mem_attachment_parent',
+    segmentId: 'seg_20260506_supplement_parent',
+    memoryId: 'mem_supplement_parent',
     title: 'Parent segment',
     now: () => '2026-05-06T13:11:00.000Z',
   });
   assert.equal(parent.ok, true);
 
-  const attachmentDraft = await createSegmentAttachmentRecordingDraft({
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    memoryId: 'mem_attachment_parent',
-    segmentId: 'seg_20260506_attachment_parent',
-    createAttachmentId: () => 'att_20260506_followup',
+    memoryId: 'mem_supplement_parent',
+    segmentId: 'seg_20260506_supplement_parent',
+    createSupplementId: () => 'sup_20260506_followup',
     now: () => '2026-05-06T13:12:00.000Z',
   });
-  assert.deepEqual(attachmentDraft, {
+  assert.deepEqual(supplementDraft, {
     ok: true,
-    attachmentId: 'att_20260506_followup',
+    supplementId: 'sup_20260506_followup',
     nextSequence: 0,
   });
-  await appendSegmentAttachmentRecordingAudioChunk({
+  await appendSegmentSupplementRecordingAudioChunk({
     rootPath,
-    attachmentId: 'att_20260506_followup',
+    supplementId: 'sup_20260506_followup',
     sequence: 0,
     chunk: new Uint8Array([4, 5, 6, 7]),
   });
 
-  const finalized = await finalizeSegmentAttachmentRecordingDraft({
+  const finalized = await finalizeSegmentSupplementRecordingDraft({
     rootPath,
     workspaceId: 'ws_draft',
-    memoryId: 'mem_attachment_parent',
-    segmentId: 'seg_20260506_attachment_parent',
-    attachmentId: 'att_20260506_followup',
-    title: 'Follow-up attachment',
+    memoryId: 'mem_supplement_parent',
+    segmentId: 'seg_20260506_supplement_parent',
+    supplementId: 'sup_20260506_followup',
+    title: 'Follow-up supplement',
     durationMs: 4000,
     now: () => '2026-05-06T13:13:00.000Z',
   });
@@ -334,36 +366,36 @@ test('segment attachment recording finalizes under the selected segment without 
   if (!finalized.ok) {
     return;
   }
-  assert.equal(finalized.attachment.attachmentId, 'att_20260506_followup');
-  assert.equal(finalized.attachment.segmentId, 'seg_20260506_attachment_parent');
-  assert.equal(finalized.segment.attachmentCount, 1);
+  assert.equal(finalized.supplement.supplementId, 'sup_20260506_followup');
+  assert.equal(finalized.supplement.segmentId, 'seg_20260506_supplement_parent');
+  assert.equal(finalized.segment.supplementCount, 1);
   assert.equal(finalized.memory.segmentCount, 1);
-  assert.equal(finalized.memory.attachmentCount, 1);
+  assert.equal(finalized.memory.supplementCount, 1);
 
   await assert.rejects(
     stat(
-      path.join(rootPath, 'memories', 'mem_attachment_parent', 'segments', 'att_20260506_followup')
+      path.join(rootPath, 'memories', 'mem_supplement_parent', 'segments', 'sup_20260506_followup')
     )
   );
   const segmentDirectory = await findSegmentDirectoryById(
     rootPath,
-    'seg_20260506_attachment_parent'
+    'seg_20260506_supplement_parent'
   );
-  const attachmentDirectory = await findAttachmentDirectoryById(
+  const supplementDirectory = await findSupplementDirectoryById(
     segmentDirectory,
-    'att_20260506_followup'
+    'sup_20260506_followup'
   );
-  assert.equal((await stat(path.join(attachmentDirectory, 'audio.webm'))).isFile(), true);
+  assert.equal((await stat(path.join(supplementDirectory, 'audio.webm'))).isFile(), true);
   const detail = await readMemoryDetailFromFileTruth({
     rootPath,
     workspaceId: 'ws_draft',
-    memoryId: 'mem_attachment_parent',
+    memoryId: 'mem_supplement_parent',
   });
   assert.equal(detail.ok, true);
   if (detail.ok) {
     assert.equal(detail.value.segmentCount, 1);
-    assert.equal(detail.value.attachmentCount, 1);
-    assert.equal(detail.value.segments[0]?.attachmentCount, 1);
+    assert.equal(detail.value.supplementCount, 1);
+    assert.equal(detail.value.segments[0]?.supplementCount, 1);
   }
 });
 
@@ -899,7 +931,7 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     ],
   });
@@ -1626,8 +1658,8 @@ test('recording finalize returns only the appended recording byte length for exi
         durationMs: 2000,
         audioByteLength: 2,
         transcript: { exists: false },
-        attachmentCount: 0,
-        attachments: [],
+        supplementCount: 0,
+        supplements: [],
       },
       memory: {
         memoryId: 'mem_existing_size',
@@ -1638,7 +1670,7 @@ test('recording finalize returns only the appended recording byte length for exi
         durationMs: 3000,
         audioByteLength: 7,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     }
   );

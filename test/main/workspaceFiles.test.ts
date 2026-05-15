@@ -30,6 +30,7 @@ import {
   setBeforeWorkspaceIndexReconciliationPersistForTest,
   updateWorkspaceIndex,
 } from '../../src/main/workspaceFiles.js';
+import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
 import {
   setAfterAtomicWorkspaceFileTempOpenForTest,
   setBeforeAtomicWorkspaceFileCommitForTest,
@@ -63,39 +64,55 @@ async function writeFinalizedMemoryRecording({
   const memoryDirectory = path.join(root, 'memories', memoryId);
   const recordingDirectory = path.join(memoryDirectory, 'segments', segmentId);
   await mkdir(recordingDirectory, { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'memories'), { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
   await writeFile(
-    path.join(memoryDirectory, 'memory.json'),
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title },
+      content: `# ${title}\n`,
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'memories', `${memoryId}.json`),
     `${JSON.stringify(
       {
+        schemaVersion: 1,
+        objectType: 'memory',
         memoryId,
-        title,
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
-        segmentIds: [segmentId],
       },
       null,
       2
     )}\n`
   );
   await writeFile(path.join(recordingDirectory, 'audio.webm'), audio);
-  await writeFile(path.join(recordingDirectory, 'transcript.md'), '');
   await writeFile(
-    path.join(recordingDirectory, 'segment.json'),
+    path.join(recordingDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\n## Transcript\n\n`,
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', `${segmentId}.json`),
     `${JSON.stringify(
       {
         schemaVersion: 1,
+        objectType: 'segment',
         workspaceId,
         memoryId,
         segmentId,
-        type: 'audio',
-        status: 'finalized',
-        title,
+        kind: 'audio',
         createdAt: '2026-05-06T13:08:00.000Z',
         finalizedAt: '2026-05-06T13:09:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
         durationMs,
         nextSequence: 1,
         audioByteLength: audio.byteLength,
-        transcriptPath: 'transcript.md',
       },
       null,
       2
@@ -337,7 +354,7 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     durationMs: 12_000,
     audioByteLength: 3,
     hasTranscript: false,
-    attachmentCount: 0,
+    supplementCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
@@ -372,7 +389,7 @@ test('open workspace uses a valid index without scanning finalized memory files'
     durationMs: 3000,
     audioByteLength: 3,
     hasTranscript: false,
-    attachmentCount: 0,
+    supplementCount: 0,
   };
   await writeFile(
     path.join(root, '.reo', 'index.json'),
@@ -465,7 +482,7 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     durationMs: 34_000,
     audioByteLength: 4,
     hasTranscript: false,
-    attachmentCount: 0,
+    supplementCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
     ok: true,
@@ -1020,9 +1037,13 @@ test('workspace snapshot refresh computes replacement after a metadata refresh',
         'mem_open_reconcile_current',
         'segments',
         'seg_open_reconcile_current',
-        'transcript.md'
+        'segment.md'
       ),
-      'Open-time transcript\n'
+      renderWorkspaceMarkdownObject({
+        objectType: 'segment',
+        data: { title: 'Open reconcile current', kind: 'audio' },
+        content: '# Open reconcile current\n\n## Transcript\n\nOpen-time transcript\n',
+      })
     );
   });
 
@@ -1097,7 +1118,7 @@ test('workspace index update does not persist reconciliation before update succe
   });
 });
 
-test('index rebuild ignores symlinked transcript presence files', async () => {
+test('index rebuild ignores symlinked segment markdown files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-markdown-presence-'));
   const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-markdown-outside-'));
   await initializeWorkspaceFiles({
@@ -1123,12 +1144,16 @@ test('index rebuild ignores symlinked transcript presence files', async () => {
     'segments',
     'seg_20260506_markdown_presence'
   );
-  await writeFile(path.join(outside, 'transcript.md'), 'outside transcript');
-  await rm(path.join(recordingDirectory, 'transcript.md'));
-  await symlink(
-    path.join(outside, 'transcript.md'),
-    path.join(recordingDirectory, 'transcript.md')
+  await writeFile(
+    path.join(outside, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'outside', kind: 'audio' },
+      content: '# outside\n\n## Transcript\n\noutside transcript\n',
+    })
   );
+  await rm(path.join(recordingDirectory, 'segment.md'));
+  await symlink(path.join(outside, 'segment.md'), path.join(recordingDirectory, 'segment.md'));
 
   const opened = await readWorkspaceSnapshotFromFileTruth({
     rootPath: root,
@@ -1137,7 +1162,7 @@ test('index rebuild ignores symlinked transcript presence files', async () => {
 
   assert.equal(opened.ok, true);
   if (opened.ok) {
-    assert.equal(opened.snapshot.memories[0]?.hasTranscript, false);
-    assert.equal(opened.snapshot.memories[0]?.attachmentCount, 0);
+    assert.equal(opened.snapshot.memories[0]?.segmentCount, 0);
+    assert.equal(opened.snapshot.memories[0]?.supplementCount, 0);
   }
 });

@@ -8,32 +8,32 @@ import {
   closeWorkspace,
   createMemory,
   deleteMemory,
-  deleteSegmentAttachment,
+  deleteSegmentSupplement,
   deleteSegment,
   createRecordingDraft,
-  createSegmentAttachmentRecordingDraft,
+  createSegmentSupplementRecordingDraft,
   discardRecordingDraft,
-  discardSegmentAttachmentRecordingDraft,
+  discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
-  finalizeSegmentAttachmentRecordingDraft,
+  finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
   listMemorySpaces,
   openWorkspace,
   openMemorySpace,
   readFinalizedAudioSegment,
-  readFinalizedAudioSegmentAttachment,
+  readFinalizedAudioSegmentSupplement,
   readMemoryDetail,
   readWorkspaceSnapshot,
   readRecordingDraftAudio,
   removeMemorySpace,
   restoreDeletedMemory,
-  restoreDeletedSegmentAttachment,
+  restoreDeletedSegmentSupplement,
   restoreDeletedSegment,
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
-  updateSegmentAttachmentTitle,
-  appendSegmentAttachmentRecordingAudioChunk,
+  updateSegmentSupplementTitle,
+  appendSegmentSupplementRecordingAudioChunk,
 } from './workspaceApi';
 
 describe('workspace renderer API wrapper', () => {
@@ -51,24 +51,24 @@ describe('workspace renderer API wrapper', () => {
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
-    deleteSegmentAttachment: vi.fn(),
-    restoreDeletedSegmentAttachment: vi.fn(),
+    deleteSegmentSupplement: vi.fn(),
+    restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
-    readFinalizedAudioSegmentAttachment: vi.fn(),
+    readFinalizedAudioSegmentSupplement: vi.fn(),
     createRecordingDraft: vi.fn(),
-    createSegmentAttachmentRecordingDraft: vi.fn(),
+    createSegmentSupplementRecordingDraft: vi.fn(),
     readRecordingDraftAudio: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
-    appendSegmentAttachmentRecordingAudioChunk: vi.fn(),
+    appendSegmentSupplementRecordingAudioChunk: vi.fn(),
     cloneRecordingDraftPrefix: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
-    finalizeSegmentAttachmentRecordingDraft: vi.fn(),
+    finalizeSegmentSupplementRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
-    discardSegmentAttachmentRecordingDraft: vi.fn(),
+    discardSegmentSupplementRecordingDraft: vi.fn(),
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
-    updateSegmentAttachmentTitle: vi.fn(),
+    updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
@@ -132,7 +132,7 @@ describe('workspace renderer API wrapper', () => {
         durationMs: 0,
         audioByteLength: 0,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     });
     reoWorkspace.deleteMemory.mockResolvedValue({
@@ -151,7 +151,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         memories: [],
       },
@@ -168,7 +168,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segmentId: 'seg_1',
         restoreToken: 'seg_1',
@@ -186,7 +186,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1,
           audioByteLength: 1,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segment: {
           workspaceId: 'ws_1',
@@ -199,8 +199,8 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 0,
-          attachments: [],
+          supplementCount: 0,
+          supplements: [],
         },
       },
     });
@@ -218,7 +218,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 0,
           audioByteLength: 0,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
           segments: [],
         },
       },
@@ -235,14 +235,14 @@ describe('workspace renderer API wrapper', () => {
         transcript: { exists: true, text: '正文' },
       },
     });
-    reoWorkspace.readFinalizedAudioSegmentAttachment.mockResolvedValue({
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
-        requestId: 'request_att_1',
+        requestId: 'request_sup_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         audio: new Uint8Array([2]),
         audioByteLength: 1,
       },
@@ -251,9 +251,9 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { segmentId: 'seg_1' },
     });
-    reoWorkspace.createSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.createSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
-      value: { attachmentId: 'att_1', nextSequence: 0 },
+      value: { supplementId: 'sup_1', nextSequence: 0 },
     });
     reoWorkspace.readRecordingDraftAudio.mockResolvedValue({
       ok: true,
@@ -263,7 +263,7 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { nextSequence: 1 },
     });
-    reoWorkspace.appendSegmentAttachmentRecordingAudioChunk.mockResolvedValue({
+    reoWorkspace.appendSegmentSupplementRecordingAudioChunk.mockResolvedValue({
       ok: true,
       value: { nextSequence: 1 },
     });
@@ -278,7 +278,7 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          attachmentCount: 0,
+          supplementCount: 0,
           hasTranscript: false,
           memoryId: 'mem_1',
           segmentCount: 1,
@@ -295,14 +295,14 @@ describe('workspace renderer API wrapper', () => {
         },
       },
     });
-    reoWorkspace.finalizeSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
       value: {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          attachmentCount: 1,
+          supplementCount: 1,
           hasTranscript: false,
           memoryId: 'mem_1',
           segmentCount: 1,
@@ -320,13 +320,13 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 0,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
-              attachmentId: 'att_1',
+              supplementId: 'sup_1',
               type: 'audio',
               title: '补充录音',
               createdAt: '2026-05-06T13:08:00.000Z',
@@ -337,11 +337,11 @@ describe('workspace renderer API wrapper', () => {
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
-          attachmentId: 'att_1',
+          supplementId: 'sup_1',
           type: 'audio',
           title: '补充录音',
           createdAt: '2026-05-06T13:08:00.000Z',
@@ -353,7 +353,7 @@ describe('workspace renderer API wrapper', () => {
       },
     });
     reoWorkspace.discardRecordingDraft.mockResolvedValue({ ok: true, value: { discarded: true } });
-    reoWorkspace.discardSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.discardSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
       value: { discarded: true },
     });
@@ -368,10 +368,10 @@ describe('workspace renderer API wrapper', () => {
         durationMs: 0,
         audioByteLength: 1,
         hasTranscript: false,
-        attachmentCount: 0,
+        supplementCount: 0,
       },
     });
-    reoWorkspace.updateSegmentAttachmentTitle.mockResolvedValue({
+    reoWorkspace.updateSegmentSupplementTitle.mockResolvedValue({
       ok: true,
       value: {
         memory: {
@@ -383,7 +383,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           hasTranscript: false,
-          attachmentCount: 1,
+          supplementCount: 1,
         },
         segment: {
           workspaceId: 'ws_1',
@@ -396,13 +396,13 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
-              attachmentId: 'att_1',
+              supplementId: 'sup_1',
               type: 'audio',
               title: '现场补充',
               createdAt: '2026-05-06T13:10:00.000Z',
@@ -413,11 +413,11 @@ describe('workspace renderer API wrapper', () => {
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
-          attachmentId: 'att_1',
+          supplementId: 'sup_1',
           type: 'audio',
           title: '现场补充',
           createdAt: '2026-05-06T13:10:00.000Z',
@@ -428,7 +428,7 @@ describe('workspace renderer API wrapper', () => {
         },
       },
     });
-    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+    reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory: {
@@ -440,7 +440,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           hasTranscript: false,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segment: {
           workspaceId: 'ws_1',
@@ -453,14 +453,14 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 0,
-          attachments: [],
+          supplementCount: 0,
+          supplements: [],
         },
-        attachmentId: 'att_1',
-        restoreToken: 'att_1',
+        supplementId: 'sup_1',
+        restoreToken: 'sup_1',
       },
     });
-    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+    reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory: {
@@ -472,7 +472,7 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           hasTranscript: false,
-          attachmentCount: 1,
+          supplementCount: 1,
         },
         segment: {
           workspaceId: 'ws_1',
@@ -485,13 +485,13 @@ describe('workspace renderer API wrapper', () => {
           durationMs: 1000,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
-              attachmentId: 'att_1',
+              supplementId: 'sup_1',
               type: 'audio',
               title: '现场补充',
               createdAt: '2026-05-06T13:10:00.000Z',
@@ -502,11 +502,11 @@ describe('workspace renderer API wrapper', () => {
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
-          attachmentId: 'att_1',
+          supplementId: 'sup_1',
           type: 'audio',
           title: '现场补充',
           createdAt: '2026-05-06T13:10:00.000Z',
@@ -524,7 +524,7 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          attachmentCount: 0,
+          supplementCount: 0,
           hasTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
@@ -581,16 +581,16 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
     });
-    await readFinalizedAudioSegmentAttachment({
+    await readFinalizedAudioSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      requestId: 'request_att_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_1',
     });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
-    await createSegmentAttachmentRecordingDraft({
+    await createSegmentSupplementRecordingDraft({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
@@ -603,9 +603,9 @@ describe('workspace renderer API wrapper', () => {
       sequence: 0,
       chunk: new Uint8Array([1]),
     });
-    await appendSegmentAttachmentRecordingAudioChunk({
+    await appendSegmentSupplementRecordingAudioChunk({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       sequence: 0,
       chunk: new Uint8Array([1]),
     });
@@ -623,46 +623,46 @@ describe('workspace renderer API wrapper', () => {
       title: '录音',
       workspaceHandle: 'wh_1',
     });
-    await finalizeSegmentAttachmentRecordingDraft({
+    await finalizeSegmentSupplementRecordingDraft({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '补充录音',
       durationMs: 1000,
     });
     await discardRecordingDraft({ workspaceHandle: 'wh_1', segmentId: 'seg_1' });
-    await discardSegmentAttachmentRecordingDraft({
+    await discardSegmentSupplementRecordingDraft({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     });
     await updateMemoryTitle({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
       title: '产品灵感与思考',
     });
-    await updateSegmentAttachmentTitle({
+    await updateSegmentSupplementTitle({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '现场补充',
     });
-    await deleteSegmentAttachment({
+    await deleteSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     });
-    await restoreDeletedSegmentAttachment({
+    await restoreDeletedSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      restoreToken: 'att_1',
+      restoreToken: 'sup_1',
     });
     await saveTranscript({
       workspaceHandle: 'wh_1',
@@ -732,15 +732,15 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
     });
-    expect(reoWorkspace.readFinalizedAudioSegmentAttachment).toHaveBeenCalledWith({
+    expect(reoWorkspace.readFinalizedAudioSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
-      requestId: 'request_att_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_1',
     });
-    expect(reoWorkspace.createSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+    expect(reoWorkspace.createSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
@@ -750,9 +750,9 @@ describe('workspace renderer API wrapper', () => {
       workspaceHandle: 'wh_1',
       segmentId: 'seg_1',
     });
-    expect(reoWorkspace.appendSegmentAttachmentRecordingAudioChunk).toHaveBeenCalledWith({
+    expect(reoWorkspace.appendSegmentSupplementRecordingAudioChunk).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       sequence: 0,
       chunk: new Uint8Array([1]),
     });
@@ -763,45 +763,45 @@ describe('workspace renderer API wrapper', () => {
       retainedByteLength: 1,
       nextSequence: 0,
     });
-    expect(reoWorkspace.finalizeSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+    expect(reoWorkspace.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '补充录音',
       durationMs: 1000,
     });
-    expect(reoWorkspace.discardSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+    expect(reoWorkspace.discardSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     });
     expect(reoWorkspace.updateMemoryTitle).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
       title: '产品灵感与思考',
     });
-    expect(reoWorkspace.updateSegmentAttachmentTitle).toHaveBeenCalledWith({
+    expect(reoWorkspace.updateSegmentSupplementTitle).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '现场补充',
     });
-    expect(reoWorkspace.deleteSegmentAttachment).toHaveBeenCalledWith({
+    expect(reoWorkspace.deleteSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
     });
-    expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalledWith({
+    expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
-      restoreToken: 'att_1',
+      restoreToken: 'sup_1',
     });
     expect(reoWorkspace.beginMicrophoneIntent).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

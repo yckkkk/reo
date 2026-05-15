@@ -1,26 +1,26 @@
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
-import type { SegmentAttachmentDeleteTarget } from './segmentActionTargets';
+import type { SegmentSupplementDeleteTarget } from './segmentActionTargets';
 
-type SegmentAttachmentDeleteDialogProps = {
+type SegmentSupplementDeleteDialogProps = {
   readonly disabled?: boolean;
   readonly onConfirm: () => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
-  readonly target: SegmentAttachmentDeleteTarget | null;
+  readonly target: SegmentSupplementDeleteTarget | null;
 };
 
-export function SegmentAttachmentDeleteDialog({
+export function SegmentSupplementDeleteDialog({
   disabled = false,
   onConfirm,
   onOpenChange,
   open,
   target,
-}: SegmentAttachmentDeleteDialogProps) {
-  const attachmentTitle = target?.attachment.title ?? '这个补充内容';
+}: SegmentSupplementDeleteDialogProps) {
+  const supplementTitle = target?.supplement.title ?? '这个补充内容';
 
   return (
     <WorkspaceDangerConfirmDialog
-      description={`删除“${attachmentTitle}”？音频、转录和元数据会先进入恢复区。`}
+      description={`删除“${supplementTitle}”？音频、转录和元数据会先进入恢复区。`}
       disabled={disabled}
       onConfirm={onConfirm}
       onOpenChange={onOpenChange}

@@ -8,7 +8,7 @@ import { toast } from './components/ui/toaster';
 import { createReoQueryClient, ReoQueryProvider } from './queryClient';
 import {
   memoryDetailQueryKey,
-  segmentAttachmentContentQueryKey,
+  segmentSupplementContentQueryKey,
   segmentContentQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
@@ -27,28 +27,28 @@ describe('App', () => {
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
-    deleteSegmentAttachment: vi.fn(),
-    restoreDeletedSegmentAttachment: vi.fn(),
+    deleteSegmentSupplement: vi.fn(),
+    restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
-    readFinalizedAudioSegmentAttachment: vi.fn(),
+    readFinalizedAudioSegmentSupplement: vi.fn(),
     createRecordingDraft: vi.fn(),
-    createSegmentAttachmentRecordingDraft: vi.fn(),
+    createSegmentSupplementRecordingDraft: vi.fn(),
     readRecordingDraftAudio: vi.fn(),
     appendRecordingAudioChunk: vi.fn(),
-    appendSegmentAttachmentRecordingAudioChunk: vi.fn(),
+    appendSegmentSupplementRecordingAudioChunk: vi.fn(),
     cloneRecordingDraftPrefix: vi.fn(),
     finalizeRecordingDraft: vi.fn(),
-    finalizeSegmentAttachmentRecordingDraft: vi.fn(),
+    finalizeSegmentSupplementRecordingDraft: vi.fn(),
     discardRecordingDraft: vi.fn(),
-    discardSegmentAttachmentRecordingDraft: vi.fn(),
+    discardSegmentSupplementRecordingDraft: vi.fn(),
     updateMemorySpaceTitle: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
-    updateSegmentAttachmentTitle: vi.fn(),
+    updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
-    saveSegmentAttachmentTranscript: vi.fn(),
+    saveSegmentSupplementTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
     startRecordingTranscription: vi.fn(),
@@ -142,18 +142,18 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_SEGMENT_RESTORE_FAILED', message: 'Segment could not be restored' },
     });
-    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+    reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: false,
       error: {
-        code: 'ERR_SEGMENT_ATTACHMENT_DELETE_FAILED',
-        message: 'SegmentAttachment could not be deleted',
+        code: 'ERR_SEGMENT_SUPPLEMENT_DELETE_FAILED',
+        message: 'SegmentSupplement could not be deleted',
       },
     });
-    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+    reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: false,
       error: {
-        code: 'ERR_SEGMENT_ATTACHMENT_RESTORE_FAILED',
-        message: 'SegmentAttachment could not be restored',
+        code: 'ERR_SEGMENT_SUPPLEMENT_RESTORE_FAILED',
+        message: 'SegmentSupplement could not be restored',
       },
     });
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
@@ -164,9 +164,9 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Segment not found' },
     });
-    reoWorkspace.updateSegmentAttachmentTitle.mockResolvedValue({
+    reoWorkspace.updateSegmentSupplementTitle.mockResolvedValue({
       ok: false,
-      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
+      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement not found' },
     });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
@@ -186,27 +186,27 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
     });
-    reoWorkspace.readFinalizedAudioSegmentAttachment.mockResolvedValue({
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockResolvedValue({
       ok: false,
-      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment recording not found' },
+      error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement recording not found' },
     });
     reoWorkspace.readRecordingDraftAudio.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Recording draft not found' },
     });
-    reoWorkspace.createSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.createSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Segment not found' },
     });
-    reoWorkspace.appendSegmentAttachmentRecordingAudioChunk.mockResolvedValue({
+    reoWorkspace.appendSegmentSupplementRecordingAudioChunk.mockResolvedValue({
       ok: true,
       value: { nextSequence: 1 },
     });
-    reoWorkspace.finalizeSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: false,
-      error: { code: 'ERR_RECORDING_FINALIZE_FAILED', message: 'Attachment could not be saved' },
+      error: { code: 'ERR_RECORDING_FINALIZE_FAILED', message: 'Supplement could not be saved' },
     });
-    reoWorkspace.discardSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.discardSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
       value: { discarded: true },
     });
@@ -243,7 +243,7 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
-  function createSegmentAttachmentFixture() {
+  function createSegmentSupplementFixture() {
     const memory = {
       memoryId: 'mem_birthday',
       title: 'My seventh birthday',
@@ -253,13 +253,13 @@ describe('App', () => {
       durationMs: 6000,
       audioByteLength: 2050,
       hasTranscript: true,
-      attachmentCount: 1,
+      supplementCount: 1,
     };
-    const attachment = {
+    const supplement = {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
-      attachmentId: 'att_birthday_followup',
+      supplementId: 'sup_birthday_followup',
       type: 'audio' as const,
       title: '补充录音1',
       createdAt: '2026-05-06T13:11:00.000Z',
@@ -279,15 +279,15 @@ describe('App', () => {
       durationMs: 5000,
       audioByteLength: 2048,
       transcript: { exists: false },
-      attachmentCount: 1,
-      attachments: [attachment],
+      supplementCount: 1,
+      supplements: [supplement],
     };
 
-    return { attachment, memory, segment };
+    return { supplement, memory, segment };
   }
 
-  function mockSegmentAttachmentWorkspace(
-    fixture: ReturnType<typeof createSegmentAttachmentFixture>
+  function mockSegmentSupplementWorkspace(
+    fixture: ReturnType<typeof createSegmentSupplementFixture>
   ) {
     const { memory, segment } = fixture;
 
@@ -337,7 +337,7 @@ describe('App', () => {
     }));
   }
 
-  async function createWorkspaceWithSegmentAttachment(user: ReturnType<typeof userEvent.setup>) {
+  async function createWorkspaceWithSegmentSupplement(user: ReturnType<typeof userEvent.setup>) {
     await openCreateWorkspaceDialog(user);
     await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
     await user.click(screen.getByRole('button', { name: '浏览' }));
@@ -346,13 +346,13 @@ describe('App', () => {
     await screen.findByRole('tab', { name: '补充录音1' });
   }
 
-  async function submitSegmentAttachmentRename(
+  async function submitSegmentSupplementRename(
     user: ReturnType<typeof userEvent.setup>,
     currentTitle: string,
     nextTitle: string
   ) {
     const tab = screen.getByRole('tab', { name: currentTitle });
-    const tabItem = tab.closest('[data-slot="memory-studio-attachment-tab-item"]');
+    const tabItem = tab.closest('[data-slot="memory-studio-supplement-tab-item"]');
     expect(tabItem).toBeInstanceOf(HTMLElement);
     await user.click(tab);
     await user.hover(tabItem as HTMLElement);
@@ -366,17 +366,17 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('button', { name: '保存' }));
   }
 
-  async function openSegmentAttachmentDeleteDialog(
+  async function openSegmentSupplementDeleteDialog(
     user: ReturnType<typeof userEvent.setup>,
     title: string
   ) {
     await user.click(screen.getByRole('tab', { name: title }));
-    const attachmentTab = screen.getByRole('tab', { name: title });
-    const attachmentTabItem = attachmentTab.closest(
-      '[data-slot="memory-studio-attachment-tab-item"]'
+    const supplementTab = screen.getByRole('tab', { name: title });
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
     );
-    expect(attachmentTabItem).toBeInstanceOf(HTMLElement);
-    await user.hover(attachmentTabItem as HTMLElement);
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(supplementTabItem as HTMLElement);
     await user.click(screen.getByRole('button', { name: `${title} 更多操作` }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(screen.getByRole('alertdialog', { name: '删除补充内容' })).toBeInTheDocument();
@@ -483,8 +483,8 @@ describe('App', () => {
       durationMs,
       audioByteLength,
       transcript: { exists: transcriptExists },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
   }
 
@@ -841,7 +841,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const renamedMemory = {
       ...originalMemory,
@@ -924,7 +924,7 @@ describe('App', () => {
       durationMs: 5000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const segment = {
       workspaceId: 'ws_1',
@@ -937,8 +937,8 @@ describe('App', () => {
       durationMs: 5000,
       audioByteLength: 2048,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const rename =
       createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentTitle']>>>();
@@ -1037,14 +1037,14 @@ describe('App', () => {
     });
   }, 10_000);
 
-  it('renames a SegmentAttachment tab optimistically from the hover More menu', async () => {
+  it('renames a SegmentSupplement tab optimistically from the hover More menu', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
-    const { attachment, memory, segment } = fixture;
+    const fixture = createSegmentSupplementFixture();
+    const { supplement, memory, segment } = fixture;
     const rename =
-      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentSupplementTitle']>>>();
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.updateSegmentSupplementTitle.mockReturnValue(rename.promise);
 
     render(
       <ReoQueryProvider>
@@ -1052,16 +1052,16 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await createWorkspaceWithSegmentSupplement(user);
+    await submitSegmentSupplementRename(user, '补充录音1', '现场补充');
 
     await waitFor(() =>
-      expect(reoWorkspace.updateSegmentAttachmentTitle).toHaveBeenCalledWith({
+      expect(reoWorkspace.updateSegmentSupplementTitle).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
         workspaceId: 'ws_1',
         memoryId: 'mem_birthday',
         segmentId: 'seg_birthday_voice',
-        attachmentId: 'att_birthday_followup',
+        supplementId: 'sup_birthday_followup',
         title: '现场补充',
       })
     );
@@ -1075,10 +1075,10 @@ describe('App', () => {
           memory,
           segment: {
             ...segment,
-            attachments: [{ ...attachment, title: '现场补充' }],
+            supplements: [{ ...supplement, title: '现场补充' }],
           },
-          attachment: {
-            ...attachment,
+          supplement: {
+            ...supplement,
             title: '现场补充',
           },
         },
@@ -1087,16 +1087,16 @@ describe('App', () => {
     });
   }, 10_000);
 
-  it('ignores an in-flight SegmentAttachment rename failure after reopening the same workspace with a new handle', async () => {
+  it('ignores an in-flight SegmentSupplement rename failure after reopening the same workspace with a new handle', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
+    const fixture = createSegmentSupplementFixture();
     const { memory, segment } = fixture;
     const rename =
-      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
-    const reopenedAttachment = { ...fixture.attachment, title: '现场补充' };
-    const reopenedSegment = { ...segment, attachments: [reopenedAttachment] };
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentSupplementTitle']>>>();
+    const reopenedSupplement = { ...fixture.supplement, title: '现场补充' };
+    const reopenedSegment = { ...segment, supplements: [reopenedSupplement] };
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.updateSegmentSupplementTitle.mockReturnValue(rename.promise);
 
     render(
       <ReoQueryProvider>
@@ -1104,8 +1104,8 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await createWorkspaceWithSegmentSupplement(user);
+    await submitSegmentSupplementRename(user, '补充录音1', '现场补充');
     await screen.findByRole('tab', { name: '现场补充' });
 
     fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
@@ -1151,7 +1151,7 @@ describe('App', () => {
     await act(async () => {
       rename.resolve({
         ok: false,
-        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
+        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement not found' },
       });
       await rename.promise;
     });
@@ -1160,13 +1160,13 @@ describe('App', () => {
     expect(screen.queryByRole('tab', { name: '补充录音1' })).not.toBeInTheDocument();
   }, 10_000);
 
-  it('rolls back a SegmentAttachment rename when saving fails and the submitted title is still current', async () => {
+  it('rolls back a SegmentSupplement rename when saving fails and the submitted title is still current', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
+    const fixture = createSegmentSupplementFixture();
     const rename =
-      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentSupplementTitle']>>>();
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.updateSegmentSupplementTitle.mockReturnValue(rename.promise);
 
     render(
       <ReoQueryProvider>
@@ -1174,14 +1174,14 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await createWorkspaceWithSegmentSupplement(user);
+    await submitSegmentSupplementRename(user, '补充录音1', '现场补充');
     await screen.findByRole('tab', { name: '现场补充' });
 
     await act(async () => {
       rename.resolve({
         ok: false,
-        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Attachment not found' },
+        error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement not found' },
       });
       await rename.promise;
     });
@@ -1192,13 +1192,13 @@ describe('App', () => {
     });
   }, 10_000);
 
-  it('keeps the optimistic SegmentAttachment rename when saving reports stale projections', async () => {
+  it('keeps the optimistic SegmentSupplement rename when saving reports stale projections', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
+    const fixture = createSegmentSupplementFixture();
     const rename =
-      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentAttachmentTitle']>>>();
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.updateSegmentAttachmentTitle.mockReturnValue(rename.promise);
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentSupplementTitle']>>>();
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.updateSegmentSupplementTitle.mockReturnValue(rename.promise);
 
     render(
       <ReoQueryProvider>
@@ -1206,8 +1206,8 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await submitSegmentAttachmentRename(user, '补充录音1', '现场补充');
+    await createWorkspaceWithSegmentSupplement(user);
+    await submitSegmentSupplementRename(user, '补充录音1', '现场补充');
     await screen.findByRole('tab', { name: '现场补充' });
 
     await act(async () => {
@@ -1228,47 +1228,47 @@ describe('App', () => {
     });
   }, 10_000);
 
-  it('deletes a SegmentAttachment through confirmation and restores it from the toast action', async () => {
+  it('deletes a SegmentSupplement through confirmation and restores it from the toast action', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
-    const { attachment, memory, segment } = fixture;
-    const memoryAfterDelete = { ...memory, attachmentCount: 0 };
-    const segmentAfterDelete = { ...segment, attachmentCount: 0, attachments: [] };
-    const attachmentContentKey = segmentAttachmentContentQueryKey({
+    const fixture = createSegmentSupplementFixture();
+    const { supplement, memory, segment } = fixture;
+    const memoryAfterDelete = { ...memory, supplementCount: 0 };
+    const segmentAfterDelete = { ...segment, supplementCount: 0, supplements: [] };
+    const supplementContentKey = segmentSupplementContentQueryKey({
       workspaceId: 'ws_1',
       memoryId: memory.memoryId,
       segmentId: segment.segmentId,
-      attachmentId: attachment.attachmentId,
+      supplementId: supplement.supplementId,
     });
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.readFinalizedAudioSegmentAttachment.mockImplementation(async (payload) => ({
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
       ok: true,
       value: {
         requestId: payload.requestId,
         workspaceId: 'ws_1',
         memoryId: payload.memoryId,
         segmentId: payload.segmentId,
-        attachmentId: payload.attachmentId,
+        supplementId: payload.supplementId,
         audio: new Uint8Array([1, 2]),
         audioByteLength: 2,
         transcript: { exists: false, text: '' },
       },
     }));
-    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+    reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory: memoryAfterDelete,
         segment: segmentAfterDelete,
-        attachmentId: attachment.attachmentId,
-        restoreToken: attachment.attachmentId,
+        supplementId: supplement.supplementId,
+        restoreToken: supplement.supplementId,
       },
     });
-    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+    reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory,
         segment,
-        attachment,
+        supplement,
       },
     });
     const queryClient = createReoQueryClient();
@@ -1279,69 +1279,69 @@ describe('App', () => {
       </QueryClientProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    queryClient.setQueryData(attachmentContentKey, {
-      requestId: 'cached_attachment_content',
+    await createWorkspaceWithSegmentSupplement(user);
+    queryClient.setQueryData(supplementContentKey, {
+      requestId: 'cached_supplement_content',
       workspaceId: 'ws_1',
       memoryId: memory.memoryId,
       segmentId: segment.segmentId,
-      attachmentId: attachment.attachmentId,
+      supplementId: supplement.supplementId,
       audio: new Uint8Array([1, 2]),
       audioByteLength: 2,
       transcript: { exists: false, text: '' },
     });
-    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+    await openSegmentSupplementDeleteDialog(user, supplement.title);
 
     const dialog = screen.getByRole('alertdialog', { name: '删除补充内容' });
-    expect(dialog).toHaveTextContent(`删除“${attachment.title}”？`);
+    expect(dialog).toHaveTextContent(`删除“${supplement.title}”？`);
     await user.click(within(dialog).getByRole('button', { name: '删除' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.deleteSegmentAttachment).toHaveBeenCalledWith({
+      expect(reoWorkspace.deleteSegmentSupplement).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
         workspaceId: 'ws_1',
         memoryId: memory.memoryId,
         segmentId: segment.segmentId,
-        attachmentId: attachment.attachmentId,
+        supplementId: supplement.supplementId,
       })
     );
-    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: supplement.title })).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '转录' })).toHaveAttribute('aria-selected', 'true');
-    expect(queryClient.getQueryData(attachmentContentKey)).toBeUndefined();
+    expect(queryClient.getQueryData(supplementContentKey)).toBeUndefined();
     expect(
       queryClient.getQueryData<{
         readonly detail: typeof memory & { readonly segments: readonly [typeof segment] };
       }>(memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: memory.memoryId }))?.detail
-        .segments[0].attachments
+        .segments[0].supplements
     ).toEqual([]);
     const deletedToastTitle = await screen.findByText('已删除补充内容');
     expect(deletedToastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
-    expect(screen.getByText(attachment.title)).toBeInTheDocument();
+    expect(screen.getByText(supplement.title)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '恢复' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalledWith({
+      expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
         workspaceId: 'ws_1',
         memoryId: memory.memoryId,
         segmentId: segment.segmentId,
-        restoreToken: attachment.attachmentId,
+        restoreToken: supplement.supplementId,
       })
     );
-    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: supplement.title })).toBeInTheDocument();
     expect(
       queryClient.getQueryData<{
         readonly detail: typeof memory & { readonly segments: readonly [typeof segment] };
       }>(memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: memory.memoryId }))?.detail
-        .segments[0].attachments
-    ).toEqual([attachment]);
+        .segments[0].supplements
+    ).toEqual([supplement]);
   }, 20_000);
 
-  it('clears a pending SegmentAttachment delete target when leaving the workspace session', async () => {
+  it('clears a pending SegmentSupplement delete target when leaving the workspace session', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
-    mockSegmentAttachmentWorkspace(fixture);
+    const fixture = createSegmentSupplementFixture();
+    mockSegmentSupplementWorkspace(fixture);
 
     render(
       <ReoQueryProvider>
@@ -1349,8 +1349,8 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await openSegmentAttachmentDeleteDialog(user, fixture.attachment.title);
+    await createWorkspaceWithSegmentSupplement(user);
+    await openSegmentSupplementDeleteDialog(user, fixture.supplement.title);
 
     fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
 
@@ -1359,22 +1359,22 @@ describe('App', () => {
         workspaceHandle: 'workspace-handle-1',
       })
     );
-    await createWorkspaceWithSegmentAttachment(user);
+    await createWorkspaceWithSegmentSupplement(user);
     expect(screen.queryByRole('alertdialog', { name: '删除补充内容' })).not.toBeInTheDocument();
   }, 10_000);
 
-  it('keeps a SegmentAttachment hidden with restore action when delete reports stale projection after moving files', async () => {
+  it('keeps a SegmentSupplement hidden with restore action when delete reports stale projection after moving files', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
-    const { attachment, memory, segment } = fixture;
-    const attachmentContentKey = segmentAttachmentContentQueryKey({
+    const fixture = createSegmentSupplementFixture();
+    const { supplement, memory, segment } = fixture;
+    const supplementContentKey = segmentSupplementContentQueryKey({
       workspaceId: 'ws_1',
       memoryId: memory.memoryId,
       segmentId: segment.segmentId,
-      attachmentId: attachment.attachmentId,
+      supplementId: supplement.supplementId,
     });
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: false,
       error: {
         code: 'ERR_WORKSPACE_LOCK_LOST',
@@ -1382,12 +1382,12 @@ describe('App', () => {
         message: 'Workspace lock was lost',
       },
     });
-    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+    reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory,
         segment,
-        attachment,
+        supplement,
       },
     });
     const queryClient = createReoQueryClient();
@@ -1398,18 +1398,18 @@ describe('App', () => {
       </QueryClientProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    queryClient.setQueryData(attachmentContentKey, {
-      requestId: 'cached_attachment_content',
+    await createWorkspaceWithSegmentSupplement(user);
+    queryClient.setQueryData(supplementContentKey, {
+      requestId: 'cached_supplement_content',
       workspaceId: 'ws_1',
       memoryId: memory.memoryId,
       segmentId: segment.segmentId,
-      attachmentId: attachment.attachmentId,
+      supplementId: supplement.supplementId,
       audio: new Uint8Array([1, 2]),
       audioByteLength: 2,
       transcript: { exists: false, text: '' },
     });
-    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+    await openSegmentSupplementDeleteDialog(user, supplement.title);
 
     await user.click(
       within(screen.getByRole('alertdialog', { name: '删除补充内容' })).getByRole('button', {
@@ -1417,44 +1417,44 @@ describe('App', () => {
       })
     );
 
-    await waitFor(() => expect(reoWorkspace.deleteSegmentAttachment).toHaveBeenCalled());
-    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+    await waitFor(() => expect(reoWorkspace.deleteSegmentSupplement).toHaveBeenCalled());
+    expect(screen.queryByRole('tab', { name: supplement.title })).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '转录' })).toHaveAttribute('aria-selected', 'true');
-    expect(queryClient.getQueryData(attachmentContentKey)).toBeUndefined();
+    expect(queryClient.getQueryData(supplementContentKey)).toBeUndefined();
     expect((await screen.findAllByText('无法删除补充内容。')).length).toBeGreaterThan(0);
     expect(await screen.findByText('已删除补充内容')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '恢复' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalledWith({
+      expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
         workspaceId: 'ws_1',
         memoryId: memory.memoryId,
         segmentId: segment.segmentId,
-        restoreToken: attachment.attachmentId,
+        restoreToken: supplement.supplementId,
       })
     );
-    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: supplement.title })).toBeInTheDocument();
   }, 20_000);
 
-  it('restores a SegmentAttachment projection when restore reports stale projection after moving files', async () => {
+  it('restores a SegmentSupplement projection when restore reports stale projection after moving files', async () => {
     const user = userEvent.setup();
-    const fixture = createSegmentAttachmentFixture();
-    const { attachment, memory, segment } = fixture;
-    const memoryAfterDelete = { ...memory, attachmentCount: 0 };
-    const segmentAfterDelete = { ...segment, attachmentCount: 0, attachments: [] };
-    mockSegmentAttachmentWorkspace(fixture);
-    reoWorkspace.deleteSegmentAttachment.mockResolvedValue({
+    const fixture = createSegmentSupplementFixture();
+    const { supplement, memory, segment } = fixture;
+    const memoryAfterDelete = { ...memory, supplementCount: 0 };
+    const segmentAfterDelete = { ...segment, supplementCount: 0, supplements: [] };
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
         memory: memoryAfterDelete,
         segment: segmentAfterDelete,
-        attachmentId: attachment.attachmentId,
-        restoreToken: attachment.attachmentId,
+        supplementId: supplement.supplementId,
+        restoreToken: supplement.supplementId,
       },
     });
-    reoWorkspace.restoreDeletedSegmentAttachment.mockResolvedValue({
+    reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: false,
       error: {
         code: 'ERR_WORKSPACE_LOCK_LOST',
@@ -1469,20 +1469,20 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await createWorkspaceWithSegmentAttachment(user);
-    await openSegmentAttachmentDeleteDialog(user, attachment.title);
+    await createWorkspaceWithSegmentSupplement(user);
+    await openSegmentSupplementDeleteDialog(user, supplement.title);
     await user.click(
       within(screen.getByRole('alertdialog', { name: '删除补充内容' })).getByRole('button', {
         name: '删除',
       })
     );
     await screen.findByText('已删除补充内容');
-    expect(screen.queryByRole('tab', { name: attachment.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: supplement.title })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '恢复' }));
 
-    await waitFor(() => expect(reoWorkspace.restoreDeletedSegmentAttachment).toHaveBeenCalled());
-    expect(await screen.findByRole('tab', { name: attachment.title })).toBeInTheDocument();
+    await waitFor(() => expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalled());
+    expect(await screen.findByRole('tab', { name: supplement.title })).toBeInTheDocument();
     expect((await screen.findAllByText('无法恢复补充内容。')).length).toBeGreaterThan(0);
   }, 20_000);
 
@@ -1497,7 +1497,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const renamedMemory = {
       ...originalMemory,
@@ -1738,7 +1738,7 @@ describe('App', () => {
       durationMs: 1000,
       audioByteLength: 3,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const snapshot = {
       workspaceId: 'ws_1',
@@ -1811,7 +1811,7 @@ describe('App', () => {
       durationMs: 1000,
       audioByteLength: 3,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const refreshedMemory = {
       ...originalMemory,
@@ -1904,7 +1904,7 @@ describe('App', () => {
       durationMs: 1000,
       audioByteLength: 3,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const staleRefresh =
       createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readWorkspaceSnapshot']>>>();
@@ -2018,7 +2018,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const remainingMemory = {
       memoryId: 'mem_morning',
@@ -2029,7 +2029,7 @@ describe('App', () => {
       durationMs: 30_000,
       audioByteLength: 512,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -2135,7 +2135,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -2148,8 +2148,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -2162,8 +2162,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterDelete = {
       ...memory,
@@ -2351,7 +2351,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -2364,8 +2364,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -2378,8 +2378,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const externallyUpdatedFileTruthMemory = {
       ...memory,
@@ -2505,7 +2505,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const otherMemory = {
       memoryId: 'mem_other_invalidation',
@@ -2516,7 +2516,7 @@ describe('App', () => {
       durationMs: 50_000,
       audioByteLength: 512,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const otherMemoryAfterRefresh = {
       ...otherMemory,
@@ -2534,8 +2534,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -2548,8 +2548,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const otherSegment = {
       workspaceId: 'ws_1',
@@ -2562,8 +2562,8 @@ describe('App', () => {
       durationMs: 50_000,
       audioByteLength: 512,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -2683,7 +2683,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -2696,8 +2696,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -2710,8 +2710,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterDelete = {
       ...memory,
@@ -2843,7 +2843,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -2856,8 +2856,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -2870,8 +2870,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterDelete = {
       ...memory,
@@ -2938,11 +2938,11 @@ describe('App', () => {
       memoryId: memory.memoryId,
       segmentId: deletedSegment.segmentId,
     });
-    const deletedAttachmentContentKey = segmentAttachmentContentQueryKey({
+    const deletedSupplementContentKey = segmentSupplementContentQueryKey({
       workspaceId: 'ws_1',
       memoryId: memory.memoryId,
       segmentId: deletedSegment.segmentId,
-      attachmentId: 'att_birthday_followup_commit',
+      supplementId: 'sup_birthday_followup_commit',
     });
     queryClient.setQueryData(deletedSegmentContentKey, {
       audio: new Uint8Array([1]),
@@ -2953,12 +2953,12 @@ describe('App', () => {
       transcript: { exists: false, text: '' },
       workspaceId: 'ws_1',
     });
-    queryClient.setQueryData(deletedAttachmentContentKey, {
-      attachmentId: 'att_birthday_followup_commit',
+    queryClient.setQueryData(deletedSupplementContentKey, {
+      supplementId: 'sup_birthday_followup_commit',
       audio: new Uint8Array([2]),
       audioByteLength: 1,
       memoryId: memory.memoryId,
-      requestId: 'segment-attachment-content:stale',
+      requestId: 'segment-supplement-content:stale',
       segmentId: deletedSegment.segmentId,
       workspaceId: 'ws_1',
     });
@@ -3016,7 +3016,7 @@ describe('App', () => {
     expect(reoWorkspace.deleteSegment).toHaveBeenCalledTimes(1);
     expect(reoWorkspace.restoreDeletedSegment).not.toHaveBeenCalled();
     expect(queryClient.getQueryData(deletedSegmentContentKey)).toBeUndefined();
-    expect(queryClient.getQueryData(deletedAttachmentContentKey)).toBeUndefined();
+    expect(queryClient.getQueryData(deletedSupplementContentKey)).toBeUndefined();
   }, 20_000);
 
   it('does not undo a Segment delete after the grace period has started committing', async () => {
@@ -3030,7 +3030,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3043,8 +3043,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const deleteDeferred =
       createDeferred<Awaited<ReturnType<Window['reoWorkspace']['deleteSegment']>>>();
@@ -3157,7 +3157,7 @@ describe('App', () => {
       durationMs: 6000,
       audioByteLength: 600,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const firstSegment = {
       workspaceId: 'ws_1',
@@ -3170,8 +3170,8 @@ describe('App', () => {
       durationMs: 1000,
       audioByteLength: 100,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const secondSegment = {
       workspaceId: 'ws_1',
@@ -3184,8 +3184,8 @@ describe('App', () => {
       durationMs: 2000,
       audioByteLength: 200,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -3198,8 +3198,8 @@ describe('App', () => {
       durationMs: 3000,
       audioByteLength: 300,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterFirstDelete = {
       ...memory,
@@ -3353,7 +3353,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3366,8 +3366,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -3380,8 +3380,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterFileTruthDelete = {
       ...memory,
@@ -3507,7 +3507,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3520,8 +3520,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -3630,7 +3630,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3643,8 +3643,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -3744,7 +3744,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3757,8 +3757,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -3858,7 +3858,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -3871,8 +3871,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const remainingSegment = {
       workspaceId: 'ws_1',
@@ -3885,8 +3885,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const memoryAfterOldDelete = {
       ...memory,
@@ -4031,7 +4031,7 @@ describe('App', () => {
       durationMs: 190_000,
       audioByteLength: 3072,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const deletedSegment = {
       workspaceId: 'ws_1',
@@ -4044,8 +4044,8 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const staleRemainingSegment = {
       workspaceId: 'ws_1',
@@ -4058,8 +4058,8 @@ describe('App', () => {
       durationMs: 65_000,
       audioByteLength: 1024,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const freshRemainingSegment = {
       ...staleRemainingSegment,
@@ -4263,7 +4263,7 @@ describe('App', () => {
       durationMs: 125_000,
       audioByteLength: 2048,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const segment = audioSegmentProjection({
       audioByteLength: 2048,
@@ -4371,7 +4371,7 @@ describe('App', () => {
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -4461,7 +4461,7 @@ describe('App', () => {
               durationMs: 1,
               audioByteLength: 1,
               hasTranscript: false,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -4490,7 +4490,7 @@ describe('App', () => {
           audioByteLength: 1,
           createdAt: '2026-05-07T14:30:00.000Z',
           durationMs: 1,
-          attachmentCount: 0,
+          supplementCount: 0,
           hasTranscript: false,
           memoryId: 'mem_existing',
           segmentCount: 2,
@@ -4552,7 +4552,7 @@ describe('App', () => {
       durationMs: 0,
       audioByteLength: 0,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -4669,7 +4669,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -4789,7 +4789,7 @@ describe('App', () => {
     expect(screen.queryByText('2 个片段 · 00:03')).not.toBeInTheDocument();
   });
 
-  it('recovers an unfinished SegmentAttachment recording through attachment IPC', async () => {
+  it('recovers an unfinished SegmentSupplement recording through supplement IPC', async () => {
     const user = userEvent.setup();
     const recoveredMemory = {
       memoryId: 'mem_existing',
@@ -4800,7 +4800,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -4809,8 +4809,8 @@ describe('App', () => {
         workspaceId: 'ws_1',
         memoryId: 'mem_existing',
         parentSegmentId: 'seg_parent',
-        segmentId: 'att_recoverable',
-        targetKind: 'segment-attachment',
+        segmentId: 'sup_recoverable',
+        targetKind: 'segment-supplement',
         title: '补充录音',
         durationMs: 3720,
         transcriptMarkdown: '恢复补充录音转写',
@@ -4839,12 +4839,12 @@ describe('App', () => {
         },
       },
     });
-    reoWorkspace.finalizeSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
       value: {
         memory: {
           ...recoveredMemory,
-          attachmentCount: 1,
+          supplementCount: 1,
           updatedAt: '2026-05-09T10:00:04.000Z',
         },
         segment: {
@@ -4858,13 +4858,13 @@ describe('App', () => {
           durationMs: 1,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 1,
+          supplementCount: 1,
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_existing',
           segmentId: 'seg_parent',
-          attachmentId: 'att_recoverable',
+          supplementId: 'sup_recoverable',
           type: 'audio',
           title: '补充录音',
           createdAt: '2026-05-09T10:00:00.000Z',
@@ -4875,12 +4875,12 @@ describe('App', () => {
         },
       },
     });
-    reoWorkspace.saveSegmentAttachmentTranscript.mockResolvedValue({
+    reoWorkspace.saveSegmentSupplementTranscript.mockResolvedValue({
       ok: true,
       value: {
         memory: {
           ...recoveredMemory,
-          attachmentCount: 1,
+          supplementCount: 1,
           updatedAt: '2026-05-09T10:00:04.000Z',
         },
         segment: {
@@ -4894,13 +4894,13 @@ describe('App', () => {
           durationMs: 1,
           audioByteLength: 1,
           transcript: { exists: false },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_existing',
               segmentId: 'seg_parent',
-              attachmentId: 'att_recoverable',
+              supplementId: 'sup_recoverable',
               type: 'audio',
               title: '补充录音',
               createdAt: '2026-05-09T10:00:00.000Z',
@@ -4911,11 +4911,11 @@ describe('App', () => {
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_existing',
           segmentId: 'seg_parent',
-          attachmentId: 'att_recoverable',
+          supplementId: 'sup_recoverable',
           type: 'audio',
           title: '补充录音',
           createdAt: '2026-05-09T10:00:00.000Z',
@@ -4945,24 +4945,24 @@ describe('App', () => {
     await user.click(within(recoveryDialog).getByRole('button', { name: '保存录音' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.finalizeSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+      expect(reoWorkspace.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
         workspaceId: 'ws_1',
         memoryId: 'mem_existing',
         segmentId: 'seg_parent',
-        attachmentId: 'att_recoverable',
+        supplementId: 'sup_recoverable',
         title: '补充录音',
         durationMs: 3720,
       })
     );
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.saveTranscript).not.toHaveBeenCalled();
-    expect(reoWorkspace.saveSegmentAttachmentTranscript).toHaveBeenCalledWith({
+    expect(reoWorkspace.saveSegmentSupplementTranscript).toHaveBeenCalledWith({
       workspaceHandle: 'workspace-handle-1',
       workspaceId: 'ws_1',
       memoryId: 'mem_existing',
       segmentId: 'seg_parent',
-      attachmentId: 'att_recoverable',
+      supplementId: 'sup_recoverable',
       markdown: '恢复补充录音转写',
     });
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
@@ -4970,7 +4970,7 @@ describe('App', () => {
     expect(screen.queryByText('1 个片段 · 00:00')).not.toBeInTheDocument();
   });
 
-  it('discards an unfinished SegmentAttachment recovery through attachment IPC', async () => {
+  it('discards an unfinished SegmentSupplement recovery through supplement IPC', async () => {
     const user = userEvent.setup();
     const recoveredMemory = {
       memoryId: 'mem_existing',
@@ -4981,7 +4981,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -4990,8 +4990,8 @@ describe('App', () => {
         workspaceId: 'ws_1',
         memoryId: 'mem_existing',
         parentSegmentId: 'seg_parent',
-        segmentId: 'att_recoverable',
-        targetKind: 'segment-attachment',
+        segmentId: 'sup_recoverable',
+        targetKind: 'segment-supplement',
         title: '补充录音',
         durationMs: 3720,
         createdAt: '2026-05-09T10:00:00.000Z',
@@ -5036,9 +5036,9 @@ describe('App', () => {
     await user.click(within(recoveryDialog).getByRole('button', { name: '放弃' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.discardSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+      expect(reoWorkspace.discardSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
-        attachmentId: 'att_recoverable',
+        supplementId: 'sup_recoverable',
       })
     );
     expect(reoWorkspace.discardRecordingDraft).not.toHaveBeenCalled();
@@ -5056,7 +5056,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -5191,7 +5191,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -5276,7 +5276,7 @@ describe('App', () => {
       durationMs: 1,
       audioByteLength: 1,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     window.localStorage.setItem(
       'reo.recordingRecovery.v1.ws_1',
@@ -5936,7 +5936,7 @@ describe('App', () => {
               durationMs: 1,
               audioByteLength: 1,
               hasTranscript: false,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6011,7 +6011,7 @@ describe('App', () => {
               durationMs: 1,
               audioByteLength: 1,
               hasTranscript: false,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6320,7 +6320,7 @@ describe('App', () => {
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6479,7 +6479,7 @@ describe('App', () => {
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6536,7 +6536,7 @@ describe('App', () => {
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6566,7 +6566,7 @@ describe('App', () => {
           durationMs: 136_200,
           audioByteLength: 4097,
           hasTranscript: true,
-          attachmentCount: 0,
+          supplementCount: 0,
         },
         segment: audioSegmentProjection({
           audioByteLength: 1,
@@ -6625,7 +6625,7 @@ describe('App', () => {
       durationMs: 135_000,
       audioByteLength: 4096,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const existingSegment = {
       workspaceId: 'ws_1',
@@ -6638,8 +6638,8 @@ describe('App', () => {
       durationMs: 135_000,
       audioByteLength: 4096,
       transcript: { exists: true },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
     const finalizedSegment = {
       workspaceId: 'ws_1',
@@ -6652,8 +6652,8 @@ describe('App', () => {
       durationMs: 1200,
       audioByteLength: 1,
       transcript: { exists: false },
-      attachmentCount: 0,
-      attachments: [],
+      supplementCount: 0,
+      supplements: [],
     };
 
     reoWorkspace.chooseDirectory.mockResolvedValue({
@@ -6756,7 +6756,7 @@ describe('App', () => {
     expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1);
   }, 10_000);
 
-  it('finalizes a SegmentAttachment recording from the selected Segment plus menu', async () => {
+  it('finalizes a SegmentSupplement recording from the selected Segment plus menu', async () => {
     const user = userEvent.setup();
     installRecordingBrowserMocks();
     const birthdayMemory = {
@@ -6768,7 +6768,7 @@ describe('App', () => {
       durationMs: 135_000,
       audioByteLength: 4096,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const parentSegment = {
       workspaceId: 'ws_1',
@@ -6781,7 +6781,7 @@ describe('App', () => {
       durationMs: 135_000,
       audioByteLength: 4096,
       transcript: { exists: true },
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -6819,32 +6819,32 @@ describe('App', () => {
       ok: true,
       value: { registered: true },
     });
-    reoWorkspace.createSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.createSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
-      value: { attachmentId: 'att_birthday_followup', nextSequence: 0 },
+      value: { supplementId: 'sup_birthday_followup', nextSequence: 0 },
     });
-    reoWorkspace.appendSegmentAttachmentRecordingAudioChunk.mockResolvedValue({
+    reoWorkspace.appendSegmentSupplementRecordingAudioChunk.mockResolvedValue({
       ok: true,
       value: { nextSequence: 1 },
     });
-    reoWorkspace.finalizeSegmentAttachmentRecordingDraft.mockResolvedValue({
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
       ok: true,
       value: {
         memory: {
           ...birthdayMemory,
           updatedAt: '2026-04-12T09:15:00.000Z',
-          attachmentCount: 1,
+          supplementCount: 1,
         },
         segment: {
           ...parentSegment,
           updatedAt: '2026-04-12T09:15:00.000Z',
-          attachmentCount: 1,
+          supplementCount: 1,
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_birthday',
           segmentId: 'seg_birthday_voice',
-          attachmentId: 'att_birthday_followup',
+          supplementId: 'sup_birthday_followup',
           type: 'audio',
           title: '补充录音',
           createdAt: '2026-04-12T09:15:00.000Z',
@@ -6879,13 +6879,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '停止录音' }));
 
     await waitFor(() =>
-      expect(reoWorkspace.finalizeSegmentAttachmentRecordingDraft).toHaveBeenCalledWith(
+      expect(reoWorkspace.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith(
         expect.objectContaining({
           workspaceHandle: 'workspace-handle-1',
           workspaceId: 'ws_1',
           memoryId: 'mem_birthday',
           segmentId: 'seg_birthday_voice',
-          attachmentId: 'att_birthday_followup',
+          supplementId: 'sup_birthday_followup',
         })
       )
     );
@@ -6923,7 +6923,7 @@ describe('App', () => {
               durationMs: 135_000,
               audioByteLength: 4096,
               hasTranscript: true,
-              attachmentCount: 0,
+              supplementCount: 0,
             },
           ],
         },
@@ -6959,7 +6959,7 @@ describe('App', () => {
       durationMs: 135_000,
       audioByteLength: 4096,
       hasTranscript: true,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     const morningMemory = {
       memoryId: 'mem_morning',
@@ -6970,7 +6970,7 @@ describe('App', () => {
       durationMs: 12_000,
       audioByteLength: 1024,
       hasTranscript: false,
-      attachmentCount: 0,
+      supplementCount: 0,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -7080,7 +7080,7 @@ describe('App', () => {
         audioByteLength: 3,
         createdAt: '2026-05-06T13:08:00.000Z',
         durationMs: 2000,
-        attachmentCount: 0,
+        supplementCount: 0,
         hasTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
@@ -7097,7 +7097,7 @@ describe('App', () => {
       audioByteLength: 3,
       createdAt: '2026-05-06T13:08:00.000Z',
       durationMs: 2000,
-      attachmentCount: 0,
+      supplementCount: 0,
       hasTranscript: false,
       memoryId: 'mem_older',
       segmentCount: 1,

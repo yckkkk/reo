@@ -37,7 +37,7 @@ const savedMemorySummary = {
   audioByteLength: 3,
   createdAt: '2026-05-06T13:08:00.000Z',
   durationMs: 0,
-  attachmentCount: 0,
+  supplementCount: 0,
   hasTranscript: true,
   memoryId: 'mem_1',
   segmentCount: 1,
@@ -102,8 +102,8 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
-    deleteSegmentAttachment: vi.fn(),
-    restoreDeletedSegmentAttachment: vi.fn(),
+    deleteSegmentSupplement: vi.fn(),
+    restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_MEMORY_NOT_FOUND' as const, message: 'Memory not found' },
@@ -112,7 +112,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
     })),
-    readFinalizedAudioSegmentAttachment: vi.fn(async () => ({
+    readFinalizedAudioSegmentSupplement: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
     })),
@@ -120,9 +120,9 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { nextSequence: 0, segmentId: 'seg_1' },
     })),
-    createSegmentAttachmentRecordingDraft: vi.fn(async () => ({
+    createSegmentSupplementRecordingDraft: vi.fn(async () => ({
       ok: true as const,
-      value: { attachmentId: 'att_1', nextSequence: 0 },
+      value: { supplementId: 'sup_1', nextSequence: 0 },
     })),
     readRecordingDraftAudio: vi.fn(async () => ({
       ok: false as const,
@@ -132,7 +132,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { nextSequence: 1 },
     })),
-    appendSegmentAttachmentRecordingAudioChunk: vi.fn(async () => ({
+    appendSegmentSupplementRecordingAudioChunk: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 1 },
     })),
@@ -147,7 +147,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           audioByteLength: 3,
           createdAt: '2026-05-06T13:08:00.000Z',
           durationMs: 0,
-          attachmentCount: 0,
+          supplementCount: 0,
           hasTranscript: false,
           memoryId: 'mem_1',
           segmentCount: 1,
@@ -165,15 +165,15 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           audioByteLength: 3,
           durationMs: 0,
           transcript: { exists: false },
-          attachmentCount: 0,
-          attachments: [],
+          supplementCount: 0,
+          supplements: [],
         },
       },
     })),
-    finalizeSegmentAttachmentRecordingDraft: vi.fn(async () => ({
+    finalizeSegmentSupplementRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: {
-        memory: { ...savedMemorySummary, attachmentCount: 1 },
+        memory: { ...savedMemorySummary, supplementCount: 1 },
         segment: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
@@ -185,13 +185,13 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           durationMs: 0,
           audioByteLength: 3,
           transcript: { exists: true },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
-              attachmentId: 'att_1',
+              supplementId: 'sup_1',
               type: 'audio' as const,
               title: '补充录音1',
               createdAt: '2026-05-06T13:09:00.000Z',
@@ -202,11 +202,11 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
-          attachmentId: 'att_1',
+          supplementId: 'sup_1',
           type: 'audio' as const,
           title: '补充录音1',
           createdAt: '2026-05-06T13:09:00.000Z',
@@ -221,22 +221,22 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { discarded: true as const },
     })),
-    discardSegmentAttachmentRecordingDraft: vi.fn(async () => ({
+    discardSegmentSupplementRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { discarded: true as const },
     })),
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
-    updateSegmentAttachmentTitle: vi.fn(),
+    updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,
       value: { memory: savedMemorySummary, saved: true as const },
     })),
-    saveSegmentAttachmentTranscript: vi.fn(async () => ({
+    saveSegmentSupplementTranscript: vi.fn(async () => ({
       ok: true as const,
       value: {
-        memory: { ...savedMemorySummary, attachmentCount: 1 },
+        memory: { ...savedMemorySummary, supplementCount: 1 },
         segment: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
@@ -248,13 +248,13 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           durationMs: 0,
           audioByteLength: 3,
           transcript: { exists: true },
-          attachmentCount: 1,
-          attachments: [
+          supplementCount: 1,
+          supplements: [
             {
               workspaceId: 'ws_1',
               memoryId: 'mem_1',
               segmentId: 'seg_1',
-              attachmentId: 'att_1',
+              supplementId: 'sup_1',
               type: 'audio' as const,
               title: '补充录音1',
               createdAt: '2026-05-06T13:09:00.000Z',
@@ -265,11 +265,11 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
             },
           ],
         },
-        attachment: {
+        supplement: {
           workspaceId: 'ws_1',
           memoryId: 'mem_1',
           segmentId: 'seg_1',
-          attachmentId: 'att_1',
+          supplementId: 'sup_1',
           type: 'audio' as const,
           title: '补充录音1',
           createdAt: '2026-05-06T13:09:00.000Z',
@@ -507,7 +507,7 @@ describe('RecordingOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('saves segment attachment recording through attachment draft IPC without creating a sibling segment', async () => {
+  it('saves segment supplement recording through supplement draft IPC without creating a sibling segment', async () => {
     let transcriptionListener: Parameters<
       Window['reoWorkspace']['onRecordingTranscriptionEvent']
     >[0] = () => {};
@@ -519,17 +519,17 @@ describe('RecordingOverlay', () => {
     });
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
-    const onSegmentAttachmentFinalized = vi.fn();
+    const onSegmentSupplementFinalized = vi.fn();
 
     render(
       <RecordingOverlayForTest
         mediaAdapter={media.adapter}
         onOpenChange={onOpenChange}
         onAudioSegmentFinalized={() => {}}
-        onSegmentAttachmentFinalized={onSegmentAttachmentFinalized}
+        onSegmentSupplementFinalized={onSegmentSupplementFinalized}
         open
         recordingTarget={{
-          kind: 'segment-attachment',
+          kind: 'segment-supplement',
           memoryId: 'mem_1',
           segmentId: 'seg_parent',
           title: '补充录音1',
@@ -566,8 +566,8 @@ describe('RecordingOverlay', () => {
     ).toMatchObject({
       memoryId: 'mem_1',
       parentSegmentId: 'seg_parent',
-      segmentId: 'att_1',
-      targetKind: 'segment-attachment',
+      segmentId: 'sup_1',
+      targetKind: 'segment-supplement',
       title: '补充录音1',
       workspaceId: 'ws_1',
     });
@@ -579,41 +579,41 @@ describe('RecordingOverlay', () => {
     expect(bridge.createRecordingDraft).not.toHaveBeenCalled();
     expect(bridge.appendRecordingAudioChunk).not.toHaveBeenCalled();
     expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
-    expect(bridge.createSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+    expect(bridge.createSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: workspaceSession.workspaceHandle,
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_parent',
     });
-    expect(bridge.appendSegmentAttachmentRecordingAudioChunk).toHaveBeenCalledWith({
+    expect(bridge.appendSegmentSupplementRecordingAudioChunk).toHaveBeenCalledWith({
       workspaceHandle: workspaceSession.workspaceHandle,
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       sequence: 0,
       chunk: new Uint8Array([1, 2, 3]),
     });
-    expect(bridge.finalizeSegmentAttachmentRecordingDraft).toHaveBeenCalledWith({
+    expect(bridge.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: workspaceSession.workspaceHandle,
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_parent',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       title: '补充录音1',
       durationMs: expect.any(Number),
     });
-    expect(bridge.saveSegmentAttachmentTranscript).toHaveBeenCalledWith({
+    expect(bridge.saveSegmentSupplementTranscript).toHaveBeenCalledWith({
       workspaceHandle: workspaceSession.workspaceHandle,
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_parent',
-      attachmentId: 'att_1',
+      supplementId: 'sup_1',
       markdown: '现场补充转写',
     });
-    expect(onSegmentAttachmentFinalized).toHaveBeenCalledTimes(2);
+    expect(onSegmentSupplementFinalized).toHaveBeenCalledTimes(2);
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('does not expose mid-track replacement for segment attachment recording', async () => {
+  it('does not expose mid-track replacement for segment supplement recording', async () => {
     const bridge = installWorkspaceBridge();
     const media = createMediaAdapter();
 
@@ -622,10 +622,10 @@ describe('RecordingOverlay', () => {
         mediaAdapter={media.adapter}
         onOpenChange={() => {}}
         onAudioSegmentFinalized={() => {}}
-        onSegmentAttachmentFinalized={() => {}}
+        onSegmentSupplementFinalized={() => {}}
         open
         recordingTarget={{
-          kind: 'segment-attachment',
+          kind: 'segment-supplement',
           memoryId: 'mem_1',
           segmentId: 'seg_parent',
           title: '补充录音1',
@@ -1525,7 +1525,7 @@ describe('RecordingOverlay', () => {
               audioByteLength: 3,
               createdAt: '2026-05-06T13:08:00.000Z',
               durationMs: 2000,
-              attachmentCount: 0,
+              supplementCount: 0,
               hasTranscript: false,
               memoryId: 'mem_1',
               segmentCount: 1,
@@ -1543,8 +1543,8 @@ describe('RecordingOverlay', () => {
               audioByteLength: 3,
               durationMs: 2000,
               transcript: { exists: false },
-              attachmentCount: 0,
-              attachments: [],
+              supplementCount: 0,
+              supplements: [],
             },
           },
         };

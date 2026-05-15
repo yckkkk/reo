@@ -17,26 +17,26 @@ const workspaceBridgeKeys = [
   'restoreDeletedMemory',
   'deleteSegment',
   'restoreDeletedSegment',
-  'deleteSegmentAttachment',
-  'restoreDeletedSegmentAttachment',
+  'deleteSegmentSupplement',
+  'restoreDeletedSegmentSupplement',
   'readMemoryDetail',
   'readFinalizedAudioSegment',
-  'readFinalizedAudioSegmentAttachment',
+  'readFinalizedAudioSegmentSupplement',
   'createRecordingDraft',
-  'createSegmentAttachmentRecordingDraft',
+  'createSegmentSupplementRecordingDraft',
   'readRecordingDraftAudio',
   'appendRecordingAudioChunk',
-  'appendSegmentAttachmentRecordingAudioChunk',
+  'appendSegmentSupplementRecordingAudioChunk',
   'cloneRecordingDraftPrefix',
   'finalizeRecordingDraft',
-  'finalizeSegmentAttachmentRecordingDraft',
+  'finalizeSegmentSupplementRecordingDraft',
   'discardRecordingDraft',
-  'discardSegmentAttachmentRecordingDraft',
+  'discardSegmentSupplementRecordingDraft',
   'updateMemoryTitle',
   'updateSegmentTitle',
-  'updateSegmentAttachmentTitle',
+  'updateSegmentSupplementTitle',
   'saveTranscript',
-  'saveSegmentAttachmentTranscript',
+  'saveSegmentSupplementTranscript',
   'beginMicrophoneIntent',
   'clearMicrophoneIntent',
   'startRecordingTranscription',
@@ -83,19 +83,19 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     restoreToken: 'seg_1',
   });
-  await bridge.deleteSegmentAttachment({
+  await bridge.deleteSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
   });
-  await bridge.restoreDeletedSegmentAttachment({
+  await bridge.restoreDeletedSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    restoreToken: 'att_1',
+    restoreToken: 'sup_1',
   });
   await bridge.readMemoryDetail({
     workspaceHandle: 'wh_1',
@@ -110,24 +110,24 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     segmentId: 'seg_1',
     requestId: 'request_seg_1',
   });
-  await bridge.readFinalizedAudioSegmentAttachment({
+  await bridge.readFinalizedAudioSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
-    requestId: 'request_att_1',
+    supplementId: 'sup_1',
+    requestId: 'request_sup_1',
   });
-  await bridge.createSegmentAttachmentRecordingDraft({
+  await bridge.createSegmentSupplementRecordingDraft({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
   });
   await bridge.readRecordingDraftAudio({ workspaceHandle: 'wh_1', segmentId: 'seg_1' });
-  await bridge.appendSegmentAttachmentRecordingAudioChunk({
+  await bridge.appendSegmentSupplementRecordingAudioChunk({
     workspaceHandle: 'wh_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
     sequence: 0,
     chunk: new Uint8Array([1]),
   });
@@ -138,25 +138,25 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     retainedByteLength: 12,
     nextSequence: 0,
   });
-  await bridge.finalizeSegmentAttachmentRecordingDraft({
+  await bridge.finalizeSegmentSupplementRecordingDraft({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
     title: '补充录音',
     durationMs: 1200,
   });
-  await bridge.discardSegmentAttachmentRecordingDraft({
+  await bridge.discardSegmentSupplementRecordingDraft({
     workspaceHandle: 'wh_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
   });
-  await bridge.saveSegmentAttachmentTranscript({
+  await bridge.saveSegmentSupplementTranscript({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
     markdown: '补充录音转写',
   });
   assert.deepEqual(calls, [
@@ -171,18 +171,18 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:restoreDeletedMemory',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
-    'workspace:deleteSegmentAttachment',
-    'workspace:restoreDeletedSegmentAttachment',
+    'workspace:deleteSegmentSupplement',
+    'workspace:restoreDeletedSegmentSupplement',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
-    'workspace:readFinalizedAudioSegmentAttachment',
-    'workspace:createSegmentAttachmentRecordingDraft',
+    'workspace:readFinalizedAudioSegmentSupplement',
+    'workspace:createSegmentSupplementRecordingDraft',
     'workspace:readRecordingDraftAudio',
-    'workspace:appendSegmentAttachmentRecordingAudioChunk',
+    'workspace:appendSegmentSupplementRecordingAudioChunk',
     'workspace:cloneRecordingDraftPrefix',
-    'workspace:finalizeSegmentAttachmentRecordingDraft',
-    'workspace:discardSegmentAttachmentRecordingDraft',
-    'workspace:saveSegmentAttachmentTranscript',
+    'workspace:finalizeSegmentSupplementRecordingDraft',
+    'workspace:discardSegmentSupplementRecordingDraft',
+    'workspace:saveSegmentSupplementTranscript',
   ]);
 });
 
@@ -209,27 +209,27 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     segmentId: 'seg_1',
     title: '录音1',
   });
-  await bridge.updateSegmentAttachmentTitle({
+  await bridge.updateSegmentSupplementTitle({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
     title: '现场补充',
   });
-  await bridge.deleteSegmentAttachment({
+  await bridge.deleteSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    attachmentId: 'att_1',
+    supplementId: 'sup_1',
   });
-  await bridge.restoreDeletedSegmentAttachment({
+  await bridge.restoreDeletedSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
-    restoreToken: 'att_1',
+    restoreToken: 'sup_1',
   });
   await bridge.beginMicrophoneIntent({
     workspaceHandle: 'wh_1',
@@ -264,34 +264,34 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
       },
     },
     {
-      channel: 'workspace:updateSegmentAttachmentTitle',
+      channel: 'workspace:updateSegmentSupplementTitle',
       payload: {
         workspaceHandle: 'wh_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
         title: '现场补充',
       },
     },
     {
-      channel: 'workspace:deleteSegmentAttachment',
+      channel: 'workspace:deleteSegmentSupplement',
       payload: {
         workspaceHandle: 'wh_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        attachmentId: 'att_1',
+        supplementId: 'sup_1',
       },
     },
     {
-      channel: 'workspace:restoreDeletedSegmentAttachment',
+      channel: 'workspace:restoreDeletedSegmentSupplement',
       payload: {
         workspaceHandle: 'wh_1',
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        restoreToken: 'att_1',
+        restoreToken: 'sup_1',
       },
     },
     {
