@@ -72,15 +72,15 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 
 - 用户和 agent 可编辑的语义真源是 `memory.md`、`segment.md` 和 `supplement.md` 的 Markdown 正文与 YAML frontmatter。
 - `.reo/workspace.json`、`.reo/index.json`、`.reo/objects/*/*.json`、draft、trash、lock、recovery marker 和技术 manifest 由 Reo 管理；agent 不得把 `.reo` 当作用户语义第二真源。
-- Memory、Segment 和 Supplement 的稳定 id、归属、音频字节数、时长、事务和恢复字段属于 `.reo/objects/*/*.json`；语义标题、摘要、标签、人物、地点、主题和正文属于 Markdown/frontmatter。
+- Memory、Segment 和 SegmentSupplement 的稳定 id、归属、音频字节数、时长、事务和恢复字段属于 `.reo/objects/*/*.json`；语义标题、摘要、标签、人物、地点、主题和正文属于 Markdown/frontmatter。
 - 用户目录中的普通 `.json`、`.md`、`.html` 或其它文件可以存在，但不自动成为 Reo 对象；只有当前文件合同识别的 `memory.md`、`segment.md` 和 `supplement.md` 进入对象图。
 - HTML 和其它可执行或可嵌入内容默认是不可信资源；没有隔离预览能力前，renderer 不执行、不注入、不渲染用户 HTML。
-- 为某个片段补充新内容时，优先使用该 Segment 下的一层 Supplement；不创建 supplement 下的 supplement，也不提前创建 ContentNode、Block runtime、插件 runtime 或任意文件 registry。
+- 为某个片段补充新内容时，优先使用该 Segment 下的一层 SegmentSupplement；不创建 supplement 下的 supplement，也不提前创建 ContentNode、Block runtime、插件 runtime 或任意文件 registry。
 
 ## 代码组织与命名
 
 - 文件夹和文件名必须表达当前产品实体、能力边界或真实复用层级。
-- Workspace、Memory、Asset 等核心实体命名必须与当前信息架构一致；不得用会暗示错误层级的名称承载新实现。
+- Workspace、Memory、Segment、SegmentSupplement 等核心实体命名必须与当前信息架构一致；不得用会暗示错误层级的名称承载新实现。
 - Feature-local 组件默认放在对应业务目录内；只有存在跨 feature 复用和稳定视觉或交互不变量时，才提升到 `components/ui` 或共享模块。
 - `components/ui` 只放可复用 primitive 或稳定交互 pattern；文件名使用 kebab-case，导出名使用 PascalCase，测试与源码同目录。
 - Feature-local React 组件文件使用 PascalCase；feature helper、query、machine、adapter 使用能表达能力边界的 camelCase 文件名，并与对应测试同目录。
@@ -156,7 +156,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - 长期任务的完成条件或范围不再匹配当前任务时，创建新的 initiative。
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 - 工作收口时，仍然有效的长期结论必须压缩回 `docs/current/*` 或 `docs/decisions/*`。
-- `docs/current/*` 只写当前行为、边界、接口、设计约束和稳定事实；任务证据、执行清单和临时 TODO 留在 spec 或 archive。
+- `docs/current/*` 只写当前行为、边界、接口、设计约束和稳定事实；任务证据、执行清单和当前未完成项留在 spec，已收口证据留在 archive。
 - 默认文档与代码注释只写当前事实、当前规则和当前决策。
 - 不写“旧、继承、废弃、过去来源、为什么从过去变成现在”这类解释。
 - 无当前用途的内容直接删除，不写废弃标记。

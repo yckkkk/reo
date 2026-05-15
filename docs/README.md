@@ -99,4 +99,4 @@ docs/archive/specs/YYYY-MM-DD-HHMM-slug/
 6. 已完成、取消或失效的 initiative 移入 `archive/initiatives/*`。
 7. 除非用户明确要求，不创建额外顶层 docs 目录。
 
-写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单、临时 TODO、历史日志和迁移解释留在 spec 或 archive。
+写入 `current/*` 时只保留当前行为、边界、接口、设计约束和稳定事实。任务证据、执行清单和当前未完成项留在 spec；历史日志和迁移解释只留在 archive。

@@ -6,9 +6,9 @@ Reo 的求职主线是 AI 产品经理，增长产品经理作为副线证明，
 
 Reo 不是为了面试而做完整商业化 SaaS。Reo 要证明候选人能把 AI 能力变成可用、可评估、可增长、可商业化的产品。
 
-Reo 的产品差异化是把记录变成 agent 可使用的创作上下文。记忆空间不是静态资料夹，而是可以被 Codex-style agent 使用的 workspace；Reo 通过初始化 `AGENTS.md`、skills、plugins 和任务模板，让普通用户也能用自己的记录生成可追溯的 PRD、增长实验、报告和设计系统约束 HTML artifact。
+Reo 的产品差异化是把记录变成 agent 可使用的创作上下文。记忆空间不是静态资料夹，而是可以被 Codex-style agent 使用的 workspace；Reo 通过初始化 `AGENTS.md`、skills、plugins 和任务模板，让普通用户也能用自己的记录生成可追溯的 PRD、增长实验、报告和设计系统约束 HTML artifact 文件；隔离预览能力完成前，Reo trusted renderer 不执行、不注入、不渲染用户 HTML。
 
-AI 产品经理的证明方式不再只是写 PRD。Reo 要展示 AI-native PM 工作方式：短周期 demo、eval-first、内测反馈、模型能力复盘、简单实现和快速 shipping。
+AI 产品经理的证明方式不再只是写 PRD。Reo 要展示 AI-native PM 工作方式：短周期 demo、eval-first、内测反馈、模型能力检查、简单实现和快速 shipping。
 
 第一阶段只服务一个主 ICP：需要整理用户访谈、会议复盘或研究材料的早期产品经理。创业者、研究型 PM、独立产品人和转行 AI PM 可以作为扩展画像，不进入第一版主叙事。
 
@@ -120,7 +120,7 @@ Reo 必须能回答这些面试问题：
 
 输出：
 
-- 背景、用户、问题、竞品、取舍、MVP、指标、风险、路线图。
+- 背景、用户、问题、竞品、取舍、核心切片、指标、风险、路线图。
 - 两张关键图：用户旅程图、指标树。
 - 一页商业化延展：会员、成本治理、登录、支付、SEO 和遥测为什么后置。
 - 一页工程协作延展：本地优先、服务端密钥边界、AI provider 调用、发布风险和验收标准。

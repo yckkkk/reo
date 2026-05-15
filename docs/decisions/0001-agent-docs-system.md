@@ -5,7 +5,7 @@
 
 ## 决策
 
-Reo 使用 `AGENTS.md` 与 `.claude/CLAUDE.md` 作为镜像 agent 入口文件，基于 Karpathy-style coding-agent 原则，并加入 Reo 专属硬门禁。
+Reo 使用 `AGENTS.md` 与 `.claude/CLAUDE.md` 作为镜像 agent 入口文件，并加入 Reo 专属硬门禁。
 
 Reo docs 使用五层结构：
 
@@ -34,7 +34,7 @@ docs/specs/
 - 已完成 specs 移入 `docs/archive/specs/*`，但不是默认阅读内容。
 - 已完成、取消或失效的 initiatives 移入 `docs/archive/initiatives/*`。
 - 归档子目录在首次写入时创建，不保留空占位目录。
-- 默认最多 1 个 active initiative。
+- 默认最多 1 个产品或代码开发 active initiative；商业化基础设施 initiative 是横切长期轨道，可以与 1 个产品或代码开发 active initiative 并行。
 - 创建新 spec 前，必须确认 `docs/specs/*` 为空或只包含当前任务。
 - 读取归档时先搜索，再只打开相关文件。
 - 长期结论必须压缩进 `docs/current/*` 或 `docs/decisions/*`。
