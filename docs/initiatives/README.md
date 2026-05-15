@@ -8,7 +8,9 @@
 
 - `2026-05-14-commercial-infrastructure-foundation`
 
-当前产品或代码开发 active initiative：无。
+当前产品或代码开发 active initiative：
+
+- `2026-05-14-segment-attachment-transcript-panel`
 
 ## 使用规则
 

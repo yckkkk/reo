@@ -1,0 +1,50 @@
+{
+  "label": "hover-active-pill",
+  "activeTabLabel": "补充录音1",
+  "activeSelected": "true",
+  "activeItemAttachmentId": "att_step2_followup",
+  "activeItemAttachmentIndex": "1",
+  "activeItemActionsVisible": null,
+  "activeItemBackground": "rgb(39, 39, 42)",
+  "focusedSlot": "memory-studio-attachment-tab",
+  "moreDisabled": true,
+  "moreAriaHidden": "true",
+  "moreAriaDisabled": null,
+  "moreAriaExpanded": null,
+  "moreDataState": null,
+  "moreActionsVisible": null,
+  "moreInsideActivePill": true,
+  "moreStyle": {
+    "opacity": "1",
+    "maxWidth": "20px",
+    "marginLeft": "6px",
+    "transform": "none",
+    "transitionDuration": "0.15s",
+    "transitionTimingFunction": "cubic-bezier(0.2, 0.9, 0.1, 1)"
+  },
+  "activeItemRect": {
+    "x": 773,
+    "y": 438,
+    "width": 136.375,
+    "height": 34,
+    "left": 773,
+    "right": 909.375,
+    "top": 438,
+    "bottom": 472
+  },
+  "moreRect": {
+    "x": 875.375,
+    "y": 445,
+    "width": 20,
+    "height": 20,
+    "left": 875.375,
+    "right": 895.375,
+    "top": 445,
+    "bottom": 465
+  },
+  "attachmentPanelRole": "tabpanel",
+  "attachmentPanelLabel": "补充录音1",
+  "contentPanelClasses": "mt-16 flex min-h-0 flex-1 flex-col pt-12",
+  "aggregateSupplementTabCount": 0,
+  "wrongContainerCount": 0
+}

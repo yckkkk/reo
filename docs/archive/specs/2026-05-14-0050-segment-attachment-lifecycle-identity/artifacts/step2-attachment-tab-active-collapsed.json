@@ -1,0 +1,50 @@
+{
+  "label": "after-click-mouse-leave",
+  "activeTabLabel": "补充录音1",
+  "activeSelected": "true",
+  "activeItemAttachmentId": "att_step2_followup",
+  "activeItemAttachmentIndex": "1",
+  "activeItemActionsVisible": null,
+  "activeItemBackground": "rgb(39, 39, 42)",
+  "focusedSlot": "memory-studio-attachment-tab",
+  "moreDisabled": true,
+  "moreAriaHidden": "true",
+  "moreAriaDisabled": null,
+  "moreAriaExpanded": null,
+  "moreDataState": null,
+  "moreActionsVisible": null,
+  "moreInsideActivePill": true,
+  "moreStyle": {
+    "opacity": "0",
+    "maxWidth": "0px",
+    "marginLeft": "0px",
+    "transform": "none",
+    "transitionDuration": "0.15s",
+    "transitionTimingFunction": "cubic-bezier(0.2, 0.9, 0.1, 1)"
+  },
+  "activeItemRect": {
+    "x": 773,
+    "y": 438,
+    "width": 110.375,
+    "height": 34,
+    "left": 773,
+    "right": 883.375,
+    "top": 438,
+    "bottom": 472
+  },
+  "moreRect": {
+    "x": 869.375,
+    "y": 447.5,
+    "width": 0,
+    "height": 15,
+    "left": 869.375,
+    "right": 869.375,
+    "top": 447.5,
+    "bottom": 462.5
+  },
+  "attachmentPanelRole": "tabpanel",
+  "attachmentPanelLabel": "补充录音1",
+  "contentPanelClasses": "mt-16 flex min-h-0 flex-1 flex-col pt-12",
+  "aggregateSupplementTabCount": 0,
+  "wrongContainerCount": 0
+}

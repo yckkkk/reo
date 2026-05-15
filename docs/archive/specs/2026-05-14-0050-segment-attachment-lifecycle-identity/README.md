@@ -67,6 +67,9 @@
 - `https://obsidian.md/help/attachments`：attachments 是 vault 内可被文件系统访问的普通文件。
 - `https://obsidian.md/help/Plugins/File%20explorer`：文件和文件夹的 rename/delete 等常见操作由文件树上下文菜单承载。
 - `https://obsidian.md/help/settings`：删除策略需要明确用户可恢复性；Obsidian 支持系统 trash、app 内 `.trash` 和永久删除三类策略。
+- `https://obsidian.md/help/tabs`：tab 属于 tab group，可切换、拖拽排序，并通过 More options 承载与当前 tab 相关的操作；Reo 只吸收 tab rail、可排序落点和 More 操作入口，不复制 Obsidian 的通用 pane/window 模型。
+- `https://obsidian.md/help/drag-and-drop`：drag tabs 是 tab 级能力；Reo Step 2 只保留 reorder anchor 和结构落点，真实 reorder 需要后续持久顺序合同。
+- `https://obsidian.md/help/workspace`：workspace 是应用界面的承载容器，tabs 是其中一个局部组织能力；Reo 本 slice 只改 Memory Studio 内容 tab，不重做外层 workspace 或内容容器。
 
 Reo 的采用边界：
 
@@ -74,6 +77,12 @@ Reo 的采用边界：
 - Reo 采用 app 内恢复区，但恢复区属于 `.reo/trash/*`，不使用系统 trash，也不暴露 raw path。
 - Reo 的 delete/restore/rename 仍通过显式 IPC、Zod schema、senderFrame 校验、single-writer lock 和 memory write lock 执行。
 - 文档表达学习 Obsidian Help 的当前行为写法：直接写用户可见行为、设置/操作入口和结果，不写历史来源或实现来源叙述。
+
+Step 2/3 官方组件采用依据：
+
+- Context7 / Radix Primitives：DropdownMenu 支持 controlled `open/onOpenChange`、`Trigger asChild` 和 `Item onSelect`；AlertDialog 用于需要明确响应的危险操作；Tabs 的键盘行为可采用受控 value + roving focus 语义。
+- Context7 / shadcn/ui：DropdownMenu 通过 `DropdownMenuTrigger asChild` + `DropdownMenuContent` + `DropdownMenuItem` 组合；AlertDialog 的危险确认保持 header / description / footer / cancel / action 的线性结构。
+- Context7 / Testing Library：renderer 行为测试优先使用 `getByRole`、`userEvent.setup()`、`hover/unhover/click`，从用户可见行为验证，而不是从实现细节倒推。
 
 ## 方案决策
 
@@ -94,7 +103,7 @@ Reo 的采用边界：
 - **是否需要 migration**：否，无 DB。
 - **durable source**：记忆空间文件夹。新增 `.reo/trash/segments/`、`.reo/trash/attachments/` 是 trash 区文件目录，首次写入时按需创建，不留空占位。
 - **数据获取模式**：TanStack Query（已有 Memory detail / Segment content / SegmentAttachment content cache），删除/恢复/重命名是 request/response mutation。
-- **Query keys / invalidation / optimistic / rollback**：不新增 Query key。Segment 删除使用 scoped optimistic update：确认后先从 Workspace snapshot cache、Memory detail cache 和 App session projection 移除 Segment，并保留前一份 projection snapshot；toast grace period 到期后才调用 `workspace:deleteSegment`。撤销或 delayed delete 失败都用前一份 projection rollback。Segment content 与该 Segment 下 attachment content cache 只在 delayed delete 成功后移除，撤销时不做无意义 cache 重建。SegmentAttachment 删除同理在 Step 4 实施。重命名用 scoped optimistic update + rollback（镜像 Segment rename），rollback 必须检查当前 title 仍是本次提交值。
+- **Query keys / invalidation / optimistic / rollback**：不新增 Query key。Segment 删除使用 scoped optimistic update：确认后先从 Workspace snapshot cache、Memory detail cache 和 App session projection 移除 Segment，并保留前一份 projection snapshot；toast grace period 到期后才调用 `workspace:deleteSegment`。撤销或 delayed delete 失败都用前一份 projection rollback。Segment content 与该 Segment 下 attachment content cache 只在 delayed delete 成功后移除，撤销时不做无意义 cache 重建。SegmentAttachment 删除使用真实 main mutation：成功 response 合并 Workspace snapshot、Memory detail 和 session projection，移除 exact attachment content Query；toast `恢复` action 调用真实 restore mutation。重命名用 scoped optimistic update + rollback（镜像 Segment rename），rollback 必须检查当前 title 仍是本次提交值。
 - **Form / client / server state owner**：删除/恢复确认 Dialog 的 open state 属于 App component state；重命名 Dialog 提交前 title draft 属于 React Hook Form；Memory detail、Segment projection 和 SegmentAttachment projection 属于 TanStack Query。
 - **文件夹结构边界**：记忆空间文件（用户内容真源）、`.reo` metadata、`.reo/trash/*`（可恢复区）、`.reo/index.json`（可重建投影）边界清楚，本工作单元只新增 trash 子目录。
 
@@ -592,42 +601,142 @@ Reo 的采用边界：
   - `docs/current/frontend.md`：写入 renderer 只提交 trimmed title，安全校验和 root move 由 main 执行，并记录 `file-written-index-stale` 不回滚 title。
   - `docs/current/quality.md`：写入新增 main test coverage。
 
-### Step 2 — SegmentAttachment 可见标题 + 时间展示
+### Step 2 — SegmentAttachment 内容 tab 体系
 
-- **范围**：纯 Renderer（`MemoryStudio.tsx`）。`SegmentAttachmentAudioPlayer` 当前 `title` 只作 `aria-label`，从不可见渲染。加可见 header——title + 创建时间，镜像 Segment card 的 title + `createdTimeLabel` pattern；用现有语义 token，无描边，按设计系统表达内容单元。建立 attachment row 结构，为 Step 3/4 的 More 菜单提供落点。
-- **数据**：attachment projection 已有 `title` / `createdAt` / `durationMs`，无 IPC/data 改动。
-- **测试**：renderer 覆盖 attachment row 渲染可见 title + time；多个 attachment 视觉可区分。
-- **文档**：`frontend.md`（attachment row 形态）、`product.md`（补充 tab 展示）。
+- **范围**：纯 Renderer（`MemoryStudio.tsx`）。在当前 `转录 / 补充` 内容 tab 基础上改，不创建第二层 tab，不创建 detached generic tab runtime。内容 tab rail 改为 `转录` + 每个真实 `SegmentAttachment` tab + 右侧 `+`。`SegmentAttachment.title` 只在 tab trigger 上可见；内容区不再重复渲染标题，不展示 `createdAt`。
+- **Demo 意图映射**：保留并映射 `tab rail`、`active pill`、`icon + label`、`hover reveal More`、`plus add menu`、`Dropdown` 操作入口、内容区切换、轻量动效、drag-and-drop reorder 意图。active pill 只表达当前内容选择；Step 2 的 More 是 disabled sibling action surface，只随 attachment tab hover 展开，鼠标移开后收起，不能因为 tab active 而常驻展开；后续 Step 3/4 启用同一个 sibling More button 作为 DropdownMenu 操作入口。Drag reorder 只保留稳定结构落点和交互边界；真实 reorder 需要持久顺序模型、IPC 和文件真源规则，不能在 Step 2 做本地假排序。
+- **未来类型边界**：当前 durable SegmentAttachment 只实现 audio recording supplement，但 UI 命名和组件边界必须表达 `SegmentAttachment`，不能写死成“录音补充列表”。当前只渲染已有 audio attachment；未来 video/photo/note 只通过 type icon、label、panel 分发边界承接，不创建假数据、假 schema、假 IPC 或未验证持久化分支。`+` 菜单当前只展示真实可创建的录音补充入口。
+- **共用设计原则**：tab 选择状态、cache projection、toast/action、危险确认、文件操作命名和错误处理必须参考 Memory / Segment 已有设计；不得为 attachment 单独发明一套状态管理或生命周期模型。
+- **数据**：attachment projection 已有 `title` / `createdAt` / `durationMs`，Step 2 只使用 `title` 和既有 audio content；无 IPC/data 改动。
+- **测试**：renderer 覆盖统一内容 tab rail；attachment tab 渲染可见 title 且多个 attachment 可区分；切换 attachment tab 只显示对应 content tabpanel；内容区不重复 title、不展示 created time；More button / reorder anchor 和 `+` 菜单入口存在；当前 attachment 消失时同步 fallback 到 `转录`；新建补充录音出现后进入 attachment tab。
+
+#### Step 2 执行证据
+
+- RED：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "content rail tabs|multiple SegmentAttachment panels|newly created SegmentAttachment recordings|supplement waveform"` 首次失败，旧实现仍只有 `补充` 聚合 tab，无法找到真实 attachment tab。
+- GREEN/REFACTOR：`MemoryStudio` 恢复原内容区骨架和主播放组件位置，只把原内容 tab row 改成 `转录` + 真实 `SegmentAttachment` tabs；active 只管选中，Step 2 More 展开由 owner component 的 Tailwind group hover 控制，button 本身 disabled 且 `aria-hidden`，避免把 active、focus、hover、future menu state 混在一个补丁分支里。内容 tab 的 id、panel id、keyboard selection 和 ARIA 关系来自同一份 selected Segment content tab model，不用 DOM query 或 click side effect 驱动状态。
+- Renderer 验证：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "content rail tabs|falls back to the transcript panel"` 通过；补充 RED `releases cached SegmentAttachment audio resources when an attachment disappears` 首次失败，证明同一 selected Segment 内 attachment 消失时 Blob URL 未释放；GREEN 后 `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx` 通过，30 个测试全绿。
+- 运行时视觉证据：`docs/specs/2026-05-14-0050-segment-attachment-lifecycle-identity/artifacts/step2-attachment-tab-active-collapsed.png` / `.json` 证明点击选中后鼠标移开 More 收起（`moreDisabled = true`、`moreAriaHidden = "true"`、`moreStyle.opacity = "0"`、`maxWidth = "0px"`、`transitionDuration = "0.15s"`、`transitionTimingFunction = "cubic-bezier(0.2, 0.9, 0.1, 1)"`），active pill 仍保持 `bg-secondary`；`step2-attachment-tab-hover.png` / `.json` 证明 hover 时 More 在同一 pill 内展开（`moreDisabled = true`、`moreAriaHidden = "true"`、`moreStyle.opacity = "1"`、`maxWidth = "20px"`、`moreInsideActivePill = true`）。两份 metrics 同时证明没有 `补充` 聚合 tab、没有 `content-tab-header/body` 错误容器、主播放组件仍在原 `memory-studio-content-panel` 内。
+- Subagent 审查：只读 subagent 分别指出 active attachment 消失 fallback、More 可访问性、active/hover 展开边界、tab/tabpanel 语义、class 绑定风险、React state 驱动 hover 的效率问题、attachment 消失时 resource cache 未 prune、workspace handle / requestId 缺失导致 resource cache identity 不够窄、`+` 按钮未复用 Button primitive。已修正为同步 `resolvedActiveContentTab` fallback、sibling More button、`aria-controls` / `tabpanel` 关联、减少播放器内部 class 断言、CSS-only group hover、disabled More `aria-hidden`、selected Segment resource prune、resource key 加入 handle/requestId，以及 `+` 使用 `Button variant="ghostIcon" size="icon"`。
+- More 边界：Step 2 的 More 是 disabled action surface，只提供 tab 内 hover 展开和后续 DropdownMenu 的稳定落点，不触发 mutation、不进入 React state、不出现在可访问树里；Step 3 解除 disabled 并接入重命名菜单，但展开态只由 tab hover 驱动，不因 active selection、trigger focus-visible 或 DropdownMenu open 常驻展开。tabpanel 使用 active tab key 触发轻量进入动效，避免 React 复用同一 DOM 节点导致切换无反馈。
+- Type 边界：`SegmentAttachmentTab` 通过 feature-local `SegmentAttachmentTypeIcon` 分发 attachment type icon；当前 durable projection 只有 `audio`，所以只实现 audio icon，不渲染 video/photo 假 tab、假内容或假 IPC。
+- Resource 边界：active-only attachment panel 保持 query 收敛，但 audio Blob URL 和 waveform decode 结果由 selected Segment scope 的 feature-local cache 承接；resource key 包含 `workspaceHandle`、`workspaceId`、`memoryId`、`segmentId`、`attachmentId`、content requestId 和 audioByteLength。A→B→A 切换不会重复 IPC 读取或重复创建 Blob URL；同 attachment content request 刷新、attachment 从 selected Segment projection 消失、切换 selected Segment、切换 Memory、workspace handle 改变或 Memory Studio unmount 时 revoke 对应 Blob URL。播放中的 attachment 切换 tab 时，player unmount cleanup 只对正在播放的 audio 调用 `pause()`，避免 detached audio 继续播放。
+- ycksimplify 复核：三轮只读审查指出私有 More reveal CSS 泄漏、tab/panel id 重复拼接、fixture 复制、DOM query + click 的半成品 tab runtime、focusable no-op More、A→B→A 重复 Blob/decode、播放中切 tab 未 pause、React state hover、removed attachment resource 泄漏、`+` 按钮绕过 Button primitive 和文档 ownership 漂移；已修正为 owner component group hover、content tab model、fixture helper、direct model selection + roving tabIndex、disabled + aria-hidden More、selected Segment resource cache + prune、unmount pause cleanup、Button primitive，以及 data/flow ownership 同步。
+- Step 2 最终门禁：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx` 通过，30 个测试全绿；`npm run typecheck` 通过；`git diff --check` 通过；`npm run verify:quick` 通过（typecheck、main tests 373、renderer tests 281、lint、format:check 全绿）。
+- **文档**：`frontend.md`（统一内容 tab rail、attachment panel 形态）、`product.md`（补充内容作为 SegmentAttachment tab 展示）。
 
 ### Step 3 — SegmentAttachment 重命名
 
 - **Main**：`updateSegmentAttachmentTitle`，镜像 `updateSegmentTitle`——按文件空间节点真源定位 attachment 目录，改 basename 为 `<attachmentId>--<title>`，写 `attachment.json` title mirror，刷新 index entry；title rename 不改 `updatedAt`。
 - **IPC**：新增 `workspace:updateSegmentAttachmentTitle` channel + schema + 复用错误信封。
-- **Preload + Renderer**：attachment row（Step 2 已建结构）加 More 菜单（DropdownMenu）→ `重命名` → 复用 `MemoryTitleDialog` 表单组件 → optimistic update + rollback（镜像 Segment rename：立即关 Dialog、更新 detail cache attachment 投影；保存失败且当前 title 仍是本次提交值才回滚）。
-- **测试**：main 覆盖 basename / `attachment.json` mirror / index 刷新；renderer 覆盖 attachment More 菜单 → rename Dialog → optimistic update + rollback。
+- **Preload + Renderer**：Step 2 attachment tab hover More 菜单（DropdownMenu）→ `重命名` → 复用既有 title dialog / form pattern → optimistic update + rollback（镜像 Segment rename：立即关 Dialog、更新 Memory detail cache 中 parent segment 的 attachment 投影；普通保存失败且当前 title 仍是本次提交值才回滚；`file-written-index-stale` 表示文件真源已写出但 index stale，不能本地回滚）。More trigger 必须是 tab item 的 sibling action，不嵌入 tab button 内部。
+- **测试**：main 覆盖 basename / `attachment.json` mirror / index 刷新 / 不改 `updatedAt` / workspace mismatch 先于文件写入拒绝 / unsafe attachment candidate 不 fallback / index stale retention；IPC 覆盖 schema + trusted sender / frame / session / handle / lock；renderer 覆盖 attachment tab More 菜单 → rename Dialog → optimistic tab label update + rollback / stale retention no rollback。
 - **文档**：`data.md` / `flow.md` / `electron.md` / `frontend.md` / `quality.md` / `product.md`。
+
+#### Step 3 执行证据
+
+- RED（main / IPC / preload / contract）：新增 `workspace:updateSegmentAttachmentTitle` channel、schema、bridge surface、main file-truth rename 测试后先跑失败；失败覆盖缺少 channel 常量、preload method、handler、response schema，以及 `memoryFiles` 还不能按 SegmentAttachment 文件节点重命名。
+- RED（renderer）：新增 attachment tab More → `重命名` → optimistic update / rollback 测试后先跑失败；旧 Step 2 More 仍 disabled / `aria-hidden`，没有 DropdownMenu intent，也没有 `workspaceApi.updateSegmentAttachmentTitle`。
+- RED（用户指出的 sticky 展开 bug）：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "does not keep the SegmentAttachment More affordance expanded" --testTimeout=20000` 首次失败，断言捕获 `data-[state=open]:max-w-20` / `opacity-100` / `scale-100` 这类把 DropdownMenu open 误当展开态的补丁式 class。
+- GREEN/REFACTOR：新增窄 `window.reoWorkspace.updateSegmentAttachmentTitle`，main 在 memory write lock 内按 `attachmentId` metadata 真源定位目录，把 basename 改成 `<attachmentId>--<title>`，写 `attachment.json.title` mirror，刷新父 Memory index entry；返回 `{ memory, segment, attachment }`，不返回 raw path，不改 `updatedAt`。Renderer 复用 `MemoryTitleDialog` 形成 `SegmentAttachmentRenameDialog`，只在 Step 2 的 sibling More DropdownMenu 中暴露 `重命名`，optimistic 更新 Memory detail / current session projection，失败时仅当当前 title 仍是本次提交值才回滚。
+- More 修正：`SegmentAttachmentTab` 删除所有 `data-[state=open]` 展开 class；More 的视觉展开只保留 `group-hover/attachment-tab:*`。active tab 继续保留 active pill，trigger focus-visible 只保留键盘 ring，DropdownMenu open 只影响 menu lifecycle，不影响 tab pill 宽度。
+- 相关测试：`npm run test:main -- test/main/workspaceContract.test.ts test/main/workspaceBridgeSurface.test.ts test/main/memoryFiles.test.ts test/main/workspaceIpc.test.ts` 通过，376 个 main/preload/contract 测试全绿；`npm run test:renderer -- src/renderer/src/workspace/workspaceApi.test.ts src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/App.test.tsx -t "SegmentAttachment|workspace file methods" --testTimeout=20000` 通过，13 个相关 renderer 测试全绿；`npm run test:renderer -- src/renderer/src/workspace/ForbiddenCapabilities.test.tsx src/renderer/src/workspace/RecordingOverlay.test.tsx --testTimeout=20000` 通过，77 个相邻能力测试全绿；`npx tsc --noEmit` 通过。
+- 运行时证据：`artifacts/step3-attachment-tab-hover.png` 证明 hover 时 More 在当前 tab pill 内展开；`artifacts/step3-attachment-tab-menu-open-unhover.png` 和 `artifacts/step3-attachment-rename-runtime.json` 证明菜单 open 且鼠标移出 tab 后 `moreDataState = "open"` 但 `opacity = "0"`、`maxWidth = "0px"`、`marginLeft = "0px"`、active tab 仍 `aria-selected = "true"`。同一运行时验证通过 UI More → `重命名` 把 `补充录音1` 临时改为 `补充录音1验证`，tab label 和 API projection 同步变化，`updatedAt` 保持 `2026-05-14T11:54:44.312Z`；随后恢复为 `补充录音1`，真实目录为 `att_20260514115441_9813fe38--补充录音1`，`attachment.json.title` 也为 `补充录音1`。
+- 用户指出的视觉返工 RED：补充测试后运行 `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "does not keep the SegmentAttachment More affordance" --testTimeout=20000` 先失败，失败点为 More trigger 仍含 `focus-visible:ml-[6px]` / `focus-visible:max-w-20` / `focus-visible:opacity-100` / `focus-visible:scale-100`，会在点击后焦点停留时形成非 hover 的展开态。
+- 用户指出的视觉返工 GREEN / REFACTOR：删除 More trigger 的 layout reveal 型 focus-visible class，只保留 focus ring；抽出 `CONTENT_TAB_MOTION_CLASS`，让 content tab pill、tab button 和 More reveal 统一使用 demo 的 `duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)]`，避免三处分散速度。重跑同一 targeted renderer 测试通过，并补充 `shows finalized recording supplements` 断言 tab rail motion。
+- 用户指出的视觉返工运行时证据：`artifacts/step3-attachment-tab-click-unhover-motion-fix.png` / `step3-attachment-tab-hover-motion-fix.png` / `step3-attachment-tab-menu-open-unhover-motion-fix.png` 与 `step3-attachment-tab-hover-motion-fix.json` 来自真实 Electron runtime。metrics 证明点击 `补充录音1` 后鼠标移开时 `tabSelected = "true"`、`moreOpacity = "0"`、`moreMaxWidth = "0px"`、`moreMarginLeft = "0px"`、`moreTransitionDuration = "0.4s"`；hover 时 `moreOpacity = "1"`、`moreMaxWidth = "20px"`、`moreMarginLeft = "6px"`；More 菜单 open 后鼠标移出 tab，`moreDataState = "open"`、`attachmentMenuVisible = true`，但 More 仍回到 `opacity = "0"` / `maxWidth = "0px"` / `marginLeft = "0px"`，active pill 保留。
+- 用户指出的视觉返工复审：subagent 只读复审 PASS，确认当前 More 展开只来自 `group-hover/attachment-tab:*`，没有 active、focus-visible layout reveal 或 `data-state=open` 展开 class；400ms cubic 与 demo 对齐；未引入 hover React state、全局 utility 或 menu-open 视觉例外。
+- 用户指出的视觉返工门禁（2026-05-14 14:59 PDT）：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testTimeout=20000` 通过，31 个测试全绿；`npm run typecheck` 通过；`npm run verify:quick` 全绿，包含 typecheck、`test:main` 382 个测试通过、`test:renderer` 29 个文件 / 285 个测试通过、lint 和 format check。
+- 用户指出的视觉返工二次 RED：补充测试后运行 `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testNamePattern "SegmentAttachment More|rename intent" --testTimeout=20000` 先失败，失败点为隐藏 More trigger 没有 `aria-hidden="true"`，仍保留可交互焦点面。
+- 用户指出的视觉返工二次 GREEN / REFACTOR：`SegmentAttachmentTab` 把 More 的 visual reveal、pointer events、tabIndex 和 `aria-hidden` 统一收束到 owner tab item hover intent；active selection、focus-visible 和 DropdownMenu open 不参与展开。DropdownMenu 关闭时如果 trigger 已隐藏，焦点回到对应 tab。没有改外层 content panel，也没有创建 generic tab runtime。
+- 用户指出的视觉返工二次运行时证据：`artifacts/step3-attachment-tab-state-model-fix.json`、`step3-attachment-tab-hover-state-model-fix.png` 和 `step3-attachment-tab-menu-open-hidden-trigger-fix.png` 来自真实 Electron runtime。metrics 证明点击 attachment tab 后鼠标移开时 `tabSelected = "true"`、`moreAriaHidden = "true"`、`moreTabIndex = "-1"`、`morePointerEvents = "none"`、`moreOpacity = "0"`；hover 时 `moreAriaHidden = null`、`moreTabIndex = "0"`、`morePointerEvents = "auto"`、`moreOpacity = "1"`、`moreMaxWidth = "20px"`、`moreMarginLeft = "6px"`；菜单 open 后鼠标移出 tab，`moreDataState = "open"` 且 menu 仍可见，但 trigger 回到 hidden / non-interactive；按 Escape 后焦点回到 attachment tab。
+- 用户指出的视觉返工二次验证：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testTimeout=20000` 通过，31 个测试全绿；`npm run typecheck` 通过。Subagent 只读复审 PASS 但指出 focus ring/current docs gap；本轮修正采用更严格的 hover intent state contract，并同步 `docs/current/data.md`、`flow.md`、`frontend.md`、`product.md` 和 `quality.md`。
+- 文档同步：`docs/current/electron.md` 写入新 IPC channel、Zod request、sender/session/handle/lock 校验和 no raw path response；`docs/current/data.md` 写入 SegmentAttachment title mirror、detail cache projection owner 和 More hover-only state owner；`docs/current/flow.md` 写入 optimistic / rollback / main rename 时序；`docs/current/frontend.md` / `product.md` 写入 demo tab 边界和 More 不随 active/open 常驻展开；`docs/current/quality.md` 写入 main + renderer 覆盖面。
+- Subagent 审查返工：首轮只读 subagent 结论为 FAIL。阻断点包括 IPC handler 未在写入前确认 request `workspaceId` 与 handle workspace 匹配、main 在目录 rename / `attachment.json` 写出后吞掉 index refresh failure 并返回 success、SegmentAttachment lookup 对 `<attachmentId>--*` symlink / 非目录 / unsafe metadata leaf candidate 会 fallback 到其它目录、renderer 缺少 `file-written-index-stale` 不回滚保护。
+- 补充 RED：`npm run test:main -- test/main/memoryFiles.test.ts --test-name-pattern "segment attachment title update"` 先失败，新增用例覆盖 workspace mismatch 不得 move、index refresh 失败后返回 `file-written-index-stale` 且保留已写 title、renamed symlink / non-directory / unsafe metadata candidate 返回 unsafe typed error；`npm run test:main -- test/main/workspaceIpc.test.ts --test-name-pattern "updateSegmentAttachmentTitle"` 先失败，新增 handler workspace mismatch 用例显示旧实现会进入 file truth 写入路径。Renderer 补充 stale-no-rollback 用例前，`App` 会把已提交 title 回滚为旧 label。
+- GREEN / REFACTOR：`workspaceIpc` 在进入 file truth 前返回 `ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH`；`memoryFiles` 在 rename 前读取 source directory identity 和 attachment metadata，校验 workspace/memory/segment/attachment 四元身份，最终 rename 使用已验证 source identity；`segmentAttachmentDirectory` 改为 attachment 版 file-space node lookup，命名匹配 candidate 如不安全直接拒绝，不 fallback；`refreshMemoryIndexEntry` 失败包装为 `file-written-index-stale`；renderer 在该 retention 上保持 optimistic title。`App.test.tsx` 抽出 SegmentAttachment rename fixture / workspace setup / submit helper，避免继续复制粘贴第三份测试装配。
+- 补充验证：`npm run test:main -- test/main/memoryFiles.test.ts --test-name-pattern "segment attachment title update"` 通过，382 个 main/preload/contract 测试全绿；`npm run test:main -- test/main/workspaceIpc.test.ts --test-name-pattern "updateSegmentAttachmentTitle"` 通过，382 个 main/preload/contract 测试全绿；`npm run test:renderer -- src/renderer/src/App.test.tsx -t "SegmentAttachment" --testTimeout=20000` 通过，6 个相关 App 测试全绿。
+- 文档补充：`docs/current/data.md`、`electron.md`、`flow.md`、`frontend.md`、`quality.md` 写入 workspace mismatch、unsafe candidate、不 fallback、`file-written-index-stale` 和 renderer stale no-rollback 当前事实。
+- 低风险简化：subagent `$ycksimplify` 指出 Segment 与 SegmentAttachment 的 file-space node lookup 存在同一真实不变量。已抽出私有 `findFileSpaceNodeDirectoryInParent`，只共享 parent 下按 stable id 定位、likely candidate unsafe 拒绝、metadata-backed fallback、duplicate detection 这组规则；Segment / SegmentAttachment wrapper 仍各自拥有 id 校验、test hook、metadata matcher、错误文案和 duplicate 文案。重跑 `npm run test:main -- test/main/memoryFiles.test.ts ...` 通过，382 个 main/preload/contract 测试全绿。
+- Subagent 复审：视觉/交互复审 PASS，确认 active pill、icon+label、hover reveal More、menu open + mouseleave 收起、没有重做内容容器、tab switching animation 和 reorder anchor 均符合 demo tab rail 边界；IPC/file-truth 复审 PASS，确认 workspace mismatch、source identity、unsafe candidate 和 stale retention 均已覆盖；ycksimplify 复审 PASS，确认 helper 抽取不是过度 generic abstraction，docs/tests 与实现一致，无进一步简化建议。
+- Step 3 最终门禁：`npm run typecheck` 通过；`npm run format:check` 通过；`npm run verify:quick` 全绿，包含 typecheck、`test:main` 382 个测试通过、`test:renderer` 29 个文件 / 285 个测试通过、lint 和 format check。Node 26 仍打印 jsdom localStorage experimental warning，当前测试 setup 生效且 full gate 通过。
 
 ### Step 4 — SegmentAttachment 软删除 + 恢复
 
 - **数据**：新 trash root `.reo/trash/attachments/<attachmentDir>/`。`attachment.json` 有 `memoryId` + `segmentId` 供恢复寻址。
-- **Main**：`deleteSegmentAttachment` / `restoreDeletedSegmentAttachment`，镜像 Step 1。恢复需父 Segment（及父 Memory）存在，否则 `ERR_ATTACHMENT_RESTORE_PARENT_MISSING`。刷新父 Memory index entry 的 `attachmentCount`。
+- **Main**：`deleteSegmentAttachment` / `restoreDeletedSegmentAttachment`，沿用 Memory / Segment 的 file truth、identity validation、lock usability 和 typed error 结构。恢复需父 Segment（及父 Memory）存在，否则 `ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING`。刷新父 Memory index entry 的 `attachmentCount`。
 - **IPC**：新增 `workspace:deleteSegmentAttachment`、`workspace:restoreDeletedSegmentAttachment` channel + schema + 错误码。
-- **Renderer**：attachment More 菜单加 `删除` → `SegmentAttachmentDeleteDialog` → 成功后更新 detail cache 的 parent segment `attachments[]` 投影、fallback（补充 tab 空了则回 转录 tab）、toast 带 `恢复` action。
+- **Renderer**：同一个 attachment tab More 菜单加 `删除` → 统一危险确认结构 → 成功后更新 Memory detail cache 的 parent segment `attachments[]` 投影，并移除 exact SegmentAttachment audio content Query。若删除当前 active attachment，tab fallback 回 `转录`。toast 使用统一 action 结构并提供用户可见、可验证的 `恢复` action；恢复调用 `restoreDeletedSegmentAttachment`，成功后恢复 parent segment attachment 投影。
 - **测试 + 文档**：镜像 Step 1。
+
+**Step 4 执行证据**
+
+- RED / main + contract + preload：新增 `deleteSegmentAttachmentFromFileTruth` / `restoreDeletedSegmentAttachmentFromFileTruth`、IPC handler、contract schema、bridge surface 测试后先失败，缺少 exports、channel、preload 方法和 handler。
+- GREEN / main + IPC：新增 `workspace:deleteSegmentAttachment` 与 `workspace:restoreDeletedSegmentAttachment`。Main 侧在当前 handle/lock 下把 parent Segment 下 matching finalized attachment 目录移入 `.reo/trash/attachments/`，恢复时要求 parent Memory 和 parent Segment 存在，parent missing 返回 `ERR_SEGMENT_ATTACHMENT_RESTORE_PARENT_MISSING` 并保留 trash。Response 不返回 raw path 或 handle。
+- RED / renderer：`LoadedWorkspaceFrame` 增加 attachment More 菜单 `删除` intent 测试后先失败，菜单只有 `重命名`；`App` 增加删除确认 + toast 恢复 + cache projection 测试后先失败，缺少 `onDeleteSegmentAttachment` 和 Dialog。
+- GREEN / renderer：`SegmentAttachmentTab` 同一个 sibling More DropdownMenu 暴露 `重命名` 与 `删除`；`SegmentAttachmentDeleteDialog` 复用统一危险确认结构；App 删除成功后合并 Workspace snapshot、Memory detail 和当前 session projection，移除 exact `segment-attachment-content` Query，并通过统一 undo toast 调用 restore。
+- 用户指出的 tab 粘滞返工 RED：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testNamePattern "does not keep the SegmentAttachment More" --testTimeout=20000` 先失败，失败点为 More trigger 没有 demo 的 `group-hover/attachment-tab:*` 视觉约束，展开完全依赖 React hover state。
+- 用户指出的 tab 粘滞返工 GREEN / REFACTOR：More 的视觉展开改回 CSS `group-hover/attachment-tab:*`；React hover intent 只负责 `aria-hidden`、`tabIndex` 和 pointer-interactive state。新增 `onMouseEnter` / `onMouseLeave` 与 pointer enter/leave 同步，active selection 和 DropdownMenu open 不再能让 More 常驻展开。Targeted 测试通过。
+- Subagent 状态泄漏复审：subagent 指出 `openAttachmentActionMenuId` 可能跨 selected Segment 残留。补充外部行为测试 `closes the SegmentAttachment More menu when the selected Segment changes` 后，当前 Radix unmount 路径已能关闭菜单；随后做显式 REFACTOR，在 selected Segment 切换时清空 `openAttachmentActionMenuId` / `hoveredAttachmentActionId`，并在 selected Segment attachment ids 变化时收敛已经不存在的 open/hover id，不再依赖第三方 unmount 副作用表达实体边界。Targeted 4 个 More / menu intent 测试通过；更宽 SegmentAttachment renderer 相关测试 16 个通过。
+- 相关验证：`npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/App.test.tsx --testNamePattern "SegmentAttachment|does not keep the SegmentAttachment More|delete intent" --testTimeout=30000` 通过，2 个文件、16 个相关测试通过；`npm run test:main -- test/main/workspaceContract.test.ts test/main/workspaceBridgeSurface.test.ts test/main/memoryFiles.test.ts test/main/workspaceIpc.test.ts --test-name-pattern "segment attachment|SegmentAttachment|deleteSegmentAttachment|restoreDeletedSegmentAttachment"` 通过，388 个 main/preload/contract 测试通过；`npm run typecheck` 通过。
+- 运行时验证：先确认未重启的 Electron runtime 只有 renderer 热更新，preload 没有 `deleteSegmentAttachment`，因此重启 `REMOTE_DEBUGGING_PORT=9233 npm run dev` 后再验证真实 main/preload/renderer。CDP 操作临时 fixture 记忆空间，通过真实 UI hover/click/delete/restore 路径写入 `artifacts/step4-delete-restore-runtime.json` 和 `artifacts/step4-tab-hover-after-click-collapse.png`。metrics 证明点击 `现场补充` 后鼠标移到 `转录`，`tabSelected = "true"` 但 More 回到 `ariaHidden = "true"`、`tabIndex = "-1"`、`pointerEvents = "none"`、`opacity = "0"`、`maxWidth = "0px"`。删除后文件真源为 `activeAttachmentDirExists = false`、`trashAttachmentDirExists = true`、`trashAudioExists = true`、`trashTranscriptExists = true`、`indexAttachmentCount = 0`；toast `恢复` 后 `activeAttachmentDirExists = true`、`trashAttachmentDirExists = false`、`activeAudioExists = true`、`activeTranscriptExists = true`、`activeAttachmentTitle = "现场补充"`、`indexAttachmentCount = 1`。
+- Subagent / 用户指出的细节返工 RED：
+  - `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testNamePattern "keeps SegmentAttachment playback position" --testTimeout=30000` 先失败：同一 attachment 只改 title 后播放器从 `00:05 / 00:05` 重置到 `00:00 / 00:05`，说明 audio resource effect 依赖整个 attachment object。
+  - `npm run test:renderer -- src/renderer/src/App.test.tsx --testNamePattern "clears a pending SegmentAttachment delete target|keeps a SegmentAttachment hidden|restores a SegmentAttachment projection" --testTimeout=30000` 先失败：离开 workspace 后旧 delete target 可在新 session 复活；delete `file-written-index-stale` 保留旧 Dialog / 旧 attachment 投影；restore `file-written-index-stale` 不把已恢复的 attachment 投影回 parent Segment。
+  - `npm run test:renderer -- src/renderer/src/components/ui/dropdown-menu.test.tsx --testTimeout=30000` 先失败：DropdownMenu content 缺少 demo 对齐的 menu enter motion class。
+  - `npm run test:main -- test/main/rendererViewportCss.test.ts --test-name-pattern "renderer tab and menu motion"` 先失败：CSS 缺 `reo-dropdown-menu-enter`，content tab panel motion 仍为 180ms。
+- GREEN / REFACTOR：
+  - `SegmentAttachmentAudioPlayer` 的 resource effect 改为只依赖 `workspaceHandle/workspaceId/memoryId/segmentId/attachmentId/requestId/audioByteLength/audio` 这些资源身份；新增 `currentAudioResourceKeyRef`，只有真实 audio resource identity 变化才重置播放位置。title-only projection update 不重建 Blob URL、不重置 playback。
+  - App 新增 `clearWorkspaceScopedTargets()`，进入新 workspace session 或成功离开当前 workspace session 时清理 Memory / Segment / SegmentAttachment / Memory space 的 workspace-scoped targets 和 Segment focus intent，避免旧 target 绑定到新 handle。
+  - SegmentAttachment delete / restore 遇到 `dataRetention: "file-written-index-stale"` 时按文件真源已移动处理：delete 保持 attachment hidden、关闭 Dialog、移除 exact attachment content Query；restore 把保存的 attachment projection 恢复到 parent Segment；两者都显示 root error toast。
+  - DropdownMenu content 增加 `reo-dropdown-menu-enter` 150ms 进入动效，reduced motion 下关闭；content tab panel motion 改为 300ms `cubic-bezier(0.2, 0.9, 0.1, 1)`，保留 tab pill / More reveal 的 400ms demo motion。
+- 补充验证：
+  - `npm run test:renderer -- src/renderer/src/App.test.tsx --testNamePattern "clears a pending SegmentAttachment delete target|keeps a SegmentAttachment hidden|restores a SegmentAttachment projection" --testTimeout=30000` 通过，3 个新增 App stale/session 测试通过。
+  - `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testNamePattern "keeps SegmentAttachment playback position" --testTimeout=30000` 通过。
+  - `npm run test:renderer -- src/renderer/src/components/ui/dropdown-menu.test.tsx --testTimeout=30000` 通过。
+  - `npm run test:main -- test/main/rendererViewportCss.test.ts --test-name-pattern "renderer tab and menu motion"` 通过。
+  - `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/App.test.tsx src/renderer/src/components/ui/dropdown-menu.test.tsx --testNamePattern "SegmentAttachment|does not keep the SegmentAttachment More|keeps SegmentAttachment playback position|delete target|stale projection|DropdownMenu" --testTimeout=30000` 通过，3 个 renderer 文件、22 个相关测试通过。
+  - `npm run test:main -- test/main/workspaceContract.test.ts test/main/workspaceBridgeSurface.test.ts test/main/memoryFiles.test.ts test/main/workspaceIpc.test.ts test/main/rendererViewportCss.test.ts --test-name-pattern "segment attachment|SegmentAttachment|deleteSegmentAttachment|restoreDeletedSegmentAttachment|renderer tab and menu motion"` 通过，389 个 main/preload/contract/CSS 测试通过。
+  - `npm run typecheck` 通过；`npm run format:check` 通过。
+- 补充返工 RED / GREEN：
+  - `npm run test:renderer -- src/renderer/src/App.test.tsx --testNamePattern "keeps a SegmentAttachment hidden with restore action" --testTimeout=30000` 确认 delete `file-written-index-stale` 分支 GREEN：attachment hidden、fallback 到 `转录`、exact content Query 被清理，并仍显示同一 `已删除补充内容` undo toast。
+  - 新增 `ignores an in-flight SegmentAttachment rename failure after reopening the same workspace with a new handle`。首个 success response 用例未失败，因为 title guard 已挡住该路径；改为旧 handle 保存失败、当前新 handle 已读到同名新 title 的 rollback 路径后 RED，旧响应会把新 session 回滚为旧 title。GREEN：`saveRenamedSegmentAttachment` 捕获提交时的 `workspaceHandle/workspaceId`，await 返回后若当前 session 不匹配则不 rollback、toast、写 cache、合并 session 或设置 focus intent。
+  - Subagent 设计复审发现键盘 focus 可见性缺口；新增 RED 断言 More trigger 具备自身 `focus-visible` 展开 class，且 active attachment 的 More 可进入键盘路径但未 hover/focus 时仍 `max-w-0` / `opacity-0`。GREEN：More visual reveal 只来自 owner tab hover 或 More trigger 自身 focus-visible；未恢复 `group-focus-within`、未添加 `data-state=open` 展开，也未让 active selection 视觉常驻展开。
+  - `$ycksimplify` 复审建议把 App test helper 从 rename-only 命名改为中性 SegmentAttachment fixture/workspace setup；已改成 `createSegmentAttachmentFixture` / `mockSegmentAttachmentWorkspace`，避免测试代码继续表达错误模型。
+- 补充验证：
+  - `npm run test:renderer -- src/renderer/src/App.test.tsx --testNamePattern "ignores an in-flight SegmentAttachment rename failure|keeps a SegmentAttachment hidden with restore action" --testTimeout=30000` 通过，2 个目标测试通过。
+  - `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx --testNamePattern "does not keep the SegmentAttachment More affordance" --testTimeout=30000` 先 RED 后 GREEN，最终通过。
+  - `npm run test:renderer -- src/renderer/src/App.test.tsx --testNamePattern "SegmentAttachment" --testTimeout=30000` 通过，11 个目标测试通过。
+  - `npm run test:renderer -- src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/App.test.tsx src/renderer/src/components/ui/dropdown-menu.test.tsx --testNamePattern "SegmentAttachment|does not keep the SegmentAttachment More|keeps SegmentAttachment playback position|delete target|stale projection|in-flight SegmentAttachment rename|DropdownMenu" --testTimeout=30000` 通过，3 个 renderer 文件、23 个相关测试通过。
+  - `npm run test:main -- test/main/rendererViewportCss.test.ts --test-name-pattern "renderer tab and menu motion"` 通过；该 main runner 同轮执行 389 个 main/preload/contract/CSS 测试，全绿。
+  - `npm run typecheck` 通过；`npm run format:check` 通过。
+- Subagent 复审：
+  - Step4 delete/restore 复审 PASS：确认 stale delete 分支保持 hidden、清 exact Query、关闭 Dialog，并用 `restoreToken = attachmentId` 显示可见 undo action；restore stale 分支把 attachment projection 恢复到 parent Segment。
+  - SegmentAttachment rename 作用域复审 PASS：确认旧 handle in-flight response 不会 rollback、toast、写 cache 或合并新 session。
+  - Tab 设计/动效复审首轮 FAIL，指出 focus 可见性；修正后复审 PASS，确认 More 默认视觉折叠、只由 hover/focus-visible 展开、没有 `group-focus-within` 或 `data-state=open` 展开，active pill、icon+label、content switching、plus add 和 reorder anchor 保留。
+  - `$ycksimplify` 复审 PASS；非阻断建议的测试 helper 中性命名已完成。
+- Step 4 最终门禁：`npm run verify:quick` 全绿；typecheck 通过，`test:main` 389 个测试通过，`test:renderer` 29 个文件 / 293 个测试通过，lint 和 format check 通过。Node 26 仍打印 jsdom localStorage experimental warning，当前测试 setup 生效且 full gate 通过。
+- Step 5 承接：补充录音转录区不属于本 session Step 2-4 收口范围，已创建 active product/code initiative `docs/initiatives/2026-05-14-segment-attachment-transcript-panel/` 承接，下一 session 需先创建独立 spec 后再 TDD 实施。
+
+### Step 5 — SegmentAttachment audio 内容区转录
+
+- **范围**：在 audio SegmentAttachment 内容 panel 的播放组件下方显示补充录音转录区。只显示真实文件真源中的 attachment transcript，不生成 mock，不把 attachment transcript 写死为 audio-only UI 文案。
+- **数据 / IPC**：当前 `readFinalizedAudioSegmentAttachmentContent` 只返回 audio bytes；Step 5 必须补齐 finalized attachment transcript 文件真源、read IPC 返回值、renderer query 和 cache projection。若录音完成时已有 ASR transcript，finalize 必须写入 attachment 自己的 transcript sidecar；不能混入 parent Segment transcript。
+- **测试 + 文档**：main 覆盖 attachment transcript 写入/读取和 unsafe path；renderer 覆盖播放组件下方 transcript 区、空态、加载失败；更新 `data.md` / `flow.md` / `electron.md` / `frontend.md` / `quality.md` / `product.md`。
 
 ## 执行清单
 
 - [x] Step 1 — Segment 软删除 + 恢复（main + IPC + preload + renderer + 测试 + 文档 + `verify:quick` + 操作验证）
-- [ ] Step 2 — SegmentAttachment 可见标题 + 时间展示（renderer + 测试 + 文档 + `verify:quick` + 视觉验证）
-- [ ] Step 3 — SegmentAttachment 重命名（main + IPC + preload + renderer + 测试 + 文档 + `verify:quick` + 操作验证）
-- [ ] Step 4 — SegmentAttachment 软删除 + 恢复（main + IPC + preload + renderer + 测试 + 文档 + `verify:quick` + 操作验证）
-- [ ] 收口：长期事实压缩回 `docs/current/*`，spec 移入 `docs/archive/specs/`
+- [x] Step 2 — SegmentAttachment 内容 tab 体系（renderer + 测试 + 文档 + `verify:quick` + 视觉验证）
+- [x] Step 3 — SegmentAttachment 重命名（main + IPC + preload + renderer + 测试 + 文档 + `verify:quick` + 操作验证）
+- [x] Step 4 — SegmentAttachment 软删除 + 恢复（main + IPC + preload + renderer + 测试 + 文档 + `verify:quick` + 操作验证）
+- [x] Step 5 承接 — SegmentAttachment audio 内容区转录已移入 `docs/initiatives/2026-05-14-segment-attachment-transcript-panel/`
+- [x] 收口：长期事实压缩回 `docs/current/*`，spec 移入 `docs/archive/specs/`
 
 ## 验证标准
 
 - 每步行为改动走真实 TDD：RED 真实运行并得到具体失败输出 → GREEN 最小实现 → REFACTOR 后重跑保护测试。
 - 每步收口前 `npm run verify:quick` 全绿。
-- 删除 / 恢复 / 重命名涉及真实桌面操作，需 Computer Use 操作验证；attachment 展示涉及设计变更，需运行时视觉证据。
+- 删除 / 恢复 / 重命名涉及真实桌面操作，需运行时或 Computer Use 操作验证；attachment 展示涉及设计变更，需运行时视觉证据。
 - 没有在当前快照运行过的检查不得宣称通过。
 
 ## TDD 说明

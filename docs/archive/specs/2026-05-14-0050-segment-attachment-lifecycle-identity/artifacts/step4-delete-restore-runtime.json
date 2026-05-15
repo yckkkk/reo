@@ -1,0 +1,77 @@
+{
+  "fixture": {
+    "registryPath": "/Users/yck/Library/Application Support/reo/workspace-registry.json",
+    "backupPath": "/Users/yck/Library/Application Support/reo/workspace-registry.json.step4-backup-1778798855956",
+    "root": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-step4-attachment-runtime-f4Bgft/Step4 Attachment Runtime Workspace",
+    "workspaceId": "ws_step4_runtime",
+    "memoryId": "mem_step4_runtime",
+    "segmentId": "seg_step4_runtime",
+    "attachmentId": "att_step4_runtime",
+    "activeAttachmentDir": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-step4-attachment-runtime-f4Bgft/Step4 Attachment Runtime Workspace/memories/mem_step4_runtime--Step4 Runtime Memory/segments/seg_step4_runtime--Runtime Segment/attachments/att_step4_runtime--现场补充",
+    "trashAttachmentDir": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-step4-attachment-runtime-f4Bgft/Step4 Attachment Runtime Workspace/.reo/trash/attachments/att_step4_runtime--现场补充"
+  },
+  "metrics": {
+    "hiddenBeforeHover": {
+      "label": "hidden before hover",
+      "tabSelected": "false",
+      "ariaHidden": "true",
+      "tabIndex": "-1",
+      "pointerEvents": "none",
+      "opacity": "0",
+      "maxWidth": "0px",
+      "width": 0,
+      "className": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100",
+      "itemClassName": "relative inline-flex h-[34px] max-w-[260px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none bg-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground group/attachment-tab pr-[14px]"
+    },
+    "visibleOnHover": {
+      "label": "visible on hover",
+      "tabSelected": "false",
+      "ariaHidden": null,
+      "tabIndex": "0",
+      "pointerEvents": "auto",
+      "opacity": "1",
+      "maxWidth": "20px",
+      "width": 20,
+      "className": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100",
+      "itemClassName": "relative inline-flex h-[34px] max-w-[260px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none bg-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground group/attachment-tab pr-[14px]"
+    },
+    "hiddenAfterClickMouseLeave": {
+      "label": "hidden after click then mouse leave to transcript",
+      "tabSelected": "true",
+      "ariaHidden": "true",
+      "tabIndex": "-1",
+      "pointerEvents": "none",
+      "opacity": "0",
+      "maxWidth": "0px",
+      "width": 0,
+      "className": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/attachment-tab:pointer-events-auto group-hover/attachment-tab:ml-[6px] group-hover/attachment-tab:max-w-20 group-hover/attachment-tab:scale-100 group-hover/attachment-tab:opacity-100",
+      "itemClassName": "relative inline-flex h-[34px] max-w-[260px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none bg-secondary text-foreground group/attachment-tab pr-[14px]"
+    }
+  },
+  "fs": {
+    "afterDelete": {
+      "activeAttachmentDirExists": false,
+      "trashAttachmentDirExists": true,
+      "trashAudioExists": true,
+      "trashTranscriptExists": true,
+      "trashAttachmentTitle": "现场补充",
+      "memorySegmentIds": ["seg_step4_runtime"],
+      "indexAttachmentCount": 0
+    },
+    "afterRestore": {
+      "activeAttachmentDirExists": true,
+      "trashAttachmentDirExists": false,
+      "activeAudioExists": true,
+      "activeTranscriptExists": true,
+      "activeAttachmentTitle": "现场补充",
+      "indexAttachmentCount": 1
+    }
+  },
+  "ui": {
+    "hoverCollapseScreenshot": "docs/specs/2026-05-14-0050-segment-attachment-lifecycle-identity/artifacts/step4-tab-hover-after-click-collapse.png",
+    "deleteDialogText": "删除补充内容\n\n删除“现场补充”？音频、转录和元数据会先进入恢复区。\n\n取消\n删除",
+    "afterDeleteHasRestoreAction": true,
+    "afterRestoreAttachmentTabText": "现场补充"
+  },
+  "registryBackup": "/Users/yck/Library/Application Support/reo/workspace-registry.json.step4-verify-backup-1778799324443"
+}

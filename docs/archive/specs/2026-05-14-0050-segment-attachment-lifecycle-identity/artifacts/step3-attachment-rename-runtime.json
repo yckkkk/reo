@@ -1,0 +1,129 @@
+{
+  "setup": {
+    "ok": true,
+    "workspaceHandle": "wh_c70e3996-bd90-4cee-8274-a5bd22b74968",
+    "workspaceId": "ws_33698e99-49ca-4e32-be50-3fe1783f309f",
+    "memoryId": "mem_20260514113152_89f0e861",
+    "segmentId": "seg_20260514113207_81e4b126",
+    "segmentTitle": "记录1",
+    "attachmentId": "att_20260514115441_9813fe38",
+    "originalTitle": "补充录音1",
+    "originalUpdatedAt": "2026-05-14T11:54:44.312Z"
+  },
+  "hoverMetrics": {
+    "itemText": "补充录音1",
+    "moreRect": {
+      "x": 463.375,
+      "y": 445,
+      "width": 20,
+      "height": 20
+    },
+    "dataState": "closed",
+    "opacity": "1",
+    "maxWidth": "20px",
+    "marginLeft": "6px",
+    "transform": "none",
+    "transitionDuration": "0.15s",
+    "transitionTimingFunction": "cubic-bezier(0.2, 0.9, 0.1, 1)",
+    "activeSelected": "true"
+  },
+  "openUnhoverMetrics": {
+    "menuOpen": true,
+    "menuText": "",
+    "moreDataState": "open",
+    "opacity": "0",
+    "maxWidth": "0px",
+    "marginLeft": "0px",
+    "transform": "none",
+    "rect": {
+      "x": 457.375,
+      "y": 447.5,
+      "width": 0,
+      "height": 15
+    },
+    "activeSelected": "true"
+  },
+  "rename": {
+    "nextTitle": "补充录音1验证",
+    "tabText": "补充录音1验证",
+    "dialogOpen": false,
+    "apiAttachment": {
+      "workspaceId": "ws_33698e99-49ca-4e32-be50-3fe1783f309f",
+      "memoryId": "mem_20260514113152_89f0e861",
+      "segmentId": "seg_20260514113207_81e4b126",
+      "attachmentId": "att_20260514115441_9813fe38",
+      "type": "audio",
+      "title": "补充录音1验证",
+      "createdAt": "2026-05-14T11:54:41.619Z",
+      "updatedAt": "2026-05-14T11:54:44.312Z",
+      "durationMs": 2047,
+      "audioByteLength": 33100,
+      "transcript": {
+        "exists": false
+      }
+    }
+  },
+  "restore": {
+    "ok": true,
+    "value": {
+      "memory": {
+        "memoryId": "mem_20260514113152_89f0e861",
+        "title": "生活呀",
+        "createdAt": "2026-05-14T11:31:52.774Z",
+        "updatedAt": "2026-05-14T14:13:01.119Z",
+        "segmentCount": 2,
+        "durationMs": 11155,
+        "audioByteLength": 181540,
+        "hasTranscript": true,
+        "attachmentCount": 1
+      },
+      "segment": {
+        "workspaceId": "ws_33698e99-49ca-4e32-be50-3fe1783f309f",
+        "memoryId": "mem_20260514113152_89f0e861",
+        "segmentId": "seg_20260514113207_81e4b126",
+        "type": "audio",
+        "title": "记录1",
+        "createdAt": "2026-05-14T11:32:07.716Z",
+        "updatedAt": "2026-05-14T11:54:44.312Z",
+        "durationMs": 2574,
+        "audioByteLength": 42793,
+        "transcript": {
+          "exists": true
+        },
+        "attachmentCount": 1,
+        "attachments": [
+          {
+            "workspaceId": "ws_33698e99-49ca-4e32-be50-3fe1783f309f",
+            "memoryId": "mem_20260514113152_89f0e861",
+            "segmentId": "seg_20260514113207_81e4b126",
+            "attachmentId": "att_20260514115441_9813fe38",
+            "type": "audio",
+            "title": "补充录音1",
+            "createdAt": "2026-05-14T11:54:41.619Z",
+            "updatedAt": "2026-05-14T11:54:44.312Z",
+            "durationMs": 2047,
+            "audioByteLength": 33100,
+            "transcript": {
+              "exists": false
+            }
+          }
+        ]
+      },
+      "attachment": {
+        "workspaceId": "ws_33698e99-49ca-4e32-be50-3fe1783f309f",
+        "memoryId": "mem_20260514113152_89f0e861",
+        "segmentId": "seg_20260514113207_81e4b126",
+        "attachmentId": "att_20260514115441_9813fe38",
+        "type": "audio",
+        "title": "补充录音1",
+        "createdAt": "2026-05-14T11:54:41.619Z",
+        "updatedAt": "2026-05-14T11:54:44.312Z",
+        "durationMs": 2047,
+        "audioByteLength": 33100,
+        "transcript": {
+          "exists": false
+        }
+      }
+    }
+  }
+}
