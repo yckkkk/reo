@@ -806,6 +806,19 @@ export const workspaceRecordingMarkdownSaveResponseSchema = z.discriminatedUnion
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceSegmentAttachmentMarkdownSaveResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+      attachment: workspaceSegmentAttachmentProjectionSchema,
+      saved: z.literal(true),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceMicrophoneIntentRequestSchema = workspaceHandleSchema
   .extend({
     recordingFlowSessionId: z.string().min(1),
@@ -888,6 +901,14 @@ export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingRea
     markdown: z.string(),
   })
   .strict();
+
+export const workspaceSegmentAttachmentMarkdownSaveRequestSchema =
+  workspaceReadFinalizedAudioSegmentAttachmentRequestSchema
+    .omit({ requestId: true, maxBytes: true })
+    .extend({
+      markdown: z.string(),
+    })
+    .strict();
 
 export const workspaceMicrophoneIntentResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -1077,6 +1098,9 @@ export type WorkspaceDiscardRecordingDraftResponse = z.infer<
 export type WorkspaceRecordingMarkdownSaveResponse = z.infer<
   typeof workspaceRecordingMarkdownSaveResponseSchema
 >;
+export type WorkspaceSegmentAttachmentMarkdownSaveResponse = z.infer<
+  typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema
+>;
 export type WorkspaceMicrophoneIntentRequest = z.infer<
   typeof workspaceMicrophoneIntentRequestSchema
 >;
@@ -1110,6 +1134,9 @@ export type WorkspaceFinalizeSegmentAttachmentRecordingDraftRequest = z.infer<
 >;
 export type WorkspaceRecordingMarkdownSaveRequest = z.infer<
   typeof workspaceRecordingMarkdownSaveRequestSchema
+>;
+export type WorkspaceSegmentAttachmentMarkdownSaveRequest = z.infer<
+  typeof workspaceSegmentAttachmentMarkdownSaveRequestSchema
 >;
 export type WorkspaceMicrophoneIntentResponse = z.infer<
   typeof workspaceMicrophoneIntentResponseSchema

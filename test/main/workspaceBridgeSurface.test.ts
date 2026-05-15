@@ -36,6 +36,7 @@ const workspaceBridgeKeys = [
   'updateSegmentTitle',
   'updateSegmentAttachmentTitle',
   'saveTranscript',
+  'saveSegmentAttachmentTranscript',
   'beginMicrophoneIntent',
   'clearMicrophoneIntent',
   'startRecordingTranscription',
@@ -150,6 +151,14 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     workspaceHandle: 'wh_1',
     attachmentId: 'att_1',
   });
+  await bridge.saveSegmentAttachmentTranscript({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    attachmentId: 'att_1',
+    markdown: '补充录音转写',
+  });
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
@@ -173,6 +182,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:cloneRecordingDraftPrefix',
     'workspace:finalizeSegmentAttachmentRecordingDraft',
     'workspace:discardSegmentAttachmentRecordingDraft',
+    'workspace:saveSegmentAttachmentTranscript',
   ]);
 });
 

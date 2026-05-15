@@ -31,6 +31,7 @@ import {
   finalizeSegmentAttachmentRecordingDraft,
   onRecordingTranscriptionEvent,
   readRecordingDraftAudio,
+  saveSegmentAttachmentTranscript,
   saveTranscript,
   sendRecordingTranscriptionAudio,
   startRecordingTranscription,
@@ -2322,6 +2323,57 @@ export function RecordingOverlay({
     }
   }
 
+  async function saveFinalSegmentAttachmentTranscript({
+    attachmentId,
+    memoryId,
+    recordingSession,
+    segmentId,
+  }: {
+    readonly attachmentId: string;
+    readonly memoryId: string;
+    readonly recordingSession: number;
+    readonly segmentId: string;
+  }) {
+    const markdown = transcriptDraftRef.current.trim();
+    if (markdown.length === 0) {
+      return true;
+    }
+
+    try {
+      const response = await saveSegmentAttachmentTranscript({
+        attachmentId,
+        markdown,
+        memoryId,
+        segmentId,
+        workspaceHandle: workspaceSession.workspaceHandle,
+        workspaceId: workspaceSession.workspaceId,
+      });
+      if (recordingSessionRef.current !== recordingSession) {
+        return false;
+      }
+      if (response.ok) {
+        clearRecordingError();
+        onSegmentAttachmentFinalized?.({
+          attachment: response.value.attachment,
+          memory: response.value.memory,
+          segment: response.value.segment,
+        });
+        return true;
+      }
+      notifyRecordingError(
+        workspaceErrorDisplayMessage(response.error, '补充录音已保存，转写暂时无法写入。')
+      );
+      return false;
+    } catch (saveError) {
+      if (recordingSessionRef.current === recordingSession) {
+        notifyRecordingError(
+          unknownErrorDisplayMessage(saveError, '补充录音已保存，转写暂时无法写入。')
+        );
+      }
+      return false;
+    }
+  }
+
   function persistRecoveryTranscriptSnapshot(segmentId: string) {
     const currentTimeline = timelineRef.current;
     updateRecordingRecoverySnapshot({
@@ -2524,7 +2576,20 @@ export function RecordingOverlay({
           segmentId,
           workspaceId: workspaceSession.workspaceId,
         });
-        clearRecoveryMarker(segmentId);
+        await backfillFinalTranscript(recordingSession);
+        persistRecoveryTranscriptSnapshot(segmentId);
+        const transcriptSaved = await saveFinalSegmentAttachmentTranscript({
+          attachmentId: finalizedAttachment.value.attachment.attachmentId,
+          memoryId: recordingTarget.memoryId,
+          recordingSession,
+          segmentId: recordingTarget.segmentId,
+        });
+        if (transcriptSaved) {
+          clearRecoveryMarker(segmentId);
+        }
+        if (recordingSessionRef.current !== recordingSession) {
+          return;
+        }
         resetClosedRecordingState();
         onRecordingFlowSettled?.();
         if (!closeImmediately) {

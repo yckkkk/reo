@@ -178,6 +178,12 @@ export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveT
   return window.reoWorkspace.saveTranscript(payload);
 }
 
+export function saveSegmentAttachmentTranscript(
+  payload: Parameters<Window['reoWorkspace']['saveSegmentAttachmentTranscript']>[0]
+) {
+  return window.reoWorkspace.saveSegmentAttachmentTranscript(payload);
+}
+
 export function beginMicrophoneIntent(
   payload: Parameters<Window['reoWorkspace']['beginMicrophoneIntent']>[0]
 ) {

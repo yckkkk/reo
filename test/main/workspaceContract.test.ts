@@ -14,6 +14,7 @@ import {
   WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
@@ -86,6 +87,8 @@ import {
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
+  workspaceSegmentAttachmentMarkdownSaveRequestSchema,
+  workspaceSegmentAttachmentMarkdownSaveResponseSchema,
   workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
@@ -131,6 +134,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateSegmentTitle',
     'workspace:updateSegmentAttachmentTitle',
     'workspace:saveTranscript',
+    'workspace:saveSegmentAttachmentTranscript',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
     'workspace:startRecordingTranscription',
@@ -191,6 +195,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(
     WORKSPACE_DISCARD_SEGMENT_ATTACHMENT_RECORDING_DRAFT_CHANNEL,
     'workspace:discardSegmentAttachmentRecordingDraft'
+  );
+  assert.equal(
+    WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+    'workspace:saveSegmentAttachmentTranscript'
   );
 });
 
@@ -1636,6 +1644,90 @@ test('microphone intent response exposes no token-like authority', () => {
       },
     })
   );
+});
+
+test('finalized audio segment attachment transcript save contract requires parent identity', () => {
+  assert.deepEqual(
+    workspaceSegmentAttachmentMarkdownSaveRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      markdown: '补充录音转写',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      attachmentId: 'att_1',
+      markdown: '补充录音转写',
+    }
+  );
+
+  const response = workspaceSegmentAttachmentMarkdownSaveResponseSchema.parse({
+    ok: true,
+    value: {
+      saved: true,
+      memory: {
+        memoryId: 'mem_1',
+        title: 'Memory',
+        createdAt: '2026-05-10T13:00:00.000Z',
+        updatedAt: '2026-05-10T13:00:00.000Z',
+        segmentCount: 1,
+        durationMs: 1500,
+        audioByteLength: 7,
+        hasTranscript: false,
+        attachmentCount: 1,
+      },
+      segment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        type: 'audio',
+        title: '录音',
+        createdAt: '2026-05-10T13:00:00.000Z',
+        updatedAt: '2026-05-10T13:00:00.000Z',
+        durationMs: 1500,
+        audioByteLength: 7,
+        transcript: { exists: false },
+        attachmentCount: 1,
+        attachments: [
+          {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            attachmentId: 'att_1',
+            type: 'audio',
+            title: '补充录音',
+            createdAt: '2026-05-10T13:01:00.000Z',
+            updatedAt: '2026-05-10T13:01:00.000Z',
+            durationMs: 500,
+            audioByteLength: 3,
+            transcript: { exists: true },
+          },
+        ],
+      },
+      attachment: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        attachmentId: 'att_1',
+        type: 'audio',
+        title: '补充录音',
+        createdAt: '2026-05-10T13:01:00.000Z',
+        updatedAt: '2026-05-10T13:01:00.000Z',
+        durationMs: 500,
+        audioByteLength: 3,
+        transcript: { exists: true },
+      },
+    },
+  });
+  assert.equal(response.ok, true);
+  assert.equal(response.value.saved, true);
+  assert.equal('rootPath' in response.value, false);
+  assert.equal('workspaceHandle' in response.value, false);
 });
 
 test('recording transcription contract keeps credentials out of renderer payloads', () => {

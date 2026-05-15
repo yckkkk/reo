@@ -38,6 +38,7 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
@@ -105,6 +106,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceSegmentIdRequestSchema,
   workspaceSegmentAttachmentIdRequestSchema,
+  workspaceSegmentAttachmentMarkdownSaveRequestSchema,
+  workspaceSegmentAttachmentMarkdownSaveResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
@@ -154,6 +157,7 @@ import {
   readFinalizedAudioSegmentAttachmentContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
+  saveSegmentAttachmentMarkdown,
 } from './recordingDrafts.js';
 import {
   createMemoryFromFileTruth,
@@ -2362,6 +2366,64 @@ export async function handleFinalizeSegmentAttachmentRecordingDraftForTest(
   return handleFinalizeSegmentAttachmentRecordingDraftCore(options);
 }
 
+function handleSaveSegmentAttachmentTranscriptCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSegmentAttachmentMarkdownSaveRequestSchema,
+    invalidMessage: 'save segment attachment transcript request is invalid',
+    run: (request, handle, assertUsable) =>
+      saveSegmentAttachmentTranscriptWithHandle(request, handle, assertUsable),
+  });
+}
+
+function saveSegmentAttachmentTranscriptWithHandle(
+  request: z.infer<typeof workspaceSegmentAttachmentMarkdownSaveRequestSchema>,
+  handle: RequiredWorkspaceHandle,
+  assertUsable: AssertWorkspaceHandleUsable
+): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
+  return withUsableWorkspaceHandle(assertUsable, async () => {
+    if (request.workspaceId !== handle.workspaceId) {
+      return workspaceError(
+        'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+        'Segment attachment transcript workspace does not match the active handle'
+      );
+    }
+    const result = await saveSegmentAttachmentMarkdown({
+      rootPath: handle.canonicalRoot,
+      workspaceId: request.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      attachmentId: request.attachmentId,
+      fileName: 'transcript.md',
+      markdown: request.markdown,
+      assertWorkspaceUsable: assertUsable,
+    });
+    return workspaceSegmentAttachmentMarkdownSaveResponseSchema.parse(
+      result.ok
+        ? {
+            ok: true,
+            value: {
+              memory: result.memory,
+              segment: result.segment,
+              attachment: result.attachment,
+              saved: true,
+            },
+          }
+        : result
+    );
+  });
+}
+
+export async function handleSaveSegmentAttachmentTranscriptForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSegmentAttachmentMarkdownSaveResponseSchema>> {
+  return handleSaveSegmentAttachmentTranscriptCore(options);
+}
+
 function closeRecordingTranscriptionCore({
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   ...options
@@ -3025,5 +3087,11 @@ export function registerWorkspaceIpc({
           result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
         );
       })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_SAVE_SEGMENT_ATTACHMENT_TRANSCRIPT_CHANNEL,
+    workspaceSegmentAttachmentMarkdownSaveRequestSchema,
+    'save segment attachment transcript request is invalid',
+    saveSegmentAttachmentTranscriptWithHandle
   );
 }

@@ -1932,7 +1932,7 @@ async function segmentAttachmentsDirectory(
   return path.join(recordingDirectory, 'attachments');
 }
 
-async function segmentAttachmentDirectory(
+export async function segmentAttachmentDirectory(
   rootPath: string,
   memoryId: string,
   segmentId: string,

@@ -233,6 +233,54 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { memory: savedMemorySummary, saved: true as const },
     })),
+    saveSegmentAttachmentTranscript: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        memory: { ...savedMemorySummary, attachmentCount: 1 },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          type: 'audio' as const,
+          title: 'Daily memory 录音',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+          durationMs: 0,
+          audioByteLength: 3,
+          transcript: { exists: true },
+          attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_1',
+              segmentId: 'seg_1',
+              attachmentId: 'att_1',
+              type: 'audio' as const,
+              title: '补充录音1',
+              createdAt: '2026-05-06T13:09:00.000Z',
+              updatedAt: '2026-05-06T13:10:00.000Z',
+              durationMs: 0,
+              audioByteLength: 1,
+              transcript: { exists: true },
+            },
+          ],
+        },
+        attachment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          attachmentId: 'att_1',
+          type: 'audio' as const,
+          title: '补充录音1',
+          createdAt: '2026-05-06T13:09:00.000Z',
+          updatedAt: '2026-05-06T13:10:00.000Z',
+          durationMs: 0,
+          audioByteLength: 1,
+          transcript: { exists: true },
+        },
+        saved: true as const,
+      },
+    })),
     beginMicrophoneIntent: vi.fn(async () => ({
       ok: true as const,
       value: { registered: true as const },
@@ -460,7 +508,15 @@ describe('RecordingOverlay', () => {
   });
 
   it('saves segment attachment recording through attachment draft IPC without creating a sibling segment', async () => {
-    const bridge = installWorkspaceBridge();
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    const bridge = installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+    });
     const media = createMediaAdapter();
     const onOpenChange = vi.fn();
     const onSegmentAttachmentFinalized = vi.fn();
@@ -485,6 +541,25 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     await emitRecordedAudio(media);
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    await flushPromises();
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1600,
+            isFinal: true,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 200,
+            text: '现场补充转写',
+          },
+        ],
+      })
+    );
 
     expect(
       JSON.parse(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1') ?? '{}')
@@ -525,7 +600,15 @@ describe('RecordingOverlay', () => {
       title: '补充录音1',
       durationMs: expect.any(Number),
     });
-    expect(onSegmentAttachmentFinalized).toHaveBeenCalledOnce();
+    expect(bridge.saveSegmentAttachmentTranscript).toHaveBeenCalledWith({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_parent',
+      attachmentId: 'att_1',
+      markdown: '现场补充转写',
+    });
+    expect(onSegmentAttachmentFinalized).toHaveBeenCalledTimes(2);
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

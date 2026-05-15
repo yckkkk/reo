@@ -48,6 +48,7 @@ describe('App', () => {
     updateSegmentTitle: vi.fn(),
     updateSegmentAttachmentTitle: vi.fn(),
     saveTranscript: vi.fn(),
+    saveSegmentAttachmentTranscript: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
     startRecordingTranscription: vi.fn(),
@@ -4812,6 +4813,7 @@ describe('App', () => {
         targetKind: 'segment-attachment',
         title: '补充录音',
         durationMs: 3720,
+        transcriptMarkdown: '恢复补充录音转写',
         createdAt: '2026-05-09T10:00:00.000Z',
         updatedAt: '2026-05-09T10:00:03.720Z',
       })
@@ -4873,6 +4875,58 @@ describe('App', () => {
         },
       },
     });
+    reoWorkspace.saveSegmentAttachmentTranscript.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...recoveredMemory,
+          attachmentCount: 1,
+          updatedAt: '2026-05-09T10:00:04.000Z',
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_existing',
+          segmentId: 'seg_parent',
+          type: 'audio',
+          title: 'Parent recording',
+          createdAt: '2026-05-07T14:30:00.000Z',
+          updatedAt: '2026-05-09T10:00:04.000Z',
+          durationMs: 1,
+          audioByteLength: 1,
+          transcript: { exists: false },
+          attachmentCount: 1,
+          attachments: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_existing',
+              segmentId: 'seg_parent',
+              attachmentId: 'att_recoverable',
+              type: 'audio',
+              title: '补充录音',
+              createdAt: '2026-05-09T10:00:00.000Z',
+              updatedAt: '2026-05-09T10:00:04.000Z',
+              durationMs: 3720,
+              audioByteLength: 23,
+              transcript: { exists: true },
+            },
+          ],
+        },
+        attachment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_existing',
+          segmentId: 'seg_parent',
+          attachmentId: 'att_recoverable',
+          type: 'audio',
+          title: '补充录音',
+          createdAt: '2026-05-09T10:00:00.000Z',
+          updatedAt: '2026-05-09T10:00:04.000Z',
+          durationMs: 3720,
+          audioByteLength: 23,
+          transcript: { exists: true },
+        },
+        saved: true,
+      },
+    });
 
     render(
       <ReoQueryProvider>
@@ -4903,6 +4957,14 @@ describe('App', () => {
     );
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.saveTranscript).not.toHaveBeenCalled();
+    expect(reoWorkspace.saveSegmentAttachmentTranscript).toHaveBeenCalledWith({
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_existing',
+      segmentId: 'seg_parent',
+      attachmentId: 'att_recoverable',
+      markdown: '恢复补充录音转写',
+    });
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.queryByText('1 个片段 · 00:00')).not.toBeInTheDocument();

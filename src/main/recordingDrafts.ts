@@ -35,6 +35,7 @@ import {
   appendAudioSegmentToMemoryForTest,
   assertNoDuplicateSegmentDirectoryById,
   lookupSegmentDirectoryById,
+  segmentAttachmentDirectory,
   memorySegmentDirectory,
   readFinalizedSegmentProjection,
   readFinalizedSegmentSummary,
@@ -83,6 +84,12 @@ type RecordingMarkdownSaveInput = {
 };
 type FinalizedAudioSegmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
   readonly memoryId: string;
+};
+type FinalizedAudioSegmentAttachmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly attachmentId: string;
 };
 
 function checkWorkspaceUsable(
@@ -281,12 +288,16 @@ async function resolveFinalizedAudioSegmentAttachmentReadTarget(
   readonly directory: string;
   readonly audioByteLength: number;
 }> {
-  const safeAttachmentId = createSafeAttachmentId(attachmentId);
   const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const segmentDirectoryIdentity = await readDirectoryIdentity(segmentDirectory);
   const attachmentsDirectory = path.join(segmentDirectory, 'attachments');
   const attachmentsDirectoryIdentity = await readDirectoryIdentity(attachmentsDirectory);
-  const attachmentDirectory = path.join(attachmentsDirectory, safeAttachmentId);
+  const attachmentDirectory = await segmentAttachmentDirectory(
+    rootPath,
+    memoryId,
+    segmentId,
+    attachmentId
+  );
   const relative = path.relative(attachmentsDirectory, attachmentDirectory);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Segment attachment path escapes parent segment');
@@ -1975,6 +1986,109 @@ async function saveRecordingMarkdownNow({
     return workspaceError(
       'ERR_WORKSPACE_INDEX_WRITE_FAILED',
       'Recording markdown was saved but the workspace index could not be refreshed',
+      'file-written-index-stale'
+    );
+  }
+}
+
+export async function saveSegmentAttachmentMarkdown(
+  input: FinalizedAudioSegmentAttachmentMarkdownSaveInput
+): Promise<
+  | {
+      readonly ok: true;
+      readonly memory: MemorySummary;
+      readonly segment: WorkspaceSegmentProjection;
+      readonly attachment: WorkspaceSegmentAttachmentProjection;
+      readonly saved: true;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  return withMarkdownSaveQueue(
+    recordingKey(
+      input.rootPath,
+      `${input.memoryId}:${input.segmentId}:${input.attachmentId}:${input.fileName}`
+    ),
+    () => saveSegmentAttachmentMarkdownNow(input)
+  );
+}
+
+async function saveSegmentAttachmentMarkdownNow({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  attachmentId,
+  fileName,
+  markdown,
+  assertWorkspaceUsable,
+}: FinalizedAudioSegmentAttachmentMarkdownSaveInput): Promise<
+  | {
+      readonly ok: true;
+      readonly memory: MemorySummary;
+      readonly segment: WorkspaceSegmentProjection;
+      readonly attachment: WorkspaceSegmentAttachmentProjection;
+      readonly saved: true;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+  try {
+    const { directory: attachmentDirectory } =
+      await resolveFinalizedAudioSegmentAttachmentReadTarget(
+        rootPath,
+        workspaceId,
+        memoryId,
+        segmentId,
+        attachmentId
+      );
+    await writeMarkdownInRecordingDirectory({
+      recordingDirectory: attachmentDirectory,
+      fileName,
+      markdown,
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+    });
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Segment attachment markdown could not be saved',
+      'previous-file-preserved'
+    );
+  }
+  try {
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    const segment = await readFinalizedSegmentProjection({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+    });
+    const attachment = segment.attachments.find(
+      (candidate) => candidate.attachmentId === attachmentId
+    );
+    if (!attachment) {
+      return workspaceError(
+        'ERR_RECORDING_NOT_FOUND',
+        'Saved segment attachment markdown projection was not found',
+        'file-written-index-stale'
+      );
+    }
+    return { ok: true, memory, segment, attachment, saved: true };
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_INDEX_WRITE_FAILED',
+      'Segment attachment markdown was saved but the workspace index could not be refreshed',
       'file-written-index-stale'
     );
   }

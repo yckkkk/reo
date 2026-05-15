@@ -66,6 +66,7 @@ import {
   removeMemorySpace,
   restoreDeletedMemory,
   restoreDeletedSegmentAttachment,
+  saveSegmentAttachmentTranscript,
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
@@ -1645,6 +1646,48 @@ export function App() {
           setRecordingRecoveryDraft({ ...draft, finalizedAttachment });
         } else {
           handleSegmentAttachmentFinalized(finalizedAttachment);
+        }
+        const recoveredTranscript =
+          draft.transcriptMarkdown ??
+          transcriptMarkdownFromSegments(draft.transcriptSegments ?? []);
+        let transcriptSaved = true;
+        if (recoveredTranscript.length > 0) {
+          try {
+            const transcriptResponse = await saveSegmentAttachmentTranscript({
+              attachmentId: finalizedAttachment.attachment.attachmentId,
+              markdown: recoveredTranscript,
+              memoryId: finalizedAttachment.attachment.memoryId,
+              segmentId: draft.parentSegmentId ?? finalizedAttachment.attachment.segmentId,
+              workspaceHandle: activeWorkspaceSession.workspaceHandle,
+              workspaceId: activeWorkspaceSession.workspaceId,
+            });
+            if (transcriptResponse.ok) {
+              handleSegmentAttachmentFinalized({
+                attachment: transcriptResponse.value.attachment,
+                memory: transcriptResponse.value.memory,
+                segment: transcriptResponse.value.segment,
+              });
+            } else {
+              transcriptSaved = false;
+              toast.error('补充录音已保存，转写暂时无法写入。', {
+                description: workspaceErrorDisplayMessage(
+                  transcriptResponse.error,
+                  '补充录音已保存，转写暂时无法写入。'
+                ),
+              });
+            }
+          } catch (transcriptError) {
+            transcriptSaved = false;
+            toast.error('补充录音已保存，转写暂时无法写入。', {
+              description: unknownErrorDisplayMessage(
+                transcriptError,
+                '补充录音已保存，转写暂时无法写入。'
+              ),
+            });
+          }
+        }
+        if (!transcriptSaved) {
+          return;
         }
         clearRecordingRecoveryDraft({
           segmentId: draft.segmentId,
