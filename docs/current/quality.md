@@ -137,7 +137,7 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 - 当前日志 retention 使用 `electron-log` file rotation：`main.log` 单文件大小上限为 1 MiB，超过后轮转为 `main.old.log`。
 - 当前诊断覆盖 app diagnostics ready、app ready、bootstrap failed、renderer process gone、uncaught exception 和 workspace IPC request start/finish。
 - Workspace IPC diagnostic span 只记录 channel、status、duration 和脱敏字段，不记录 request payload、root path、file path、display path、title、token、handle、transcript、正文或 secret。
-- Diagnostic fields 默认不展开对象、数组或未知字符串；只有 `channel`、`status`、`mode`、`processType`、`reason`、`phase`、`errorName`、`errorCode` 和 `dataRetention` 这类固定枚举短字段保留原始字符串。
+- Diagnostic fields 默认不展开对象、数组或未知字符串；`channel`、`status`、`mode`、`processType`、`reason`、`errorName`、`errorCode` 和 `dataRetention` 只能在闭合 allowlist 中保留。未知 `errorName` 收敛为 `Error`，未知 `errorCode` 收敛为 `ERR_UNKNOWN`，未知 `error:*` status 收敛为 `error`。
 - `REO_DIAGNOSTICS_CONSOLE=1` 只允许在本机开发时把同一诊断事件同步到 console；默认 console transport 关闭。
 - Renderer error capture、preload logging bridge、IPC logging channel、generic diagnostic IPC 和远程 telemetry 当前都不存在。
 - 引入 crash/error reporting 时，使用 Sentry。

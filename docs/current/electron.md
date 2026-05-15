@@ -12,7 +12,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前 IPC API 只有显式 workspace product channels，不存在 generic `invoke/send` bridge。
 - 当前 main process 持有 memory space registry，真实 memory space root 只存放在 main-owned app state file 中，不进入 renderer、preload DTO、DOM、URL 或 Query key。
 - 当前 main process 使用 `electron-log/main` 写入本地结构化诊断日志；日志目录由 `app.setAppLogsPath()` 交给 Electron 管理，当前文件为 Electron logs path 下的 `main.log`。
-- 当前本地诊断覆盖 app diagnostics ready、app ready、bootstrap failed、renderer process gone、uncaught exception 和 workspace IPC request start/finish。Workspace IPC 诊断只记录 channel、status、duration 和脱敏字段，不记录 root path、file path、display path、title、token、handle、payload、transcript、正文或 secret。诊断字段默认不展开对象、数组或未知字符串；只有固定枚举类字段允许保留短字符串。
+- 当前本地诊断覆盖 app diagnostics ready、app ready、bootstrap failed、renderer process gone、uncaught exception 和 workspace IPC request start/finish。Workspace IPC 诊断只记录 channel、status、duration 和脱敏字段，不记录 root path、file path、display path、title、token、handle、payload、transcript、正文或 secret。诊断字段默认不展开对象、数组或未知字符串；channel、status、errorName、errorCode、mode、processType、reason 和 dataRetention 只在闭合 allowlist 中保留。
 - 当前没有 renderer error capture、preload logging bridge、IPC logging channel、generic diagnostic IPC 或远程 telemetry。
 - 当前没有 packaging、updater、signing、notarization、ASAR 或 fuse config。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。

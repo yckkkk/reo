@@ -44,8 +44,8 @@
 
 ## 当前证据
 
-- `npm run test:main`：402 个 main/preload/contract 测试通过，覆盖 diagnostic span、字段脱敏、`electron-log` 本地文件写入和默认 console transport 关闭。
-- `npm run verify:quick`：typecheck、402 个 main tests、297 个 renderer tests、lint 和 format check 全部通过。
+- `npm run test:main`：403 个 main/preload/contract 测试通过，覆盖 diagnostic span、字段脱敏、attacker-controlled error name/status 收敛、`electron-log` 本地文件写入、默认 console transport 关闭和 workspace IPC diagnostics fields 边界。
+- `npm run verify:quick`：typecheck、403 个 main tests、297 个 renderer tests、lint 和 format check 全部通过。
 - `npm run dev`：使用 `REMOTE_DEBUGGING_PORT=9233 REO_DIAGNOSTICS_CONSOLE=1` 启动真实 Electron runtime。
 - Runtime E2E：
   - 通过 UI 打开“创建本地记忆空间”表单。
@@ -58,3 +58,9 @@
 - E2E artifact：
   - `artifacts/e2e-result.json`
   - `artifacts/e2e-workspace.png`
+
+## 最终审查修复
+
+- Subagent 审查指出 `Error.name`、`errorCode` 和 derived `status` 不能作为未收敛字符串；已改为闭合 allowlist，恶意 path/title/token-shaped 字符串只落为 `Error`、`ERR_UNKNOWN` 或 `error`。
+- Subagent 审查指出 workspace IPC 诊断测试没有保护未来误传 payload；已让注册层测试断言 diagnostics fields 只能包含 `channel`。
+- Active test/doc 中的旧外部文件刷新文案已改为 external file 或 Markdown/frontmatter 表达。

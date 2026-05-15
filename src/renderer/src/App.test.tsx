@@ -1727,7 +1727,7 @@ describe('App', () => {
     expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it('skips child query invalidation when external JSON refresh returns the same snapshot', async () => {
+  it('skips child query invalidation when external file refresh returns the same snapshot', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -1800,7 +1800,7 @@ describe('App', () => {
     expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1);
   });
 
-  it('refreshes the active workspace from external JSON edits when the document becomes visible', async () => {
+  it('refreshes the active workspace from external Markdown edits when the document becomes visible', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -1893,7 +1893,7 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
   });
 
-  it('ignores stale external JSON refresh responses when visibility events overlap', async () => {
+  it('ignores stale external file refresh responses when visibility events overlap', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',

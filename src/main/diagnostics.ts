@@ -1,3 +1,9 @@
+import {
+  WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_RENDERER_EVENT_CHANNELS,
+  workspaceErrorCodeSchema,
+} from '../workspace-contract/workspace-contract.js';
+
 type DiagnosticLevel = 'info' | 'warn' | 'error';
 type DiagnosticFieldValue = string | number | boolean | null;
 
@@ -48,18 +54,50 @@ const SENSITIVE_FIELD_PATTERNS = [
   /token/i,
   /transcript/i,
 ];
-const SAFE_STRING_FIELD_KEYS = new Set([
-  'channel',
-  'dataRetention',
-  'errorCode',
-  'errorName',
-  'mode',
-  'phase',
-  'processType',
-  'reason',
-  'status',
+const SAFE_CHANNELS = new Set<string>([
+  ...WORKSPACE_IPC_CHANNELS,
+  ...WORKSPACE_RENDERER_EVENT_CHANNELS,
 ]);
-const MAX_SAFE_STRING_LENGTH = 160;
+const SAFE_DATA_RETENTION_VALUES = new Set([
+  'none-written',
+  'previous-file-preserved',
+  'draft-preserved',
+  'durable-marker-recovery-required',
+  'file-written-index-stale',
+  'unknown',
+]);
+const SAFE_ERROR_CODES = new Set<string>(workspaceErrorCodeSchema.options);
+const SAFE_ERROR_NAMES = new Set([
+  'AbortError',
+  'AggregateError',
+  'DOMException',
+  'Error',
+  'EvalError',
+  'FileWrittenIndexStale',
+  'FinalizeTransactionFailure',
+  'RangeError',
+  'RecordingTranscriptionStartClosedError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'WorkspaceHandleLost',
+  'WorkspaceMemorySpaceRegistryReadError',
+  'WorkspaceOpenAborted',
+  'WorkspacePathAborted',
+  'ZodError',
+]);
+const SAFE_MODE_VALUES = new Set(['development', 'production']);
+const SAFE_PROCESS_TYPE_VALUES = new Set(['main']);
+const SAFE_RENDERER_GONE_REASONS = new Set([
+  'abnormal-exit',
+  'clean-exit',
+  'crashed',
+  'integrity-failure',
+  'killed',
+  'launch-failed',
+  'oom',
+]);
 
 const DEFAULT_SINK: DiagnosticSink = {
   write() {},
@@ -109,8 +147,60 @@ export function sanitizeDiagnosticFields(
 }
 
 function sanitizeStringField(key: string, value: string): DiagnosticFieldValue {
-  if (SAFE_STRING_FIELD_KEYS.has(key) && value.length <= MAX_SAFE_STRING_LENGTH) {
+  if (key === 'channel') {
+    return SAFE_CHANNELS.has(value) ? value : `[string:${value.length}]`;
+  }
+
+  if (key === 'dataRetention') {
+    return SAFE_DATA_RETENTION_VALUES.has(value) ? value : `[string:${value.length}]`;
+  }
+
+  if (key === 'errorCode') {
+    return SAFE_ERROR_CODES.has(value) ? value : 'ERR_UNKNOWN';
+  }
+
+  if (key === 'errorName') {
+    return sanitizeDiagnosticErrorName(value);
+  }
+
+  if (key === 'status') {
+    return sanitizeDiagnosticStatus(value);
+  }
+
+  if (key === 'mode') {
+    return SAFE_MODE_VALUES.has(value) ? value : `[string:${value.length}]`;
+  }
+
+  if (key === 'processType') {
+    return SAFE_PROCESS_TYPE_VALUES.has(value) ? value : `[string:${value.length}]`;
+  }
+
+  if (key === 'reason') {
+    return SAFE_RENDERER_GONE_REASONS.has(value) ? value : `[string:${value.length}]`;
+  }
+
+  return `[string:${value.length}]`;
+}
+
+export function diagnosticErrorName(error: unknown): string {
+  if (error instanceof Error) {
+    return sanitizeDiagnosticErrorName(error.name);
+  }
+  return typeof error;
+}
+
+function sanitizeDiagnosticErrorName(value: string): string {
+  return SAFE_ERROR_NAMES.has(value) ? value : 'Error';
+}
+
+function sanitizeDiagnosticStatus(value: string): string {
+  if (value === 'ok' || value === 'error' || value === 'thrown') {
     return value;
+  }
+
+  if (value.startsWith('error:')) {
+    const code = value.slice('error:'.length);
+    return SAFE_ERROR_CODES.has(code) ? value : 'error';
   }
 
   return `[string:${value.length}]`;
@@ -175,7 +265,7 @@ export function createDiagnosticRecorder({
         fields: {
           ...event.fields,
           durationMs: Math.max(0, Math.round(nowMs() - startedAt)),
-          errorName: error instanceof Error ? error.name : typeof error,
+          errorName: diagnosticErrorName(error),
           status: 'thrown',
         },
         level: 'error',

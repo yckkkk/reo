@@ -71,7 +71,10 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
       workspaceId: 'ws_1',
     });
     const closedHandles: string[] = [];
-    const diagnosticEvents: Array<{ readonly event: string; readonly channel: string }> = [];
+    const diagnosticEvents: Array<{
+      readonly event: string;
+      readonly fields: Record<string, unknown>;
+    }> = [];
 
     registerWorkspaceIpc({
       expectedSession,
@@ -92,14 +95,15 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
         },
         run: () => Promise<Result> | Result
       ): Promise<Result> {
+        assert.deepEqual(Object.keys(event.fields ?? {}).sort(), ['channel']);
         diagnosticEvents.push({
-          channel: String(event.fields?.['channel'] ?? ''),
           event: `${event.event}.start`,
+          fields: event.fields ?? {},
         });
         const result = await run();
         diagnosticEvents.push({
-          channel: String(event.fields?.['channel'] ?? ''),
           event: `${event.event}.finish`,
+          fields: event.fields ?? {},
         });
         return result;
       },
@@ -112,8 +116,8 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
     assert.deepEqual(response, { ok: true, value: { closed: true } });
     assert.deepEqual(closedHandles, ['wh_ipc']);
     assert.deepEqual(diagnosticEvents, [
-      { channel: WORKSPACE_CLOSE_CHANNEL, event: 'request.start' },
-      { channel: WORKSPACE_CLOSE_CHANNEL, event: 'request.finish' },
+      { event: 'request.start', fields: { channel: WORKSPACE_CLOSE_CHANNEL } },
+      { event: 'request.finish', fields: { channel: WORKSPACE_CLOSE_CHANNEL } },
     ]);
   } finally {
     moduleWithLoad._load = originalLoad;

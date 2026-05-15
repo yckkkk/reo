@@ -7,6 +7,7 @@ import log from 'electron-log/main';
 import { initializeElectronDiagnostics } from '../../src/main/electronDiagnostics.js';
 import {
   createDiagnosticRecorder,
+  diagnosticErrorName,
   recordDiagnosticEvent,
   sanitizeDiagnosticFields,
   type DiagnosticEvent,
@@ -102,6 +103,75 @@ test('diagnostic span records error status and redacts thrown error messages', a
     filePath: '[redacted]',
     status: 'thrown',
   });
+});
+
+test('diagnostic error names and statuses reject attacker-controlled strings', async () => {
+  const events: DiagnosticEvent[] = [];
+  const recorder = createDiagnosticRecorder({
+    now: () => '2026-05-15T16:41:00.000Z',
+    nowMs: (() => {
+      const values = [1, 2];
+      return () => values.shift() ?? 2;
+    })(),
+    sink: {
+      write(event) {
+        events.push(event);
+      },
+    },
+  });
+  const error = new Error('message is never diagnostic payload');
+  error.name = 'TokenABC123';
+
+  await assert.rejects(
+    recorder.withSpan(
+      {
+        area: 'workspace-ipc',
+        event: 'request',
+        fields: {
+          channel: 'workspace:open',
+        },
+      },
+      async () => {
+        throw error;
+      }
+    )
+  );
+
+  assert.equal(diagnosticErrorName(error), 'Error');
+  assert.deepEqual(events[1]?.fields, {
+    channel: 'workspace:open',
+    durationMs: 1,
+    errorName: 'Error',
+    status: 'thrown',
+  });
+  assert.deepEqual(
+    sanitizeDiagnosticFields({
+      channel: 'selectionTokenLikeChannel',
+      errorCode: 'ERR_TOKEN_ABC123',
+      errorName: 'TokenABC123',
+      status: 'error:ERR_TOKEN_ABC123',
+    }),
+    {
+      channel: '[string:25]',
+      errorCode: 'ERR_UNKNOWN',
+      errorName: 'Error',
+      status: 'error',
+    }
+  );
+  assert.deepEqual(
+    sanitizeDiagnosticFields({
+      channel: 'workspace:close',
+      errorCode: 'ERR_WORKSPACE_LOCK_LOST',
+      errorName: 'TypeError',
+      status: 'error:ERR_WORKSPACE_LOCK_LOST',
+    }),
+    {
+      channel: 'workspace:close',
+      errorCode: 'ERR_WORKSPACE_LOCK_LOST',
+      errorName: 'TypeError',
+      status: 'error:ERR_WORKSPACE_LOCK_LOST',
+    }
+  );
 });
 
 test('diagnostic field sanitizer bounds primitives and never expands objects', () => {

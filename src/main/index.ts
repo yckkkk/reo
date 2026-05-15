@@ -8,7 +8,7 @@ import {
   type WebContentsWillRedirectEventParams,
 } from 'electron';
 import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from './appProtocol.js';
-import { recordDiagnosticEvent } from './diagnostics.js';
+import { diagnosticErrorName, recordDiagnosticEvent } from './diagnostics.js';
 import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
@@ -126,14 +126,11 @@ app
     });
   })
   .catch((error: unknown) => {
-    console.error(
-      '[Main] Failed to bootstrap application',
-      error instanceof Error ? error.name : typeof error
-    );
+    console.error('[Main] Failed to bootstrap application', diagnosticErrorName(error));
     recordDiagnosticEvent({
       area: 'app',
       event: 'bootstrap.failed',
-      fields: { errorName: error instanceof Error ? error.name : typeof error },
+      fields: { errorName: diagnosticErrorName(error) },
       level: 'error',
     });
     app.quit();
@@ -146,11 +143,12 @@ app.on('window-all-closed', () => {
 });
 
 process.on('uncaughtException', (error: Error) => {
-  console.error('[Main] Uncaught Exception', error.name);
+  const errorName = diagnosticErrorName(error);
+  console.error('[Main] Uncaught Exception', errorName);
   recordDiagnosticEvent({
     area: 'app',
     event: 'uncaughtException',
-    fields: { errorName: error.name },
+    fields: { errorName },
     level: 'error',
   });
   void closeAllWorkspaceHandles().finally(() => {
