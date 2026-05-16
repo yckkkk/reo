@@ -1,0 +1,194 @@
+{
+  "generatedAt": "2026-05-16T01:06:55.249Z",
+  "runtime": "REMOTE_DEBUGGING_PORT=9233 npm run dev",
+  "cdpPage": {
+    "title": "Reo",
+    "url": "http://localhost:5173/"
+  },
+  "fixture": {
+    "workspaceTitle": "Reo Actions Runtime 20260516005001",
+    "root": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001",
+    "memoryDir": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001",
+    "segmentDir": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001",
+    "supplementDir": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001/supplements/sup_actions_20260516005001--Runtime Supplement 20260516005001"
+  },
+  "menus": [
+    {
+      "id": "sidebar-memory-space",
+      "file": "runtime-02-sidebar-memory-space-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "Reo Actions Runtime 20260516005001 更多操作",
+        "rect": {
+          "x": 64,
+          "y": 226,
+          "width": 160,
+          "height": 186
+        },
+        "items": ["用默认应用打开", "在访达中显示", "复制绝对路径", "重命名", "移除"]
+      }
+    },
+    {
+      "id": "titlebar-memory-space",
+      "file": "runtime-03-titlebar-memory-space-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "Reo Actions Runtime 20260516005001 记忆空间操作",
+        "rect": {
+          "x": 252,
+          "y": 41,
+          "width": 160,
+          "height": 186
+        },
+        "items": ["用默认应用打开", "在访达中显示", "复制绝对路径", "重命名", "移除"]
+      }
+    },
+    {
+      "id": "titlebar-memory",
+      "file": "runtime-04-titlebar-memory-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "Runtime Memory 20260516005001 记忆操作",
+        "rect": {
+          "x": 484,
+          "y": 41,
+          "width": 160,
+          "height": 218
+        },
+        "items": [
+          "用默认应用打开",
+          "在访达中显示",
+          "复制相对路径",
+          "复制绝对路径",
+          "重命名",
+          "删除"
+        ]
+      }
+    },
+    {
+      "id": "memory-rail-memory",
+      "file": "runtime-05-memory-rail-memory-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "Runtime Memory 20260516005001 更多操作",
+        "rect": {
+          "x": 1040,
+          "y": 108,
+          "width": 160,
+          "height": 218
+        },
+        "items": [
+          "用默认应用打开",
+          "在访达中显示",
+          "复制相对路径",
+          "复制绝对路径",
+          "重命名",
+          "删除"
+        ]
+      }
+    },
+    {
+      "id": "segment-card",
+      "file": "runtime-06-segment-card-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "片段 Runtime Segment 20260516005001 更多操作",
+        "rect": {
+          "x": 260,
+          "y": 136,
+          "width": 160,
+          "height": 218
+        },
+        "items": [
+          "用默认应用打开",
+          "在访达中显示",
+          "复制相对路径",
+          "复制绝对路径",
+          "重命名",
+          "删除"
+        ]
+      }
+    },
+    {
+      "id": "supplement-tab",
+      "file": "runtime-07-supplement-tab-menu.png",
+      "menu": {
+        "ok": true,
+        "aria": "Runtime Supplement 20260516005001 操作",
+        "rect": {
+          "x": 520,
+          "y": 471,
+          "width": 160,
+          "height": 218
+        },
+        "items": [
+          "用默认应用打开",
+          "在访达中显示",
+          "复制相对路径",
+          "复制绝对路径",
+          "重命名",
+          "删除"
+        ]
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "memory-space-copy-absolute",
+      "clipboard": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001",
+      "expected": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001",
+      "toasts": ["已复制路径"],
+      "clipboardRealpath": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001",
+      "expectedRealpath": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001",
+      "matchesExpected": true
+    },
+    {
+      "id": "memory-copy-relative",
+      "clipboard": "memories/mem_actions_20260516005001--Runtime Memory 20260516005001",
+      "expected": "memories/mem_actions_20260516005001--Runtime Memory 20260516005001",
+      "toasts": ["已复制路径", "已复制路径"],
+      "matchesExpected": true
+    },
+    {
+      "id": "segment-copy-absolute",
+      "clipboard": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001",
+      "expected": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001",
+      "toasts": ["已复制路径", "已复制路径", "已复制路径"],
+      "clipboardRealpath": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001",
+      "expectedRealpath": "/private/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001",
+      "matchesExpected": true
+    },
+    {
+      "id": "segment-supplement-copy-relative",
+      "clipboard": "memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001/supplements/sup_actions_20260516005001--Runtime Supplement 20260516005001",
+      "expected": "memories/mem_actions_20260516005001--Runtime Memory 20260516005001/segments/seg_actions_20260516005001--Runtime Segment 20260516005001/supplements/sup_actions_20260516005001--Runtime Supplement 20260516005001",
+      "toasts": ["已复制路径", "已复制路径", "已复制路径"],
+      "matchesExpected": true
+    },
+    {
+      "id": "memory-open-default-app",
+      "frontmostAfterOpen": "stable",
+      "toasts": [],
+      "expectedDocument": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001/memory.md",
+      "noErrorToast": true
+    },
+    {
+      "id": "memory-reveal-finder",
+      "finderSelection": "",
+      "expected": "/var/folders/ql/82hx_cy97xd902x7ryf2dx3m0000gn/T/reo-actions-menu-runtime-20260516005001/Reo Actions Runtime 20260516005001/memories/mem_actions_20260516005001--Runtime Memory 20260516005001",
+      "toasts": [],
+      "probeLimitation": "Finder reveal menu item returned without a renderer error toast. Finder selection was empty after the corrected selection probe, and a later Finder window-introspection AppleScript hung in this environment.",
+      "noErrorToast": true,
+      "initialFinderProbe": "osascript failed: Command failed: osascript -e tell application \"Finder\" to if (count of selection) is greater than 0 then POSIX path of ((item 1 of selection) as alias) else \"\"\n121:127: syntax error: ““else””不能跟在““)””之后。 (-2740)\n",
+      "correctedFinderProbe": {
+        "selection": "",
+        "toasts": []
+      }
+    },
+    {
+      "id": "memory-open-missing-document",
+      "toasts": ["找不到对应的正文文件。"],
+      "matchesExpected": true
+    }
+  ]
+}

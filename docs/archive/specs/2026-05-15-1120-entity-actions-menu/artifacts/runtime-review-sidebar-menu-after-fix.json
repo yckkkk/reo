@@ -1,0 +1,131 @@
+{
+  "ok": true,
+  "menu": {
+    "x": 64,
+    "y": 262,
+    "width": 160,
+    "height": 186
+  },
+  "itemCount": 5,
+  "separatorCount": 2,
+  "items": [
+    {
+      "text": "用默认应用打开",
+      "svgCount": 1,
+      "rect": {
+        "x": 68,
+        "y": 266,
+        "width": 152,
+        "height": 32
+      },
+      "paddingLeft": "8px",
+      "gap": "8px"
+    },
+    {
+      "text": "在访达中显示",
+      "svgCount": 1,
+      "rect": {
+        "x": 68,
+        "y": 298,
+        "width": 152,
+        "height": 32
+      },
+      "paddingLeft": "8px",
+      "gap": "8px"
+    },
+    {
+      "text": "复制绝对路径",
+      "svgCount": 1,
+      "rect": {
+        "x": 68,
+        "y": 339,
+        "width": 152,
+        "height": 32
+      },
+      "paddingLeft": "8px",
+      "gap": "8px"
+    },
+    {
+      "text": "重命名",
+      "svgCount": 1,
+      "rect": {
+        "x": 68,
+        "y": 380,
+        "width": 152,
+        "height": 32
+      },
+      "paddingLeft": "8px",
+      "gap": "8px"
+    },
+    {
+      "text": "移除",
+      "svgCount": 1,
+      "rect": {
+        "x": 68,
+        "y": 412,
+        "width": 152,
+        "height": 32
+      },
+      "paddingLeft": "8px",
+      "gap": "8px"
+    }
+  ],
+  "separators": [
+    {
+      "rect": {
+        "x": 76,
+        "y": 334,
+        "width": 136,
+        "height": 1
+      },
+      "backgroundColor": "oklab(0.985098 0.0000447631 0.0000197291 / 0.2)",
+      "marginTop": "4px",
+      "marginBottom": "4px",
+      "marginLeft": "8px",
+      "marginRight": "8px"
+    },
+    {
+      "rect": {
+        "x": 76,
+        "y": 375,
+        "width": 136,
+        "height": 1
+      },
+      "backgroundColor": "oklab(0.985098 0.0000447631 0.0000197291 / 0.2)",
+      "marginTop": "4px",
+      "marginBottom": "4px",
+      "marginLeft": "8px",
+      "marginRight": "8px"
+    }
+  ],
+  "verticalGaps": [
+    {
+      "before": "在访达中显示",
+      "gap": 0
+    },
+    {
+      "before": "复制绝对路径",
+      "gap": 9
+    },
+    {
+      "before": "重命名",
+      "gap": 9
+    },
+    {
+      "before": "移除",
+      "gap": 0
+    }
+  ],
+  "allItemsHaveIcons": true,
+  "separatorsVisible": true,
+  "button": {
+    "ok": true,
+    "label": "Reo Actions Runtime 20260516005001 更多操作",
+    "rect": {
+      "x": 196,
+      "y": 226,
+      "width": 28,
+      "height": 28
+    }
+  }
+}
