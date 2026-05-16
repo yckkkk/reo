@@ -20,9 +20,12 @@ describe('AppShell', () => {
     onHome,
     onLibrary = vi.fn(),
     onOpenLocalWorkspace = vi.fn(),
+    onOpenSettings = vi.fn(),
     onRenameMemorySpace = vi.fn(),
     onRemoveMemorySpace = vi.fn(),
+    onSettingsBlocked = vi.fn(),
     onSelectMemorySpace,
+    recordingActive = false,
     memorySpaces = [
       { title: 'reo', workspaceId: 'ws_reo' },
       { title: 'MemoryOS_V1', workspaceId: 'ws_memory' },
@@ -37,6 +40,7 @@ describe('AppShell', () => {
     readonly onHome?: () => void;
     readonly onLibrary?: () => void;
     readonly onOpenLocalWorkspace?: () => void;
+    readonly onOpenSettings?: () => void;
     readonly onRenameMemorySpace?: (memorySpace: {
       readonly title: string;
       readonly workspaceId: string;
@@ -45,7 +49,9 @@ describe('AppShell', () => {
       readonly title: string;
       readonly workspaceId: string;
     }) => void;
+    readonly onSettingsBlocked?: () => void;
     readonly onSelectMemorySpace?: (workspaceId: string) => void;
+    readonly recordingActive?: boolean;
     readonly memorySpaces?: ReadonlyArray<{
       readonly title: string;
       readonly workspaceId: string;
@@ -67,9 +73,12 @@ describe('AppShell', () => {
         onHome={onHome ?? (() => {})}
         onLibrary={onLibrary}
         onOpenLocalWorkspace={onOpenLocalWorkspace}
+        onOpenSettings={onOpenSettings}
         onRenameMemorySpace={onRenameMemorySpace}
         onRemoveMemorySpace={onRemoveMemorySpace}
+        onSettingsBlocked={onSettingsBlocked}
         onSelectMemorySpace={onSelectMemorySpace}
+        recordingActive={recordingActive}
       >
         {children}
       </AppShell>
@@ -391,6 +400,59 @@ describe('AppShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '切换到浅色模式' }));
     expect(shell).toHaveAttribute('data-theme', 'light');
     expect(screen.getByRole('button', { name: '切换到深色模式' })).toBeInTheDocument();
+  });
+
+  it('places the settings trigger next to the theme button in the sidebar tool area', () => {
+    render(
+      <TestAppShell>
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    const toolArea = screen.getByRole('group', { name: '侧边栏工具' });
+    const settingsButton = screen.getByRole('button', { name: '设置' });
+    const themeButton = screen.getByRole('button', { name: '切换到深色模式' });
+
+    expect(toolArea).toContainElement(settingsButton);
+    expect(toolArea).toContainElement(themeButton);
+    expect(toolArea).toHaveClass('flex', 'items-center', 'gap-8');
+  });
+
+  it('forwards settings clicks to the App owner without changing routes itself', async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+
+    render(
+      <TestAppShell onOpenSettings={onOpenSettings}>
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(screen.getByText('Starter home')).toBeInTheDocument();
+  });
+
+  it('blocks settings navigation through the owner callback while recording is active', async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+    const onSettingsBlocked = vi.fn();
+
+    render(
+      <TestAppShell
+        onOpenSettings={onOpenSettings}
+        onSettingsBlocked={onSettingsBlocked}
+        recordingActive
+      >
+        <div>Starter home</div>
+      </TestAppShell>
+    );
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(onSettingsBlocked).toHaveBeenCalledOnce();
   });
 
   it('renders effective dark theme when preference is "system" and the OS reports dark', () => {

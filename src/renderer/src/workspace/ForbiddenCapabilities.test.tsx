@@ -29,6 +29,9 @@ describe('forbidden first-slice capabilities', () => {
           onHome={() => {}}
           onLibrary={() => {}}
           onCycleThemePreference={() => {}}
+          onOpenSettings={() => {}}
+          onSettingsBlocked={() => {}}
+          recordingActive={false}
         >
           <LoadedWorkspaceFrame
             workspaceSession={workspaceSession}

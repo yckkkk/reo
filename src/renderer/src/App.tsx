@@ -1445,14 +1445,17 @@ export function App() {
       void navigateLibrary();
     },
     onCycleThemePreference: cyclePreference,
+    onOpenSettings: () => undefined,
     onOpenLocalWorkspace: () => {
       void handleOpenLocalWorkspace();
     },
     onRenameMemorySpace: openMemorySpaceRenameDialog,
     onRemoveMemorySpace: openMemorySpaceRemoveDialog,
+    onSettingsBlocked: blockRecordingFlowInterruption,
     onSelectMemorySpace: (workspaceId: string) => {
       void selectMemorySpaceFromSidebar(workspaceId);
     },
+    recordingActive: recordingTarget !== null,
   };
   const workspaceDialogs = (
     <>

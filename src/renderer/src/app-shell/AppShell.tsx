@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { MemorySpaceActionsMenu } from '../workspace/MemorySpaceActionsMenu';
+import { SidebarSettingsTrigger } from '../workspace/SidebarSettingsTrigger';
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
@@ -61,6 +62,9 @@ type AppShellProps = {
   readonly onCycleThemePreference: () => void;
   readonly themePreference: ThemePreference;
   readonly effectiveTheme: ThemeMode;
+  readonly onOpenSettings: () => void;
+  readonly onSettingsBlocked: () => void;
+  readonly recordingActive: boolean;
   readonly memorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
   readonly panelTitlebar?: React.ReactNode;
 };
@@ -102,7 +106,10 @@ export function AppShell({
   onRemoveMemorySpace,
   onSelectMemorySpace,
   onCycleThemePreference,
+  onOpenSettings,
+  onSettingsBlocked,
   panelTitlebar,
+  recordingActive,
   themePreference,
   effectiveTheme,
   memorySpaces = [],
@@ -402,7 +409,12 @@ export function AppShell({
             </div>
           </section>
 
-          <div className="mt-auto flex items-center">
+          <div role="group" aria-label="侧边栏工具" className="mt-auto flex items-center gap-8">
+            <SidebarSettingsTrigger
+              onOpenSettings={onOpenSettings}
+              onRecordingBlocked={onSettingsBlocked}
+              recordingActive={recordingActive}
+            />
             <Tooltip>
               <Button asChild variant="ghostIcon" size="icon">
                 <TooltipTrigger
