@@ -9,12 +9,16 @@ import {
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+  WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
@@ -23,10 +27,12 @@ import {
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
+  WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
+  WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
@@ -199,6 +205,12 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:sendRecordingTranscriptionAudio',
     'workspace:finishRecordingTranscription',
     'workspace:closeRecordingTranscription',
+    'workspace:readVoiceTranscriptionSettings',
+    'workspace:setVoiceTranscriptionEnabled',
+    'workspace:saveVoiceTranscriptionApiKey',
+    'workspace:clearVoiceTranscriptionApiKey',
+    'workspace:validateVoiceTranscriptionCredentials',
+    'workspace:openExternalUrl',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
@@ -273,6 +285,44 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
     'workspace:saveSegmentSupplementTranscript'
   );
+  assert.equal(
+    WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+    'workspace:readVoiceTranscriptionSettings'
+  );
+  assert.equal(
+    WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+    'workspace:setVoiceTranscriptionEnabled'
+  );
+  assert.equal(
+    WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    'workspace:saveVoiceTranscriptionApiKey'
+  );
+  assert.equal(
+    WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    'workspace:clearVoiceTranscriptionApiKey'
+  );
+  assert.equal(
+    WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+    'workspace:validateVoiceTranscriptionCredentials'
+  );
+  assert.equal(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, 'workspace:openExternalUrl');
+});
+
+test('workspace IPC channels include application-scoped voice settings channels', () => {
+  const voiceSettingsChannels = [
+    'workspace:readVoiceTranscriptionSettings',
+    'workspace:setVoiceTranscriptionEnabled',
+    'workspace:saveVoiceTranscriptionApiKey',
+    'workspace:clearVoiceTranscriptionApiKey',
+    'workspace:validateVoiceTranscriptionCredentials',
+    'workspace:openExternalUrl',
+  ];
+
+  assert.equal(voiceSettingsChannels.length, 6);
+
+  for (const channel of voiceSettingsChannels) {
+    assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
+  }
 });
 
 test('workspace error code schema accepts entity actions menu error codes', () => {
