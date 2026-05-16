@@ -21,7 +21,10 @@ test('main bootstrap wires voice settings store into recording transcription at 
   const source = await readFile('src/main/index.ts', 'utf8');
 
   assert.match(source, /safeStorage/);
-  assert.match(source, /let closeWorkspaceRuntime:\s*\(\)\s*=>\s*Promise<void>\s*=\s*closeAllWorkspaceHandles/);
+  assert.match(
+    source,
+    /let closeWorkspaceRuntime:\s*\(\)\s*=>\s*Promise<void>\s*=\s*closeAllWorkspaceHandles/
+  );
   assert.match(source, /createVoiceSettingsStore/);
   assert.match(source, /createRecordingTranscriptionSessionRegistry/);
   assert.match(

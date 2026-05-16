@@ -1,0 +1,26 @@
+# Doubao Voice BYOK Settings Tasks
+
+- [x] Task 1: voiceSettingsStore module
+- [x] Task 2: voiceTranscriptionProbe module
+- [x] Task 3: doubaoStreamingAsr.ts protocol migration
+- [x] Task 4: recordingTranscriptionSessions credentials and toggle branching
+- [x] Task 5: Initialize voiceSettingsStore in main entry
+- [x] Task 6: workspace-channels new voice settings channels
+- [x] Task 7: workspace-contract schemas, transcriptionMode, error codes
+- [x] Task 8: reo-workspace-bridge voice settings method types
+- [x] Task 9: workspaceIpc voice settings handlers
+- [x] Task 10: preload bridge voice settings methods
+- [x] Task 11: shadcn Switch primitive
+- [x] Task 12: voiceSettingsQueries TanStack Query options
+- [x] Task 13: SettingsShell skeleton
+- [x] Task 14: VoiceSettingsPanel states 1-3
+- [x] Task 15: VoiceSettingsPanel states 4-5
+- [x] Task 16: VoiceSettingsPanel states 6-9
+- [x] Task 17: VoiceSettingsPanel clear flow with AlertDialog
+- [x] Task 18: SidebarSettingsTrigger button
+- [x] Task 19: AppShell appMode state and sidebar bottom layout
+- [x] Task 20: RecordingOverlay skip live transcription when disabled
+- [x] Task 21: Update docs/current/electron.md
+- [x] Task 22: Update docs/current/frontend.md
+- [x] Task 23: Update docs/current/data.md
+- [x] Task 24: Final verify, dev runtime evidence, verification.md, artifacts

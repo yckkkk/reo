@@ -1052,9 +1052,7 @@ export type WorkspaceValidateVoiceTranscriptionCredentialsRequest = z.infer<
 export type WorkspaceValidateVoiceTranscriptionCredentialsResponse = z.infer<
   typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema
 >;
-export type WorkspaceOpenExternalUrlRequest = z.infer<
-  typeof workspaceOpenExternalUrlRequestSchema
->;
+export type WorkspaceOpenExternalUrlRequest = z.infer<typeof workspaceOpenExternalUrlRequestSchema>;
 export type WorkspaceOpenExternalUrlResponse = z.infer<
   typeof workspaceOpenExternalUrlResponseSchema
 >;

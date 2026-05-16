@@ -1,0 +1,7 @@
+$ real Doubao X-Api-Key minimal WebSocket handshake probe
+endpoint=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+resourceId=volc.seedasr.sauc.duration
+apiKeyLast4=9151
+startedAt=2026-05-16T17:35:25.180Z
+finishedAt=2026-05-16T17:35:25.527Z
+result={"ok":true,"code":"ok"}

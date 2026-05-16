@@ -81,6 +81,7 @@
 ### Task 1: voiceSettingsStore module
 
 **Files:**
+
 - Create: `src/main/voiceSettingsStore.ts`
 - Test: `test/main/voiceSettingsStore.test.ts`
 
@@ -94,7 +95,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { createVoiceSettingsStore, type VoiceSettingsFile } from '../../src/main/voiceSettingsStore.js';
+import {
+  createVoiceSettingsStore,
+  type VoiceSettingsFile,
+} from '../../src/main/voiceSettingsStore.js';
 
 function makeFakeSafeStorage() {
   let available = true;
@@ -117,7 +121,12 @@ function setup() {
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'reo-voice-settings-'));
   const safeStorage = makeFakeSafeStorage();
   const store = createVoiceSettingsStore({ safeStorage, userDataDir });
-  return { userDataDir, safeStorage, store, cleanup: () => rmSync(userDataDir, { recursive: true, force: true }) };
+  return {
+    userDataDir,
+    safeStorage,
+    store,
+    cleanup: () => rmSync(userDataDir, { recursive: true, force: true }),
+  };
 }
 
 test('voiceSettingsStore: read returns default when file missing', () => {
@@ -198,7 +207,9 @@ test('voiceSettingsStore: decrypt failure returns null but keeps file', () => {
     store.writeApiKey('abcd1234');
     safeStorage.setAvailable(false);
     assert.equal(store.readDecryptedApiKey(), null);
-    const raw = JSON.parse(readFileSync(path.join(userDataDir, 'voice-transcription-settings.json'), 'utf8')) as VoiceSettingsFile;
+    const raw = JSON.parse(
+      readFileSync(path.join(userDataDir, 'voice-transcription-settings.json'), 'utf8')
+    ) as VoiceSettingsFile;
     assert.ok(raw.apiKeyCiphertext, 'cipher remains on disk');
   } finally {
     cleanup();
@@ -347,7 +358,13 @@ export function createVoiceSettingsStore({ safeStorage, userDataDir }: VoiceSett
     });
   }
 
-  function recordValidation({ ok, code }: { ok: boolean | null; code: 'ok' | 'auth' | 'network' | null }) {
+  function recordValidation({
+    ok,
+    code,
+  }: {
+    ok: boolean | null;
+    code: 'ok' | 'auth' | 'network' | null;
+  }) {
     persist({
       ...cache,
       lastValidatedAt: new Date().toISOString(),
@@ -393,6 +410,7 @@ copy. Strict Zod schema; no fallback to plaintext."
 ### Task 2: voiceTranscriptionProbe module
 
 **Files:**
+
 - Create: `src/main/voiceTranscriptionProbe.ts`
 - Test: `test/main/voiceTranscriptionProbe.test.ts`
 
@@ -403,11 +421,21 @@ Create `test/main/voiceTranscriptionProbe.test.ts`：
 ```ts
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runVoiceTranscriptionProbe, type VoiceTranscriptionProbeSocket } from '../../src/main/voiceTranscriptionProbe.js';
+import {
+  runVoiceTranscriptionProbe,
+  type VoiceTranscriptionProbeSocket,
+} from '../../src/main/voiceTranscriptionProbe.js';
 
-type Handlers = { open?: () => void; error?: (err: Error) => void; close?: (code?: number) => void };
+type Handlers = {
+  open?: () => void;
+  error?: (err: Error) => void;
+  close?: (code?: number) => void;
+};
 
-function fakeSocket(behavior: 'open' | 'unauthorized' | 'network', latencyMs = 5): {
+function fakeSocket(
+  behavior: 'open' | 'unauthorized' | 'network',
+  latencyMs = 5
+): {
   socket: VoiceTranscriptionProbeSocket;
   flush: () => void;
 } {
@@ -492,7 +520,10 @@ Create `src/main/voiceTranscriptionProbe.ts`：
 ```ts
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
-import { DOUBAO_STREAMING_ASR_ENDPOINT, DOUBAO_STREAMING_ASR_RESOURCE_ID } from './doubaoStreamingAsr.js';
+import {
+  DOUBAO_STREAMING_ASR_ENDPOINT,
+  DOUBAO_STREAMING_ASR_RESOURCE_ID,
+} from './doubaoStreamingAsr.js';
 
 export type VoiceTranscriptionProbeCode = 'ok' | 'auth' | 'network';
 
@@ -554,17 +585,30 @@ export function runVoiceTranscriptionProbe({
         'X-Api-Resource-Id': DOUBAO_STREAMING_ASR_RESOURCE_ID,
       },
     });
-    const timer = setTimeout(() => settle({ ok: false, code: 'network', message: 'probe timeout' }), Math.max(1, timeoutMs));
+    const timer = setTimeout(
+      () => settle({ ok: false, code: 'network', message: 'probe timeout' }),
+      Math.max(1, timeoutMs)
+    );
     function settle(result: VoiceTranscriptionProbeResult) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try { socket.close(); } catch { /* ignore */ }
+      try {
+        socket.close();
+      } catch {
+        /* ignore */
+      }
       resolve(result);
     }
     socket
       .on('open', () => settle({ ok: true, code: 'ok' }))
-      .on('error', (err) => settle({ ok: false, code: 'network', message: err instanceof Error ? err.message : String(err) }))
+      .on('error', (err) =>
+        settle({
+          ok: false,
+          code: 'network',
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
       .on('close', (code) => {
         const numeric = typeof code === 'number' ? code : 0;
         if (numeric === 401 || numeric === 403) settle({ ok: false, code: 'auth' });
@@ -595,6 +639,7 @@ sends audio."
 ### Task 3: doubaoStreamingAsr.ts — protocol migration
 
 **Files:**
+
 - Modify: `src/main/doubaoStreamingAsr.ts`
 - Modify: `test/main/doubaoStreamingAsr.test.ts`
 
@@ -680,6 +725,7 @@ tests updated. No fallback to legacy headers."
 ### Task 4: recordingTranscriptionSessions — credentials + toggle branching
 
 **Files:**
+
 - Modify: `src/main/recordingTranscriptionSessions.ts`
 - Modify: `test/main/recordingTranscriptionSessions.test.ts`
 - Modify: `src/workspace-contract/workspace-contract.ts` (extend response shape — picked up in Task 7; here only adjust call sites)
@@ -694,32 +740,48 @@ Add to `test/main/recordingTranscriptionSessions.test.ts`:
 test('start returns transcriptionMode=disabled when toggle off', async () => {
   const registry = createRecordingTranscriptionSessionRegistry({
     resolveVoiceSettings: () => ({ enabled: false, apiKey: null }),
-    createSession: () => { throw new Error('should not create'); },
+    createSession: () => {
+      throw new Error('should not create');
+    },
   });
   const response = await registry.start(makeStartInput());
   assert.equal(response.ok, true);
-  assert.equal((response as { value: { accepted: boolean; transcriptionMode: string } }).value.accepted, true);
-  assert.equal((response as { value: { transcriptionMode: string } }).value.transcriptionMode, 'disabled');
+  assert.equal(
+    (response as { value: { accepted: boolean; transcriptionMode: string } }).value.accepted,
+    true
+  );
+  assert.equal(
+    (response as { value: { transcriptionMode: string } }).value.transcriptionMode,
+    'disabled'
+  );
 });
 
 test('start returns ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE when enabled but no key', async () => {
   const registry = createRecordingTranscriptionSessionRegistry({
     resolveVoiceSettings: () => ({ enabled: true, apiKey: null }),
-    createSession: () => { throw new Error('should not create'); },
+    createSession: () => {
+      throw new Error('should not create');
+    },
   });
   const response = await registry.start(makeStartInput());
   assert.equal(response.ok, false);
-  assert.equal((response as { error: { code: string } }).error.code, 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE');
+  assert.equal(
+    (response as { error: { code: string } }).error.code,
+    'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE'
+  );
 });
 
 test('start returns transcriptionMode=live when enabled with key', async () => {
   const registry = createRecordingTranscriptionSessionRegistry({
     resolveVoiceSettings: () => ({ enabled: true, apiKey: 'k1' }),
-    createSession: makeFakeSession,   // existing helper
+    createSession: makeFakeSession, // existing helper
   });
   const response = await registry.start(makeStartInput());
   assert.equal(response.ok, true);
-  assert.equal((response as { value: { transcriptionMode: string } }).value.transcriptionMode, 'live');
+  assert.equal(
+    (response as { value: { transcriptionMode: string } }).value.transcriptionMode,
+    'live'
+  );
 });
 ```
 
@@ -761,14 +823,19 @@ Update `accepted` helper to include `transcriptionMode`:
 ```ts
 function accepted(
   acceptedValue: boolean,
-  options: { segments?: readonly DoubaoAsrTranscriptSegment[]; transcriptionMode?: 'live' | 'disabled' } = {}
+  options: {
+    segments?: readonly DoubaoAsrTranscriptSegment[];
+    transcriptionMode?: 'live' | 'disabled';
+  } = {}
 ): WorkspaceRecordingTranscriptionControlResponse {
   return {
     ok: true,
     value: {
       accepted: acceptedValue,
       ...(options.transcriptionMode ? { transcriptionMode: options.transcriptionMode } : {}),
-      ...(options.segments && options.segments.length > 0 ? { segments: [...options.segments] } : {}),
+      ...(options.segments && options.segments.length > 0
+        ? { segments: [...options.segments] }
+        : {}),
     },
   };
 }
@@ -837,6 +904,7 @@ REO_DOUBAO_ASR_ACCESS_TOKEN env var reads with no fallback."
 ### Task 5: Initialize voiceSettingsStore in main entry
 
 **Files:**
+
 - Modify: `src/main/index.ts`
 - Modify: `src/main/workspaceIpc.ts` (or wherever `createRecordingTranscriptionSessionRegistry` is constructed)
 
@@ -896,6 +964,7 @@ resolveVoiceSettings option."
 ### Task 6: workspace-channels — 6 new channel constants
 
 **Files:**
+
 - Modify: `src/workspace-contract/workspace-channels.ts`
 
 - [ ] **Step 1: Append channel constants**
@@ -937,6 +1006,7 @@ for the volcengine console deep link."
 ### Task 7: workspace-contract — schemas + transcriptionMode extension + error codes
 
 **Files:**
+
 - Modify: `src/workspace-contract/workspace-contract.ts`
 
 - [ ] **Step 1: Add error codes to workspaceErrorCodeSchema**
@@ -963,7 +1033,9 @@ export const voiceTranscriptionSettingsSnapshotSchema = z.strictObject({
   lastValidationOk: z.boolean().nullable(),
   lastValidationCode: z.enum(['ok', 'auth', 'network']).nullable(),
 });
-export type VoiceTranscriptionSettingsSnapshot = z.infer<typeof voiceTranscriptionSettingsSnapshotSchema>;
+export type VoiceTranscriptionSettingsSnapshot = z.infer<
+  typeof voiceTranscriptionSettingsSnapshotSchema
+>;
 
 const settingsResponseValueSchema = z.strictObject({
   settings: voiceTranscriptionSettingsSnapshotSchema,
@@ -1049,6 +1121,7 @@ skip the transcript surface."
 ### Task 8: reo-workspace-bridge — 6 new method types
 
 **Files:**
+
 - Modify: `src/workspace-contract/reo-workspace-bridge.ts`
 
 - [ ] **Step 1: Add 6 method type declarations**
@@ -1095,6 +1168,7 @@ git commit -m "feat(contract): expose voice settings + openExternalUrl bridge ty
 ### Task 9: workspaceIpc — register 6 new handlers
 
 **Files:**
+
 - Modify: `src/main/workspaceIpc.ts`
 - Modify: `test/main/workspaceIpc.test.ts` (may already exist; if not, create new colocated test file)
 
@@ -1108,7 +1182,9 @@ import assert from 'node:assert/strict';
 import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
 import { handleReadVoiceTranscriptionSettingsForTest } from '../../src/main/workspaceIpc.js';
 
-function fakeStore() { /* in-memory store with same surface */ }
+function fakeStore() {
+  /* in-memory store with same surface */
+}
 
 test('readVoiceTranscriptionSettings returns snapshot without ciphertext', async () => {
   const store = fakeStore();
@@ -1153,28 +1229,44 @@ async function handleSettingsRead(store: VoiceSettingsStore) {
 
 async function handleSettingsSetEnabled(store: VoiceSettingsStore, payload: unknown) {
   const parsed = workspaceSetVoiceTranscriptionEnabledRequestSchema.safeParse(payload);
-  if (!parsed.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings enabled request.', 'none-written');
+  if (!parsed.success)
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Invalid voice settings enabled request.',
+      'none-written'
+    );
   store.setEnabled(parsed.data.enabled);
   return { ok: true as const, value: { settings: store.read() } };
 }
 
 async function handleSettingsSaveApiKey(
   store: VoiceSettingsStore,
-  probe: (key: string) => Promise<{ ok: boolean; code: 'ok' | 'auth' | 'network'; message?: string }>,
+  probe: (
+    key: string
+  ) => Promise<{ ok: boolean; code: 'ok' | 'auth' | 'network'; message?: string }>,
   payload: unknown
 ) {
   const parsed = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.safeParse(payload);
-  if (!parsed.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings API key request.', 'none-written');
+  if (!parsed.success)
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Invalid voice settings API key request.',
+      'none-written'
+    );
   try {
     store.writeApiKey(parsed.data.apiKey);
   } catch (err) {
-    const code = err instanceof Error && err.message === 'safeStorage unavailable'
-      ? 'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE'
-      : 'ERR_VOICE_SETTINGS_WRITE_FAILED';
+    const code =
+      err instanceof Error && err.message === 'safeStorage unavailable'
+        ? 'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE'
+        : 'ERR_VOICE_SETTINGS_WRITE_FAILED';
     return workspaceError(code, '无法写入本地配置，请检查磁盘或系统安全存储。', 'none-written');
   }
   const result = await probe(parsed.data.apiKey);
-  store.recordValidation({ ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null, code: result.code });
+  store.recordValidation({
+    ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null,
+    code: result.code,
+  });
   return {
     ok: true as const,
     value: {
@@ -1191,26 +1283,54 @@ async function handleSettingsClear(store: VoiceSettingsStore) {
 
 async function handleValidate(
   store: VoiceSettingsStore,
-  probe: (key: string) => Promise<{ ok: boolean; code: 'ok' | 'auth' | 'network'; message?: string }>
+  probe: (
+    key: string
+  ) => Promise<{ ok: boolean; code: 'ok' | 'auth' | 'network'; message?: string }>
 ) {
   const key = store.readDecryptedApiKey();
-  if (!key) return workspaceError('ERR_VOICE_TRANSCRIPTION_PROBE_FAILED', '请先填写 X-Api-Key。', 'none-written');
+  if (!key)
+    return workspaceError(
+      'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+      '请先填写 X-Api-Key。',
+      'none-written'
+    );
   const result = await probe(key);
-  store.recordValidation({ ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null, code: result.code });
-  return { ok: true as const, value: { code: result.code, ...(result.message ? { message: result.message } : {}) } };
+  store.recordValidation({
+    ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null,
+    code: result.code,
+  });
+  return {
+    ok: true as const,
+    value: { code: result.code, ...(result.message ? { message: result.message } : {}) },
+  };
 }
 
 async function handleOpenExternal(payload: unknown) {
   const parsed = workspaceOpenExternalUrlRequestSchema.safeParse(payload);
   if (!parsed.success) {
-    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid open external URL request.', 'none-written');
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Invalid open external URL request.',
+      'none-written'
+    );
   }
   const url = new URL(parsed.data.url);
   const hostname = url.hostname.toLowerCase();
-  const isAllowedVolcengineHost = hostname === 'volcengine.com' || hostname.endsWith('.volcengine.com');
+  const isAllowedVolcengineHost =
+    hostname === 'volcengine.com' || hostname.endsWith('.volcengine.com');
   const hasExplicitPort = url.port.length > 0;
-  if (url.protocol !== 'https:' || url.username || url.password || hasExplicitPort || !isAllowedVolcengineHost) {
-    return workspaceError('ERR_OPEN_EXTERNAL_URL_REJECTED', '不允许打开该外部链接。', 'none-written');
+  if (
+    url.protocol !== 'https:' ||
+    url.username ||
+    url.password ||
+    hasExplicitPort ||
+    !isAllowedVolcengineHost
+  ) {
+    return workspaceError(
+      'ERR_OPEN_EXTERNAL_URL_REJECTED',
+      '不允许打开该外部链接。',
+      'none-written'
+    );
   }
   await requireElectronShellApi().shell.openExternal(url.toString());
   return { ok: true as const, value: {} };
@@ -1220,19 +1340,27 @@ async function handleOpenExternal(payload: unknown) {
 Register handlers through the existing `registerWorkspaceIpcHandler` helper inside `registerWorkspaceIpc`; do not create a second IPC registration path:
 
 ```ts
-registerWorkspaceIpcHandler(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, payload) => {
-  const trusted = validateWorkspaceSender({
-    event,
-    channel: WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
-    expectedSession,
-    expectedSessionKey,
-    isTrustedUrl,
-  });
-  if (!trusted.ok) return trusted;
-  const request = workspaceNoInputSchema.safeParse(payload);
-  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings read request.', 'none-written');
-  return handleSettingsRead(voiceSettingsStore);
-});
+registerWorkspaceIpcHandler(
+  WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+  (event, payload) => {
+    const trusted = validateWorkspaceSender({
+      event,
+      channel: WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    });
+    if (!trusted.ok) return trusted;
+    const request = workspaceNoInputSchema.safeParse(payload);
+    if (!request.success)
+      return workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'Invalid voice settings read request.',
+        'none-written'
+      );
+    return handleSettingsRead(voiceSettingsStore);
+  }
+);
 registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, payload) => {
   const trusted = validateWorkspaceSender({
     event,
@@ -1244,50 +1372,66 @@ registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (
   if (!trusted.ok) return trusted;
   return handleSettingsSetEnabled(voiceSettingsStore, payload);
 });
-registerWorkspaceIpcHandler(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
-  const trusted = validateWorkspaceSender({
-    event,
-    channel: WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
-    expectedSession,
-    expectedSessionKey,
-    isTrustedUrl,
-  });
-  if (!trusted.ok) return trusted;
-  return handleSettingsSaveApiKey(
-    voiceSettingsStore,
-    (k) => runVoiceTranscriptionProbe({ apiKey: k }),
-    payload,
-  );
-});
-registerWorkspaceIpcHandler(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
-  const trusted = validateWorkspaceSender({
-    event,
-    channel: WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
-    expectedSession,
-    expectedSessionKey,
-    isTrustedUrl,
-  });
-  if (!trusted.ok) return trusted;
-  const request = workspaceNoInputSchema.safeParse(payload);
-  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings clear request.', 'none-written');
-  return handleSettingsClear(voiceSettingsStore);
-});
-registerWorkspaceIpcHandler(WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL, (event, payload) => {
-  const trusted = validateWorkspaceSender({
-    event,
-    channel: WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
-    expectedSession,
-    expectedSessionKey,
-    isTrustedUrl,
-  });
-  if (!trusted.ok) return trusted;
-  const request = workspaceNoInputSchema.safeParse(payload);
-  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings validate request.', 'none-written');
-  return handleValidate(
-    voiceSettingsStore,
-    (k) => runVoiceTranscriptionProbe({ apiKey: k }),
-  );
-});
+registerWorkspaceIpcHandler(
+  WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  (event, payload) => {
+    const trusted = validateWorkspaceSender({
+      event,
+      channel: WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    });
+    if (!trusted.ok) return trusted;
+    return handleSettingsSaveApiKey(
+      voiceSettingsStore,
+      (k) => runVoiceTranscriptionProbe({ apiKey: k }),
+      payload
+    );
+  }
+);
+registerWorkspaceIpcHandler(
+  WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  (event, payload) => {
+    const trusted = validateWorkspaceSender({
+      event,
+      channel: WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    });
+    if (!trusted.ok) return trusted;
+    const request = workspaceNoInputSchema.safeParse(payload);
+    if (!request.success)
+      return workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'Invalid voice settings clear request.',
+        'none-written'
+      );
+    return handleSettingsClear(voiceSettingsStore);
+  }
+);
+registerWorkspaceIpcHandler(
+  WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+  (event, payload) => {
+    const trusted = validateWorkspaceSender({
+      event,
+      channel: WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    });
+    if (!trusted.ok) return trusted;
+    const request = workspaceNoInputSchema.safeParse(payload);
+    if (!request.success)
+      return workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'Invalid voice settings validate request.',
+        'none-written'
+      );
+    return handleValidate(voiceSettingsStore, (k) => runVoiceTranscriptionProbe({ apiKey: k }));
+  }
+);
 registerWorkspaceIpcHandler(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, (event, payload) => {
   const trusted = validateWorkspaceSender({
     event,
@@ -1325,6 +1469,7 @@ responses never contain ciphertext or full key."
 ### Task 10: preload bridge — expose 6 new methods
 
 **Files:**
+
 - Modify: `src/preload/workspaceBridge.ts`
 
 - [ ] **Step 1: Add invoke wrappers**
@@ -1367,6 +1512,7 @@ git commit -m "feat(preload): expose voice settings + openExternalUrl bridge met
 ### Task 11: shadcn Switch primitive
 
 **Files:**
+
 - Create: `src/renderer/src/components/ui/switch.tsx`
 - Create: `src/renderer/src/components/ui/switch.test.tsx`
 - Modify: `package.json` if `@radix-ui/react-switch` missing
@@ -1431,7 +1577,7 @@ const Switch = React.forwardRef<
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
       'disabled:cursor-not-allowed disabled:opacity-50',
       'data-[state=checked]:bg-primary data-[state=unchecked]:bg-secondary',
-      className,
+      className
     )}
     {...props}
     ref={ref}
@@ -1439,7 +1585,7 @@ const Switch = React.forwardRef<
     <SwitchPrimitive.Thumb
       className={cn(
         'pointer-events-none block h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
-        'data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px]',
+        'data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px]'
       )}
     />
   </SwitchPrimitive.Root>
@@ -1469,6 +1615,7 @@ unchecked. Background-colored thumb. Used by VoiceSettingsPanel toggle."
 ### Task 12: voiceSettingsQueries — TanStack Query options
 
 **Files:**
+
 - Create: `src/renderer/src/settings/voiceSettingsQueries.ts`
 - Create: `src/renderer/src/settings/voiceSettingsQueries.test.ts`
 
@@ -1482,7 +1629,9 @@ import { QueryClient } from '@tanstack/react-query';
 import { voiceSettingsQueryKey, voiceSettingsQueryOptions } from './voiceSettingsQueries';
 
 declare global {
-  interface Window { reoWorkspace: any }
+  interface Window {
+    reoWorkspace: any;
+  }
 }
 
 beforeEach(() => {
@@ -1519,7 +1668,11 @@ describe('voiceSettingsQueries', () => {
   it('throws on error envelope', async () => {
     window.reoWorkspace.readVoiceTranscriptionSettings = vi.fn().mockResolvedValue({
       ok: false,
-      error: { code: 'ERR_VOICE_SETTINGS_WRITE_FAILED', message: 'oops', dataRetention: 'none-written' },
+      error: {
+        code: 'ERR_VOICE_SETTINGS_WRITE_FAILED',
+        message: 'oops',
+        dataRetention: 'none-written',
+      },
     });
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await expect(qc.fetchQuery(voiceSettingsQueryOptions())).rejects.toThrow('oops');
@@ -1585,6 +1738,7 @@ Stable key ['settings','voice']; throws on workspace error envelope;
 ### Task 13: SettingsShell skeleton
 
 **Files:**
+
 - Create: `src/renderer/src/settings/SettingsShell.tsx`
 - Create: `src/renderer/src/settings/SettingsShell.test.tsx`
 
@@ -1613,7 +1767,11 @@ describe('SettingsShell', () => {
   it('calls onReturnToApp when return button clicked', async () => {
     const onReturnToApp = vi.fn();
     render(
-      <SettingsShell activeCategory="voice" onReturnToApp={onReturnToApp} onSelectCategory={vi.fn()}>
+      <SettingsShell
+        activeCategory="voice"
+        onReturnToApp={onReturnToApp}
+        onSelectCategory={vi.fn()}
+      >
         <div />
       </SettingsShell>
     );
@@ -1675,7 +1833,9 @@ export function SettingsShell({
               onClick={() => onSelectCategory(cat)}
               className={cn(
                 'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
-                cat === activeCategory ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-accent',
+                cat === activeCategory
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:bg-accent'
               )}
             >
               <Settings2 className="h-4 w-4" />
@@ -1716,6 +1876,7 @@ border-secondary divider mirrors AppShell layout."
 ### Task 14: VoiceSettingsPanel — states 1-3 (disabled-no-key / enabled-no-key / editing-with-key)
 
 **Files:**
+
 - Create: `src/renderer/src/settings/VoiceSettingsPanel.tsx`
 - Create: `src/renderer/src/settings/VoiceSettingsPanel.test.tsx`
 
@@ -1732,8 +1893,12 @@ import { VoiceSettingsPanel } from './VoiceSettingsPanel';
 
 function renderWithQuery(snapshot: any) {
   window.reoWorkspace = {
-    readVoiceTranscriptionSettings: vi.fn().mockResolvedValue({ ok: true, value: { settings: snapshot } }),
-    setVoiceTranscriptionEnabled: vi.fn().mockResolvedValue({ ok: true, value: { settings: snapshot } }),
+    readVoiceTranscriptionSettings: vi
+      .fn()
+      .mockResolvedValue({ ok: true, value: { settings: snapshot } }),
+    setVoiceTranscriptionEnabled: vi
+      .fn()
+      .mockResolvedValue({ ok: true, value: { settings: snapshot } }),
     saveVoiceTranscriptionApiKey: vi.fn(),
     clearVoiceTranscriptionApiKey: vi.fn(),
     validateVoiceTranscriptionCredentials: vi.fn(),
@@ -1743,15 +1908,19 @@ function renderWithQuery(snapshot: any) {
   return render(
     <QueryClientProvider client={qc}>
       <VoiceSettingsPanel />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 
 describe('VoiceSettingsPanel state disabled-no-key', () => {
   it('toggle is off, input is disabled, save is disabled', async () => {
     renderWithQuery({
-      enabled: false, apiKeyConfigured: false, apiKeyLastFour: null,
-      lastValidatedAt: null, lastValidationOk: null, lastValidationCode: null,
+      enabled: false,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
     });
     expect(await screen.findByRole('switch')).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByLabelText('X-Api-Key')).toBeDisabled();
@@ -1762,8 +1931,12 @@ describe('VoiceSettingsPanel state disabled-no-key', () => {
 describe('VoiceSettingsPanel state enabled-no-key', () => {
   it('shows red hint and enables input', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: false, apiKeyLastFour: null,
-      lastValidatedAt: null, lastValidationOk: null, lastValidationCode: null,
+      enabled: true,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
     });
     expect(await screen.findByText('启用后需要 X-Api-Key 才能生成转录')).toBeInTheDocument();
     expect(screen.getByLabelText('X-Api-Key')).not.toBeDisabled();
@@ -1773,8 +1946,12 @@ describe('VoiceSettingsPanel state enabled-no-key', () => {
 describe('VoiceSettingsPanel state editing-with-key', () => {
   it('typing in input enables Save button and hides red hint', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: false, apiKeyLastFour: null,
-      lastValidatedAt: null, lastValidationOk: null, lastValidationCode: null,
+      enabled: true,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
     });
     const input = await screen.findByLabelText('X-Api-Key');
     await userEvent.type(input, 'mykey1234');
@@ -1801,10 +1978,7 @@ import { Button } from '@/components/ui/button';
 import { FieldControl, FieldGroup, FieldHint, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import {
-  invalidateVoiceSettings,
-  voiceSettingsQueryOptions,
-} from './voiceSettingsQueries';
+import { invalidateVoiceSettings, voiceSettingsQueryOptions } from './voiceSettingsQueries';
 
 export function VoiceSettingsPanel() {
   const qc = useQueryClient();
@@ -1854,7 +2028,11 @@ export function VoiceSettingsPanel() {
               value={draftKey}
               disabled={inputDisabled}
               onChange={(e) => setDraftKey(e.target.value)}
-              placeholder={settings.apiKeyConfigured ? `已配置 · 末 4 位 ●●●● ${settings.apiKeyLastFour ?? ''}` : 'X-Api-Key'}
+              placeholder={
+                settings.apiKeyConfigured
+                  ? `已配置 · 末 4 位 ●●●● ${settings.apiKeyLastFour ?? ''}`
+                  : 'X-Api-Key'
+              }
               maxLength={1024}
             />
             <button
@@ -1871,9 +2049,7 @@ export function VoiceSettingsPanel() {
         {showRedHint ? (
           <p className="text-sm text-destructive">启用后需要 X-Api-Key 才能生成转录</p>
         ) : (
-          <FieldHint>
-            可在火山引擎控制台 → 大模型流式语音识别 获取
-          </FieldHint>
+          <FieldHint>可在火山引擎控制台 → 大模型流式语音识别 获取</FieldHint>
         )}
       </FieldGroup>
 
@@ -1908,6 +2084,7 @@ eye-toggle; red hint when toggle on and key blank."
 ### Task 15: VoiceSettingsPanel — states 4-5 (validating / verified-active)
 
 **Files:**
+
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.tsx`
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.test.tsx`
 
@@ -1918,14 +2095,35 @@ Append to `VoiceSettingsPanel.test.tsx`:
 ```tsx
 describe('VoiceSettingsPanel state validating + verified-active', () => {
   it('clicking save calls saveVoiceTranscriptionApiKey and shows spinner', async () => {
-    const saveMock = vi.fn(() => new Promise((resolve) => setTimeout(() => resolve({
-      ok: true,
-      value: { settings: { enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-        lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: true, lastValidationCode: 'ok' } },
-    }), 30)));
+    const saveMock = vi.fn(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                value: {
+                  settings: {
+                    enabled: true,
+                    apiKeyConfigured: true,
+                    apiKeyLastFour: '1234',
+                    lastValidatedAt: '2026-05-16T13:00:00.000Z',
+                    lastValidationOk: true,
+                    lastValidationCode: 'ok',
+                  },
+                },
+              }),
+            30
+          )
+        )
+    );
     renderWithQuery({
-      enabled: true, apiKeyConfigured: false, apiKeyLastFour: null,
-      lastValidatedAt: null, lastValidationOk: null, lastValidationCode: null,
+      enabled: true,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
     });
     window.reoWorkspace.saveVoiceTranscriptionApiKey = saveMock;
     const input = await screen.findByLabelText('X-Api-Key');
@@ -1938,8 +2136,12 @@ describe('VoiceSettingsPanel state validating + verified-active', () => {
 
   it('shows verified status point after success', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: true, lastValidationCode: 'ok',
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: '2026-05-16T13:00:00.000Z',
+      lastValidationOk: true,
+      lastValidationCode: 'ok',
     });
     expect(await screen.findByText(/已验证/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '更换' })).toBeInTheDocument();
@@ -1970,16 +2172,18 @@ const saveMutation = useMutation({
   onClick={() => saveMutation.mutate(draftKey.trim())}
 >
   {saveMutation.isPending ? '验证中...' : '保存'}
-</Button>
+</Button>;
 
 // After Save, render status point:
-{settings.lastValidatedAt && (
-  <StatusPoint
-    code={settings.lastValidationCode}
-    ok={settings.lastValidationOk}
-    timestamp={settings.lastValidatedAt}
-  />
-)}
+{
+  settings.lastValidatedAt && (
+    <StatusPoint
+      code={settings.lastValidationCode}
+      ok={settings.lastValidationOk}
+      timestamp={settings.lastValidatedAt}
+    />
+  );
+}
 
 // Replace placeholder logic:
 // When apiKeyConfigured: render "已配置 · 末 4 位 ●●●● XXXX" + 更换 button (clears draftKey ready)
@@ -1994,21 +2198,37 @@ function formatTimestamp(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function StatusPoint({ code, ok, timestamp }: { code: 'ok'|'auth'|'network'|null; ok: boolean|null; timestamp: string }) {
+function StatusPoint({
+  code,
+  ok,
+  timestamp,
+}: {
+  code: 'ok' | 'auth' | 'network' | null;
+  ok: boolean | null;
+  timestamp: string;
+}) {
   if (code === 'ok' && ok) {
-    return <p className="flex items-center gap-2 text-sm text-foreground">
-      <span className="h-2 w-2 rounded-full bg-emerald-500" /> 已验证 · {formatTimestamp(timestamp)}
-    </p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-foreground">
+        <span className="h-2 w-2 rounded-full bg-emerald-500" /> 已验证 ·{' '}
+        {formatTimestamp(timestamp)}
+      </p>
+    );
   }
   if (code === 'auth') {
-    return <p className="flex items-center gap-2 text-sm text-destructive">
-      <span className="h-2 w-2 rounded-full bg-destructive" /> X-Api-Key 无效或没有权限，请检查控制台
-    </p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-destructive">
+        <span className="h-2 w-2 rounded-full bg-destructive" /> X-Api-Key
+        无效或没有权限，请检查控制台
+      </p>
+    );
   }
   if (code === 'network') {
-    return <p className="flex items-center gap-2 text-sm text-amber-600">
-      <span className="h-2 w-2 rounded-full bg-amber-500" /> 无法连接豆包服务，请检查网络后重试
-    </p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-amber-600">
+        <span className="h-2 w-2 rounded-full bg-amber-500" /> 无法连接豆包服务，请检查网络后重试
+      </p>
+    );
   }
   return null;
 }
@@ -2037,6 +2257,7 @@ text from lastValidationCode/lastValidationOk/lastValidatedAt."
 ### Task 16: VoiceSettingsPanel — states 6-9 (disabled-with-key / validation-failed-401 / validation-failed-network / enabled-with-stale-key)
 
 **Files:**
+
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.tsx`
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.test.tsx`
 
@@ -2046,8 +2267,12 @@ text from lastValidationCode/lastValidationOk/lastValidatedAt."
 describe('VoiceSettingsPanel state validation-failed-401', () => {
   it('shows red status and 401 message', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: false, lastValidationCode: 'auth',
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: '2026-05-16T13:00:00.000Z',
+      lastValidationOk: false,
+      lastValidationCode: 'auth',
     });
     expect(await screen.findByText(/X-Api-Key 无效/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
@@ -2057,8 +2282,12 @@ describe('VoiceSettingsPanel state validation-failed-401', () => {
 describe('VoiceSettingsPanel state validation-failed-network', () => {
   it('shows amber status and network message', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: null, lastValidationCode: 'network',
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: '2026-05-16T13:00:00.000Z',
+      lastValidationOk: null,
+      lastValidationCode: 'network',
     });
     expect(await screen.findByText(/无法连接豆包服务/)).toBeInTheDocument();
   });
@@ -2067,8 +2296,12 @@ describe('VoiceSettingsPanel state validation-failed-network', () => {
 describe('VoiceSettingsPanel state disabled-with-key', () => {
   it('toggle off but configured shows masked input', async () => {
     renderWithQuery({
-      enabled: false, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: true, lastValidationCode: 'ok',
+      enabled: false,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: '2026-05-16T13:00:00.000Z',
+      lastValidationOk: true,
+      lastValidationCode: 'ok',
     });
     const input = await screen.findByLabelText('X-Api-Key');
     expect(input).toBeDisabled();
@@ -2080,8 +2313,12 @@ describe('VoiceSettingsPanel state enabled-with-stale-key', () => {
   it('shows stale validation hint when >24h', async () => {
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     renderWithQuery({
-      enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: eightDaysAgo, lastValidationOk: true, lastValidationCode: 'ok',
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: eightDaysAgo,
+      lastValidationOk: true,
+      lastValidationCode: 'ok',
     });
     expect(await screen.findByText(/上次验证.+天前/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新验证' })).toBeInTheDocument();
@@ -2098,7 +2335,8 @@ const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const isStale = settings.lastValidatedAt
   ? Date.now() - new Date(settings.lastValidatedAt).getTime() > STALE_THRESHOLD_MS
   : false;
-const isFailed = settings.lastValidationCode === 'auth' || settings.lastValidationCode === 'network';
+const isFailed =
+  settings.lastValidationCode === 'auth' || settings.lastValidationCode === 'network';
 const saveLabel = saveMutation.isPending ? '验证中...' : isFailed ? '重试' : '保存';
 
 // Stale path renders <Button onClick={() => validateMutation.mutate()}>重新验证</Button>
@@ -2146,6 +2384,7 @@ button). validateVoiceTranscriptionCredentials mutation wired."
 ### Task 17: VoiceSettingsPanel — clear flow with AlertDialog
 
 **Files:**
+
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.tsx`
 - Modify: `src/renderer/src/settings/VoiceSettingsPanel.test.tsx`
 
@@ -2155,19 +2394,29 @@ button). validateVoiceTranscriptionCredentials mutation wired."
 describe('VoiceSettingsPanel clear flow', () => {
   it('clicking 清除 opens AlertDialog, confirm calls clearVoiceTranscriptionApiKey', async () => {
     renderWithQuery({
-      enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234',
-      lastValidatedAt: '2026-05-16T13:00:00.000Z', lastValidationOk: true, lastValidationCode: 'ok',
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: '2026-05-16T13:00:00.000Z',
+      lastValidationOk: true,
+      lastValidationCode: 'ok',
     });
     window.reoWorkspace.clearVoiceTranscriptionApiKey = vi.fn().mockResolvedValue({
       ok: true,
-      value: { settings: {
-        enabled: true, apiKeyConfigured: false, apiKeyLastFour: null,
-        lastValidatedAt: null, lastValidationOk: null, lastValidationCode: null,
-      } },
+      value: {
+        settings: {
+          enabled: true,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
     });
     await userEvent.click(await screen.findByRole('button', { name: '清除' }));
     expect(screen.getByText('确认清除 X-Api-Key？此操作会停止流式语音识别。')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '清除' }));   // confirm
+    await userEvent.click(screen.getByRole('button', { name: '清除' })); // confirm
     expect(window.reoWorkspace.clearVoiceTranscriptionApiKey).toHaveBeenCalledWith({});
   });
 });
@@ -2202,6 +2451,7 @@ clearVoiceTranscriptionApiKey IPC and invalidates ['settings','voice']."
 ### Task 18: SidebarSettingsTrigger button
 
 **Files:**
+
 - Create: `src/renderer/src/workspace/SidebarSettingsTrigger.tsx`
 - Create: `src/renderer/src/workspace/SidebarSettingsTrigger.test.tsx`
 
@@ -2283,6 +2533,7 @@ button. Disabled prop honors recording navigation gate."
 ### Task 19: AppShell appMode state + sidebar bottom layout
 
 **Files:**
+
 - Modify: `src/renderer/src/app-shell/AppShell.tsx`
 - Modify: `src/renderer/src/app-shell/AppShell.test.tsx`
 
@@ -2375,6 +2626,7 @@ when in settings. Recording-active blocks mode switch with root toast."
 ### Task 20: RecordingOverlay — skip start when toggle disabled
 
 **Files:**
+
 - Modify: `src/renderer/src/workspace/RecordingOverlay.tsx`
 - Modify: `src/renderer/src/workspace/RecordingOverlay.test.tsx` (or related test)
 
@@ -2438,6 +2690,7 @@ placeholder. Live ASR errors are impossible when toggle is off."
 ### Task 21: Update docs/current/electron.md
 
 **Files:**
+
 - Modify: `docs/current/electron.md`
 
 - [ ] **Step 1: Edit electron.md**
@@ -2490,6 +2743,7 @@ in the settings deep-link path with host allowlist."
 ### Task 22: Update docs/current/frontend.md
 
 **Files:**
+
 - Modify: `docs/current/frontend.md`
 
 - [ ] **Step 1: Edit frontend.md**
@@ -2519,6 +2773,7 @@ git commit -m "docs(current): add Settings Shell section + voice settings sideba
 ### Task 23: Update docs/current/data.md
 
 **Files:**
+
 - Modify: `docs/current/data.md`
 
 - [ ] **Step 1: Edit data.md**
@@ -2544,6 +2799,7 @@ git commit -m "docs(current): add voice transcription settings ownership + query
 ### Task 24: Final verify + dev runtime evidence + verification.md + artifacts/
 
 **Files:**
+
 - Create: `docs/specs/2026-05-16-0605-doubao-voice-byok-settings/verification.md`
 - Create: `docs/specs/2026-05-16-0605-doubao-voice-byok-settings/tasks.md`
 - Create: `docs/specs/2026-05-16-0605-doubao-voice-byok-settings/artifacts/` (with screenshots and verify-quick.txt)
@@ -2580,6 +2836,7 @@ Start dev: `npm run dev`. Manually walk through:
 10. Clear → confirm → back to disabled-no-key
 
 Then recording lines:
+
 - enabled + good key + record → transcript appears
 - enabled + bad key + record → toast "X-Api-Key 无效..."
 - disabled + record → no ASR call, no error, file saved

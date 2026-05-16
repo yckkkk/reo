@@ -88,12 +88,12 @@
 
 ### 三、用户角色 + 入口 + 前置条件
 
-| 项 | 内容 |
-|---|---|
-| 角色 | 当前 Reo 本机用户（无登录态，无服务端账号） |
+| 项   | 内容                                                          |
+| ---- | ------------------------------------------------------------- |
+| 角色 | 当前 Reo 本机用户（无登录态，无服务端账号）                   |
 | 入口 | Sidebar 左下角齿轮 + 「设置」文字按钮（录音中除外，始终可见） |
-| 前置 | 已有 Reo 本地安装；不需要登录；不需要已打开记忆空间 |
-| 退出 | 点击 nav rail 顶部 `← 返回应用` 或键盘 Esc |
+| 前置 | 已有 Reo 本地安装；不需要登录；不需要已打开记忆空间           |
+| 退出 | 点击 nav rail 顶部 `← 返回应用` 或键盘 Esc                    |
 
 ### 四、页面状态机（9 个状态）
 
@@ -239,14 +239,14 @@ JSON shape：
 
 #### 6.2 IPC contract
 
-| Channel | Request | Response | 说明 |
-|---|---|---|---|
-| `workspace:readVoiceTranscriptionSettings` | `{}` | `{ enabled, apiKeyConfigured, apiKeyLastFour, lastValidatedAt, lastValidationOk, lastValidationCode }` | 不返回 key 本身；无 workspaceHandle |
-| `workspace:setVoiceTranscriptionEnabled` | `{ enabled: boolean }` | 同上 | 切 toggle |
-| `workspace:saveVoiceTranscriptionApiKey` | `{ apiKey: string }` | 同上 + `{ validationError?: string }` | 先写 safeStorage 后 probe，原子返回最新状态 |
-| `workspace:clearVoiceTranscriptionApiKey` | `{}` | 同上 | 清空 key + 重置 validation 字段 |
-| `workspace:validateVoiceTranscriptionCredentials` | `{}` | `{ ok, code: 'ok' \| 'auth' \| 'network', message? }` | 主动 probe，更新 `lastValidatedAt/lastValidationOk/lastValidationCode` |
-| `workspace:openExternalUrl`（扩展） | `{ url: string }` | `{ ok: true } \| typed error` | main 校验 host allowlist，调 `shell.openExternal` |
+| Channel                                           | Request                | Response                                                                                               | 说明                                                                   |
+| ------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `workspace:readVoiceTranscriptionSettings`        | `{}`                   | `{ enabled, apiKeyConfigured, apiKeyLastFour, lastValidatedAt, lastValidationOk, lastValidationCode }` | 不返回 key 本身；无 workspaceHandle                                    |
+| `workspace:setVoiceTranscriptionEnabled`          | `{ enabled: boolean }` | 同上                                                                                                   | 切 toggle                                                              |
+| `workspace:saveVoiceTranscriptionApiKey`          | `{ apiKey: string }`   | 同上 + `{ validationError?: string }`                                                                  | 先写 safeStorage 后 probe，原子返回最新状态                            |
+| `workspace:clearVoiceTranscriptionApiKey`         | `{}`                   | 同上                                                                                                   | 清空 key + 重置 validation 字段                                        |
+| `workspace:validateVoiceTranscriptionCredentials` | `{}`                   | `{ ok, code: 'ok' \| 'auth' \| 'network', message? }`                                                  | 主动 probe，更新 `lastValidatedAt/lastValidationOk/lastValidationCode` |
+| `workspace:openExternalUrl`（扩展）               | `{ url: string }`      | `{ ok: true } \| typed error`                                                                          | main 校验 host allowlist，调 `shell.openExternal`                      |
 
 Sender validation：所有新 channel 校验 trusted main frame + `reo-app://renderer/index.html` + loopback dev origin + channel allowlist；无 workspaceHandle 但仍校验 sender。所有 IPC 输入有 Zod schema 严格校验。
 
@@ -361,47 +361,47 @@ Mutation invalidate：`setEnabled` / `saveApiKey` / `clear` / `validate` 任一 
 
 ### 七、状态切换规则
 
-| 当前 | 目标 | 触发 | 系统行为 | 数据 | IPC | 异常 |
-|---|---|---|---|---|---|---|
-| disabled-no-key | enabled-no-key | 点 toggle | `setVoiceTranscriptionEnabled({enabled:true})` | `enabled=true` | setEnabled | IPC 失败 → toggle 回滚 + root toast |
-| enabled-no-key | editing-with-key | 输入字符 | renderer 本地 state | - | - | - |
-| editing-with-key | validating | 点保存 | `saveVoiceTranscriptionApiKey({apiKey})` | apiKey 密文写入 | saveApiKey | IPC 异常 → 红 toast，不进 validating |
-| validating | verified-active | probe 200 | - | `lastValidationOk=true, code='ok'` | - | - |
-| validating | validation-failed-401 | probe 401/403/4xx | - | `lastValidationOk=false, code='auth'` | - | key 不清空 |
-| validating | validation-failed-network | probe 超时/5xx/DNS | - | `lastValidationOk=null, code='network'` | - | key 不清空 |
-| verified-active | disabled-with-key | 点 toggle | `setVoiceTranscriptionEnabled({enabled:false})` | `enabled=false`，apiKey 保留 | setEnabled | - |
-| disabled-with-key | verified-active | 点 toggle | 同上 | `enabled=true` | setEnabled | 不重 probe |
-| disabled-with-key | enabled-with-stale-key | 点 toggle 且 >24h | 同上 | `enabled=true` | setEnabled | - |
-| 任意 | 二次确认 | 点清除 | 打开 AlertDialog | - | - | - |
-| 二次确认 | disabled-no-key | 确认 | `clearVoiceTranscriptionApiKey` | apiKey + validation 字段清空 | clear | - |
-| workspace mode | settings mode | 点齿轮 | AppShell setState | renderer state | - | 录音中拒绝 |
-| settings mode | workspace mode | 点返回应用 | AppShell setState | 恢复 stage state | - | - |
-| 录音中（任意 workspace） | 阻止 | 点齿轮 | 不切换 + root toast | - | - | - |
+| 当前                     | 目标                      | 触发               | 系统行为                                        | 数据                                    | IPC        | 异常                                 |
+| ------------------------ | ------------------------- | ------------------ | ----------------------------------------------- | --------------------------------------- | ---------- | ------------------------------------ |
+| disabled-no-key          | enabled-no-key            | 点 toggle          | `setVoiceTranscriptionEnabled({enabled:true})`  | `enabled=true`                          | setEnabled | IPC 失败 → toggle 回滚 + root toast  |
+| enabled-no-key           | editing-with-key          | 输入字符           | renderer 本地 state                             | -                                       | -          | -                                    |
+| editing-with-key         | validating                | 点保存             | `saveVoiceTranscriptionApiKey({apiKey})`        | apiKey 密文写入                         | saveApiKey | IPC 异常 → 红 toast，不进 validating |
+| validating               | verified-active           | probe 200          | -                                               | `lastValidationOk=true, code='ok'`      | -          | -                                    |
+| validating               | validation-failed-401     | probe 401/403/4xx  | -                                               | `lastValidationOk=false, code='auth'`   | -          | key 不清空                           |
+| validating               | validation-failed-network | probe 超时/5xx/DNS | -                                               | `lastValidationOk=null, code='network'` | -          | key 不清空                           |
+| verified-active          | disabled-with-key         | 点 toggle          | `setVoiceTranscriptionEnabled({enabled:false})` | `enabled=false`，apiKey 保留            | setEnabled | -                                    |
+| disabled-with-key        | verified-active           | 点 toggle          | 同上                                            | `enabled=true`                          | setEnabled | 不重 probe                           |
+| disabled-with-key        | enabled-with-stale-key    | 点 toggle 且 >24h  | 同上                                            | `enabled=true`                          | setEnabled | -                                    |
+| 任意                     | 二次确认                  | 点清除             | 打开 AlertDialog                                | -                                       | -          | -                                    |
+| 二次确认                 | disabled-no-key           | 确认               | `clearVoiceTranscriptionApiKey`                 | apiKey + validation 字段清空            | clear      | -                                    |
+| workspace mode           | settings mode             | 点齿轮             | AppShell setState                               | renderer state                          | -          | 录音中拒绝                           |
+| settings mode            | workspace mode            | 点返回应用         | AppShell setState                               | 恢复 stage state                        | -          | -                                    |
+| 录音中（任意 workspace） | 阻止                      | 点齿轮             | 不切换 + root toast                             | -                                       | -          | -                                    |
 
 ### 八、边界情况补齐
 
-| # | 场景 | 触发 | 处理 | 文案 | 验收 |
-|---|---|---|---|---|---|
-| 1 | safeStorage 不可用 | Linux 无 libsecret | save fail-fast | 「系统暂不支持安全存储，无法保存 X-Api-Key」 | Linux container 测试 |
-| 2 | userData 写失败 | 磁盘满 / 只读 | save 失败回滚，旧值保留 | 「无法写入本地配置，请检查磁盘空间」 | mock fs 单元测试 |
-| 3 | probe 超时 | DNS / 防火墙 | 1s timeout → `network` | 见状态 8 | mock socket hang |
-| 4 | probe 5xx | 服务端故障 | 当作 network 处理 | 「豆包服务暂时不可用，请稍后重试」 | mock 503 |
-| 5 | probe 4xx 非 401 | 资源 ID 错 / 配额 | 当作 auth 处理 | 「鉴权失败：{code}」 | mock 429/400 |
-| 6 | 录音中点齿轮 | overlay open | 阻止 + toast | 「请先完成或关闭录音」 | E2E |
-| 7 | 录音中 toggle 切换 | 理论不可能 | live session 用 start 时快照，不响应中途变更 | - | 单元测试 |
-| 8 | 重复点保存 | 网络慢用户重点 | 第二次 disabled | - | UI 测试 |
-| 9 | 启用但 key 空 | 用户保存空状态 | 允许；下次录音返回 unavailable + toast 引导 | 「请到 设置 → 语音 填写 X-Api-Key 后再录音」 | 录音 E2E |
-| 10 | key 含前后空格 | 复制粘贴 | main `apiKey.trim()` 后存 + probe | - | 单元测试 |
-| 11 | key 超长 | 异常输入 | renderer maxLength + main schema 限制 | 输入框截断 | schema 测试 |
-| 12 | safeStorage 解密失败 | userData 跨用户复制 | `resolveDefaultDoubaoCredentials` 返回 null + 日志 + UI needs-reauth | 「配置已失效，请重新填写」 | mock 解密失败 |
-| 13 | settings IPC sender 不可信 | 恶意 renderer | sender validation 拒绝 | - | sender test |
-| 14 | 多 Reo 实例同时运行 | 用户开多个 | safeStorage 写入串行化但无文件锁；接受 last-writer | - | 接受 last-writer |
-| 15 | settings 切换时录音在后台收口 | 录音 finalize 后台 transcript save | settings 切换不阻止后台 IPC；新设置只影响下次录音 | - | E2E |
-| 16 | 进入 settings 后窗口关闭 | 用户直接关 BrowserWindow | App 正常 teardown；voice settings 持久 | - | window close test |
-| 17 | 极速切换 settings↔workspace | 反复点 | renderer setState 串行；不发起额外 IPC | - | UI 测试 |
-| 18 | IME 中文输入法 | macOS 中文 | composition end 前不算输入完成；空 key 用 trimmed value 判断 | - | 手动测试 |
-| 19 | 主题切换中点保存 | theme transition | 不影响（独立 reducer） | - | - |
-| 20 | env var 兼容残留 | grep 检查 | 删除路径后无消费者 | - | grep src 零结果 |
+| #   | 场景                          | 触发                               | 处理                                                                 | 文案                                         | 验收                 |
+| --- | ----------------------------- | ---------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- | -------------------- |
+| 1   | safeStorage 不可用            | Linux 无 libsecret                 | save fail-fast                                                       | 「系统暂不支持安全存储，无法保存 X-Api-Key」 | Linux container 测试 |
+| 2   | userData 写失败               | 磁盘满 / 只读                      | save 失败回滚，旧值保留                                              | 「无法写入本地配置，请检查磁盘空间」         | mock fs 单元测试     |
+| 3   | probe 超时                    | DNS / 防火墙                       | 1s timeout → `network`                                               | 见状态 8                                     | mock socket hang     |
+| 4   | probe 5xx                     | 服务端故障                         | 当作 network 处理                                                    | 「豆包服务暂时不可用，请稍后重试」           | mock 503             |
+| 5   | probe 4xx 非 401              | 资源 ID 错 / 配额                  | 当作 auth 处理                                                       | 「鉴权失败：{code}」                         | mock 429/400         |
+| 6   | 录音中点齿轮                  | overlay open                       | 阻止 + toast                                                         | 「请先完成或关闭录音」                       | E2E                  |
+| 7   | 录音中 toggle 切换            | 理论不可能                         | live session 用 start 时快照，不响应中途变更                         | -                                            | 单元测试             |
+| 8   | 重复点保存                    | 网络慢用户重点                     | 第二次 disabled                                                      | -                                            | UI 测试              |
+| 9   | 启用但 key 空                 | 用户保存空状态                     | 允许；下次录音返回 unavailable + toast 引导                          | 「请到 设置 → 语音 填写 X-Api-Key 后再录音」 | 录音 E2E             |
+| 10  | key 含前后空格                | 复制粘贴                           | main `apiKey.trim()` 后存 + probe                                    | -                                            | 单元测试             |
+| 11  | key 超长                      | 异常输入                           | renderer maxLength + main schema 限制                                | 输入框截断                                   | schema 测试          |
+| 12  | safeStorage 解密失败          | userData 跨用户复制                | `resolveDefaultDoubaoCredentials` 返回 null + 日志 + UI needs-reauth | 「配置已失效，请重新填写」                   | mock 解密失败        |
+| 13  | settings IPC sender 不可信    | 恶意 renderer                      | sender validation 拒绝                                               | -                                            | sender test          |
+| 14  | 多 Reo 实例同时运行           | 用户开多个                         | safeStorage 写入串行化但无文件锁；接受 last-writer                   | -                                            | 接受 last-writer     |
+| 15  | settings 切换时录音在后台收口 | 录音 finalize 后台 transcript save | settings 切换不阻止后台 IPC；新设置只影响下次录音                    | -                                            | E2E                  |
+| 16  | 进入 settings 后窗口关闭      | 用户直接关 BrowserWindow           | App 正常 teardown；voice settings 持久                               | -                                            | window close test    |
+| 17  | 极速切换 settings↔workspace   | 反复点                             | renderer setState 串行；不发起额外 IPC                               | -                                            | UI 测试              |
+| 18  | IME 中文输入法                | macOS 中文                         | composition end 前不算输入完成；空 key 用 trimmed value 判断         | -                                            | 手动测试             |
+| 19  | 主题切换中点保存              | theme transition                   | 不影响（独立 reducer）                                               | -                                            | -                    |
+| 20  | env var 兼容残留              | grep 检查                          | 删除路径后无消费者                                                   | -                                            | grep src 零结果      |
 
 ### 九、验收标准
 
@@ -464,11 +464,11 @@ Mutation invalidate：`setEnabled` / `saveApiKey` / `clear` / `validate` 任一 
 
 A 收口后必须为下列每一项独立走完整 brainstorm → spec → plan → 实现 → 验证流程，**禁止合并**：
 
-| ID | 名称 | 一句话目标 | 依赖 |
-|---|---|---|---|
-| B | 未转录状态可视化 | finalized audio segment / supplement 在 Memory Studio 标记「待转录」+ 录音 overlay 在 toggle disabled 时显示「语音转录已停用」占位 | 依赖 A 提供的 `transcriptionMode` 字段与 `transcript.exists` 派生字段 |
-| C | 网络 / 凭证恢复后自动轮询补转录 | 应用启动 / 网络恢复 / 凭证保存成功后，扫描未转录 finalized audio，逐个走异步转录 | 依赖 A 的 voice settings store，B 的「待转录」集合，以及一条新的离线转录引擎（endpoint 需在 C/E 独立核对） |
-| D | 转录 tab More 菜单 + 手动重新生成转录 | 在 Segment / Supplement 的 transcript surface 加入 More 下拉，提供「重新生成转录」动作；同一引擎服务 C 的自动路径 | 依赖 C 的离线转录引擎 |
-| E | Endpoint 校正 | 独立核对 `bigmodel_async` 与 `bigmodel` 在当前火山引擎控制台和计费资源下的实际语义、成本与稳定性；如有必要再调整流式实时或离线批处理 endpoint | 独立技术调研，可与 C 合并启动 |
+| ID  | 名称                                  | 一句话目标                                                                                                                                    | 依赖                                                                                                       |
+| --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| B   | 未转录状态可视化                      | finalized audio segment / supplement 在 Memory Studio 标记「待转录」+ 录音 overlay 在 toggle disabled 时显示「语音转录已停用」占位            | 依赖 A 提供的 `transcriptionMode` 字段与 `transcript.exists` 派生字段                                      |
+| C   | 网络 / 凭证恢复后自动轮询补转录       | 应用启动 / 网络恢复 / 凭证保存成功后，扫描未转录 finalized audio，逐个走异步转录                                                              | 依赖 A 的 voice settings store，B 的「待转录」集合，以及一条新的离线转录引擎（endpoint 需在 C/E 独立核对） |
+| D   | 转录 tab More 菜单 + 手动重新生成转录 | 在 Segment / Supplement 的 transcript surface 加入 More 下拉，提供「重新生成转录」动作；同一引擎服务 C 的自动路径                             | 依赖 C 的离线转录引擎                                                                                      |
+| E   | Endpoint 校正                         | 独立核对 `bigmodel_async` 与 `bigmodel` 在当前火山引擎控制台和计费资源下的实际语义、成本与稳定性；如有必要再调整流式实时或离线批处理 endpoint | 独立技术调研，可与 C 合并启动                                                                              |
 
 每一项必须在 `docs/specs/` 当前空闲、本次 A 已归档之后才能开新 spec，遵守 CLAUDE.md 「同一时间只推进一个可验证基础工作单元」约束。

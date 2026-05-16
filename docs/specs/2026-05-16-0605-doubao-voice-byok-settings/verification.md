@@ -1,0 +1,26 @@
+# Doubao Voice BYOK Settings Verification
+
+- [x] 24 tasks completed and recorded in `tasks.md`.
+- [x] `goal.md` created with locked decisions, stop conditions, and follow-up reserve.
+- [x] Critical review notes appended to `plan.md`.
+- [x] X-Api-Key BYOK settings persist through Electron safeStorage and userData JSON.
+- [x] Renderer does not receive saved key plaintext; saved state shows only last 4 characters.
+- [x] Eye icon only reveals the current unsaved replacement draft.
+- [x] Toggle defaults off and remains independent from key presence.
+- [x] Save runs a minimal Doubao WebSocket probe before returning validated state.
+- [x] Live recording session snapshots voice settings at start and ignores mid-session changes.
+- [x] Recording starts without live transcription when voice recognition is disabled.
+- [x] Settings route uses the same BrowserWindow appMode and preserves the workspace handle.
+- [x] Recording blocks settings navigation.
+- [x] Settings IPC channels have sender validation and strict schemas.
+- [x] `shell.openExternal` remains host-allowlisted.
+- [x] Official Doubao protocol corrected to `X-Api-Key`, `volc.seedasr.sauc.duration`, `/api/v3/sauc/bigmodel_async`.
+- [x] Legacy env var and two-header auth consumers removed from `src/`.
+- [x] `docs/current/electron.md`, `docs/current/frontend.md`, and `docs/current/data.md` updated.
+- [x] Runtime settings screenshots captured: `artifacts/state-1.png` through `artifacts/state-9.png`.
+- [x] Clear confirmation screenshot captured: `artifacts/state-clear-confirm.png`.
+- [x] Recording screenshots captured: `artifacts/recording-a.png`, `artifacts/recording-b.png`, `artifacts/recording-c.png`.
+- [x] Settings design correction screenshot captured: `artifacts/settings-design-fix.png`.
+- [x] Grep evidence captured in `artifacts/grep-evidence.txt`.
+- [x] Real Doubao X-Api-Key minimal WebSocket handshake probe captured in `artifacts/real-api-probe.txt`.
+- [x] `npm run verify:quick` captured in `artifacts/verify-quick.txt`.

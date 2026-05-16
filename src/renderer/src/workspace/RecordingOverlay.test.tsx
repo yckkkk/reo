@@ -1,10 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import {
-  act,
-  fireEvent,
-  render as renderTestingLibrary,
-  screen,
-} from '@testing-library/react';
+import { act, fireEvent, render as renderTestingLibrary, screen } from '@testing-library/react';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
@@ -1165,9 +1160,10 @@ describe('RecordingOverlay', () => {
   });
 
   it('starts live transcription after voice settings finish loading enabled', async () => {
-    const deferredSettings = createDeferred<
-      Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
-    >();
+    const deferredSettings =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
+      >();
     const bridge = installWorkspaceBridge({
       readVoiceTranscriptionSettings: vi.fn(() => deferredSettings.promise),
     });
