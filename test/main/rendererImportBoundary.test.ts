@@ -32,4 +32,16 @@ test('renderer source cannot import Node or Electron modules', async () => {
     bareBuiltinResult.messages.some((message) => message.ruleId === 'no-restricted-imports'),
     JSON.stringify(bareBuiltinResult.messages, null, 2)
   );
+
+  const dynamicBuiltinResults = await eslint.lintText(
+    ["const fs = await import('node:fs');", 'export const value = Boolean(fs);'].join('\n'),
+    { filePath: 'src/renderer/src/violates-dynamic-builtin.ts' }
+  );
+  const dynamicBuiltinResult = dynamicBuiltinResults[0];
+
+  assert.ok(dynamicBuiltinResult);
+  assert.ok(
+    dynamicBuiltinResult.messages.some((message) => message.ruleId === 'no-restricted-syntax'),
+    JSON.stringify(dynamicBuiltinResult.messages, null, 2)
+  );
 });

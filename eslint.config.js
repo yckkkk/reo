@@ -12,6 +12,11 @@ const nodeBuiltinImports = [
     })
   ),
 ];
+const rendererRestrictedDynamicImportPattern = `^(?:${['electron', ...nodeBuiltinImports]
+  .map((source) => source.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&'))
+  .join('|')})$`;
+const preloadRestrictedImportPattern =
+  '^(?!electron$|\\.\\/|\\.\\.\\/workspace-contract\\/(?:workspace-channels|reo-workspace-bridge)\\.js$).+';
 
 export default defineConfig([
   globalIgnores(['node_modules', 'out']),
@@ -33,6 +38,13 @@ export default defineConfig([
           patterns: ['node:*'],
         },
       ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `ImportExpression[source.value=/${rendererRestrictedDynamicImportPattern}/]`,
+          message: 'Renderer source cannot dynamically import Electron or Node builtins.',
+        },
+      ],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -52,11 +64,19 @@ export default defineConfig([
           paths: nodeBuiltinImports,
           patterns: [
             {
-              regex: '^(?!electron$|\\.\\.?/).+',
+              regex: preloadRestrictedImportPattern,
               message:
                 'Preload source may only import Electron and relative preload/contract modules.',
             },
           ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `ImportExpression[source.value=/${preloadRestrictedImportPattern}/]`,
+          message:
+            'Preload source may only dynamically import Electron and relative preload/contract modules.',
         },
       ],
     },

@@ -150,7 +150,7 @@ function domIdPart(value: string) {
 
 function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
   const valueDomId =
-    value === 'transcript' ? 'transcript' : domIdPart(value.slice('supplement:'.length));
+    value === 'transcript' ? 'transcript' : domIdPart(supplementIdFromContentTab(value) ?? value);
   const baseId = `memory-studio-${segmentDomId}-${valueDomId}`;
 
   return {

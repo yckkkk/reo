@@ -56,3 +56,17 @@ test('local env loader keeps explicit shell values ahead of .env.local', async (
   assert.equal(result.env['REO_DOUBAO_ASR_ACCESS_TOKEN'], 'shell-token');
   assert.equal(result.env['REO_DOUBAO_ASR_APP_ID'], 'local-app');
 });
+
+test('local env loader does not inject Vite-exposed client variables from .env.local', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reo-local-env-'));
+  await writeFile(
+    join(directory, '.env.local'),
+    ['VITE_SECRET=renderer-visible', 'REO_DOUBAO_ASR_APP_ID=main-only-app'].join('\n')
+  );
+
+  const { loadLocalEnvFiles } = await importLocalEnvModule();
+  const result = loadLocalEnvFiles({ cwd: directory, env: {} });
+
+  assert.equal(result.env['VITE_SECRET'], undefined);
+  assert.equal(result.env['REO_DOUBAO_ASR_APP_ID'], 'main-only-app');
+});

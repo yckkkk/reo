@@ -85,6 +85,9 @@ export function loadLocalEnvFiles({
     const parsed = parseLocalEnv(content);
     loadedFiles.push(file);
     for (const [key, value] of Object.entries(parsed)) {
+      if (key.startsWith('VITE_')) {
+        continue;
+      }
       if (nextEnv[key] === undefined) {
         nextEnv[key] = value;
       }
