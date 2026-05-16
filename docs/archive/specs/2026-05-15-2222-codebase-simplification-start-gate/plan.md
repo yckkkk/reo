@@ -47,7 +47,7 @@
 - Modify: `src/main/recordingDrafts.ts`
 - Modify if current fact changes: `docs/current/flow.md`, `docs/current/quality.md`
 
-- [ ] **Step 1: Write focused RED tests**
+- [x] **Step 1: Write focused RED tests**
 
 Cover helper behavior before migration:
 
@@ -64,7 +64,7 @@ npm run test:main -- --test-name-pattern='workspace directory transaction'
 
 Expected: FAIL because `workspaceDirectoryTransactions.ts` does not exist.
 
-- [ ] **Step 2: Implement minimal helper**
+- [x] **Step 2: Implement minimal helper**
 
 Add only primitives needed by `atomicWorkspaceFile.ts` and `recordingDrafts.ts`:
 
@@ -77,7 +77,7 @@ Add only primitives needed by `atomicWorkspaceFile.ts` and `recordingDrafts.ts`:
 
 Do not add rename helpers in this task.
 
-- [ ] **Step 3: Run RED target to GREEN**
+- [x] **Step 3: Run RED target to GREEN**
 
 ```bash
 npm run test:main -- --test-name-pattern='workspace directory transaction'
@@ -85,7 +85,7 @@ npm run test:main -- --test-name-pattern='workspace directory transaction'
 
 Expected: PASS.
 
-- [ ] **Step 4: Migrate first consumers**
+- [x] **Step 4: Migrate first consumers**
 
 Replace duplicated helper logic in:
 
@@ -94,7 +94,7 @@ Replace duplicated helper logic in:
 
 Keep existing exported APIs unchanged.
 
-- [ ] **Step 5: Run protection tests**
+- [x] **Step 5: Run protection tests**
 
 ```bash
 npm run test:main -- --test-name-pattern='atomic workspace writes|recording draft'
@@ -103,11 +103,11 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 6: Simplification review**
+- [x] **Step 6: Simplification review**
 
 Remove duplicate local helpers only after all call sites in this task compile. Do not migrate `memoryFiles.ts` yet.
 
-- [ ] **Step 7: Full gate**
+- [x] **Step 7: Full gate**
 
 ```bash
 npm run verify:quick
@@ -121,35 +121,32 @@ Expected: PASS.
 
 - Modify: `src/main/workspaceDirectoryTransactions.ts`
 - Modify: `src/main/memoryFiles.ts`
-- Modify: `test/main/memoryFiles.test.ts`
-- Modify if current fact changes: `docs/current/flow.md`
+- Modify: `test/main/workspaceDirectoryTransactions.test.ts`
+- Protect with existing behavior tests: `test/main/memoryFiles.test.ts`
+- Modify if current fact changes: `docs/current/flow.md`, `docs/current/quality.md`
 
-- [ ] **Step 1: Write RED tests for migrated memory file behaviors**
+- [x] **Step 1: Write RED tests for migrated memory file behaviors**
 
-Use existing memory file test patterns to prove:
+Task 2 current test boundary:
 
-- copy from draft to staging still rejects source directory swap.
-- cleanup still refuses unsafe symlink parent.
-- empty metadata-less memory cleanup still preserves late `memory.md` payload.
-- recursive cleanup still requires validated workspace containment.
+- helper-level main tests cover validated-directory entry read, tree remove identity and empty directory late payload protection.
+- existing `test/main/memoryFiles.test.ts` behavior tests continue to protect finalize, recovery, delete, restore and SegmentSupplement flows.
 
-Run targeted tests and expect failure only after replacing local helper references with missing shared helper names.
-
-- [ ] **Step 2: Extend helper minimally**
+- [x] **Step 2: Extend helper minimally**
 
 Add only capabilities needed by memory file cleanup/copy:
 
-- safe tree directory remove with optional allow-missing.
+- tree directory remove; `removeSafeWorkspaceDirectory` keeps root containment and allow-missing ownership.
 - empty directory remove.
-- known-directory copy/open helpers if they remove real duplication.
+- known-directory read/open/remove helpers where they remove real duplication.
 
 Do not migrate directory rename transaction in this task.
 
-- [ ] **Step 3: Migrate memoryFiles safe open/read/remove helper call sites**
+- [x] **Step 3: Migrate memoryFiles safe open/read/remove helper call sites**
 
 Keep transaction marker, staging expose, rollback and recovery order unchanged.
 
-- [ ] **Step 4: Run protection tests**
+- [x] **Step 4: Run protection tests**
 
 ```bash
 npm run test:main -- --test-name-pattern='finalize|recovery|delete Segment|restore Segment|SegmentSupplement'
@@ -158,7 +155,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Full gate**
+- [x] **Step 5: Full gate**
 
 ```bash
 npm run verify:quick
@@ -176,15 +173,15 @@ Expected: PASS.
 - Modify: `test/main/workspaceLock.test.ts`
 - Modify if current fact changes: `docs/current/flow.md`
 
-- [ ] **Step 1: Write RED tests only for newly shared helper boundary**
+- [x] **Step 1: Write RED tests only for newly shared helper boundary**
 
 Do not rewrite existing lock behavior tests. Add helper-level coverage if a helper is extended for lock owner directory operations.
 
-- [ ] **Step 2: Migrate best-effort fsync and known-directory open helpers**
+- [x] **Step 2: Migrate best-effort fsync and known-directory open helpers**
 
 Keep stale lock replacement, owner file no-follow open and lock directory identity checks in `workspaceLock.ts` unless the shared helper exactly preserves the same sequence.
 
-- [ ] **Step 3: Run protection tests**
+- [x] **Step 3: Run protection tests**
 
 ```bash
 npm run test:main -- --test-name-pattern='workspace lock|workspace root|initializeWorkspace|openWorkspace'
@@ -193,7 +190,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Full gate**
+- [x] **Step 4: Full gate**
 
 ```bash
 npm run verify:quick
@@ -214,7 +211,7 @@ Expected: PASS.
 - Modify: `src/renderer/src/workspace/SegmentSupplementActionsMenu.tsx`
 - Modify if current fact changes: `docs/current/frontend.md`
 
-- [ ] **Step 1: Write RED binding tests**
+- [x] **Step 1: Write RED binding tests**
 
 Test that each entity kind maps to the correct workspace API wrappers:
 
@@ -231,19 +228,19 @@ npm run test:renderer -- entityActionBindings
 
 Expected: FAIL because binding module does not exist.
 
-- [ ] **Step 2: Add workspace API wrappers**
+- [x] **Step 2: Add workspace API wrappers**
 
 Add typed wrappers in `workspaceApi.ts`; direct `window.reoWorkspace` access stays there.
 
-- [ ] **Step 3: Add `entityActionBindings.ts`**
+- [x] **Step 3: Add `entityActionBindings.ts`**
 
 Return only read-only shell handlers. Do not include rename/delete/remove, because owner components still own Dialog and mutation state.
 
-- [ ] **Step 4: Migrate four action menu wrappers**
+- [x] **Step 4: Migrate four action menu wrappers**
 
 Keep prop names and public wrapper behavior stable unless a test proves a simpler prop shape is safe.
 
-- [ ] **Step 5: Run renderer protection tests**
+- [x] **Step 5: Run renderer protection tests**
 
 ```bash
 npm run test:renderer -- MemorySpaceActionsMenu MemoryActionsMenu SegmentActionsMenu SegmentSupplementActionsMenu entityActionMenu entityActionBindings
@@ -252,7 +249,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 6: Full gate**
+- [x] **Step 6: Full gate**
 
 ```bash
 npm run verify:quick
@@ -270,7 +267,7 @@ Expected: PASS.
 - Modify only if justified: `src/main/workspaceDirectoryTransactions.ts`
 - Modify if current fact changes: `docs/current/flow.md`
 
-- [ ] **Step 1: Audit remaining duplicate rename transactions**
+- [x] **Step 1: Audit remaining duplicate rename transactions**
 
 List each remaining duplicate and its unique constraints:
 
@@ -279,19 +276,19 @@ List each remaining duplicate and its unique constraints:
 - workspace root rename with platform no-replace behavior.
 - stale lock directory replacement.
 
-- [ ] **Step 2: Decide migrate or keep**
+- [x] **Step 2: Decide migrate or keep**
 
-Migrate only if a helper can preserve all target preflight, source identity, target identity, rollback, parent fsync and platform-specific semantics with less code.
+Decision: keep local rename transaction implementations. A shared helper would need optional branches for marker-first staging expose, cross-parent trash/restore moves, platform no-replace workspace root moves and stale lock ownership checks.
 
-- [ ] **Step 3: If migrate, write RED tests first**
+- [x] **Step 3: If migrate, write RED tests first**
 
-Each migrated rename primitive must have a focused race/rollback test before implementation.
+No rename primitive is migrated in this task.
 
-- [ ] **Step 4: If keep, document the current split**
+- [x] **Step 4: If keep, document the current split**
 
 If migration is not worth it, keep local rename helpers and document that they remain local because each one owns different transaction semantics.
 
-- [ ] **Step 5: Full gate**
+- [x] **Step 5: Full gate**
 
 ```bash
 npm run verify:quick

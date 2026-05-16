@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-- 状态：active
-- 类型：产品或代码开发 active initiative
-- 当前 spec：`docs/specs/2026-05-15-2222-codebase-simplification-start-gate`
+- 状态：complete
+- 类型：已完成的产品或代码开发 initiative
+- 归档 spec：`docs/archive/specs/2026-05-15-2222-codebase-simplification-start-gate`
 
 ## 目标
 
@@ -33,6 +33,6 @@
 - Node.js v22 fs 文档确认 `fs.constants`、exclusive open、`fsyncSync`、`renameSync`、`linkSync`、`rmSync` / `rmdirSync` 行为存在平台差异；Reo helper 必须继续保留当前 unsafe path、directory identity 和 best-effort directory fsync 规则。
 - React 官方文档建议只在共用逻辑能让组件表达 intent、封装外部系统同步或消除有意义重复时抽取 hook/component；本 initiative 的 renderer 抽取只处理 entity shell action binding，不迁移 owner state。
 
-## 下一步
+## 收口状态
 
-从当前 spec `docs/specs/2026-05-15-2222-codebase-simplification-start-gate` 的 Task 1 开始，先做 main process 文件事务 helper 的最小可验证切片。
+完成条件已收口到 `docs/current/flow.md`、`docs/current/frontend.md` 和 `docs/current/quality.md` 的当前事实；后续代码开发需要创建新的 active spec。

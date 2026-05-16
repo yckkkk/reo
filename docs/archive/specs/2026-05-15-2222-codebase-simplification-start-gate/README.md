@@ -5,11 +5,11 @@
 - 创建时间：2026-05-15 22:22 America/Los_Angeles
 - 当前 HEAD：`305a24ea`
 - 关联 initiative：`docs/initiatives/2026-05-15-codebase-simplification-foundation`
-- 状态：active
+- 状态：complete
 
 ## Objective
 
-为更宽的文件事务 helper 抽取和 UI action wrapper 统一建立可执行 spec/plan，并定义第一批可验证实现切片。
+按可验证任务顺序完成文件事务 helper 抽取、renderer entity action wrapper 统一，以及剩余 rename transaction 的保留决策。
 
 ## 背景
 
@@ -17,15 +17,15 @@
 
 - `305a24ea chore: harden staged codebase simplifications`
 
-本轮不直接做大范围实现。先把长期任务拆成小的、可验证的 spec 顺序，避免在文件事务和 renderer owner state 上一次性扩大风险。
+本轮按 plan 顺序执行代码迁移和决策 gate，避免在文件事务和 renderer owner state 上一次性扩大风险。
 
 ## 成功标准
 
-- 新建一个产品或代码开发 active initiative，且不冲突当前商业化横切 initiative。
-- 当前 spec 明确范围、非目标、采用依据、任务顺序和验证方式。
-- 第一实现切片从文件事务 helper 最小骨架开始，不先处理宽 rename transaction 或 UI owner state。
-- 明确 TDD 红线：所有行为改动必须先 RED，再 GREEN，再 REFACTOR。
-- 本 planning spec 不改变 runtime 行为；TDD 豁免仅限文档和计划文件。
+- `src/main/workspaceDirectoryTransactions.ts` 承载已收敛的 workspace directory transaction primitives。
+- `atomicWorkspaceFile.ts`、`recordingDrafts.ts`、`memoryFiles.ts`、`workspaceFiles.ts` 和 `workspaceLock.ts` 迁移后保持 lock、identity、rollback、cleanup 和 stale/unsafe path 行为。
+- 四类 renderer entity action menu wrapper 通过 `workspaceApi.ts` 和 `entityActionBindings.ts` 触发只读 shell 动作，不直接调用 `window.reoWorkspace`。
+- 剩余 directory rename transaction 已完成收益评估，并保留在本地 owner 中。
+- `docs/current/flow.md`、`docs/current/frontend.md` 和 `docs/current/quality.md` 已更新为当前事实。
 
 ## 当前依据
 
@@ -42,13 +42,12 @@
 
 ## 非目标
 
-- 不执行代码迁移。
 - 不新增 runtime surface。
 - 不改 UI 视觉和交互文案。
 - 不创建 generic filesystem abstraction。
-- 不把 active spec 归档；后续实现切片仍以该 spec 的计划顺序推进或拆出新 spec。
+- 不把 Dialog、pending projection、Query owner 或 directory rename transaction 抽成泛用 helper。
 
 ## 验证计划
 
-- 文档创建后运行 `npm run format:check`。
-- 如果本 spec 后续进入实现阶段，每个任务收口前运行 `npm run verify:quick`。
+- 每个任务收口前运行 `npm run verify:quick`。
+- 最终收口运行 `npm run verify:quick`。
