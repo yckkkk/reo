@@ -12,6 +12,13 @@ import {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -27,12 +34,20 @@ import {
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
+  WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
+  WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
+  WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -70,7 +85,18 @@ import {
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
+  workspaceOpenMemoryDocumentRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
+  workspaceOpenMemorySpaceAgentsFileRequestSchema,
+  workspaceOpenSegmentDocumentRequestSchema,
+  workspaceOpenSegmentSupplementDocumentRequestSchema,
+  workspaceCopyMemoryAbsolutePathRequestSchema,
+  workspaceCopyMemorySpaceAbsolutePathRequestSchema,
+  workspaceCopyMemoryRelativePathRequestSchema,
+  workspaceCopySegmentAbsolutePathRequestSchema,
+  workspaceCopySegmentRelativePathRequestSchema,
+  workspaceCopySegmentSupplementAbsolutePathRequestSchema,
+  workspaceCopySegmentSupplementRelativePathRequestSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
@@ -79,6 +105,10 @@ import {
   workspaceReadMemoryDetailResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
+  workspaceRevealMemoryInFinderRequestSchema,
+  workspaceRevealMemorySpaceInFinderRequestSchema,
+  workspaceRevealSegmentInFinderRequestSchema,
+  workspaceRevealSegmentSupplementInFinderRequestSchema,
   workspaceRemoveMemorySpaceRequestSchema,
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceRecordingAppendRequestSchema,
@@ -120,6 +150,8 @@ import {
   workspaceUpdateSegmentSupplementTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
+  workspaceEntityActionResponseSchema,
+  type WorkspaceEntityActionResponse,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
   type WorkspaceErrorEnvelope,
@@ -131,6 +163,19 @@ import {
   WorkspaceMemorySpaceRegistryReadError,
   type WorkspaceMemorySpaceRegistry,
 } from './workspaceMemorySpaceRegistry.js';
+import {
+  nodeFsProbe,
+  resolveMemoryPaths,
+  resolveMemorySpacePaths,
+  resolveSegmentPaths,
+  resolveSegmentSupplementPaths,
+  type FsProbe,
+  type MemoryPaths,
+  type MemorySpacePaths,
+  type ResolverResult,
+  type SegmentPaths,
+  type SegmentSupplementPaths,
+} from './entityPathResolver.js';
 import { acquireWorkspaceLock } from './workspaceLock.js';
 import {
   createWorkspaceSelectionTokenStore,
@@ -198,7 +243,9 @@ import {
 import { withDiagnosticSpan } from './diagnostics.js';
 
 const nodeRequire = createRequire(import.meta.url);
-const { app, dialog, ipcMain } = nodeRequire('electron') as Partial<typeof import('electron')>;
+const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
+  typeof import('electron')
+>;
 const defaultHandleStore = createWorkspaceHandleStore();
 let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
 const defaultRecordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry();
@@ -209,6 +256,47 @@ interface ShowOpenDirectoryDialogResult {
 }
 
 type ShowOpenDirectoryDialog = () => Promise<ShowOpenDirectoryDialogResult>;
+type ShowItemInFolder = (filePath: string) => void;
+type OpenPath = (filePath: string) => Promise<string>;
+type WriteClipboardText = (text: string) => void;
+type ResolveMemorySpacePaths = (
+  workspaceId: string,
+  deps?: {
+    readonly registry?: WorkspaceMemorySpaceRegistry;
+    readonly fs?: FsProbe;
+    readonly requireAgentsFile?: boolean;
+  }
+) => Promise<ResolverResult<MemorySpacePaths>>;
+type ResolveMemoryPaths = (
+  handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+  workspaceId: string,
+  memoryId: string,
+  deps?: {
+    readonly fs?: FsProbe;
+    readonly requireDocument?: boolean;
+  }
+) => Promise<ResolverResult<MemoryPaths>>;
+type ResolveSegmentPaths = (
+  handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  deps?: {
+    readonly fs?: FsProbe;
+    readonly requireDocument?: boolean;
+  }
+) => Promise<ResolverResult<SegmentPaths>>;
+type ResolveSegmentSupplementPaths = (
+  handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  supplementId: string,
+  deps?: {
+    readonly fs?: FsProbe;
+    readonly requireDocument?: boolean;
+  }
+) => Promise<ResolverResult<SegmentSupplementPaths>>;
 type MaybePromise<T> = T | Promise<T>;
 
 export interface RegisterWorkspaceIpcOptions {
@@ -324,6 +412,105 @@ type HandleOpenWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
 };
 
+type HandleRevealMemorySpaceInFinderOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemorySpacePaths;
+  readonly showItemInFolder?: ShowItemInFolder;
+};
+
+type HandleOpenMemorySpaceAgentsFileOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemorySpacePaths;
+  readonly openPath?: OpenPath;
+};
+
+type HandleCopyMemorySpaceAbsolutePathOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemorySpacePaths;
+  readonly writeText?: WriteClipboardText;
+};
+
+interface HandleCopyMemoryAbsolutePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemoryPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopyMemoryRelativePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemoryPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopySegmentAbsolutePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopySegmentRelativePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopySegmentSupplementAbsolutePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentSupplementPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopySegmentSupplementRelativePathOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentSupplementPaths;
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleRevealMemoryInFinderOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemoryPaths;
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleOpenMemoryDocumentOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveMemoryPaths;
+  readonly openPath?: OpenPath;
+}
+
+interface HandleOpenSegmentDocumentOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentPaths;
+  readonly openPath?: OpenPath;
+}
+
+interface HandleRevealSegmentInFinderOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentPaths;
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleRevealSegmentSupplementInFinderOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentSupplementPaths;
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleOpenSegmentSupplementDocumentOptions extends HandleWorkspaceRequestOptions {
+  readonly fs?: FsProbe;
+  readonly resolver?: ResolveSegmentSupplementPaths;
+  readonly openPath?: OpenPath;
+}
+
 type AcquiredWorkspaceLock = Extract<
   Awaited<ReturnType<typeof acquireWorkspaceLock>>,
   { readonly ok: true }
@@ -342,11 +529,37 @@ async function showSystemOpenDirectoryDialog(): Promise<ShowOpenDirectoryDialogR
   });
 }
 
+function showSystemItemInFolder(filePath: string): void {
+  requireElectronShellApi().shell.showItemInFolder(filePath);
+}
+
+async function openSystemPath(filePath: string): Promise<string> {
+  return requireElectronShellApi().shell.openPath(filePath);
+}
+
+function writeSystemClipboardText(text: string): void {
+  requireElectronClipboardApi().clipboard.writeText(text);
+}
+
 function requireElectronMainApi(): Pick<typeof import('electron'), 'dialog' | 'ipcMain'> {
   if (!dialog || !ipcMain) {
     throw new Error('Electron main API is unavailable');
   }
   return { dialog, ipcMain };
+}
+
+function requireElectronShellApi(): Pick<typeof import('electron'), 'shell'> {
+  if (!shell) {
+    throw new Error('Electron shell API is unavailable');
+  }
+  return { shell };
+}
+
+function requireElectronClipboardApi(): Pick<typeof import('electron'), 'clipboard'> {
+  if (!clipboard) {
+    throw new Error('Electron clipboard API is unavailable');
+  }
+  return { clipboard };
 }
 
 export async function handleChooseWorkspaceDirectory({
@@ -496,6 +709,685 @@ export async function handleRemoveMemorySpaceForTest(
   options: HandleRemoveWorkspaceMemorySpaceOptions
 ): Promise<z.infer<typeof workspaceRemoveMemorySpaceResponseSchema>> {
   return handleRemoveMemorySpaceCore(options);
+}
+
+function handleRevealMemorySpaceInFinderCore({
+  fs,
+  resolver = resolveMemorySpacePaths,
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealMemorySpaceInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleMemorySpaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
+    schema: workspaceRevealMemorySpaceInFinderRequestSchema,
+    invalidMessage: 'revealMemorySpaceInFinder request is invalid',
+    resolveFailureMessage: 'Memory space path could not be resolved',
+    resolve: (request, memorySpaceRegistry) =>
+      resolver(request.workspaceId, {
+        registry: memorySpaceRegistry,
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      revealEntityDirectory({
+        fs: entityActionFsForResolver(fs, resolver, resolveMemorySpacePaths),
+        paths: { directoryAbsolute: paths.rootAbsolute },
+        missingCode: 'ERR_WORKSPACE_ROOT_MISSING',
+        missingMessage: 'Memory space root is missing',
+        unsafeMessage: 'Memory space root is unsafe',
+        showItemInFolder,
+        failureMessage: 'Memory space could not be revealed',
+      }),
+  });
+}
+
+export async function handleRevealMemorySpaceInFinder(
+  options: HandleRevealMemorySpaceInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealMemorySpaceInFinderCore(options);
+}
+
+export async function handleRevealMemorySpaceInFinderForTest(
+  options: HandleRevealMemorySpaceInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealMemorySpaceInFinderCore(options);
+}
+
+function handleOpenMemorySpaceAgentsFileCore({
+  fs,
+  resolver = resolveMemorySpacePaths,
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenMemorySpaceAgentsFileOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleMemorySpaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
+    schema: workspaceOpenMemorySpaceAgentsFileRequestSchema,
+    invalidMessage: 'openMemorySpaceAgentsFile request is invalid',
+    resolveFailureMessage: 'Memory space AGENTS.md path could not be resolved',
+    resolve: (request, memorySpaceRegistry) =>
+      resolver(request.workspaceId, {
+        registry: memorySpaceRegistry,
+        requireAgentsFile: true,
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      openEntityDocument({
+        fs: entityActionFsForResolver(fs, resolver, resolveMemorySpacePaths),
+        paths: { documentAbsolute: paths.agentsFileAbsolute },
+        missingCode: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING',
+        missingMessage: 'Memory space AGENTS.md is missing',
+        unsafeMessage: 'Memory space AGENTS.md path is unsafe',
+        openPath,
+        failureMessage: 'Memory space AGENTS.md could not be opened',
+      }),
+  });
+}
+
+export async function handleOpenMemorySpaceAgentsFile(
+  options: HandleOpenMemorySpaceAgentsFileOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenMemorySpaceAgentsFileCore(options);
+}
+
+export async function handleOpenMemorySpaceAgentsFileForTest(
+  options: HandleOpenMemorySpaceAgentsFileOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenMemorySpaceAgentsFileCore(options);
+}
+
+function handleCopyMemorySpaceAbsolutePathCore({
+  fs,
+  resolver = resolveMemorySpacePaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyMemorySpaceAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleMemorySpaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
+    schema: workspaceCopyMemorySpaceAbsolutePathRequestSchema,
+    invalidMessage: 'copyMemorySpaceAbsolutePath request is invalid',
+    resolveFailureMessage: 'Memory space path could not be resolved',
+    resolve: (request, memorySpaceRegistry) =>
+      resolver(request.workspaceId, {
+        registry: memorySpaceRegistry,
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      copyEntityAbsoluteDirectoryPath({
+        fs: entityActionFsForResolver(fs, resolver, resolveMemorySpacePaths),
+        paths: { directoryAbsolute: paths.rootAbsolute },
+        missingCode: 'ERR_WORKSPACE_ROOT_MISSING',
+        missingMessage: 'Memory space root is missing',
+        unsafeMessage: 'Memory space root is unsafe',
+        writeText,
+        failureMessage: 'Memory space path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopyMemorySpaceAbsolutePath(
+  options: HandleCopyMemorySpaceAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemorySpaceAbsolutePathCore(options);
+}
+
+export async function handleCopyMemorySpaceAbsolutePathForTest(
+  options: HandleCopyMemorySpaceAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemorySpaceAbsolutePathCore(options);
+}
+
+function handleCopyMemoryAbsolutePathCore({
+  fs,
+  resolver = resolveMemoryPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyMemoryAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
+    schema: workspaceCopyMemoryAbsolutePathRequestSchema,
+    invalidMessage: 'copyMemoryAbsolutePath request is invalid',
+    workspaceMismatchMessage: 'Memory path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Memory path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveMemoryPaths),
+        pathKind: 'absolute',
+        missingCode: 'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+        missingMessage: 'Memory path is missing',
+        unsafeMessage: 'Memory path is unsafe',
+        writeText,
+        failureMessage: 'Memory path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopyMemoryAbsolutePath(
+  options: HandleCopyMemoryAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemoryAbsolutePathCore(options);
+}
+
+export async function handleCopyMemoryAbsolutePathForTest(
+  options: HandleCopyMemoryAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemoryAbsolutePathCore(options);
+}
+
+function handleCopyMemoryRelativePathCore({
+  fs,
+  resolver = resolveMemoryPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyMemoryRelativePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
+    schema: workspaceCopyMemoryRelativePathRequestSchema,
+    invalidMessage: 'copyMemoryRelativePath request is invalid',
+    workspaceMismatchMessage:
+      'Memory relative path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Memory relative path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveMemoryPaths),
+        pathKind: 'relative',
+        missingCode: 'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+        missingMessage: 'Memory relative path is missing',
+        unsafeMessage: 'Memory relative path is unsafe',
+        writeText,
+        failureMessage: 'Memory relative path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopyMemoryRelativePath(
+  options: HandleCopyMemoryRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemoryRelativePathCore(options);
+}
+
+export async function handleCopyMemoryRelativePathForTest(
+  options: HandleCopyMemoryRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyMemoryRelativePathCore(options);
+}
+
+function handleRevealMemoryInFinderCore({
+  fs,
+  resolver = resolveMemoryPaths,
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealMemoryInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
+    schema: workspaceRevealMemoryInFinderRequestSchema,
+    invalidMessage: 'revealMemoryInFinder request is invalid',
+    workspaceMismatchMessage: 'Memory reveal workspace does not match the active handle',
+    resolveFailureMessage: 'Memory path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      revealEntityDirectory({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveMemoryPaths),
+        missingCode: 'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+        missingMessage: 'Memory path is missing',
+        unsafeMessage: 'Memory path is unsafe',
+        showItemInFolder,
+        failureMessage: 'Memory could not be revealed',
+      }),
+  });
+}
+
+export async function handleRevealMemoryInFinder(
+  options: HandleRevealMemoryInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealMemoryInFinderCore(options);
+}
+
+export async function handleRevealMemoryInFinderForTest(
+  options: HandleRevealMemoryInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealMemoryInFinderCore(options);
+}
+
+function handleOpenMemoryDocumentCore({
+  fs,
+  resolver = resolveMemoryPaths,
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenMemoryDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
+    schema: workspaceOpenMemoryDocumentRequestSchema,
+    invalidMessage: 'openMemoryDocument request is invalid',
+    workspaceMismatchMessage: 'Memory document workspace does not match the active handle',
+    resolveFailureMessage: 'Memory document path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, {
+        requireDocument: true,
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      openEntityDocument({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveMemoryPaths),
+        missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+        missingMessage: 'Memory document is missing',
+        unsafeMessage: 'Memory document path is unsafe',
+        openPath,
+        failureMessage: 'Memory document could not be opened',
+      }),
+  });
+}
+
+export async function handleOpenMemoryDocument(
+  options: HandleOpenMemoryDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenMemoryDocumentCore(options);
+}
+
+export async function handleOpenMemoryDocumentForTest(
+  options: HandleOpenMemoryDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenMemoryDocumentCore(options);
+}
+
+function handleOpenSegmentDocumentCore({
+  fs,
+  resolver = resolveSegmentPaths,
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenSegmentDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
+    schema: workspaceOpenSegmentDocumentRequestSchema,
+    invalidMessage: 'openSegmentDocument request is invalid',
+    workspaceMismatchMessage: 'Segment document workspace does not match the active handle',
+    resolveFailureMessage: 'Segment document path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, request.segmentId, {
+        requireDocument: true,
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      openEntityDocument({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentPaths),
+        missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+        missingMessage: 'Segment document is missing',
+        unsafeMessage: 'Segment document path is unsafe',
+        openPath,
+        failureMessage: 'Segment document could not be opened',
+      }),
+  });
+}
+
+export async function handleOpenSegmentDocument(
+  options: HandleOpenSegmentDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenSegmentDocumentCore(options);
+}
+
+export async function handleOpenSegmentDocumentForTest(
+  options: HandleOpenSegmentDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenSegmentDocumentCore(options);
+}
+
+function handleRevealSegmentInFinderCore({
+  fs,
+  resolver = resolveSegmentPaths,
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealSegmentInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
+    schema: workspaceRevealSegmentInFinderRequestSchema,
+    invalidMessage: 'revealSegmentInFinder request is invalid',
+    workspaceMismatchMessage: 'Segment reveal workspace does not match the active handle',
+    resolveFailureMessage: 'Segment path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, request.segmentId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths) =>
+      revealEntityDirectory({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentPaths),
+        missingCode: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+        missingMessage: 'Segment path is missing',
+        unsafeMessage: 'Segment path is unsafe',
+        showItemInFolder,
+        failureMessage: 'Segment could not be revealed',
+      }),
+  });
+}
+
+export async function handleRevealSegmentInFinder(
+  options: HandleRevealSegmentInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealSegmentInFinderCore(options);
+}
+
+export async function handleRevealSegmentInFinderForTest(
+  options: HandleRevealSegmentInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealSegmentInFinderCore(options);
+}
+
+function handleCopySegmentAbsolutePathCore({
+  fs,
+  resolver = resolveSegmentPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopySegmentAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
+    schema: workspaceCopySegmentAbsolutePathRequestSchema,
+    invalidMessage: 'copySegmentAbsolutePath request is invalid',
+    workspaceMismatchMessage: 'Segment path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Segment path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, request.segmentId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentPaths),
+        pathKind: 'absolute',
+        missingCode: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+        missingMessage: 'Segment path is missing',
+        unsafeMessage: 'Segment path is unsafe',
+        writeText,
+        failureMessage: 'Segment path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopySegmentAbsolutePath(
+  options: HandleCopySegmentAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentAbsolutePathCore(options);
+}
+
+export async function handleCopySegmentAbsolutePathForTest(
+  options: HandleCopySegmentAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentAbsolutePathCore(options);
+}
+
+function handleCopySegmentRelativePathCore({
+  fs,
+  resolver = resolveSegmentPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopySegmentRelativePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
+    schema: workspaceCopySegmentRelativePathRequestSchema,
+    invalidMessage: 'copySegmentRelativePath request is invalid',
+    workspaceMismatchMessage:
+      'Segment relative path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Segment relative path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(handle, request.workspaceId, request.memoryId, request.segmentId, {
+        ...(fs ? { fs } : {}),
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentPaths),
+        pathKind: 'relative',
+        missingCode: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+        missingMessage: 'Segment relative path is missing',
+        unsafeMessage: 'Segment relative path is unsafe',
+        writeText,
+        failureMessage: 'Segment relative path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopySegmentRelativePath(
+  options: HandleCopySegmentRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentRelativePathCore(options);
+}
+
+export async function handleCopySegmentRelativePathForTest(
+  options: HandleCopySegmentRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentRelativePathCore(options);
+}
+
+function handleCopySegmentSupplementAbsolutePathCore({
+  fs,
+  resolver = resolveSegmentSupplementPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopySegmentSupplementAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
+    schema: workspaceCopySegmentSupplementAbsolutePathRequestSchema,
+    invalidMessage: 'copySegmentSupplementAbsolutePath request is invalid',
+    workspaceMismatchMessage:
+      'SegmentSupplement path copy workspace does not match the active handle',
+    resolveFailureMessage: 'SegmentSupplement path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(
+        handle,
+        request.workspaceId,
+        request.memoryId,
+        request.segmentId,
+        request.supplementId,
+        {
+          ...(fs ? { fs } : {}),
+        }
+      ),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentSupplementPaths),
+        pathKind: 'absolute',
+        missingCode: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+        missingMessage: 'SegmentSupplement path is missing',
+        unsafeMessage: 'SegmentSupplement path is unsafe',
+        writeText,
+        failureMessage: 'SegmentSupplement path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopySegmentSupplementAbsolutePath(
+  options: HandleCopySegmentSupplementAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentSupplementAbsolutePathCore(options);
+}
+
+export async function handleCopySegmentSupplementAbsolutePathForTest(
+  options: HandleCopySegmentSupplementAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentSupplementAbsolutePathCore(options);
+}
+
+function handleCopySegmentSupplementRelativePathCore({
+  fs,
+  resolver = resolveSegmentSupplementPaths,
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopySegmentSupplementRelativePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
+    schema: workspaceCopySegmentSupplementRelativePathRequestSchema,
+    invalidMessage: 'copySegmentSupplementRelativePath request is invalid',
+    workspaceMismatchMessage:
+      'SegmentSupplement relative path copy workspace does not match the active handle',
+    resolveFailureMessage: 'SegmentSupplement relative path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(
+        handle,
+        request.workspaceId,
+        request.memoryId,
+        request.segmentId,
+        request.supplementId,
+        {
+          ...(fs ? { fs } : {}),
+        }
+      ),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentSupplementPaths),
+        pathKind: 'relative',
+        missingCode: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+        missingMessage: 'SegmentSupplement relative path is missing',
+        unsafeMessage: 'SegmentSupplement relative path is unsafe',
+        writeText,
+        failureMessage: 'SegmentSupplement relative path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopySegmentSupplementRelativePath(
+  options: HandleCopySegmentSupplementRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentSupplementRelativePathCore(options);
+}
+
+export async function handleCopySegmentSupplementRelativePathForTest(
+  options: HandleCopySegmentSupplementRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopySegmentSupplementRelativePathCore(options);
+}
+
+function handleRevealSegmentSupplementInFinderCore({
+  fs,
+  resolver = resolveSegmentSupplementPaths,
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealSegmentSupplementInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
+    schema: workspaceRevealSegmentSupplementInFinderRequestSchema,
+    invalidMessage: 'revealSegmentSupplementInFinder request is invalid',
+    workspaceMismatchMessage: 'SegmentSupplement reveal workspace does not match the active handle',
+    resolveFailureMessage: 'SegmentSupplement path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(
+        handle,
+        request.workspaceId,
+        request.memoryId,
+        request.segmentId,
+        request.supplementId,
+        {
+          ...(fs ? { fs } : {}),
+        }
+      ),
+    run: (paths) =>
+      revealEntityDirectory({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentSupplementPaths),
+        missingCode: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+        missingMessage: 'SegmentSupplement path is missing',
+        unsafeMessage: 'SegmentSupplement path is unsafe',
+        showItemInFolder,
+        failureMessage: 'SegmentSupplement could not be revealed',
+      }),
+  });
+}
+
+export async function handleRevealSegmentSupplementInFinder(
+  options: HandleRevealSegmentSupplementInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealSegmentSupplementInFinderCore(options);
+}
+
+export async function handleRevealSegmentSupplementInFinderForTest(
+  options: HandleRevealSegmentSupplementInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealSegmentSupplementInFinderCore(options);
+}
+
+function handleOpenSegmentSupplementDocumentCore({
+  fs,
+  resolver = resolveSegmentSupplementPaths,
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenSegmentSupplementDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
+    schema: workspaceOpenSegmentSupplementDocumentRequestSchema,
+    invalidMessage: 'openSegmentSupplementDocument request is invalid',
+    workspaceMismatchMessage:
+      'SegmentSupplement document workspace does not match the active handle',
+    resolveFailureMessage: 'SegmentSupplement document path could not be resolved',
+    resolve: (request, handle) =>
+      resolver(
+        handle,
+        request.workspaceId,
+        request.memoryId,
+        request.segmentId,
+        request.supplementId,
+        {
+          requireDocument: true,
+          ...(fs ? { fs } : {}),
+        }
+      ),
+    run: (paths) =>
+      openEntityDocument({
+        paths,
+        fs: entityActionFsForResolver(fs, resolver, resolveSegmentSupplementPaths),
+        missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+        missingMessage: 'SegmentSupplement document is missing',
+        unsafeMessage: 'SegmentSupplement document path is unsafe',
+        openPath,
+        failureMessage: 'SegmentSupplement document could not be opened',
+      }),
+  });
+}
+
+export async function handleOpenSegmentSupplementDocument(
+  options: HandleOpenSegmentSupplementDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenSegmentSupplementDocumentCore(options);
+}
+
+export async function handleOpenSegmentSupplementDocumentForTest(
+  options: HandleOpenSegmentSupplementDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenSegmentSupplementDocumentCore(options);
 }
 
 async function persistMemorySpaceTitleUpdate({
@@ -1162,6 +2054,417 @@ async function withWorkspaceHandleRequest<
     required.handle.assertUsable,
     trusted.sender
   );
+}
+
+type WorkspaceEntityHandleRequestData = WorkspaceHandleRequestData & {
+  readonly workspaceId: string;
+};
+
+type MemorySpaceEntityActionOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+};
+
+type MemorySpaceEntityActionRequestData = {
+  readonly workspaceId: string;
+};
+
+type EntityDirectoryPaths = {
+  readonly directoryAbsolute: string;
+};
+
+type EntityDocumentPaths = {
+  readonly documentAbsolute: string;
+};
+
+type EntityActionMissingPathCode =
+  | 'ERR_WORKSPACE_ROOT_MISSING'
+  | 'ERR_WORKSPACE_MEMORY_NOT_FOUND'
+  | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
+  | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
+  | 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING'
+  | 'ERR_ENTITY_DOCUMENT_MISSING';
+
+function entityActionFsForResolver<Resolver>(
+  fs: FsProbe | undefined,
+  resolver: Resolver,
+  defaultResolver: Resolver
+): FsProbe | undefined {
+  return fs ?? (resolver === defaultResolver ? nodeFsProbe : undefined);
+}
+
+async function safeDirectoryForAction(
+  fs: FsProbe | undefined,
+  directoryPath: string
+): Promise<'present' | 'missing' | 'unsafe'> {
+  if (!fs) {
+    return 'present';
+  }
+  if (fs?.safeDirectory) {
+    return fs.safeDirectory(directoryPath);
+  }
+
+  return (await fs.exists(directoryPath)) ? 'present' : 'missing';
+}
+
+async function safeFileForAction(
+  fs: FsProbe | undefined,
+  filePath: string
+): Promise<'present' | 'missing' | 'unsafe'> {
+  if (!fs) {
+    return 'present';
+  }
+  if (fs?.safeFile) {
+    return fs.safeFile(filePath);
+  }
+
+  return (await fs.exists(filePath)) ? 'present' : 'missing';
+}
+
+function entityActionMissingPathError(
+  code: EntityActionMissingPathCode,
+  message: string
+): WorkspaceEntityActionResponse {
+  return workspaceError(code, message);
+}
+
+function entityActionUnsafePathError(message: string): WorkspaceEntityActionResponse {
+  return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', message);
+}
+
+async function validateDirectoryBeforeEntityAction({
+  fs,
+  directoryPath,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+}: {
+  readonly fs: FsProbe | undefined;
+  readonly directoryPath: string;
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+}): Promise<WorkspaceEntityActionResponse | null> {
+  const state = await safeDirectoryForAction(fs, directoryPath);
+  if (state === 'present') {
+    return null;
+  }
+
+  return state === 'missing'
+    ? entityActionMissingPathError(missingCode, missingMessage)
+    : entityActionUnsafePathError(unsafeMessage);
+}
+
+async function validateFileBeforeEntityAction({
+  fs,
+  filePath,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+}: {
+  readonly fs: FsProbe | undefined;
+  readonly filePath: string;
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+}): Promise<WorkspaceEntityActionResponse | null> {
+  const state = await safeFileForAction(fs, filePath);
+  if (state === 'present') {
+    return null;
+  }
+
+  return state === 'missing'
+    ? entityActionMissingPathError(missingCode, missingMessage)
+    : entityActionUnsafePathError(unsafeMessage);
+}
+
+async function handleWorkspaceEntityActionRequest<
+  Schema extends z.ZodType<WorkspaceEntityHandleRequestData>,
+  Paths,
+>({
+  options,
+  channel,
+  schema,
+  invalidMessage,
+  workspaceMismatchMessage,
+  resolveFailureMessage,
+  resolve,
+  run,
+}: {
+  readonly options: HandleWorkspaceRequestOptions;
+  readonly channel: string;
+  readonly schema: Schema;
+  readonly invalidMessage: string;
+  readonly workspaceMismatchMessage: string;
+  readonly resolveFailureMessage: string;
+  readonly resolve: (
+    request: z.infer<Schema>,
+    handle: RequiredWorkspaceHandle
+  ) => Promise<ResolverResult<Paths>>;
+  readonly run: (
+    paths: Paths,
+    handle: RequiredWorkspaceHandle
+  ) => MaybePromise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope>;
+}): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema,
+    invalidMessage,
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            workspaceMismatchMessage
+          );
+        }
+
+        let resolved: ResolverResult<Paths>;
+        try {
+          resolved = await resolve(request, handle);
+        } catch {
+          return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', resolveFailureMessage);
+        }
+        if (!resolved.ok) {
+          return workspaceError(resolved.code, resolveFailureMessage);
+        }
+
+        return run(resolved.value, handle);
+      }),
+  });
+}
+
+async function handleMemorySpaceEntityActionRequest<
+  Schema extends z.ZodType<MemorySpaceEntityActionRequestData>,
+>({
+  options: {
+    event,
+    input,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+    memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  },
+  channel,
+  schema,
+  invalidMessage,
+  resolveFailureMessage,
+  resolve,
+  run,
+}: {
+  readonly options: MemorySpaceEntityActionOptions;
+  readonly channel: string;
+  readonly schema: Schema;
+  readonly invalidMessage: string;
+  readonly resolveFailureMessage: string;
+  readonly resolve: (
+    request: z.infer<Schema>,
+    memorySpaceRegistry: WorkspaceMemorySpaceRegistry
+  ) => Promise<ResolverResult<MemorySpacePaths>>;
+  readonly run: (paths: MemorySpacePaths) => MaybePromise<WorkspaceEntityActionResponse>;
+}): Promise<WorkspaceEntityActionResponse> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = schema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', invalidMessage);
+  }
+
+  let resolved: ResolverResult<MemorySpacePaths>;
+  try {
+    resolved = await resolve(request.data, memorySpaceRegistry);
+  } catch {
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', resolveFailureMessage);
+  }
+  if (!resolved.ok) {
+    return workspaceError(resolved.code, resolveFailureMessage);
+  }
+
+  return run(resolved.value);
+}
+
+function workspaceRelativePosixPath(handle: RequiredWorkspaceHandle, absolutePath: string): string {
+  return path.relative(handle.canonicalRoot, absolutePath).split(path.sep).join('/');
+}
+
+async function copyEntityAbsoluteDirectoryPath({
+  paths,
+  fs,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+  writeText,
+  failureMessage,
+}: {
+  readonly paths: EntityDirectoryPaths;
+  readonly fs: FsProbe | undefined;
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+  readonly writeText: WriteClipboardText;
+  readonly failureMessage: string;
+}): Promise<WorkspaceEntityActionResponse> {
+  const validation = await validateDirectoryBeforeEntityAction({
+    fs,
+    directoryPath: paths.directoryAbsolute,
+    missingCode,
+    missingMessage,
+    unsafeMessage,
+  });
+  if (validation) {
+    return validation;
+  }
+
+  try {
+    writeText(paths.directoryAbsolute);
+  } catch {
+    return workspaceError('ERR_CLIPBOARD_WRITE_FAILED', failureMessage);
+  }
+
+  return workspaceEntityActionResponseSchema.parse({ ok: true });
+}
+
+async function copyEntityDirectoryPath({
+  paths,
+  handle,
+  fs,
+  pathKind,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+  writeText,
+  failureMessage,
+}: {
+  readonly paths: EntityDirectoryPaths;
+  readonly handle: RequiredWorkspaceHandle;
+  readonly fs: FsProbe | undefined;
+  readonly pathKind: 'absolute' | 'relative';
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+  readonly writeText: WriteClipboardText;
+  readonly failureMessage: string;
+}): Promise<WorkspaceEntityActionResponse> {
+  if (pathKind === 'absolute') {
+    return copyEntityAbsoluteDirectoryPath({
+      paths,
+      fs,
+      missingCode,
+      missingMessage,
+      unsafeMessage,
+      writeText,
+      failureMessage,
+    });
+  }
+
+  const pathText = workspaceRelativePosixPath(handle, paths.directoryAbsolute);
+  const validation = await validateDirectoryBeforeEntityAction({
+    fs,
+    directoryPath: paths.directoryAbsolute,
+    missingCode,
+    missingMessage,
+    unsafeMessage,
+  });
+  if (validation) {
+    return validation;
+  }
+
+  try {
+    writeText(pathText);
+  } catch {
+    return workspaceError('ERR_CLIPBOARD_WRITE_FAILED', failureMessage);
+  }
+
+  return workspaceEntityActionResponseSchema.parse({ ok: true });
+}
+
+async function revealEntityDirectory({
+  paths,
+  fs,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+  showItemInFolder,
+  failureMessage,
+}: {
+  readonly paths: EntityDirectoryPaths;
+  readonly fs: FsProbe | undefined;
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+  readonly showItemInFolder: ShowItemInFolder;
+  readonly failureMessage: string;
+}): Promise<WorkspaceEntityActionResponse> {
+  const validation = await validateDirectoryBeforeEntityAction({
+    fs,
+    directoryPath: paths.directoryAbsolute,
+    missingCode,
+    missingMessage,
+    unsafeMessage,
+  });
+  if (validation) {
+    return validation;
+  }
+
+  try {
+    showItemInFolder(paths.directoryAbsolute);
+  } catch {
+    return workspaceError('ERR_SHELL_OPEN_FAILED', failureMessage);
+  }
+
+  return workspaceEntityActionResponseSchema.parse({ ok: true });
+}
+
+async function openEntityDocument({
+  paths,
+  fs,
+  missingCode,
+  missingMessage,
+  unsafeMessage,
+  openPath,
+  failureMessage,
+}: {
+  readonly paths: EntityDocumentPaths;
+  readonly fs: FsProbe | undefined;
+  readonly missingCode: EntityActionMissingPathCode;
+  readonly missingMessage: string;
+  readonly unsafeMessage: string;
+  readonly openPath: OpenPath;
+  readonly failureMessage: string;
+}): Promise<WorkspaceEntityActionResponse> {
+  const validation = await validateFileBeforeEntityAction({
+    fs,
+    filePath: paths.documentAbsolute,
+    missingCode,
+    missingMessage,
+    unsafeMessage,
+  });
+  if (validation) {
+    return validation;
+  }
+
+  try {
+    const openError = await openPath(paths.documentAbsolute);
+    if (openError) {
+      return workspaceError('ERR_SHELL_OPEN_FAILED', failureMessage);
+    }
+  } catch {
+    return workspaceError('ERR_SHELL_OPEN_FAILED', failureMessage);
+  }
+
+  return workspaceEntityActionResponseSchema.parse({ ok: true });
 }
 
 async function openWorkspaceRoot({
@@ -2588,6 +3891,162 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       memorySpaceRegistry,
     })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealMemorySpaceInFinder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL, (event, input) =>
+    handleOpenMemorySpaceAgentsFile({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopyMemorySpaceAbsolutePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealMemoryInFinder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenMemoryDocument({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopyMemoryAbsolutePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL, (event, input) =>
+    handleCopyMemoryRelativePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealSegmentInFinder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenSegmentDocument({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopySegmentAbsolutePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL, (event, input) =>
+    handleCopySegmentRelativePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
+    (event, input) =>
+      handleRevealSegmentSupplementInFinder({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenSegmentSupplementDocument({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
+    (event, input) =>
+      handleCopySegmentSupplementAbsolutePath({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
+    (event, input) =>
+      handleCopySegmentSupplementRelativePath({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemorySpaceTitle({

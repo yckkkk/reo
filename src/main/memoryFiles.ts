@@ -989,6 +989,15 @@ async function memoryObjectManifestPath(rootPath: string, memoryId: string): Pro
   return workspaceObjectManifestPath(rootPath, 'memories', memoryId);
 }
 
+async function readMemoryObjectManifest(
+  rootPath: string,
+  memoryId: string
+): Promise<MemoryObjectManifest> {
+  return memoryObjectManifestSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(await memoryObjectManifestPath(rootPath, memoryId)))
+  );
+}
+
 async function segmentObjectManifestPath(rootPath: string, segmentId: string): Promise<string> {
   return workspaceObjectManifestPath(rootPath, 'segments', segmentId);
 }
@@ -1306,9 +1315,7 @@ async function readMemoryFileTruthFromDirectory(
   if (!MEMORY_ID_PATTERN.test(memoryId)) {
     throw new Error('Invalid memory id');
   }
-  const manifest = memoryObjectManifestSchema.parse(
-    JSON.parse(await readWorkspaceTextFile(await memoryObjectManifestPath(rootPath, memoryId)))
-  );
+  const manifest = await readMemoryObjectManifest(rootPath, memoryId);
   if (manifest.memoryId !== memoryId) {
     throw new Error('Memory manifest does not match file truth');
   }
@@ -1338,36 +1345,18 @@ async function memoryDirectoryInParent({
   if (!MEMORY_ID_PATTERN.test(memoryId)) {
     throw new Error('Invalid memory id');
   }
-  const safeParentDirectory = await resolveSafeWorkspaceChild(rootPath, parentDirectory);
-  const entries = await readExistingDirectoryEntries(safeParentDirectory);
-  const matches: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    if (!fileSpaceNodeDirectoryNameMatchesId(entry.name, memoryId)) {
-      continue;
-    }
-    const candidate = await resolveSafeWorkspaceChild(
-      rootPath,
-      path.join(safeParentDirectory, entry.name)
-    );
-    try {
+  return findFileSpaceNodeDirectoryInParent({
+    defaultDirectoryName,
+    duplicateMessage: 'Duplicate memory id',
+    matchesCandidate: async (candidate) => {
       const memory = await readMemoryFileTruthFromDirectory(rootPath, candidate);
-      if (memory.memoryId === memoryId) {
-        matches.push(candidate);
-      }
-    } catch {
-      continue;
-    }
-  }
-  if (matches.length > 1) {
-    throw new Error('Duplicate memory id');
-  }
-  return (
-    matches[0] ??
-    resolveSafeWorkspaceChild(rootPath, path.join(safeParentDirectory, defaultDirectoryName))
-  );
+      return memory.memoryId === memoryId;
+    },
+    nodeId: memoryId,
+    parentDirectory,
+    rootPath,
+    unsafeMessage: 'Workspace memory directory is not safe',
+  });
 }
 
 async function memoryDirectory(rootPath: string, memoryId: string): Promise<string> {
@@ -1376,6 +1365,60 @@ async function memoryDirectory(rootPath: string, memoryId: string): Promise<stri
     memoryId,
     parentDirectory: path.join(rootPath, 'memories'),
     rootPath,
+  });
+}
+
+export async function resolveMemoryDirectory(rootPath: string, memoryId: string): Promise<string> {
+  return memoryDirectory(rootPath, memoryId);
+}
+
+export async function resolveMemoryDirectoryForEntityAction(
+  rootPath: string,
+  memoryId: string
+): Promise<string> {
+  if (!MEMORY_ID_PATTERN.test(memoryId)) {
+    throw new Error('Invalid memory id');
+  }
+
+  let actionManifest: MemoryObjectManifest | null | undefined;
+  const readActionManifest = async () => {
+    if (actionManifest === undefined) {
+      actionManifest = await readMemoryObjectManifest(rootPath, memoryId).catch(() => null);
+    }
+
+    return actionManifest;
+  };
+
+  return findFileSpaceNodeDirectoryInParent({
+    defaultDirectoryName: memoryId,
+    duplicateMessage: 'Duplicate memory id',
+    matchesCandidate: async (candidate) => {
+      try {
+        const memory = await readMemoryFileTruthFromDirectory(rootPath, candidate);
+        return memory.memoryId === memoryId;
+      } catch (error) {
+        if (isUnsafeWorkspacePathError(error)) {
+          throw error;
+        }
+
+        return false;
+      }
+    },
+    matchesFallbackCandidate: async (candidate) => {
+      if (!fileSpaceNodeDirectoryNameMatchesId(path.basename(candidate), memoryId)) {
+        return false;
+      }
+      if (await exists(path.join(candidate, 'memory.md'))) {
+        return false;
+      }
+
+      const manifest = await readActionManifest();
+      return manifest?.memoryId === memoryId;
+    },
+    nodeId: memoryId,
+    parentDirectory: path.join(rootPath, 'memories'),
+    rootPath,
+    unsafeMessage: 'Workspace memory directory is not safe',
   });
 }
 
@@ -1827,6 +1870,7 @@ async function findFileSpaceNodeDirectoryInParent({
   beforeScan,
   defaultDirectoryName,
   duplicateMessage,
+  matchesFallbackCandidate,
   matchesCandidate,
   nodeId,
   parentDirectory,
@@ -1836,6 +1880,10 @@ async function findFileSpaceNodeDirectoryInParent({
   readonly beforeScan?: (safeParentDirectory: string) => MaybePromise<void>;
   readonly defaultDirectoryName: string;
   readonly duplicateMessage: string;
+  readonly matchesFallbackCandidate?: (
+    candidate: string,
+    candidateIdentity: DirectoryIdentity
+  ) => boolean | Promise<boolean>;
   readonly matchesCandidate: (
     candidate: string,
     candidateIdentity: DirectoryIdentity
@@ -1848,7 +1896,8 @@ async function findFileSpaceNodeDirectoryInParent({
   const safeParentDirectory = await resolveSafeWorkspaceChild(rootPath, parentDirectory);
   await beforeScan?.(safeParentDirectory);
   const entries = await readExistingDirectoryEntries(safeParentDirectory);
-  const matches: string[] = [];
+  const primaryMatches: string[] = [];
+  const fallbackMatches: string[] = [];
   const generatedPrefix = `${nodeId}--`;
   const isLikelyCandidate = (entry: Dirent) =>
     entry.name === nodeId || entry.name.startsWith(generatedPrefix);
@@ -1874,7 +1923,11 @@ async function findFileSpaceNodeDirectoryInParent({
       await assertSafeExistingDirectory(candidate, unsafeMessage);
       const candidateIdentity = await readDirectoryIdentity(candidate);
       if (await matchesCandidate(candidate, candidateIdentity)) {
-        matches.push(candidate);
+        primaryMatches.push(candidate);
+        return;
+      }
+      if (await matchesFallbackCandidate?.(candidate, candidateIdentity)) {
+        fallbackMatches.push(candidate);
       }
     } catch (error) {
       if (options?.rejectUnsafeCandidate && isUnsafeWorkspacePathError(error)) {
@@ -1886,11 +1939,12 @@ async function findFileSpaceNodeDirectoryInParent({
   for (const entry of likelyEntries) {
     await inspectEntry(entry, { rejectUnsafeCandidate: true });
   }
-  if (matches.length === 0) {
+  if (primaryMatches.length === 0) {
     for (const entry of fallbackEntries) {
       await inspectEntry(entry);
     }
   }
+  const matches = primaryMatches.length > 0 ? primaryMatches : fallbackMatches;
   if (matches.length > 1) {
     throw new Error(duplicateMessage);
   }
@@ -1906,10 +1960,29 @@ export async function memorySegmentDirectory(
   segmentId: string
 ): Promise<string> {
   const directory = await memoryDirectory(rootPath, memoryId);
+  return resolveSegmentDirectoryInMemoryDirectory({
+    memoryDirectory: directory,
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+}
+
+export async function resolveSegmentDirectoryInMemoryDirectory({
+  memoryDirectory,
+  memoryId,
+  rootPath,
+  segmentId,
+}: {
+  readonly memoryDirectory: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+}): Promise<string> {
   return segmentDirectoryInParent({
     defaultDirectoryName: segmentId,
     memoryId,
-    parentDirectory: path.join(directory, 'segments'),
+    parentDirectory: path.join(memoryDirectory, 'segments'),
     rootPath,
     segmentId,
   });
@@ -2404,12 +2477,35 @@ export async function segmentSupplementDirectory(
   segmentId: string,
   supplementId: string
 ): Promise<string> {
+  const recordingDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+  return resolveSegmentSupplementDirectoryInSegmentDirectory({
+    memoryId,
+    rootPath,
+    segmentDirectory: recordingDirectory,
+    segmentId,
+    supplementId,
+  });
+}
+
+export async function resolveSegmentSupplementDirectoryInSegmentDirectory({
+  memoryId,
+  rootPath,
+  segmentDirectory,
+  segmentId,
+  supplementId,
+}: {
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentDirectory: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<string> {
   if (!SUPPLEMENT_ID_PATTERN.test(supplementId)) {
     throw new Error('Invalid segment supplement id');
   }
   const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    await segmentSupplementsDirectory(rootPath, memoryId, segmentId)
+    path.join(segmentDirectory, 'supplements')
   );
   return findFileSpaceNodeDirectoryInParent({
     defaultDirectoryName: supplementId,

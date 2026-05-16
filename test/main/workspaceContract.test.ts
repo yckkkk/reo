@@ -76,6 +76,22 @@ import {
   workspaceUpdateSegmentTitleResponseSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleResponseSchema,
+  workspaceRevealMemorySpaceInFinderRequestSchema,
+  workspaceRevealMemoryInFinderRequestSchema,
+  workspaceRevealSegmentInFinderRequestSchema,
+  workspaceRevealSegmentSupplementInFinderRequestSchema,
+  workspaceOpenMemorySpaceAgentsFileRequestSchema,
+  workspaceOpenMemoryDocumentRequestSchema,
+  workspaceOpenSegmentDocumentRequestSchema,
+  workspaceOpenSegmentSupplementDocumentRequestSchema,
+  workspaceCopyMemorySpaceAbsolutePathRequestSchema,
+  workspaceCopyMemoryAbsolutePathRequestSchema,
+  workspaceCopySegmentAbsolutePathRequestSchema,
+  workspaceCopySegmentSupplementAbsolutePathRequestSchema,
+  workspaceCopyMemoryRelativePathRequestSchema,
+  workspaceCopySegmentRelativePathRequestSchema,
+  workspaceCopySegmentSupplementRelativePathRequestSchema,
+  workspaceEntityActionResponseSchema,
   workspaceOpenRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
   workspaceRemoveMemorySpaceResponseSchema,
@@ -92,11 +108,53 @@ import {
   workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
+  workspaceErrorCodeSchema,
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
   workspaceMemorySummarySchema,
   workspaceSnapshotSchema,
+  type WorkspaceRevealMemorySpaceInFinderRequest,
+  type WorkspaceRevealMemoryInFinderRequest,
+  type WorkspaceRevealSegmentInFinderRequest,
+  type WorkspaceRevealSegmentSupplementInFinderRequest,
+  type WorkspaceOpenMemorySpaceAgentsFileRequest,
+  type WorkspaceOpenMemoryDocumentRequest,
+  type WorkspaceOpenSegmentDocumentRequest,
+  type WorkspaceOpenSegmentSupplementDocumentRequest,
+  type WorkspaceCopyMemorySpaceAbsolutePathRequest,
+  type WorkspaceCopyMemoryAbsolutePathRequest,
+  type WorkspaceCopySegmentAbsolutePathRequest,
+  type WorkspaceCopySegmentSupplementAbsolutePathRequest,
+  type WorkspaceCopyMemoryRelativePathRequest,
+  type WorkspaceCopySegmentRelativePathRequest,
+  type WorkspaceCopySegmentSupplementRelativePathRequest,
+  type WorkspaceEntityActionResponse,
 } from '../../src/workspace-contract/workspace-contract.js';
+
+type WorkspaceEntityActionRequest =
+  | WorkspaceRevealMemorySpaceInFinderRequest
+  | WorkspaceRevealMemoryInFinderRequest
+  | WorkspaceRevealSegmentInFinderRequest
+  | WorkspaceRevealSegmentSupplementInFinderRequest
+  | WorkspaceOpenMemorySpaceAgentsFileRequest
+  | WorkspaceOpenMemoryDocumentRequest
+  | WorkspaceOpenSegmentDocumentRequest
+  | WorkspaceOpenSegmentSupplementDocumentRequest
+  | WorkspaceCopyMemorySpaceAbsolutePathRequest
+  | WorkspaceCopyMemoryAbsolutePathRequest
+  | WorkspaceCopySegmentAbsolutePathRequest
+  | WorkspaceCopySegmentSupplementAbsolutePathRequest
+  | WorkspaceCopyMemoryRelativePathRequest
+  | WorkspaceCopySegmentRelativePathRequest
+  | WorkspaceCopySegmentSupplementRelativePathRequest;
+
+function assertWorkspaceEntityActionRequest(_request: WorkspaceEntityActionRequest): void {
+  void _request;
+}
+
+function assertWorkspaceEntityActionResponse(_response: WorkspaceEntityActionResponse): void {
+  void _response;
+}
 
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
   assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
@@ -141,6 +199,21 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:sendRecordingTranscriptionAudio',
     'workspace:finishRecordingTranscription',
     'workspace:closeRecordingTranscription',
+    'workspace:revealMemorySpaceInFinder',
+    'workspace:revealMemoryInFinder',
+    'workspace:revealSegmentInFinder',
+    'workspace:revealSegmentSupplementInFinder',
+    'workspace:openMemorySpaceAgentsFile',
+    'workspace:openMemoryDocument',
+    'workspace:openSegmentDocument',
+    'workspace:openSegmentSupplementDocument',
+    'workspace:copyMemorySpaceAbsolutePath',
+    'workspace:copyMemoryAbsolutePath',
+    'workspace:copySegmentAbsolutePath',
+    'workspace:copySegmentSupplementAbsolutePath',
+    'workspace:copyMemoryRelativePath',
+    'workspace:copySegmentRelativePath',
+    'workspace:copySegmentSupplementRelativePath',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
   assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, ['workspace:recordingTranscriptionEvent']);
@@ -199,6 +272,193 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(
     WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
     'workspace:saveSegmentSupplementTranscript'
+  );
+});
+
+test('workspace error code schema accepts entity actions menu error codes', () => {
+  const entityActionErrorCodes = [
+    'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+    'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+    'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+    'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING',
+    'ERR_ENTITY_DOCUMENT_MISSING',
+    'ERR_SHELL_OPEN_FAILED',
+    'ERR_CLIPBOARD_WRITE_FAILED',
+  ];
+
+  assert.equal(entityActionErrorCodes.length, 7);
+
+  for (const code of entityActionErrorCodes) {
+    assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
+  }
+});
+
+test('workspace IPC channels include entity actions menu shell channels', () => {
+  const entityActionChannels = [
+    'workspace:revealMemorySpaceInFinder',
+    'workspace:revealMemoryInFinder',
+    'workspace:revealSegmentInFinder',
+    'workspace:revealSegmentSupplementInFinder',
+    'workspace:openMemorySpaceAgentsFile',
+    'workspace:openMemoryDocument',
+    'workspace:openSegmentDocument',
+    'workspace:openSegmentSupplementDocument',
+    'workspace:copyMemorySpaceAbsolutePath',
+    'workspace:copyMemoryAbsolutePath',
+    'workspace:copySegmentAbsolutePath',
+    'workspace:copySegmentSupplementAbsolutePath',
+    'workspace:copyMemoryRelativePath',
+    'workspace:copySegmentRelativePath',
+    'workspace:copySegmentSupplementRelativePath',
+  ];
+
+  assert.equal(entityActionChannels.length, 15);
+
+  for (const channel of entityActionChannels) {
+    assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
+  }
+});
+
+test('workspace entity action schemas accept memory-space identity only', () => {
+  const request = { workspaceId: 'ws_1' };
+
+  assert.deepEqual(workspaceRevealMemorySpaceInFinderRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceOpenMemorySpaceAgentsFileRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopyMemorySpaceAbsolutePathRequestSchema.parse(request), request);
+
+  assertWorkspaceEntityActionRequest(
+    workspaceRevealMemorySpaceInFinderRequestSchema.parse(request)
+  );
+  assertWorkspaceEntityActionRequest(
+    workspaceOpenMemorySpaceAgentsFileRequestSchema.parse(request)
+  );
+  assertWorkspaceEntityActionRequest(
+    workspaceCopyMemorySpaceAbsolutePathRequestSchema.parse(request)
+  );
+  assert.throws(() =>
+    workspaceRevealMemorySpaceInFinderRequestSchema.parse({
+      ...request,
+      rootPath: '/Users/example/Memory Space',
+    })
+  );
+});
+
+test('workspace entity action schemas require memory identity', () => {
+  const request = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+  };
+
+  assert.deepEqual(workspaceRevealMemoryInFinderRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceOpenMemoryDocumentRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopyMemoryAbsolutePathRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopyMemoryRelativePathRequestSchema.parse(request), request);
+
+  assertWorkspaceEntityActionRequest(workspaceRevealMemoryInFinderRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceOpenMemoryDocumentRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceCopyMemoryAbsolutePathRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceCopyMemoryRelativePathRequestSchema.parse(request));
+  assert.throws(() =>
+    workspaceRevealMemoryInFinderRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    })
+  );
+});
+
+test('workspace entity action schemas require segment identity chain', () => {
+  const request = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  };
+
+  assert.deepEqual(workspaceRevealSegmentInFinderRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceOpenSegmentDocumentRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopySegmentAbsolutePathRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopySegmentRelativePathRequestSchema.parse(request), request);
+
+  assertWorkspaceEntityActionRequest(workspaceRevealSegmentInFinderRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceOpenSegmentDocumentRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceCopySegmentAbsolutePathRequestSchema.parse(request));
+  assertWorkspaceEntityActionRequest(workspaceCopySegmentRelativePathRequestSchema.parse(request));
+  assert.throws(() =>
+    workspaceRevealSegmentInFinderRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+    })
+  );
+});
+
+test('workspace entity action schemas require supplement identity chain', () => {
+  const request = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+  };
+
+  assert.deepEqual(workspaceRevealSegmentSupplementInFinderRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceOpenSegmentSupplementDocumentRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopySegmentSupplementAbsolutePathRequestSchema.parse(request), request);
+  assert.deepEqual(workspaceCopySegmentSupplementRelativePathRequestSchema.parse(request), request);
+
+  assertWorkspaceEntityActionRequest(
+    workspaceRevealSegmentSupplementInFinderRequestSchema.parse(request)
+  );
+  assertWorkspaceEntityActionRequest(
+    workspaceOpenSegmentSupplementDocumentRequestSchema.parse(request)
+  );
+  assertWorkspaceEntityActionRequest(
+    workspaceCopySegmentSupplementAbsolutePathRequestSchema.parse(request)
+  );
+  assertWorkspaceEntityActionRequest(
+    workspaceCopySegmentSupplementRelativePathRequestSchema.parse(request)
+  );
+  assert.throws(() =>
+    workspaceRevealSegmentSupplementInFinderRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    })
+  );
+});
+
+test('workspace entity action response schema returns only ok or error envelope', () => {
+  const ok = workspaceEntityActionResponseSchema.parse({ ok: true });
+  assert.deepEqual(ok, { ok: true });
+  assertWorkspaceEntityActionResponse(ok);
+
+  const error = workspaceEntityActionResponseSchema.parse({
+    ok: false,
+    error: { code: 'ERR_WORKSPACE_ROOT_MISSING', message: 'x' },
+  });
+  assert.deepEqual(error, {
+    ok: false,
+    error: { code: 'ERR_WORKSPACE_ROOT_MISSING', message: 'x' },
+  });
+  assertWorkspaceEntityActionResponse(error);
+
+  assert.throws(() =>
+    workspaceEntityActionResponseSchema.parse({
+      ok: true,
+      value: { rootPath: '/Users/example/Memory Space' },
+    })
+  );
+  assert.throws(() =>
+    workspaceEntityActionResponseSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_ROOT_MISSING',
+        message: 'x',
+        dataRetention: 'none-written',
+      },
+    })
   );
 });
 

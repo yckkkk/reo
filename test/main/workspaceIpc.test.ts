@@ -38,6 +38,21 @@ import {
   handleReadFinalizedAudioSegmentForTest,
   handleReadFinalizedAudioSegmentSupplementForTest,
   handleReadMemoryDetailForTest,
+  handleRevealMemoryInFinderForTest,
+  handleRevealMemorySpaceInFinderForTest,
+  handleRevealSegmentInFinderForTest,
+  handleRevealSegmentSupplementInFinderForTest,
+  handleOpenMemoryDocumentForTest,
+  handleOpenSegmentDocumentForTest,
+  handleOpenSegmentSupplementDocumentForTest,
+  handleOpenMemorySpaceAgentsFileForTest,
+  handleCopyMemoryAbsolutePathForTest,
+  handleCopyMemorySpaceAbsolutePathForTest,
+  handleCopyMemoryRelativePathForTest,
+  handleCopySegmentAbsolutePathForTest,
+  handleCopySegmentRelativePathForTest,
+  handleCopySegmentSupplementAbsolutePathForTest,
+  handleCopySegmentSupplementRelativePathForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
   handleRestoreDeletedMemoryForTest,
@@ -94,6 +109,18 @@ const event: TrustedSenderEventAdapter = {
 const microphoneEvent = {
   ...event,
   sender: { ...event.sender, id: 101 },
+};
+type MemorySpaceResolverDepsForTest = {
+  readonly requireAgentsFile?: boolean;
+};
+type MemoryResolverDepsForTest = {
+  readonly requireDocument?: boolean;
+};
+type SegmentResolverDepsForTest = {
+  readonly requireDocument?: boolean;
+};
+type SegmentSupplementResolverDepsForTest = {
+  readonly requireDocument?: boolean;
 };
 
 test('recording transcription events keep the Electron sender binding', () => {
@@ -3518,6 +3545,3463 @@ test('openMemorySpace reports a missing persisted workspace folder', async () =>
     assert.equal(result.error.code, 'ERR_WORKSPACE_ROOT_MISSING');
     assert.equal(result.error.dataRetention, 'none-written');
   }
+});
+
+test('revealMemorySpaceInFinder rejects untrusted sender and does not show the folder', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemorySpaceInFinderForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({
+      ok: true,
+      value: {
+        rootAbsolute: '/tmp/reo-memory-space',
+        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+      },
+    }),
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemorySpaceInFinder rejects invalid request', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemorySpaceInFinderForTest({
+    event,
+    input: {
+      workspaceId: '',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemorySpaceInFinder returns root missing when the memory space cannot be resolved', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemorySpaceInFinderForTest({
+    event,
+    input: {
+      workspaceId: 'ws_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({ ok: false, code: 'ERR_WORKSPACE_ROOT_MISSING' }),
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_ROOT_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemorySpaceInFinder shows the canonical memory space root', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemorySpaceInFinderForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async (workspaceId: string) => {
+      assert.equal(workspaceId, 'ws_runtime_validated');
+      return {
+        ok: true,
+        value: {
+          rootAbsolute: '/tmp/reo-memory-space-canonical',
+          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+        },
+      };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(shownPaths, ['/tmp/reo-memory-space-canonical']);
+});
+
+test('revealMemoryInFinder rejects untrusted sender and does not show the folder', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-reveal-untrusted');
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemoryInFinderForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemoryInFinder rejects a missing workspace handle', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemoryInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemoryInFinder rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-reveal-mismatch');
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemoryInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemoryInFinder returns memory missing when the memory cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-reveal-missing');
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemoryInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-reveal-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_missing');
+      return { ok: false, code: 'ERR_WORKSPACE_MEMORY_NOT_FOUND' };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_MEMORY_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealMemoryInFinder shows the resolved memory directory', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-reveal-success');
+  const shownPaths: string[] = [];
+  const result = await handleRevealMemoryInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-reveal-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_reveal');
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-reveal-success/memories/mem_reveal',
+          documentAbsolute: '/tmp/reo-memory-reveal-success/memories/mem_reveal/memory.md',
+        },
+      };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(shownPaths, ['/tmp/reo-memory-reveal-success/memories/mem_reveal']);
+});
+
+test('revealSegmentInFinder rejects untrusted sender and does not show the folder', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-reveal-untrusted');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentInFinderForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentInFinder rejects a missing workspace handle', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentInFinder rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-reveal-mismatch');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentInFinder returns segment missing when the segment cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-reveal-missing');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-reveal-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_reveal');
+      assert.equal(segmentId, 'seg_missing');
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND' };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentInFinder shows the resolved segment directory', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-reveal-success');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-reveal-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_reveal');
+      assert.equal(segmentId, 'seg_reveal');
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-segment-reveal-success/memories/mem_reveal/segments/seg_reveal',
+          documentAbsolute:
+            '/tmp/reo-segment-reveal-success/memories/mem_reveal/segments/seg_reveal/segment.md',
+        },
+      };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(shownPaths, [
+    '/tmp/reo-segment-reveal-success/memories/mem_reveal/segments/seg_reveal',
+  ]);
+});
+
+test('revealSegmentSupplementInFinder rejects untrusted sender and does not show the folder', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-supplement-reveal-untrusted');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentSupplementInFinderForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+      supplementId: 'sup_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentSupplementInFinder rejects a missing workspace handle', async () => {
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentSupplementInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+      supplementId: 'sup_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentSupplementInFinder rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-supplement-reveal-mismatch');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentSupplementInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+      supplementId: 'sup_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentSupplementInFinder returns supplement missing when the supplement cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-supplement-reveal-missing');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentSupplementInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+      supplementId: 'sup_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-supplement-reveal-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_reveal');
+      assert.equal(segmentId, 'seg_reveal');
+      assert.equal(supplementId, 'sup_missing');
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND' };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(shownPaths, []);
+});
+
+test('revealSegmentSupplementInFinder shows the resolved supplement directory', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-supplement-reveal-success');
+  const shownPaths: string[] = [];
+  const result = await handleRevealSegmentSupplementInFinderForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_reveal',
+      segmentId: 'seg_reveal',
+      supplementId: 'sup_reveal',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-supplement-reveal-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_reveal');
+      assert.equal(segmentId, 'seg_reveal');
+      assert.equal(supplementId, 'sup_reveal');
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-segment-supplement-reveal-success/memories/mem_reveal/segments/seg_reveal/supplements/sup_reveal',
+          documentAbsolute:
+            '/tmp/reo-segment-supplement-reveal-success/memories/mem_reveal/segments/seg_reveal/supplements/sup_reveal/supplement.md',
+        },
+      };
+    },
+    showItemInFolder: (filePath: string) => {
+      shownPaths.push(filePath);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(shownPaths, [
+    '/tmp/reo-segment-supplement-reveal-success/memories/mem_reveal/segments/seg_reveal/supplements/sup_reveal',
+  ]);
+});
+
+test('openMemorySpaceAgentsFile rejects untrusted sender and does not open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemorySpaceAgentsFileForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({
+      ok: true,
+      value: {
+        rootAbsolute: '/tmp/reo-memory-space',
+        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+      },
+    }),
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemorySpaceAgentsFile rejects invalid request and does not open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemorySpaceAgentsFileForTest({
+    event,
+    input: {
+      workspaceId: '',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemorySpaceAgentsFile returns agents-file missing when the resolver cannot find AGENTS.md', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemorySpaceAgentsFileForTest({
+    event,
+    input: {
+      workspaceId: 'ws_missing_agents',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async (workspaceId: string, deps?: MemorySpaceResolverDepsForTest) => {
+      assert.equal(workspaceId, 'ws_missing_agents');
+      assert.equal(deps?.requireAgentsFile, true);
+      return { ok: false, code: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING' };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemorySpaceAgentsFile returns shell-open failed when Electron cannot open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemorySpaceAgentsFileForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({
+      ok: true,
+      value: {
+        rootAbsolute: '/tmp/reo-memory-space',
+        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+      },
+    }),
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return 'No application is associated with the specified file';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_SHELL_OPEN_FAILED');
+  }
+  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space/AGENTS.md']);
+});
+
+test('openMemorySpaceAgentsFile opens the resolved AGENTS.md file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemorySpaceAgentsFileForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async (workspaceId: string, deps?: MemorySpaceResolverDepsForTest) => {
+      assert.equal(workspaceId, 'ws_runtime_validated');
+      assert.equal(deps?.requireAgentsFile, true);
+      return {
+        ok: true,
+        value: {
+          rootAbsolute: '/tmp/reo-memory-space-canonical',
+          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+        },
+      };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space-canonical/AGENTS.md']);
+});
+
+test('copyMemorySpaceAbsolutePath rejects untrusted sender and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemorySpaceAbsolutePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemorySpaceAbsolutePath rejects invalid request and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemorySpaceAbsolutePathForTest({
+    event,
+    input: {
+      workspaceId: '',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemorySpaceAbsolutePath returns root missing when the memory space cannot be resolved', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemorySpaceAbsolutePathForTest({
+    event,
+    input: {
+      workspaceId: 'ws_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({ ok: false, code: 'ERR_WORKSPACE_ROOT_MISSING' }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_ROOT_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemorySpaceAbsolutePath returns clipboard-write failed when clipboard write throws', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemorySpaceAbsolutePathForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async () => ({
+      ok: true,
+      value: {
+        rootAbsolute: '/tmp/reo-memory-space-canonical',
+        agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.deepEqual(copiedText, ['/tmp/reo-memory-space-canonical']);
+});
+
+test('copyMemorySpaceAbsolutePath writes the resolved root absolute path to clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemorySpaceAbsolutePathForTest({
+    event,
+    input: {
+      workspaceId: 'ws_runtime_validated',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    resolver: async (workspaceId: string) => {
+      assert.equal(workspaceId, 'ws_runtime_validated');
+      return {
+        ok: true,
+        value: {
+          rootAbsolute: '/tmp/reo-memory-space-canonical',
+          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(copiedText, ['/tmp/reo-memory-space-canonical']);
+});
+
+test('copyMemoryAbsolutePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath rejects invalid request and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-lock-lost', () => false);
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath returns memory missing when the memory cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-copy-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_MEMORY_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_MEMORY_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath converts resolver throws to a typed error envelope', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-resolver-throws');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('duplicate memory directory');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath revalidates the resolved directory before clipboard write', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-revalidate-directory');
+  const copiedText: string[] = [];
+  let resolverReturned = false;
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    fs: {
+      async exists() {
+        return true;
+      },
+      async safeDirectory(directoryPath: string) {
+        assert.equal(resolverReturned, true);
+        assert.equal(directoryPath, '/tmp/reo-memory-copy-revalidate-directory/memories/mem_copy');
+        return 'unsafe';
+      },
+    },
+    resolver: async () => {
+      resolverReturned = true;
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-copy-revalidate-directory/memories/mem_copy',
+          documentAbsolute: '/tmp/reo-memory-copy-revalidate-directory/memories/mem_copy/memory.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryAbsolutePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute: '/tmp/reo-memory-copy-clipboard-failure/memories/mem_copy',
+        documentAbsolute: '/tmp/reo-memory-copy-clipboard-failure/memories/mem_copy/memory.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.deepEqual(copiedText, ['/tmp/reo-memory-copy-clipboard-failure/memories/mem_copy']);
+});
+
+test('copyMemoryAbsolutePath writes the resolved memory directory absolute path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-copy-success');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-copy-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-copy-success/memories/mem_copy',
+          documentAbsolute: '/tmp/reo-memory-copy-success/memories/mem_copy/memory.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(copiedText, ['/tmp/reo-memory-copy-success/memories/mem_copy']);
+});
+
+test('copyMemoryRelativePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath rejects invalid request and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore(
+    '/tmp/reo-memory-relative-lock-lost',
+    () => false
+  );
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath returns memory missing when the memory cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-relative-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_MEMORY_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_MEMORY_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyMemoryRelativePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute: '/tmp/reo-memory-relative-clipboard-failure/memories/mem_copy',
+        documentAbsolute: '/tmp/reo-memory-relative-clipboard-failure/memories/mem_copy/memory.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.deepEqual(copiedText, ['memories/mem_copy']);
+});
+
+test('copyMemoryRelativePath writes the resolved POSIX memory directory relative path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-relative-success');
+  const copiedText: string[] = [];
+  const result = await handleCopyMemoryRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-relative-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-relative-success/memories/mem_copy',
+          documentAbsolute: '/tmp/reo-memory-relative-success/memories/mem_copy/memory.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(copiedText, ['memories/mem_copy']);
+});
+
+test('copySegmentAbsolutePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentAbsolutePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentAbsolutePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentAbsolutePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-lock-lost', () => false);
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentAbsolutePath returns segment missing when the segment cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-copy-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentAbsolutePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-segment-copy-clipboard-failure/memories/mem_copy/segments/seg_copy',
+        documentAbsolute:
+          '/tmp/reo-segment-copy-clipboard-failure/memories/mem_copy/segments/seg_copy/segment.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.deepEqual(copiedText, [
+    '/tmp/reo-segment-copy-clipboard-failure/memories/mem_copy/segments/seg_copy',
+  ]);
+});
+
+test('copySegmentAbsolutePath writes the resolved segment directory absolute path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-copy-success');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-copy-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-segment-copy-success/memories/mem_copy/segments/seg_copy',
+          documentAbsolute:
+            '/tmp/reo-segment-copy-success/memories/mem_copy/segments/seg_copy/segment.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(copiedText, [
+    '/tmp/reo-segment-copy-success/memories/mem_copy/segments/seg_copy',
+  ]);
+});
+
+test('copySegmentRelativePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath rejects invalid request and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore(
+    '/tmp/reo-segment-relative-lock-lost',
+    () => false
+  );
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath returns segment missing when the segment cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-relative-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentRelativePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-segment-relative-clipboard-failure/memories/mem_copy/segments/seg_copy',
+        documentAbsolute:
+          '/tmp/reo-segment-relative-clipboard-failure/memories/mem_copy/segments/seg_copy/segment.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.equal(
+    JSON.stringify(result).includes('/tmp/reo-segment-relative-clipboard-failure'),
+    false
+  );
+  assert.deepEqual(copiedText, ['memories/mem_copy/segments/seg_copy']);
+});
+
+test('copySegmentRelativePath writes the resolved POSIX segment directory relative path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-relative-success');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-relative-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-segment-relative-success/memories/mem_copy/segments/seg_copy',
+          documentAbsolute:
+            '/tmp/reo-segment-relative-success/memories/mem_copy/segments/seg_copy/segment.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(JSON.stringify(result).includes('/tmp/reo-segment-relative-success'), false);
+  assert.deepEqual(copiedText, ['memories/mem_copy/segments/seg_copy']);
+});
+
+test('copySegmentSupplementAbsolutePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath rejects invalid request and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore(
+    '/tmp/reo-supplement-copy-lock-lost',
+    () => false
+  );
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath returns supplement missing when the supplement cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-copy-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(supplementId, 'sup_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementAbsolutePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-supplement-copy-clipboard-failure/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+        documentAbsolute:
+          '/tmp/reo-supplement-copy-clipboard-failure/memories/mem_copy/segments/seg_copy/supplements/sup_copy/supplement.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.deepEqual(copiedText, [
+    '/tmp/reo-supplement-copy-clipboard-failure/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+  ]);
+});
+
+test('copySegmentSupplementAbsolutePath writes the resolved supplement directory absolute path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-copy-success');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementAbsolutePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-copy-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(supplementId, 'sup_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-supplement-copy-success/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+          documentAbsolute:
+            '/tmp/reo-supplement-copy-success/memories/mem_copy/segments/seg_copy/supplements/sup_copy/supplement.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(copiedText, [
+    '/tmp/reo-supplement-copy-success/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+  ]);
+});
+
+test('copySegmentSupplementRelativePath rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath rejects invalid request and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath rejects a missing workspace handle and does not write clipboard', async () => {
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath rejects an unusable workspace handle and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore(
+    '/tmp/reo-supplement-relative-lock-lost',
+    () => false
+  );
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath returns supplement missing when the supplement cannot be resolved', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-missing');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_missing',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-relative-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(supplementId, 'sup_missing');
+      assert.equal(deps?.requireDocument, undefined);
+      return { ok: false, code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND' };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copySegmentSupplementRelativePath returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-supplement-relative-clipboard-failure/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+        documentAbsolute:
+          '/tmp/reo-supplement-relative-clipboard-failure/memories/mem_copy/segments/seg_copy/supplements/sup_copy/supplement.md',
+      },
+    }),
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.equal(
+    JSON.stringify(result).includes('/tmp/reo-supplement-relative-clipboard-failure'),
+    false
+  );
+  assert.deepEqual(copiedText, ['memories/mem_copy/segments/seg_copy/supplements/sup_copy']);
+});
+
+test('copySegmentSupplementRelativePath writes the resolved POSIX supplement directory relative path to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-relative-success');
+  const copiedText: string[] = [];
+  const result = await handleCopySegmentSupplementRelativePathForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_copy',
+      segmentId: 'seg_copy',
+      supplementId: 'sup_copy',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-relative-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_copy');
+      assert.equal(segmentId, 'seg_copy');
+      assert.equal(supplementId, 'sup_copy');
+      assert.equal(deps?.requireDocument, undefined);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-supplement-relative-success/memories/mem_copy/segments/seg_copy/supplements/sup_copy',
+          documentAbsolute:
+            '/tmp/reo-supplement-relative-success/memories/mem_copy/segments/seg_copy/supplements/sup_copy/supplement.md',
+        },
+      };
+    },
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(JSON.stringify(result).includes('/tmp/reo-supplement-relative-success'), false);
+  assert.deepEqual(copiedText, ['memories/mem_copy/segments/seg_copy/supplements/sup_copy']);
+});
+
+test('openMemoryDocument rejects untrusted sender and does not open the file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-untrusted');
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemoryDocument rejects a missing workspace handle and does not open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemoryDocument rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-mismatch');
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemoryDocument returns document missing when the resolver cannot find memory.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-missing');
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_missing_document',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-document-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_missing_document');
+      assert.equal(deps?.requireDocument, true);
+      return { ok: false, code: 'ERR_ENTITY_DOCUMENT_MISSING' };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_ENTITY_DOCUMENT_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemoryDocument revalidates the resolved markdown file before shell open', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-revalidate-file');
+  const openedPaths: string[] = [];
+  let resolverReturned = false;
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    fs: {
+      async exists() {
+        return true;
+      },
+      async safeFile(filePath: string) {
+        assert.equal(resolverReturned, true);
+        assert.equal(
+          filePath,
+          '/tmp/reo-memory-document-revalidate-file/memories/mem_open/memory.md'
+        );
+        return 'unsafe';
+      },
+    },
+    resolver: async () => {
+      resolverReturned = true;
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-document-revalidate-file/memories/mem_open',
+          documentAbsolute: '/tmp/reo-memory-document-revalidate-file/memories/mem_open/memory.md',
+        },
+      };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openMemoryDocument returns shell-open failed when Electron cannot open memory.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-shell-failure');
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute: '/tmp/reo-memory-document-shell-failure/memories/mem_open',
+        documentAbsolute: '/tmp/reo-memory-document-shell-failure/memories/mem_open/memory.md',
+      },
+    }),
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return 'No application is associated with the specified file';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_SHELL_OPEN_FAILED');
+  }
+  assert.deepEqual(openedPaths, [
+    '/tmp/reo-memory-document-shell-failure/memories/mem_open/memory.md',
+  ]);
+});
+
+test('openMemoryDocument opens the resolved memory.md file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-memory-document-success');
+  const openedPaths: string[] = [];
+  const result = await handleOpenMemoryDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      deps?: MemoryResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-memory-document-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_open');
+      assert.equal(deps?.requireDocument, true);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute: '/tmp/reo-memory-document-success/memories/mem_open',
+          documentAbsolute: '/tmp/reo-memory-document-success/memories/mem_open/memory.md',
+        },
+      };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(openedPaths, ['/tmp/reo-memory-document-success/memories/mem_open/memory.md']);
+});
+
+test('openSegmentDocument rejects untrusted sender and does not open the file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-document-untrusted');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentDocument rejects a missing workspace handle and does not open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentDocument rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-document-mismatch');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentDocument returns document missing when the resolver cannot find segment.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-document-missing');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_missing_document',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-document-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_open');
+      assert.equal(segmentId, 'seg_missing_document');
+      assert.equal(deps?.requireDocument, true);
+      return { ok: false, code: 'ERR_ENTITY_DOCUMENT_MISSING' };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_ENTITY_DOCUMENT_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentDocument returns shell-open failed when Electron cannot open segment.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-document-shell-failure');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-segment-document-shell-failure/memories/mem_open/segments/seg_open',
+        documentAbsolute:
+          '/tmp/reo-segment-document-shell-failure/memories/mem_open/segments/seg_open/segment.md',
+      },
+    }),
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return 'No application is associated with the specified file';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_SHELL_OPEN_FAILED');
+  }
+  assert.deepEqual(openedPaths, [
+    '/tmp/reo-segment-document-shell-failure/memories/mem_open/segments/seg_open/segment.md',
+  ]);
+});
+
+test('openSegmentDocument opens the resolved segment.md file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-segment-document-success');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      deps?: SegmentResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-segment-document-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_open');
+      assert.equal(segmentId, 'seg_open');
+      assert.equal(deps?.requireDocument, true);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-segment-document-success/memories/mem_open/segments/seg_open',
+          documentAbsolute:
+            '/tmp/reo-segment-document-success/memories/mem_open/segments/seg_open/segment.md',
+        },
+      };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(openedPaths, [
+    '/tmp/reo-segment-document-success/memories/mem_open/segments/seg_open/segment.md',
+  ]);
+});
+
+test('openSegmentSupplementDocument rejects untrusted sender and does not open the file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-document-untrusted');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentSupplementDocument rejects a missing workspace handle and does not open the file', async () => {
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentSupplementDocument rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-document-mismatch');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => {
+      throw new Error('resolver should not be called');
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentSupplementDocument returns document missing when the resolver cannot find supplement.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-document-missing');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_missing_document',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-document-missing');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_open');
+      assert.equal(segmentId, 'seg_open');
+      assert.equal(supplementId, 'sup_missing_document');
+      assert.equal(deps?.requireDocument, true);
+      return { ok: false, code: 'ERR_ENTITY_DOCUMENT_MISSING' };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_ENTITY_DOCUMENT_MISSING');
+    assert.equal('dataRetention' in result.error, false);
+  }
+  assert.deepEqual(openedPaths, []);
+});
+
+test('openSegmentSupplementDocument returns shell-open failed when Electron cannot open supplement.md', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-document-shell-failure');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async () => ({
+      ok: true,
+      value: {
+        directoryAbsolute:
+          '/tmp/reo-supplement-document-shell-failure/memories/mem_open/segments/seg_open/supplements/sup_open',
+        documentAbsolute:
+          '/tmp/reo-supplement-document-shell-failure/memories/mem_open/segments/seg_open/supplements/sup_open/supplement.md',
+      },
+    }),
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return 'No application is associated with the specified file';
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_SHELL_OPEN_FAILED');
+  }
+  assert.deepEqual(openedPaths, [
+    '/tmp/reo-supplement-document-shell-failure/memories/mem_open/segments/seg_open/supplements/sup_open/supplement.md',
+  ]);
+});
+
+test('openSegmentSupplementDocument opens the resolved supplement.md file', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-supplement-document-success');
+  const openedPaths: string[] = [];
+  const result = await handleOpenSegmentSupplementDocumentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_open',
+      segmentId: 'seg_open',
+      supplementId: 'sup_open',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    resolver: async (
+      handle: { readonly canonicalRoot: string; readonly workspaceId: string },
+      workspaceId: string,
+      memoryId: string,
+      segmentId: string,
+      supplementId: string,
+      deps?: SegmentSupplementResolverDepsForTest
+    ) => {
+      assert.equal(handle.canonicalRoot, '/tmp/reo-supplement-document-success');
+      assert.equal(handle.workspaceId, 'ws_ipc');
+      assert.equal(workspaceId, 'ws_ipc');
+      assert.equal(memoryId, 'mem_open');
+      assert.equal(segmentId, 'seg_open');
+      assert.equal(supplementId, 'sup_open');
+      assert.equal(deps?.requireDocument, true);
+      return {
+        ok: true,
+        value: {
+          directoryAbsolute:
+            '/tmp/reo-supplement-document-success/memories/mem_open/segments/seg_open/supplements/sup_open',
+          documentAbsolute:
+            '/tmp/reo-supplement-document-success/memories/mem_open/segments/seg_open/supplements/sup_open/supplement.md',
+        },
+      };
+    },
+    openPath: async (filePath: string) => {
+      openedPaths.push(filePath);
+      return '';
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(openedPaths, [
+    '/tmp/reo-supplement-document-success/memories/mem_open/segments/seg_open/supplements/sup_open/supplement.md',
+  ]);
 });
 
 test('removeMemorySpace removes a persisted memory space without resolving or deleting its folder', async () => {

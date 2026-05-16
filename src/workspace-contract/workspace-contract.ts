@@ -46,6 +46,13 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
   'ERR_WORKSPACE_ROOT_MISSING',
   'ERR_WORKSPACE_UNSAFE_PATH',
+  'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+  'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+  'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+  'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING',
+  'ERR_ENTITY_DOCUMENT_MISSING',
+  'ERR_SHELL_OPEN_FAILED',
+  'ERR_CLIPBOARD_WRITE_FAILED',
   'ERR_WORKSPACE_ALREADY_EXISTS',
   'ERR_WORKSPACE_AGENTS_CONFLICT',
   'ERR_WORKSPACE_METADATA_INVALID',
@@ -483,6 +490,45 @@ export const workspaceReadFinalizedAudioSegmentSupplementRequestSchema =
     })
     .strict();
 
+const workspaceMemoryEntityRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+  })
+  .strict();
+
+const workspaceSegmentEntityRequestSchema = workspaceMemoryEntityRequestSchema
+  .extend({
+    segmentId: segmentIdSchema,
+  })
+  .strict();
+
+const workspaceSegmentSupplementEntityRequestSchema = workspaceSegmentEntityRequestSchema
+  .extend({
+    supplementId: supplementIdSchema,
+  })
+  .strict();
+
+export const workspaceRevealMemorySpaceInFinderRequestSchema = workspaceMemorySpaceIdRequestSchema;
+export const workspaceRevealMemoryInFinderRequestSchema = workspaceMemoryEntityRequestSchema;
+export const workspaceRevealSegmentInFinderRequestSchema = workspaceSegmentEntityRequestSchema;
+export const workspaceRevealSegmentSupplementInFinderRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema;
+export const workspaceOpenMemorySpaceAgentsFileRequestSchema = workspaceMemorySpaceIdRequestSchema;
+export const workspaceOpenMemoryDocumentRequestSchema = workspaceMemoryEntityRequestSchema;
+export const workspaceOpenSegmentDocumentRequestSchema = workspaceSegmentEntityRequestSchema;
+export const workspaceOpenSegmentSupplementDocumentRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema;
+export const workspaceCopyMemorySpaceAbsolutePathRequestSchema =
+  workspaceMemorySpaceIdRequestSchema;
+export const workspaceCopyMemoryAbsolutePathRequestSchema = workspaceMemoryEntityRequestSchema;
+export const workspaceCopySegmentAbsolutePathRequestSchema = workspaceSegmentEntityRequestSchema;
+export const workspaceCopySegmentSupplementAbsolutePathRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema;
+export const workspaceCopyMemoryRelativePathRequestSchema = workspaceMemoryEntityRequestSchema;
+export const workspaceCopySegmentRelativePathRequestSchema = workspaceSegmentEntityRequestSchema;
+export const workspaceCopySegmentSupplementRelativePathRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema;
+
 export const workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema = workspaceHandleSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -523,6 +569,21 @@ export const workspaceUpdateSegmentSupplementTitleResponseSchema = z.discriminat
     }),
   }),
   workspaceErrorEnvelopeSchema,
+]);
+
+const workspaceEntityActionErrorEnvelopeSchema = z.strictObject({
+  ok: z.literal(false),
+  error: z.strictObject({
+    code: workspaceErrorCodeSchema,
+    message: z.string().min(1),
+  }),
+});
+
+export const workspaceEntityActionResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+  }),
+  workspaceEntityActionErrorEnvelopeSchema,
 ]);
 
 export const workspaceCreateMemoryResponseSchema = z.discriminatedUnion('ok', [
@@ -897,6 +958,59 @@ export type WorkspaceInitializeRequest = z.infer<typeof workspaceInitializeReque
 export type WorkspaceInitializeResponse = z.infer<typeof workspaceInitializeResponseSchema>;
 export type WorkspaceOpenRequest = z.infer<typeof workspaceOpenRequestSchema>;
 export type WorkspaceMemorySpaceIdRequest = z.infer<typeof workspaceMemorySpaceIdRequestSchema>;
+export type WorkspaceMemorySpaceEntityActionRequest = WorkspaceMemorySpaceIdRequest;
+export type WorkspaceMemoryEntityActionRequest = z.infer<typeof workspaceMemoryEntityRequestSchema>;
+export type WorkspaceSegmentEntityActionRequest = z.infer<
+  typeof workspaceSegmentEntityRequestSchema
+>;
+export type WorkspaceSegmentSupplementEntityActionRequest = z.infer<
+  typeof workspaceSegmentSupplementEntityRequestSchema
+>;
+export type WorkspaceRevealMemorySpaceInFinderRequest = z.infer<
+  typeof workspaceRevealMemorySpaceInFinderRequestSchema
+>;
+export type WorkspaceRevealMemoryInFinderRequest = z.infer<
+  typeof workspaceRevealMemoryInFinderRequestSchema
+>;
+export type WorkspaceRevealSegmentInFinderRequest = z.infer<
+  typeof workspaceRevealSegmentInFinderRequestSchema
+>;
+export type WorkspaceRevealSegmentSupplementInFinderRequest = z.infer<
+  typeof workspaceRevealSegmentSupplementInFinderRequestSchema
+>;
+export type WorkspaceOpenMemorySpaceAgentsFileRequest = z.infer<
+  typeof workspaceOpenMemorySpaceAgentsFileRequestSchema
+>;
+export type WorkspaceOpenMemoryDocumentRequest = z.infer<
+  typeof workspaceOpenMemoryDocumentRequestSchema
+>;
+export type WorkspaceOpenSegmentDocumentRequest = z.infer<
+  typeof workspaceOpenSegmentDocumentRequestSchema
+>;
+export type WorkspaceOpenSegmentSupplementDocumentRequest = z.infer<
+  typeof workspaceOpenSegmentSupplementDocumentRequestSchema
+>;
+export type WorkspaceCopyMemorySpaceAbsolutePathRequest = z.infer<
+  typeof workspaceCopyMemorySpaceAbsolutePathRequestSchema
+>;
+export type WorkspaceCopyMemoryAbsolutePathRequest = z.infer<
+  typeof workspaceCopyMemoryAbsolutePathRequestSchema
+>;
+export type WorkspaceCopySegmentAbsolutePathRequest = z.infer<
+  typeof workspaceCopySegmentAbsolutePathRequestSchema
+>;
+export type WorkspaceCopySegmentSupplementAbsolutePathRequest = z.infer<
+  typeof workspaceCopySegmentSupplementAbsolutePathRequestSchema
+>;
+export type WorkspaceCopyMemoryRelativePathRequest = z.infer<
+  typeof workspaceCopyMemoryRelativePathRequestSchema
+>;
+export type WorkspaceCopySegmentRelativePathRequest = z.infer<
+  typeof workspaceCopySegmentRelativePathRequestSchema
+>;
+export type WorkspaceCopySegmentSupplementRelativePathRequest = z.infer<
+  typeof workspaceCopySegmentSupplementRelativePathRequestSchema
+>;
 export type WorkspaceUpdateMemorySpaceTitleRequest = z.infer<
   typeof workspaceUpdateMemorySpaceTitleRequestSchema
 >;
@@ -993,6 +1107,7 @@ export type WorkspaceUpdateSegmentTitleResponse = z.infer<
 export type WorkspaceUpdateSegmentSupplementTitleResponse = z.infer<
   typeof workspaceUpdateSegmentSupplementTitleResponseSchema
 >;
+export type WorkspaceEntityActionResponse = z.infer<typeof workspaceEntityActionResponseSchema>;
 export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemoryResponseSchema>;
 export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;
 export type WorkspaceRestoreDeletedMemoryResponse = z.infer<

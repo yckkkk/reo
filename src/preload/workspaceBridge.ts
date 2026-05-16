@@ -7,6 +7,13 @@ import {
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
+  WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -21,13 +28,21 @@ import {
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
+  WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
+  WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
+  WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
@@ -79,6 +94,81 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     removeMemorySpace: (payload) =>
       invoke<WorkspaceBridgeResponse<'removeMemorySpace'>>(
         WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
+        payload
+      ),
+    revealMemorySpaceInFinder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'revealMemorySpaceInFinder'>>(
+        WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
+        payload
+      ),
+    revealMemoryInFinder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'revealMemoryInFinder'>>(
+        WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
+        payload
+      ),
+    revealSegmentInFinder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'revealSegmentInFinder'>>(
+        WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
+        payload
+      ),
+    revealSegmentSupplementInFinder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'revealSegmentSupplementInFinder'>>(
+        WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
+        payload
+      ),
+    openMemorySpaceAgentsFile: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openMemorySpaceAgentsFile'>>(
+        WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
+        payload
+      ),
+    openMemoryDocument: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openMemoryDocument'>>(
+        WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
+        payload
+      ),
+    openSegmentDocument: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openSegmentDocument'>>(
+        WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
+        payload
+      ),
+    openSegmentSupplementDocument: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openSegmentSupplementDocument'>>(
+        WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
+        payload
+      ),
+    copyMemorySpaceAbsolutePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyMemorySpaceAbsolutePath'>>(
+        WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
+        payload
+      ),
+    copyMemoryAbsolutePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyMemoryAbsolutePath'>>(
+        WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
+        payload
+      ),
+    copySegmentAbsolutePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copySegmentAbsolutePath'>>(
+        WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
+        payload
+      ),
+    copySegmentSupplementAbsolutePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copySegmentSupplementAbsolutePath'>>(
+        WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
+        payload
+      ),
+    copyMemoryRelativePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyMemoryRelativePath'>>(
+        WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
+        payload
+      ),
+    copySegmentRelativePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copySegmentRelativePath'>>(
+        WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
+        payload
+      ),
+    copySegmentSupplementRelativePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copySegmentSupplementRelativePath'>>(
+        WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
         payload
       ),
     updateMemorySpaceTitle: (payload) =>

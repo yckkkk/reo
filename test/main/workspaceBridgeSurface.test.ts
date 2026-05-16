@@ -9,6 +9,21 @@ const workspaceBridgeKeys = [
   'openWorkspace',
   'openMemorySpace',
   'removeMemorySpace',
+  'revealMemorySpaceInFinder',
+  'revealMemoryInFinder',
+  'revealSegmentInFinder',
+  'revealSegmentSupplementInFinder',
+  'openMemorySpaceAgentsFile',
+  'openMemoryDocument',
+  'openSegmentDocument',
+  'openSegmentSupplementDocument',
+  'copyMemorySpaceAbsolutePath',
+  'copyMemoryAbsolutePath',
+  'copySegmentAbsolutePath',
+  'copySegmentSupplementAbsolutePath',
+  'copyMemoryRelativePath',
+  'copySegmentRelativePath',
+  'copySegmentSupplementRelativePath',
   'updateMemorySpaceTitle',
   'closeWorkspace',
   'readWorkspaceSnapshot',
@@ -44,6 +59,24 @@ const workspaceBridgeKeys = [
   'finishRecordingTranscription',
   'closeRecordingTranscription',
   'onRecordingTranscriptionEvent',
+] as const;
+
+const workspaceEntityActionBridgeKeys = [
+  'revealMemorySpaceInFinder',
+  'revealMemoryInFinder',
+  'revealSegmentInFinder',
+  'revealSegmentSupplementInFinder',
+  'openMemorySpaceAgentsFile',
+  'openMemoryDocument',
+  'openSegmentDocument',
+  'openSegmentSupplementDocument',
+  'copyMemorySpaceAbsolutePath',
+  'copyMemoryAbsolutePath',
+  'copySegmentAbsolutePath',
+  'copySegmentSupplementAbsolutePath',
+  'copyMemoryRelativePath',
+  'copySegmentRelativePath',
+  'copySegmentSupplementRelativePath',
 ] as const;
 
 test('workspace preload bridge exposes explicit methods and no generic ipc methods', async () => {
@@ -183,6 +216,79 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:finalizeSegmentSupplementRecordingDraft',
     'workspace:discardSegmentSupplementRecordingDraft',
     'workspace:saveSegmentSupplementTranscript',
+  ]);
+});
+
+test('workspace preload bridge exposes entity actions menu methods', () => {
+  const bridge = createWorkspaceBridge({
+    invoke: async () => ({ ok: true }),
+  });
+
+  for (const method of workspaceEntityActionBridgeKeys) {
+    assert.equal(typeof (bridge as unknown as Record<string, unknown>)[method], 'function', method);
+  }
+});
+
+test('workspace preload bridge maps entity actions menu methods to explicit channels', async () => {
+  const memorySpacePayload = { workspaceId: 'ws_1' };
+  const memoryPayload = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+  };
+  const segmentPayload = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  };
+  const supplementPayload = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+  };
+  const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
+  const bridge = createWorkspaceBridge({
+    invoke: async (channel, payload) => {
+      calls.push({ channel, payload });
+      return { ok: true };
+    },
+  });
+
+  await bridge.revealMemorySpaceInFinder(memorySpacePayload);
+  await bridge.revealMemoryInFinder(memoryPayload);
+  await bridge.revealSegmentInFinder(segmentPayload);
+  await bridge.revealSegmentSupplementInFinder(supplementPayload);
+  await bridge.openMemorySpaceAgentsFile(memorySpacePayload);
+  await bridge.openMemoryDocument(memoryPayload);
+  await bridge.openSegmentDocument(segmentPayload);
+  await bridge.openSegmentSupplementDocument(supplementPayload);
+  await bridge.copyMemorySpaceAbsolutePath(memorySpacePayload);
+  await bridge.copyMemoryAbsolutePath(memoryPayload);
+  await bridge.copySegmentAbsolutePath(segmentPayload);
+  await bridge.copySegmentSupplementAbsolutePath(supplementPayload);
+  await bridge.copyMemoryRelativePath(memoryPayload);
+  await bridge.copySegmentRelativePath(segmentPayload);
+  await bridge.copySegmentSupplementRelativePath(supplementPayload);
+
+  assert.deepEqual(calls, [
+    { channel: 'workspace:revealMemorySpaceInFinder', payload: memorySpacePayload },
+    { channel: 'workspace:revealMemoryInFinder', payload: memoryPayload },
+    { channel: 'workspace:revealSegmentInFinder', payload: segmentPayload },
+    { channel: 'workspace:revealSegmentSupplementInFinder', payload: supplementPayload },
+    { channel: 'workspace:openMemorySpaceAgentsFile', payload: memorySpacePayload },
+    { channel: 'workspace:openMemoryDocument', payload: memoryPayload },
+    { channel: 'workspace:openSegmentDocument', payload: segmentPayload },
+    { channel: 'workspace:openSegmentSupplementDocument', payload: supplementPayload },
+    { channel: 'workspace:copyMemorySpaceAbsolutePath', payload: memorySpacePayload },
+    { channel: 'workspace:copyMemoryAbsolutePath', payload: memoryPayload },
+    { channel: 'workspace:copySegmentAbsolutePath', payload: segmentPayload },
+    { channel: 'workspace:copySegmentSupplementAbsolutePath', payload: supplementPayload },
+    { channel: 'workspace:copyMemoryRelativePath', payload: memoryPayload },
+    { channel: 'workspace:copySegmentRelativePath', payload: segmentPayload },
+    { channel: 'workspace:copySegmentSupplementRelativePath', payload: supplementPayload },
   ]);
 });
 

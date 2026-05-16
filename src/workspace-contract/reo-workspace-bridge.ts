@@ -3,6 +3,13 @@ import type {
   WorkspaceClearMicrophoneIntentResponse,
   WorkspaceCloseRequest,
   WorkspaceCloseResponse,
+  WorkspaceCopyMemoryAbsolutePathRequest,
+  WorkspaceCopyMemoryRelativePathRequest,
+  WorkspaceCopyMemorySpaceAbsolutePathRequest,
+  WorkspaceCopySegmentAbsolutePathRequest,
+  WorkspaceCopySegmentRelativePathRequest,
+  WorkspaceCopySegmentSupplementAbsolutePathRequest,
+  WorkspaceCopySegmentSupplementRelativePathRequest,
   WorkspaceCreateMemoryRequest,
   WorkspaceCreateMemoryResponse,
   WorkspaceDeleteMemoryRequest,
@@ -20,11 +27,16 @@ import type {
   WorkspaceHandleRequest,
   WorkspaceInitializeRequest,
   WorkspaceInitializeResponse,
+  WorkspaceEntityActionResponse,
   WorkspaceListMemorySpacesResponse,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
+  WorkspaceOpenMemoryDocumentRequest,
+  WorkspaceOpenMemorySpaceAgentsFileRequest,
   WorkspaceOpenRequest,
+  WorkspaceOpenSegmentDocumentRequest,
+  WorkspaceOpenSegmentSupplementDocumentRequest,
   WorkspaceReadFinalizedAudioSegmentRequest,
   WorkspaceReadFinalizedAudioSegmentResponse,
   WorkspaceReadFinalizedAudioSegmentSupplementRequest,
@@ -53,6 +65,10 @@ import type {
   WorkspaceRecordingTranscriptionControlResponse,
   WorkspaceRecordingTranscriptionEvent,
   WorkspaceRecordingTranscriptionStartRequest,
+  WorkspaceRevealMemoryInFinderRequest,
+  WorkspaceRevealMemorySpaceInFinderRequest,
+  WorkspaceRevealSegmentInFinderRequest,
+  WorkspaceRevealSegmentSupplementInFinderRequest,
   WorkspaceSegmentSupplementIdRequest,
   WorkspaceSegmentSupplementRecordingAppendResponse,
   WorkspaceSegmentIdRequest,
@@ -84,6 +100,51 @@ export interface ReoWorkspaceBridge {
   readonly removeMemorySpace: (
     payload: WorkspaceMemorySpaceIdRequest
   ) => Promise<WorkspaceRemoveMemorySpaceResponse>;
+  readonly revealMemorySpaceInFinder: (
+    payload: WorkspaceRevealMemorySpaceInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly revealMemoryInFinder: (
+    payload: WorkspaceRevealMemoryInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly revealSegmentInFinder: (
+    payload: WorkspaceRevealSegmentInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly revealSegmentSupplementInFinder: (
+    payload: WorkspaceRevealSegmentSupplementInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openMemorySpaceAgentsFile: (
+    payload: WorkspaceOpenMemorySpaceAgentsFileRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openMemoryDocument: (
+    payload: WorkspaceOpenMemoryDocumentRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openSegmentDocument: (
+    payload: WorkspaceOpenSegmentDocumentRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openSegmentSupplementDocument: (
+    payload: WorkspaceOpenSegmentSupplementDocumentRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyMemorySpaceAbsolutePath: (
+    payload: WorkspaceCopyMemorySpaceAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyMemoryAbsolutePath: (
+    payload: WorkspaceCopyMemoryAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copySegmentAbsolutePath: (
+    payload: WorkspaceCopySegmentAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copySegmentSupplementAbsolutePath: (
+    payload: WorkspaceCopySegmentSupplementAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyMemoryRelativePath: (
+    payload: WorkspaceCopyMemoryRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copySegmentRelativePath: (
+    payload: WorkspaceCopySegmentRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copySegmentSupplementRelativePath: (
+    payload: WorkspaceCopySegmentSupplementRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly updateMemorySpaceTitle: (
     payload: WorkspaceUpdateMemorySpaceTitleRequest
   ) => Promise<WorkspaceUpdateMemorySpaceTitleResponse>;
