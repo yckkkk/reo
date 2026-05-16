@@ -77,6 +77,10 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_RECORDING_FINALIZE_FAILED',
   'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE',
   'ERR_RECORDING_TRANSCRIPTION_FAILED',
+  'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
+  'ERR_VOICE_SETTINGS_WRITE_FAILED',
+  'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+  'ERR_OPEN_EXTERNAL_URL_REJECTED',
   'ERR_WORKSPACE_INDEX_WRITE_FAILED',
   'ERR_MEMORY_NOT_FOUND',
   'ERR_MEMORY_CREATE_FAILED',
@@ -111,6 +115,77 @@ export const workspaceErrorEnvelopeSchema = z.strictObject({
   ok: z.literal(false),
   error: workspaceErrorSchema,
 });
+
+export const voiceTranscriptionSettingsSnapshotSchema = z.strictObject({
+  enabled: z.boolean(),
+  apiKeyConfigured: z.boolean(),
+  apiKeyLastFour: z.string().length(4).nullable(),
+  lastValidatedAt: z.string().nullable(),
+  lastValidationOk: z.boolean().nullable(),
+  lastValidationCode: z.enum(['ok', 'auth', 'network']).nullable(),
+});
+
+const voiceTranscriptionSettingsResponseValueSchema = z.strictObject({
+  settings: voiceTranscriptionSettingsSnapshotSchema,
+  validationError: z.string().optional(),
+});
+
+export const workspaceReadVoiceTranscriptionSettingsRequestSchema = workspaceNoInputSchema;
+
+export const workspaceReadVoiceTranscriptionSettingsResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: voiceTranscriptionSettingsResponseValueSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceSetVoiceTranscriptionEnabledRequestSchema = z.strictObject({
+  enabled: z.boolean(),
+});
+
+export const workspaceSetVoiceTranscriptionEnabledResponseSchema =
+  workspaceReadVoiceTranscriptionSettingsResponseSchema;
+
+export const workspaceSaveVoiceTranscriptionApiKeyRequestSchema = z.strictObject({
+  apiKey: z.string().min(4).max(1024),
+});
+
+export const workspaceSaveVoiceTranscriptionApiKeyResponseSchema =
+  workspaceReadVoiceTranscriptionSettingsResponseSchema;
+
+export const workspaceClearVoiceTranscriptionApiKeyRequestSchema = workspaceNoInputSchema;
+
+export const workspaceClearVoiceTranscriptionApiKeyResponseSchema =
+  workspaceReadVoiceTranscriptionSettingsResponseSchema;
+
+export const workspaceValidateVoiceTranscriptionCredentialsRequestSchema = workspaceNoInputSchema;
+
+export const workspaceValidateVoiceTranscriptionCredentialsResponseSchema = z.discriminatedUnion(
+  'ok',
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      value: z.strictObject({
+        code: z.enum(['ok', 'auth', 'network']),
+        message: z.string().optional(),
+      }),
+    }),
+    workspaceErrorEnvelopeSchema,
+  ]
+);
+
+export const workspaceOpenExternalUrlRequestSchema = z.strictObject({
+  url: z.string().url(),
+});
+
+export const workspaceOpenExternalUrlResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({}),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
 
 export const workspaceChooseDirectoryResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -883,6 +958,7 @@ export const workspaceRecordingTranscriptionControlResponseSchema = z.discrimina
     value: z.strictObject({
       accepted: z.boolean(),
       segments: z.array(workspaceTranscriptSegmentSchema).optional(),
+      transcriptionMode: z.enum(['live', 'disabled']).optional(),
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -943,6 +1019,45 @@ export const workspaceMicrophoneIntentResponseSchema = z.discriminatedUnion('ok'
 export type WorkspaceErrorCode = z.infer<typeof workspaceErrorCodeSchema>;
 export type WorkspaceError = z.infer<typeof workspaceErrorSchema>;
 export type WorkspaceErrorEnvelope = z.infer<typeof workspaceErrorEnvelopeSchema>;
+export type VoiceTranscriptionSettingsSnapshot = z.infer<
+  typeof voiceTranscriptionSettingsSnapshotSchema
+>;
+export type WorkspaceReadVoiceTranscriptionSettingsRequest = z.infer<
+  typeof workspaceReadVoiceTranscriptionSettingsRequestSchema
+>;
+export type WorkspaceReadVoiceTranscriptionSettingsResponse = z.infer<
+  typeof workspaceReadVoiceTranscriptionSettingsResponseSchema
+>;
+export type WorkspaceSetVoiceTranscriptionEnabledRequest = z.infer<
+  typeof workspaceSetVoiceTranscriptionEnabledRequestSchema
+>;
+export type WorkspaceSetVoiceTranscriptionEnabledResponse = z.infer<
+  typeof workspaceSetVoiceTranscriptionEnabledResponseSchema
+>;
+export type WorkspaceSaveVoiceTranscriptionApiKeyRequest = z.infer<
+  typeof workspaceSaveVoiceTranscriptionApiKeyRequestSchema
+>;
+export type WorkspaceSaveVoiceTranscriptionApiKeyResponse = z.infer<
+  typeof workspaceSaveVoiceTranscriptionApiKeyResponseSchema
+>;
+export type WorkspaceClearVoiceTranscriptionApiKeyRequest = z.infer<
+  typeof workspaceClearVoiceTranscriptionApiKeyRequestSchema
+>;
+export type WorkspaceClearVoiceTranscriptionApiKeyResponse = z.infer<
+  typeof workspaceClearVoiceTranscriptionApiKeyResponseSchema
+>;
+export type WorkspaceValidateVoiceTranscriptionCredentialsRequest = z.infer<
+  typeof workspaceValidateVoiceTranscriptionCredentialsRequestSchema
+>;
+export type WorkspaceValidateVoiceTranscriptionCredentialsResponse = z.infer<
+  typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema
+>;
+export type WorkspaceOpenExternalUrlRequest = z.infer<
+  typeof workspaceOpenExternalUrlRequestSchema
+>;
+export type WorkspaceOpenExternalUrlResponse = z.infer<
+  typeof workspaceOpenExternalUrlResponseSchema
+>;
 export type WorkspaceChooseDirectoryResult = z.infer<typeof workspaceChooseDirectoryResultSchema>;
 export type WorkspaceChooseDirectoryResponse = z.infer<
   typeof workspaceChooseDirectoryResponseSchema

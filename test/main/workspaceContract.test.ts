@@ -114,11 +114,37 @@ import {
   workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
+  workspaceClearVoiceTranscriptionApiKeyRequestSchema,
+  workspaceClearVoiceTranscriptionApiKeyResponseSchema,
   workspaceErrorCodeSchema,
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
   workspaceMemorySummarySchema,
+  workspaceOpenExternalUrlRequestSchema,
+  workspaceOpenExternalUrlResponseSchema,
+  workspaceReadVoiceTranscriptionSettingsRequestSchema,
+  workspaceReadVoiceTranscriptionSettingsResponseSchema,
+  workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
+  workspaceSaveVoiceTranscriptionApiKeyResponseSchema,
+  workspaceSetVoiceTranscriptionEnabledRequestSchema,
+  workspaceSetVoiceTranscriptionEnabledResponseSchema,
   workspaceSnapshotSchema,
+  workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
+  workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
+  voiceTranscriptionSettingsSnapshotSchema,
+  type VoiceTranscriptionSettingsSnapshot,
+  type WorkspaceClearVoiceTranscriptionApiKeyRequest,
+  type WorkspaceClearVoiceTranscriptionApiKeyResponse,
+  type WorkspaceOpenExternalUrlRequest,
+  type WorkspaceOpenExternalUrlResponse,
+  type WorkspaceReadVoiceTranscriptionSettingsRequest,
+  type WorkspaceReadVoiceTranscriptionSettingsResponse,
+  type WorkspaceSaveVoiceTranscriptionApiKeyRequest,
+  type WorkspaceSaveVoiceTranscriptionApiKeyResponse,
+  type WorkspaceSetVoiceTranscriptionEnabledRequest,
+  type WorkspaceSetVoiceTranscriptionEnabledResponse,
+  type WorkspaceValidateVoiceTranscriptionCredentialsRequest,
+  type WorkspaceValidateVoiceTranscriptionCredentialsResponse,
   type WorkspaceRevealMemorySpaceInFinderRequest,
   type WorkspaceRevealMemoryInFinderRequest,
   type WorkspaceRevealSegmentInFinderRequest,
@@ -160,6 +186,29 @@ function assertWorkspaceEntityActionRequest(_request: WorkspaceEntityActionReque
 
 function assertWorkspaceEntityActionResponse(_response: WorkspaceEntityActionResponse): void {
   void _response;
+}
+
+function assertVoiceSettingsSnapshot(_snapshot: VoiceTranscriptionSettingsSnapshot): void {
+  void _snapshot;
+}
+
+function assertVoiceSettingsContracts(
+  _contracts: readonly [
+    WorkspaceReadVoiceTranscriptionSettingsRequest,
+    WorkspaceReadVoiceTranscriptionSettingsResponse,
+    WorkspaceSetVoiceTranscriptionEnabledRequest,
+    WorkspaceSetVoiceTranscriptionEnabledResponse,
+    WorkspaceSaveVoiceTranscriptionApiKeyRequest,
+    WorkspaceSaveVoiceTranscriptionApiKeyResponse,
+    WorkspaceClearVoiceTranscriptionApiKeyRequest,
+    WorkspaceClearVoiceTranscriptionApiKeyResponse,
+    WorkspaceValidateVoiceTranscriptionCredentialsRequest,
+    WorkspaceValidateVoiceTranscriptionCredentialsResponse,
+    WorkspaceOpenExternalUrlRequest,
+    WorkspaceOpenExternalUrlResponse,
+  ]
+): void {
+  void _contracts;
 }
 
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
@@ -323,6 +372,201 @@ test('workspace IPC channels include application-scoped voice settings channels'
   for (const channel of voiceSettingsChannels) {
     assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
   }
+});
+
+test('workspace error code schema accepts voice settings and external URL errors', () => {
+  const voiceSettingsErrorCodes = [
+    'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
+    'ERR_VOICE_SETTINGS_WRITE_FAILED',
+    'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+    'ERR_OPEN_EXTERNAL_URL_REJECTED',
+  ];
+
+  assert.equal(voiceSettingsErrorCodes.length, 4);
+
+  for (const code of voiceSettingsErrorCodes) {
+    assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
+  }
+});
+
+test('voice transcription settings contract exposes redacted snapshot and strict schemas', () => {
+  const snapshot = voiceTranscriptionSettingsSnapshotSchema.parse({
+    enabled: true,
+    apiKeyConfigured: true,
+    apiKeyLastFour: '1234',
+    lastValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastValidationOk: false,
+    lastValidationCode: 'auth',
+  });
+
+  assertVoiceSettingsSnapshot(snapshot);
+  assert.deepEqual(snapshot, {
+    enabled: true,
+    apiKeyConfigured: true,
+    apiKeyLastFour: '1234',
+    lastValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastValidationOk: false,
+    lastValidationCode: 'auth',
+  });
+  assert.equal('apiKey' in snapshot, false);
+  assert.equal('apiKeyCiphertext' in snapshot, false);
+
+  assert.deepEqual(
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      enabled: false,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    }),
+    {
+      enabled: false,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    }
+  );
+
+  assert.throws(() =>
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      ...snapshot,
+      apiKeyLastFour: '12345',
+    })
+  );
+  assert.throws(() =>
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      ...snapshot,
+      lastValidationCode: 'timeout',
+    })
+  );
+  assert.throws(() =>
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      ...snapshot,
+      apiKey: 'full-secret-key',
+    })
+  );
+});
+
+test('voice transcription settings IPC schemas use undefined for no-payload requests', () => {
+  const readRequest = workspaceReadVoiceTranscriptionSettingsRequestSchema.parse(undefined);
+  const clearRequest = workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse(undefined);
+  const validateRequest =
+    workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse(undefined);
+
+  assert.equal(readRequest, undefined);
+  assert.equal(clearRequest, undefined);
+  assert.equal(validateRequest, undefined);
+  assert.throws(() => workspaceReadVoiceTranscriptionSettingsRequestSchema.parse({}));
+  assert.throws(() => workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse({}));
+  assert.throws(() => workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse({}));
+});
+
+test('voice transcription settings IPC schemas validate payloads and redacted responses', () => {
+  const settings = {
+    enabled: true,
+    apiKeyConfigured: true,
+    apiKeyLastFour: '1234',
+    lastValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastValidationOk: true,
+    lastValidationCode: 'ok',
+  };
+
+  const readRequest = workspaceReadVoiceTranscriptionSettingsRequestSchema.parse(undefined);
+  const readResponse = workspaceReadVoiceTranscriptionSettingsResponseSchema.parse({
+    ok: true,
+    value: { settings },
+  });
+  const setEnabledRequest = workspaceSetVoiceTranscriptionEnabledRequestSchema.parse({
+    enabled: false,
+  });
+  const setEnabledResponse = workspaceSetVoiceTranscriptionEnabledResponseSchema.parse({
+    ok: true,
+    value: { settings: { ...settings, enabled: false } },
+  });
+  const saveApiKeyRequest = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({
+    apiKey: 'abcd1234',
+  });
+  const saveApiKeyResponse = workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
+    ok: true,
+    value: { settings, validationError: 'network unavailable' },
+  });
+  const clearResponse = workspaceClearVoiceTranscriptionApiKeyResponseSchema.parse({
+    ok: true,
+    value: {
+      settings: {
+        enabled: true,
+        apiKeyConfigured: false,
+        apiKeyLastFour: null,
+        lastValidatedAt: null,
+        lastValidationOk: null,
+        lastValidationCode: null,
+      },
+    },
+  });
+  const clearRequest = workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse(undefined);
+  const validateRequest =
+    workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse(undefined);
+  const validateResponse = workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
+    ok: true,
+    value: { code: 'network', message: 'Network unavailable' },
+  });
+  const openExternalRequest = workspaceOpenExternalUrlRequestSchema.parse({
+    url: 'https://console.volcengine.com/speech/service',
+  });
+  const openExternalResponse = workspaceOpenExternalUrlResponseSchema.parse({
+    ok: true,
+    value: {},
+  });
+
+  assertVoiceSettingsContracts([
+    readRequest,
+    readResponse,
+    setEnabledRequest,
+    setEnabledResponse,
+    saveApiKeyRequest,
+    saveApiKeyResponse,
+    clearRequest,
+    clearResponse,
+    validateRequest,
+    validateResponse,
+    openExternalRequest,
+    openExternalResponse,
+  ]);
+
+  assert.deepEqual(saveApiKeyRequest, { apiKey: 'abcd1234' });
+  assert.equal(readResponse.ok, true);
+  assert.equal(saveApiKeyResponse.ok, true);
+  if (readResponse.ok) {
+    assert.equal('apiKey' in readResponse.value.settings, false);
+  }
+  if (saveApiKeyResponse.ok) {
+    assert.equal('apiKey' in saveApiKeyResponse.value.settings, false);
+  }
+  assert.throws(() => workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({ apiKey: 'abc' }));
+  assert.throws(() =>
+    workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({ apiKey: 'a'.repeat(1025) })
+  );
+  assert.throws(() =>
+    workspaceReadVoiceTranscriptionSettingsResponseSchema.parse({
+      ok: true,
+      value: { settings, apiKey: 'full-secret-key' },
+    })
+  );
+  assert.throws(() =>
+    workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
+      ok: true,
+      value: { code: 'ok', apiKey: 'full-secret-key' },
+    })
+  );
+  assert.throws(() =>
+    workspaceOpenExternalUrlResponseSchema.parse({
+      ok: true,
+      value: { apiKey: 'full-secret-key' },
+    })
+  );
 });
 
 test('workspace error code schema accepts entity actions menu error codes', () => {
@@ -2112,6 +2356,26 @@ test('recording transcription contract keeps credentials out of renderer payload
       value: { accepted: true },
     }),
     { ok: true, value: { accepted: true } }
+  );
+  assert.deepEqual(
+    workspaceRecordingTranscriptionControlResponseSchema.parse({
+      ok: true,
+      value: { accepted: true, transcriptionMode: 'live' },
+    }),
+    { ok: true, value: { accepted: true, transcriptionMode: 'live' } }
+  );
+  assert.deepEqual(
+    workspaceRecordingTranscriptionControlResponseSchema.parse({
+      ok: true,
+      value: { accepted: true, transcriptionMode: 'disabled' },
+    }),
+    { ok: true, value: { accepted: true, transcriptionMode: 'disabled' } }
+  );
+  assert.throws(() =>
+    workspaceRecordingTranscriptionControlResponseSchema.parse({
+      ok: true,
+      value: { accepted: true, transcriptionMode: 'batch' },
+    })
   );
 });
 
