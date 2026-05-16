@@ -16,3 +16,20 @@ test('main window uses hidden-inset chrome for the layered app shell', async () 
 
   assert.match(source, /titleBarStyle:\s*'hiddenInset'/);
 });
+
+test('main bootstrap wires voice settings store into recording transcription at app ready', async () => {
+  const source = await readFile('src/main/index.ts', 'utf8');
+
+  assert.match(source, /safeStorage/);
+  assert.match(source, /createVoiceSettingsStore/);
+  assert.match(source, /createRecordingTranscriptionSessionRegistry/);
+  assert.match(
+    source,
+    /whenReady\(\)[\s\S]*createVoiceSettingsStore\(\{[\s\S]*safeStorage[\s\S]*userDataDir:\s*app\.getPath\('userData'\)[\s\S]*registerWorkspaceIpc/
+  );
+  assert.match(
+    source,
+    /createRecordingTranscriptionSessionRegistry\(\{[\s\S]*resolveVoiceSettings:\s*\(\)\s*=>[\s\S]*voiceSettingsStore\.read\(\)[\s\S]*voiceSettingsStore\.readDecryptedApiKey\(\)/
+  );
+  assert.match(source, /registerWorkspaceIpc\(\{[\s\S]*recordingTranscriptionSessions/);
+});

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  safeStorage,
   session,
   type Event,
   type WebContentsWillFrameNavigateEventParams,
@@ -11,6 +12,7 @@ import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from
 import { diagnosticErrorName, recordDiagnosticEvent } from './diagnostics.js';
 import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
+import { createRecordingTranscriptionSessionRegistry } from './recordingTranscriptionSessions.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
   getDevServerUrl,
@@ -18,6 +20,7 @@ import {
   setupContentSecurityPolicy,
   setupPermissionRequestHandler,
 } from './security.js';
+import { createVoiceSettingsStore } from './voiceSettingsStore.js';
 import { closeAllWorkspaceHandles, registerWorkspaceIpc } from './workspaceIpc.js';
 import { bindWorkspaceHandleLifecycle } from './workspaceHandleLifecycle.js';
 
@@ -111,10 +114,24 @@ app
     });
     setupContentSecurityPolicy();
     setupPermissionRequestHandler();
+    const voiceSettingsStore = createVoiceSettingsStore({
+      safeStorage,
+      userDataDir: app.getPath('userData'),
+    });
+    const recordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry({
+      resolveVoiceSettings: () => {
+        const snapshot = voiceSettingsStore.read();
+        return {
+          enabled: snapshot.enabled,
+          apiKey: voiceSettingsStore.readDecryptedApiKey(),
+        };
+      },
+    });
     registerWorkspaceIpc({
       expectedSession: session.defaultSession,
       expectedSessionKey: 'default',
       isTrustedUrl: isTrustedAppUrl,
+      recordingTranscriptionSessions,
     });
     registerAppShellProtocol();
     createWindow();
