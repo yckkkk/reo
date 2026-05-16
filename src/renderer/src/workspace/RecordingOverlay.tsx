@@ -657,6 +657,7 @@ export function RecordingOverlay({
 
   const draftPlaybackUrl = draftPlaybackPreview.url;
   const draftPlaybackStatus = draftPlaybackPreview.status;
+  const hasTranscriptPreview = timeline.transcriptSegments.length > 0;
 
   function setDraftPlaybackPreview(nextPreview: DraftPlaybackPreview) {
     draftPlaybackPreviewRef.current = nextPreview;
@@ -2995,7 +2996,7 @@ export function RecordingOverlay({
               className="row-start-2 flex h-full w-full items-center justify-center"
               data-testid="recording-copy-slot"
             >
-              {transcriptionDisabled ? (
+              {transcriptionDisabled && !hasTranscriptPreview ? (
                 <p
                   className={`max-w-[680px] text-balance text-muted-foreground ${RECORDING_SPEECH_TEXT_CLASS}`}
                   role="status"

@@ -2757,6 +2757,60 @@ describe('RecordingOverlay', () => {
     expect(screen.getByRole('button', { name: '播放录音' })).toBeEnabled();
   });
 
+  it('shows recovered transcript segments even when new voice recognition is disabled', async () => {
+    voiceSettingsForTest = createVoiceSettingsSnapshot(false);
+    installWorkspaceBridge({
+      readRecordingDraftAudio: vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          audio: new Uint8Array([1, 2, 3]),
+          audioByteLength: 3,
+          nextSequence: 3,
+        },
+      })),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        recoveredDraft={{
+          audioChunks: [{ byteLength: 3, endTimeMs: 4000, startTimeMs: 0 }],
+          createdAt: '2026-05-09T10:00:00.000Z',
+          durationMs: 4000,
+          memoryId: 'mem_1',
+          nextSequence: 3,
+          recordingSessionId: 'recording-1',
+          revisionId: 'recording-1-revision-0',
+          schemaVersion: 1,
+          segmentId: 'seg_recoverable',
+          title: 'Daily memory 录音',
+          transcriptSegments: [
+            {
+              endTimeMs: 3000,
+              isFinal: true,
+              recordingSessionId: 'recording-1',
+              revisionId: 'recording-1-revision-0',
+              startTimeMs: 0,
+              text: '恢复后的转写内容',
+            },
+          ],
+          updatedAt: '2026-05-09T10:00:04.000Z',
+          workspaceId: 'ws_1',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    await flushPromises();
+
+    expect(screen.getByText('恢复后的转写内容')).toBeInTheDocument();
+    expect(screen.queryByText('语音识别已关闭，本次只保存本地录音。')).not.toBeInTheDocument();
+  });
+
   it('saves recovered transcript markdown when the recovery marker only has sidecar text', async () => {
     const bridge = installWorkspaceBridge({
       readRecordingDraftAudio: vi.fn(async () => ({
