@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VoiceTranscriptionSettings } from '../workspace/workspaceApi';
@@ -36,6 +36,34 @@ const verifiedActiveSnapshot: VoiceTranscriptionSettings = {
   lastValidatedAt: '2026-05-16T13:00:00.000Z',
   lastValidationCode: 'ok',
   lastValidationOk: true,
+};
+
+const disabledWithKeySnapshot: VoiceTranscriptionSettings = {
+  ...verifiedActiveSnapshot,
+  enabled: false,
+};
+
+const authFailedSnapshot: VoiceTranscriptionSettings = {
+  enabled: true,
+  apiKeyConfigured: true,
+  apiKeyLastFour: '1234',
+  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidationCode: 'auth',
+  lastValidationOk: false,
+};
+
+const networkFailedSnapshot: VoiceTranscriptionSettings = {
+  enabled: true,
+  apiKeyConfigured: true,
+  apiKeyLastFour: '1234',
+  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidationCode: 'network',
+  lastValidationOk: null,
+};
+
+const staleVerifiedSnapshot: VoiceTranscriptionSettings = {
+  ...verifiedActiveSnapshot,
+  lastValidatedAt: '2026-05-08T13:00:00.000Z',
 };
 
 function createDeferred<T>() {
@@ -94,6 +122,7 @@ function renderVoiceSettingsPanel(
 
   return {
     bridge: installVoiceSettingsBridge(snapshot, overrides),
+    queryClient,
     user: userEvent.setup(),
     ...render(
       <QueryClientProvider client={queryClient}>
@@ -218,5 +247,83 @@ describe('VoiceSettingsPanel validating and verified-active', () => {
     expect(keyInput).toHaveValue('');
     expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
+});
+
+describe('VoiceSettingsPanel remaining key states', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows an auth failure as a safe red retry state without rendering the full key', async () => {
+    renderVoiceSettingsPanel(authFailedSnapshot);
+
+    expect(await screen.findByText('X-Api-Key 验证失败，请确认密钥后重试。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
+
+  it('shows a network failure as an amber retry state while preserving configured-key projection', async () => {
+    renderVoiceSettingsPanel(networkFailedSnapshot);
+
+    expect(await screen.findByText('暂时无法连接豆包服务，请稍后重试。')).toBeInTheDocument();
+    expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
+  });
+
+  it('keeps a configured key when disabled and locks the password input', async () => {
+    renderVoiceSettingsPanel(disabledWithKeySnapshot);
+
+    const input = await screen.findByLabelText('X-Api-Key');
+
+    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
+    expect(input).toBeDisabled();
+    expect(input).toHaveAttribute('placeholder', '已配置 · ●●●● 1234');
+    expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
+  });
+
+  it('marks an old successful validation as stale and allows revalidation without polling', async () => {
+    const validateVoiceTranscriptionCredentials = vi.fn(async () => ({
+      ok: true as const,
+      value: { code: 'ok' as const },
+    }));
+    const { user } = renderVoiceSettingsPanel(staleVerifiedSnapshot, {
+      validateVoiceTranscriptionCredentials,
+    });
+
+    expect(await screen.findByText(/上次验证 \d+ 天前/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '重新验证' }));
+
+    expect(validateVoiceTranscriptionCredentials).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clears the configured key only after accessible confirmation and invalidates the exact settings query', async () => {
+    const clearVoiceTranscriptionApiKey = vi.fn(async () => ({
+      ok: true as const,
+      value: { settings: disabledNoKeySnapshot },
+    }));
+    const { queryClient, user } = renderVoiceSettingsPanel(verifiedActiveSnapshot, {
+      clearVoiceTranscriptionApiKey,
+    });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await user.click(await screen.findByRole('button', { name: '清除 X-Api-Key' }));
+
+    expect(screen.getByRole('alertdialog', { name: '清除 X-Api-Key？' })).toBeInTheDocument();
+    expect(screen.getByText('清除后，录音不会再使用这枚密钥生成流式转录。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '清除' }));
+
+    expect(clearVoiceTranscriptionApiKey).toHaveBeenCalledWith(undefined);
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        exact: true,
+        queryKey: ['settings', 'voice'],
+      });
+    });
   });
 });
