@@ -2998,3 +2998,9 @@ This section is authoritative over earlier illustrative code blocks. Phase 2 rev
 - Recording finish/close now closes existing ASR sessions even if settings change to disabled mid-session, and a main-side disabled start suppresses final backfill ASR.
 - Settings shell shares AppShell geometry constants, keeps the full-width drag titlebar, locks return/Escape while settings mutations are pending, and removes the unused multi-category abstraction for Slice A.
 - Real-key verification artifacts must redact key fragments; only result code and non-secret protocol metadata may be recorded.
+- Probe service error mapping is credential-specific: 401/403 service error frames map to `auth`; quota, 5xx, malformed service errors and all non-auth transport failures map to `network`.
+- `workspace:saveVoiceTranscriptionApiKey` now distinguishes `none-written`, `previous-file-preserved`, and `file-written-index-stale`; if the key file is already written but validation-state persistence fails, renderer invalidates `['settings', 'voice']`, clears the draft, and shows only the refreshed last4 projection.
+- Settings sidebar keeps the same width, color, item gutters, top spacing, titlebar drag behavior, and no-drag control boundaries as the main AppShell sidebar.
+- Old Doubao env var names were removed from active source fixtures; remaining local env loader tests use generic main-only env names so the deleted BYOK variables cannot look like active config.
+- `AppShell` geometry constants are imported from `appShellGeometry` instead of re-exporting them through the component module.
+- Active spec README was corrected to start with Slice A收口事实, not the removed env-var/two-header state.

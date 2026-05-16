@@ -324,6 +324,45 @@ describe('VoiceSettingsPanel validating and verified-active', () => {
     expect(keyInput).toHaveValue('sk-test-1234');
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
   });
+
+  it('clears the draft when the key was written but validation state was not refreshed', async () => {
+    let snapshot = enabledNoKeySnapshot;
+    const writtenKeySnapshot: VoiceTranscriptionSettings = {
+      ...enabledNoKeySnapshot,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+    };
+    const readVoiceTranscriptionSettings = vi.fn(async () => ({
+      ok: true as const,
+      value: { settings: snapshot },
+    }));
+    const saveVoiceTranscriptionApiKey = vi.fn(async () => {
+      snapshot = writtenKeySnapshot;
+
+      return {
+        ok: false as const,
+        error: {
+          code: 'ERR_VOICE_SETTINGS_WRITE_FAILED' as const,
+          dataRetention: 'file-written-index-stale' as const,
+          message: 'validation state write failed',
+        },
+      };
+    });
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      readVoiceTranscriptionSettings,
+      saveVoiceTranscriptionApiKey,
+    });
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, 'sk-test-1234');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(await screen.findByText('语音设置无法写入本地配置。')).toBeInTheDocument();
+    await waitFor(() => expect(keyInput).toHaveValue(''));
+    expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '显示 X-Api-Key' })).not.toBeInTheDocument();
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
 });
 
 describe('VoiceSettingsPanel remaining key states', () => {

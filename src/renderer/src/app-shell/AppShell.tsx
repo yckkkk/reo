@@ -34,7 +34,6 @@ import { cycleThemePreference, type ThemeMode, type ThemePreference } from './th
 export type AppShellState = 'expanded' | 'covered';
 export type AppShellActiveSection = 'home' | 'library' | 'workspace';
 
-export { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, PANEL_RADIUS, SIDEBAR_RESIZE_STEP, TITLEBAR_HEIGHT };
 const TITLEBAR_CONTROL_LEFT = 80;
 const TITLEBAR_CONTROL_TOP = 2;
 const TITLEBAR_CONTROL_SIZE = 32;

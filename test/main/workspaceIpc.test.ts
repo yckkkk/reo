@@ -423,7 +423,10 @@ test('voice settings IPC saveApiKey reports validation persistence failures with
   assert.equal(response.ok, false);
   if (!response.ok) {
     assert.equal(response.error.code, 'ERR_VOICE_SETTINGS_WRITE_FAILED');
+    assert.equal(response.error.dataRetention, 'file-written-index-stale');
   }
+  assert.equal(store.read().apiKeyConfigured, true);
+  assert.equal(store.read().apiKeyLastFour, 'CRET');
   assert.equal(JSON.stringify(response).includes(apiKey), false);
 });
 

@@ -158,4 +158,34 @@ describe('voice settings queries', () => {
       queryKey: ['settings', 'voice'],
     });
   });
+
+  it('invalidates settings before reporting a save failure after the key file was written', async () => {
+    installVoiceSettingsBridge({
+      saveVoiceTranscriptionApiKey: vi.fn(async () => ({
+        ok: false as const,
+        error: {
+          code: 'ERR_VOICE_SETTINGS_WRITE_FAILED' as const,
+          dataRetention: 'file-written-index-stale' as const,
+          message: 'validation state write failed',
+        },
+      })),
+    });
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await expect(
+      new MutationObserver(
+        queryClient,
+        saveVoiceTranscriptionApiKeyMutationOptions(queryClient)
+      ).mutate({ apiKey: 'abcd1234' })
+    ).rejects.toMatchObject({
+      dataRetention: 'file-written-index-stale',
+      message: '语音设置无法写入本地配置。',
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ['settings', 'voice'],
+    });
+  });
 });

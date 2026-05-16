@@ -16,14 +16,20 @@ describe('SettingsShell', () => {
     expect(titlebar).toHaveClass('inset-x-0', '[-webkit-app-region:drag]');
     expect(titlebar).toHaveStyle({ height: '48px' });
     const sidebar = screen.getByRole('complementary', { name: '设置侧边栏' });
-    expect(sidebar).toHaveClass('bg-card', 'px-8');
+    expect(sidebar).toHaveClass('bg-card', 'px-8', '[-webkit-app-region:drag]');
     expect(sidebar).toHaveStyle({ paddingTop: '48px', width: '240px' });
     expect(sidebar).not.toHaveClass('bg-secondary');
-    expect(screen.getByRole('button', { name: '返回应用' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: '设置类目' })).toHaveClass('mt-4', 'gap-4');
+    expect(screen.getByRole('button', { name: '返回应用' })).toHaveClass(
+      '[-webkit-app-region:no-drag]'
+    );
+    expect(screen.getByRole('navigation', { name: '设置类目' })).toHaveClass(
+      'mt-4',
+      'gap-4',
+      '[-webkit-app-region:no-drag]'
+    );
     const voiceCategory = screen.getByRole('button', { name: '语音' });
     expect(voiceCategory).toHaveAttribute('aria-current', 'page');
-    expect(voiceCategory).toHaveClass('bg-secondary');
+    expect(voiceCategory).toHaveClass('bg-secondary', '[-webkit-app-region:no-drag]');
     expect(screen.getByRole('region', { name: '语音设置' })).toHaveTextContent('语音内容');
   });
 
@@ -64,5 +70,4 @@ describe('SettingsShell', () => {
     expect(onReturnToApp).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: '返回应用' })).toBeDisabled();
   });
-
 });

@@ -20,6 +20,7 @@ import {
   saveVoiceTranscriptionApiKeyMutationOptions,
   setVoiceTranscriptionEnabledMutationOptions,
   validateVoiceTranscriptionCredentialsMutationOptions,
+  VoiceSettingsMutationError,
   voiceSettingsQueryOptions,
 } from './voiceSettingsQueries';
 
@@ -166,6 +167,15 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
     saveApiKeyMutation.mutate(
       { apiKey: trimmedDraftApiKey },
       {
+        onError: (error) => {
+          if (
+            error instanceof VoiceSettingsMutationError &&
+            error.dataRetention === 'file-written-index-stale'
+          ) {
+            setDraftApiKey('');
+            setApiKeyVisible(false);
+          }
+        },
         onSuccess: () => {
           setDraftApiKey('');
           setApiKeyVisible(false);

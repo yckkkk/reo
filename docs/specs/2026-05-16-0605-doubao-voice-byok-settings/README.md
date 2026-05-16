@@ -26,20 +26,15 @@
 
 不在本 spec 范围（见末尾 follow-up）：B 未转录状态可视化、C 自动轮询补转录、D 转录 More 菜单 + 手动重新生成、E `bigmodel_async` vs `bigmodel` endpoint 校正。
 
-## 当前事实
+## 收口事实
 
-- `src/main/doubaoStreamingAsr.ts:312-323` 当前使用旧版双 header：`X-Api-Access-Key + X-Api-App-Key + X-Api-Connect-Id + X-Api-Resource-Id`。
-- `src/main/recordingTranscriptionSessions.ts:143-147` 当前 `resolveDefaultDoubaoCredentials` 读取 `process.env['REO_DOUBAO_ASR_APP_ID']` 与 `REO_DOUBAO_ASR_ACCESS_TOKEN`，两者拼成 `{ accessKey, appKey }`。
-- `src/main/recordingTranscriptionSessions.ts:419-426` 当前在 `resolveCredentials()` 返回 null 时直接返回 `ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE`，录音照常保存，transcript 缺失。
-- `docs/current/electron.md:20` 当前明确把 `REO_DOUBAO_ASR_APP_ID / REO_DOUBAO_ASR_ACCESS_TOKEN` 写入 Electron 当前真源。
-- `docs/current/electron.md:115` 当前明确"豆包流式语音识别在 main 侧运行 live session...header 使用 `X-Api-Connect-Id`..."等旧版字段描述。
-- `docs/current/frontend.md:122` 当前 navigation gate 阻止首页/资料库/创建打开记忆空间/移除记忆空间/切换 Memory context，但**不含** settings mode。
-- `docs/current/data.md` 当前无 voice settings ownership 描述；无 `['settings', 'voice']` query key。
-- 当前 Sidebar 底部只有主题切换按钮（`src/renderer/src/...`，对应 `docs/current/frontend.md:14`），无 settings 入口。
-- 当前 AppShell 无 `mode` 概念，只区分 starter Home 与 loaded workspace。
-- 当前未安装/未使用 `shell.openExternal`（`docs/current/electron.md:119`）。本 spec 要新增 host allowlist 受限的扩展。
-- 当前未引入 shadcn `Switch` source；本 spec 需要新增 `src/renderer/src/components/ui/switch.tsx`。
-- WebSocket endpoint `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` 在代码中标为流式实时使用；官方大模型流式语音识别 API 文档把 `bigmodel_async` 描述为双向流式优化版本，并要求 `X-Api-Resource-Id: volc.seedasr.sauc.duration`。本 spec 不修改 endpoint，只把鉴权从旧双 header 切到新版控制台单 `X-Api-Key`。
+- 豆包 ASR auth 使用单 `X-Api-Key` header；`DOUBAO_STREAMING_ASR_RESOURCE_ID` 为 `volc.seedasr.sauc.duration`，endpoint 为 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`。
+- `REO_DOUBAO_ASR_APP_ID` / `REO_DOUBAO_ASR_ACCESS_TOKEN` 旧变量读取已从 `src/` 删除；录音转写凭证只来自 main-owned voice settings store。
+- `workspace:readVoiceTranscriptionSettings` / `setVoiceTranscriptionEnabled` / `saveVoiceTranscriptionApiKey` / `clearVoiceTranscriptionApiKey` / `validateVoiceTranscriptionCredentials` 均为 application-scoped settings IPC，返回不含密钥明文或密文的 snapshot。
+- `workspace:openExternalUrl` 只允许 `https://volcengine.com` 及其子域，无 username/password/显式 port。
+- Sidebar 设置入口、同窗口 Settings Shell、shadcn/Radix Switch、录音中 settings navigation gate、`['settings', 'voice']` query key 和 voice settings ownership 已写入 `docs/current/*`。
+- 保存 key 后输入框清空，只显示已配置末 4 位；眼睛按钮只作用于当前未保存草稿。
+- WebSocket probe 会在 open 后发送 Doubao full request frame，并等待服务响应帧；只有明确 401/403 鉴权错误归为 `auth`，其它 service/transport 失败归为 `network`。
 
 ## 设计
 

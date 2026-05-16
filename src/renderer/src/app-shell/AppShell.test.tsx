@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppShell, TITLEBAR_HEIGHT } from './AppShell';
+import { AppShell } from './AppShell';
+import { TITLEBAR_HEIGHT } from './appShellGeometry';
 import {
   cycleThemePreference,
   resolveEffectiveTheme,

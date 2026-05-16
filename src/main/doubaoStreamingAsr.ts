@@ -200,7 +200,7 @@ function createDefaultDoubaoStreamingAsrSocket({
   return wrappedSocket;
 }
 
-function normalizeSocketMessageFrame(message: unknown): Buffer {
+export function normalizeDoubaoAsrSocketMessageFrame(message: unknown): Buffer {
   if (Buffer.isBuffer(message)) {
     return message;
   }
@@ -211,7 +211,7 @@ function normalizeSocketMessageFrame(message: unknown): Buffer {
     return Buffer.from(message.buffer, message.byteOffset, message.byteLength);
   }
   if (Array.isArray(message)) {
-    return Buffer.concat(message.map((entry) => normalizeSocketMessageFrame(entry)));
+    return Buffer.concat(message.map((entry) => normalizeDoubaoAsrSocketMessageFrame(entry)));
   }
   if (typeof message === 'string') {
     return Buffer.from(message, 'utf8');
@@ -403,7 +403,7 @@ export function createDoubaoStreamingAsrSession({
 
   const handleResponse = (message: unknown) => {
     try {
-      const response = parseDoubaoAsrResponseFrame(normalizeSocketMessageFrame(message));
+      const response = parseDoubaoAsrResponseFrame(normalizeDoubaoAsrSocketMessageFrame(message));
       if (response.kind === 'error') {
         const safeMessage = safeErrorMessage(`豆包流式语音识别服务返回错误：${response.code}。`);
         onTerminalError?.(safeMessage);

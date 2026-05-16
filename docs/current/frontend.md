@@ -69,9 +69,9 @@
 ## Settings Shell
 
 - Settings mode 由 App 顶层 `appMode` 切换进入，Sidebar 左下角齿轮「设置」按钮是入口。Settings shell 渲染在现有 AppShell 主内容区，不打开第二个 BrowserWindow，不引入 router package。
-- Settings shell 使用左侧设置 nav rail 和右侧内容 panel；左侧顶部是「返回应用」，下方按类目切换，当前唯一类目是「语音」。
+- Settings shell 使用左侧设置 nav rail 和右侧内容 panel；设置 nav rail 复用 AppShell sidebar 的宽度、`bg-card` 画布、8px 左右内距和 48px 原生 titlebar 几何，顶部「返回应用」与 macOS 红绿灯底部保持同一视觉间距，下方按类目切换，当前唯一类目是「语音」。Settings titlebar 保持全宽可拖拽且不画分割线；可点击控件使用 no-drag region。
 - 返回应用只把 `appMode` 切回 `'app'`，不释放当前 workspace handle，不重置当前 workspace view、selected Memory、Memory detail cache 或 recording lifecycle owner。
-- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；它使用 `Switch` 控制流式语音识别启用状态，使用 password `Input` 编辑 X-Api-Key，保存后由 main 同步执行验证，清除 X-Api-Key 使用 `WorkspaceDangerConfirmDialog` 二次确认。
+- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；主内容标题「语音」与设置表单列左对齐，整列在内容区居中。它使用 `Switch` 控制流式语音识别启用状态，使用 password `Input` 编辑 X-Api-Key，眼睛按钮只显示当前未保存草稿；保存成功后输入框清空，已保存 key 只显示 last4，清除 X-Api-Key 使用 `WorkspaceDangerConfirmDialog` 二次确认。若保存时 key 已写入但 validation snapshot 未刷新，renderer 清空草稿并重新读取 `['settings', 'voice']`。
 - 录音 overlay open 时 Sidebar settings trigger 保持当前 app mode，并通过 root toast 提示先完成或关闭录音。
 
 ## Loaded Workspace

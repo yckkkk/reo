@@ -43,14 +43,14 @@ export function SettingsShell({
       />
       <aside
         aria-label="设置侧边栏"
-        className="relative z-20 flex shrink-0 flex-col bg-card px-8 pb-16"
+        className="relative z-20 flex shrink-0 flex-col bg-card px-8 pb-16 [-webkit-app-region:drag]"
         style={{ paddingTop: TITLEBAR_HEIGHT, width: MIN_SIDEBAR_WIDTH }}
       >
         <Button
           type="button"
           variant="ghostIcon"
           size="compact"
-          className="w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground [-webkit-app-region:no-drag]"
           disabled={returnDisabled}
           onClick={onReturnToApp}
         >
@@ -58,13 +58,16 @@ export function SettingsShell({
           返回应用
         </Button>
 
-        <nav className="mt-4 flex flex-col gap-4" aria-label="设置类目">
+        <nav
+          className="mt-4 flex flex-col gap-4 [-webkit-app-region:no-drag]"
+          aria-label="设置类目"
+        >
           <Button
             type="button"
             variant="ghostIcon"
             size="compact"
             aria-current="page"
-            className="w-full justify-start bg-secondary px-8 text-foreground hover:bg-secondary hover:text-foreground"
+            className="w-full justify-start bg-secondary px-8 text-foreground hover:bg-secondary hover:text-foreground [-webkit-app-region:no-drag]"
           >
             <Mic className="size-16" aria-hidden="true" />
             {SETTINGS_VOICE_LABEL}

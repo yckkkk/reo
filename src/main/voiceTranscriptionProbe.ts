@@ -4,6 +4,7 @@ import {
   buildDoubaoAsrAuthHeaders,
   buildDoubaoAsrFullRequestFrame,
   DOUBAO_STREAMING_ASR_ENDPOINT,
+  normalizeDoubaoAsrSocketMessageFrame,
   parseDoubaoAsrResponseFrame,
   redactSecrets,
 } from './doubaoStreamingAsr.js';
@@ -93,28 +94,13 @@ function readHttpStatusCode(args: readonly unknown[]) {
   return null;
 }
 
-function normalizeSocketMessageFrame(message: unknown): Buffer {
-  if (Buffer.isBuffer(message)) {
-    return message;
-  }
-  if (message instanceof ArrayBuffer) {
-    return Buffer.from(message);
-  }
-  if (ArrayBuffer.isView(message)) {
-    return Buffer.from(message.buffer, message.byteOffset, message.byteLength);
-  }
-  if (Array.isArray(message)) {
-    return Buffer.concat(message.map((entry) => normalizeSocketMessageFrame(entry)));
-  }
-  if (typeof message === 'string') {
-    return Buffer.from(message, 'utf8');
-  }
-  throw new Error('Doubao ASR probe response frame is unsupported.');
-}
-
 function probeMessage(error: unknown, apiKey: string) {
   const message = error instanceof Error ? error.message : String(error);
   return redactSecrets(message, [apiKey]);
+}
+
+function serviceErrorCodeToProbeCode(code: number): Exclude<VoiceTranscriptionProbeCode, 'ok'> {
+  return code === 401 || code === 403 ? 'auth' : 'network';
 }
 
 function settleSocket(
@@ -171,9 +157,11 @@ export function runVoiceTranscriptionProbe({
       })
       .on('message', (message) => {
         try {
-          const response = parseDoubaoAsrResponseFrame(normalizeSocketMessageFrame(message));
+          const response = parseDoubaoAsrResponseFrame(
+            normalizeDoubaoAsrSocketMessageFrame(message)
+          );
           if (response.kind === 'error') {
-            settle({ code: 'auth', ok: false });
+            settle({ code: serviceErrorCodeToProbeCode(response.code), ok: false });
             return;
           }
           settle({ code: 'ok', ok: true });

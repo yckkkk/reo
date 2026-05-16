@@ -2023,11 +2023,13 @@ function safeVoiceValidationMessage(code: VoiceTranscriptionProbeResult['code'])
   return 'X-Api-Key 验证通过。';
 }
 
-function voiceSettingsWriteFailedError() {
+function voiceSettingsWriteFailedError(
+  dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']> = 'none-written'
+) {
   return workspaceError(
     'ERR_VOICE_SETTINGS_WRITE_FAILED',
     '语音设置无法写入本地配置。',
-    'none-written'
+    dataRetention
   );
 }
 
@@ -2045,27 +2047,30 @@ async function runVoiceSettingsProbe(apiKey: string, probe: VoiceTranscriptionPr
 
 async function recordVoiceSettingsValidation(
   store: VoiceSettingsStore,
-  code: VoiceTranscriptionProbeResult['code']
+  code: VoiceTranscriptionProbeResult['code'],
+  dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']>
 ) {
   try {
     await store.recordValidation({ code });
     return null;
   } catch {
-    return voiceSettingsWriteFailedError();
+    return voiceSettingsWriteFailedError(dataRetention);
   }
 }
 
 async function probeAndPersistVoiceValidation({
   apiKey,
+  dataRetention,
   probe,
   store,
 }: {
   readonly apiKey: string;
+  readonly dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']>;
   readonly probe: VoiceTranscriptionProbe;
   readonly store: VoiceSettingsStore;
 }) {
   const result = await runVoiceSettingsProbe(apiKey, probe);
-  const persistError = await recordVoiceSettingsValidation(store, result.code);
+  const persistError = await recordVoiceSettingsValidation(store, result.code, dataRetention);
   if (persistError) {
     return { ok: false as const, error: persistError };
   }
@@ -2242,7 +2247,12 @@ async function handleSaveVoiceTranscriptionApiKeyCore({
     return workspaceError(code, '语音设置无法写入本地配置。', 'none-written');
   }
 
-  const validation = await probeAndPersistVoiceValidation({ apiKey, probe, store });
+  const validation = await probeAndPersistVoiceValidation({
+    apiKey,
+    dataRetention: 'file-written-index-stale',
+    probe,
+    store,
+  });
   if (!validation.ok) {
     return validation.error;
   }
@@ -2338,7 +2348,12 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
     );
   }
 
-  const validation = await probeAndPersistVoiceValidation({ apiKey, probe, store });
+  const validation = await probeAndPersistVoiceValidation({
+    apiKey,
+    dataRetention: 'previous-file-preserved',
+    probe,
+    store,
+  });
   if (!validation.ok) {
     return validation.error;
   }

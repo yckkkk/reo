@@ -129,14 +129,39 @@ test('voiceTranscriptionProbe: service response wins and late socket events do n
   assert.equal(socket.terminateCalls, 0);
 });
 
-test('voiceTranscriptionProbe: service error frames return auth', async () => {
+test('voiceTranscriptionProbe: 401 and 403 service error frames return auth', async () => {
+  for (const code of [401, 403]) {
+    const socket = new FakeProbeSocket();
+    const { promise } = createProbeWithSocket(socket);
+
+    socket.emit('open');
+    socket.emit(
+      'message',
+      buildServerErrorFrame({ message: 'unauthorized fake-api-key-only' }, code)
+    );
+
+    assert.deepEqual(await promise, { ok: false, code: 'auth' });
+    assert.equal(socket.closeCalls, 0);
+    assert.equal(socket.terminateCalls, 1);
+  }
+});
+
+test('voiceTranscriptionProbe: non-auth service error frames return network', async () => {
   const socket = new FakeProbeSocket();
   const { promise } = createProbeWithSocket(socket);
 
   socket.emit('open');
-  socket.emit('message', buildServerErrorFrame({ message: 'unauthorized fake-api-key-only' }));
+  socket.emit(
+    'message',
+    buildServerErrorFrame({ message: 'quota limited fake-api-key-only' }, 429)
+  );
 
-  assert.deepEqual(await promise, { ok: false, code: 'auth' });
+  const result = await promise;
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'network');
+  if (result.message) {
+    assert.equal(result.message.includes('fake-api-key-only'), false);
+  }
   assert.equal(socket.closeCalls, 0);
   assert.equal(socket.terminateCalls, 1);
 });

@@ -11,15 +11,35 @@ import {
 } from '../workspace/workspaceApi';
 import { workspaceErrorDisplayMessage } from '../workspace/workspaceErrorMessages';
 
+type VoiceSettingsErrorLike = {
+  readonly code?: string;
+  readonly dataRetention?: string | undefined;
+  readonly message?: string;
+};
+
+export class VoiceSettingsMutationError extends Error {
+  readonly dataRetention: string | undefined;
+
+  constructor(message: string, dataRetention?: string) {
+    super(message);
+    this.name = 'VoiceSettingsMutationError';
+    this.dataRetention = dataRetention;
+  }
+}
+
 export function voiceSettingsQueryKey() {
   return ['settings', 'voice'] as const;
 }
 
-function voiceSettingsErrorMessage(
-  error: { readonly message?: string },
-  fallback = '无法加载语音设置。'
-) {
+function voiceSettingsErrorMessage(error: VoiceSettingsErrorLike, fallback = '无法加载语音设置。') {
   return workspaceErrorDisplayMessage(error, fallback);
+}
+
+function voiceSettingsMutationError(error: VoiceSettingsErrorLike, fallback: string) {
+  return new VoiceSettingsMutationError(
+    voiceSettingsErrorMessage(error, fallback),
+    error.dataRetention
+  );
 }
 
 function toVoiceSettingsProjection(
@@ -64,7 +84,10 @@ export function invalidateVoiceSettings(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ exact: true, queryKey: voiceSettingsQueryKey() });
 }
 
-function seedVoiceSettings(queryClient: QueryClient, value: VoiceTranscriptionSettingsResponseValue) {
+function seedVoiceSettings(
+  queryClient: QueryClient,
+  value: VoiceTranscriptionSettingsResponseValue
+) {
   queryClient.setQueryData(voiceSettingsQueryKey(), toVoiceSettingsProjection(value.settings));
 }
 
@@ -76,7 +99,7 @@ export function setVoiceTranscriptionEnabledMutationOptions(queryClient: QueryCl
       const response = await setVoiceTranscriptionEnabled(payload);
 
       if (!response.ok) {
-        throw new Error(voiceSettingsErrorMessage(response.error, '无法更新语音设置。'));
+        throw voiceSettingsMutationError(response.error, '无法更新语音设置。');
       }
 
       return toVoiceSettingsResponseValue(response.value);
@@ -93,7 +116,10 @@ export function saveVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryCl
       const response = await saveVoiceTranscriptionApiKey(payload);
 
       if (!response.ok) {
-        throw new Error(voiceSettingsErrorMessage(response.error, '无法保存语音识别密钥。'));
+        if (response.error.dataRetention === 'file-written-index-stale') {
+          await invalidateVoiceSettings(queryClient);
+        }
+        throw voiceSettingsMutationError(response.error, '无法保存语音识别密钥。');
       }
 
       return toVoiceSettingsResponseValue(response.value);
@@ -108,7 +134,7 @@ export function clearVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryC
       const response = await clearVoiceTranscriptionApiKey();
 
       if (!response.ok) {
-        throw new Error(voiceSettingsErrorMessage(response.error, '无法清除语音识别密钥。'));
+        throw voiceSettingsMutationError(response.error, '无法清除语音识别密钥。');
       }
 
       return toVoiceSettingsResponseValue(response.value);
@@ -123,7 +149,7 @@ export function validateVoiceTranscriptionCredentialsMutationOptions(queryClient
       const response = await validateVoiceTranscriptionCredentials();
 
       if (!response.ok) {
-        throw new Error(voiceSettingsErrorMessage(response.error, '无法验证语音识别密钥。'));
+        throw voiceSettingsMutationError(response.error, '无法验证语音识别密钥。');
       }
 
       return response.value;
