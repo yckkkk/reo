@@ -17,8 +17,21 @@ import {
 import { mergeTranscriptSegments } from '../workspace-contract/transcript-segments.js';
 
 type DoubaoCredentials = {
-  readonly accessKey: string;
-  readonly appKey: string;
+  readonly apiKey: string;
+};
+
+type RecordingTranscriptionMode = 'disabled' | 'live';
+
+type RecordingTranscriptionSuccessValue = Extract<
+  WorkspaceRecordingTranscriptionControlResponse,
+  { ok: true }
+>['value'] & {
+  readonly transcriptionMode?: RecordingTranscriptionMode;
+};
+
+type RecordingTranscriptionVoiceSettingsSnapshot = {
+  readonly apiKey: string | null;
+  readonly enabled: boolean;
 };
 
 type RecordingTranscriptionSessionIdentity = {
@@ -69,7 +82,7 @@ type PendingRecordingTranscriptionStart = RecordingTranscriptionSessionIdentity 
 
 type CreateRecordingTranscriptionSessionRegistryOptions = {
   readonly createSession?: (input: DoubaoStreamingAsrSessionInput) => DoubaoStreamingAsrSession;
-  readonly resolveCredentials?: () => DoubaoCredentials | null;
+  readonly resolveVoiceSettings?: () => RecordingTranscriptionVoiceSettingsSnapshot;
   readonly sendEvent?: (event: WorkspaceRecordingTranscriptionEvent) => void;
   readonly startAttempts?: number;
 };
@@ -85,14 +98,19 @@ class RecordingTranscriptionStartClosedError extends Error {
 
 function accepted(
   acceptedValue: boolean,
-  segments?: readonly DoubaoAsrTranscriptSegment[]
+  options: {
+    readonly segments?: readonly DoubaoAsrTranscriptSegment[];
+    readonly transcriptionMode?: RecordingTranscriptionMode;
+  } = {}
 ): WorkspaceRecordingTranscriptionControlResponse {
+  const value: RecordingTranscriptionSuccessValue = {
+    accepted: acceptedValue,
+    ...(options.transcriptionMode ? { transcriptionMode: options.transcriptionMode } : {}),
+    ...(options.segments && options.segments.length > 0 ? { segments: [...options.segments] } : {}),
+  };
   return {
     ok: true,
-    value: {
-      accepted: acceptedValue,
-      ...(segments && segments.length > 0 ? { segments: [...segments] } : {}),
-    },
+    value,
   };
 }
 
@@ -140,14 +158,12 @@ function offsetSegments(
   }));
 }
 
-function resolveDefaultDoubaoCredentials(): DoubaoCredentials | null {
-  const appKey = process.env['REO_DOUBAO_ASR_APP_ID']?.trim();
-  const accessKey = process.env['REO_DOUBAO_ASR_ACCESS_TOKEN']?.trim();
-  return appKey && accessKey ? { accessKey, appKey } : null;
+function defaultResolveVoiceSettings(): RecordingTranscriptionVoiceSettingsSnapshot {
+  return { apiKey: null, enabled: false };
 }
 
 function redactCredentialText(message: string, credentials: DoubaoCredentials) {
-  return redactSecrets(message, [credentials.accessKey, credentials.appKey]);
+  return redactSecrets(message, [credentials.apiKey]);
 }
 
 function startFailureMessage(error: unknown, credentials: DoubaoCredentials) {
@@ -166,7 +182,7 @@ function trimReconnectBuffer(entry: RecordingTranscriptionSessionEntry) {
 
 export function createRecordingTranscriptionSessionRegistry({
   createSession = createDoubaoStreamingAsrSession,
-  resolveCredentials = resolveDefaultDoubaoCredentials,
+  resolveVoiceSettings = defaultResolveVoiceSettings,
   sendEvent: defaultSendEvent = () => {},
   startAttempts = DEFAULT_START_ATTEMPTS,
 }: CreateRecordingTranscriptionSessionRegistryOptions = {}) {
@@ -239,7 +255,7 @@ export function createRecordingTranscriptionSessionRegistry({
   }) {
     let liveSession: DoubaoStreamingAsrSession | null = null;
     liveSession = createSession({
-      apiKey: credentials.accessKey,
+      apiKey: credentials.apiKey,
       onError: (message) => {
         const entry = entryRef.current;
         if (
@@ -415,14 +431,18 @@ export function createRecordingTranscriptionSessionRegistry({
       closeEntry(sessions.get(key));
       closePendingStart(pendingStarts.get(key));
 
-      const credentials = resolveCredentials();
-      if (!credentials) {
+      const voiceSettings = resolveVoiceSettings();
+      if (!voiceSettings.enabled) {
+        return accepted(true, { transcriptionMode: 'disabled' });
+      }
+      if (!voiceSettings.apiKey) {
         return workspaceError(
           'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE',
-          '豆包流式语音识别暂时不可用，录音会继续保存。',
+          '请到 设置 → 语音 填写 X-Api-Key 后再录音。',
           'none-written'
         );
       }
+      const credentials: DoubaoCredentials = { apiKey: voiceSettings.apiKey };
 
       const sendEvent = input.sendEvent ?? defaultSendEvent;
       const entryRef: { current: RecordingTranscriptionSessionEntry | null } = {
@@ -470,7 +490,7 @@ export function createRecordingTranscriptionSessionRegistry({
         };
         entryRef.current = entry;
         sessions.set(key, entry);
-        return accepted(true);
+        return accepted(true, { transcriptionMode: 'live' });
       } catch (error) {
         if (pendingStarts.get(key) === pendingStart) {
           pendingStarts.delete(key);
@@ -529,7 +549,7 @@ export function createRecordingTranscriptionSessionRegistry({
         recordingSessionId: entry.recordingSessionId,
         revisionId: entry.revisionId,
       });
-      return accepted(true, entry.transcriptSegments);
+      return accepted(true, { segments: entry.transcriptSegments });
     },
     close(input: RecordingTranscriptionCloseInput): WorkspaceRecordingTranscriptionControlResponse {
       const entry = currentEntry(input);

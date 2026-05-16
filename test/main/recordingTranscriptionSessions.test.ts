@@ -50,12 +50,167 @@ function halfSecondPcmChunk(seed: number) {
   return new Uint8Array(16_000).fill(seed);
 }
 
+function makeStartInput(
+  overrides: Partial<
+    Parameters<ReturnType<typeof createRecordingTranscriptionSessionRegistry>['start']>[0]
+  > = {}
+) {
+  return {
+    recordingFlowSessionId: 'recording-1',
+    recordingSessionId: 'recording-1',
+    revisionId: 'recording-1-revision-0',
+    senderKey: 'sender-1',
+    timeOffsetMs: 0,
+    workspaceHandle: 'wh_1',
+    ...overrides,
+  };
+}
+
+function assertControlValue(
+  response: Awaited<
+    ReturnType<ReturnType<typeof createRecordingTranscriptionSessionRegistry>['start']>
+  >
+) {
+  assert.equal(response.ok, true);
+  return response.value as {
+    readonly accepted: boolean;
+    readonly transcriptionMode?: 'disabled' | 'live';
+  };
+}
+
+test('recording transcription registry disables transcription quietly when voice settings are off', async () => {
+  const live = createFakeLiveSessionStore();
+  const events: unknown[] = [];
+  const registry = createRecordingTranscriptionSessionRegistry({
+    createSession: live.createSession,
+    resolveVoiceSettings: () => ({ enabled: false, apiKey: null }),
+    sendEvent: (event) => events.push(event),
+  });
+
+  const started = await registry.start(makeStartInput());
+
+  assert.deepEqual(assertControlValue(started), {
+    accepted: true,
+    transcriptionMode: 'disabled',
+  });
+  assert.equal(live.sessions.length, 0);
+  assert.deepEqual(events, []);
+  assert.deepEqual(
+    registry.sendAudio({
+      audio: new Uint8Array([1, 2, 3]),
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      senderKey: 'sender-1',
+      workspaceHandle: 'wh_1',
+    }),
+    { ok: true, value: { accepted: false } }
+  );
+});
+
+test('recording transcription registry ignores old Doubao env vars when no voice settings resolver is injected', async () => {
+  const legacyAppIdName = ['REO', 'DOUBAO', 'ASR', 'APP', 'ID'].join('_');
+  const legacyAccessTokenName = ['REO', 'DOUBAO', 'ASR', 'ACCESS', 'TOKEN'].join('_');
+  const previousAppId = process.env[legacyAppIdName];
+  const previousAccessToken = process.env[legacyAccessTokenName];
+  process.env[legacyAppIdName] = 'env-app-id';
+  process.env[legacyAccessTokenName] = 'env-access-token';
+  try {
+    const live = createFakeLiveSessionStore();
+    const registry = createRecordingTranscriptionSessionRegistry({
+      createSession: live.createSession,
+    });
+
+    const started = await registry.start(makeStartInput());
+
+    assert.deepEqual(assertControlValue(started), {
+      accepted: true,
+      transcriptionMode: 'disabled',
+    });
+    assert.equal(live.sessions.length, 0);
+  } finally {
+    if (previousAppId === undefined) {
+      delete process.env[legacyAppIdName];
+    } else {
+      process.env[legacyAppIdName] = previousAppId;
+    }
+    if (previousAccessToken === undefined) {
+      delete process.env[legacyAccessTokenName];
+    } else {
+      process.env[legacyAccessTokenName] = previousAccessToken;
+    }
+  }
+});
+
+test('recording transcription registry rejects enabled transcription without a configured api key', async () => {
+  const live = createFakeLiveSessionStore();
+  const registry = createRecordingTranscriptionSessionRegistry({
+    createSession: live.createSession,
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: null }),
+  });
+
+  const response = await registry.start(makeStartInput());
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE');
+    assert.equal(response.error.message.includes('api-secret'), false);
+    assert.equal(response.error.message.includes('env-access-token'), false);
+  }
+  assert.equal(live.sessions.length, 0);
+});
+
+test('recording transcription registry starts a live session with the start-time api key snapshot', async () => {
+  const live = createFakeLiveSessionStore();
+  let enabled = true;
+  let apiKey: string | null = 'start-key';
+  let resolveCalls = 0;
+  const registry = createRecordingTranscriptionSessionRegistry({
+    createSession: live.createSession,
+    resolveVoiceSettings: () => {
+      resolveCalls += 1;
+      return { enabled, apiKey };
+    },
+  });
+
+  const started = await registry.start(makeStartInput());
+
+  assert.deepEqual(assertControlValue(started), {
+    accepted: true,
+    transcriptionMode: 'live',
+  });
+  assert.equal(live.sessions.length, 1);
+  assert.equal(live.sessions[0]?.input.apiKey, 'start-key');
+
+  enabled = false;
+  apiKey = null;
+  const audio = new Uint8Array([1, 2, 3]);
+  assert.deepEqual(
+    registry.sendAudio({
+      audio,
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      senderKey: 'sender-1',
+      workspaceHandle: 'wh_1',
+    }),
+    { ok: true, value: { accepted: true } }
+  );
+  assert.deepEqual(live.sessions[0]?.sentAudio, [audio]);
+
+  live.sessions[0]?.input.onError?.('network dropped start-key');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(live.sessions.length, 2);
+  assert.equal(live.sessions[1]?.input.apiKey, 'start-key');
+  assert.equal(resolveCalls, 1);
+});
+
 test('recording transcription registry sends only current revision segments', async () => {
   const live = createFakeLiveSessionStore();
   const events: unknown[] = [];
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -67,7 +222,10 @@ test('recording transcription registry sends only current revision segments', as
     timeOffsetMs: 0,
     workspaceHandle: 'wh_1',
   });
-  assert.deepEqual(started, { ok: true, value: { accepted: true } });
+  assert.deepEqual(assertControlValue(started), {
+    accepted: true,
+    transcriptionMode: 'live',
+  });
 
   live.sessions[0]?.input.onTranscriptSegments?.([
     {
@@ -125,7 +283,7 @@ test('recording transcription registry offsets service timestamps without exposi
   const events: unknown[] = [];
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -192,7 +350,7 @@ test('recording transcription registry returns final segments emitted during fin
         async start() {},
       };
     },
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -236,7 +394,7 @@ test('recording transcription registry returns the cumulative transcript snapsho
   const live = createFakeLiveSessionStore();
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: () => {},
   });
 
@@ -289,7 +447,7 @@ test('recording transcription registry rejects missing credentials and ignores s
   const live = createFakeLiveSessionStore();
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => null,
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: null }),
     sendEvent: () => {},
   });
 
@@ -310,7 +468,7 @@ test('recording transcription registry rejects missing credentials and ignores s
 
   const availableRegistry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: () => {},
   });
   await availableRegistry.start({
@@ -340,14 +498,14 @@ test('recording transcription registry returns a safe error when final transcrip
   const session: DoubaoStreamingAsrSession = {
     close() {},
     async finish() {
-      throw new Error('timeout access-secret app-secret');
+      throw new Error('timeout api-secret');
     },
     sendAudioChunk() {},
     async start() {},
   };
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: () => session,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -371,8 +529,7 @@ test('recording transcription registry returns a safe error when final transcrip
   assert.equal(finished.ok, false);
   if (!finished.ok) {
     assert.equal(finished.error.code, 'ERR_RECORDING_TRANSCRIPTION_FAILED');
-    assert.equal(finished.error.message.includes('access-secret'), false);
-    assert.equal(finished.error.message.includes('app-secret'), false);
+    assert.equal(finished.error.message.includes('api-secret'), false);
   }
   assert.deepEqual(events, []);
 });
@@ -400,14 +557,14 @@ test('recording transcription registry retries the initial live session connecti
         },
         async start() {
           if (sessionIndex === 0) {
-            throw new Error('temporary network failure access-secret app-secret');
+            throw new Error('temporary network failure api-secret');
           }
         },
       };
       sessions.push(session);
       return session;
     },
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -420,7 +577,10 @@ test('recording transcription registry retries the initial live session connecti
     workspaceHandle: 'wh_1',
   });
 
-  assert.deepEqual(started, { ok: true, value: { accepted: true } });
+  assert.deepEqual(assertControlValue(started), {
+    accepted: true,
+    transcriptionMode: 'live',
+  });
   assert.equal(sessions.length, 2);
   assert.equal(sessions[0]?.closeCalls, 1);
   assert.deepEqual(events, []);
@@ -462,7 +622,7 @@ test('recording transcription registry closes pending starts when a workspace cl
       sessions.push(session);
       return session;
     },
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: () => {},
   });
 
@@ -501,7 +661,7 @@ test('recording transcription registry reconnects after a live session drops mid
   const events: unknown[] = [];
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -526,7 +686,7 @@ test('recording transcription registry reconnects after a live session drops mid
     });
   }
 
-  live.sessions[0]?.input.onError?.('network dropped access-secret app-secret');
+  live.sessions[0]?.input.onError?.('network dropped api-secret');
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(live.sessions.length, 2);
@@ -571,7 +731,7 @@ test('recording transcription registry trims replay audio when reconnect starts 
   const live = createFakeLiveSessionStore();
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
   });
 
   await registry.start({
@@ -628,7 +788,7 @@ test('recording transcription registry closes terminal service errors without re
   const events: unknown[] = [];
   const registry = createRecordingTranscriptionSessionRegistry({
     createSession: live.createSession,
-    resolveCredentials: () => ({ accessKey: 'access-secret', appKey: 'app-secret' }),
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
     sendEvent: (event) => events.push(event),
   });
 
@@ -641,7 +801,7 @@ test('recording transcription registry closes terminal service errors without re
     workspaceHandle: 'wh_1',
   });
 
-  live.sessions[0]?.input.onTerminalError?.('server rejected access-secret app-secret');
+  live.sessions[0]?.input.onTerminalError?.('server rejected api-secret');
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(live.sessions.length, 1);
@@ -649,7 +809,7 @@ test('recording transcription registry closes terminal service errors without re
   assert.deepEqual(events, [
     {
       kind: 'error',
-      message: 'server rejected [redacted] [redacted]',
+      message: 'server rejected [redacted]',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
     },
