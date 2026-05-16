@@ -1516,6 +1516,16 @@ export function App() {
   );
 
   if (!workspaceSession) {
+    if (appMode === 'settings') {
+      return (
+        <>
+          <ReoToaster themeMode={effectiveTheme} />
+          {settingsContent}
+          {workspaceDialogs}
+        </>
+      );
+    }
+
     return (
       <>
         <ReoToaster themeMode={effectiveTheme} />
@@ -1523,13 +1533,7 @@ export function App() {
           {...shellProps}
           activeSection={workspaceView.name === 'library' ? 'library' : 'home'}
         >
-          {appMode === 'settings' ? (
-            settingsContent
-          ) : workspaceView.name === 'library' ? (
-            <WorkspaceLibraryPage />
-          ) : (
-            <WorkspaceStarterHome />
-          )}
+          {workspaceView.name === 'library' ? <WorkspaceLibraryPage /> : <WorkspaceStarterHome />}
         </AppShell>
         {workspaceDialogs}
       </>
@@ -3212,21 +3216,25 @@ export function App() {
     setRecordingFlow({ status: 'closed' });
   }
 
+  if (appMode === 'settings') {
+    return (
+      <>
+        <ReoToaster themeMode={effectiveTheme} />
+        {settingsContent}
+        {workspaceDialogs}
+      </>
+    );
+  }
+
   return (
     <>
       <ReoToaster themeMode={effectiveTheme} />
       <AppShell
         {...shellProps}
         activeWorkspaceId={activeWorkspaceSession.workspaceId}
-        activeSection={
-          appMode === 'settings'
-            ? undefined
-            : workspaceView.name === 'library'
-              ? 'library'
-              : 'workspace'
-        }
+        activeSection={workspaceView.name === 'library' ? 'library' : 'workspace'}
         panelTitlebar={
-          appMode === 'app' && workspaceView.name === 'workspace-stage' ? (
+          workspaceView.name === 'workspace-stage' ? (
             <WorkspaceTitlebar
               currentMemory={currentMemory}
               memoryRailOpen={memoryRailOpen}
@@ -3253,9 +3261,7 @@ export function App() {
           ) : null
         }
       >
-        {appMode === 'settings' ? (
-          settingsContent
-        ) : workspaceView.name === 'library' ? (
+        {workspaceView.name === 'library' ? (
           <WorkspaceLibraryPage />
         ) : (
           <LoadedWorkspaceFrame

@@ -184,6 +184,22 @@ describe('VoiceSettingsPanel editing-with-key', () => {
     expect(screen.queryByText('启用后需要 X-Api-Key 才能生成转录')).not.toBeInTheDocument();
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
   });
+
+  it('uses an accessible visibility toggle without rendering the typed key as text', async () => {
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot);
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, 'sk-test-1234');
+    await user.click(screen.getByRole('button', { name: '显示 X-Api-Key' }));
+
+    expect(keyInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: '隐藏 X-Api-Key' })).toBeInTheDocument();
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '隐藏 X-Api-Key' }));
+
+    expect(keyInput).toHaveAttribute('type', 'password');
+  });
 });
 
 describe('VoiceSettingsPanel validating and verified-active', () => {
@@ -281,7 +297,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
       'false'
     );
     expect(input).toBeDisabled();
-    expect(input).toHaveAttribute('placeholder', '已配置 · ●●●● 1234');
+    expect(input).toHaveAttribute('placeholder', '输入新的 X-Api-Key 以替换当前密钥');
     expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
     expect(screen.queryByText(/已验证/)).not.toBeInTheDocument();
   });

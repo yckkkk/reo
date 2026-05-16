@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Eye, EyeOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { FieldControl, FieldError, FieldGroup, FieldHint, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkspaceDangerConfirmDialog } from '../workspace/WorkspaceDangerConfirmDialog';
 import {
   clearVoiceTranscriptionApiKeyMutationOptions,
@@ -71,6 +73,7 @@ export function VoiceSettingsPanel() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery(voiceSettingsQueryOptions());
   const [draftApiKey, setDraftApiKey] = useState('');
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const setEnabledMutation = useMutation(setVoiceTranscriptionEnabledMutationOptions(queryClient));
   const saveApiKeyMutation = useMutation(saveVoiceTranscriptionApiKeyMutationOptions(queryClient));
@@ -119,15 +122,16 @@ export function VoiceSettingsPanel() {
     settings.lastValidationOk === true &&
     settings.lastValidatedAt !== null;
   const verifiedAt = showVerifiedStatus ? settings.lastValidatedAt : null;
-  const configuredPlaceholder =
-    settings.apiKeyConfigured && settings.apiKeyLastFour !== null
-      ? `已配置 · ●●●● ${settings.apiKeyLastFour}`
-      : '请输入火山引擎 X-Api-Key';
+  const configuredPlaceholder = settings.apiKeyConfigured
+    ? '输入新的 X-Api-Key 以替换当前密钥'
+    : '请输入火山引擎 X-Api-Key';
   const saveButtonLabel = saveApiKeyMutation.isPending
     ? '验证中'
     : settings.enabled && isValidationFailed
       ? '重试'
       : '保存';
+  const apiKeyVisibilityLabel = apiKeyVisible ? '隐藏 X-Api-Key' : '显示 X-Api-Key';
+  const ApiKeyVisibilityIcon = apiKeyVisible ? EyeOff : Eye;
 
   function handleSave() {
     if (saveDisabled) return;
@@ -178,16 +182,37 @@ export function VoiceSettingsPanel() {
       <FieldGroup>
         <FieldLabel htmlFor={API_KEY_INPUT_ID}>X-Api-Key</FieldLabel>
         <FieldControl>
-          <Input
-            id={API_KEY_INPUT_ID}
-            type="password"
-            value={draftApiKey}
-            disabled={keyInputDisabled}
-            maxLength={1024}
-            autoComplete="off"
-            placeholder={configuredPlaceholder}
-            onChange={(event) => setDraftApiKey(event.target.value)}
-          />
+          <div className="relative">
+            <Input
+              id={API_KEY_INPUT_ID}
+              type={apiKeyVisible ? 'text' : 'password'}
+              value={draftApiKey}
+              disabled={keyInputDisabled}
+              maxLength={1024}
+              autoComplete="off"
+              placeholder={configuredPlaceholder}
+              className="pr-[44px]"
+              onChange={(event) => setDraftApiKey(event.target.value)}
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghostIcon"
+                    size="icon"
+                    aria-label={apiKeyVisibilityLabel}
+                    className="absolute right-4 top-1/2 size-32 -translate-y-1/2"
+                    disabled={keyInputDisabled}
+                    onClick={() => setApiKeyVisible((current) => !current)}
+                  >
+                    <ApiKeyVisibilityIcon className="size-16" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{apiKeyVisibilityLabel}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </FieldControl>
         {showRequiredHint ? (
           <FieldError className="text-destructive">启用后需要 X-Api-Key 才能生成转录</FieldError>
