@@ -1294,17 +1294,17 @@ export async function readRecordingDraftAudio({
   }
 }
 
-async function readOptionalFinalizedTranscript(
-  recordingDirectory: string,
-  recordingDirectoryIdentity: DirectoryIdentity
+async function readOptionalFinalizedTranscriptFile(
+  directory: string,
+  directoryIdentity: DirectoryIdentity,
+  options: {
+    readonly markdownFileName: 'segment.md' | 'supplement.md';
+    readonly objectType: 'segment' | 'supplement';
+  }
 ): Promise<{ readonly exists: boolean; readonly text: string }> {
-  let segmentFd: number;
+  let fd: number;
   try {
-    segmentFd = openFileForReadInDirectory(
-      recordingDirectory,
-      recordingDirectoryIdentity,
-      'segment.md'
-    );
+    fd = openFileForReadInDirectory(directory, directoryIdentity, options.markdownFileName);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return { exists: false, text: '' };
@@ -1313,23 +1313,23 @@ async function readOptionalFinalizedTranscript(
   }
 
   try {
-    const segment = fstatSync(segmentFd);
-    if (!segment.isFile()) {
-      throw new Error('Recording segment markdown path is unsafe');
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) {
+      throw new Error(`${options.markdownFileName} path is unsafe`);
     }
-    if (segment.size > MAX_FINALIZED_TRANSCRIPT_READ_BYTES) {
-      throw new Error('Recording segment markdown is too large');
+    if (stat.size > MAX_FINALIZED_TRANSCRIPT_READ_BYTES) {
+      throw new Error(`${options.markdownFileName} is too large`);
     }
-    const markdown = (await readFileDescriptor(segmentFd, 'utf8')) as string;
-    const parsed = parseWorkspaceMarkdownObject({ objectType: 'segment', markdown });
+    const markdown = (await readFileDescriptor(fd, 'utf8')) as string;
+    const parsed = parseWorkspaceMarkdownObject({ objectType: options.objectType, markdown });
     const text = extractSegmentTranscript(parsed.content);
-    await assertSameDirectory(recordingDirectory, recordingDirectoryIdentity);
+    await assertSameDirectory(directory, directoryIdentity);
     return {
       exists: text.length > 0,
       text,
     };
   } finally {
-    closeSync(segmentFd);
+    closeSync(fd);
   }
 }
 
@@ -1395,9 +1395,10 @@ export async function readFinalizedAudioSegmentContent({
           'durable-marker-recovery-required'
         );
       }
-      const transcript = await readOptionalFinalizedTranscript(
+      const transcript = await readOptionalFinalizedTranscriptFile(
         target.directory,
-        recordingDirectoryIdentity
+        recordingDirectoryIdentity,
+        { markdownFileName: 'segment.md', objectType: 'segment' }
       );
       const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
       if (stillUsable) {
