@@ -1,0 +1,18 @@
+Command: npm run verify:quick
+Result: passed
+
+Included checks:
+- npm run typecheck: passed
+- npm run test:main: passed, 550 tests
+- npm run test:renderer: passed, 35 files / 338 tests
+- npm run lint: passed
+- npm run format:check: passed
+
+Captured during Task 8 Step 1 by a fresh Task 8 subagent.
+
+Final rerun after visual evidence artifacts:
+- npm run verify:quick: passed
+- npm run test:main: 550 tests passed
+- npm run test:renderer: 35 files / 338 tests passed
+- npm run lint: passed
+- npm run format:check: passed
