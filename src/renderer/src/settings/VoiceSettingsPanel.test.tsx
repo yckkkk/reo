@@ -29,7 +29,30 @@ const enabledNoKeySnapshot: VoiceTranscriptionSettings = {
   enabled: true,
 };
 
-function installVoiceSettingsBridge(snapshot: VoiceTranscriptionSettings) {
+const verifiedActiveSnapshot: VoiceTranscriptionSettings = {
+  enabled: true,
+  apiKeyConfigured: true,
+  apiKeyLastFour: '1234',
+  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidationCode: 'ok',
+  lastValidationOk: true,
+};
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
+function installVoiceSettingsBridge(
+  snapshot: VoiceTranscriptionSettings,
+  overrides: Partial<VoiceSettingsBridge> = {}
+) {
   const bridge: VoiceSettingsBridge = {
     readVoiceTranscriptionSettings: vi.fn(async () => ({
       ok: true as const,
@@ -48,6 +71,7 @@ function installVoiceSettingsBridge(snapshot: VoiceTranscriptionSettings) {
     clearVoiceTranscriptionApiKey: vi.fn(),
     validateVoiceTranscriptionCredentials: vi.fn(),
     openExternalUrl: vi.fn(),
+    ...overrides,
   };
 
   Object.defineProperty(window, 'reoWorkspace', {
@@ -58,7 +82,10 @@ function installVoiceSettingsBridge(snapshot: VoiceTranscriptionSettings) {
   return bridge;
 }
 
-function renderVoiceSettingsPanel(snapshot: VoiceTranscriptionSettings) {
+function renderVoiceSettingsPanel(
+  snapshot: VoiceTranscriptionSettings,
+  overrides: Partial<VoiceSettingsBridge> = {}
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -66,7 +93,7 @@ function renderVoiceSettingsPanel(snapshot: VoiceTranscriptionSettings) {
   });
 
   return {
-    bridge: installVoiceSettingsBridge(snapshot),
+    bridge: installVoiceSettingsBridge(snapshot, overrides),
     user: userEvent.setup(),
     ...render(
       <QueryClientProvider client={queryClient}>
@@ -126,6 +153,70 @@ describe('VoiceSettingsPanel editing-with-key', () => {
     expect(keyInput).toHaveValue('  sk-test-1234  ');
     expect(screen.getByRole('button', { name: '保存' })).toBeEnabled();
     expect(screen.queryByText('启用后需要 X-Api-Key 才能生成转录')).not.toBeInTheDocument();
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
+});
+
+describe('VoiceSettingsPanel validating and verified-active', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('submits a trimmed key and locks controls while the save probe validates', async () => {
+    const saveDeferred = createDeferred<{
+      ok: true;
+      value: { settings: VoiceTranscriptionSettings };
+    }>();
+    const saveVoiceTranscriptionApiKey = vi.fn(() => saveDeferred.promise);
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      saveVoiceTranscriptionApiKey,
+    });
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, '  sk-test-1234  ');
+    expect(keyInput).toHaveValue('  sk-test-1234  ');
+
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(saveVoiceTranscriptionApiKey).toHaveBeenCalledWith({ apiKey: 'sk-test-1234' });
+    expect(screen.getByRole('status')).toHaveTextContent('正在验证 X-Api-Key');
+    expect(screen.getByRole('status')).not.toHaveTextContent('sk-test-1234');
+    expect(screen.getByRole('button', { name: '验证中' })).toBeDisabled();
+    expect(keyInput).toBeDisabled();
+    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toBeDisabled();
+
+    saveDeferred.resolve({
+      ok: true,
+      value: { settings: verifiedActiveSnapshot },
+    });
+  });
+
+  it('clears the draft and renders verified projection after save succeeds', async () => {
+    let snapshot = enabledNoKeySnapshot;
+    const readVoiceTranscriptionSettings = vi.fn(async () => ({
+      ok: true as const,
+      value: { settings: snapshot },
+    }));
+    const saveVoiceTranscriptionApiKey = vi.fn(async () => {
+      snapshot = verifiedActiveSnapshot;
+
+      return {
+        ok: true as const,
+        value: { settings: verifiedActiveSnapshot },
+      };
+    });
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      readVoiceTranscriptionSettings,
+      saveVoiceTranscriptionApiKey,
+    });
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, '  sk-test-1234  ');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(await screen.findByText(/已验证/)).toBeInTheDocument();
+    expect(keyInput).toHaveValue('');
+    expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
   });
 });
