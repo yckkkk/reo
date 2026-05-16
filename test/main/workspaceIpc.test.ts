@@ -53,18 +53,25 @@ import {
   handleCopySegmentRelativePathForTest,
   handleCopySegmentSupplementAbsolutePathForTest,
   handleCopySegmentSupplementRelativePathForTest,
+  handleClearVoiceTranscriptionApiKeyForTest,
+  handleOpenExternalUrlForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
+  handleReadVoiceTranscriptionSettingsForTest,
   handleRestoreDeletedMemoryForTest,
   handleRestoreDeletedSegmentSupplementForTest,
   handleRestoreDeletedSegmentForTest,
   handleSaveSegmentSupplementTranscriptForTest,
+  handleSaveVoiceTranscriptionApiKeyForTest,
+  handleSetVoiceTranscriptionEnabledForTest,
+  handleValidateVoiceTranscriptionCredentialsForTest,
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
   handleUpdateSegmentSupplementTitleForTest,
   handleUpdateSegmentTitleForTest,
 } from '../../src/main/workspaceIpc.js';
+import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
 import { appendSegmentSupplementRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
@@ -123,6 +130,55 @@ type SegmentSupplementResolverDepsForTest = {
   readonly requireDocument?: boolean;
 };
 
+function makeFakeVoiceSafeStorage() {
+  let available = true;
+  const prefix = 'enc:';
+  return {
+    isEncryptionAvailable: () => available,
+    encryptString: (plaintext: string) => Buffer.from(`${prefix}${plaintext}`, 'utf8'),
+    decryptString: (cipher: Buffer) => {
+      const value = cipher.toString('utf8');
+      if (!value.startsWith(prefix)) {
+        throw new Error('decrypt failed');
+      }
+      return value.slice(prefix.length);
+    },
+    getSelectedStorageBackend: () => 'gnome_libsecret' as const,
+    setAvailable(value: boolean) {
+      available = value;
+    },
+  };
+}
+
+function makeVoiceSettingsStoreForIpcTest() {
+  const files = new Map<string, unknown>();
+  const safeStorage = makeFakeVoiceSafeStorage();
+  const store = createVoiceSettingsStore({
+    safeStorage,
+    userDataDir: path.join(os.tmpdir(), `reo-voice-ipc-${randomUUIDForTest()}`),
+    platform: 'linux',
+    now: () => new Date('2026-05-16T13:08:00.000Z'),
+    writeJsonAtomic: async (filePath, value) => {
+      files.set(filePath, value);
+    },
+  });
+  return { files, safeStorage, store };
+}
+
+function randomUUIDForTest() {
+  return Math.random().toString(16).slice(2);
+}
+
+function voiceIpcBaseOptions(input: unknown = undefined, customEvent = event) {
+  return {
+    event: customEvent,
+    expectedSession,
+    expectedSessionKey: 'default',
+    input,
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+  };
+}
+
 test('recording transcription events keep the Electron sender binding', () => {
   const sent: unknown[] = [];
   const senderWithSend = {
@@ -154,6 +210,237 @@ test('recording transcription events keep the Electron sender binding', () => {
       },
     },
   ]);
+});
+
+test('voice settings IPC read returns snapshot without key or ciphertext', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+
+  const response = await handleReadVoiceTranscriptionSettingsForTest({
+    ...voiceIpcBaseOptions(),
+    store,
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value.settings, {
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: 'CRET',
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    });
+  }
+  assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
+  assert.equal(JSON.stringify(response).includes('enc:'), false);
+});
+
+test('voice settings IPC read rejects an untrusted sender before returning settings', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const untrustedEvent: TrustedSenderEventAdapter = {
+    ...event,
+    senderFrame: {
+      routingId: 4,
+      topRoutingId: 4,
+      url: 'https://volcengine.com/settings',
+    },
+  };
+
+  const response = await handleReadVoiceTranscriptionSettingsForTest({
+    ...voiceIpcBaseOptions(undefined, untrustedEvent),
+    store,
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+});
+
+test('voice settings IPC setEnabled validates payload and toggles independently from key', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.writeApiKey('abcd1234SECRET');
+
+  const invalid = await handleSetVoiceTranscriptionEnabledForTest({
+    ...voiceIpcBaseOptions({ enabled: 'true' }),
+    store,
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) {
+    assert.equal(invalid.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+
+  const enabled = await handleSetVoiceTranscriptionEnabledForTest({
+    ...voiceIpcBaseOptions({ enabled: true }),
+    store,
+  });
+  assert.equal(enabled.ok, true);
+  if (enabled.ok) {
+    assert.equal(enabled.value.settings.enabled, true);
+    assert.equal(enabled.value.settings.apiKeyConfigured, true);
+  }
+  assert.equal(JSON.stringify(enabled).includes('abcd1234SECRET'), false);
+});
+
+test('voice settings IPC saveApiKey writes before probe and records ok auth network branches', async () => {
+  for (const code of ['ok', 'auth', 'network'] as const) {
+    const { store } = makeVoiceSettingsStoreForIpcTest();
+    const apiKey = `KEY-${code}-SECRET`;
+    let probeSawPersistedKey = false;
+
+    const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+      ...voiceIpcBaseOptions({ apiKey }),
+      store,
+      probe: async (key: string) => {
+        assert.equal(key, apiKey);
+        probeSawPersistedKey = store.readDecryptedApiKey() === apiKey;
+        return code === 'ok'
+          ? { ok: true, code }
+          : { ok: false, code, message: `${code} validation failed for ${apiKey}` };
+      },
+    });
+
+    assert.equal(probeSawPersistedKey, true);
+    assert.equal(response.ok, true);
+    if (response.ok) {
+      assert.equal(response.value.settings.apiKeyConfigured, true);
+      assert.equal(response.value.settings.apiKeyLastFour, 'CRET');
+      assert.equal(response.value.settings.lastValidationCode, code);
+      assert.equal(
+        response.value.settings.lastValidationOk,
+        code === 'ok' ? true : code === 'auth' ? false : null
+      );
+      assert.equal('validationError' in response.value, code !== 'ok');
+    }
+    const serialized = JSON.stringify(response);
+    assert.equal(serialized.includes(apiKey), false);
+    assert.equal(serialized.includes('enc:'), false);
+  }
+});
+
+test('voice settings IPC saveApiKey maps storage failures without leaking key', async () => {
+  const { safeStorage, store } = makeVoiceSettingsStoreForIpcTest();
+  safeStorage.setAvailable(false);
+  const apiKey = 'SECRET-STORAGE-KEY';
+
+  const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions({ apiKey }),
+    store,
+    probe: async () => {
+      throw new Error('probe must not run when storage fails');
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE');
+  }
+  assert.equal(JSON.stringify(response).includes(apiKey), false);
+});
+
+test('voice settings IPC clearApiKey wipes key and validation state', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.writeApiKey('abcd1234SECRET');
+  await store.recordValidation({ code: 'auth' });
+
+  const response = await handleClearVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions(),
+    store,
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value.settings, {
+      enabled: false,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    });
+  }
+});
+
+test('voice settings IPC validate reads decrypted key only in main and handles missing key', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const missing = await handleValidateVoiceTranscriptionCredentialsForTest({
+    ...voiceIpcBaseOptions(),
+    store,
+    probe: async () => {
+      throw new Error('probe must not run without a key');
+    },
+  });
+  assert.equal(missing.ok, false);
+  if (!missing.ok) {
+    assert.equal(missing.error.code, 'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED');
+  }
+
+  await store.writeApiKey('abcd1234SECRET');
+  const response = await handleValidateVoiceTranscriptionCredentialsForTest({
+    ...voiceIpcBaseOptions(),
+    store,
+    probe: async (apiKey: string) => {
+      assert.equal(apiKey, 'abcd1234SECRET');
+      return { ok: false, code: 'network', message: 'network failure for abcd1234SECRET' };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(response.value.code, 'network');
+  }
+  assert.equal(store.read().lastValidationOk, null);
+  assert.equal(store.read().lastValidationCode, 'network');
+  assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
+});
+
+test('voice settings IPC openExternalUrl allows only safe Volcengine HTTPS URLs', async () => {
+  const opened: string[] = [];
+  const allowed = await handleOpenExternalUrlForTest({
+    ...voiceIpcBaseOptions({ url: 'https://Console.VOLCENGINE.com/docs?x=1' }),
+    openExternal: async (url: string) => {
+      opened.push(url);
+    },
+  });
+
+  assert.deepEqual(allowed, { ok: true, value: {} });
+  assert.deepEqual(opened, ['https://console.volcengine.com/docs?x=1']);
+
+  for (const url of [
+    'http://console.volcengine.com/docs',
+    'https://volcengine.com:443/docs',
+    'https://user:pass@volcengine.com/docs',
+    'https://volcengine.com.evil.com/docs',
+    'https://evilvolcengine.com/docs',
+    'https://evil.com/docs',
+  ]) {
+    const response = await handleOpenExternalUrlForTest({
+      ...voiceIpcBaseOptions({ url }),
+      openExternal: async () => {
+        throw new Error(`should not open ${url}`);
+      },
+    });
+    assert.equal(response.ok, false);
+    if (!response.ok) {
+      assert.equal(response.error.code, 'ERR_OPEN_EXTERNAL_URL_REJECTED');
+    }
+  }
+});
+
+test('voice settings IPC openExternalUrl validates request payload', async () => {
+  const response = await handleOpenExternalUrlForTest({
+    ...voiceIpcBaseOptions({ url: 'not a url' }),
+    openExternal: async () => {
+      throw new Error('invalid payload must not open');
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
 });
 
 async function assertWorkspaceLockCanBeReacquired(rootPath: string): Promise<void> {

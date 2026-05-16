@@ -9,6 +9,7 @@ import {
   WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
@@ -37,11 +38,13 @@ import {
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
+  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
@@ -56,11 +59,14 @@ import {
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+  WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
+  WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
@@ -103,6 +109,8 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadVoiceTranscriptionSettingsRequestSchema,
+  workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRevealMemoryInFinderRequestSchema,
@@ -134,10 +142,20 @@ import {
   workspaceRecordingTranscriptionControlResponseSchema,
   workspaceRecordingTranscriptionEventSchema,
   workspaceRecordingTranscriptionStartRequestSchema,
+  workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
+  workspaceSaveVoiceTranscriptionApiKeyResponseSchema,
   workspaceSegmentIdRequestSchema,
   workspaceSegmentSupplementIdRequestSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
+  workspaceSetVoiceTranscriptionEnabledRequestSchema,
+  workspaceSetVoiceTranscriptionEnabledResponseSchema,
+  workspaceClearVoiceTranscriptionApiKeyRequestSchema,
+  workspaceClearVoiceTranscriptionApiKeyResponseSchema,
+  workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
+  workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
+  workspaceOpenExternalUrlRequestSchema,
+  workspaceOpenExternalUrlResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
@@ -241,6 +259,11 @@ import {
   type RecordingTranscriptionSessionRegistry,
 } from './recordingTranscriptionSessions.js';
 import { withDiagnosticSpan } from './diagnostics.js';
+import {
+  runVoiceTranscriptionProbe,
+  type VoiceTranscriptionProbeResult,
+} from './voiceTranscriptionProbe.js';
+import type { VoiceSettingsStore } from './voiceSettingsStore.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
@@ -258,7 +281,9 @@ interface ShowOpenDirectoryDialogResult {
 type ShowOpenDirectoryDialog = () => Promise<ShowOpenDirectoryDialogResult>;
 type ShowItemInFolder = (filePath: string) => void;
 type OpenPath = (filePath: string) => Promise<string>;
+type OpenExternalUrl = (url: string) => Promise<void>;
 type WriteClipboardText = (text: string) => void;
+type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
 type ResolveMemorySpacePaths = (
   workspaceId: string,
   deps?: {
@@ -307,6 +332,9 @@ export interface RegisterWorkspaceIpcOptions {
   readonly handleStore?: WorkspaceHandleStore;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
+  readonly voiceSettingsStore: VoiceSettingsStore;
+  readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
+  readonly openExternal?: OpenExternalUrl;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
   readonly withDiagnostics?: typeof withDiagnosticSpan;
 }
@@ -379,6 +407,26 @@ export interface HandleFinalizeSegmentSupplementRecordingDraftOptions extends Ha
 }
 
 export type HandleRecordingTranscriptionControlOptions = HandleWorkspaceRequestOptions;
+
+type HandleVoiceSettingsRequestOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly store: VoiceSettingsStore;
+};
+
+type HandleSaveVoiceTranscriptionApiKeyOptions = HandleVoiceSettingsRequestOptions & {
+  readonly probe: VoiceTranscriptionProbe;
+};
+
+type HandleValidateVoiceTranscriptionCredentialsOptions = HandleVoiceSettingsRequestOptions & {
+  readonly probe: VoiceTranscriptionProbe;
+};
+
+type HandleOpenExternalUrlOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly openExternal?: OpenExternalUrl;
+};
 
 type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
   readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
@@ -1963,6 +2011,399 @@ function validateWorkspaceSender({
     expectedSessionKey,
     isTrustedUrl,
   });
+}
+
+function safeVoiceValidationMessage(code: VoiceTranscriptionProbeResult['code']): string {
+  if (code === 'auth') {
+    return 'X-Api-Key 验证失败。';
+  }
+  if (code === 'network') {
+    return '暂时无法连接语音识别服务。';
+  }
+  return 'X-Api-Key 验证通过。';
+}
+
+function validationErrorForProbeResult(result: VoiceTranscriptionProbeResult): string | undefined {
+  return result.code === 'ok' ? undefined : safeVoiceValidationMessage(result.code);
+}
+
+function hasExplicitPort(rawUrl: string): boolean {
+  const schemeIndex = rawUrl.indexOf('://');
+  if (schemeIndex < 0) {
+    return false;
+  }
+  const authority = rawUrl.slice(schemeIndex + 3).split(/[/?#]/, 1)[0] ?? '';
+  const hostPort = authority.slice(authority.lastIndexOf('@') + 1);
+  if (hostPort.startsWith('[')) {
+    const end = hostPort.indexOf(']');
+    return end >= 0 && hostPort.slice(end + 1).startsWith(':');
+  }
+  return /:\d*$/.test(hostPort);
+}
+
+function isAllowedVolcengineExternalUrl(
+  rawUrl: string
+): { readonly ok: true; readonly url: URL } | { readonly ok: false } {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return { ok: false };
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const isAllowedHost = hostname === 'volcengine.com' || hostname.endsWith('.volcengine.com');
+  if (
+    url.protocol !== 'https:' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    hasExplicitPort(rawUrl) ||
+    !isAllowedHost
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, url };
+}
+
+function runDefaultVoiceTranscriptionProbe(apiKey: string): Promise<VoiceTranscriptionProbeResult> {
+  return runVoiceTranscriptionProbe({ apiKey });
+}
+
+async function openSystemExternalUrl(url: string): Promise<void> {
+  await requireElectronShellApi().shell.openExternal(url);
+}
+
+async function handleReadVoiceTranscriptionSettingsCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  store,
+}: HandleVoiceSettingsRequestOptions): Promise<
+  z.infer<typeof workspaceReadVoiceTranscriptionSettingsResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadVoiceTranscriptionSettingsRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readVoiceTranscriptionSettings request is invalid',
+      'none-written'
+    );
+  }
+
+  return workspaceReadVoiceTranscriptionSettingsResponseSchema.parse({
+    ok: true,
+    value: { settings: store.read() },
+  });
+}
+
+async function handleSetVoiceTranscriptionEnabledCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  store,
+}: HandleVoiceSettingsRequestOptions): Promise<
+  z.infer<typeof workspaceSetVoiceTranscriptionEnabledResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceSetVoiceTranscriptionEnabledRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'setVoiceTranscriptionEnabled request is invalid',
+      'none-written'
+    );
+  }
+
+  try {
+    await store.setEnabled(request.data.enabled);
+  } catch {
+    return workspaceError(
+      'ERR_VOICE_SETTINGS_WRITE_FAILED',
+      '语音设置无法写入本地配置。',
+      'none-written'
+    );
+  }
+
+  return workspaceSetVoiceTranscriptionEnabledResponseSchema.parse({
+    ok: true,
+    value: { settings: store.read() },
+  });
+}
+
+async function handleSaveVoiceTranscriptionApiKeyCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  store,
+  probe,
+}: HandleSaveVoiceTranscriptionApiKeyOptions): Promise<
+  z.infer<typeof workspaceSaveVoiceTranscriptionApiKeyResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'saveVoiceTranscriptionApiKey request is invalid',
+      'none-written'
+    );
+  }
+
+  try {
+    await store.writeApiKey(request.data.apiKey);
+  } catch (error) {
+    const code =
+      error instanceof Error && error.message === 'safeStorage unavailable'
+        ? 'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE'
+        : 'ERR_VOICE_SETTINGS_WRITE_FAILED';
+    return workspaceError(code, '语音设置无法写入本地配置。', 'none-written');
+  }
+
+  try {
+    const result = await probe(request.data.apiKey);
+    await store.recordValidation({ code: result.code });
+    return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
+      ok: true,
+      value: {
+        settings: store.read(),
+        ...(validationErrorForProbeResult(result)
+          ? { validationError: validationErrorForProbeResult(result) }
+          : {}),
+      },
+    });
+  } catch {
+    await store.recordValidation({ code: 'network' });
+    return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
+      ok: true,
+      value: {
+        settings: store.read(),
+        validationError: safeVoiceValidationMessage('network'),
+      },
+    });
+  }
+}
+
+async function handleClearVoiceTranscriptionApiKeyCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  store,
+}: HandleVoiceSettingsRequestOptions): Promise<
+  z.infer<typeof workspaceClearVoiceTranscriptionApiKeyResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceClearVoiceTranscriptionApiKeyRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'clearVoiceTranscriptionApiKey request is invalid',
+      'none-written'
+    );
+  }
+
+  try {
+    await store.clearApiKey();
+  } catch {
+    return workspaceError(
+      'ERR_VOICE_SETTINGS_WRITE_FAILED',
+      '语音设置无法写入本地配置。',
+      'none-written'
+    );
+  }
+
+  return workspaceClearVoiceTranscriptionApiKeyResponseSchema.parse({
+    ok: true,
+    value: { settings: store.read() },
+  });
+}
+
+async function handleValidateVoiceTranscriptionCredentialsCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  store,
+  probe,
+}: HandleValidateVoiceTranscriptionCredentialsOptions): Promise<
+  z.infer<typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceValidateVoiceTranscriptionCredentialsRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'validateVoiceTranscriptionCredentials request is invalid',
+      'none-written'
+    );
+  }
+
+  const apiKey = store.readDecryptedApiKey();
+  if (!apiKey) {
+    return workspaceError(
+      'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+      '请先填写 X-Api-Key。',
+      'none-written'
+    );
+  }
+
+  try {
+    const result = await probe(apiKey);
+    await store.recordValidation({ code: result.code });
+    return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
+      ok: true,
+      value: {
+        code: result.code,
+        ...(result.code === 'ok' ? {} : { message: safeVoiceValidationMessage(result.code) }),
+      },
+    });
+  } catch {
+    await store.recordValidation({ code: 'network' });
+    return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
+      ok: true,
+      value: { code: 'network', message: safeVoiceValidationMessage('network') },
+    });
+  }
+}
+
+async function handleOpenExternalUrlCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  openExternal = openSystemExternalUrl,
+}: HandleOpenExternalUrlOptions): Promise<z.infer<typeof workspaceOpenExternalUrlResponseSchema>> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceOpenExternalUrlRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'openExternalUrl request is invalid',
+      'none-written'
+    );
+  }
+
+  const allowed = isAllowedVolcengineExternalUrl(request.data.url);
+  if (!allowed.ok) {
+    return workspaceError(
+      'ERR_OPEN_EXTERNAL_URL_REJECTED',
+      '不允许打开该外部链接。',
+      'none-written'
+    );
+  }
+
+  try {
+    await openExternal(allowed.url.toString());
+    return workspaceOpenExternalUrlResponseSchema.parse({ ok: true, value: {} });
+  } catch {
+    return workspaceError('ERR_OPEN_EXTERNAL_URL_REJECTED', '外部链接无法打开。', 'none-written');
+  }
+}
+
+export async function handleReadVoiceTranscriptionSettingsForTest(
+  options: HandleVoiceSettingsRequestOptions
+): Promise<z.infer<typeof workspaceReadVoiceTranscriptionSettingsResponseSchema>> {
+  return handleReadVoiceTranscriptionSettingsCore(options);
+}
+
+export async function handleSetVoiceTranscriptionEnabledForTest(
+  options: HandleVoiceSettingsRequestOptions
+): Promise<z.infer<typeof workspaceSetVoiceTranscriptionEnabledResponseSchema>> {
+  return handleSetVoiceTranscriptionEnabledCore(options);
+}
+
+export async function handleSaveVoiceTranscriptionApiKeyForTest(
+  options: HandleSaveVoiceTranscriptionApiKeyOptions
+): Promise<z.infer<typeof workspaceSaveVoiceTranscriptionApiKeyResponseSchema>> {
+  return handleSaveVoiceTranscriptionApiKeyCore(options);
+}
+
+export async function handleClearVoiceTranscriptionApiKeyForTest(
+  options: HandleVoiceSettingsRequestOptions
+): Promise<z.infer<typeof workspaceClearVoiceTranscriptionApiKeyResponseSchema>> {
+  return handleClearVoiceTranscriptionApiKeyCore(options);
+}
+
+export async function handleValidateVoiceTranscriptionCredentialsForTest(
+  options: HandleValidateVoiceTranscriptionCredentialsOptions
+): Promise<z.infer<typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema>> {
+  return handleValidateVoiceTranscriptionCredentialsCore(options);
+}
+
+export async function handleOpenExternalUrlForTest(
+  options: HandleOpenExternalUrlOptions
+): Promise<z.infer<typeof workspaceOpenExternalUrlResponseSchema>> {
+  return handleOpenExternalUrlCore(options);
 }
 
 type WorkspaceHandleRequestData = {
@@ -3807,6 +4248,9 @@ export function registerWorkspaceIpc({
   handleStore = defaultHandleStore,
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
+  voiceSettingsStore,
+  voiceTranscriptionProbe = runDefaultVoiceTranscriptionProbe,
+  openExternal = openSystemExternalUrl,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
   withDiagnostics = withDiagnosticSpan,
 }: RegisterWorkspaceIpcOptions): void {
@@ -4155,6 +4599,70 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       recordingTranscriptionSessions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, input) =>
+    handleReadVoiceTranscriptionSettingsCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      store: voiceSettingsStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, input) =>
+    handleSetVoiceTranscriptionEnabledCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      store: voiceSettingsStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
+    handleSaveVoiceTranscriptionApiKeyCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      store: voiceSettingsStore,
+      probe: voiceTranscriptionProbe,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
+    handleClearVoiceTranscriptionApiKeyCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      store: voiceSettingsStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+    (event, input) =>
+      handleValidateVoiceTranscriptionCredentialsCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        store: voiceSettingsStore,
+        probe: voiceTranscriptionProbe,
+      })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, (event, input) =>
+    handleOpenExternalUrlCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      openExternal,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>

@@ -137,6 +137,7 @@ app
       expectedSessionKey: 'default',
       isTrustedUrl: isTrustedAppUrl,
       recordingTranscriptionSessions,
+      voiceSettingsStore,
     });
     registerAppShellProtocol();
     createWindow();

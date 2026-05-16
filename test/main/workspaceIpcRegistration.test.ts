@@ -6,7 +6,15 @@ import path from 'node:path';
 import test from 'node:test';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import type { TrustedSenderEventAdapter } from '../../src/main/trustedSender.js';
-import { WORKSPACE_CLOSE_CHANNEL } from '../../src/workspace-contract/workspace-channels.js';
+import {
+  WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_CLOSE_CHANNEL,
+  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+  WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+  WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+  WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+} from '../../src/workspace-contract/workspace-channels.js';
 
 const expectedSession = { label: 'default-session' };
 const event: TrustedSenderEventAdapter = {
@@ -86,6 +94,21 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
           closedHandles.push(workspaceHandle);
         },
       } as never,
+      voiceSettingsStore: {
+        read: () => ({
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        }),
+        setEnabled: async () => {},
+        writeApiKey: async () => {},
+        clearApiKey: async () => {},
+        recordValidation: async () => {},
+        readDecryptedApiKey: () => null,
+      },
       async withDiagnostics<Result>(
         event: {
           readonly area: string;
@@ -108,6 +131,17 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
         return result;
       },
     });
+
+    for (const channel of [
+      WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+      WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+      WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+      WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+      WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+      WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+    ]) {
+      assert.equal(handlers.has(channel), true, `${channel} should be registered`);
+    }
 
     const closeHandler = handlers.get(WORKSPACE_CLOSE_CHANNEL);
     assert.ok(closeHandler);
