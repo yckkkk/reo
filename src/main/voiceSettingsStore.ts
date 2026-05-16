@@ -1,7 +1,7 @@
-import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
+import { readBoundedJsonNoFollowSync } from './workspaceJsonFile.js';
 
 const SCHEMA_VERSION = 1;
 const FILE_NAME = 'voice-transcription-settings.json';
@@ -82,28 +82,12 @@ function fileToSnapshot(file: VoiceSettingsFile): VoiceSettingsSnapshot {
 }
 
 function loadFromDisk(filePath: string): VoiceSettingsFile {
-  let fileDescriptor: number | null = null;
-  try {
-    fileDescriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const metadata = fstatSync(fileDescriptor);
-    if (!metadata.isFile() || metadata.size > MAX_SETTINGS_FILE_BYTES) {
-      return defaultFile();
-    }
-    const parsed = voiceSettingsFileSchema.safeParse(
-      JSON.parse(readFileSync(fileDescriptor, 'utf8'))
-    );
-    return parsed.success ? parsed.data : defaultFile();
-  } catch {
-    return defaultFile();
-  } finally {
-    if (fileDescriptor !== null) {
-      try {
-        closeSync(fileDescriptor);
-      } catch {
-        // Startup should fall back to the default settings file on local state read issues.
-      }
-    }
-  }
+  const result = readBoundedJsonNoFollowSync({
+    filePath,
+    maxBytes: MAX_SETTINGS_FILE_BYTES,
+    schema: voiceSettingsFileSchema,
+  });
+  return result.status === 'ok' ? result.value : defaultFile();
 }
 
 function isSecureStorageAvailable({
@@ -150,9 +134,11 @@ export function createVoiceSettingsStore({
   }
 
   function updateFile(mutator: (current: VoiceSettingsFile) => VoiceSettingsFile): Promise<void> {
-    const queued = writeQueue.catch(() => {}).then(async () => {
-      await persist(mutator(cache));
-    });
+    const queued = writeQueue
+      .catch(() => {})
+      .then(async () => {
+        await persist(mutator(cache));
+      });
     writeQueue = queued.then(
       () => {},
       () => {}

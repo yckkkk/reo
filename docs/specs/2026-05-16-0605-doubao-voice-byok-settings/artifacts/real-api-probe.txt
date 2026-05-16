@@ -2,6 +2,6 @@ $ real Doubao X-Api-Key full-request service-frame probe
 endpoint=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 resourceId=volc.seedasr.sauc.duration
 apiKeyLast4=[redacted]
-startedAt=2026-05-16T18:21:14.962Z
-finishedAt=2026-05-16T18:21:15.203Z
+startedAt=2026-05-16T18:37:02.257Z
+finishedAt=2026-05-16T18:37:02.566Z
 result={"ok":true,"code":"ok"}

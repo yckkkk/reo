@@ -71,7 +71,7 @@ describe('App', () => {
     saveVoiceTranscriptionApiKey: vi.fn(),
     clearVoiceTranscriptionApiKey: vi.fn(),
     validateVoiceTranscriptionCredentials: vi.fn(),
-    openExternalUrl: vi.fn(),
+    openVoiceTranscriptionProviderConsole: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
   };
 

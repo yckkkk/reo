@@ -13,7 +13,7 @@ import {
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+  WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
@@ -120,8 +120,8 @@ import {
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
   workspaceMemorySummarySchema,
-  workspaceOpenExternalUrlRequestSchema,
-  workspaceOpenExternalUrlResponseSchema,
+  workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
+  workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
@@ -135,8 +135,8 @@ import {
   type VoiceTranscriptionSettingsSnapshot,
   type WorkspaceClearVoiceTranscriptionApiKeyRequest,
   type WorkspaceClearVoiceTranscriptionApiKeyResponse,
-  type WorkspaceOpenExternalUrlRequest,
-  type WorkspaceOpenExternalUrlResponse,
+  type WorkspaceOpenVoiceTranscriptionProviderConsoleRequest,
+  type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
   type WorkspaceReadVoiceTranscriptionSettingsRequest,
   type WorkspaceReadVoiceTranscriptionSettingsResponse,
   type WorkspaceSaveVoiceTranscriptionApiKeyRequest,
@@ -204,8 +204,8 @@ function assertVoiceSettingsContracts(
     WorkspaceClearVoiceTranscriptionApiKeyResponse,
     WorkspaceValidateVoiceTranscriptionCredentialsRequest,
     WorkspaceValidateVoiceTranscriptionCredentialsResponse,
-    WorkspaceOpenExternalUrlRequest,
-    WorkspaceOpenExternalUrlResponse,
+    WorkspaceOpenVoiceTranscriptionProviderConsoleRequest,
+    WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
   ]
 ): void {
   void _contracts;
@@ -259,7 +259,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:saveVoiceTranscriptionApiKey',
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
-    'workspace:openExternalUrl',
+    'workspace:openVoiceTranscriptionProviderConsole',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
@@ -354,7 +354,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
     'workspace:validateVoiceTranscriptionCredentials'
   );
-  assert.equal(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, 'workspace:openExternalUrl');
+  assert.equal(
+    WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+    'workspace:openVoiceTranscriptionProviderConsole'
+  );
 });
 
 test('workspace IPC channels include application-scoped voice settings channels', () => {
@@ -364,7 +367,7 @@ test('workspace IPC channels include application-scoped voice settings channels'
     'workspace:saveVoiceTranscriptionApiKey',
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
-    'workspace:openExternalUrl',
+    'workspace:openVoiceTranscriptionProviderConsole',
   ];
 
   assert.equal(voiceSettingsChannels.length, 6);
@@ -374,12 +377,12 @@ test('workspace IPC channels include application-scoped voice settings channels'
   }
 });
 
-test('workspace error code schema accepts voice settings and external URL errors', () => {
+test('workspace error code schema accepts voice settings and provider console errors', () => {
   const voiceSettingsErrorCodes = [
     'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
     'ERR_VOICE_SETTINGS_WRITE_FAILED',
     'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
-    'ERR_OPEN_EXTERNAL_URL_REJECTED',
+    'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
   ];
 
   assert.equal(voiceSettingsErrorCodes.length, 4);
@@ -513,13 +516,13 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
     ok: true,
     value: { code: 'network', message: 'Network unavailable' },
   });
-  const openExternalRequest = workspaceOpenExternalUrlRequestSchema.parse({
-    url: 'https://console.volcengine.com/speech/service',
-  });
-  const openExternalResponse = workspaceOpenExternalUrlResponseSchema.parse({
-    ok: true,
-    value: {},
-  });
+  const openVoiceConsoleRequest =
+    workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema.parse(undefined);
+  const openVoiceConsoleResponse =
+    workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema.parse({
+      ok: true,
+      value: {},
+    });
 
   assertVoiceSettingsContracts([
     readRequest,
@@ -532,8 +535,8 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
     clearResponse,
     validateRequest,
     validateResponse,
-    openExternalRequest,
-    openExternalResponse,
+    openVoiceConsoleRequest,
+    openVoiceConsoleResponse,
   ]);
 
   assert.deepEqual(saveApiKeyRequest, { apiKey: 'abcd1234' });
@@ -562,7 +565,7 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
     })
   );
   assert.throws(() =>
-    workspaceOpenExternalUrlResponseSchema.parse({
+    workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema.parse({
       ok: true,
       value: { apiKey: 'full-secret-key' },
     })

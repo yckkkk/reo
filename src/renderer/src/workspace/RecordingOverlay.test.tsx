@@ -399,7 +399,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { code: 'network' as const },
     })),
-    openExternalUrl: vi.fn(async () => ({
+    openVoiceTranscriptionProviderConsole: vi.fn(async () => ({
       ok: true as const,
       value: {},
     })),

@@ -124,7 +124,7 @@ app
         const snapshot = voiceSettingsStore.read();
         return {
           enabled: snapshot.enabled,
-          apiKey: voiceSettingsStore.readDecryptedApiKey(),
+          apiKey: snapshot.enabled ? voiceSettingsStore.readDecryptedApiKey() : null,
         };
       },
     });

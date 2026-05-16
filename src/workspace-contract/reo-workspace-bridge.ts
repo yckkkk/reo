@@ -34,8 +34,7 @@ import type {
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
-  WorkspaceOpenExternalUrlRequest,
-  WorkspaceOpenExternalUrlResponse,
+  WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
   WorkspaceOpenMemoryDocumentRequest,
   WorkspaceOpenMemorySpaceAgentsFileRequest,
   WorkspaceOpenRequest,
@@ -272,9 +271,7 @@ export interface ReoWorkspaceBridge {
   readonly validateVoiceTranscriptionCredentials: (
     payload: WorkspaceValidateVoiceTranscriptionCredentialsRequest
   ) => Promise<WorkspaceValidateVoiceTranscriptionCredentialsResponse>;
-  readonly openExternalUrl: (
-    payload: WorkspaceOpenExternalUrlRequest
-  ) => Promise<WorkspaceOpenExternalUrlResponse>;
+  readonly openVoiceTranscriptionProviderConsole: () => Promise<WorkspaceOpenVoiceTranscriptionProviderConsoleResponse>;
   readonly onRecordingTranscriptionEvent: (
     callback: (event: WorkspaceRecordingTranscriptionEvent) => void
   ) => () => void;

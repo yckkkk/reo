@@ -80,7 +80,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_WRITE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
-  'ERR_OPEN_EXTERNAL_URL_REJECTED',
+  'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
   'ERR_WORKSPACE_INDEX_WRITE_FAILED',
   'ERR_MEMORY_NOT_FOUND',
   'ERR_MEMORY_CREATE_FAILED',
@@ -174,17 +174,18 @@ export const workspaceValidateVoiceTranscriptionCredentialsResponseSchema = z.di
   ]
 );
 
-export const workspaceOpenExternalUrlRequestSchema = z.strictObject({
-  url: z.string().url(),
-});
+export const workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema = workspaceNoInputSchema;
 
-export const workspaceOpenExternalUrlResponseSchema = z.discriminatedUnion('ok', [
-  z.strictObject({
-    ok: z.literal(true),
-    value: z.strictObject({}),
-  }),
-  workspaceErrorEnvelopeSchema,
-]);
+export const workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema = z.discriminatedUnion(
+  'ok',
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      value: z.strictObject({}),
+    }),
+    workspaceErrorEnvelopeSchema,
+  ]
+);
 
 export const workspaceChooseDirectoryResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -1051,9 +1052,11 @@ export type WorkspaceValidateVoiceTranscriptionCredentialsRequest = z.infer<
 export type WorkspaceValidateVoiceTranscriptionCredentialsResponse = z.infer<
   typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema
 >;
-export type WorkspaceOpenExternalUrlRequest = z.infer<typeof workspaceOpenExternalUrlRequestSchema>;
-export type WorkspaceOpenExternalUrlResponse = z.infer<
-  typeof workspaceOpenExternalUrlResponseSchema
+export type WorkspaceOpenVoiceTranscriptionProviderConsoleRequest = z.infer<
+  typeof workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema
+>;
+export type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse = z.infer<
+  typeof workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema
 >;
 export type WorkspaceChooseDirectoryResult = z.infer<typeof workspaceChooseDirectoryResultSchema>;
 export type WorkspaceChooseDirectoryResponse = z.infer<

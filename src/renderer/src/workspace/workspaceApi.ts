@@ -56,8 +56,8 @@ export function openMemorySpaceAgentsFile(
   return window.reoWorkspace.openMemorySpaceAgentsFile(payload);
 }
 
-export function openExternalUrl(payload: Parameters<Window['reoWorkspace']['openExternalUrl']>[0]) {
-  return window.reoWorkspace.openExternalUrl(payload);
+export function openVoiceTranscriptionProviderConsole() {
+  return window.reoWorkspace.openVoiceTranscriptionProviderConsole();
 }
 
 export function openMemoryDocument(

@@ -8,19 +8,20 @@ import {
   type VoiceTranscriptionCredentialsValidation,
   type VoiceTranscriptionSettings,
   type VoiceTranscriptionSettingsResponseValue,
+  type WorkspaceError,
 } from '../workspace/workspaceApi';
 import { workspaceErrorDisplayMessage } from '../workspace/workspaceErrorMessages';
 
 type VoiceSettingsErrorLike = {
   readonly code?: string;
-  readonly dataRetention?: string | undefined;
+  readonly dataRetention?: WorkspaceError['dataRetention'];
   readonly message?: string;
 };
 
 export class VoiceSettingsMutationError extends Error {
-  readonly dataRetention: string | undefined;
+  readonly dataRetention: WorkspaceError['dataRetention'];
 
-  constructor(message: string, dataRetention?: string) {
+  constructor(message: string, dataRetention?: WorkspaceError['dataRetention']) {
     super(message);
     this.name = 'VoiceSettingsMutationError';
     this.dataRetention = dataRetention;

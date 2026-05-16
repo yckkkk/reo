@@ -64,7 +64,7 @@ const workspaceBridgeKeys = [
   'saveVoiceTranscriptionApiKey',
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
-  'openExternalUrl',
+  'openVoiceTranscriptionProviderConsole',
   'onRecordingTranscriptionEvent',
 ] as const;
 
@@ -92,7 +92,7 @@ const voiceSettingsBridgeContractKeys = [
   'saveVoiceTranscriptionApiKey',
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
-  'openExternalUrl',
+  'openVoiceTranscriptionProviderConsole',
 ] as const satisfies readonly (keyof ReoWorkspaceBridge)[];
 
 test('workspace bridge contract declares voice settings methods before preload exposure', () => {
@@ -104,7 +104,7 @@ test('workspace bridge contract declares voice settings methods before preload e
       'saveVoiceTranscriptionApiKey',
       'clearVoiceTranscriptionApiKey',
       'validateVoiceTranscriptionCredentials',
-      'openExternalUrl',
+      'openVoiceTranscriptionProviderConsole',
     ]
   );
 });
@@ -555,7 +555,7 @@ test('workspace preload bridge maps voice settings methods to explicit channels'
   await bridge.saveVoiceTranscriptionApiKey({ apiKey: 'abcd1234' });
   await bridge.clearVoiceTranscriptionApiKey(undefined);
   await bridge.validateVoiceTranscriptionCredentials(undefined);
-  await bridge.openExternalUrl({ url: 'https://console.volcengine.com/' });
+  await bridge.openVoiceTranscriptionProviderConsole();
 
   assert.deepEqual(calls, [
     { channel: 'workspace:readVoiceTranscriptionSettings', payload: undefined },
@@ -563,7 +563,7 @@ test('workspace preload bridge maps voice settings methods to explicit channels'
     { channel: 'workspace:saveVoiceTranscriptionApiKey', payload: { apiKey: 'abcd1234' } },
     { channel: 'workspace:clearVoiceTranscriptionApiKey', payload: undefined },
     { channel: 'workspace:validateVoiceTranscriptionCredentials', payload: undefined },
-    { channel: 'workspace:openExternalUrl', payload: { url: 'https://console.volcengine.com/' } },
+    { channel: 'workspace:openVoiceTranscriptionProviderConsole', payload: undefined },
   ]);
 });
 

@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/toaster';
 import { WorkspaceDangerConfirmDialog } from '../workspace/WorkspaceDangerConfirmDialog';
-import { openExternalUrl } from '../workspace/workspaceApi';
+import { openVoiceTranscriptionProviderConsole } from '../workspace/workspaceApi';
 import {
   unknownErrorDisplayMessage,
   workspaceErrorDisplayMessage,
@@ -26,7 +26,6 @@ import {
 
 const API_KEY_INPUT_ID = 'voice-transcription-api-key';
 const STALE_VALIDATION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const VOLCENGINE_CONSOLE_URL = 'https://console.volcengine.com/';
 
 function formatValidationTime(isoTimestamp: string) {
   return format(new Date(isoTimestamp), 'yyyy-MM-dd HH:mm');
@@ -146,15 +145,12 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
   const ApiKeyVisibilityIcon = apiKeyVisible ? EyeOff : Eye;
   const showApiKeyVisibilityToggle = draftApiKey.length > 0;
   const mutationErrorMessage =
-    setEnabledMutation.error instanceof Error
-      ? setEnabledMutation.error.message
-      : saveApiKeyMutation.error instanceof Error
-        ? saveApiKeyMutation.error.message
-        : validateCredentialsMutation.error instanceof Error
-          ? validateCredentialsMutation.error.message
-          : clearApiKeyMutation.error instanceof Error
-            ? clearApiKeyMutation.error.message
-            : null;
+    [
+      setEnabledMutation.error,
+      saveApiKeyMutation.error,
+      validateCredentialsMutation.error,
+      clearApiKeyMutation.error,
+    ].find((error): error is Error => error instanceof Error)?.message ?? null;
 
   function handleSave() {
     if (saveDisabled) return;
@@ -195,7 +191,7 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
 
   async function handleOpenVolcengineConsole() {
     try {
-      const response = await openExternalUrl({ url: VOLCENGINE_CONSOLE_URL });
+      const response = await openVoiceTranscriptionProviderConsole();
       if (!response.ok) {
         toast.error(workspaceErrorDisplayMessage(response.error, '外部链接无法打开。'));
       }

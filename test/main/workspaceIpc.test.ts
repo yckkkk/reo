@@ -54,7 +54,7 @@ import {
   handleCopySegmentSupplementAbsolutePathForTest,
   handleCopySegmentSupplementRelativePathForTest,
   handleClearVoiceTranscriptionApiKeyForTest,
-  handleOpenExternalUrlForTest,
+  handleOpenVoiceTranscriptionProviderConsoleForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
   handleReadVoiceTranscriptionSettingsForTest,
@@ -302,7 +302,7 @@ test('voice settings IPC write channels reject untrusted senders before side eff
         },
       }),
     () =>
-      handleOpenExternalUrlForTest({
+      handleOpenVoiceTranscriptionProviderConsoleForTest({
         ...voiceIpcBaseOptions({ url: 'https://console.volcengine.com/' }, untrustedEvent),
         openExternal: async () => {
           openedUrls += 1;
@@ -528,42 +528,22 @@ test('voice settings IPC validate reports validation persistence failures withou
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
 });
 
-test('voice settings IPC openExternalUrl allows only safe Volcengine HTTPS URLs', async () => {
+test('voice settings IPC openVoiceTranscriptionProviderConsole opens the main-owned console URL', async () => {
   const opened: string[] = [];
-  const allowed = await handleOpenExternalUrlForTest({
-    ...voiceIpcBaseOptions({ url: 'https://Console.VOLCENGINE.com/docs?x=1' }),
+  const allowed = await handleOpenVoiceTranscriptionProviderConsoleForTest({
+    ...voiceIpcBaseOptions(undefined),
     openExternal: async (url: string) => {
       opened.push(url);
     },
   });
 
   assert.deepEqual(allowed, { ok: true, value: {} });
-  assert.deepEqual(opened, ['https://console.volcengine.com/docs?x=1']);
-
-  for (const url of [
-    'http://console.volcengine.com/docs',
-    'https://volcengine.com:443/docs',
-    'https://user:pass@volcengine.com/docs',
-    'https://volcengine.com.evil.com/docs',
-    'https://evilvolcengine.com/docs',
-    'https://evil.com/docs',
-  ]) {
-    const response = await handleOpenExternalUrlForTest({
-      ...voiceIpcBaseOptions({ url }),
-      openExternal: async () => {
-        throw new Error(`should not open ${url}`);
-      },
-    });
-    assert.equal(response.ok, false);
-    if (!response.ok) {
-      assert.equal(response.error.code, 'ERR_OPEN_EXTERNAL_URL_REJECTED');
-    }
-  }
+  assert.deepEqual(opened, ['https://console.volcengine.com/']);
 });
 
-test('voice settings IPC openExternalUrl validates request payload', async () => {
-  const response = await handleOpenExternalUrlForTest({
-    ...voiceIpcBaseOptions({ url: 'not a url' }),
+test('voice settings IPC openVoiceTranscriptionProviderConsole validates request payload', async () => {
+  const response = await handleOpenVoiceTranscriptionProviderConsoleForTest({
+    ...voiceIpcBaseOptions({ url: 'https://console.volcengine.com/' }),
     openExternal: async () => {
       throw new Error('invalid payload must not open');
     },

@@ -31,7 +31,7 @@
 - 豆包 ASR auth 使用单 `X-Api-Key` header；`DOUBAO_STREAMING_ASR_RESOURCE_ID` 为 `volc.seedasr.sauc.duration`，endpoint 为 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`。
 - `REO_DOUBAO_ASR_APP_ID` / `REO_DOUBAO_ASR_ACCESS_TOKEN` 旧变量读取已从 `src/` 删除；录音转写凭证只来自 main-owned voice settings store。
 - `workspace:readVoiceTranscriptionSettings` / `setVoiceTranscriptionEnabled` / `saveVoiceTranscriptionApiKey` / `clearVoiceTranscriptionApiKey` / `validateVoiceTranscriptionCredentials` 均为 application-scoped settings IPC，返回不含密钥明文或密文的 snapshot。
-- `workspace:openExternalUrl` 只允许 `https://volcengine.com` 及其子域，无 username/password/显式 port。
+- `workspace:openVoiceTranscriptionProviderConsole` 不接受 renderer URL payload；main 固定打开火山引擎控制台 URL，并在调用 `shell.openExternal` 前校验 URL host。
 - Sidebar 设置入口、同窗口 Settings Shell、shadcn/Radix Switch、录音中 settings navigation gate、`['settings', 'voice']` query key 和 voice settings ownership 已写入 `docs/current/*`。
 - 保存 key 后输入框清空，只显示已配置末 4 位；眼睛按钮只作用于当前未保存草稿。
 - WebSocket probe 会在 open 后发送 Doubao full request frame，并等待服务响应帧；只有明确 401/403 鉴权错误归为 `auth`，其它 service/transport 失败归为 `network`。
@@ -204,7 +204,7 @@
 
 #### 5.4 外部链接策略
 
-- 新增 `workspace:openExternalUrl`，main 校验 host ∈ allowlist（只允许 `volcengine.com` 及子域），调用 `shell.openExternal`。`docs/current/electron.md:119` 当前规则「不使用 `shell.openExternal`」必须同批更新。
+- 新增 `workspace:openVoiceTranscriptionProviderConsole`，不接受 renderer URL payload；main 固定使用火山引擎控制台 URL，校验 host 后调用 `shell.openExternal`。
 
 ### 六、工程实现说明
 
@@ -241,7 +241,7 @@ JSON shape：
 | `workspace:saveVoiceTranscriptionApiKey`          | `{ apiKey: string }`   | 同上                                                                                                   | 先写 safeStorage 后 probe，原子返回最新状态                            |
 | `workspace:clearVoiceTranscriptionApiKey`         | `{}`                   | 同上                                                                                                   | 清空 key + 重置 validation 字段                                        |
 | `workspace:validateVoiceTranscriptionCredentials` | `{}`                   | `{ ok, code: 'ok' \| 'auth' \| 'network', message? }`                                                  | 主动 probe，更新 `lastValidatedAt/lastValidationOk/lastValidationCode` |
-| `workspace:openExternalUrl`（扩展）               | `{ url: string }`      | `{ ok: true } \| typed error`                                                                          | main 校验 host allowlist，调 `shell.openExternal`                      |
+| `workspace:openVoiceTranscriptionProviderConsole` | `undefined`            | `{ ok: true } \| typed error`                                                                          | main 固定火山引擎控制台 URL，校验 host 后调 `shell.openExternal`       |
 
 Sender validation：所有新 channel 校验 trusted main frame + `reo-app://renderer/index.html` + loopback dev origin + channel allowlist；无 workspaceHandle 但仍校验 sender。所有 IPC 输入有 Zod schema 严格校验。
 

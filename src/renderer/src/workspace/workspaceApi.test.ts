@@ -27,7 +27,7 @@ import {
   listMemorySpaces,
   openMemoryDocument,
   openMemorySpaceAgentsFile,
-  openExternalUrl,
+  openVoiceTranscriptionProviderConsole,
   openSegmentDocument,
   openSegmentSupplementDocument,
   openWorkspace,
@@ -68,7 +68,7 @@ describe('workspace renderer API wrapper', () => {
     openMemoryDocument: vi.fn(),
     openSegmentDocument: vi.fn(),
     openSegmentSupplementDocument: vi.fn(),
-    openExternalUrl: vi.fn(),
+    openVoiceTranscriptionProviderConsole: vi.fn(),
     copyMemorySpaceAbsolutePath: vi.fn(),
     copyMemoryAbsolutePath: vi.fn(),
     copySegmentAbsolutePath: vi.fn(),
@@ -132,10 +132,10 @@ describe('workspace renderer API wrapper', () => {
       reoWorkspace.copyMemoryRelativePath,
       reoWorkspace.copySegmentRelativePath,
       reoWorkspace.copySegmentSupplementRelativePath,
-      reoWorkspace.openExternalUrl,
     ]) {
       action.mockResolvedValue(okResponse);
     }
+    reoWorkspace.openVoiceTranscriptionProviderConsole.mockResolvedValue(okResponse);
 
     const memorySpacePayload = { workspaceId: 'ws_1' };
     const memoryPayload = {
@@ -167,7 +167,7 @@ describe('workspace renderer API wrapper', () => {
     await openSegmentSupplementDocument(supplementPayload);
     await copySegmentSupplementAbsolutePath(supplementPayload);
     await copySegmentSupplementRelativePath(supplementPayload);
-    await openExternalUrl({ url: 'https://console.volcengine.com/' });
+    await openVoiceTranscriptionProviderConsole();
 
     expect(reoWorkspace.revealMemorySpaceInFinder).toHaveBeenCalledWith(memorySpacePayload);
     expect(reoWorkspace.openMemorySpaceAgentsFile).toHaveBeenCalledWith(memorySpacePayload);
@@ -184,9 +184,7 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.openSegmentSupplementDocument).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.copySegmentSupplementAbsolutePath).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.copySegmentSupplementRelativePath).toHaveBeenCalledWith(supplementPayload);
-    expect(reoWorkspace.openExternalUrl).toHaveBeenCalledWith({
-      url: 'https://console.volcengine.com/',
-    });
+    expect(reoWorkspace.openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
   });
 
   it('forwards workspace file methods to the explicit preload surface', async () => {

@@ -38,7 +38,7 @@ import {
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
-  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+  WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -154,8 +154,8 @@ import {
   workspaceClearVoiceTranscriptionApiKeyResponseSchema,
   workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
-  workspaceOpenExternalUrlRequestSchema,
-  workspaceOpenExternalUrlResponseSchema,
+  workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
+  workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceHandleRequestSchema,
@@ -281,7 +281,7 @@ interface ShowOpenDirectoryDialogResult {
 type ShowOpenDirectoryDialog = () => Promise<ShowOpenDirectoryDialogResult>;
 type ShowItemInFolder = (filePath: string) => void;
 type OpenPath = (filePath: string) => Promise<string>;
-type OpenExternalUrl = (url: string) => Promise<void>;
+type OpenVoiceTranscriptionProviderConsole = (url: string) => Promise<void>;
 type WriteClipboardText = (text: string) => void;
 type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
 type ResolveMemorySpacePaths = (
@@ -334,7 +334,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
   readonly voiceSettingsStore: VoiceSettingsStore;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
-  readonly openExternal?: OpenExternalUrl;
+  readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
   readonly withDiagnostics?: typeof withDiagnosticSpan;
 }
@@ -422,10 +422,10 @@ type HandleValidateVoiceTranscriptionCredentialsOptions = HandleVoiceSettingsReq
   readonly probe: VoiceTranscriptionProbe;
 };
 
-type HandleOpenExternalUrlOptions = WorkspaceIpcBaseOptions & {
+type HandleOpenVoiceTranscriptionProviderConsoleOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
-  readonly openExternal?: OpenExternalUrl;
+  readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
 };
 
 type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
@@ -2091,6 +2091,8 @@ function hasExplicitPort(rawUrl: string): boolean {
   return /:\d*$/.test(hostPort);
 }
 
+const VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_URL = 'https://console.volcengine.com/';
+
 function isAllowedVolcengineExternalUrl(
   rawUrl: string
 ): { readonly ok: true; readonly url: URL } | { readonly ok: false } {
@@ -2368,17 +2370,19 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
   });
 }
 
-async function handleOpenExternalUrlCore({
+async function handleOpenVoiceTranscriptionProviderConsoleCore({
   event,
   input,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
   openExternal = openSystemExternalUrl,
-}: HandleOpenExternalUrlOptions): Promise<z.infer<typeof workspaceOpenExternalUrlResponseSchema>> {
+}: HandleOpenVoiceTranscriptionProviderConsoleOptions): Promise<
+  z.infer<typeof workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema>
+> {
   const trusted = validateWorkspaceSender({
     event,
-    channel: WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+    channel: WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
     expectedSession,
     expectedSessionKey,
     isTrustedUrl,
@@ -2387,19 +2391,19 @@ async function handleOpenExternalUrlCore({
     return trusted;
   }
 
-  const request = workspaceOpenExternalUrlRequestSchema.safeParse(input);
+  const request = workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema.safeParse(input);
   if (!request.success) {
     return workspaceError(
       'ERR_WORKSPACE_INVALID_REQUEST',
-      'openExternalUrl request is invalid',
+      'openVoiceTranscriptionProviderConsole request is invalid',
       'none-written'
     );
   }
 
-  const allowed = isAllowedVolcengineExternalUrl(request.data.url);
+  const allowed = isAllowedVolcengineExternalUrl(VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_URL);
   if (!allowed.ok) {
     return workspaceError(
-      'ERR_OPEN_EXTERNAL_URL_REJECTED',
+      'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
       '不允许打开该外部链接。',
       'none-written'
     );
@@ -2407,9 +2411,16 @@ async function handleOpenExternalUrlCore({
 
   try {
     await openExternal(allowed.url.toString());
-    return workspaceOpenExternalUrlResponseSchema.parse({ ok: true, value: {} });
+    return workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema.parse({
+      ok: true,
+      value: {},
+    });
   } catch {
-    return workspaceError('ERR_OPEN_EXTERNAL_URL_REJECTED', '外部链接无法打开。', 'none-written');
+    return workspaceError(
+      'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
+      '外部链接无法打开。',
+      'none-written'
+    );
   }
 }
 
@@ -2443,10 +2454,10 @@ export async function handleValidateVoiceTranscriptionCredentialsForTest(
   return handleValidateVoiceTranscriptionCredentialsCore(options);
 }
 
-export async function handleOpenExternalUrlForTest(
-  options: HandleOpenExternalUrlOptions
-): Promise<z.infer<typeof workspaceOpenExternalUrlResponseSchema>> {
-  return handleOpenExternalUrlCore(options);
+export async function handleOpenVoiceTranscriptionProviderConsoleForTest(
+  options: HandleOpenVoiceTranscriptionProviderConsoleOptions
+): Promise<z.infer<typeof workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema>> {
+  return handleOpenVoiceTranscriptionProviderConsoleCore(options);
 }
 
 type WorkspaceHandleRequestData = {
@@ -4698,15 +4709,17 @@ export function registerWorkspaceIpc({
         probe: voiceTranscriptionProbe,
       })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, (event, input) =>
-    handleOpenExternalUrlCore({
-      event,
-      input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-      openExternal,
-    })
+  registerWorkspaceIpcHandler(
+    WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+    (event, input) =>
+      handleOpenVoiceTranscriptionProviderConsoleCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        openExternal,
+      })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemoryTitle({

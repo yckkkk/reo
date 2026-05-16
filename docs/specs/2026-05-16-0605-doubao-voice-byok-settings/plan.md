@@ -2708,7 +2708,7 @@ placeholder. Live ASR errors are impossible when toggle is off."
 - Replace line 119 from `当前不使用 shell.openExternal` to:
 
 ```
-- 当前 `shell.openExternal` 只在 settings 场景下用于打开 volcengine.com host allowlist 内的链接（由 `workspace:openExternalUrl` 校验后转发），不暴露通用外链能力。
+- 当前 `shell.openExternal` 只在 settings 场景下用于打开 main-owned 火山引擎控制台链接，由 `workspace:openVoiceTranscriptionProviderConsole` 校验固定 URL 后转发；renderer 不传入 URL，当前不暴露通用外链能力。
 ```
 
 - Append 6 new channel descriptions to the existing IPC channels list (paragraph that enumerates Memory Space channels et al.). Each in one line, e.g.：
@@ -2719,10 +2719,10 @@ placeholder. Live ASR errors are impossible when toggle is off."
 - `workspace:saveVoiceTranscriptionApiKey` request 接受 `{ apiKey }`；main 先 safeStorage 加密写入再立即跑 probe，response 携带最新 snapshot，不返回额外 validation 字段。
 - `workspace:clearVoiceTranscriptionApiKey` request 不接受 payload；response 与 read 同；ciphertext、apiKeyLastFour 与 validation 字段一并清空。
 - `workspace:validateVoiceTranscriptionCredentials` request 不接受 payload；response `{ code: 'ok' \| 'auth' \| 'network', message? }`；同步更新 store lastValidation 字段。
-- `workspace:openExternalUrl` request 接受 `{ url }`；main 校验 host ∈ volcengine.com allowlist 后调用 `shell.openExternal`，否则返回 `ERR_OPEN_EXTERNAL_URL_REJECTED`。
+- `workspace:openVoiceTranscriptionProviderConsole` request 不接受 payload；main 固定火山引擎控制台 URL，校验 host 后调用 `shell.openExternal`，否则返回 `ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED`。
 ```
 
-- Update the IPC overall description to add `voice transcription settings read/setEnabled/save/clear/validate, open external URL`.
+- Update the IPC overall description to add `voice transcription settings read/setEnabled/save/clear/validate, open voice transcription provider console`.
 
 - [ ] **Step 2: Commit**
 
@@ -3004,3 +3004,4 @@ This section is authoritative over earlier illustrative code blocks. Phase 2 rev
 - Old Doubao env var names were removed from active source fixtures; remaining local env loader tests use generic main-only env names so the deleted BYOK variables cannot look like active config.
 - `AppShell` geometry constants are imported from `appShellGeometry` instead of re-exporting them through the component module.
 - Active spec README was corrected to start with Slice A收口事实, not the removed env-var/two-header state.
+- The external-link IPC was narrowed from renderer-provided URL payload to `workspace:openVoiceTranscriptionProviderConsole`; main owns the console URL and still validates it before `shell.openExternal`. The typed failure code is `ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED`, not a generic external URL code.

@@ -8,7 +8,7 @@ import { VoiceSettingsPanel } from './VoiceSettingsPanel';
 type VoiceSettingsBridge = Pick<
   Window['reoWorkspace'],
   | 'clearVoiceTranscriptionApiKey'
-  | 'openExternalUrl'
+  | 'openVoiceTranscriptionProviderConsole'
   | 'readVoiceTranscriptionSettings'
   | 'saveVoiceTranscriptionApiKey'
   | 'setVoiceTranscriptionEnabled'
@@ -98,7 +98,7 @@ function installVoiceSettingsBridge(
     saveVoiceTranscriptionApiKey: vi.fn(),
     clearVoiceTranscriptionApiKey: vi.fn(),
     validateVoiceTranscriptionCredentials: vi.fn(),
-    openExternalUrl: vi.fn(),
+    openVoiceTranscriptionProviderConsole: vi.fn(),
     ...overrides,
   };
 
@@ -167,14 +167,17 @@ describe('VoiceSettingsPanel enabled-no-key', () => {
   });
 
   it('opens the Volcengine console through the allowlisted workspace bridge', async () => {
-    const openExternalUrl = vi.fn(async () => ({ ok: true as const, value: {} }));
-    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, { openExternalUrl });
+    const openVoiceTranscriptionProviderConsole = vi.fn(async () => ({
+      ok: true as const,
+      value: {},
+    }));
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      openVoiceTranscriptionProviderConsole,
+    });
 
     await user.click(await screen.findByRole('button', { name: '打开火山引擎控制台' }));
 
-    expect(openExternalUrl).toHaveBeenCalledWith({
-      url: 'https://console.volcengine.com/',
-    });
+    expect(openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
   });
 });
 
