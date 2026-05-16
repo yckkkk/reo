@@ -1047,6 +1047,7 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
+        transcript: { exists: true, text: '补充录音转写正文' },
       },
     }),
     {
@@ -1059,6 +1060,7 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
+        transcript: { exists: true, text: '补充录音转写正文' },
       },
     }
   );

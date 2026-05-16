@@ -1620,7 +1620,7 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes with
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
-    assert.equal('transcript' in result.value, false);
+    assert.deepEqual(result.value.transcript, { exists: false, text: '' });
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }

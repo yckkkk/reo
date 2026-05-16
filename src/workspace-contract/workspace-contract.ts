@@ -708,6 +708,10 @@ export const workspaceReadFinalizedAudioSegmentSupplementResponseSchema = z.disc
         supplementId: supplementIdSchema,
         audio: z.instanceof(Uint8Array),
         audioByteLength: z.number().int().nonnegative(),
+        transcript: z.strictObject({
+          exists: z.boolean(),
+          text: z.string(),
+        }),
       }),
     }),
     workspaceErrorEnvelopeSchema,
