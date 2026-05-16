@@ -239,8 +239,7 @@ export function createRecordingTranscriptionSessionRegistry({
   }) {
     let liveSession: DoubaoStreamingAsrSession | null = null;
     liveSession = createSession({
-      accessKey: credentials.accessKey,
-      appKey: credentials.appKey,
+      apiKey: credentials.accessKey,
       onError: (message) => {
         const entry = entryRef.current;
         if (

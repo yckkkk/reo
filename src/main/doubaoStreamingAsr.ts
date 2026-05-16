@@ -23,8 +23,7 @@ const COMPRESSION_TYPE_GZIP = 0b0001;
 const DEFAULT_FINAL_RESULT_TIMEOUT_MS = 5000;
 
 type DoubaoAsrAuthInput = {
-  readonly accessKey: string;
-  readonly appKey: string;
+  readonly apiKey: string;
   readonly connectId: string;
 };
 
@@ -62,8 +61,7 @@ export type CreateDoubaoStreamingAsrSocketInput = {
 };
 
 export type DoubaoStreamingAsrSessionInput = {
-  readonly accessKey: string;
-  readonly appKey: string;
+  readonly apiKey: string;
   readonly connectId?: string;
   readonly createSocket?: (input: CreateDoubaoStreamingAsrSocketInput) => DoubaoStreamingAsrSocket;
   readonly finalResultTimeoutMs?: number;
@@ -310,21 +308,18 @@ function parseJsonPayload(payload: Buffer, compressed: boolean): unknown {
 }
 
 export function buildDoubaoAsrAuthHeaders({
-  accessKey,
-  appKey,
+  apiKey,
   connectId,
 }: DoubaoAsrAuthInput): Record<string, string> {
   return {
-    'X-Api-Access-Key': accessKey,
-    'X-Api-App-Key': appKey,
+    'X-Api-Key': apiKey,
     'X-Api-Connect-Id': connectId,
     'X-Api-Resource-Id': DOUBAO_STREAMING_ASR_RESOURCE_ID,
   };
 }
 
 export function createDoubaoStreamingAsrSession({
-  accessKey,
-  appKey,
+  apiKey,
   connectId = randomUUID(),
   createSocket = createDefaultDoubaoStreamingAsrSocket,
   finalResultTimeoutMs = DEFAULT_FINAL_RESULT_TIMEOUT_MS,
@@ -336,7 +331,7 @@ export function createDoubaoStreamingAsrSession({
   uid,
   url = DOUBAO_STREAMING_ASR_ENDPOINT,
 }: DoubaoStreamingAsrSessionInput): DoubaoStreamingAsrSession {
-  const secrets = [accessKey, appKey];
+  const secrets = [apiKey];
   let isClosed = false;
   let isStarted = false;
   let closeRequested = false;
@@ -446,7 +441,7 @@ export function createDoubaoStreamingAsrSession({
     }
 
     socket = createSocket({
-      headers: buildDoubaoAsrAuthHeaders({ accessKey, appKey, connectId }),
+      headers: buildDoubaoAsrAuthHeaders({ apiKey, connectId }),
       url,
     });
 

@@ -128,14 +128,12 @@ test('builds Doubao ASR auth headers without storing credentials in code', () =>
 
   assert.deepEqual(
     buildDoubaoAsrAuthHeaders({
-      accessKey: 'access-token-from-runtime',
-      appKey: 'app-id-from-runtime',
-      connectId: 'connect-1',
+      apiKey: 'test-api-key',
+      connectId: 'fixture-uuid',
     }),
     {
-      'X-Api-Access-Key': 'access-token-from-runtime',
-      'X-Api-App-Key': 'app-id-from-runtime',
-      'X-Api-Connect-Id': 'connect-1',
+      'X-Api-Key': 'test-api-key',
+      'X-Api-Connect-Id': 'fixture-uuid',
       'X-Api-Resource-Id': 'volc.seedasr.sauc.duration',
     }
   );
@@ -272,8 +270,7 @@ test('parses result frames and maps utterances to timestamped transcript segment
 test('opens a live Doubao ASR session and sends full, audio, and final frames', async () => {
   let socket: MockAsrSocket | null = null;
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'access-token-from-runtime',
-    appKey: 'app-id-from-runtime',
+    apiKey: 'test-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -286,9 +283,11 @@ test('opens a live Doubao ASR session and sends full, audio, and final frames', 
   const start = session.start();
   const activeSocket = requireSocket(socket);
   assert.equal(activeSocket.url, 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async');
-  assert.equal(activeSocket.headers['X-Api-App-Key'], 'app-id-from-runtime');
-  assert.equal(activeSocket.headers['X-Api-Access-Key'], 'access-token-from-runtime');
-  assert.equal(activeSocket.headers['X-Api-Resource-Id'], 'volc.seedasr.sauc.duration');
+  assert.deepEqual(activeSocket.headers, {
+    'X-Api-Key': 'test-api-key',
+    'X-Api-Connect-Id': activeSocket.headers['X-Api-Connect-Id'],
+    'X-Api-Resource-Id': 'volc.seedasr.sauc.duration',
+  });
   assert.ok(activeSocket.headers['X-Api-Connect-Id']);
 
   activeSocket.emit('open');
@@ -343,8 +342,7 @@ test('opens a live Doubao ASR session and sends full, audio, and final frames', 
 test('rejects finish when the live Doubao ASR socket closes before the final package', async () => {
   let socket: MockAsrSocket | null = null;
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'access-token-from-runtime',
-    appKey: 'app-id-from-runtime',
+    apiKey: 'test-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -370,8 +368,7 @@ test('maps live Doubao ASR responses to transcript segments', async () => {
   let socket: MockAsrSocket | null = null;
   const receivedSegments: unknown[] = [];
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'access-token-from-runtime',
-    appKey: 'app-id-from-runtime',
+    apiKey: 'test-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -418,8 +415,7 @@ test('reports an unexpected live Doubao ASR close after the stream has started',
   let socket: MockAsrSocket | null = null;
   const errors: string[] = [];
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'super-secret-runtime-token',
-    appKey: 'runtime-app-id',
+    apiKey: 'super-secret-runtime-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -439,16 +435,14 @@ test('reports an unexpected live Doubao ASR close after the stream has started',
 
   assert.equal(errors.length, 1);
   assert.match(errors[0]!, /连接已关闭/);
-  assert.doesNotMatch(errors[0]!, /super-secret-runtime-token/);
-  assert.doesNotMatch(errors[0]!, /runtime-app-id/);
+  assert.doesNotMatch(errors[0]!, /super-secret-runtime-api-key/);
 });
 
 test('reports live Doubao ASR errors without leaking runtime credentials', async () => {
   let socket: MockAsrSocket | null = null;
   const terminalErrors: string[] = [];
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'super-secret-runtime-token',
-    appKey: 'runtime-app-id',
+    apiKey: 'super-secret-runtime-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -466,14 +460,13 @@ test('reports live Doubao ASR errors without leaking runtime credentials', async
   activeSocket.emit(
     'message',
     buildServerErrorFrame({
-      message: 'unauthorized super-secret-runtime-token runtime-app-id',
+      message: 'unauthorized super-secret-runtime-api-key',
     })
   );
 
   assert.equal(terminalErrors.length, 1);
   assert.match(terminalErrors[0]!, /401/);
-  assert.doesNotMatch(terminalErrors[0]!, /super-secret-runtime-token/);
-  assert.doesNotMatch(terminalErrors[0]!, /runtime-app-id/);
+  assert.doesNotMatch(terminalErrors[0]!, /super-secret-runtime-api-key/);
   assert.equal(activeSocket.closeCalls, 1);
 
   session.sendAudioChunk(Buffer.from([9]));
@@ -484,8 +477,7 @@ test('reports live Doubao ASR transport errors without leaking runtime credentia
   let socket: MockAsrSocket | null = null;
   const errors: string[] = [];
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'super-secret-runtime-token',
-    appKey: 'runtime-app-id',
+    apiKey: 'super-secret-runtime-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
@@ -498,21 +490,19 @@ test('reports live Doubao ASR transport errors without leaking runtime credentia
 
   const start = session.start();
   const activeSocket = requireSocket(socket);
-  activeSocket.emit('error', new Error('network failed super-secret-runtime-token'));
+  activeSocket.emit('error', new Error('network failed super-secret-runtime-api-key'));
 
   await assert.rejects(start, /豆包流式语音识别连接失败/);
   assert.equal(errors.length, 1);
   assert.match(errors[0]!, /连接失败/);
-  assert.doesNotMatch(errors[0]!, /super-secret-runtime-token/);
-  assert.doesNotMatch(errors[0]!, /runtime-app-id/);
+  assert.doesNotMatch(errors[0]!, /super-secret-runtime-api-key/);
 });
 
 test('rejects start when the live Doubao ASR socket closes before opening', async () => {
   let socket: MockAsrSocket | null = null;
   const errors: string[] = [];
   const session = createDoubaoStreamingAsrSession({
-    accessKey: 'access-token-from-runtime',
-    appKey: 'app-id-from-runtime',
+    apiKey: 'test-api-key',
     createSocket: ({ headers, url }) => {
       socket = new MockAsrSocket({ headers, url });
       return socket;
