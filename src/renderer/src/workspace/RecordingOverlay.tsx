@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -79,6 +80,7 @@ import {
   updateRecordingRecoverySnapshot,
   writeRecordingRecoveryDraft,
 } from './recordingRecovery';
+import { voiceSettingsQueryOptions } from '@/settings/voiceSettingsQueries';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 type RecordingOverlayProps = {
@@ -314,6 +316,8 @@ export function RecordingOverlay({
   recordingTarget,
   workspaceSession,
 }: RecordingOverlayProps) {
+  const { data: voiceSettings } = useQuery(voiceSettingsQueryOptions());
+  const transcriptionEnabled = voiceSettings?.enabled === true;
   const [state, setState] = useState<RecordingState>(() => createInitialRecordingState());
   const [elapsedMs, setElapsedMs] = useState(0);
   const [timeline, setTimeline] = useState(() =>
@@ -704,6 +708,14 @@ export function RecordingOverlay({
   }
 
   async function finishActiveTranscription(recordingSession: number) {
+    if (!transcriptionEnabled) {
+      activeTranscriptionStartPromiseRef.current = null;
+      activeTranscriptionRef.current = null;
+      transcriptionAudioQueueRef.current = null;
+      finalTranscriptionNeedsBackfillRef.current = false;
+      return;
+    }
+
     const pendingStart = activeTranscriptionStartPromiseRef.current;
     if (pendingStart) {
       await pendingStart.catch(() => {});
@@ -778,6 +790,14 @@ export function RecordingOverlay({
     readonly revisionId: string;
     readonly timeOffsetMs: number;
   }) {
+    if (!transcriptionEnabled) {
+      activeTranscriptionStartPromiseRef.current = null;
+      activeTranscriptionRef.current = null;
+      transcriptionAudioQueueRef.current = null;
+      finalTranscriptionNeedsBackfillRef.current = false;
+      return;
+    }
+
     const response = await startRecordingTranscription({
       recordingFlowSessionId,
       recordingSessionId: recordingFlowSessionId,
@@ -827,6 +847,14 @@ export function RecordingOverlay({
     readonly revisionId: string;
     readonly timeOffsetMs: number;
   }) {
+    if (!transcriptionEnabled) {
+      activeTranscriptionStartPromiseRef.current = null;
+      activeTranscriptionRef.current = null;
+      transcriptionAudioQueueRef.current = null;
+      finalTranscriptionNeedsBackfillRef.current = false;
+      return;
+    }
+
     const startPromise = startActiveTranscription(input).finally(() => {
       if (activeTranscriptionStartPromiseRef.current === startPromise) {
         activeTranscriptionStartPromiseRef.current = null;
@@ -2396,6 +2424,11 @@ export function RecordingOverlay({
   }
 
   async function backfillFinalTranscript(recordingSession: number) {
+    if (!transcriptionEnabled) {
+      finalTranscriptionNeedsBackfillRef.current = false;
+      return;
+    }
+
     const needsBackfill =
       finalTranscriptionNeedsBackfillRef.current || transcriptDraftRef.current.trim().length === 0;
     if (!needsBackfill) {
@@ -2834,7 +2867,11 @@ export function RecordingOverlay({
 
   return (
     <RecordingSurface
-      description="录制本地音频，并在完成后保存声音和实时转写。"
+      description={
+        transcriptionEnabled
+          ? '录制本地音频，并在完成后保存声音和实时转写。'
+          : '录制本地音频，语音识别已关闭。'
+      }
       closeBlocked={!canClose}
       immersive
       onOpenChange={handleOpenChange}
@@ -2926,14 +2963,23 @@ export function RecordingOverlay({
               className="row-start-2 flex h-full w-full items-center justify-center"
               data-testid="recording-copy-slot"
             >
-              <RecordingTranscriptPreview
-                autoScrollMode={
-                  state.status === 'paused' || state.status === 'replacing' ? 'focus' : 'latest'
-                }
-                fallback="实时转写会在你说话时安静地出现在这里。"
-                focusTimeMs={transcriptFocusTimeMs}
-                segments={timeline.transcriptSegments}
-              />
+              {transcriptionEnabled ? (
+                <RecordingTranscriptPreview
+                  autoScrollMode={
+                    state.status === 'paused' || state.status === 'replacing' ? 'focus' : 'latest'
+                  }
+                  fallback="实时转写会在你说话时安静地出现在这里。"
+                  focusTimeMs={transcriptFocusTimeMs}
+                  segments={timeline.transcriptSegments}
+                />
+              ) : (
+                <p
+                  className={`max-w-[680px] text-balance text-muted-foreground ${RECORDING_SPEECH_TEXT_CLASS}`}
+                  role="status"
+                >
+                  语音识别已关闭，本次只保存本地录音。
+                </p>
+              )}
             </div>
             <div
               className="relative row-start-3 flex h-full items-center justify-center"

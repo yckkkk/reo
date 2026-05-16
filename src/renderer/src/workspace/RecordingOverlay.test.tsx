@@ -1,14 +1,17 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render as renderTestingLibrary, screen } from '@testing-library/react';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
+import { createReoQueryClient } from '../queryClient';
+import { voiceSettingsQueryKey } from '@/settings/voiceSettingsQueries';
 import { RecordingOverlay, type RecordingTarget } from './RecordingOverlay';
 import type {
   RecordingMediaAdapter,
   RecordingMediaController,
   RecordingMediaHandlers,
 } from './mediaRecorderAdapter';
-import type { WorkspaceSession } from './workspaceApi';
+import type { VoiceTranscriptionSettings, WorkspaceSession } from './workspaceApi';
 
 vi.mock('@/components/ui/toaster', () => {
   const toast = Object.assign(vi.fn(), {
@@ -44,6 +47,31 @@ const savedMemorySummary = {
   title: 'Daily memory 录音',
   updatedAt: '2026-05-06T13:09:00.000Z',
 };
+
+function createVoiceSettingsSnapshot(enabled: boolean = true): VoiceTranscriptionSettings {
+  return {
+    enabled,
+    apiKeyConfigured: enabled,
+    apiKeyLastFour: enabled ? '1234' : null,
+    lastValidatedAt: enabled ? '2026-05-16T09:00:00.000Z' : null,
+    lastValidationOk: enabled ? true : null,
+    lastValidationCode: enabled ? 'ok' : null,
+  };
+}
+
+let voiceSettingsForTest = createVoiceSettingsSnapshot();
+
+function render(ui: ReactElement) {
+  const queryClient = createReoQueryClient();
+  queryClient.setQueryData(voiceSettingsQueryKey(), voiceSettingsForTest);
+  function Wrapper({ children }: { readonly children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+  return {
+    queryClient,
+    ...renderTestingLibrary(ui, { wrapper: Wrapper }),
+  };
+}
 
 type RecordingOverlayForTestProps = Omit<
   ComponentProps<typeof RecordingOverlay>,
@@ -323,14 +351,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
     readVoiceTranscriptionSettings: vi.fn(async () => ({
       ok: true as const,
       value: {
-        settings: {
-          enabled: false,
-          apiKeyConfigured: false,
-          apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
-        },
+        settings: voiceSettingsForTest,
       },
     })),
     setVoiceTranscriptionEnabled: vi.fn(async () => ({
@@ -467,6 +488,7 @@ function expectNoMockTranscript() {
 describe('RecordingOverlay', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    voiceSettingsForTest = createVoiceSettingsSnapshot();
     vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
@@ -1089,6 +1111,50 @@ describe('RecordingOverlay', () => {
     act(() => media.emitPcm(new Uint8Array([5, 6, 7, 8])));
     await flushPromises();
     expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+  });
+
+  it('saves recording without live transcription when voice settings are disabled', async () => {
+    voiceSettingsForTest = createVoiceSettingsSnapshot(false);
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+    const onAudioSegmentFinalized = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onAudioSegmentFinalized={onAudioSegmentFinalized}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+    expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        workspaceHandle: workspaceSession.workspaceHandle,
+      })
+    );
+    expect(onAudioSegmentFinalized).toHaveBeenCalledWith(
+      expect.objectContaining({
+        segment: expect.objectContaining({ segmentId: 'seg_1' }),
+      })
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('starts durable capture before live transcription accepts and flushes buffered PCM', async () => {
