@@ -442,6 +442,9 @@ function createMediaAdapter() {
       }
       return controller;
     },
+    get handlers() {
+      return handlers;
+    },
     emitChunk: (chunk: Uint8Array, index = handlers.length - 1) => handlers[index]?.onChunk(chunk),
     emitPcm: (chunk: Uint8Array, index = handlers.length - 1) =>
       handlers[index]?.onPcmChunk?.(chunk),
@@ -1135,6 +1138,8 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
     await flushPromises();
     await emitRecordedAudio(media);
+    expect(media.handlers).toHaveLength(1);
+    expect(media.handlers.at(-1)?.onPcmChunk).toBeUndefined();
     act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
     await flushPromises();
 
@@ -1246,6 +1251,53 @@ describe('RecordingOverlay', () => {
     expect(bridge.sendRecordingTranscriptionAudio).toHaveBeenCalledWith({
       chunk: new Uint8Array([1, 2, 3, 4]),
       recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+  });
+
+  it('backfills after stop when voice settings are still loading', async () => {
+    const deferredSettings =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
+      >();
+    const bridge = installWorkspaceBridge({
+      readVoiceTranscriptionSettings: vi.fn(() => deferredSettings.promise),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />,
+      { seedVoiceSettings: false }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    act(() => vi.advanceTimersByTime(2000));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).toHaveBeenCalledWith({
+      recordingFlowSessionId: 'recording-1-completion-backfill',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      timeOffsetMs: 0,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    expect(bridge.sendRecordingTranscriptionAudio).toHaveBeenCalledWith({
+      chunk: new Uint8Array([1, 2, 3, 4]),
+      recordingFlowSessionId: 'recording-1-completion-backfill',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       workspaceHandle: workspaceSession.workspaceHandle,
@@ -1404,7 +1456,7 @@ describe('RecordingOverlay', () => {
         .mockResolvedValueOnce({
           ok: false as const,
           error: {
-            code: 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE' as const,
+            code: 'ERR_RECORDING_TRANSCRIPTION_FAILED' as const,
             message: 'ASR unavailable',
           },
         })
@@ -1819,6 +1871,8 @@ describe('RecordingOverlay', () => {
     await flushPromises();
 
     expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+    expect(bridge.finishRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.startRecordingTranscription).toHaveBeenCalledTimes(1);
     expect(bridge.appendRecordingAudioChunk).toHaveBeenCalled();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -1879,7 +1933,7 @@ describe('RecordingOverlay', () => {
         .mockResolvedValueOnce({
           ok: false as const,
           error: {
-            code: 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE' as const,
+            code: 'ERR_RECORDING_TRANSCRIPTION_FAILED' as const,
             message: '豆包流式语音识别暂时不可用，录音会继续保存。',
           },
         })
@@ -2278,7 +2332,7 @@ describe('RecordingOverlay', () => {
         .mockResolvedValueOnce({
           ok: false as const,
           error: {
-            code: 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE' as const,
+            code: 'ERR_RECORDING_TRANSCRIPTION_FAILED' as const,
             message: '豆包流式语音识别暂时不可用，录音会继续保存。',
           },
         })

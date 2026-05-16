@@ -406,6 +406,23 @@ test('voice settings IPC saveApiKey probes the same trimmed key that it persists
   assert.equal(store.readDecryptedApiKey(), 'abcd1234SECRET');
 });
 
+test('voice settings IPC saveApiKey ignores stale probe results after key changes', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions({ apiKey: 'first1234SECRET' }),
+    store,
+    probe: async () => {
+      await store.writeApiKey('second5678SECRET');
+      return { ok: true as const, code: 'ok' as const };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(store.readDecryptedApiKey(), 'second5678SECRET');
+  assert.equal(store.read().apiKeyLastFour, 'CRET');
+  assert.equal(store.read().lastValidationCode, null);
+});
+
 test('voice settings IPC saveApiKey reports validation persistence failures without leaking key', async () => {
   const { store } = makeVoiceSettingsStoreForIpcTest();
   const apiKey = 'abcd1234SECRET';
@@ -453,7 +470,7 @@ test('voice settings IPC saveApiKey maps storage failures without leaking key', 
 test('voice settings IPC clearApiKey wipes key and validation state', async () => {
   const { store } = makeVoiceSettingsStoreForIpcTest();
   await store.writeApiKey('abcd1234SECRET');
-  await store.recordValidation({ code: 'auth' });
+  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'auth' });
 
   const response = await handleClearVoiceTranscriptionApiKeyForTest({
     ...voiceIpcBaseOptions(),
@@ -504,6 +521,27 @@ test('voice settings IPC validate reads decrypted key only in main and handles m
   assert.equal(store.read().lastValidationOk, null);
   assert.equal(store.read().lastValidationCode, 'network');
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
+});
+
+test('voice settings IPC validate rejects stale probe results after key changes', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.writeApiKey('first1234SECRET');
+
+  const response = await handleValidateVoiceTranscriptionCredentialsForTest({
+    ...voiceIpcBaseOptions(),
+    store,
+    probe: async () => {
+      await store.writeApiKey('second5678SECRET');
+      return { ok: true as const, code: 'ok' as const };
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED');
+  }
+  assert.equal(store.readDecryptedApiKey(), 'second5678SECRET');
+  assert.equal(store.read().lastValidationCode, null);
 });
 
 test('voice settings IPC validate reports validation persistence failures without leaking key', async () => {

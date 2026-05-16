@@ -117,6 +117,28 @@ function validationOkForCode(code: VoiceSettingsValidationCode): boolean | null 
   return null;
 }
 
+function decryptApiKeyFromFile({
+  file,
+  platform,
+  safeStorage,
+}: {
+  readonly file: VoiceSettingsFile;
+  readonly platform: NodeJS.Platform;
+  readonly safeStorage: VoiceSettingsStoreSafeStorage;
+}): string | null {
+  if (file.apiKeyCiphertext === null) {
+    return null;
+  }
+  if (!isSecureStorageAvailable({ safeStorage, platform })) {
+    return null;
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(file.apiKeyCiphertext, 'base64'));
+  } catch {
+    return null;
+  }
+}
+
 export function createVoiceSettingsStore({
   safeStorage,
   userDataDir,
@@ -137,7 +159,10 @@ export function createVoiceSettingsStore({
     const queued = writeQueue
       .catch(() => {})
       .then(async () => {
-        await persist(mutator(cache));
+        const next = mutator(cache);
+        if (next !== cache) {
+          await persist(next);
+        }
       });
     writeQueue = queued.then(
       () => {},
@@ -191,30 +216,30 @@ export function createVoiceSettingsStore({
   }
 
   async function recordValidation({
+    apiKey,
     code,
   }: {
+    readonly apiKey: string;
     readonly code: VoiceSettingsValidationCode;
-  }): Promise<void> {
-    await updateFile((current) => ({
-      ...current,
-      lastValidatedAt: now().toISOString(),
-      lastValidationOk: validationOkForCode(code),
-      lastValidationCode: code,
-    }));
+  }): Promise<boolean> {
+    let applied = false;
+    await updateFile((current) => {
+      if (decryptApiKeyFromFile({ file: current, platform, safeStorage }) !== apiKey) {
+        return current;
+      }
+      applied = true;
+      return {
+        ...current,
+        lastValidatedAt: now().toISOString(),
+        lastValidationOk: validationOkForCode(code),
+        lastValidationCode: code,
+      };
+    });
+    return applied;
   }
 
   function readDecryptedApiKey(): string | null {
-    if (cache.apiKeyCiphertext === null) {
-      return null;
-    }
-    if (!isSecureStorageAvailable({ safeStorage, platform })) {
-      return null;
-    }
-    try {
-      return safeStorage.decryptString(Buffer.from(cache.apiKeyCiphertext, 'base64'));
-    } catch {
-      return null;
-    }
+    return decryptApiKeyFromFile({ file: cache, platform, safeStorage });
   }
 
   return {

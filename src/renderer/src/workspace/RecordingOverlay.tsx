@@ -40,6 +40,7 @@ import {
 import type {
   FinalizedAudioSegment,
   FinalizedSegmentSupplementRecording,
+  WorkspaceError,
   WorkspaceMemorySummary,
   WorkspaceSession,
 } from './workspaceApi';
@@ -133,6 +134,10 @@ const LONG_RECORDING_WARNING_NOTICE = '录音即将达到时长上限，请尽�
 const MAX_RECORDING_DURATION_NOTICE = '录音已达到时长上限，已自动暂停。';
 const SILENCE_NOTICE = '暂时没有检测到明显声音，你可以靠近麦克风或继续录音。';
 const COMPLETION_BACKFILL_UNAVAILABLE_NOTICE = '录音已保存，转写暂时不可用，稍后可重新尝试。';
+
+function isRecordingTranscriptionUnavailable(error: WorkspaceError) {
+  return error.code === 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE';
+}
 
 type CapturedRecordingChunk = {
   readonly chunk: Uint8Array;
@@ -357,6 +362,7 @@ export function RecordingOverlay({
   const activeTranscriptionStartPromiseRef = useRef<Promise<void> | null>(null);
   const pendingTranscriptionStartRef = useRef<PendingTranscriptionStart | null>(null);
   const transcriptionDisabledByMainRef = useRef(false);
+  const transcriptionUnavailableForSessionRef = useRef(false);
   const transcriptionAudioQueueRef = useRef<TranscriptionAudioQueue | null>(null);
   const liveAudioInputActiveRef = useRef(false);
   const pendingMicrophoneIntentRef = useRef<{
@@ -405,6 +411,31 @@ export function RecordingOverlay({
   const clearRecordingError = useCallback(() => {
     lastRecordingErrorToastRef.current = null;
   }, []);
+
+  function clearCapturedTranscriptionPcm() {
+    capturedPcmChunksRef.current = [];
+    completionBackfillTooLargeRef.current = false;
+    lastCapturedPcmChunkEndMsRef.current = readRecordingDurationMs();
+  }
+
+  function clearTranscriptionRuntime({ clearPcm = false }: { readonly clearPcm?: boolean } = {}) {
+    activeTranscriptionStartPromiseRef.current = null;
+    pendingTranscriptionStartRef.current = null;
+    activeTranscriptionRef.current = null;
+    transcriptionAudioQueueRef.current = null;
+    finalTranscriptionNeedsBackfillRef.current = false;
+    if (clearPcm) {
+      clearCapturedTranscriptionPcm();
+    }
+  }
+
+  function shouldCaptureTranscriptionPcm() {
+    return (
+      !transcriptionDisabled &&
+      !transcriptionDisabledByMainRef.current &&
+      !transcriptionUnavailableForSessionRef.current
+    );
+  }
 
   const replaceTranscriptDraft = useCallback((nextTranscript: string) => {
     transcriptDraftRef.current = nextTranscript;
@@ -513,6 +544,8 @@ export function RecordingOverlay({
     liveAudioInputActiveRef.current = false;
     completionBackfillTooLargeRef.current = false;
     finalTranscriptionNeedsBackfillRef.current = false;
+    transcriptionDisabledByMainRef.current = false;
+    transcriptionUnavailableForSessionRef.current = false;
     lastCapturedChunkEndMsRef.current = durationMs;
     lastCapturedPcmChunkEndMsRef.current = durationMs;
     lastNoticeableAudioAtMsRef.current = durationMs;
@@ -631,6 +664,7 @@ export function RecordingOverlay({
       pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
       transcriptionDisabledByMainRef.current = false;
+      transcriptionUnavailableForSessionRef.current = false;
       transcriptionAudioQueueRef.current = null;
       if (activeTranscription) {
         closeTranscriptionSilently(activeTranscription);
@@ -744,14 +778,23 @@ export function RecordingOverlay({
     if (
       !activeTranscriptionStartPromiseRef.current &&
       !activeTranscriptionRef.current &&
-      (!voiceSettingsKnown || !transcriptionEnabled)
+      !voiceSettingsKnown
     ) {
       activeTranscriptionStartPromiseRef.current = null;
       pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
-      transcriptionDisabledByMainRef.current = false;
       transcriptionAudioQueueRef.current = null;
-      finalTranscriptionNeedsBackfillRef.current = false;
+      finalTranscriptionNeedsBackfillRef.current = capturedPcmChunksRef.current.length > 0;
+      return;
+    }
+
+    if (
+      !activeTranscriptionStartPromiseRef.current &&
+      !activeTranscriptionRef.current &&
+      !transcriptionEnabled
+    ) {
+      transcriptionDisabledByMainRef.current = false;
+      clearTranscriptionRuntime({ clearPcm: true });
       return;
     }
 
@@ -830,11 +873,8 @@ export function RecordingOverlay({
     readonly timeOffsetMs: number;
   }) {
     if (!transcriptionEnabled) {
-      activeTranscriptionStartPromiseRef.current = null;
-      activeTranscriptionRef.current = null;
       transcriptionDisabledByMainRef.current = false;
-      transcriptionAudioQueueRef.current = null;
-      finalTranscriptionNeedsBackfillRef.current = false;
+      clearTranscriptionRuntime({ clearPcm: true });
       return;
     }
 
@@ -861,6 +901,12 @@ export function RecordingOverlay({
       return;
     }
     if (!response.ok) {
+      if (isRecordingTranscriptionUnavailable(response.error)) {
+        transcriptionUnavailableForSessionRef.current = true;
+        clearTranscriptionRuntime({ clearPcm: true });
+        notifyRecordingError(workspaceErrorDisplayMessage(response.error, '实时转写暂时不可用。'));
+        return;
+      }
       finalTranscriptionNeedsBackfillRef.current = true;
       notifyRecordingError(workspaceErrorDisplayMessage(response.error, '实时转写暂时不可用。'));
       return;
@@ -870,11 +916,8 @@ export function RecordingOverlay({
       return;
     }
     if (response.value.transcriptionMode === 'disabled') {
-      activeTranscriptionStartPromiseRef.current = null;
-      activeTranscriptionRef.current = null;
       transcriptionDisabledByMainRef.current = true;
-      transcriptionAudioQueueRef.current = null;
-      finalTranscriptionNeedsBackfillRef.current = false;
+      clearTranscriptionRuntime({ clearPcm: true });
       return;
     }
     activeTranscriptionRef.current = {
@@ -897,11 +940,8 @@ export function RecordingOverlay({
 
     pendingTranscriptionStartRef.current = null;
     if (!transcriptionEnabled) {
-      activeTranscriptionStartPromiseRef.current = null;
-      activeTranscriptionRef.current = null;
       transcriptionDisabledByMainRef.current = false;
-      transcriptionAudioQueueRef.current = null;
-      finalTranscriptionNeedsBackfillRef.current = false;
+      clearTranscriptionRuntime({ clearPcm: true });
       return;
     }
 
@@ -987,7 +1027,14 @@ export function RecordingOverlay({
           return;
         }
         activeTranscription.acceptsAudio = false;
-        finalTranscriptionNeedsBackfillRef.current = true;
+        if (!response.ok && isRecordingTranscriptionUnavailable(response.error)) {
+          transcriptionUnavailableForSessionRef.current = true;
+          finalTranscriptionNeedsBackfillRef.current = false;
+          transcriptionAudioQueueRef.current = null;
+          clearCapturedTranscriptionPcm();
+        } else {
+          finalTranscriptionNeedsBackfillRef.current = true;
+        }
         notifyRecordingError(
           response.ok
             ? '实时转写暂时不可用，录音会继续保存。'
@@ -1717,6 +1764,7 @@ export function RecordingOverlay({
   }: {
     readonly recordingSession: number;
   }): RecordingMediaHandlers {
+    const shouldInstallPcmHandler = !transcriptionDisabled;
     return {
       onChunk: (chunk) => {
         if (recordingSessionRef.current !== recordingSession) {
@@ -1741,13 +1789,21 @@ export function RecordingOverlay({
           appendWaveformLevel(samples);
         }
       },
-      onPcmChunk: (chunk) => {
-        if (recordingSessionRef.current !== recordingSession || !liveAudioInputActiveRef.current) {
-          return;
-        }
-        captureLivePcmChunk(chunk);
-        sendActiveTranscriptionAudio(recordingSession, chunk);
-      },
+      ...(shouldInstallPcmHandler
+        ? {
+            onPcmChunk: (chunk) => {
+              if (
+                recordingSessionRef.current !== recordingSession ||
+                !liveAudioInputActiveRef.current ||
+                !shouldCaptureTranscriptionPcm()
+              ) {
+                return;
+              }
+              captureLivePcmChunk(chunk);
+              sendActiveTranscriptionAudio(recordingSession, chunk);
+            },
+          }
+        : {}),
       onStop: () => {},
     };
   }
@@ -1786,6 +1842,8 @@ export function RecordingOverlay({
     replaceTranscriptDraft('');
     completionBackfillTooLargeRef.current = false;
     finalTranscriptionNeedsBackfillRef.current = false;
+    transcriptionDisabledByMainRef.current = false;
+    transcriptionUnavailableForSessionRef.current = false;
     resetRecordingDurationClock();
     const recordingSession = recordingSessionRef.current + 1;
     const recordingFlowSessionId = `recording-${recordingSession}`;
@@ -2475,7 +2533,11 @@ export function RecordingOverlay({
   }
 
   async function backfillFinalTranscript(recordingSession: number) {
-    if (!transcriptionEnabled || transcriptionDisabledByMainRef.current) {
+    if (
+      transcriptionDisabled ||
+      transcriptionDisabledByMainRef.current ||
+      transcriptionUnavailableForSessionRef.current
+    ) {
       finalTranscriptionNeedsBackfillRef.current = false;
       return;
     }
@@ -2853,6 +2915,8 @@ export function RecordingOverlay({
     clearRecordingError();
     finalTranscriptionNeedsBackfillRef.current = false;
     completionBackfillTooLargeRef.current = false;
+    transcriptionDisabledByMainRef.current = false;
+    transcriptionUnavailableForSessionRef.current = false;
     clearShortRecordingNotice();
     setState(createInitialRecordingState());
     const initialTimeline = createRecordingTimeline({

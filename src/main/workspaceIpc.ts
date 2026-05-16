@@ -2047,14 +2047,20 @@ async function runVoiceSettingsProbe(apiKey: string, probe: VoiceTranscriptionPr
 
 async function recordVoiceSettingsValidation(
   store: VoiceSettingsStore,
+  apiKey: string,
   code: VoiceTranscriptionProbeResult['code'],
   dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']>
 ) {
   try {
-    await store.recordValidation({ code });
-    return null;
+    return {
+      ok: true as const,
+      validationApplied: await store.recordValidation({ apiKey, code }),
+    };
   } catch {
-    return voiceSettingsWriteFailedError(dataRetention);
+    return {
+      ok: false as const,
+      error: voiceSettingsWriteFailedError(dataRetention),
+    };
   }
 }
 
@@ -2070,11 +2076,11 @@ async function probeAndPersistVoiceValidation({
   readonly store: VoiceSettingsStore;
 }) {
   const result = await runVoiceSettingsProbe(apiKey, probe);
-  const persistError = await recordVoiceSettingsValidation(store, result.code, dataRetention);
-  if (persistError) {
-    return { ok: false as const, error: persistError };
+  const persisted = await recordVoiceSettingsValidation(store, apiKey, result.code, dataRetention);
+  if (!persisted.ok) {
+    return { ok: false as const, error: persisted.error };
   }
-  return { ok: true as const, result };
+  return { ok: true as const, result, validationApplied: persisted.validationApplied };
 }
 
 function hasExplicitPort(rawUrl: string): boolean {
@@ -2358,6 +2364,13 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
   });
   if (!validation.ok) {
     return validation.error;
+  }
+  if (!validation.validationApplied) {
+    return workspaceError(
+      'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+      'X-Api-Key 已变更，请重新验证。',
+      'previous-file-preserved'
+    );
   }
   return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
     ok: true,

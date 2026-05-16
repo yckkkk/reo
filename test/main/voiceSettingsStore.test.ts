@@ -110,7 +110,7 @@ test('voiceSettingsStore: setEnabled and clearApiKey keep enabled independent fr
   try {
     await store.setEnabled(true);
     await store.writeApiKey('xxxx1234');
-    await store.recordValidation({ code: 'ok' });
+    await store.recordValidation({ apiKey: 'xxxx1234', code: 'ok' });
     await store.clearApiKey();
 
     assert.deepEqual(store.read(), {
@@ -211,18 +211,47 @@ test('voiceSettingsStore: readDecryptedApiKey returns null when secure safeStora
 test('voiceSettingsStore: recordValidation maps ok auth and network to tri-state snapshot', async () => {
   const { store, cleanup } = setup();
   try {
-    await store.recordValidation({ code: 'ok' });
+    await store.writeApiKey('abcd1234');
+    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'ok' }), true);
     assert.equal(store.read().lastValidationOk, true);
     assert.equal(store.read().lastValidationCode, 'ok');
     assert.match(store.read().lastValidatedAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
 
-    await store.recordValidation({ code: 'auth' });
+    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'auth' }), true);
     assert.equal(store.read().lastValidationOk, false);
     assert.equal(store.read().lastValidationCode, 'auth');
 
-    await store.recordValidation({ code: 'network' });
+    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'network' }), true);
     assert.equal(store.read().lastValidationOk, null);
     assert.equal(store.read().lastValidationCode, 'network');
+  } finally {
+    cleanup();
+  }
+});
+
+test('voiceSettingsStore: skips stale validation after key changes', async () => {
+  const { store, cleanup } = setup();
+  try {
+    await store.writeApiKey('first1234');
+    await store.writeApiKey('second5678');
+
+    assert.equal(await store.recordValidation({ apiKey: 'first1234', code: 'ok' }), false);
+    assert.deepEqual(store.read(), {
+      enabled: false,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '5678',
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    });
+
+    assert.equal(await store.recordValidation({ apiKey: 'second5678', code: 'auth' }), true);
+    assert.equal(store.read().lastValidationOk, false);
+    assert.equal(store.read().lastValidationCode, 'auth');
+
+    await store.clearApiKey();
+    assert.equal(await store.recordValidation({ apiKey: 'second5678', code: 'ok' }), false);
+    assert.equal(store.read().lastValidationCode, null);
   } finally {
     cleanup();
   }

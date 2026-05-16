@@ -3000,6 +3000,9 @@ This section is authoritative over earlier illustrative code blocks. Phase 2 rev
 - Real-key verification artifacts must redact key fragments; only result code and non-secret protocol metadata may be recorded.
 - Probe service error mapping is credential-specific: 401/403 service error frames map to `auth`; quota, 5xx, malformed service errors and all non-auth transport failures map to `network`.
 - `workspace:saveVoiceTranscriptionApiKey` now distinguishes `none-written`, `previous-file-preserved`, and `file-written-index-stale`; if the key file is already written but validation-state persistence fails, renderer invalidates `['settings', 'voice']`, clears the draft, and shows only the refreshed last4 projection.
+- Validation persistence is bound to the exact X-Api-Key value that was probed; stale save/validate probe results cannot mark a later key or cleared key as valid or invalid.
+- Recording capture does not install the PCM transcription hot path when voice transcription is known disabled; missing-key unavailable starts disable session backfill instead of retrying the same impossible completion path.
+- If voice settings are still loading when recording stops, completion backfill asks main for the current start-time settings instead of silently losing the saved recording's transcript opportunity.
 - Settings sidebar keeps the same width, color, item gutters, top spacing, titlebar drag behavior, and no-drag control boundaries as the main AppShell sidebar.
 - Old Doubao env var names were removed from active source fixtures; remaining local env loader tests use generic main-only env names so the deleted BYOK variables cannot look like active config.
 - `AppShell` geometry constants are imported from `appShellGeometry` instead of re-exporting them through the component module.
