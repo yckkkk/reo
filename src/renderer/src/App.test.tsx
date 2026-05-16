@@ -5204,6 +5204,12 @@ describe('App', () => {
       });
     });
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
+    const supplementContentInvalidations = invalidateSpy.mock.calls.filter(
+      ([options]) =>
+        options?.exact === true &&
+        JSON.stringify(options.queryKey) === JSON.stringify(supplementContentKey)
+    );
+    expect(supplementContentInvalidations).toHaveLength(1);
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.queryByText('1 个片段 · 00:00')).not.toBeInTheDocument();
   });
@@ -7175,6 +7181,221 @@ describe('App', () => {
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.createMemory).not.toHaveBeenCalled();
   });
+
+  it('refreshes an active SegmentSupplement panel after its transcript is saved', async () => {
+    const user = userEvent.setup();
+    installRecordingBrowserMocks();
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    const birthdayMemory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-04-12T09:00:00.000Z',
+      updatedAt: '2026-04-12T09:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 135_000,
+      audioByteLength: 4096,
+      hasTranscript: true,
+      supplementCount: 0,
+    };
+    const parentSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: 'Birthday candles',
+      createdAt: '2026-04-12T09:00:00.000Z',
+      updatedAt: '2026-04-12T09:10:00.000Z',
+      durationMs: 135_000,
+      audioByteLength: 4096,
+      transcript: { exists: true },
+      supplementCount: 0,
+      supplements: [],
+    };
+    const supplementWithoutTranscript = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+      type: 'audio' as const,
+      title: '补充录音',
+      createdAt: '2026-04-12T09:15:00.000Z',
+      updatedAt: '2026-04-12T09:15:00.000Z',
+      durationMs: 1200,
+      audioByteLength: 1,
+      transcript: { exists: false },
+    };
+    const segmentWithSupplementWithoutTranscript = {
+      ...parentSegment,
+      updatedAt: '2026-04-12T09:15:00.000Z',
+      supplementCount: 1,
+      supplements: [supplementWithoutTranscript],
+    };
+    const supplementWithTranscript = {
+      ...supplementWithoutTranscript,
+      transcript: { exists: true },
+    };
+    const segmentWithSupplementTranscript = {
+      ...segmentWithSupplementWithoutTranscript,
+      supplements: [supplementWithTranscript],
+    };
+    const saveDeferred =
+      createDeferred<Awaited<ReturnType<typeof reoWorkspace.saveSegmentSupplementTranscript>>>();
+    const finalTranscriptSegment = {
+      endTimeMs: 1100,
+      isFinal: true,
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      startTimeMs: 100,
+      text: '现场补充转写',
+    };
+    let transcriptReadReady = false;
+
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [birthdayMemory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...birthdayMemory,
+          workspaceId: 'ws_1',
+          segments: [parentSegment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        supplementId: payload.supplementId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: transcriptReadReady
+          ? { exists: true, text: '现场补充转写' }
+          : { exists: false, text: '' },
+      },
+    }));
+    reoWorkspace.onRecordingTranscriptionEvent.mockImplementation((listener) => {
+      transcriptionListener = listener;
+      return () => {};
+    });
+    reoWorkspace.finishRecordingTranscription.mockResolvedValue({
+      ok: true,
+      value: {
+        accepted: true,
+        segments: [finalTranscriptSegment],
+      },
+    });
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.createSegmentSupplementRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: { supplementId: 'sup_birthday_followup', nextSequence: 0 },
+    });
+    reoWorkspace.appendSegmentSupplementRecordingAudioChunk.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 1 },
+    });
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...birthdayMemory,
+          updatedAt: '2026-04-12T09:15:00.000Z',
+          supplementCount: 1,
+        },
+        segment: segmentWithSupplementWithoutTranscript,
+        supplement: supplementWithoutTranscript,
+      },
+    });
+    reoWorkspace.saveSegmentSupplementTranscript.mockReturnValue(saveDeferred.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await findTitlebarMemoryControl('My seventh birthday');
+    await user.click(await screen.findByRole('button', { name: '添加片段补充内容' }));
+    await user.click(await screen.findByRole('menuitem', { name: '录音补充' }));
+    await user.click(screen.getByRole('button', { name: '开始录音' }));
+    await screen.findByRole('button', { name: '停止录音' });
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [finalTranscriptSegment],
+      })
+    );
+    await user.click(screen.getByRole('button', { name: '停止录音' }));
+    await screen.findByText(/录音时间较短/);
+    await user.click(screen.getByRole('button', { name: '停止录音' }));
+
+    expect(await screen.findByText('这段补充录音还没有转录。')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reoWorkspace.saveSegmentSupplementTranscript).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        supplementId: 'sup_birthday_followup',
+        markdown: '现场补充转写',
+      })
+    );
+
+    transcriptReadReady = true;
+    await act(async () => {
+      saveDeferred.resolve({
+        ok: true,
+        value: {
+          memory: {
+            ...birthdayMemory,
+            updatedAt: '2026-04-12T09:15:00.000Z',
+            supplementCount: 1,
+          },
+          segment: segmentWithSupplementTranscript,
+          supplement: supplementWithTranscript,
+          saved: true,
+        },
+      });
+      await saveDeferred.promise;
+    });
+
+    expect(await screen.findByText('现场补充转写')).toBeInTheDocument();
+  }, 10_000);
 
   it('opens the recording overlay from the current memory stage FAB', async () => {
     const user = userEvent.setup();

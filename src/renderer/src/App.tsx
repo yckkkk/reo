@@ -1551,62 +1551,62 @@ export function App() {
     );
   }
 
-  function handleSegmentSupplementFinalized(finalized: FinalizedSegmentSupplementRecording) {
-    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+  function handleSegmentSupplementFinalized(
+    finalized: FinalizedSegmentSupplementRecording,
+    options: { readonly refreshContent?: boolean } = {}
+  ) {
+    const activeSession = workspaceSessionRef.current;
+    if (
+      !activeSession ||
+      activeSession.workspaceHandle !== activeWorkspaceSession.workspaceHandle ||
+      activeSession.workspaceId !== activeWorkspaceSession.workspaceId
+    ) {
+      return;
+    }
+
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeSession);
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
       snapshotQueryKey,
       (currentSnapshot) =>
         mergeMemoryIntoSession(
           {
-            ...activeWorkspaceSession,
-            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+            ...activeSession,
+            snapshot: currentSnapshot ?? activeSession.snapshot,
           },
           finalized.memory
         ).snapshot
     );
-    queryClient.setQueryData<
-      | {
-          readonly requestId: string;
-          readonly detail: import('./workspace/workspaceApi').WorkspaceMemoryDetail;
-        }
-      | undefined
-    >(
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
       memoryDetailQueryKey({
-        workspaceId: activeWorkspaceSession.workspaceId,
+        workspaceId: activeSession.workspaceId,
         memoryId: finalized.memory.memoryId,
       }),
       (currentDetail) =>
-        currentDetail
-          ? {
-              ...currentDetail,
-              detail: {
-                ...currentDetail.detail,
-                ...finalized.memory,
-                workspaceId: currentDetail.detail.workspaceId,
-                segments: sortSegmentsByUpdatedAt(
-                  currentDetail.detail.segments.map((segment) =>
-                    segment.segmentId === finalized.segment.segmentId ? finalized.segment : segment
-                  )
-                ),
-              },
-            }
-          : currentDetail
+        mergeSegmentIntoMemoryDetail(
+          currentDetail,
+          finalized.memory,
+          finalized.segment,
+          activeSession.workspaceId
+        )
     );
     setSelectedMemoryId(finalized.memory.memoryId);
-    setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceId === activeWorkspaceSession.workspaceId
-        ? mergeMemoryIntoSession(currentSession, finalized.memory)
-        : currentSession
+    setWorkspaceSession((session) =>
+      session?.workspaceHandle === activeSession.workspaceHandle &&
+      session.workspaceId === activeSession.workspaceId
+        ? mergeMemoryIntoSession(session, finalized.memory)
+        : session
     );
-    void queryClient.invalidateQueries({
-      exact: true,
-      queryKey: segmentSupplementContentQueryKey({
-        workspaceId: activeWorkspaceSession.workspaceId,
-        memoryId: finalized.memory.memoryId,
-        segmentId: finalized.segment.segmentId,
-        supplementId: finalized.supplement.supplementId,
-      }),
-    });
+    if (options.refreshContent) {
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: segmentSupplementContentQueryKey({
+          workspaceId: activeSession.workspaceId,
+          memoryId: finalized.memory.memoryId,
+          segmentId: finalized.segment.segmentId,
+          supplementId: finalized.supplement.supplementId,
+        }),
+      });
+    }
   }
 
   async function saveRecoveredRecording() {
@@ -1671,11 +1671,14 @@ export function App() {
               workspaceId: activeWorkspaceSession.workspaceId,
             });
             if (transcriptResponse.ok) {
-              handleSegmentSupplementFinalized({
-                supplement: transcriptResponse.value.supplement,
-                memory: transcriptResponse.value.memory,
-                segment: transcriptResponse.value.segment,
-              });
+              handleSegmentSupplementFinalized(
+                {
+                  supplement: transcriptResponse.value.supplement,
+                  memory: transcriptResponse.value.memory,
+                  segment: transcriptResponse.value.segment,
+                },
+                { refreshContent: true }
+              );
             } else {
               transcriptSaved = false;
               toast.error('补充录音已保存，转写暂时无法写入。', {

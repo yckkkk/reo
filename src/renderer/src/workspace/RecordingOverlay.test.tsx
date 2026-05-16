@@ -628,6 +628,86 @@ describe('RecordingOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('ignores stale SegmentSupplement transcript save failures after close', async () => {
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    const transcriptSave =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['saveSegmentSupplementTranscript']>>
+      >();
+    const bridge = installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+      saveSegmentSupplementTranscript: vi.fn(() => transcriptSave.promise),
+    });
+    const media = createMediaAdapter();
+    const onOpenChange = vi.fn();
+    const onSegmentSupplementFinalized = vi.fn();
+
+    const { unmount } = render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={onOpenChange}
+        onAudioSegmentFinalized={() => {}}
+        onSegmentSupplementFinalized={onSegmentSupplementFinalized}
+        open
+        recordingTarget={{
+          kind: 'segment-supplement',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+          title: '补充录音1',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1600,
+            isFinal: true,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 200,
+            text: '现场补充转写',
+          },
+        ],
+      })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存录音' }));
+    await flushPromises();
+
+    expect(bridge.saveSegmentSupplementTranscript).toHaveBeenCalledTimes(1);
+    expect(onSegmentSupplementFinalized).toHaveBeenCalledTimes(1);
+
+    vi.mocked(toast.error).mockClear();
+    unmount();
+    await act(async () => {
+      transcriptSave.resolve({
+        ok: false,
+        error: {
+          code: 'ERR_RECORDING_TRANSCRIPTION_FAILED',
+          message: 'save failed',
+        },
+      });
+      await transcriptSave.promise;
+    });
+
+    expect(toast.error).not.toHaveBeenCalledWith('补充录音已保存，转写暂时无法写入。');
+  });
+
   it('does not expose mid-track replacement for segment supplement recording', async () => {
     const bridge = installWorkspaceBridge();
     const media = createMediaAdapter();

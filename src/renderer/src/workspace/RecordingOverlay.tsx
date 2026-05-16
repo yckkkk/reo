@@ -88,7 +88,10 @@ type RecordingOverlayProps = {
   readonly onRecordingContentSaved?: (content: SavedRecordingContent) => void;
   readonly onAudioSegmentFinalized: (recording: FinalizedAudioSegment) => void;
   readonly onRecordingFlowSettled?: () => void;
-  readonly onSegmentSupplementFinalized?: (recording: FinalizedSegmentSupplementRecording) => void;
+  readonly onSegmentSupplementFinalized?: (
+    recording: FinalizedSegmentSupplementRecording,
+    options?: { readonly refreshContent?: boolean }
+  ) => void;
   readonly open: boolean;
   readonly recoveredDraft?: RecordingRecoveryDraft | null;
   readonly recordingTarget: RecordingTarget;
@@ -2347,21 +2350,25 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
         workspaceId: workspaceSession.workspaceId,
       });
-      if (recordingSessionRef.current !== recordingSession) {
-        return false;
-      }
       if (response.ok) {
-        clearRecordingError();
-        onSegmentSupplementFinalized?.({
-          supplement: response.value.supplement,
-          memory: response.value.memory,
-          segment: response.value.segment,
-        });
+        if (recordingSessionRef.current === recordingSession) {
+          clearRecordingError();
+        }
+        onSegmentSupplementFinalized?.(
+          {
+            supplement: response.value.supplement,
+            memory: response.value.memory,
+            segment: response.value.segment,
+          },
+          { refreshContent: true }
+        );
         return true;
       }
-      notifyRecordingError(
-        workspaceErrorDisplayMessage(response.error, '补充录音已保存，转写暂时无法写入。')
-      );
+      if (recordingSessionRef.current === recordingSession) {
+        notifyRecordingError(
+          workspaceErrorDisplayMessage(response.error, '补充录音已保存，转写暂时无法写入。')
+        );
+      }
       return false;
     } catch (saveError) {
       if (recordingSessionRef.current === recordingSession) {
