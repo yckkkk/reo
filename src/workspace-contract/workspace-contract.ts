@@ -127,7 +127,6 @@ export const voiceTranscriptionSettingsSnapshotSchema = z.strictObject({
 
 const voiceTranscriptionSettingsResponseValueSchema = z.strictObject({
   settings: voiceTranscriptionSettingsSnapshotSchema,
-  validationError: z.string().optional(),
 });
 
 export const workspaceReadVoiceTranscriptionSettingsRequestSchema = workspaceNoInputSchema;

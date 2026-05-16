@@ -2023,8 +2023,53 @@ function safeVoiceValidationMessage(code: VoiceTranscriptionProbeResult['code'])
   return 'X-Api-Key 验证通过。';
 }
 
-function validationErrorForProbeResult(result: VoiceTranscriptionProbeResult): string | undefined {
-  return result.code === 'ok' ? undefined : safeVoiceValidationMessage(result.code);
+function voiceSettingsWriteFailedError() {
+  return workspaceError(
+    'ERR_VOICE_SETTINGS_WRITE_FAILED',
+    '语音设置无法写入本地配置。',
+    'none-written'
+  );
+}
+
+async function runVoiceSettingsProbe(apiKey: string, probe: VoiceTranscriptionProbe) {
+  try {
+    return await probe(apiKey);
+  } catch {
+    return {
+      code: 'network',
+      message: safeVoiceValidationMessage('network'),
+      ok: false,
+    } as const;
+  }
+}
+
+async function recordVoiceSettingsValidation(
+  store: VoiceSettingsStore,
+  code: VoiceTranscriptionProbeResult['code']
+) {
+  try {
+    await store.recordValidation({ code });
+    return null;
+  } catch {
+    return voiceSettingsWriteFailedError();
+  }
+}
+
+async function probeAndPersistVoiceValidation({
+  apiKey,
+  probe,
+  store,
+}: {
+  readonly apiKey: string;
+  readonly probe: VoiceTranscriptionProbe;
+  readonly store: VoiceSettingsStore;
+}) {
+  const result = await runVoiceSettingsProbe(apiKey, probe);
+  const persistError = await recordVoiceSettingsValidation(store, result.code);
+  if (persistError) {
+    return { ok: false as const, error: persistError };
+  }
+  return { ok: true as const, result };
 }
 
 function hasExplicitPort(rawUrl: string): boolean {
@@ -2186,8 +2231,9 @@ async function handleSaveVoiceTranscriptionApiKeyCore({
     );
   }
 
+  const apiKey = request.data.apiKey.trim();
   try {
-    await store.writeApiKey(request.data.apiKey);
+    await store.writeApiKey(apiKey);
   } catch (error) {
     const code =
       error instanceof Error && error.message === 'safeStorage unavailable'
@@ -2196,28 +2242,14 @@ async function handleSaveVoiceTranscriptionApiKeyCore({
     return workspaceError(code, '语音设置无法写入本地配置。', 'none-written');
   }
 
-  try {
-    const result = await probe(request.data.apiKey);
-    await store.recordValidation({ code: result.code });
-    return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
-      ok: true,
-      value: {
-        settings: store.read(),
-        ...(validationErrorForProbeResult(result)
-          ? { validationError: validationErrorForProbeResult(result) }
-          : {}),
-      },
-    });
-  } catch {
-    await store.recordValidation({ code: 'network' });
-    return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
-      ok: true,
-      value: {
-        settings: store.read(),
-        validationError: safeVoiceValidationMessage('network'),
-      },
-    });
+  const validation = await probeAndPersistVoiceValidation({ apiKey, probe, store });
+  if (!validation.ok) {
+    return validation.error;
   }
+  return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
+    ok: true,
+    value: { settings: store.read() },
+  });
 }
 
 async function handleClearVoiceTranscriptionApiKeyCore({
@@ -2301,28 +2333,24 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
   if (!apiKey) {
     return workspaceError(
       'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
-      '请先填写 X-Api-Key。',
+      '请先填写或重新保存 X-Api-Key。',
       'none-written'
     );
   }
 
-  try {
-    const result = await probe(apiKey);
-    await store.recordValidation({ code: result.code });
-    return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
-      ok: true,
-      value: {
-        code: result.code,
-        ...(result.code === 'ok' ? {} : { message: safeVoiceValidationMessage(result.code) }),
-      },
-    });
-  } catch {
-    await store.recordValidation({ code: 'network' });
-    return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
-      ok: true,
-      value: { code: 'network', message: safeVoiceValidationMessage('network') },
-    });
+  const validation = await probeAndPersistVoiceValidation({ apiKey, probe, store });
+  if (!validation.ok) {
+    return validation.error;
   }
+  return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
+    ok: true,
+    value: {
+      code: validation.result.code,
+      ...(validation.result.code === 'ok'
+        ? {}
+        : { message: safeVoiceValidationMessage(validation.result.code) }),
+    },
+  });
 }
 
 async function handleOpenExternalUrlCore({

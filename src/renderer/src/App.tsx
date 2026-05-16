@@ -541,6 +541,7 @@ export function App() {
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
   const [appMode, setAppMode] = useState<AppMode>('app');
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
     readThemePreference()
   );
@@ -1439,11 +1440,14 @@ export function App() {
       : memorySpaces;
   const settingsContent = (
     <SettingsShell
-      activeCategory="voice"
-      onReturnToApp={() => setAppMode('app')}
-      onSelectCategory={() => {}}
+      returnDisabled={settingsBusy}
+      onReturnToApp={() => {
+        if (!settingsBusy) {
+          setAppMode('app');
+        }
+      }}
     >
-      <VoiceSettingsPanel />
+      <VoiceSettingsPanel onBusyChange={setSettingsBusy} />
     </SettingsShell>
   );
   function openSettingsMode() {

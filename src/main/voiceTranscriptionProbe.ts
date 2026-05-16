@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import {
+  buildDoubaoAsrAuthHeaders,
+  buildDoubaoAsrFullRequestFrame,
   DOUBAO_STREAMING_ASR_ENDPOINT,
-  DOUBAO_STREAMING_ASR_RESOURCE_ID,
+  parseDoubaoAsrResponseFrame,
+  redactSecrets,
 } from './doubaoStreamingAsr.js';
 
 const DEFAULT_TIMEOUT_MS = 1000;
@@ -20,7 +23,12 @@ export type VoiceTranscriptionProbeResult =
       readonly ok: false;
     };
 
-export type VoiceTranscriptionProbeSocketEvent = 'close' | 'error' | 'open' | 'unexpected-response';
+export type VoiceTranscriptionProbeSocketEvent =
+  | 'close'
+  | 'error'
+  | 'message'
+  | 'open'
+  | 'unexpected-response';
 
 export type VoiceTranscriptionProbeSocket = {
   readonly close: () => void;
@@ -28,6 +36,7 @@ export type VoiceTranscriptionProbeSocket = {
     event: VoiceTranscriptionProbeSocketEvent,
     listener: (...args: readonly unknown[]) => void
   ) => VoiceTranscriptionProbeSocket;
+  readonly send: (data: Buffer) => void;
   readonly terminate: () => void;
 };
 
@@ -60,17 +69,14 @@ function createDefaultVoiceTranscriptionProbeSocket({
       socket.on(event, listener as never);
       return wrappedSocket;
     },
+    send: (data) => socket.send(data),
     terminate: () => socket.terminate(),
   };
   return wrappedSocket;
 }
 
 function buildProbeHeaders(apiKey: string): Record<string, string> {
-  return {
-    'X-Api-Connect-Id': randomUUID(),
-    'X-Api-Key': apiKey,
-    'X-Api-Resource-Id': DOUBAO_STREAMING_ASR_RESOURCE_ID,
-  };
+  return buildDoubaoAsrAuthHeaders({ apiKey, connectId: randomUUID() });
 }
 
 function readHttpStatusCode(args: readonly unknown[]) {
@@ -85,6 +91,30 @@ function readHttpStatusCode(args: readonly unknown[]) {
     }
   }
   return null;
+}
+
+function normalizeSocketMessageFrame(message: unknown): Buffer {
+  if (Buffer.isBuffer(message)) {
+    return message;
+  }
+  if (message instanceof ArrayBuffer) {
+    return Buffer.from(message);
+  }
+  if (ArrayBuffer.isView(message)) {
+    return Buffer.from(message.buffer, message.byteOffset, message.byteLength);
+  }
+  if (Array.isArray(message)) {
+    return Buffer.concat(message.map((entry) => normalizeSocketMessageFrame(entry)));
+  }
+  if (typeof message === 'string') {
+    return Buffer.from(message, 'utf8');
+  }
+  throw new Error('Doubao ASR probe response frame is unsupported.');
+}
+
+function probeMessage(error: unknown, apiKey: string) {
+  const message = error instanceof Error ? error.message : String(error);
+  return redactSecrets(message, [apiKey]);
 }
 
 function settleSocket(
@@ -132,7 +162,25 @@ export function runVoiceTranscriptionProbe({
     }
 
     socket
-      .on('open', () => settle({ code: 'ok', ok: true }))
+      .on('open', () => {
+        try {
+          socket?.send(buildDoubaoAsrFullRequestFrame({ sequence: 1, uid: 'reo-probe' }));
+        } catch {
+          settle({ code: 'network', message: 'probe request failed', ok: false });
+        }
+      })
+      .on('message', (message) => {
+        try {
+          const response = parseDoubaoAsrResponseFrame(normalizeSocketMessageFrame(message));
+          if (response.kind === 'error') {
+            settle({ code: 'auth', ok: false });
+            return;
+          }
+          settle({ code: 'ok', ok: true });
+        } catch (error) {
+          settle({ code: 'network', message: probeMessage(error, apiKey), ok: false });
+        }
+      })
       .on('error', () => settle({ code: 'network', message: 'probe network failure', ok: false }))
       .on('close', () => settle({ code: 'network', ok: false }))
       .on('unexpected-response', (...args) => {

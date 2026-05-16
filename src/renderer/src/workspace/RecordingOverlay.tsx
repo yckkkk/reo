@@ -356,6 +356,7 @@ export function RecordingOverlay({
   const activeTranscriptionRef = useRef<ActiveTranscriptionSession | null>(null);
   const activeTranscriptionStartPromiseRef = useRef<Promise<void> | null>(null);
   const pendingTranscriptionStartRef = useRef<PendingTranscriptionStart | null>(null);
+  const transcriptionDisabledByMainRef = useRef(false);
   const transcriptionAudioQueueRef = useRef<TranscriptionAudioQueue | null>(null);
   const liveAudioInputActiveRef = useRef(false);
   const pendingMicrophoneIntentRef = useRef<{
@@ -629,6 +630,7 @@ export function RecordingOverlay({
       activeTranscriptionStartPromiseRef.current = null;
       pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
+      transcriptionDisabledByMainRef.current = false;
       transcriptionAudioQueueRef.current = null;
       if (activeTranscription) {
         closeTranscriptionSilently(activeTranscription);
@@ -739,10 +741,15 @@ export function RecordingOverlay({
   }
 
   async function finishActiveTranscription(recordingSession: number) {
-    if (!voiceSettingsKnown || !transcriptionEnabled) {
+    if (
+      !activeTranscriptionStartPromiseRef.current &&
+      !activeTranscriptionRef.current &&
+      (!voiceSettingsKnown || !transcriptionEnabled)
+    ) {
       activeTranscriptionStartPromiseRef.current = null;
       pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
+      transcriptionDisabledByMainRef.current = false;
       transcriptionAudioQueueRef.current = null;
       finalTranscriptionNeedsBackfillRef.current = false;
       return;
@@ -825,6 +832,7 @@ export function RecordingOverlay({
     if (!transcriptionEnabled) {
       activeTranscriptionStartPromiseRef.current = null;
       activeTranscriptionRef.current = null;
+      transcriptionDisabledByMainRef.current = false;
       transcriptionAudioQueueRef.current = null;
       finalTranscriptionNeedsBackfillRef.current = false;
       return;
@@ -861,6 +869,14 @@ export function RecordingOverlay({
       finalTranscriptionNeedsBackfillRef.current = true;
       return;
     }
+    if (response.value.transcriptionMode === 'disabled') {
+      activeTranscriptionStartPromiseRef.current = null;
+      activeTranscriptionRef.current = null;
+      transcriptionDisabledByMainRef.current = true;
+      transcriptionAudioQueueRef.current = null;
+      finalTranscriptionNeedsBackfillRef.current = false;
+      return;
+    }
     activeTranscriptionRef.current = {
       acceptsAudio: true,
       recordingFlowSessionId,
@@ -883,11 +899,13 @@ export function RecordingOverlay({
     if (!transcriptionEnabled) {
       activeTranscriptionStartPromiseRef.current = null;
       activeTranscriptionRef.current = null;
+      transcriptionDisabledByMainRef.current = false;
       transcriptionAudioQueueRef.current = null;
       finalTranscriptionNeedsBackfillRef.current = false;
       return;
     }
 
+    transcriptionDisabledByMainRef.current = false;
     const startPromise = startActiveTranscription(input).finally(() => {
       if (activeTranscriptionStartPromiseRef.current === startPromise) {
         activeTranscriptionStartPromiseRef.current = null;
@@ -2457,7 +2475,7 @@ export function RecordingOverlay({
   }
 
   async function backfillFinalTranscript(recordingSession: number) {
-    if (!transcriptionEnabled) {
+    if (!transcriptionEnabled || transcriptionDisabledByMainRef.current) {
       finalTranscriptionNeedsBackfillRef.current = false;
       return;
     }

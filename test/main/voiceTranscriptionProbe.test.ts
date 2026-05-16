@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { gzipSync } from 'node:zlib';
 import {
   DOUBAO_STREAMING_ASR_ENDPOINT,
   DOUBAO_STREAMING_ASR_RESOURCE_ID,
@@ -15,6 +16,7 @@ type ProbeListener = (...args: readonly unknown[]) => void;
 
 class FakeProbeSocket implements VoiceTranscriptionProbeSocket {
   closeCalls = 0;
+  sentFrames: Buffer[] = [];
   terminateCalls = 0;
   private readonly listeners = new Map<VoiceTranscriptionProbeSocketEvent, ProbeListener[]>();
 
@@ -35,9 +37,38 @@ class FakeProbeSocket implements VoiceTranscriptionProbeSocket {
     return this;
   }
 
+  send(data: Buffer) {
+    this.sentFrames.push(data);
+  }
+
   terminate() {
     this.terminateCalls += 1;
   }
+}
+
+function buildServerResultFrame(payload: unknown) {
+  const encodedPayload = gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'));
+  const frame = Buffer.alloc(8 + encodedPayload.byteLength);
+  frame[0] = 0x11;
+  frame[1] = 0x90;
+  frame[2] = 0x11;
+  frame[3] = 0x00;
+  frame.writeUInt32BE(encodedPayload.byteLength, 4);
+  encodedPayload.copy(frame, 8);
+  return frame;
+}
+
+function buildServerErrorFrame(payload: unknown, code = 401) {
+  const encodedPayload = gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'));
+  const frame = Buffer.alloc(12 + encodedPayload.byteLength);
+  frame[0] = 0x11;
+  frame[1] = 0xf0;
+  frame[2] = 0x11;
+  frame[3] = 0x00;
+  frame.writeInt32BE(code, 4);
+  frame.writeUInt32BE(encodedPayload.byteLength, 8);
+  encodedPayload.copy(frame, 12);
+  return frame;
 }
 
 function createProbeWithSocket(socket: FakeProbeSocket) {
@@ -55,7 +86,7 @@ function createProbeWithSocket(socket: FakeProbeSocket) {
   return { capturedInput: captured.input, promise };
 }
 
-test('voiceTranscriptionProbe: creates a single-header websocket probe without audio payload', async () => {
+test('voiceTranscriptionProbe: creates a single-header websocket probe and verifies a service frame', async () => {
   const socket = new FakeProbeSocket();
   const { capturedInput, promise } = createProbeWithSocket(socket);
 
@@ -76,23 +107,38 @@ test('voiceTranscriptionProbe: creates a single-header websocket probe without a
   assert.equal(capturedInput.headers['X-Api-Access-Key'], undefined);
 
   socket.emit('open');
+  assert.equal(socket.sentFrames.length, 1);
+  socket.emit('message', buildServerResultFrame({ result: { text: '' } }));
 
   assert.deepEqual(await promise, { ok: true, code: 'ok' });
   assert.equal(socket.closeCalls, 1);
   assert.equal(socket.terminateCalls, 0);
 });
 
-test('voiceTranscriptionProbe: open wins and late socket events do not settle twice', async () => {
+test('voiceTranscriptionProbe: service response wins and late socket events do not settle twice', async () => {
   const socket = new FakeProbeSocket();
   const { promise } = createProbeWithSocket(socket);
 
   socket.emit('open');
+  socket.emit('message', buildServerResultFrame({ result: { text: '' } }));
   socket.emit('error', new Error('late network failure'));
   socket.emit('close', 1006);
 
   assert.deepEqual(await promise, { ok: true, code: 'ok' });
   assert.equal(socket.closeCalls, 1);
   assert.equal(socket.terminateCalls, 0);
+});
+
+test('voiceTranscriptionProbe: service error frames return auth', async () => {
+  const socket = new FakeProbeSocket();
+  const { promise } = createProbeWithSocket(socket);
+
+  socket.emit('open');
+  socket.emit('message', buildServerErrorFrame({ message: 'unauthorized fake-api-key-only' }));
+
+  assert.deepEqual(await promise, { ok: false, code: 'auth' });
+  assert.equal(socket.closeCalls, 0);
+  assert.equal(socket.terminateCalls, 1);
 });
 
 test('voiceTranscriptionProbe: HTTP 401 and 403 unexpected-response failures return auth', async () => {

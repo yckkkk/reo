@@ -157,20 +157,20 @@
 #### 7. `validation-failed-401`
 
 - 进入条件：probe 返回 401/403 或 4xx 非超时。
-- 页面表现：toggle ON；输入框 readonly 显示已输 key（不 mask）；状态点红 + 「X-Api-Key 无效或没有权限，请检查控制台」；保存按钮变「重试」。
+- 页面表现：toggle ON；保存后的输入框清空，只显示已配置末 4 位；状态点红 + 「X-Api-Key 无效或没有权限，请检查控制台」；保存按钮变「重试」。
 - 数据：safeStorage 已写入 + `lastValidationOk=false, lastValidationCode='auth'`。
 - 用户能做：改 key 重试 / 关 toggle 保留无效 key / 清除 / 返回。
 - 退出：改 key → `editing-with-key`；重试 → `validating`。
-- 验收：key 不清空；toast 文案正确。
+- 验收：已保存密钥不回显完整内容；toast 文案正确。
 
 #### 8. `validation-failed-network`
 
 - 进入条件：probe 超时、DNS 失败、5xx。
-- 页面表现：toggle ON；状态点黄 + 「无法连接豆包服务，请检查网络后重试」；输入框 readonly 显示已输 key；保存按钮变「重试」。
+- 页面表现：toggle ON；状态点黄 + 「无法连接豆包服务，请检查网络后重试」；保存后的输入框清空，只显示已配置末 4 位；保存按钮变「重试」。
 - 数据：safeStorage 已写入 + `lastValidationOk=null, lastValidationCode='network'`（unknown，不是 false）。
 - 用户能做：重试 / 关 toggle / 改 key / 返回。
 - 退出：重试 → `validating`。
-- 验收：key 不清空；网络恢复后重试可通过。
+- 验收：已保存密钥不回显完整内容；网络恢复后重试可通过。
 
 #### 9. `enabled-with-stale-key`
 
@@ -243,7 +243,7 @@ JSON shape：
 | ------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | `workspace:readVoiceTranscriptionSettings`        | `{}`                   | `{ enabled, apiKeyConfigured, apiKeyLastFour, lastValidatedAt, lastValidationOk, lastValidationCode }` | 不返回 key 本身；无 workspaceHandle                                    |
 | `workspace:setVoiceTranscriptionEnabled`          | `{ enabled: boolean }` | 同上                                                                                                   | 切 toggle                                                              |
-| `workspace:saveVoiceTranscriptionApiKey`          | `{ apiKey: string }`   | 同上 + `{ validationError?: string }`                                                                  | 先写 safeStorage 后 probe，原子返回最新状态                            |
+| `workspace:saveVoiceTranscriptionApiKey`          | `{ apiKey: string }`   | 同上                                                                                                   | 先写 safeStorage 后 probe，原子返回最新状态                            |
 | `workspace:clearVoiceTranscriptionApiKey`         | `{}`                   | 同上                                                                                                   | 清空 key + 重置 validation 字段                                        |
 | `workspace:validateVoiceTranscriptionCredentials` | `{}`                   | `{ ok, code: 'ok' \| 'auth' \| 'network', message? }`                                                  | 主动 probe，更新 `lastValidatedAt/lastValidationOk/lastValidationCode` |
 | `workspace:openExternalUrl`（扩展）               | `{ url: string }`      | `{ ok: true } \| typed error`                                                                          | main 校验 host allowlist，调 `shell.openExternal`                      |
@@ -341,7 +341,7 @@ TanStack Query keys（写入 `docs/current/data.md`）：
 ['settings', 'voice']  →  readVoiceTranscriptionSettings response
 ```
 
-Mutation invalidate：`setEnabled` / `saveApiKey` / `clear` / `validate` 任一 mutation 成功后 invalidate `['settings', 'voice']`。
+Mutation cache：`setEnabled` / `saveApiKey` / `clear` 成功后用 response snapshot seed `['settings', 'voice']`；`validate` 成功后 invalidate `['settings', 'voice']` 重新读取 validation snapshot。
 
 #### 6.5 录音 navigation gate 扩展
 
@@ -445,7 +445,7 @@ Mutation invalidate：`setEnabled` / `saveApiKey` / `clear` / `validate` 任一 
 - `docs/current/frontend.md:16`：shadcn/ui source 范围追加 `components/ui/switch.tsx`。
 - `docs/current/frontend.md:122`：录音 navigation gate 列表追加「切换到 settings 模式」一项。
 - `docs/current/frontend.md`：新增「Settings Shell」一节，描述 `mode: 'workspace' | 'settings'` 切换、左 nav rail、内容 panel 几何与 navigation gate。
-- `docs/current/data.md`：新增 voice transcription settings 实体描述（main-owned safeStorage + userData JSON），追加 `['settings', 'voice']` query key，描述 mutation invalidate 规则。
+- `docs/current/data.md`：新增 voice transcription settings 实体描述（main-owned safeStorage + userData JSON），追加 `['settings', 'voice']` query key，描述 mutation seed / invalidate 规则。
 - `docs/current/data.md`：把 `REO_DOUBAO_ASR_APP_ID/ACCESS_TOKEN` 相关描述（如有）删除。
 - `docs/current/quality.md`：如有「`.env.local` 加载豆包密钥」相关描述则同步删除。
 
@@ -458,7 +458,7 @@ Mutation invalidate：`setEnabled` / `saveApiKey` / `clear` / `validate` 任一 
 
 ### 十二、最终目标总结（可直接放在工程任务顶部）
 
-本次任务的最终交付是：让 Reo 用户可以通过 Sidebar 左下角齿轮 + 「设置」按钮进入同窗口的 Settings 路由，在「语音」类目下用一个独立 toggle 启用/停用流式语音识别，并在启用时录入并验证自己的火山引擎豆包大模型流式语音识别 X-Api-Key（新版控制台单 header 鉴权）。X-Api-Key 必须通过 Electron 官方 safeStorage（OS Keychain / DPAPI / libsecret）加密后写入 userData 下的专用 JSON，永远不进 renderer / IPC payload / 日志 / 错误信封 / 内容文件；renderer 只能通过 5 个新增的 application-scoped IPC channel 读到不含密文的状态投影（enabled / apiKeyConfigured / apiKeyLastFour / lastValidatedAt / lastValidationOk / lastValidationCode），TanStack Query key 为 `['settings','voice']`，所有写入 mutation 成功后必须 invalidate 该 key。保存时 main process 先写 safeStorage 后立即跑一次最小 WebSocket 握手 probe（1 秒 timeout、不发音频、只验鉴权），区分 ok / auth / network 三种 code 写回 store 并通过同一 response 原子返回。设置是 application-scoped，不绑定单个 workspace；录音中 sidebar 齿轮 disabled 并通过 root toast 阻止进入 settings；非录音时进入 settings 保留 workspace handle / session / lock，「返回应用」后 stage 状态完全恢复。底层 ASR 协议必须从旧版 X-Api-App-Key + X-Api-Access-Key 双 header 完全切换到新版 X-Api-Key 单 header，连同 `doubaoStreamingAsr.ts` 的 `DoubaoAsrAuthInput / DoubaoStreamingAsrSessionInput / redactSecrets` 和 `recordingTranscriptionSessions.ts` 的 `DoubaoCredentials / resolveDefaultDoubaoCredentials / redactCredentialText` 全部改造；`.env.local` 中 `REO_DOUBAO_ASR_APP_ID / REO_DOUBAO_ASR_ACCESS_TOKEN` 在代码侧的所有读取路径必须删除，按 CLAUDE.md 未发布不保留兼容性垫片硬约束不留 fallback。录音 start IPC 在 toggle disabled 时返回 `{ accepted: true, transcriptionMode: 'disabled' }`（不算错误，整条 transcript 链路安静关闭），在 toggle enabled 但 key 缺失时返回 `ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE` 引导用户去设置，在 toggle enabled 且 key 存在时进入现有 live session 路径（保留 5 秒 PCM buffer 自动重连）；live session 一旦 start 完成就用其 settings 快照走完整 session，不响应中途的设置变更。`docs/current/electron.md` 关于豆包 App ID / Access Token 段落与 IPC channel 列表、`docs/current/frontend.md` 关于 sidebar 入口、shadcn/ui source 范围、录音 navigation gate 与 Settings Shell、`docs/current/data.md` 关于 query keys 与 settings ownership 的段落必须同批更新。本次 spec 末尾完整列出 B（未转录状态可视化）、C（网络/凭证恢复后的自动轮询补转录）、D（转录 More 菜单 + 手动重新生成）、E（`bigmodel_async` vs `bigmodel` endpoint 校正）四项 follow-up，并明确写「A 收口后必须为每一项独立走完整 brainstorm → spec → plan → 实现 → 验证流程，禁止合并」。验收口径是 `npm run verify:quick` 全绿，加 grep 验证 `REO_DOUBAO_ASR_APP_ID / REO_DOUBAO_ASR_ACCESS_TOKEN / X-Api-App-Key / X-Api-Access-Key` 在 src 下零结果，加 Dev 内手动覆盖 9 个状态的全部转换以及三种主线录音行为，验证证据按 `docs/current/quality.md` 要求写入 `verification.md` 与 `artifacts/`。
+本次任务的最终交付是：让 Reo 用户可以通过 Sidebar 左下角齿轮 + 「设置」按钮进入同窗口的 Settings 路由，在「语音」类目下用一个独立 toggle 启用/停用流式语音识别，并在启用时录入并验证自己的火山引擎豆包大模型流式语音识别 X-Api-Key（新版控制台单 header 鉴权）。X-Api-Key 必须通过 Electron 官方 safeStorage（OS Keychain / DPAPI / libsecret）加密后写入 userData 下的专用 JSON，永远不进 renderer / IPC payload / 日志 / 错误信封 / 内容文件；renderer 只能通过 5 个新增的 application-scoped IPC channel 读到不含密文的状态投影（enabled / apiKeyConfigured / apiKeyLastFour / lastValidatedAt / lastValidationOk / lastValidationCode），TanStack Query key 为 `['settings','voice']`，`setEnabled` / `saveApiKey` / `clear` 成功后用 response snapshot seed 该 key，`validate` 成功后 invalidate 该 key。保存时 main process 先写 safeStorage 后立即跑一次最小 WebSocket probe（1 秒 timeout、不发音频、发送 full request 后等待服务响应），区分 ok / auth / network 三种 code 写回 store 并通过同一 response 原子返回。设置是 application-scoped，不绑定单个 workspace；录音中 sidebar 齿轮 disabled 并通过 root toast 阻止进入 settings；非录音时进入 settings 保留 workspace handle / session / lock，「返回应用」后 stage 状态完全恢复。底层 ASR 协议必须从旧版 X-Api-App-Key + X-Api-Access-Key 双 header 完全切换到新版 X-Api-Key 单 header，连同 `doubaoStreamingAsr.ts` 的 `DoubaoAsrAuthInput / DoubaoStreamingAsrSessionInput / redactSecrets` 和 `recordingTranscriptionSessions.ts` 的 `DoubaoCredentials / resolveDefaultDoubaoCredentials / redactCredentialText` 全部改造；`.env.local` 中 `REO_DOUBAO_ASR_APP_ID / REO_DOUBAO_ASR_ACCESS_TOKEN` 在代码侧的所有读取路径必须删除，按 CLAUDE.md 未发布不保留兼容性垫片硬约束不留 fallback。录音 start IPC 在 toggle disabled 时返回 `{ accepted: true, transcriptionMode: 'disabled' }`（不算错误，整条 transcript 链路安静关闭），在 toggle enabled 但 key 缺失时返回 `ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE` 引导用户去设置，在 toggle enabled 且 key 存在时进入现有 live session 路径（保留 5 秒 PCM buffer 自动重连）；live session 一旦 start 完成就用其 settings 快照走完整 session，不响应中途的设置变更。`docs/current/electron.md` 关于豆包 App ID / Access Token 段落与 IPC channel 列表、`docs/current/frontend.md` 关于 sidebar 入口、shadcn/ui source 范围、录音 navigation gate 与 Settings Shell、`docs/current/data.md` 关于 query keys 与 settings ownership 的段落必须同批更新。本次 spec 末尾完整列出 B（未转录状态可视化）、C（网络/凭证恢复后的自动轮询补转录）、D（转录 More 菜单 + 手动重新生成）、E（`bigmodel_async` vs `bigmodel` endpoint 校正）四项 follow-up，并明确写「A 收口后必须为每一项独立走完整 brainstorm → spec → plan → 实现 → 验证流程，禁止合并」。验收口径是 `npm run verify:quick` 全绿，加 grep 验证 `REO_DOUBAO_ASR_APP_ID / REO_DOUBAO_ASR_ACCESS_TOKEN / X-Api-App-Key / X-Api-Access-Key` 在 src 下零结果，加 Dev 内手动覆盖 9 个状态的全部转换以及三种主线录音行为，验证证据按 `docs/current/quality.md` 要求写入 `verification.md` 与 `artifacts/`。
 
 ## 范围外（follow-up）
 

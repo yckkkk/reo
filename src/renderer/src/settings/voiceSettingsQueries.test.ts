@@ -32,13 +32,7 @@ function installVoiceSettingsBridge(overrides: Partial<VoiceSettingsBridge> = {}
   const bridge: VoiceSettingsBridge = {
     readVoiceTranscriptionSettings: vi.fn(async () => ({
       ok: true as const,
-      value: {
-        settings: {
-          ...settingsProjection,
-          apiKey: 'full-secret-key',
-          apiKeyCiphertext: 'ciphertext',
-        },
-      },
+      value: { settings: settingsProjection },
     })),
     setVoiceTranscriptionEnabled: vi.fn(async () => ({
       ok: true as const,
@@ -108,7 +102,7 @@ describe('voice settings queries', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     await expect(queryClient.fetchQuery(voiceSettingsQueryOptions())).rejects.toThrow(
-      '无法加载语音设置。'
+      '语音设置无法写入本地配置。'
     );
   });
 
@@ -124,7 +118,7 @@ describe('voice settings queries', () => {
     });
   });
 
-  it('invalidates the exact voice settings key after successful settings writes', async () => {
+  it('seeds successful settings writes and only invalidates after validate', async () => {
     const queryClient = new QueryClient();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -132,33 +126,34 @@ describe('voice settings queries', () => {
       queryClient,
       setVoiceTranscriptionEnabledMutationOptions(queryClient)
     ).mutate({ enabled: false });
+    expect(queryClient.getQueryData(voiceSettingsQueryKey())).toEqual({
+      ...settingsProjection,
+      enabled: false,
+    });
+
     await new MutationObserver(
       queryClient,
       saveVoiceTranscriptionApiKeyMutationOptions(queryClient)
     ).mutate({ apiKey: 'abcd1234' });
+    expect(queryClient.getQueryData(voiceSettingsQueryKey())).toEqual(settingsProjection);
+
     await new MutationObserver(
       queryClient,
       clearVoiceTranscriptionApiKeyMutationOptions(queryClient)
     ).mutate(undefined);
+    expect(queryClient.getQueryData(voiceSettingsQueryKey())).toEqual({
+      ...settingsProjection,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+    });
+
     await new MutationObserver(
       queryClient,
       validateVoiceTranscriptionCredentialsMutationOptions(queryClient)
     ).mutate(undefined);
 
-    expect(invalidateSpy).toHaveBeenCalledTimes(4);
-    expect(invalidateSpy).toHaveBeenNthCalledWith(1, {
-      exact: true,
-      queryKey: ['settings', 'voice'],
-    });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(2, {
-      exact: true,
-      queryKey: ['settings', 'voice'],
-    });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(3, {
-      exact: true,
-      queryKey: ['settings', 'voice'],
-    });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(4, {
+    expect(invalidateSpy).toHaveBeenCalledOnce();
+    expect(invalidateSpy).toHaveBeenCalledWith({
       exact: true,
       queryKey: ['settings', 'voice'],
     });

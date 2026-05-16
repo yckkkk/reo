@@ -259,6 +259,77 @@ test('voice settings IPC read rejects an untrusted sender before returning setti
   }
 });
 
+test('voice settings IPC write channels reject untrusted senders before side effects', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const untrustedEvent: TrustedSenderEventAdapter = {
+    ...event,
+    senderFrame: {
+      routingId: 4,
+      topRoutingId: 4,
+      url: 'https://volcengine.com/settings',
+    },
+  };
+  let probeCalls = 0;
+  let openedUrls = 0;
+
+  const cases = [
+    () =>
+      handleSetVoiceTranscriptionEnabledForTest({
+        ...voiceIpcBaseOptions({ enabled: true }, untrustedEvent),
+        store,
+      }),
+    () =>
+      handleSaveVoiceTranscriptionApiKeyForTest({
+        ...voiceIpcBaseOptions({ apiKey: 'abcd1234SECRET' }, untrustedEvent),
+        store,
+        probe: async () => {
+          probeCalls += 1;
+          return { ok: true as const, code: 'ok' as const };
+        },
+      }),
+    () =>
+      handleClearVoiceTranscriptionApiKeyForTest({
+        ...voiceIpcBaseOptions(undefined, untrustedEvent),
+        store,
+      }),
+    () =>
+      handleValidateVoiceTranscriptionCredentialsForTest({
+        ...voiceIpcBaseOptions(undefined, untrustedEvent),
+        store,
+        probe: async () => {
+          probeCalls += 1;
+          return { ok: true as const, code: 'ok' as const };
+        },
+      }),
+    () =>
+      handleOpenExternalUrlForTest({
+        ...voiceIpcBaseOptions({ url: 'https://console.volcengine.com/' }, untrustedEvent),
+        openExternal: async () => {
+          openedUrls += 1;
+        },
+      }),
+  ];
+
+  for (const run of cases) {
+    const response = await run();
+    assert.equal(response.ok, false);
+    if (!response.ok) {
+      assert.equal(response.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+    }
+  }
+
+  assert.deepEqual(store.read(), {
+    enabled: false,
+    apiKeyConfigured: false,
+    apiKeyLastFour: null,
+    lastValidatedAt: null,
+    lastValidationOk: null,
+    lastValidationCode: null,
+  });
+  assert.equal(probeCalls, 0);
+  assert.equal(openedUrls, 0);
+});
+
 test('voice settings IPC setEnabled validates payload and toggles independently from key', async () => {
   const { store } = makeVoiceSettingsStoreForIpcTest();
   await store.writeApiKey('abcd1234SECRET');
@@ -312,12 +383,48 @@ test('voice settings IPC saveApiKey writes before probe and records ok auth netw
         response.value.settings.lastValidationOk,
         code === 'ok' ? true : code === 'auth' ? false : null
       );
-      assert.equal('validationError' in response.value, code !== 'ok');
+      assert.deepEqual(Object.keys(response.value), ['settings']);
     }
     const serialized = JSON.stringify(response);
     assert.equal(serialized.includes(apiKey), false);
     assert.equal(serialized.includes('enc:'), false);
   }
+});
+
+test('voice settings IPC saveApiKey probes the same trimmed key that it persists', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions({ apiKey: '  abcd1234SECRET  ' }),
+    store,
+    probe: async (key: string) => {
+      assert.equal(key, 'abcd1234SECRET');
+      return { ok: true as const, code: 'ok' as const };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(store.readDecryptedApiKey(), 'abcd1234SECRET');
+});
+
+test('voice settings IPC saveApiKey reports validation persistence failures without leaking key', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const apiKey = 'abcd1234SECRET';
+  const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions({ apiKey }),
+    store: {
+      ...store,
+      recordValidation: async () => {
+        throw new Error(`write failed for ${apiKey}`);
+      },
+    },
+    probe: async () => ({ ok: true as const, code: 'ok' as const }),
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_VOICE_SETTINGS_WRITE_FAILED');
+  }
+  assert.equal(JSON.stringify(response).includes(apiKey), false);
 });
 
 test('voice settings IPC saveApiKey maps storage failures without leaking key', async () => {
@@ -393,6 +500,28 @@ test('voice settings IPC validate reads decrypted key only in main and handles m
   }
   assert.equal(store.read().lastValidationOk, null);
   assert.equal(store.read().lastValidationCode, 'network');
+  assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
+});
+
+test('voice settings IPC validate reports validation persistence failures without leaking key', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.writeApiKey('abcd1234SECRET');
+
+  const response = await handleValidateVoiceTranscriptionCredentialsForTest({
+    ...voiceIpcBaseOptions(),
+    store: {
+      ...store,
+      recordValidation: async () => {
+        throw new Error('write failed for abcd1234SECRET');
+      },
+    },
+    probe: async () => ({ ok: true as const, code: 'ok' as const }),
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_VOICE_SETTINGS_WRITE_FAILED');
+  }
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
 });
 

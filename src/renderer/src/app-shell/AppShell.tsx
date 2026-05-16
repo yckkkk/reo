@@ -22,16 +22,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { MemorySpaceActionsMenu } from '../workspace/MemorySpaceActionsMenu';
 import { SidebarSettingsTrigger } from '../workspace/SidebarSettingsTrigger';
+import {
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  PANEL_RADIUS,
+  SIDEBAR_RESIZE_STEP,
+  TITLEBAR_HEIGHT,
+} from './appShellGeometry';
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
 export type AppShellActiveSection = 'home' | 'library' | 'workspace';
 
-export const MIN_SIDEBAR_WIDTH = 240;
-export const MAX_SIDEBAR_WIDTH = 520;
-export const SIDEBAR_RESIZE_STEP = 20;
-export const PANEL_RADIUS = 'var(--radius-md)';
-export const TITLEBAR_HEIGHT = 48;
+export { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, PANEL_RADIUS, SIDEBAR_RESIZE_STEP, TITLEBAR_HEIGHT };
 const TITLEBAR_CONTROL_LEFT = 80;
 const TITLEBAR_CONTROL_TOP = 2;
 const TITLEBAR_CONTROL_SIZE = 32;

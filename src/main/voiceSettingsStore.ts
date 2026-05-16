@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
 
 const SCHEMA_VERSION = 1;
 const FILE_NAME = 'voice-transcription-settings.json';
+const MAX_SETTINGS_FILE_BYTES = 64 * 1024;
 
 const validationCodeSchema = z.enum(['ok', 'auth', 'network']);
 
@@ -81,14 +82,27 @@ function fileToSnapshot(file: VoiceSettingsFile): VoiceSettingsSnapshot {
 }
 
 function loadFromDisk(filePath: string): VoiceSettingsFile {
-  if (!existsSync(filePath)) {
-    return defaultFile();
-  }
+  let fileDescriptor: number | null = null;
   try {
-    const parsed = voiceSettingsFileSchema.safeParse(JSON.parse(readFileSync(filePath, 'utf8')));
+    fileDescriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const metadata = fstatSync(fileDescriptor);
+    if (!metadata.isFile() || metadata.size > MAX_SETTINGS_FILE_BYTES) {
+      return defaultFile();
+    }
+    const parsed = voiceSettingsFileSchema.safeParse(
+      JSON.parse(readFileSync(fileDescriptor, 'utf8'))
+    );
     return parsed.success ? parsed.data : defaultFile();
   } catch {
     return defaultFile();
+  } finally {
+    if (fileDescriptor !== null) {
+      try {
+        closeSync(fileDescriptor);
+      } catch {
+        // Startup should fall back to the default settings file on local state read issues.
+      }
+    }
   }
 }
 
@@ -128,10 +142,22 @@ export function createVoiceSettingsStore({
 }: VoiceSettingsStoreOptions) {
   const filePath = getVoiceSettingsFilePath(userDataDir);
   let cache = loadFromDisk(filePath);
+  let writeQueue: Promise<void> = Promise.resolve();
 
   async function persist(next: VoiceSettingsFile): Promise<void> {
     await writeJsonAtomic(filePath, next);
     cache = next;
+  }
+
+  function updateFile(mutator: (current: VoiceSettingsFile) => VoiceSettingsFile): Promise<void> {
+    const queued = writeQueue.catch(() => {}).then(async () => {
+      await persist(mutator(cache));
+    });
+    writeQueue = queued.then(
+      () => {},
+      () => {}
+    );
+    return queued;
   }
 
   function requireSecureStorage(): void {
@@ -145,35 +171,37 @@ export function createVoiceSettingsStore({
   }
 
   async function setEnabled(enabled: boolean): Promise<void> {
-    await persist({ ...cache, enabled });
+    await updateFile((current) => ({ ...current, enabled }));
   }
 
   async function writeApiKey(apiKey: string): Promise<void> {
-    requireSecureStorage();
     const trimmed = apiKey.trim();
     if (trimmed.length < 4) {
       throw new Error('apiKey must be at least 4 characters');
     }
-    const encrypted = safeStorage.encryptString(trimmed).toString('base64');
-    await persist({
-      ...cache,
-      apiKeyCiphertext: encrypted,
-      apiKeyLastFour: trimmed.slice(-4),
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
+    await updateFile((current) => {
+      requireSecureStorage();
+      const encrypted = safeStorage.encryptString(trimmed).toString('base64');
+      return {
+        ...current,
+        apiKeyCiphertext: encrypted,
+        apiKeyLastFour: trimmed.slice(-4),
+        lastValidatedAt: null,
+        lastValidationOk: null,
+        lastValidationCode: null,
+      };
     });
   }
 
   async function clearApiKey(): Promise<void> {
-    await persist({
-      ...cache,
+    await updateFile((current) => ({
+      ...current,
       apiKeyCiphertext: null,
       apiKeyLastFour: null,
       lastValidatedAt: null,
       lastValidationOk: null,
       lastValidationCode: null,
-    });
+    }));
   }
 
   async function recordValidation({
@@ -181,12 +209,12 @@ export function createVoiceSettingsStore({
   }: {
     readonly code: VoiceSettingsValidationCode;
   }): Promise<void> {
-    await persist({
-      ...cache,
+    await updateFile((current) => ({
+      ...current,
       lastValidatedAt: now().toISOString(),
       lastValidationOk: validationOkForCode(code),
       lastValidationCode: code,
-    });
+    }));
   }
 
   function readDecryptedApiKey(): string | null {

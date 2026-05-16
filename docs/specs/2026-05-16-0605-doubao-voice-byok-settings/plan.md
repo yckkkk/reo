@@ -41,7 +41,7 @@
 - `src/renderer/src/components/ui/switch.tsx` — shadcn Switch source（Radix Switch + Reo design system token）。
 - `src/renderer/src/settings/SettingsShell.tsx` — 左 nav rail + 右 content panel + 返回按钮。
 - `src/renderer/src/settings/VoiceSettingsPanel.tsx` — 9 状态机 + key 输入 + 状态点 + 清除二次确认。
-- `src/renderer/src/settings/voiceSettingsQueries.ts` — TanStack Query options + mutation invalidate。
+- `src/renderer/src/settings/voiceSettingsQueries.ts` — TanStack Query options + mutation seed/invalidate。
 - `src/renderer/src/workspace/SidebarSettingsTrigger.tsx` — Sidebar 齿轮按钮。
 
 ### renderer 修改
@@ -1039,7 +1039,6 @@ export type VoiceTranscriptionSettingsSnapshot = z.infer<
 
 const settingsResponseValueSchema = z.strictObject({
   settings: voiceTranscriptionSettingsSnapshotSchema,
-  validationError: z.string().optional(),
 });
 
 export const workspaceReadVoiceTranscriptionSettingsRequestSchema = z.strictObject({});
@@ -1271,7 +1270,6 @@ async function handleSettingsSaveApiKey(
     ok: true as const,
     value: {
       settings: store.read(),
-      ...(result.code !== 'ok' ? { validationError: result.message ?? result.code } : {}),
     },
   };
 }
@@ -2718,7 +2716,7 @@ placeholder. Live ASR errors are impossible when toggle is off."
 ```
 - `workspace:readVoiceTranscriptionSettings` request 不接受 payload；response 返回 `settings: { enabled, apiKeyConfigured, apiKeyLastFour, lastValidatedAt, lastValidationOk, lastValidationCode }`，不返回 X-Api-Key 明文或密文。
 - `workspace:setVoiceTranscriptionEnabled` request 接受 `{ enabled }`；response 与 read 同。
-- `workspace:saveVoiceTranscriptionApiKey` request 接受 `{ apiKey }`；main 先 safeStorage 加密写入再立即跑 probe，response 携带最新 snapshot 与可选 `validationError`。
+- `workspace:saveVoiceTranscriptionApiKey` request 接受 `{ apiKey }`；main 先 safeStorage 加密写入再立即跑 probe，response 携带最新 snapshot，不返回额外 validation 字段。
 - `workspace:clearVoiceTranscriptionApiKey` request 不接受 payload；response 与 read 同；ciphertext、apiKeyLastFour 与 validation 字段一并清空。
 - `workspace:validateVoiceTranscriptionCredentials` request 不接受 payload；response `{ code: 'ok' \| 'auth' \| 'network', message? }`；同步更新 store lastValidation 字段。
 - `workspace:openExternalUrl` request 接受 `{ url }`；main 校验 host ∈ volcengine.com allowlist 后调用 `shell.openExternal`，否则返回 `ERR_OPEN_EXTERNAL_URL_REJECTED`。
@@ -2783,7 +2781,7 @@ git commit -m "docs(current): add Settings Shell section + voice settings sideba
 - 加一段：
 
 ```
-- Voice transcription settings 由 main process `voiceSettingsStore` 持有，文件 `userData/voice-transcription-settings.json` 经 `safeStorage` 加密 X-Api-Key 字段；renderer 通过 TanStack Query `['settings', 'voice']` 读取不含密文的 snapshot。Snapshot 字段为 `enabled / apiKeyConfigured / apiKeyLastFour / lastValidatedAt / lastValidationOk / lastValidationCode`。Mutation 成功后必须 invalidate exact key；该 query 不绑定 workspaceHandle，不在 workspace session 切换时清理。
+- Voice transcription settings 由 main process `voiceSettingsStore` 持有，文件 `userData/voice-transcription-settings.json` 经 `safeStorage` 加密 X-Api-Key 字段；renderer 通过 TanStack Query `['settings', 'voice']` 读取不含密文的 snapshot。Snapshot 字段为 `enabled / apiKeyConfigured / apiKeyLastFour / lastValidatedAt / lastValidationOk / lastValidationCode`。`setEnabled` / `saveApiKey` / `clear` 成功后 seed exact key，`validate` 成功后 invalidate exact key；该 query 不绑定 workspaceHandle，不在 workspace session 切换时清理。
 - Recording transcription session 在 start 时通过 `resolveVoiceSettings()` 拍下当前 voice settings 快照，并把 `transcriptionMode: 'live' \| 'disabled'` 写入 `WorkspaceRecordingTranscriptionControlResponse.value`。Live session 一旦 start 完成就不响应中途的 voice settings 变更。
 ```
 
@@ -2986,3 +2984,17 @@ This section is authoritative over earlier illustrative code blocks. Phase 2 rev
 - Current source fit: PASS after amendments. Paths, field exports, workspace bridge style, channel allowlist, main test runner, and App/AppShell ownership are now aligned with current repo.
 - Official protocol fit: PASS for A. Keep `bigmodel_async`, `volc.seedasr.sauc.duration`, and single `X-Api-Key`; treat the supplied Python demo as older dual-header reference only.
 - Executability: PASS with caveat that illustrative snippets remain guidance. Workers must inspect current files before coding and follow this Review Notes section when snippets conflict.
+
+### Post-Implementation Review / ycksimplify Amendments
+
+- `voiceSettingsStore` writes are serialized through a per-store queue so concurrent `setEnabled` / `writeApiKey` / `recordValidation` mutations derive next state from the latest cache.
+- Startup settings load is bounded to 64 KiB and uses no-follow file open before parsing userData JSON.
+- `workspace:saveVoiceTranscriptionApiKey` persists the trimmed key and probes the same trimmed value.
+- Probe failure and validation-state persistence failure are separated; validation persistence failure returns `ERR_VOICE_SETTINGS_WRITE_FAILED` without retrying or leaking key material.
+- Settings response value no longer carries `validationError`; renderer derives visible auth/network state from the persisted snapshot fields.
+- The BYOK probe now sends the Doubao full request frame after WebSocket open and returns ok only after a service response frame.
+- Settings mutations seed returned snapshots for `setEnabled` / `saveApiKey` / `clear`; `validate` still invalidates and rereads.
+- Saved key drafts are cleared after any successful save, including auth/network validation outcomes; the eye control only reveals the current unsaved draft.
+- Recording finish/close now closes existing ASR sessions even if settings change to disabled mid-session, and a main-side disabled start suppresses final backfill ASR.
+- Settings shell shares AppShell geometry constants, keeps the full-width drag titlebar, locks return/Escape while settings mutations are pending, and removes the unused multi-category abstraction for Slice A.
+- Real-key verification artifacts must redact key fragments; only result code and non-secret protocol metadata may be recorded.

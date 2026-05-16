@@ -40,7 +40,6 @@ function toVoiceSettingsResponseValue(
 ): VoiceTranscriptionSettingsResponseValue {
   return {
     settings: toVoiceSettingsProjection(value.settings),
-    ...(value.validationError ? { validationError: value.validationError } : {}),
   };
 }
 
@@ -65,6 +64,10 @@ export function invalidateVoiceSettings(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ exact: true, queryKey: voiceSettingsQueryKey() });
 }
 
+function seedVoiceSettings(queryClient: QueryClient, value: VoiceTranscriptionSettingsResponseValue) {
+  queryClient.setQueryData(voiceSettingsQueryKey(), toVoiceSettingsProjection(value.settings));
+}
+
 export function setVoiceTranscriptionEnabledMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: async (
@@ -78,7 +81,7 @@ export function setVoiceTranscriptionEnabledMutationOptions(queryClient: QueryCl
 
       return toVoiceSettingsResponseValue(response.value);
     },
-    onSuccess: () => invalidateVoiceSettings(queryClient),
+    onSuccess: (value) => seedVoiceSettings(queryClient, value),
   });
 }
 
@@ -95,7 +98,7 @@ export function saveVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryCl
 
       return toVoiceSettingsResponseValue(response.value);
     },
-    onSuccess: () => invalidateVoiceSettings(queryClient),
+    onSuccess: (value) => seedVoiceSettings(queryClient, value),
   });
 }
 
@@ -110,7 +113,7 @@ export function clearVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryC
 
       return toVoiceSettingsResponseValue(response.value);
     },
-    onSuccess: () => invalidateVoiceSettings(queryClient),
+    onSuccess: (value) => seedVoiceSettings(queryClient, value),
   });
 }
 

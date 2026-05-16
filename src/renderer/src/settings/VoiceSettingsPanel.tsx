@@ -1,13 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff } from 'lucide-react';
+import { format } from 'date-fns';
+import { ExternalLink, Eye, EyeOff } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { FieldControl, FieldError, FieldGroup, FieldHint, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from '@/components/ui/toaster';
 import { WorkspaceDangerConfirmDialog } from '../workspace/WorkspaceDangerConfirmDialog';
+import { openExternalUrl } from '../workspace/workspaceApi';
+import {
+  unknownErrorDisplayMessage,
+  workspaceErrorDisplayMessage,
+} from '../workspace/workspaceErrorMessages';
 import {
   clearVoiceTranscriptionApiKeyMutationOptions,
   saveVoiceTranscriptionApiKeyMutationOptions,
@@ -18,14 +25,10 @@ import {
 
 const API_KEY_INPUT_ID = 'voice-transcription-api-key';
 const STALE_VALIDATION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const VOLCENGINE_CONSOLE_URL = 'https://console.volcengine.com/';
 
 function formatValidationTime(isoTimestamp: string) {
-  const date = new Date(isoTimestamp);
-  const pad = (value: number) => String(value).padStart(2, '0');
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours()
-  )}:${pad(date.getMinutes())}`;
+  return format(new Date(isoTimestamp), 'yyyy-MM-dd HH:mm');
 }
 
 function VoiceValidationStatus({
@@ -69,7 +72,11 @@ function staleValidationLabel(isoTimestamp: string) {
   return `上次验证 ${elapsedDays} 天前`;
 }
 
-export function VoiceSettingsPanel() {
+export type VoiceSettingsPanelProps = {
+  readonly onBusyChange?: (busy: boolean) => void;
+};
+
+export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {}) {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery(voiceSettingsQueryOptions());
   const [draftApiKey, setDraftApiKey] = useState('');
@@ -83,16 +90,20 @@ export function VoiceSettingsPanel() {
   const clearApiKeyMutation = useMutation(
     clearVoiceTranscriptionApiKeyMutationOptions(queryClient)
   );
-
-  if (isLoading || !settings) {
-    return <p className="text-ui-sm leading-ui-sm text-muted-foreground">正在载入语音设置。</p>;
-  }
-
   const isBusy =
     setEnabledMutation.isPending ||
     saveApiKeyMutation.isPending ||
     validateCredentialsMutation.isPending ||
     clearApiKeyMutation.isPending;
+
+  useEffect(() => {
+    onBusyChange?.(isBusy);
+  }, [isBusy, onBusyChange]);
+
+  if (isLoading || !settings) {
+    return <p className="text-ui-sm leading-ui-sm text-muted-foreground">正在载入语音设置。</p>;
+  }
+
   const keyInputDisabled = !settings.enabled || isBusy;
   const showRequiredHint =
     settings.enabled && !settings.apiKeyConfigured && draftApiKey.length === 0;
@@ -133,6 +144,16 @@ export function VoiceSettingsPanel() {
   const apiKeyVisibilityLabel = apiKeyVisible ? '隐藏 X-Api-Key' : '显示 X-Api-Key';
   const ApiKeyVisibilityIcon = apiKeyVisible ? EyeOff : Eye;
   const showApiKeyVisibilityToggle = draftApiKey.length > 0;
+  const mutationErrorMessage =
+    setEnabledMutation.error instanceof Error
+      ? setEnabledMutation.error.message
+      : saveApiKeyMutation.error instanceof Error
+        ? saveApiKeyMutation.error.message
+        : validateCredentialsMutation.error instanceof Error
+          ? validateCredentialsMutation.error.message
+          : clearApiKeyMutation.error instanceof Error
+            ? clearApiKeyMutation.error.message
+            : null;
 
   function handleSave() {
     if (saveDisabled) return;
@@ -145,14 +166,9 @@ export function VoiceSettingsPanel() {
     saveApiKeyMutation.mutate(
       { apiKey: trimmedDraftApiKey },
       {
-        onSuccess: (data) => {
-          if (
-            data.settings.lastValidationCode === 'ok' &&
-            data.settings.lastValidationOk === true
-          ) {
-            setDraftApiKey('');
-            setApiKeyVisible(false);
-          }
+        onSuccess: () => {
+          setDraftApiKey('');
+          setApiKeyVisible(false);
         },
       }
     );
@@ -165,6 +181,17 @@ export function VoiceSettingsPanel() {
         setClearDialogOpen(false);
       },
     });
+  }
+
+  async function handleOpenVolcengineConsole() {
+    try {
+      const response = await openExternalUrl({ url: VOLCENGINE_CONSOLE_URL });
+      if (!response.ok) {
+        toast.error(workspaceErrorDisplayMessage(response.error, '外部链接无法打开。'));
+      }
+    } catch (error) {
+      toast.error(unknownErrorDisplayMessage(error, '外部链接无法打开。'));
+    }
   }
 
   return (
@@ -236,6 +263,21 @@ export function VoiceSettingsPanel() {
         ) : (
           <FieldHint>密钥只用于本机语音转录设置。</FieldHint>
         )}
+        <Button
+          type="button"
+          variant="ghostIcon"
+          size="compact"
+          className="mt-8 w-fit px-8 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          onClick={() => {
+            void handleOpenVolcengineConsole();
+          }}
+        >
+          <ExternalLink className="size-16" aria-hidden="true" />
+          打开火山引擎控制台
+        </Button>
+        {mutationErrorMessage ? (
+          <FieldError className="text-destructive">{mutationErrorMessage}</FieldError>
+        ) : null}
         {saveApiKeyMutation.isPending ? (
           <p role="status" className="mt-4 text-ui-xs leading-ui-xs text-muted-foreground">
             正在验证 X-Api-Key

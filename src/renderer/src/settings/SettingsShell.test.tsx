@@ -6,21 +6,18 @@ import { SettingsShell } from './SettingsShell';
 describe('SettingsShell', () => {
   it('renders the return action, category nav, active voice category, and content area', () => {
     render(
-      <SettingsShell activeCategory="voice" onReturnToApp={vi.fn()} onSelectCategory={vi.fn()}>
+      <SettingsShell onReturnToApp={vi.fn()}>
         <div>语音内容</div>
       </SettingsShell>
     );
 
     const titlebar = screen.getByRole('banner', { name: '设置标题栏' });
     expect(titlebar).toHaveAttribute('data-slot', 'settings-titlebar');
-    expect(titlebar).toHaveClass(
-      'left-[240px]',
-      'h-[48px]',
-      'bg-background',
-      '[-webkit-app-region:drag]'
-    );
+    expect(titlebar).toHaveClass('inset-x-0', '[-webkit-app-region:drag]');
+    expect(titlebar).toHaveStyle({ height: '48px' });
     const sidebar = screen.getByRole('complementary', { name: '设置侧边栏' });
-    expect(sidebar).toHaveClass('w-[240px]', 'bg-card', 'px-8', 'pt-[48px]');
+    expect(sidebar).toHaveClass('bg-card', 'px-8');
+    expect(sidebar).toHaveStyle({ paddingTop: '48px', width: '240px' });
     expect(sidebar).not.toHaveClass('bg-secondary');
     expect(screen.getByRole('button', { name: '返回应用' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '设置类目' })).toHaveClass('mt-4', 'gap-4');
@@ -34,11 +31,7 @@ describe('SettingsShell', () => {
     const onReturnToApp = vi.fn();
 
     render(
-      <SettingsShell
-        activeCategory="voice"
-        onReturnToApp={onReturnToApp}
-        onSelectCategory={vi.fn()}
-      >
+      <SettingsShell onReturnToApp={onReturnToApp}>
         <div />
       </SettingsShell>
     );
@@ -48,21 +41,28 @@ describe('SettingsShell', () => {
     expect(onReturnToApp).toHaveBeenCalledOnce();
   });
 
-  it('calls onSelectCategory when the voice category is clicked', async () => {
-    const onSelectCategory = vi.fn();
-
-    render(
-      <SettingsShell
-        activeCategory="voice"
-        onReturnToApp={vi.fn()}
-        onSelectCategory={onSelectCategory}
-      >
+  it('uses Escape to return only when navigation is not locked', async () => {
+    const onReturnToApp = vi.fn();
+    const { rerender } = render(
+      <SettingsShell onReturnToApp={onReturnToApp}>
         <div />
       </SettingsShell>
     );
 
-    await userEvent.click(screen.getByRole('button', { name: '语音' }));
+    await userEvent.keyboard('{Escape}');
 
-    expect(onSelectCategory).toHaveBeenCalledWith('voice');
+    expect(onReturnToApp).toHaveBeenCalledOnce();
+
+    rerender(
+      <SettingsShell returnDisabled onReturnToApp={onReturnToApp}>
+        <div />
+      </SettingsShell>
+    );
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(onReturnToApp).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: '返回应用' })).toBeDisabled();
   });
+
 });

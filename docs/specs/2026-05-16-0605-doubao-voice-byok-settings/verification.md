@@ -7,7 +7,7 @@
 - [x] Renderer does not receive saved key plaintext; saved state shows only last 4 characters.
 - [x] Eye icon only reveals the current unsaved replacement draft.
 - [x] Toggle defaults off and remains independent from key presence.
-- [x] Save runs a minimal Doubao WebSocket probe before returning validated state.
+- [x] Save runs a minimal Doubao WebSocket full-request service-frame probe before returning validated state.
 - [x] Live recording session snapshots voice settings at start and ignores mid-session changes.
 - [x] Recording starts without live transcription when voice recognition is disabled.
 - [x] Settings route uses the same BrowserWindow appMode and preserves the workspace handle.
@@ -22,5 +22,5 @@
 - [x] Recording screenshots captured: `artifacts/recording-a.png`, `artifacts/recording-b.png`, `artifacts/recording-c.png`.
 - [x] Settings design correction screenshot captured: `artifacts/settings-design-fix.png`.
 - [x] Grep evidence captured in `artifacts/grep-evidence.txt`.
-- [x] Real Doubao X-Api-Key minimal WebSocket handshake probe captured in `artifacts/real-api-probe.txt`.
+- [x] Real Doubao X-Api-Key full-request service-frame probe captured in `artifacts/real-api-probe.txt`.
 - [x] `npm run verify:quick` captured in `artifacts/verify-quick.txt`.

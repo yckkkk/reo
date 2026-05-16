@@ -491,7 +491,7 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
   });
   const saveApiKeyResponse = workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
     ok: true,
-    value: { settings, validationError: 'network unavailable' },
+    value: { settings },
   });
   const clearResponse = workspaceClearVoiceTranscriptionApiKeyResponseSchema.parse({
     ok: true,

@@ -1159,6 +1159,40 @@ describe('RecordingOverlay', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it('stays quiet when main accepts transcription start as disabled', async () => {
+    const bridge = installWorkspaceBridge({
+      startRecordingTranscription: vi.fn(async () => ({
+        ok: true as const,
+        value: { accepted: true, transcriptionMode: 'disabled' as const },
+      })),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).toHaveBeenCalledOnce();
+    expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+    expect(bridge.finishRecordingTranscription).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('starts live transcription after voice settings finish loading enabled', async () => {
     const deferredSettings =
       createDeferred<

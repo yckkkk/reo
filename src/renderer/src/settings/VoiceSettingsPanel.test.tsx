@@ -165,6 +165,17 @@ describe('VoiceSettingsPanel enabled-no-key', () => {
     expect(screen.getByText('启用后需要 X-Api-Key 才能生成转录')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   });
+
+  it('opens the Volcengine console through the allowlisted workspace bridge', async () => {
+    const openExternalUrl = vi.fn(async () => ({ ok: true as const, value: {} }));
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, { openExternalUrl });
+
+    await user.click(await screen.findByRole('button', { name: '打开火山引擎控制台' }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith({
+      url: 'https://console.volcengine.com/',
+    });
+  });
 });
 
 describe('VoiceSettingsPanel editing-with-key', () => {
@@ -264,6 +275,55 @@ describe('VoiceSettingsPanel validating and verified-active', () => {
     expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
   });
+
+  it('clears the saved draft even when validation returns an auth failure projection', async () => {
+    let snapshot = enabledNoKeySnapshot;
+    const readVoiceTranscriptionSettings = vi.fn(async () => ({
+      ok: true as const,
+      value: { settings: snapshot },
+    }));
+    const saveVoiceTranscriptionApiKey = vi.fn(async () => {
+      snapshot = authFailedSnapshot;
+
+      return {
+        ok: true as const,
+        value: { settings: authFailedSnapshot },
+      };
+    });
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      readVoiceTranscriptionSettings,
+      saveVoiceTranscriptionApiKey,
+    });
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, 'sk-test-1234');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(await screen.findByText('X-Api-Key 验证失败，请确认密钥后重试。')).toBeInTheDocument();
+    expect(keyInput).toHaveValue('');
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
+
+  it('shows a safe mutation error without rendering the draft key', async () => {
+    const saveVoiceTranscriptionApiKey = vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'ERR_VOICE_SETTINGS_WRITE_FAILED' as const,
+        message: '语音设置无法写入本地配置。',
+      },
+    }));
+    const { user } = renderVoiceSettingsPanel(enabledNoKeySnapshot, {
+      saveVoiceTranscriptionApiKey,
+    });
+    const keyInput = await screen.findByLabelText('X-Api-Key');
+
+    await user.type(keyInput, 'sk-test-1234');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(await screen.findByText('语音设置无法写入本地配置。')).toBeInTheDocument();
+    expect(keyInput).toHaveValue('sk-test-1234');
+    expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
+  });
 });
 
 describe('VoiceSettingsPanel remaining key states', () => {
@@ -327,7 +387,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
     expect(validateVoiceTranscriptionCredentials).toHaveBeenCalledWith(undefined);
   });
 
-  it('clears the configured key only after accessible confirmation and invalidates the exact settings query', async () => {
+  it('clears the configured key only after accessible confirmation and seeds the latest settings', async () => {
     const clearVoiceTranscriptionApiKey = vi.fn(async () => ({
       ok: true as const,
       value: { settings: disabledNoKeySnapshot },
@@ -335,7 +395,6 @@ describe('VoiceSettingsPanel remaining key states', () => {
     const { queryClient, user } = renderVoiceSettingsPanel(verifiedActiveSnapshot, {
       clearVoiceTranscriptionApiKey,
     });
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
     await user.click(await screen.findByRole('button', { name: '清除 X-Api-Key' }));
 
@@ -346,10 +405,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
 
     expect(clearVoiceTranscriptionApiKey).toHaveBeenCalledWith(undefined);
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        exact: true,
-        queryKey: ['settings', 'voice'],
-      });
+      expect(queryClient.getQueryData(['settings', 'voice'])).toEqual(disabledNoKeySnapshot);
     });
   });
 });

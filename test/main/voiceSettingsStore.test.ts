@@ -227,3 +227,73 @@ test('voiceSettingsStore: recordValidation maps ok auth and network to tri-state
     cleanup();
   }
 });
+
+test('voiceSettingsStore: serializes concurrent writes against the latest cache', async () => {
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'reo-voice-settings-'));
+  const safeStorage = makeFakeSafeStorage();
+  const writes: Array<() => void> = [];
+  const store = createVoiceSettingsStore({
+    safeStorage,
+    userDataDir,
+    platform: 'linux',
+    writeJsonAtomic: (filePath: string, value: unknown) =>
+      new Promise<void>((resolve) => {
+        writes.push(() => {
+          writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+          resolve();
+        });
+      }),
+  });
+
+  try {
+    const enablePromise = store.setEnabled(true);
+    const keyPromise = store.writeApiKey('abcd1234');
+
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(writes.length, 1);
+    writes.shift()?.();
+    await enablePromise;
+
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(writes.length, 1);
+    writes.shift()?.();
+    await keyPromise;
+
+    assert.deepEqual(store.read(), {
+      enabled: true,
+      apiKeyConfigured: true,
+      apiKeyLastFour: '1234',
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    });
+  } finally {
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('voiceSettingsStore: ignores oversized settings files during startup', () => {
+  const { userDataDir, filePath, cleanup } = setup();
+  try {
+    writeFileSync(filePath, JSON.stringify({ junk: 'x'.repeat(70_000) }), 'utf8');
+
+    const store = createVoiceSettingsStore({
+      safeStorage: makeFakeSafeStorage(),
+      userDataDir,
+      platform: 'linux',
+    });
+
+    assert.deepEqual(store.read(), {
+      enabled: false,
+      apiKeyConfigured: false,
+      apiKeyLastFour: null,
+      lastValidatedAt: null,
+      lastValidationOk: null,
+      lastValidationCode: null,
+    });
+  } finally {
+    cleanup();
+  }
+});
