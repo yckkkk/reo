@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceSegmentEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
+import { bindSegmentEntityActions } from './entityActionBindings';
 import { EntityActionMenu } from './entityActionMenu';
 
 export type SegmentActionIdentity = WorkspaceSegmentEntityActionRequest;
@@ -29,19 +30,19 @@ export function SegmentActionsMenu({
   triggerLabel,
 }: SegmentActionsMenuProps) {
   const menuLabel = triggerLabel ?? `${segmentTitle} 更多操作`;
-  const payload = actionIdentity;
+  const actionBindings = bindSegmentEntityActions(actionIdentity);
 
   return (
     <EntityActionMenu
       contentAlign={contentAlign}
       menuLabel={menuLabel}
-      onCopyAbsolutePath={() => window.reoWorkspace.copySegmentAbsolutePath(payload)}
-      onCopyRelativePath={() => window.reoWorkspace.copySegmentRelativePath(payload)}
+      onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
+      onCopyRelativePath={actionBindings.onCopyRelativePath}
       onDelete={onDelete}
       onOpenChange={onOpenChange}
-      onOpenDefault={() => window.reoWorkspace.openSegmentDocument(payload)}
+      onOpenDefault={actionBindings.onOpenDefault}
       onRename={onRename}
-      onRevealInFinder={() => window.reoWorkspace.revealSegmentInFinder(payload)}
+      onRevealInFinder={actionBindings.onRevealInFinder}
       open={open}
       trigger={trigger}
     />

@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceMemoryEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
+import { bindMemoryEntityActions } from './entityActionBindings';
 import { EntityActionMenu } from './entityActionMenu';
 
 export type MemoryActionIdentity = WorkspaceMemoryEntityActionRequest;
@@ -25,18 +26,18 @@ export function MemoryActionsMenu({
   triggerLabel,
 }: MemoryActionsMenuProps) {
   const menuLabel = triggerLabel ?? `${memoryTitle} 更多操作`;
-  const payload = actionIdentity;
+  const actionBindings = bindMemoryEntityActions(actionIdentity);
 
   return (
     <EntityActionMenu
       contentAlign={contentAlign}
       menuLabel={menuLabel}
-      onCopyAbsolutePath={() => window.reoWorkspace.copyMemoryAbsolutePath(payload)}
-      onCopyRelativePath={() => window.reoWorkspace.copyMemoryRelativePath(payload)}
+      onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
+      onCopyRelativePath={actionBindings.onCopyRelativePath}
       onDelete={onDelete}
-      onOpenDefault={() => window.reoWorkspace.openMemoryDocument(payload)}
+      onOpenDefault={actionBindings.onOpenDefault}
       onRename={onRename}
-      onRevealInFinder={() => window.reoWorkspace.revealMemoryInFinder(payload)}
+      onRevealInFinder={actionBindings.onRevealInFinder}
       trigger={trigger}
     />
   );

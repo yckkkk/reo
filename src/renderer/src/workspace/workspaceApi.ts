@@ -26,6 +26,96 @@ export function removeMemorySpace(
   return window.reoWorkspace.removeMemorySpace(payload);
 }
 
+export function revealMemorySpaceInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealMemorySpaceInFinder']>[0]
+) {
+  return window.reoWorkspace.revealMemorySpaceInFinder(payload);
+}
+
+export function revealMemoryInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealMemoryInFinder']>[0]
+) {
+  return window.reoWorkspace.revealMemoryInFinder(payload);
+}
+
+export function revealSegmentInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealSegmentInFinder']>[0]
+) {
+  return window.reoWorkspace.revealSegmentInFinder(payload);
+}
+
+export function revealSegmentSupplementInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealSegmentSupplementInFinder']>[0]
+) {
+  return window.reoWorkspace.revealSegmentSupplementInFinder(payload);
+}
+
+export function openMemorySpaceAgentsFile(
+  payload: Parameters<Window['reoWorkspace']['openMemorySpaceAgentsFile']>[0]
+) {
+  return window.reoWorkspace.openMemorySpaceAgentsFile(payload);
+}
+
+export function openMemoryDocument(
+  payload: Parameters<Window['reoWorkspace']['openMemoryDocument']>[0]
+) {
+  return window.reoWorkspace.openMemoryDocument(payload);
+}
+
+export function openSegmentDocument(
+  payload: Parameters<Window['reoWorkspace']['openSegmentDocument']>[0]
+) {
+  return window.reoWorkspace.openSegmentDocument(payload);
+}
+
+export function openSegmentSupplementDocument(
+  payload: Parameters<Window['reoWorkspace']['openSegmentSupplementDocument']>[0]
+) {
+  return window.reoWorkspace.openSegmentSupplementDocument(payload);
+}
+
+export function copyMemorySpaceAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copyMemorySpaceAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copyMemorySpaceAbsolutePath(payload);
+}
+
+export function copyMemoryAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copyMemoryAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copyMemoryAbsolutePath(payload);
+}
+
+export function copySegmentAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copySegmentAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copySegmentAbsolutePath(payload);
+}
+
+export function copySegmentSupplementAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copySegmentSupplementAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copySegmentSupplementAbsolutePath(payload);
+}
+
+export function copyMemoryRelativePath(
+  payload: Parameters<Window['reoWorkspace']['copyMemoryRelativePath']>[0]
+) {
+  return window.reoWorkspace.copyMemoryRelativePath(payload);
+}
+
+export function copySegmentRelativePath(
+  payload: Parameters<Window['reoWorkspace']['copySegmentRelativePath']>[0]
+) {
+  return window.reoWorkspace.copySegmentRelativePath(payload);
+}
+
+export function copySegmentSupplementRelativePath(
+  payload: Parameters<Window['reoWorkspace']['copySegmentSupplementRelativePath']>[0]
+) {
+  return window.reoWorkspace.copySegmentSupplementRelativePath(payload);
+}
+
 export function updateMemorySpaceTitle(
   payload: Parameters<Window['reoWorkspace']['updateMemorySpaceTitle']>[0]
 ) {

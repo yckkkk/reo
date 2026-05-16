@@ -6,6 +6,13 @@ import {
   clearMicrophoneIntent,
   cloneRecordingDraftPrefix,
   closeWorkspace,
+  copyMemoryAbsolutePath,
+  copyMemoryRelativePath,
+  copyMemorySpaceAbsolutePath,
+  copySegmentAbsolutePath,
+  copySegmentRelativePath,
+  copySegmentSupplementAbsolutePath,
+  copySegmentSupplementRelativePath,
   createMemory,
   deleteMemory,
   deleteSegmentSupplement,
@@ -18,6 +25,10 @@ import {
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
   listMemorySpaces,
+  openMemoryDocument,
+  openMemorySpaceAgentsFile,
+  openSegmentDocument,
+  openSegmentSupplementDocument,
   openWorkspace,
   openMemorySpace,
   readFinalizedAudioSegment,
@@ -26,6 +37,10 @@ import {
   readWorkspaceSnapshot,
   readRecordingDraftAudio,
   removeMemorySpace,
+  revealMemoryInFinder,
+  revealMemorySpaceInFinder,
+  revealSegmentInFinder,
+  revealSegmentSupplementInFinder,
   restoreDeletedMemory,
   restoreDeletedSegmentSupplement,
   restoreDeletedSegment,
@@ -44,6 +59,21 @@ describe('workspace renderer API wrapper', () => {
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
     removeMemorySpace: vi.fn(),
+    revealMemorySpaceInFinder: vi.fn(),
+    revealMemoryInFinder: vi.fn(),
+    revealSegmentInFinder: vi.fn(),
+    revealSegmentSupplementInFinder: vi.fn(),
+    openMemorySpaceAgentsFile: vi.fn(),
+    openMemoryDocument: vi.fn(),
+    openSegmentDocument: vi.fn(),
+    openSegmentSupplementDocument: vi.fn(),
+    copyMemorySpaceAbsolutePath: vi.fn(),
+    copyMemoryAbsolutePath: vi.fn(),
+    copySegmentAbsolutePath: vi.fn(),
+    copySegmentSupplementAbsolutePath: vi.fn(),
+    copyMemoryRelativePath: vi.fn(),
+    copySegmentRelativePath: vi.fn(),
+    copySegmentSupplementRelativePath: vi.fn(),
     closeWorkspace: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),
@@ -80,6 +110,76 @@ describe('workspace renderer API wrapper', () => {
       configurable: true,
       value: reoWorkspace,
     });
+  });
+
+  it('forwards entity shell actions to the explicit preload surface', async () => {
+    const okResponse = { ok: true, value: { completed: true } };
+    for (const action of [
+      reoWorkspace.revealMemorySpaceInFinder,
+      reoWorkspace.revealMemoryInFinder,
+      reoWorkspace.revealSegmentInFinder,
+      reoWorkspace.revealSegmentSupplementInFinder,
+      reoWorkspace.openMemorySpaceAgentsFile,
+      reoWorkspace.openMemoryDocument,
+      reoWorkspace.openSegmentDocument,
+      reoWorkspace.openSegmentSupplementDocument,
+      reoWorkspace.copyMemorySpaceAbsolutePath,
+      reoWorkspace.copyMemoryAbsolutePath,
+      reoWorkspace.copySegmentAbsolutePath,
+      reoWorkspace.copySegmentSupplementAbsolutePath,
+      reoWorkspace.copyMemoryRelativePath,
+      reoWorkspace.copySegmentRelativePath,
+      reoWorkspace.copySegmentSupplementRelativePath,
+    ]) {
+      action.mockResolvedValue(okResponse);
+    }
+
+    const memorySpacePayload = { workspaceId: 'ws_1' };
+    const memoryPayload = {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+    };
+    const segmentPayload = {
+      ...memoryPayload,
+      segmentId: 'seg_1',
+    };
+    const supplementPayload = {
+      ...segmentPayload,
+      supplementId: 'sup_1',
+    };
+
+    await revealMemorySpaceInFinder(memorySpacePayload);
+    await openMemorySpaceAgentsFile(memorySpacePayload);
+    await copyMemorySpaceAbsolutePath(memorySpacePayload);
+    await revealMemoryInFinder(memoryPayload);
+    await openMemoryDocument(memoryPayload);
+    await copyMemoryAbsolutePath(memoryPayload);
+    await copyMemoryRelativePath(memoryPayload);
+    await revealSegmentInFinder(segmentPayload);
+    await openSegmentDocument(segmentPayload);
+    await copySegmentAbsolutePath(segmentPayload);
+    await copySegmentRelativePath(segmentPayload);
+    await revealSegmentSupplementInFinder(supplementPayload);
+    await openSegmentSupplementDocument(supplementPayload);
+    await copySegmentSupplementAbsolutePath(supplementPayload);
+    await copySegmentSupplementRelativePath(supplementPayload);
+
+    expect(reoWorkspace.revealMemorySpaceInFinder).toHaveBeenCalledWith(memorySpacePayload);
+    expect(reoWorkspace.openMemorySpaceAgentsFile).toHaveBeenCalledWith(memorySpacePayload);
+    expect(reoWorkspace.copyMemorySpaceAbsolutePath).toHaveBeenCalledWith(memorySpacePayload);
+    expect(reoWorkspace.revealMemoryInFinder).toHaveBeenCalledWith(memoryPayload);
+    expect(reoWorkspace.openMemoryDocument).toHaveBeenCalledWith(memoryPayload);
+    expect(reoWorkspace.copyMemoryAbsolutePath).toHaveBeenCalledWith(memoryPayload);
+    expect(reoWorkspace.copyMemoryRelativePath).toHaveBeenCalledWith(memoryPayload);
+    expect(reoWorkspace.revealSegmentInFinder).toHaveBeenCalledWith(segmentPayload);
+    expect(reoWorkspace.openSegmentDocument).toHaveBeenCalledWith(segmentPayload);
+    expect(reoWorkspace.copySegmentAbsolutePath).toHaveBeenCalledWith(segmentPayload);
+    expect(reoWorkspace.copySegmentRelativePath).toHaveBeenCalledWith(segmentPayload);
+    expect(reoWorkspace.revealSegmentSupplementInFinder).toHaveBeenCalledWith(supplementPayload);
+    expect(reoWorkspace.openSegmentSupplementDocument).toHaveBeenCalledWith(supplementPayload);
+    expect(reoWorkspace.copySegmentSupplementAbsolutePath).toHaveBeenCalledWith(supplementPayload);
+    expect(reoWorkspace.copySegmentSupplementRelativePath).toHaveBeenCalledWith(supplementPayload);
   });
 
   it('forwards workspace file methods to the explicit preload surface', async () => {
