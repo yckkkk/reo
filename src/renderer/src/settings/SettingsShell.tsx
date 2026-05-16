@@ -41,7 +41,7 @@ export function SettingsShell({
       />
       <aside
         aria-label="设置侧边栏"
-        className="flex w-[240px] shrink-0 flex-col bg-card px-12 pb-16 pt-[48px]"
+        className="flex w-[240px] shrink-0 flex-col bg-card px-8 pb-16 pt-[48px]"
       >
         <Button
           type="button"

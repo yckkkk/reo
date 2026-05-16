@@ -104,7 +104,7 @@ describe('AppShell', () => {
     );
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
     const sidebar = screen.getByRole('complementary', { name: '记忆空间侧边栏' });
-    expect(sidebar).toHaveClass('bg-card');
+    expect(sidebar).toHaveClass('bg-card', 'px-8');
     expect(sidebar).not.toHaveClass('bg-background');
     expect(sidebar).toHaveStyle({ zIndex: '1', width: '240px' });
     expect(document.querySelector('[data-slot="app-shell-sidebar-corner-underlay"]')).toBeNull();

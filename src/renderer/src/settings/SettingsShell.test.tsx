@@ -20,7 +20,7 @@ describe('SettingsShell', () => {
       '[-webkit-app-region:drag]'
     );
     const sidebar = screen.getByRole('complementary', { name: '设置侧边栏' });
-    expect(sidebar).toHaveClass('w-[240px]', 'bg-card', 'pt-[48px]');
+    expect(sidebar).toHaveClass('w-[240px]', 'bg-card', 'px-8', 'pt-[48px]');
     expect(sidebar).not.toHaveClass('bg-secondary');
     expect(screen.getByRole('button', { name: '返回应用' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '设置类目' })).toHaveClass('mt-4', 'gap-4');
