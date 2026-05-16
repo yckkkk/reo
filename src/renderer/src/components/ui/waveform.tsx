@@ -265,6 +265,22 @@ export function Waveform({
     return () => resizeObserver.disconnect();
   }, [drawWaveform]);
 
+  useEffect(() => {
+    const observedContainer = containerRef.current;
+    if (!observedContainer || typeof MutationObserver !== 'function') {
+      return undefined;
+    }
+
+    const observer = new MutationObserver(drawWaveform);
+    const themeOwner = observedContainer.closest('[data-theme]') ?? document.documentElement;
+    observer.observe(themeOwner, {
+      attributeFilter: ['data-theme'],
+      attributes: true,
+    });
+
+    return () => observer.disconnect();
+  }, [drawWaveform]);
+
   const safeProgress = progress === null ? null : Math.min(1, Math.max(0, progress));
 
   return (

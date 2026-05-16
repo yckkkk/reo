@@ -17,7 +17,7 @@
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
-- `Waveform` 是当前 Reo audio UI primitive；它支持 canvas bars、静态 dots、播放进度双色切分和录音编辑 cursor，不包含 agent runtime、network/API key、demo feedback 或未实现文案。
+- `Waveform` 是当前 Reo audio UI primitive；它支持 canvas bars、静态 dots、播放进度双色切分和录音编辑 cursor，并在 `data-theme` 切换时重绘 canvas 以同步主题 token 颜色；不包含 agent runtime、network/API key、demo feedback 或未实现文案。
 - 当前没有 shared local playback primitive；暂停态回听由 recording overlay 内部的隐藏 HTMLAudioElement 和 feature-local controls 承担。
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
@@ -50,7 +50,7 @@
 - Separator：保留语义和命中区，不默认画可见线。
 - Breadcrumb：用于 AppShell panel titlebar；trigger 使用 `rounded-sm` 方圆角，层级之间使用圆点 separator，不使用 chevron。
 - Floating Action Button Speed Dial：用于底部表达入口；trigger 使用 `bg-brand-ember` 红色，trigger 和 action 都是全圆 FAB 控件；普通菜单 action 不继承该例外。PrimeReact action 自带圆形样式，Reo primitive 在该层明确保留 `rounded-full`，不能让业务 consumer 处理；结构展开动效不表达基础阴影。
-- Waveform：保留 canvas waveform renderer、静态 dots、动态 bars、播放进度双色切分和录音编辑 cursor；当 data 为空或样本为零时不绘制占位 bars。
+- Waveform：保留 canvas waveform renderer、静态 dots、动态 bars、播放进度双色切分和录音编辑 cursor；主题切换后重新读取 token 并重绘；当 data 为空或样本为零时不绘制占位 bars。
 - Edge Fade：`edge-fade-y` 用于纵向 scroll surface 的上下渐隐，`edge-fade-x` 用于横向 scroll surface 的左右渐隐；渐隐是滚动感知的——每个边缘只在该方向有内容被滚走时出现，未滚动或内容不溢出时该边缘清晰无遮挡。`scrollbar-hover` 默认隐藏滚动条，在 hover 或 focus-within 时显示。可滚动转写文本和横向片段流必须复用这些 utilities。
 
 ## App Shell

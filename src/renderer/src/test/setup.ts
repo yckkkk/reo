@@ -73,6 +73,7 @@ window.EventTarget.prototype.dispatchEvent = function dispatchWindowEvent(event:
 
 Element.prototype.setPointerCapture ??= () => undefined;
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  configurable: true,
   value: (contextType: string) =>
     contextType === '2d'
       ? {
@@ -89,6 +90,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
           setTransform: () => undefined,
         }
       : null,
+  writable: true,
 });
 globalThis.ResizeObserver ??= class ResizeObserver {
   observe() {
