@@ -1558,7 +1558,7 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
   }
 });
 
-test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes without transcript text or paths', async () => {
+test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and empty transcript without paths', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-supplement-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
