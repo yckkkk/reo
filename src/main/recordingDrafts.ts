@@ -1322,11 +1322,7 @@ async function readOptionalFinalizedTranscriptFile(
     }
     const markdown = (await readFileDescriptor(fd, 'utf8')) as string;
     const parsed = parseWorkspaceMarkdownObject({ objectType: options.objectType, markdown });
-    const extractedText = extractSegmentTranscript(parsed.content);
-    const text =
-      options.objectType === 'supplement' && extractedText.length === 0
-        ? parsed.content.trim()
-        : extractedText;
+    const text = extractSegmentTranscript(parsed.content);
     await assertSameDirectory(directory, directoryIdentity);
     return {
       exists: text.length > 0,

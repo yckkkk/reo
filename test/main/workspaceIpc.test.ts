@@ -1592,7 +1592,7 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     segmentId: 'seg_ipc_audio',
     supplementId: 'sup_ipc_followup',
     title: '补充录音',
-    content: '补充录音转写正文',
+    content: '# 补充录音\n\n## Transcript\n\n补充录音转写正文',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
@@ -1627,7 +1627,7 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
   }
 });
 
-test('readFinalizedAudioSegmentSupplement returns empty transcript when supplement body is empty', async () => {
+test('readFinalizedAudioSegmentSupplement returns empty transcript when supplement has no transcript section', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-empty-supplement-transcript-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -1661,7 +1661,7 @@ test('readFinalizedAudioSegmentSupplement returns empty transcript when suppleme
     segmentId: 'seg_ipc_audio',
     supplementId: 'sup_ipc_followup',
     title: '补充录音',
-    content: '',
+    content: '# 补充录音\n\n补充录音普通正文',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
