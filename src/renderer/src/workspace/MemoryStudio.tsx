@@ -873,6 +873,23 @@ function SegmentSupplementAudioPlayer({
           补充录音加载失败。
         </p>
       ) : null}
+      <div data-slot="memory-studio-supplement-transcript" className="mt-12">
+        <SegmentTranscriptView
+          status={
+            supplementContentQuery.isLoading
+              ? 'loading'
+              : supplementContentQuery.isError
+                ? 'error'
+                : 'ready'
+          }
+          transcript={supplementContent?.transcript ?? null}
+          copy={{
+            loading: '正在载入补充录音内容。',
+            error: '补充录音转录加载失败，请重试。',
+            empty: '这段补充录音还没有转录。',
+          }}
+        />
+      </div>
       <audio
         ref={audioRef}
         src={audioUrl ?? undefined}

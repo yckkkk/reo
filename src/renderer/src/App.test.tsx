@@ -357,6 +357,19 @@ describe('App', () => {
         transcript: { exists: false, text: '' },
       },
     }));
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        supplementId: payload.supplementId,
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+        transcript: { exists: true, text: '补充录音转写正文' },
+      },
+    }));
   }
 
   async function createWorkspaceWithSegmentSupplement(user: ReturnType<typeof userEvent.setup>) {
@@ -1298,6 +1311,53 @@ describe('App', () => {
       expect(screen.queryByRole('tab', { name: '补充录音1' })).not.toBeInTheDocument();
     });
   }, 10_000);
+
+  it('renders the supplement transcript text under the player when transcript exists', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentSupplementFixture();
+    mockSegmentSupplementWorkspace(fixture);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentSupplement(user);
+    await user.click(screen.getByRole('tab', { name: '补充录音1' }));
+
+    expect(await screen.findByText('补充录音转写正文')).toBeInTheDocument();
+  });
+
+  it('renders the supplement empty transcript copy when the supplement has no transcript', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentSupplementFixture();
+    mockSegmentSupplementWorkspace(fixture);
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        supplementId: payload.supplementId,
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentSupplement(user);
+    await user.click(screen.getByRole('tab', { name: '补充录音1' }));
+
+    expect(await screen.findByText('这段补充录音还没有转录。')).toBeInTheDocument();
+  });
 
   it('deletes a SegmentSupplement through confirmation and restores it from the toast action', async () => {
     const user = userEvent.setup();
@@ -5081,11 +5141,29 @@ describe('App', () => {
         saved: true,
       },
     });
+    const queryClient = createReoQueryClient();
+    const supplementContentKey = segmentSupplementContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_existing',
+      segmentId: 'seg_parent',
+      supplementId: 'sup_recoverable',
+    });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    queryClient.setQueryData(supplementContentKey, {
+      requestId: 'cached_supplement_content',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_existing',
+      segmentId: 'seg_parent',
+      supplementId: 'sup_recoverable',
+      audio: new Uint8Array([4, 5]),
+      audioByteLength: 2,
+      transcript: { exists: false, text: '' },
+    });
 
     render(
-      <ReoQueryProvider>
+      <QueryClientProvider client={queryClient}>
         <App />
-      </ReoQueryProvider>
+      </QueryClientProvider>
     );
 
     await openCreateWorkspaceDialog(user);
@@ -5118,6 +5196,12 @@ describe('App', () => {
       segmentId: 'seg_parent',
       supplementId: 'sup_recoverable',
       markdown: '恢复补充录音转写',
+    });
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        exact: true,
+        queryKey: supplementContentKey,
+      });
     });
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();

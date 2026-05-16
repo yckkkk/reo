@@ -1598,6 +1598,15 @@ export function App() {
         ? mergeMemoryIntoSession(currentSession, finalized.memory)
         : currentSession
     );
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentSupplementContentQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId: finalized.memory.memoryId,
+        segmentId: finalized.segment.segmentId,
+        supplementId: finalized.supplement.supplementId,
+      }),
+    });
   }
 
   async function saveRecoveredRecording() {
