@@ -1,14 +1,4 @@
-import {
-  closeSync,
-  constants,
-  fsync,
-  fsyncSync,
-  linkSync,
-  openSync,
-  renameSync,
-  rmSync,
-  writeFile,
-} from 'node:fs';
+import { closeSync, fsync, linkSync, renameSync, rmSync, writeFile } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -19,6 +9,12 @@ import {
   readSafeDirectoryIdentity as readDirectoryIdentity,
   type DirectoryIdentity,
 } from './directoryIdentity.js';
+import {
+  fsyncCurrentWorkspaceDirectoryBestEffort,
+  isUnsupportedWorkspaceDirectoryFsyncError,
+  openNoReplaceWorkspaceFileInDirectory,
+  removeWorkspaceFileInDirectory,
+} from './workspaceDirectoryTransactions.js';
 
 interface WorkspaceFileHandle {
   writeFile(data: string | Uint8Array): Promise<void>;
@@ -44,14 +40,6 @@ interface WriteWorkspaceFileAtomicOptions {
 
 type AssertWorkspaceFileUsable = () => void;
 
-const UNSUPPORTED_DIRECTORY_FSYNC_CODES = new Set([
-  'EACCES',
-  'EISDIR',
-  'EINVAL',
-  'ENOTSUP',
-  'EPERM',
-]);
-
 const fsyncDescriptor = promisify(fsync);
 const writeFileDescriptor = promisify(writeFile);
 
@@ -61,59 +49,8 @@ let afterAtomicWorkspaceFileTempOpenForTest: (() => void) | null = null;
 let afterAtomicWorkspaceFileValidationForTest: (() => void) | null = null;
 let afterAtomicWorkspaceFileBackupRemoveForTest: (() => void) | null = null;
 
-export function isUnsupportedDirectoryFsync(error: unknown): boolean {
-  return UNSUPPORTED_DIRECTORY_FSYNC_CODES.has((error as NodeJS.ErrnoException).code ?? '');
-}
-
-function fsyncCurrentDirectoryBestEffort(): void {
-  let directoryFd: number | null = null;
-  try {
-    directoryFd = openSync('.', 'r');
-    fsyncSync(directoryFd);
-  } catch (error) {
-    if (!isUnsupportedDirectoryFsync(error)) {
-      throw error;
-    }
-  } finally {
-    if (directoryFd !== null) {
-      closeSync(directoryFd);
-    }
-  }
-}
-
-function openNoReplaceFileInDirectory(
-  directory: string,
-  identity: DirectoryIdentity,
-  fileName: string
-): number {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(identity);
-    const fd = openSync(
-      fileName,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
-    );
-    assertSameCurrentDirectory(identity);
-    return fd;
-  } finally {
-    process.chdir(previousCwd);
-  }
-}
-
-function removeFileInDirectory(
-  directory: string,
-  identity: DirectoryIdentity,
-  fileName: string
-): void {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(identity);
-    rmSync(fileName, { force: true });
-  } finally {
-    process.chdir(previousCwd);
-  }
+function isUnsupportedDirectoryFsync(error: unknown): boolean {
+  return isUnsupportedWorkspaceDirectoryFsyncError(error);
 }
 
 async function writeWorkspaceFileAtomicInDirectory({
@@ -142,7 +79,11 @@ async function writeWorkspaceFileAtomicInDirectory({
 
   try {
     beforeAtomicWorkspaceFileTempOpenForTest?.();
-    tempFd = openNoReplaceFileInDirectory(directory, directoryIdentity, tempName);
+    tempFd = openNoReplaceWorkspaceFileInDirectory({
+      directory,
+      directoryIdentity,
+      fileName: tempName,
+    });
     tempCreated = true;
     afterAtomicWorkspaceFileTempOpenForTest?.();
     assertUsable?.();
@@ -185,14 +126,14 @@ async function writeWorkspaceFileAtomicInDirectory({
 
     assertSameDirectoryPath(directory, directoryIdentity);
     assertSameCurrentDirectory(directoryIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
     if (backupCreated) {
       rmSync(backupName, { force: true });
       backupCreated = false;
       targetCreated = false;
       try {
         afterAtomicWorkspaceFileBackupRemoveForTest?.();
-        fsyncCurrentDirectoryBestEffort();
+        fsyncCurrentWorkspaceDirectoryBestEffort();
       } catch {
         // The replace commit is already durable; backup cleanup durability is best-effort.
       }
@@ -214,7 +155,11 @@ async function writeWorkspaceFileAtomicInDirectory({
       }
     } else if (tempCreated) {
       try {
-        removeFileInDirectory(directory, directoryIdentity, tempName);
+        removeWorkspaceFileInDirectory({
+          directory,
+          directoryIdentity,
+          fileName: tempName,
+        });
       } catch {
         // The temp file is only removed when the original directory identity is still reachable.
       }

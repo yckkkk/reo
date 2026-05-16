@@ -6,7 +6,6 @@ import {
   ftruncateSync,
   fsyncSync,
   mkdirSync,
-  openSync,
   read as readCallback,
   readFile as readFileCallback,
   rmdirSync,
@@ -29,6 +28,11 @@ import {
   readSafeDirectoryIdentitySync as readDirectoryIdentitySync,
   type DirectoryIdentity,
 } from './directoryIdentity.js';
+import {
+  openExistingWorkspaceFileInDirectory,
+  openNoReplaceWorkspaceFileInDirectory,
+  runInWorkspaceDirectorySync,
+} from './workspaceDirectoryTransactions.js';
 import {
   appendAudioSupplementToSegment,
   appendAudioSegmentToMemory,
@@ -216,25 +220,25 @@ function createRecordingDirectoryWithinParent({
   readonly directoryName: string;
 }): string {
   const parentIdentity = readDirectoryIdentitySync(parentDirectory);
-  const previousCwd = process.cwd();
-  let directoryCreated = false;
-  try {
-    process.chdir(parentDirectory);
-    assertSameCurrentDirectory(parentIdentity);
-    mkdirSync(directoryName);
-    directoryCreated = true;
-    assertSameDirectoryPath(parentDirectory, parentIdentity);
-    assertSameCurrentDirectory(parentIdentity);
-    directoryCreated = false;
-    return path.join(parentDirectory, directoryName);
-  } catch (error) {
-    if (directoryCreated) {
-      rmdirSync(directoryName);
+  return runInWorkspaceDirectorySync(
+    { directory: parentDirectory, directoryIdentity: parentIdentity },
+    () => {
+      let directoryCreated = false;
+      try {
+        mkdirSync(directoryName);
+        directoryCreated = true;
+        assertSameDirectoryPath(parentDirectory, parentIdentity);
+        assertSameCurrentDirectory(parentIdentity);
+        directoryCreated = false;
+        return path.join(parentDirectory, directoryName);
+      } catch (error) {
+        if (directoryCreated) {
+          rmdirSync(directoryName);
+        }
+        throw error;
+      }
     }
-    throw error;
-  } finally {
-    process.chdir(previousCwd);
-  }
+  );
 }
 
 const resolveDraftRecordingDirectory = resolveWorkspaceDraftSegmentDirectory;
@@ -409,55 +413,12 @@ function openFileForReadInDirectory(
   directoryIdentity: DirectoryIdentity,
   fileName: string
 ): number {
-  return openExistingFileInDirectory({
+  return openExistingWorkspaceFileInDirectory({
     directory,
     directoryIdentity,
     fileName,
     flags: constants.O_RDONLY | constants.O_NOFOLLOW,
   });
-}
-
-function openExistingFileInDirectory({
-  directory,
-  directoryIdentity,
-  fileName,
-  flags,
-}: {
-  readonly directory: string;
-  readonly directoryIdentity: DirectoryIdentity;
-  readonly fileName: string;
-  readonly flags: number;
-}): number {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(directoryIdentity);
-    const fd = openSync(fileName, flags);
-    assertSameCurrentDirectory(directoryIdentity);
-    return fd;
-  } finally {
-    process.chdir(previousCwd);
-  }
-}
-
-function openNoReplaceFileInDirectory(
-  directory: string,
-  directoryIdentity: DirectoryIdentity,
-  fileName: string
-): number {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(directoryIdentity);
-    const fd = openSync(
-      fileName,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
-    );
-    assertSameCurrentDirectory(directoryIdentity);
-    return fd;
-  } finally {
-    process.chdir(previousCwd);
-  }
 }
 
 async function readTextFileInKnownDirectory(
@@ -558,7 +519,11 @@ async function createEmptyDraftAudioFile(
   await assertSameDirectory(recordingDirectory, directoryIdentity);
   await beforeDraftAudioCreateForTest?.();
   assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-  const audioFd = openNoReplaceFileInDirectory(recordingDirectory, directoryIdentity, 'audio.webm');
+  const audioFd = openNoReplaceWorkspaceFileInDirectory({
+    directory: recordingDirectory,
+    directoryIdentity,
+    fileName: 'audio.webm',
+  });
   try {
     fsyncSync(audioFd);
   } finally {
@@ -573,7 +538,7 @@ async function openAudioFileForAppend(
 ) {
   try {
     await beforeDraftAudioOpenForTest?.();
-    const audioFd = openExistingFileInDirectory({
+    const audioFd = openExistingWorkspaceFileInDirectory({
       directory: recordingDirectory,
       directoryIdentity,
       fileName: 'audio.webm',
@@ -1146,7 +1111,7 @@ export async function cloneRecordingDraftPrefix({
           'draft-preserved'
         );
       }
-      const targetAudioFd = openExistingFileInDirectory({
+      const targetAudioFd = openExistingWorkspaceFileInDirectory({
         directory: targetDirectory,
         directoryIdentity: targetDirectoryIdentity,
         fileName: 'audio.webm',

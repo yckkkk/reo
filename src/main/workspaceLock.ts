@@ -11,7 +11,6 @@ import {
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
-import { isUnsupportedDirectoryFsync } from './atomicWorkspaceFile.js';
 import {
   assertSameCurrentDirectoryIdentity as assertSameCurrentDirectory,
   readSafeDirectoryIdentity,
@@ -24,6 +23,7 @@ import {
   workspaceError,
   type WorkspaceErrorEnvelope,
 } from '../workspace-contract/workspace-contract.js';
+import { fsyncCurrentWorkspaceDirectoryBestEffort } from './workspaceDirectoryTransactions.js';
 
 let afterWorkspaceLockDirectoryCreateForTest: (() => void) | null = null;
 let beforeStaleLockDirectoryRemoveForTest: (() => void) | null = null;
@@ -53,22 +53,6 @@ async function readDirectoryIdentity(
     return await readSafeDirectoryIdentity(directoryPath, 'Workspace root is unsafe');
   } catch {
     return unsafeWorkspacePath();
-  }
-}
-
-function fsyncCurrentDirectoryBestEffort(): void {
-  let directoryFd: number | null = null;
-  try {
-    directoryFd = openSync('.', 'r');
-    fsyncSync(directoryFd);
-  } catch (error) {
-    if (!isUnsupportedDirectoryFsync(error)) {
-      throw error;
-    }
-  } finally {
-    if (directoryFd !== null) {
-      closeSync(directoryFd);
-    }
   }
 }
 
@@ -234,7 +218,7 @@ function writeLockOwnerFile(lockDirectoryIdentity: DirectoryIdentity): void {
     closeSync(ownerFd);
     ownerFd = null;
     assertSameCurrentDirectory(lockDirectoryIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
   } finally {
     if (ownerFd !== null) {
       closeSync(ownerFd);
@@ -279,7 +263,7 @@ function createLockWithinDirectory(
       'Workspace lock path is unsafe'
     );
     writeLockOwnerFile(lockDirectoryIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
     return {
       lockDirectoryIdentity,
       release: (currentReoDirectory: string) => {
@@ -296,7 +280,7 @@ function createLockWithinDirectory(
             throw new Error('Workspace lock ownership changed');
           }
           rmSync('workspace.lock.lock', { recursive: true });
-          fsyncCurrentDirectoryBestEffort();
+          fsyncCurrentWorkspaceDirectoryBestEffort();
         } finally {
           process.chdir(releaseCwd);
         }

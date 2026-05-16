@@ -1,10 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, fsyncSync, lstatSync, openSync, realpathSync, renameSync } from 'node:fs';
+import { lstatSync, realpathSync, renameSync } from 'node:fs';
 import { lstat, opendir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
-  isUnsupportedDirectoryFsync,
   writeWorkspaceFileNoReplaceAtomic,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
@@ -42,6 +41,10 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 import { isSafeWorkspaceDirectoryName } from '../workspace-contract/workspace-name.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
+import {
+  fsyncCurrentWorkspaceDirectoryBestEffort,
+  runInWorkspaceDirectorySync,
+} from './workspaceDirectoryTransactions.js';
 
 const WORKSPACE_SCHEMA_VERSION = 1;
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
@@ -221,22 +224,6 @@ function workspaceInvalidFolderName(): WorkspaceErrorEnvelope {
 
 function workspaceErrorAfterRootRename(error: WorkspaceErrorEnvelope): WorkspaceErrorEnvelope {
   return workspaceError(error.error.code, error.error.message, 'file-written-index-stale');
-}
-
-function fsyncCurrentDirectoryBestEffort(): void {
-  let directoryFd: number | null = null;
-  try {
-    directoryFd = openSync('.', 'r');
-    fsyncSync(directoryFd);
-  } catch (error) {
-    if (!isUnsupportedDirectoryFsync(error)) {
-      throw error;
-    }
-  } finally {
-    if (directoryFd !== null) {
-      closeSync(directoryFd);
-    }
-  }
 }
 
 function targetDirectoryIdentityForRename(
@@ -432,18 +419,19 @@ function finalizeWorkspaceRootDirectoryRename({
   const targetName = path.basename(canonicalRoot);
   const parentDirectory = path.dirname(canonicalRoot);
   const parentIdentity = readDirectoryIdentitySync(parentDirectory);
-  const previousCwd = process.cwd();
   try {
-    process.chdir(parentDirectory);
-    beforeWorkspaceRootRenameFinalizeForTest?.();
-    assertSameCurrentDirectory(parentIdentity);
-    assertSameDirectoryPath(targetName, expectedRootIdentity, 'Workspace root target changed');
-    fsyncCurrentDirectoryBestEffort();
-    return { ok: true, canonicalRoot: realpathSync(targetName) };
+    return runInWorkspaceDirectorySync(
+      { directory: parentDirectory, directoryIdentity: parentIdentity },
+      () => {
+        beforeWorkspaceRootRenameFinalizeForTest?.();
+        assertSameCurrentDirectory(parentIdentity);
+        assertSameDirectoryPath(targetName, expectedRootIdentity, 'Workspace root target changed');
+        fsyncCurrentWorkspaceDirectoryBestEffort();
+        return { ok: true, canonicalRoot: realpathSync(targetName) };
+      }
+    );
   } catch {
     return workspaceRootPostMoveFailed();
-  } finally {
-    process.chdir(previousCwd);
   }
 }
 

@@ -3,10 +3,8 @@ import {
   constants,
   fsync as fsyncCallback,
   fstatSync,
-  fsyncSync,
   lstatSync,
   mkdirSync,
-  openSync,
   read as readCallback,
   readSync,
   readdirSync,
@@ -22,7 +20,6 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
-  isUnsupportedDirectoryFsync,
   writeWorkspaceFileAtomic,
   writeWorkspaceFileAtomicInKnownDirectory,
   writeWorkspaceJsonAtomic,
@@ -44,6 +41,17 @@ import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
+import {
+  fsyncCurrentWorkspaceDirectoryBestEffort,
+  isUnsupportedWorkspaceDirectoryFsyncError,
+  openExistingWorkspaceFileInDirectory,
+  openNoReplaceWorkspaceFileInDirectory,
+  readWorkspaceDirectoryEntriesInDirectory,
+  removeEmptyWorkspaceDirectoryInDirectory,
+  removeWorkspaceDirectoryTreeInDirectory,
+  removeWorkspaceFileInDirectory,
+  runInWorkspaceDirectorySync,
+} from './workspaceDirectoryTransactions.js';
 import {
   draftSegmentSupplementMetadataSchema,
   draftSegmentMetadataSchema,
@@ -736,7 +744,7 @@ async function fsyncWorkspaceDirectoryWithOpen({
     handle = await openDirectory(directoryPath);
     await handle.sync();
   } catch (error) {
-    if (!isUnsupportedDirectoryFsync(error)) {
+    if (!isUnsupportedWorkspaceDirectoryFsyncError(error)) {
       throw error;
     }
   } finally {
@@ -832,7 +840,7 @@ function readWorkspaceTextFileInKnownDirectory(
   directoryIdentity: DirectoryIdentity,
   fileName: string
 ): string {
-  const fd = openFileInDirectory({
+  const fd = openExistingWorkspaceFileInDirectory({
     directory,
     directoryIdentity,
     fileName,
@@ -1231,16 +1239,12 @@ async function unlinkFinalizeTransactionMarkerInDirectory(directory: string): Pr
     directory,
     'Recording target path is not safe'
   );
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
+  runInWorkspaceDirectorySync({ directory, directoryIdentity }, () => {
     assertSameCurrentDirectory(directoryIdentity);
     unlinkSync(FINALIZE_TRANSACTION_MARKER);
     assertSameCurrentDirectory(directoryIdentity);
-    fsyncCurrentDirectoryBestEffort();
-  } finally {
-    process.chdir(previousCwd);
-  }
+    fsyncCurrentWorkspaceDirectoryBestEffort();
+  });
 }
 
 async function withMemoryWriteLock<T>(
@@ -1463,22 +1467,6 @@ async function assertSafeExistingDirectory(directoryPath: string, message: strin
   }
 }
 
-function fsyncCurrentDirectoryBestEffort(): void {
-  let directoryFd: number | null = null;
-  try {
-    directoryFd = openSync('.', 'r');
-    fsyncSync(directoryFd);
-  } catch (error) {
-    if (!isUnsupportedDirectoryFsync(error)) {
-      throw error;
-    }
-  } finally {
-    if (directoryFd !== null) {
-      closeSync(directoryFd);
-    }
-  }
-}
-
 function renameWorkspaceDirectoryWithinParent({
   parentDirectory,
   sourceName,
@@ -1551,7 +1539,7 @@ function renameWorkspaceDirectoryWithinParent({
     assertSameDirectoryPath(targetName, targetIdentity, 'Recording target path changed');
     assertSameDirectoryPath(parentDirectory, parentIdentity);
     assertSameCurrentDirectory(parentIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
   } finally {
     process.chdir(previousCwd);
   }
@@ -1607,10 +1595,10 @@ function renameWorkspaceDirectoryAcrossParents({
     renameSync(sourceName, targetPath);
     assertSameDirectoryPath(targetPath, sourceIdentity, 'Memory target path changed');
     assertSameCurrentDirectory(sourceParentIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
     process.chdir(targetParentDirectory);
     assertSameCurrentDirectory(targetParentIdentity);
-    fsyncCurrentDirectoryBestEffort();
+    fsyncCurrentWorkspaceDirectoryBestEffort();
   } finally {
     process.chdir(previousCwd);
   }
@@ -1704,36 +1692,37 @@ function createWorkspaceDirectoryWithinParent({
   readonly beforeCommit?: () => void;
 }): void {
   const parentIdentity = readDirectoryIdentitySync(parentDirectory);
-  const previousCwd = process.cwd();
-  let directoryCreated = false;
-  try {
-    process.chdir(parentDirectory);
-    assertSameCurrentDirectory(parentIdentity);
-    beforeCommit?.();
-    try {
-      mkdirSync(directoryName);
-      directoryCreated = true;
-    } catch (error) {
-      if (!allowExisting || (error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        throw error;
-      }
-      const existing = lstatSync(directoryName);
-      if (!existing.isDirectory() || existing.isSymbolicLink()) {
+  runInWorkspaceDirectorySync(
+    { directory: parentDirectory, directoryIdentity: parentIdentity },
+    () => {
+      let directoryCreated = false;
+      try {
+        assertSameCurrentDirectory(parentIdentity);
+        beforeCommit?.();
+        try {
+          mkdirSync(directoryName);
+          directoryCreated = true;
+        } catch (error) {
+          if (!allowExisting || (error as NodeJS.ErrnoException).code !== 'EEXIST') {
+            throw error;
+          }
+          const existing = lstatSync(directoryName);
+          if (!existing.isDirectory() || existing.isSymbolicLink()) {
+            throw error;
+          }
+        }
+        assertSameDirectoryPath(parentDirectory, parentIdentity);
+        assertSameCurrentDirectory(parentIdentity);
+        fsyncCurrentWorkspaceDirectoryBestEffort();
+        directoryCreated = false;
+      } catch (error) {
+        if (directoryCreated) {
+          rmSync(directoryName, { force: true, recursive: true });
+        }
         throw error;
       }
     }
-    assertSameDirectoryPath(parentDirectory, parentIdentity);
-    assertSameCurrentDirectory(parentIdentity);
-    fsyncCurrentDirectoryBestEffort();
-    directoryCreated = false;
-  } catch (error) {
-    if (directoryCreated) {
-      rmSync(directoryName, { force: true, recursive: true });
-    }
-    throw error;
-  } finally {
-    process.chdir(previousCwd);
-  }
+  );
 }
 
 async function ensureMemorySegmentsDirectory({
@@ -2181,7 +2170,7 @@ function readFileSizeInKnownDirectory(
   directoryIdentity: DirectoryIdentity,
   fileName: string
 ): number {
-  const fd = openFileInDirectory({
+  const fd = openExistingWorkspaceFileInDirectory({
     directory,
     directoryIdentity,
     fileName,
@@ -2204,16 +2193,12 @@ function unlinkFileInKnownDirectory(
   directoryIdentity: DirectoryIdentity,
   fileName: string
 ): void {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
+  runInWorkspaceDirectorySync({ directory, directoryIdentity }, () => {
     assertSameCurrentDirectory(directoryIdentity);
     unlinkSync(fileName);
     assertSameCurrentDirectory(directoryIdentity);
-    fsyncCurrentDirectoryBestEffort();
-  } finally {
-    process.chdir(previousCwd);
-  }
+    fsyncCurrentWorkspaceDirectoryBestEffort();
+  });
 }
 
 function unlinkFileInKnownDirectoryIfExists(
@@ -3628,7 +3613,10 @@ async function copyDirectoryContents(
     'Recording staging directory is not safe'
   );
 
-  for (const entry of readDirectoryEntriesInDirectory(sourceDirectory, sourceIdentity)) {
+  for (const entry of readWorkspaceDirectoryEntriesInDirectory({
+    directory: sourceDirectory,
+    directoryIdentity: sourceIdentity,
+  })) {
     if (!entry.isFile() || entry.isSymbolicLink() || !allowedFiles.has(entry.name)) {
       throw new Error('Recording draft file is not safe');
     }
@@ -3639,60 +3627,6 @@ async function copyDirectoryContents(
       targetIdentity,
       fileName: entry.name,
     });
-  }
-}
-
-function readDirectoryEntriesInDirectory(
-  directory: string,
-  directoryIdentity: DirectoryIdentity
-): Dirent[] {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(directoryIdentity);
-    const entries = readdirSync('.', { withFileTypes: true });
-    assertSameCurrentDirectory(directoryIdentity);
-    return entries;
-  } finally {
-    process.chdir(previousCwd);
-  }
-}
-
-function openFileInDirectory({
-  directory,
-  directoryIdentity,
-  fileName,
-  flags,
-}: {
-  readonly directory: string;
-  readonly directoryIdentity: DirectoryIdentity;
-  readonly fileName: string;
-  readonly flags: number;
-}): number {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(directoryIdentity);
-    const fd = openSync(fileName, flags);
-    assertSameCurrentDirectory(directoryIdentity);
-    return fd;
-  } finally {
-    process.chdir(previousCwd);
-  }
-}
-
-function removeFileInDirectory(
-  directory: string,
-  directoryIdentity: DirectoryIdentity,
-  fileName: string
-): void {
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(directory);
-    assertSameCurrentDirectory(directoryIdentity);
-    rmSync(fileName, { force: true });
-  } finally {
-    process.chdir(previousCwd);
   }
 }
 
@@ -3713,7 +3647,7 @@ async function copyFileBetweenDirectories({
   let targetFd: number | null = null;
   let targetCreated = false;
   try {
-    sourceFd = openFileInDirectory({
+    sourceFd = openExistingWorkspaceFileInDirectory({
       directory: sourceDirectory,
       directoryIdentity: sourceIdentity,
       fileName,
@@ -3724,11 +3658,10 @@ async function copyFileBetweenDirectories({
       throw new Error('Recording draft file is not safe');
     }
 
-    targetFd = openFileInDirectory({
+    targetFd = openNoReplaceWorkspaceFileInDirectory({
       directory: targetDirectory,
       directoryIdentity: targetIdentity,
       fileName,
-      flags: constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
     });
     targetCreated = true;
 
@@ -3769,7 +3702,11 @@ async function copyFileBetweenDirectories({
     }
     if (targetCreated) {
       try {
-        removeFileInDirectory(targetDirectory, targetIdentity, fileName);
+        removeWorkspaceFileInDirectory({
+          directory: targetDirectory,
+          directoryIdentity: targetIdentity,
+          fileName,
+        });
       } catch {
         // Cleanup only touches the original staging directory identity.
       }
@@ -3871,17 +3808,12 @@ export async function removeSafeWorkspaceDirectory(
   if (currentSafeDirectory !== safeDirectory) {
     return options?.allowMissing ? isSafeMissingWorkspaceChild(rootPath, directoryPath) : false;
   }
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(parentDirectory);
-    assertSameCurrentDirectory(parentIdentity);
-    assertSameDirectoryPath(directoryName, directoryIdentity, 'Workspace cleanup path changed');
-    rmSync(directoryName, { recursive: true, force: true });
-    assertSameCurrentDirectory(parentIdentity);
-    fsyncCurrentDirectoryBestEffort();
-  } finally {
-    process.chdir(previousCwd);
-  }
+  removeWorkspaceDirectoryTreeInDirectory({
+    directory: parentDirectory,
+    directoryIdentity: parentIdentity,
+    targetName: directoryName,
+    targetIdentity: directoryIdentity,
+  });
   return true;
 }
 
@@ -3897,17 +3829,12 @@ async function removeEmptyWorkspaceDirectory(
   const directoryName = path.basename(safeDirectory);
   const parentIdentity = await readDirectoryIdentity(parentDirectory);
   const directoryIdentity = await readDirectoryIdentity(safeDirectory);
-  const previousCwd = process.cwd();
-  try {
-    process.chdir(parentDirectory);
-    assertSameCurrentDirectory(parentIdentity);
-    assertSameDirectoryPath(directoryName, directoryIdentity, 'Workspace cleanup path changed');
-    rmdirSync(directoryName);
-    assertSameCurrentDirectory(parentIdentity);
-    fsyncCurrentDirectoryBestEffort();
-  } finally {
-    process.chdir(previousCwd);
-  }
+  removeEmptyWorkspaceDirectoryInDirectory({
+    directory: parentDirectory,
+    directoryIdentity: parentIdentity,
+    targetName: directoryName,
+    targetIdentity: directoryIdentity,
+  });
   return true;
 }
 
@@ -4139,7 +4066,7 @@ async function writeFinalizedSegmentFiles({
     targetRecordingDirectory,
     'Recording finalize path crosses a symlink'
   );
-  const audioFd = openFileInDirectory({
+  const audioFd = openExistingWorkspaceFileInDirectory({
     directory: targetRecordingDirectory,
     directoryIdentity: targetIdentity,
     fileName: 'audio.webm',
@@ -4212,7 +4139,7 @@ async function writeFinalizedSupplementFiles({
     targetSupplementDirectory,
     'Segment supplement finalize path crosses a symlink'
   );
-  const audioFd = openFileInDirectory({
+  const audioFd = openExistingWorkspaceFileInDirectory({
     directory: targetSupplementDirectory,
     directoryIdentity: targetIdentity,
     fileName: 'audio.webm',
@@ -5708,11 +5635,11 @@ export async function appendAudioSupplementToSegment(
       );
       const finalSupplementDirectoryIdentity =
         await readDirectoryIdentity(finalSupplementDirectory);
-      removeFileInDirectory(
-        finalSupplementDirectory,
-        finalSupplementDirectoryIdentity,
-        FINALIZE_TRANSACTION_MARKER
-      );
+      removeWorkspaceFileInDirectory({
+        directory: finalSupplementDirectory,
+        directoryIdentity: finalSupplementDirectoryIdentity,
+        fileName: FINALIZE_TRANSACTION_MARKER,
+      });
       await writeSupplementObjectManifest({
         rootPath: input.rootPath,
         supplement: supplementManifest,

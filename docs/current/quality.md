@@ -19,6 +19,7 @@
 - TanStack Query、React Hook Form 和 `@hookform/resolvers` 已安装，当前服务 memory space creation form、memory rename form、memory space list 和记忆空间 snapshot cache。
 - `class-variance-authority`、`clsx`、`tailwind-merge`、`@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator`、`primereact`、`vaul` 和 `lucide-react` 已安装，当前服务 Button、Label、Dialog、AlertDialog、DropdownMenu、Floating Action Button Speed Dial、Drawer、Textarea、Tooltip、Separator、App shell、recording audio controls 和 icon controls。
 - Workspace single-writer lock 使用 `.reo/workspace.lock` no-follow leaf file 和同目录 `.reo/workspace.lock.lock` 目录锁，owner 文件写入 pid 与进程启动指纹，不依赖通用 lock service。
+- Workspace directory transaction helper 有 focused main tests 覆盖 parent identity replacement、no-replace leaf safety、known-directory file remove safety、known-directory entry read identity、known-directory tree remove identity、empty directory late payload protection 和 unsupported directory fsync code allowlist。
 - `electron-log` 已安装，当前只服务 main-owned 本地诊断日志。
 - 当前 logging owner 是 main process diagnostics；diagnostic event contract 位于 `src/main/diagnostics.ts`，本地 Electron file transport 初始化位于 `src/main/electronDiagnostics.ts`。
 - 当前没有 Sentry DSN、release environment、source map upload、sampling 或 privacy/scrubbing policy。
