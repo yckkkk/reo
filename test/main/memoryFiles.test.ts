@@ -2415,6 +2415,71 @@ test('supplement finalize uses segment file-space node truth when file-truth sca
   );
 });
 
+test('supplement finalize checks parent by direct file truth without pre-scanning all segment ids', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_supplement_direct_parent_check';
+  const segmentId = 'seg_20260512_supplement_direct_parent_check';
+  const supplementId = 'sup_20260512_direct_parent_check';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充录音直查父片段',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音25',
+  });
+  await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-12T16:28:00.000Z',
+  });
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId,
+    sequence: 0,
+    chunk: new Uint8Array([4, 5, 6]),
+  });
+  let segmentFileTruthScanCount = 0;
+  setBeforeSegmentFileTruthListForTest(() => {
+    segmentFileTruthScanCount += 1;
+  });
+
+  try {
+    const finalized = await appendAudioSupplementToSegment({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      supplementId,
+      title: '补充录音1',
+      durationMs: 1200,
+      now: () => '2026-05-12T16:29:00.000Z',
+      rebuildIndex: async () => [
+        {
+          memoryId,
+          title: '补充录音直查父片段',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-12T16:29:00.000Z',
+          segmentCount: 1,
+          durationMs: 1200,
+          audioByteLength: 3,
+          hasTranscript: false,
+          supplementCount: 1,
+        },
+      ],
+    });
+
+    assert.equal(finalized.ok, true);
+    assert.equal(segmentFileTruthScanCount, 0);
+  } finally {
+    setBeforeSegmentFileTruthListForTest(null);
+  }
+});
+
 test('supplement finalize rejects duplicate supplement ids even when the existing folder was renamed', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_supplement_duplicate';
@@ -5485,6 +5550,36 @@ test('recovery stops before metadata-less memory cleanup when workspace usabilit
     /Workspace lock was lost/
   );
   await stat(memoryDirectory);
+});
+
+test('recovery preserves metadata-less memory when semantic payload appears before cleanup remove', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_recovery_late_payload';
+  const memoryDirectory = path.join(rootPath, 'memories', memoryId);
+  await mkdir(path.join(memoryDirectory, 'segments'), { recursive: true });
+  let checks = 0;
+
+  await recoverRecordingFinalizeTransactions(rootPath, {
+    assertWorkspaceUsable: async () => {
+      checks += 1;
+      if (checks === 2) {
+        await writeFile(
+          path.join(memoryDirectory, 'memory.md'),
+          renderWorkspaceMarkdownObject({
+            objectType: 'memory',
+            data: { title: '恢复期间出现的记忆' },
+            content: '# 恢复期间出现的记忆\n',
+          })
+        );
+      }
+    },
+  });
+
+  await stat(memoryDirectory);
+  assert.match(
+    await readFile(path.join(memoryDirectory, 'memory.md'), 'utf8'),
+    /恢复期间出现的记忆/
+  );
 });
 
 test('recovery preserves markerless metadata-less memory payloads instead of guessing deletion', async () => {

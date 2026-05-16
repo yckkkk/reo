@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { renameSync, symlinkSync } from 'node:fs';
+import { mkdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -17,6 +17,7 @@ import test from 'node:test';
 import {
   acquireWorkspaceLock,
   setAfterWorkspaceLockDirectoryCreateForTest,
+  setBeforeStaleLockDirectoryRemoveForTest,
 } from '../../src/main/workspaceLock.js';
 
 test('workspace lock rejects duplicate open and releases explicitly', async () => {
@@ -81,6 +82,43 @@ test('workspace lock replaces stale lock directories when the owner process fing
   assert.equal(typeof owner.processStartTimeMs, 'number');
   assert.notEqual(owner.processStartTimeMs, 0);
   await acquired.lock.release();
+});
+
+test('workspace lock does not remove a replacement live lock after stale owner validation', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-lock-stale-replaced-before-remove-'));
+  const staleLockDirectory = path.join(root, '.reo', 'workspace.lock.lock');
+  const preservedStaleLockDirectory = path.join(root, '.reo', 'workspace.lock.lock-stale');
+  await mkdir(staleLockDirectory, { recursive: true });
+  await writeFile(
+    path.join(staleLockDirectory, 'owner.json'),
+    JSON.stringify({ schemaVersion: 2, pid: process.pid, processStartTimeMs: 0 })
+  );
+
+  setBeforeStaleLockDirectoryRemoveForTest(() => {
+    setBeforeStaleLockDirectoryRemoveForTest(null);
+    renameSync(staleLockDirectory, preservedStaleLockDirectory);
+    mkdirSync(staleLockDirectory);
+    writeFileSync(
+      path.join(staleLockDirectory, 'owner.json'),
+      JSON.stringify({ pid: process.pid })
+    );
+  });
+
+  try {
+    const acquired = await acquireWorkspaceLock({ canonicalRoot: root });
+    assert.equal(acquired.ok, false);
+    if (!acquired.ok) {
+      assert.equal(acquired.error.code, 'ERR_WORKSPACE_LOCKED');
+    }
+  } finally {
+    setBeforeStaleLockDirectoryRemoveForTest(null);
+  }
+
+  assert.equal(
+    JSON.parse(await readFile(path.join(staleLockDirectory, 'owner.json'), 'utf8')).pid,
+    process.pid
+  );
+  await stat(preservedStaleLockDirectory);
 });
 
 test('workspace lock replaces legacy pid-only locks when the owner file predates the live pid', async () => {

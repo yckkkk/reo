@@ -4,7 +4,6 @@ import {
   constants,
   fstatSync,
   fsyncSync,
-  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -27,6 +26,7 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 
 let afterWorkspaceLockDirectoryCreateForTest: (() => void) | null = null;
+let beforeStaleLockDirectoryRemoveForTest: (() => void) | null = null;
 
 const LOCK_OWNER_SCHEMA_VERSION = 2;
 const LOCK_OWNER_MAX_BYTES = 512;
@@ -117,6 +117,10 @@ function isSameProcessStartTime(left: number, right: number): boolean {
   return Math.abs(left - right) <= PROCESS_START_TIME_TOLERANCE_MS;
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (error as NodeJS.ErrnoException).code === code;
+}
+
 function readLockOwner(): LockOwner | null {
   let ownerFd: number | null = null;
   try {
@@ -180,12 +184,28 @@ function isLockOwnerAlive(owner: LockOwner): boolean {
 }
 
 function removeStaleLockDirectory(): boolean {
-  const lockEntry = lstatSync('workspace.lock.lock');
-  if (!lockEntry.isDirectory() || lockEntry.isSymbolicLink()) {
-    throw new Error('Workspace lock path is unsafe');
-  }
+  const staleLockDirectoryIdentity = readDirectoryIdentitySync(
+    'workspace.lock.lock',
+    'Workspace lock path is unsafe'
+  );
   const owner = readLockOwner();
   if (owner !== null && isLockOwnerAlive(owner)) {
+    return false;
+  }
+  beforeStaleLockDirectoryRemoveForTest?.();
+  let currentLockDirectoryIdentity: DirectoryIdentity;
+  try {
+    currentLockDirectoryIdentity = readDirectoryIdentitySync(
+      'workspace.lock.lock',
+      'Workspace lock path is unsafe'
+    );
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return true;
+    }
+    throw error;
+  }
+  if (!sameDirectoryIdentity(currentLockDirectoryIdentity, staleLockDirectoryIdentity)) {
     return false;
   }
   rmSync('workspace.lock.lock', { recursive: true });
@@ -306,6 +326,10 @@ function createLockWithinDirectory(
 
 export function setAfterWorkspaceLockDirectoryCreateForTest(hook: (() => void) | null): void {
   afterWorkspaceLockDirectoryCreateForTest = hook;
+}
+
+export function setBeforeStaleLockDirectoryRemoveForTest(hook: (() => void) | null): void {
+  beforeStaleLockDirectoryRemoveForTest = hook;
 }
 
 export interface WorkspaceLock {

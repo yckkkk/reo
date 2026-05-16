@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const LOCAL_ENV_FILES = ['.env.local'];
@@ -73,11 +73,16 @@ export function loadLocalEnvFiles({
 
   for (const file of files) {
     const filePath = resolve(cwd, file);
-    if (!existsSync(filePath)) {
-      continue;
+    let content;
+    try {
+      content = readFileSync(filePath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+        continue;
+      }
+      throw error;
     }
-
-    const parsed = parseLocalEnv(readFileSync(filePath, 'utf8'));
+    const parsed = parseLocalEnv(content);
     loadedFiles.push(file);
     for (const [key, value] of Object.entries(parsed)) {
       if (nextEnv[key] === undefined) {

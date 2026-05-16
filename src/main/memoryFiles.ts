@@ -2974,12 +2974,6 @@ async function listValidFinalizedSegmentFileTruths(
   return fileTruths.filter((fileTruth) => !duplicated.has(fileTruth.segmentId));
 }
 
-async function listValidFinalizedSegmentIds(rootPath: string, memoryId: string): Promise<string[]> {
-  return (await listValidFinalizedSegmentFileTruths(rootPath, memoryId)).map(
-    (fileTruth) => fileTruth.segmentId
-  );
-}
-
 async function readValidFinalizedSegmentFileTruth(
   rootPath: string,
   memoryId: string,
@@ -3891,6 +3885,32 @@ export async function removeSafeWorkspaceDirectory(
   return true;
 }
 
+async function removeEmptyWorkspaceDirectory(
+  rootPath: string,
+  directoryPath: string
+): Promise<boolean> {
+  const safeDirectory = await resolveSafeCleanupDirectory(rootPath, directoryPath);
+  if (!safeDirectory) {
+    return false;
+  }
+  const parentDirectory = path.dirname(safeDirectory);
+  const directoryName = path.basename(safeDirectory);
+  const parentIdentity = await readDirectoryIdentity(parentDirectory);
+  const directoryIdentity = await readDirectoryIdentity(safeDirectory);
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(parentDirectory);
+    assertSameCurrentDirectory(parentIdentity);
+    assertSameDirectoryPath(directoryName, directoryIdentity, 'Workspace cleanup path changed');
+    rmdirSync(directoryName);
+    assertSameCurrentDirectory(parentIdentity);
+    fsyncCurrentDirectoryBestEffort();
+  } finally {
+    process.chdir(previousCwd);
+  }
+  return true;
+}
+
 async function removeDraftSegmentDirectorySafely(
   rootPath: string,
   segmentId: string,
@@ -3918,7 +3938,7 @@ async function removeMetadataLessEmptyMemoryDirectory(
   const entries = await readExistingDirectoryNames(directory);
   if (entries.length === 0) {
     await assertWorkspaceUsable?.();
-    await removeSafeWorkspaceDirectory(rootPath, directory).catch(() => {});
+    await removeEmptyWorkspaceDirectory(rootPath, directory).catch(() => {});
     return;
   }
   if (entries.length !== 1 || entries[0] !== 'segments') {
@@ -3933,7 +3953,14 @@ async function removeMetadataLessEmptyMemoryDirectory(
     return;
   }
   await assertWorkspaceUsable?.();
-  await removeSafeWorkspaceDirectory(rootPath, directory).catch(() => {});
+  const segmentsRemoved = await removeEmptyWorkspaceDirectory(rootPath, segmentsDirectory).catch(
+    () => false
+  );
+  if (!segmentsRemoved) {
+    return;
+  }
+  await assertWorkspaceUsable?.();
+  await removeEmptyWorkspaceDirectory(rootPath, directory).catch(() => {});
 }
 
 async function cleanupPreExposeFinalizeArtifacts({
@@ -5581,13 +5608,6 @@ export async function appendAudioSupplementToSegment(
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const current = await readMemoryFileTruth(input.rootPath, input.memoryId);
-      const fileTruthSegmentIds = await listValidFinalizedSegmentIds(
-        input.rootPath,
-        input.memoryId
-      );
-      if (!fileTruthSegmentIds.includes(input.segmentId)) {
-        throw new Error('Segment supplement parent is not part of memory');
-      }
       const parentSegment = await readValidFinalizedSegmentProjection({
         rootPath: input.rootPath,
         workspaceId: input.workspaceId,

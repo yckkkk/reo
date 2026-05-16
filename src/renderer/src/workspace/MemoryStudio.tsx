@@ -150,7 +150,7 @@ function domIdPart(value: string) {
 
 function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
   const valueDomId =
-    value === 'transcript' ? 'transcript' : domIdPart(supplementIdFromContentTab(value) ?? value);
+    value === 'transcript' ? 'transcript' : domIdPart(value.slice('supplement:'.length));
   const baseId = `memory-studio-${segmentDomId}-${valueDomId}`;
 
   return {
@@ -1182,14 +1182,21 @@ export function MemoryStudio({
 
     event.preventDefault();
 
-    const nextIndex =
-      event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? contentTabs.length - 1
-          : event.key === 'ArrowRight'
-            ? (currentIndex + 1) % contentTabs.length
-            : (currentIndex - 1 + contentTabs.length) % contentTabs.length;
+    let nextIndex: number;
+    switch (event.key) {
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = contentTabs.length - 1;
+        break;
+      case 'ArrowRight':
+        nextIndex = (currentIndex + 1) % contentTabs.length;
+        break;
+      default:
+        nextIndex = (currentIndex - 1 + contentTabs.length) % contentTabs.length;
+        break;
+    }
     const nextTab = contentTabs[nextIndex];
     if (!nextTab) {
       return;

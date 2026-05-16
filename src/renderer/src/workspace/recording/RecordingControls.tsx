@@ -6,6 +6,15 @@ import type { RecordingState } from '../recordingMachine';
 
 export type PausedRecordingPrimaryAction = 'resume' | 'replace' | 'none';
 
+const PAUSED_PRIMARY_ACTION_CONTENT: Record<
+  PausedRecordingPrimaryAction,
+  { readonly label: string; readonly text: string } | null
+> = {
+  resume: { label: '继续录音', text: '继续' },
+  replace: { label: '替换录音', text: '替换' },
+  none: null,
+};
+
 type RecordingControlsProps = {
   readonly isPlaying?: boolean;
   readonly playbackDisabled?: boolean;
@@ -100,14 +109,7 @@ export function RecordingControls({
   const isPaused = state.status === 'paused';
   const locatorDisabled = !isPaused;
   const playbackControlDisabled = locatorDisabled || playbackDisabled;
-  const pausedPrimaryLabel =
-    pausedPrimaryAction === 'resume'
-      ? '继续录音'
-      : pausedPrimaryAction === 'replace'
-        ? '替换录音'
-        : null;
-  const pausedPrimaryText =
-    pausedPrimaryAction === 'resume' ? '继续' : pausedPrimaryAction === 'replace' ? '替换' : null;
+  const pausedPrimaryContent = PAUSED_PRIMARY_ACTION_CONTENT[pausedPrimaryAction];
   const playbackLabel = isPlaying ? '暂停回放' : '播放录音';
 
   return (
@@ -116,15 +118,15 @@ export function RecordingControls({
       data-vaul-no-drag
     >
       <div className="flex justify-start" data-testid="recording-left-control-slot">
-        {isPaused && pausedPrimaryLabel && pausedPrimaryText ? (
+        {isPaused && pausedPrimaryContent ? (
           <Button
-            aria-label={pausedPrimaryLabel}
+            aria-label={pausedPrimaryContent.label}
             className="h-40 w-[108px] rounded-lg bg-card px-10 text-ui-md text-brand-ember shadow-none hover:bg-secondary hover:text-foreground"
             onClick={onPrimaryPausedAction}
             type="button"
             variant="secondary"
           >
-            {pausedPrimaryText}
+            {pausedPrimaryContent.text}
           </Button>
         ) : isPaused ? null : (
           <Button

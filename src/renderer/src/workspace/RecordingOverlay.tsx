@@ -1949,7 +1949,8 @@ export function RecordingOverlay({
       if (!draft.ok) {
         throw new Error(workspaceErrorDisplayMessage(draft.error, '无法创建替换录音。'));
       }
-      nextSegmentId = draft.value.segmentId;
+      const replacementSegmentId = draft.value.segmentId;
+      nextSegmentId = replacementSegmentId;
       sequenceRef.current = draft.value.nextSequence;
       appendQueueRef.current = Promise.resolve();
       appendFailureRef.current = null;
@@ -1958,7 +1959,7 @@ export function RecordingOverlay({
           nextSequence: draft.value.nextSequence,
           retainedByteLength,
           sourceSegmentId: oldDraft.segmentId,
-          targetSegmentId: nextSegmentId,
+          targetSegmentId: replacementSegmentId,
           workspaceHandle: workspaceSession.workspaceHandle,
         });
         if (recordingSessionRef.current !== recordingSession) {
@@ -1973,20 +1974,18 @@ export function RecordingOverlay({
       }
       replacementCopySessionRef.current = null;
       activeDraftRef.current = {
-        segmentId: nextSegmentId,
+        segmentId: replacementSegmentId,
         recordingSession: nextRecordingSession,
       };
       setCapturedChunks(retainedChunks);
       capturedPcmChunksRef.current = retainedPcmChunks;
       lastCapturedChunkEndMsRef.current = replacementStartMs;
       lastCapturedPcmChunkEndMsRef.current = replacementStartMs;
-      writeRecoveryMarker(nextSegmentId, replacementStartMs, {
+      writeRecoveryMarker(replacementSegmentId, replacementStartMs, {
         recordingSessionId: nextRecordingFlowSessionId,
         revisionId: nextRevisionId,
       });
       persistRecoveryAudioChunksSnapshot(replacementStartMs, { force: true });
-      lastCapturedChunkEndMsRef.current = replacementStartMs;
-      lastCapturedPcmChunkEndMsRef.current = replacementStartMs;
       lastNoticeableAudioAtMsRef.current = replacementStartMs;
       lastRecoveryWaveformPersistedMsRef.current = replacementStartMs;
       lastWaveformSampleAtMsRef.current = replacementStartMs;
@@ -2025,7 +2024,7 @@ export function RecordingOverlay({
           transcriptMarkdown: replacementTranscript,
           transcriptSegments: replacementTimeline.transcriptSegments,
         },
-        segmentId: nextSegmentId,
+        segmentId: replacementSegmentId,
         workspaceId: workspaceSession.workspaceId,
       });
       let nextController = oldController;
@@ -2070,7 +2069,7 @@ export function RecordingOverlay({
       liveAudioInputActiveRef.current = true;
       setState((current) =>
         transitionRecordingState(current, {
-          segmentId: nextSegmentId!,
+          segmentId: replacementSegmentId,
           type: 'resume-requested',
         })
       );

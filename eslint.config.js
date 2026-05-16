@@ -2,6 +2,16 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
+import { builtinModules } from 'node:module';
+
+const nodeBuiltinImports = [
+  ...new Set(
+    builtinModules.flatMap((moduleName) => {
+      const bareName = moduleName.replace(/^node:/, '');
+      return [bareName, `node:${bareName}`];
+    })
+  ),
+];
 
 export default defineConfig([
   globalIgnores(['node_modules', 'out']),
@@ -19,7 +29,7 @@ export default defineConfig([
       'no-restricted-imports': [
         'error',
         {
-          paths: ['electron', 'fs', 'fs/promises', 'path', 'child_process', 'crypto', 'os', 'url'],
+          paths: ['electron', ...nodeBuiltinImports],
           patterns: ['node:*'],
         },
       ],
@@ -29,6 +39,24 @@ export default defineConfig([
         {
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/preload/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: nodeBuiltinImports,
+          patterns: [
+            {
+              regex: '^(?!electron$|\\.\\.?/).+',
+              message:
+                'Preload source may only import Electron and relative preload/contract modules.',
+            },
+          ],
         },
       ],
     },
