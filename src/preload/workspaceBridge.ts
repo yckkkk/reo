@@ -3,6 +3,7 @@ import {
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
+  WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
@@ -28,6 +29,7 @@ import {
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
@@ -37,6 +39,7 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
@@ -50,11 +53,14 @@ import {
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
+  WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
+  WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
   type WorkspaceIpcChannel,
   type WorkspaceRendererEventChannel,
 } from '../workspace-contract/workspace-channels.js';
@@ -69,23 +75,15 @@ export interface WorkspaceBridgeInvoker {
 }
 
 type WorkspaceBridgeMethod = keyof ReoWorkspaceBridge;
-type PendingVoiceSettingsBridgeMethod =
-  | 'readVoiceTranscriptionSettings'
-  | 'setVoiceTranscriptionEnabled'
-  | 'saveVoiceTranscriptionApiKey'
-  | 'clearVoiceTranscriptionApiKey'
-  | 'validateVoiceTranscriptionCredentials'
-  | 'openExternalUrl';
-type ImplementedWorkspaceBridge = Omit<ReoWorkspaceBridge, PendingVoiceSettingsBridgeMethod>;
 type WorkspaceBridgeResponse<Method extends WorkspaceBridgeMethod> = Awaited<
   ReturnType<ReoWorkspaceBridge[Method]>
 >;
 
-export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ImplementedWorkspaceBridge {
+export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorkspaceBridge {
   const invoke = <Response>(channel: WorkspaceIpcChannel, payload?: unknown): Promise<Response> =>
     invoker.invoke(channel, payload) as Promise<Response>;
 
-  const bridge: ImplementedWorkspaceBridge = {
+  const bridge: ReoWorkspaceBridge = {
     chooseDirectory: () =>
       invoke<WorkspaceBridgeResponse<'chooseDirectory'>>(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL),
     listMemorySpaces: () =>
@@ -332,6 +330,36 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): Implemen
     closeRecordingTranscription: (payload) =>
       invoke<WorkspaceBridgeResponse<'closeRecordingTranscription'>>(
         WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+        payload
+      ),
+    readVoiceTranscriptionSettings: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readVoiceTranscriptionSettings'>>(
+        WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+        payload
+      ),
+    setVoiceTranscriptionEnabled: (payload) =>
+      invoke<WorkspaceBridgeResponse<'setVoiceTranscriptionEnabled'>>(
+        WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+        payload
+      ),
+    saveVoiceTranscriptionApiKey: (payload) =>
+      invoke<WorkspaceBridgeResponse<'saveVoiceTranscriptionApiKey'>>(
+        WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+        payload
+      ),
+    clearVoiceTranscriptionApiKey: (payload) =>
+      invoke<WorkspaceBridgeResponse<'clearVoiceTranscriptionApiKey'>>(
+        WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+        payload
+      ),
+    validateVoiceTranscriptionCredentials: (payload) =>
+      invoke<WorkspaceBridgeResponse<'validateVoiceTranscriptionCredentials'>>(
+        WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+        payload
+      ),
+    openExternalUrl: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openExternalUrl'>>(
+        WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
         payload
       ),
     onRecordingTranscriptionEvent: (callback) =>

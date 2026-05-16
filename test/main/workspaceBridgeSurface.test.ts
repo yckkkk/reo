@@ -59,6 +59,12 @@ const workspaceBridgeKeys = [
   'sendRecordingTranscriptionAudio',
   'finishRecordingTranscription',
   'closeRecordingTranscription',
+  'readVoiceTranscriptionSettings',
+  'setVoiceTranscriptionEnabled',
+  'saveVoiceTranscriptionApiKey',
+  'clearVoiceTranscriptionApiKey',
+  'validateVoiceTranscriptionCredentials',
+  'openExternalUrl',
   'onRecordingTranscriptionEvent',
 ] as const;
 
@@ -533,6 +539,32 @@ test('workspace preload bridge maps recording transcription methods and strips i
   );
   assert.deepEqual(events, [{ kind: 'closed', recordingSessionId: 'recording-1' }]);
   assert.equal(removed, true);
+});
+
+test('workspace preload bridge maps voice settings methods to explicit channels', async () => {
+  const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
+  const bridge = createWorkspaceBridge({
+    invoke: async (channel, payload) => {
+      calls.push({ channel, payload });
+      return { ok: true, value: {} };
+    },
+  }) as unknown as ReoWorkspaceBridge;
+
+  await bridge.readVoiceTranscriptionSettings(undefined);
+  await bridge.setVoiceTranscriptionEnabled({ enabled: true });
+  await bridge.saveVoiceTranscriptionApiKey({ apiKey: 'abcd1234' });
+  await bridge.clearVoiceTranscriptionApiKey(undefined);
+  await bridge.validateVoiceTranscriptionCredentials(undefined);
+  await bridge.openExternalUrl({ url: 'https://console.volcengine.com/' });
+
+  assert.deepEqual(calls, [
+    { channel: 'workspace:readVoiceTranscriptionSettings', payload: undefined },
+    { channel: 'workspace:setVoiceTranscriptionEnabled', payload: { enabled: true } },
+    { channel: 'workspace:saveVoiceTranscriptionApiKey', payload: { apiKey: 'abcd1234' } },
+    { channel: 'workspace:clearVoiceTranscriptionApiKey', payload: undefined },
+    { channel: 'workspace:validateVoiceTranscriptionCredentials', payload: undefined },
+    { channel: 'workspace:openExternalUrl', payload: { url: 'https://console.volcengine.com/' } },
+  ]);
 });
 
 test('workspace preload bridge exposes only implemented workspace file methods', async () => {
