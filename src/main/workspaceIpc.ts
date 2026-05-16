@@ -3579,7 +3579,7 @@ function handleReadFinalizedAudioSegmentSupplementCore(
                   supplementId: request.supplementId,
                   audio: result.audio,
                   audioByteLength: result.audioByteLength,
-                  transcript: { exists: false, text: '' },
+                  transcript: result.transcript,
                 },
               }
             : result

@@ -1322,7 +1322,11 @@ async function readOptionalFinalizedTranscriptFile(
     }
     const markdown = (await readFileDescriptor(fd, 'utf8')) as string;
     const parsed = parseWorkspaceMarkdownObject({ objectType: options.objectType, markdown });
-    const text = extractSegmentTranscript(parsed.content);
+    const extractedText = extractSegmentTranscript(parsed.content);
+    const text =
+      options.objectType === 'supplement' && extractedText.length === 0
+        ? parsed.content.trim()
+        : extractedText;
     await assertSameDirectory(directory, directoryIdentity);
     return {
       exists: text.length > 0,
@@ -1444,6 +1448,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
       readonly ok: true;
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly transcript: { readonly exists: boolean; readonly text: string };
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1494,6 +1499,11 @@ export async function readFinalizedAudioSegmentSupplementContent({
           'durable-marker-recovery-required'
         );
       }
+      const transcript = await readOptionalFinalizedTranscriptFile(
+        target.directory,
+        supplementDirectoryIdentity,
+        { markdownFileName: 'supplement.md', objectType: 'supplement' }
+      );
       const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
       if (stillUsable) {
         return stillUsable;
@@ -1503,6 +1513,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
         ok: true,
         audio: new Uint8Array(content),
         audioByteLength: target.audioByteLength,
+        transcript,
       };
     } finally {
       closeSync(audioFd);

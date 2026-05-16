@@ -1558,7 +1558,7 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
   }
 });
 
-test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and empty transcript without paths', async () => {
+test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and transcript without exposing paths', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-supplement-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -1592,6 +1592,76 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     segmentId: 'seg_ipc_audio',
     supplementId: 'sup_ipc_followup',
     title: '补充录音',
+    content: '补充录音转写正文',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleReadFinalizedAudioSegmentSupplementForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.requestId, 'request_sup_ipc_followup');
+    assert.equal(result.value.workspaceId, 'ws_ipc');
+    assert.equal(result.value.memoryId, 'mem_ipc_audio');
+    assert.equal(result.value.segmentId, 'seg_ipc_audio');
+    assert.equal(result.value.supplementId, 'sup_ipc_followup');
+    assert.deepEqual(Array.from(result.value.audio), [4, 5]);
+    assert.equal(result.value.audioByteLength, 2);
+    assert.deepEqual(result.value.transcript, { exists: true, text: '补充录音转写正文' });
+    assert.equal('workspaceHandle' in result.value, false);
+    assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('readFinalizedAudioSegmentSupplement returns empty transcript when supplement body is empty', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-empty-supplement-transcript-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补充播放',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+  });
+  const supplementDirectory = path.join(
+    rootPath,
+    'memories',
+    'mem_ipc_audio',
+    'segments',
+    'seg_ipc_audio',
+    'supplements',
+    'sup_ipc_followup'
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+    content: '',
   });
   const handleStore = createRegisteredHandleStore(rootPath);
 
