@@ -130,7 +130,7 @@
 - 录音真实转写容器使用 `edge-fade-y scrollbar-hover`：上下边缘渐隐，右侧滚动条默认隐藏，hover 或 focus-within 时显示。
 - 点击完成录音会立即关闭 visible recording surface；App 保留隐藏的 recording lifecycle owner 直到 durable audio finalize、必要的 completion backfill、transcript save 和 recovery marker 收口完成。普通录音默认 title 是目标 Memory 内的 `录音N`；补充录音默认 title 是 selected Segment 内的 `补充录音N`；恢复录音使用 recovery marker 保存的 title。完成后不进入强制描述、转写编辑或反思编辑窗口；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment 的 `segment.md` 正文，或通过 `workspace:saveSegmentSupplementTranscript` 写入 finalized audio SegmentSupplement 的 `supplement.md` 正文；若后台收口失败，recording surface 重新打开到失败恢复态。
 - 录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context、切换到 settings mode，并使用 root toast 提示先完成或关闭录音。
-- `RecordingOverlay` 通过 `['settings', 'voice']` 读取 voice transcription settings。Settings disabled 时不调用 `workspace:startRecordingTranscription`，不建立 live ASR audio queue，转写区域显示安静的禁用占位；settings 未加载完成时录音开始按钮保持不可用，避免在未知配置下启动 live ASR。
+- `RecordingOverlay` 通过 `['settings', 'voice']` 读取 voice transcription settings。语音识别关闭时不调用 `workspace:startRecordingTranscription`，不建立 live ASR audio queue，转写区域显示安静的禁用占位；settings 未加载完成时仍允许开始本地录音，但 live ASR start 会等待 settings snapshot 已知后再按当前 snapshot 决定启动或跳过，避免在未知配置下启动 live ASR。
 
 ## State 与 Data
 
