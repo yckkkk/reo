@@ -254,6 +254,19 @@ describe('App', () => {
       ok: true,
       value: { accepted: true },
     });
+    reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
+      ok: true,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
+    });
     reoWorkspace.onRecordingTranscriptionEvent.mockReturnValue(() => {});
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
@@ -572,6 +585,29 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
   });
 
+  it('opens voice settings in the same app window and returns to the app', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+
+    expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '语音' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: '记忆空间内容' })).toContainElement(
+      screen.getByRole('region', { name: '语音设置' })
+    );
+
+    await user.click(screen.getByRole('button', { name: '返回应用' }));
+
+    expect(screen.getByRole('region', { name: '首页' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '语音设置' })).not.toBeInTheDocument();
+  });
+
   it('moves to a loaded workspace state after successful initialization', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
@@ -637,6 +673,65 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '记忆' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByText('workspace-handle-1')).not.toBeInTheDocument();
+  });
+
+  it('returns from settings without releasing the loaded workspace session or stage state', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [
+            {
+              memoryId: 'mem_existing',
+              title: 'Existing memory',
+              createdAt: '2026-05-07T14:30:00.000Z',
+              updatedAt: '2026-05-07T14:30:00.000Z',
+              segmentCount: 1,
+              durationMs: 1,
+              audioByteLength: 1,
+              hasTranscript: false,
+              supplementCount: 0,
+            },
+          ],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '返回应用' }));
+
+    expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Memory Studio' })).toBeInTheDocument();
+    expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
   });
 
   it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {
@@ -6264,6 +6359,12 @@ describe('App', () => {
     await findTitlebarMemoryControl('Existing memory');
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '录音' }));
+    expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '设置', hidden: true }));
+
+    expect(await screen.findByText('当前录音尚未完成，请先完成或关闭录音。')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '语音设置' })).not.toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Memory Space two', hidden: true }));

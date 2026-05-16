@@ -22,7 +22,7 @@
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
-- 当前 renderer route state 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell。
+- 当前 App 顶层持有 `appMode: 'app' | 'settings'`。`appMode: 'app'` 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell；`appMode: 'settings'` 在同一 BrowserWindow 的 AppShell 主内容区渲染 Settings shell，不释放当前 workspace handle，不清理 workspace session、Memory detail cache 或 stage selection state。
 - Agentation 作为 dev-only renderer feedback toolbar 挂载在 renderer root，只在 Vite development 且非 test mode 下 lazy-load；它连接本机 `http://localhost:4747` MCP endpoint，保留点击标注、文本选择、多选、复制输出、本地持久化和 MCP sync 能力，不进入 product App tree、product runtime state、Query、preload 或 IPC。DevAgentation 对 Agentation copy output 执行 renderer-only fallback copy，避免 Electron runtime 拒绝 `navigator.clipboard` 时静默丢失复制结果；DevAgentation 会读取 Agentation 的本地 Layout Mode state，把 `section.note` 补入复制输出，并用 Agentation 的本地 session id 补发或更新 MCP rearrange annotation，确保只写注释、不移动或缩放的 Layout Mode feedback 也能进入复制文本和 MCP pending annotations。
 
 ## 设计系统规则
@@ -57,12 +57,20 @@
 
 - 当前无 memory space state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 记忆空间列表。
 - 当前 loaded memory space state 使用 `AppShell` 包裹 loaded workspace frame；创建记忆空间通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
+- Sidebar 左下角设置入口由 App 拥有的 app mode 切换驱动：非录音状态点击「设置」进入 settings mode，录音状态点击保持当前 app mode 并使用 root toast 提示先完成或关闭录音。AppShell 只暴露 settings trigger，不持有应用 route state。
 - 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 保持透明 Electron drag region，不画分隔线。窗口控制和 sidebar hide/show control 属于该层。
 - AppShell root 和主内容 panel 使用 `bg-background`；左侧 sidebar 使用 `bg-card`；两者在交界处直接相邻，不增加 underlay、合成层、左侧投影或额外边界。
 - 主内容 panel 同步保留 48px panel titlebar slot；panel titlebar 只是 page panel 内的高度占位，不建立独立实色 surface。
 - Sidebar hide/show control 使用 AppShell 内部几何常量定位，对齐原生 macOS traffic-light 行；这些数值不进入全局 design token。
 - Sidebar 宽度可拖拽，最小 240px，最大 520px；covered 状态是主内容面板的 `left` 归零并覆盖 sidebar。
 - Sidebar 展开/covered 动效使用 `duration-200 ease-out`，只过渡 panel 的 `left` 与 border radius；拖拽 resize 时关闭 motion，只直接更新 left。
+
+## Settings Shell
+
+- Settings mode 由 App 顶层 `appMode` 切换进入，Settings shell 渲染在现有 AppShell 主内容区，不打开第二个 BrowserWindow，不引入 router package。
+- Settings shell 使用左侧设置 nav rail 和右侧内容 panel；当前唯一类目是「语音」，返回按钮文案为「返回应用」。
+- 返回应用只把 `appMode` 切回 `'app'`，不释放当前 workspace handle，不重置当前 workspace view、selected Memory、Memory detail cache 或 recording lifecycle owner。
+- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；录音 overlay 的 ASR disabled 行为不属于 Settings shell route 切换。
 
 ## Loaded Workspace
 
@@ -119,7 +127,7 @@
 - 录音转写在录音中只跟随内部转写容器底部，暂停态 cursor focus 也只滚动内部转写容器；不得使用会滚动外层页面或 Drawer 的 element-level focus scrolling。
 - 录音真实转写容器使用 `edge-fade-y scrollbar-hover`：上下边缘渐隐，右侧滚动条默认隐藏，hover 或 focus-within 时显示。
 - 点击完成录音会立即关闭 visible recording surface；App 保留隐藏的 recording lifecycle owner 直到 durable audio finalize、必要的 completion backfill、transcript save 和 recovery marker 收口完成。普通录音默认 title 是目标 Memory 内的 `录音N`；补充录音默认 title 是 selected Segment 内的 `补充录音N`；恢复录音使用 recovery marker 保存的 title。完成后不进入强制描述、转写编辑或反思编辑窗口；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment 的 `segment.md` 正文，或通过 `workspace:saveSegmentSupplementTranscript` 写入 finalized audio SegmentSupplement 的 `supplement.md` 正文；若后台收口失败，recording surface 重新打开到失败恢复态。
-- 录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context，并使用 root toast 提示先完成或关闭录音。
+- 录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context、切换到 settings mode，并使用 root toast 提示先完成或关闭录音。
 
 ## State 与 Data
 

@@ -13,6 +13,8 @@ import {
   type ThemePreference,
 } from './app-shell/themePreference';
 import { ReoToaster, showReoUndoToast, toast } from './components/ui/toaster';
+import { SettingsShell } from './settings/SettingsShell';
+import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
@@ -103,6 +105,7 @@ import {
 } from './workspace/workspaceQueries';
 
 type WorkspaceView = { readonly name: 'workspace-stage' } | { readonly name: 'library' };
+type AppMode = 'app' | 'settings';
 
 type TopLevelWorkspaceView = Extract<
   WorkspaceView,
@@ -537,6 +540,7 @@ export function App() {
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
+  const [appMode, setAppMode] = useState<AppMode>('app');
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
     readThemePreference()
   );
@@ -1433,6 +1437,23 @@ export function App() {
           ...memorySpaces,
         ]
       : memorySpaces;
+  const settingsContent = (
+    <SettingsShell
+      activeCategory="voice"
+      onReturnToApp={() => setAppMode('app')}
+      onSelectCategory={() => {}}
+    >
+      <VoiceSettingsPanel />
+    </SettingsShell>
+  );
+  function openSettingsMode() {
+    if (blockRecordingFlowInterruption()) {
+      return;
+    }
+
+    setAppMode('settings');
+  }
+
   const shellProps = {
     themePreference,
     effectiveTheme,
@@ -1445,7 +1466,7 @@ export function App() {
       void navigateLibrary();
     },
     onCycleThemePreference: cyclePreference,
-    onOpenSettings: () => undefined,
+    onOpenSettings: openSettingsMode,
     onOpenLocalWorkspace: () => {
       void handleOpenLocalWorkspace();
     },
@@ -1502,7 +1523,13 @@ export function App() {
           {...shellProps}
           activeSection={workspaceView.name === 'library' ? 'library' : 'home'}
         >
-          {workspaceView.name === 'library' ? <WorkspaceLibraryPage /> : <WorkspaceStarterHome />}
+          {appMode === 'settings' ? (
+            settingsContent
+          ) : workspaceView.name === 'library' ? (
+            <WorkspaceLibraryPage />
+          ) : (
+            <WorkspaceStarterHome />
+          )}
         </AppShell>
         {workspaceDialogs}
       </>
@@ -3191,9 +3218,15 @@ export function App() {
       <AppShell
         {...shellProps}
         activeWorkspaceId={activeWorkspaceSession.workspaceId}
-        activeSection={workspaceView.name === 'library' ? 'library' : 'workspace'}
+        activeSection={
+          appMode === 'settings'
+            ? undefined
+            : workspaceView.name === 'library'
+              ? 'library'
+              : 'workspace'
+        }
         panelTitlebar={
-          workspaceView.name === 'workspace-stage' ? (
+          appMode === 'app' && workspaceView.name === 'workspace-stage' ? (
             <WorkspaceTitlebar
               currentMemory={currentMemory}
               memoryRailOpen={memoryRailOpen}
@@ -3220,7 +3253,9 @@ export function App() {
           ) : null
         }
       >
-        {workspaceView.name === 'library' ? (
+        {appMode === 'settings' ? (
+          settingsContent
+        ) : workspaceView.name === 'library' ? (
           <WorkspaceLibraryPage />
         ) : (
           <LoadedWorkspaceFrame
