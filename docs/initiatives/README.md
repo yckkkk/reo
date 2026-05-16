@@ -10,7 +10,7 @@
 
 当前产品或代码开发 active initiative：
 
-- 无
+- `2026-05-15-codebase-simplification-foundation`
 
 ## 使用规则
 
