@@ -28,6 +28,7 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
+import { SegmentTranscriptView } from './SegmentTranscriptView';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
@@ -1863,23 +1864,21 @@ export function MemoryStudio({
                   data-slot="memory-studio-transcript-scroll"
                   className="reo-content-tab-panel-motion edge-fade-y scrollbar-hover mt-4 min-h-0 flex-1 overflow-y-auto pl-8 pr-8 pb-6"
                 >
-                  {segmentContentQuery.isLoading ? (
-                    <p className="text-body leading-body text-muted-foreground">
-                      正在载入片段内容。
-                    </p>
-                  ) : segmentContentQuery.isError ? (
-                    <p className="text-body leading-body text-muted-foreground">
-                      片段内容加载失败，请重试。
-                    </p>
-                  ) : segmentContent?.transcript.exists ? (
-                    <p className="select-text max-w-[820px] text-body leading-[1.78] text-foreground">
-                      {segmentContent.transcript.text}
-                    </p>
-                  ) : (
-                    <p className="text-body leading-body text-muted-foreground">
-                      这段录音还没有转录。
-                    </p>
-                  )}
+                  <SegmentTranscriptView
+                    status={
+                      segmentContentQuery.isLoading
+                        ? 'loading'
+                        : segmentContentQuery.isError
+                          ? 'error'
+                          : 'ready'
+                    }
+                    transcript={segmentContent?.transcript ?? null}
+                    copy={{
+                      loading: '正在载入片段内容。',
+                      error: '片段内容加载失败，请重试。',
+                      empty: '这段录音还没有转录。',
+                    }}
+                  />
                 </section>
               ) : activeSegmentSupplement ? (
                 <section
