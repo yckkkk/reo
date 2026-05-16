@@ -310,6 +310,30 @@ export function closeRecordingTranscription(
   return window.reoWorkspace.closeRecordingTranscription(payload);
 }
 
+export function readVoiceTranscriptionSettings() {
+  return window.reoWorkspace.readVoiceTranscriptionSettings(undefined);
+}
+
+export function setVoiceTranscriptionEnabled(
+  payload: Parameters<Window['reoWorkspace']['setVoiceTranscriptionEnabled']>[0]
+) {
+  return window.reoWorkspace.setVoiceTranscriptionEnabled(payload);
+}
+
+export function saveVoiceTranscriptionApiKey(
+  payload: Parameters<Window['reoWorkspace']['saveVoiceTranscriptionApiKey']>[0]
+) {
+  return window.reoWorkspace.saveVoiceTranscriptionApiKey(payload);
+}
+
+export function clearVoiceTranscriptionApiKey() {
+  return window.reoWorkspace.clearVoiceTranscriptionApiKey(undefined);
+}
+
+export function validateVoiceTranscriptionCredentials() {
+  return window.reoWorkspace.validateVoiceTranscriptionCredentials(undefined);
+}
+
 export function onRecordingTranscriptionEvent(
   callback: Parameters<Window['reoWorkspace']['onRecordingTranscriptionEvent']>[0]
 ) {
@@ -359,6 +383,18 @@ export type WorkspaceFinalizedAudioSegmentContent = Extract<
 >['value'];
 export type WorkspaceFinalizedAudioSegmentSupplementContent = Extract<
   Awaited<ReturnType<typeof readFinalizedAudioSegmentSupplement>>,
+  { readonly ok: true }
+>['value'];
+export type VoiceTranscriptionSettings = Extract<
+  Awaited<ReturnType<typeof readVoiceTranscriptionSettings>>,
+  { readonly ok: true }
+>['value']['settings'];
+export type VoiceTranscriptionSettingsResponseValue = Extract<
+  Awaited<ReturnType<typeof readVoiceTranscriptionSettings>>,
+  { readonly ok: true }
+>['value'];
+export type VoiceTranscriptionCredentialsValidation = Extract<
+  Awaited<ReturnType<typeof validateVoiceTranscriptionCredentials>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;
