@@ -11,15 +11,15 @@
 - 当前设计系统是黑色为主、红色为辅的 Soft Flat Design System：纯白或极深灰画布、低对比灰度容器、无同平面描边、基础组件无阴影、浮层使用克制 Z 轴投影、黑色用于核心动作和明确状态，红色用于表达入口、录音主按钮和危险/高注意力状态。
 - `src/renderer/src/index.css` 负责 Tailwind v4 import、`data-theme="dark"` dark variant、Electron drag/no-drag utility、全局不可选中文本和输入/转录类文本可选中规则。
 - `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x`、`scrollbar-hover` 和 `reo-content-tab-panel-motion`。它们用于可滚动内容边缘渐隐、hover/focus 时才显露滚动条的文本容器，以及内容 tab panel 的轻量进入反馈，不由业务组件重复实现 gradient overlay、mask、scrollbar 或 panel motion 规则。业务局部的 sibling action reveal 留在 owner component，不写入全局 CSS。`edge-fade-*` 是滚动感知的：通过 `@property` 注册的边缘偏移变量 + scroll-driven animation，每个边缘只在该方向有内容被滚走时才渐隐，内容不溢出时无 fade。
-- 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme` 与 document 根节点 `data-theme` 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容也继承当前主题。侧边栏底部使用单按钮循环 `浅色 → 深色 → 跟随系统 → 浅色`，按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
+- 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme` 与 document 根节点 `data-theme` 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容也继承当前主题。侧边栏底部提供齿轮「设置」入口和单按钮主题循环 `浅色 → 深色 → 跟随系统 → 浅色`，主题按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
 - 深色主题的 `accent` 是 popover 上的交互高光色，使用 `color-mix(in oklab, var(--foreground) 10%, var(--popover))`，不得与 `popover` 同色；DropdownMenu、ghost icon、secondary Button hover 和弹层内次要按钮 hover 都依赖它表达可见但克制的状态反馈。
-- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/alert-dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/alert-dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx`、`components/ui/switch.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
 - `Waveform` 是当前 Reo audio UI primitive；它支持 canvas bars、静态 dots、播放进度双色切分和录音编辑 cursor，并在 `data-theme` 切换时重绘 canvas 以同步主题 token 颜色；不包含 agent runtime、network/API key、demo feedback 或未实现文案。
 - 当前没有 shared local playback primitive；暂停态回听由 recording overlay 内部的隐藏 HTMLAudioElement 和 feature-local controls 承担。
-- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip` 和 `@radix-ui/react-separator`。
+- 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-switch`。
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。
 - 当前 renderer 入口由 QueryClient provider 包裹。
 - 当前 App 顶层持有 `appMode: 'app' | 'settings'`。`appMode: 'app'` 覆盖无 active memory space 的 starter Home shell 和已初始化或已打开 memory space 的 loaded shell；`appMode: 'settings'` 在同一 BrowserWindow 的 AppShell 主内容区渲染 Settings shell，不释放当前 workspace handle，不清理 workspace session、Memory detail cache 或 stage selection state。
@@ -48,6 +48,7 @@
 - Dialog、AlertDialog 与 Drawer：使用 `bg-popover text-popover-foreground shadow-modal`，由 Radix/Vaul 承担 overlay mechanics。危险确认统一通过 workspace-level `WorkspaceDangerConfirmDialog` 使用 AlertDialog 的 title / description / footer 线性结构；Memory delete、Segment delete 和 Memory space remove 不在确认弹层内嵌套重内容卡，确认按钮不得让 Radix 自动关闭弹层，是否关闭由对应业务 flow 的成功/失败状态决定。
 - Toast：root 只挂载一次，toast surface 使用 `bg-popover text-popover-foreground shadow-float`。所有 toast action 使用同一 action button 结构；默认态透明、无边框、无填充底色，hover/active 只用 `color-mix` 填充高光，不画描边，focus-visible 保留键盘可达 ring。恢复 action 使用 icon+文字，不使用裸文字按钮。可撤销删除 toast 统一通过 `showReoUndoToast` 使用同一 neutral surface、目标标题、icon+文字恢复 action、无 close button、`dismissible: false` 和底部 2px 进度条；Memory delete 的 undo 调用 main restore，Segment delete 的 undo 只回滚 renderer pending projection。10 秒 toast duration 是 Segment delete grace-period 唯一时钟。
 - Separator：保留语义和命中区，不默认画可见线。
+- Switch：Radix mechanics，source 位于 `components/ui/switch.tsx`，当前 consumer 是 `VoiceSettingsPanel` 的「启用流式语音识别」开关；轨道使用 `bg-secondary`，checked 使用 `bg-primary`，disabled 使用 `bg-muted`，thumb 使用 `bg-background`，不使用描边或阴影。
 - Breadcrumb：用于 AppShell panel titlebar；trigger 使用 `rounded-sm` 方圆角，层级之间使用圆点 separator，不使用 chevron。
 - Floating Action Button Speed Dial：用于底部表达入口；trigger 使用 `bg-brand-ember` 红色，trigger 和 action 都是全圆 FAB 控件；普通菜单 action 不继承该例外。PrimeReact action 自带圆形样式，Reo primitive 在该层明确保留 `rounded-full`，不能让业务 consumer 处理；结构展开动效不表达基础阴影。
 - Waveform：保留 canvas waveform renderer、静态 dots、动态 bars、播放进度双色切分和录音编辑 cursor；主题切换后重新读取 token 并重绘；当 data 为空或样本为零时不绘制占位 bars。
@@ -67,10 +68,11 @@
 
 ## Settings Shell
 
-- Settings mode 由 App 顶层 `appMode` 切换进入，Settings shell 渲染在现有 AppShell 主内容区，不打开第二个 BrowserWindow，不引入 router package。
-- Settings shell 使用左侧设置 nav rail 和右侧内容 panel；当前唯一类目是「语音」，返回按钮文案为「返回应用」。
+- Settings mode 由 App 顶层 `appMode` 切换进入，Sidebar 左下角齿轮「设置」按钮是入口。Settings shell 渲染在现有 AppShell 主内容区，不打开第二个 BrowserWindow，不引入 router package。
+- Settings shell 使用左侧设置 nav rail 和右侧内容 panel；左侧顶部是「返回应用」，下方按类目切换，当前唯一类目是「语音」。
 - 返回应用只把 `appMode` 切回 `'app'`，不释放当前 workspace handle，不重置当前 workspace view、selected Memory、Memory detail cache 或 recording lifecycle owner。
-- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；录音 overlay 的 ASR disabled 行为不属于 Settings shell route 切换。
+- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；它使用 `Switch` 控制流式语音识别启用状态，使用 password `Input` 编辑 X-Api-Key，保存后由 main 同步执行验证，清除 X-Api-Key 使用 `WorkspaceDangerConfirmDialog` 二次确认。
+- 录音 overlay open 时 Sidebar settings trigger 保持当前 app mode，并通过 root toast 提示先完成或关闭录音。
 
 ## Loaded Workspace
 
@@ -128,6 +130,7 @@
 - 录音真实转写容器使用 `edge-fade-y scrollbar-hover`：上下边缘渐隐，右侧滚动条默认隐藏，hover 或 focus-within 时显示。
 - 点击完成录音会立即关闭 visible recording surface；App 保留隐藏的 recording lifecycle owner 直到 durable audio finalize、必要的 completion backfill、transcript save 和 recovery marker 收口完成。普通录音默认 title 是目标 Memory 内的 `录音N`；补充录音默认 title 是 selected Segment 内的 `补充录音N`；恢复录音使用 recovery marker 保存的 title。完成后不进入强制描述、转写编辑或反思编辑窗口；非空最终 transcript 会通过 `workspace:saveTranscript` 写入当前 finalized audio segment 的 `segment.md` 正文，或通过 `workspace:saveSegmentSupplementTranscript` 写入 finalized audio SegmentSupplement 的 `supplement.md` 正文；若后台收口失败，recording surface 重新打开到失败恢复态。
 - 录音流程打开时，App 会阻止进入首页、资料库、创建或打开其他记忆空间、移除记忆空间、切换右侧 Memory context、切换到 settings mode，并使用 root toast 提示先完成或关闭录音。
+- `RecordingOverlay` 通过 `['settings', 'voice']` 读取 voice transcription settings。Settings disabled 时不调用 `workspace:startRecordingTranscription`，不建立 live ASR audio queue，转写区域显示安静的禁用占位；settings 未加载完成时录音开始按钮保持不可用，避免在未知配置下启动 live ASR。
 
 ## State 与 Data
 
