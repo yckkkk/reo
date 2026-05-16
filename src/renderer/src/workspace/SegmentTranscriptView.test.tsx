@@ -21,11 +21,7 @@ describe('SegmentTranscriptView', () => {
 
   it('shows empty copy when transcript does not exist', () => {
     render(
-      <SegmentTranscriptView
-        status="ready"
-        transcript={{ exists: false, text: '' }}
-        copy={copy}
-      />
+      <SegmentTranscriptView status="ready" transcript={{ exists: false, text: '' }} copy={copy} />
     );
     expect(screen.getByText('还没有转录。')).toBeInTheDocument();
   });

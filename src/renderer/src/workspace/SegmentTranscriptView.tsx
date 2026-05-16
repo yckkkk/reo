@@ -13,8 +13,7 @@ export type SegmentTranscriptViewProps = {
 };
 
 const MUTED_PARAGRAPH = 'text-body leading-body text-muted-foreground';
-const TRANSCRIPT_PARAGRAPH =
-  'select-text max-w-[820px] text-body leading-[1.78] text-foreground';
+const TRANSCRIPT_PARAGRAPH = 'select-text max-w-[820px] text-body leading-[1.78] text-foreground';
 
 export function SegmentTranscriptView({ status, transcript, copy }: SegmentTranscriptViewProps) {
   if (status === 'loading') {

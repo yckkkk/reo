@@ -12,26 +12,27 @@
 
 ## 文件结构
 
-| 路径 | 动作 | 责任 |
-| --- | --- | --- |
-| `src/workspace-contract/workspace-contract.ts` | 修改 line 698-715 | 给 `workspaceReadFinalizedAudioSegmentSupplementResponseSchema.value` 追加 `transcript: { exists, text }`，镜像 segment response 字段。 |
-| `test/main/workspaceContract.test.ts` | 修改 line 1040-1064 | 更新已有 `workspaceReadFinalizedAudioSegmentSupplementResponseSchema.parse(...)` 断言，包含 transcript 字段（exists+text）。 |
-| `src/main/recordingDrafts.ts` | 修改 line 1297-1334 / 1336-1423 / 1425-1519 | 将 `readOptionalFinalizedTranscript` 泛化为 `readOptionalFinalizedTranscriptFile({ markdownFileName, objectType })`；segment 与 supplement read 都通过它；supplement read 在 audio 后追加 transcript 字段。 |
-| `test/main/workspaceIpc.test.ts` | 修改 line 1561-1627；新增"supplement returns transcript text" 一例 | 翻转 `'transcript' in result.value === false` 断言；新增 transcript exists 与 empty 两态覆盖。 |
-| `src/renderer/src/workspace/SegmentTranscriptView.tsx` | 创建 | 4 态只读展示组件，props 化文案，无 scroll surface。 |
-| `src/renderer/src/workspace/SegmentTranscriptView.test.tsx` | 创建 | loading / error / ready+exists / ready+empty 四态文案 + 关键 class 断言。 |
-| `src/renderer/src/workspace/MemoryStudio.tsx` | 修改 line 1856-1883 / line 848-894 | Segment transcript tab 与 supplement audio panel 都改用 `SegmentTranscriptView`；supplement panel 在播放行下方插入。 |
-| `src/renderer/src/App.tsx` | 修改 line 1554-1601 | `handleSegmentSupplementFinalized` 末尾追加 exact `segmentSupplementContentQueryKey` invalidate。 |
-| `src/renderer/src/App.test.tsx` | 修改 fixture + 新增一例 | 给 supplement panel 增加 transcript 4 态渲染断言；新增"supplement 录音保存后 invalidate supplement content cache" 断言。 |
-| `docs/current/frontend.md` | 修改 line 105 | 改成"supplement audio panel 在播放行下方使用同一 `SegmentTranscriptView` 显示 transcript"。 |
-| `docs/current/data.md` | 修改 line 92 | 改"不返回 transcript text" 为"返回 transcript text（exists+text），保存成功后 invalidate supplement content Query"。 |
-| `docs/specs/2026-05-16-0026-supplement-transcript-panel/verification.md` | 修改 | 命令与视觉证据完成后勾选并附 artifacts。 |
+| 路径                                                                     | 动作                                                               | 责任                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/workspace-contract/workspace-contract.ts`                           | 修改 line 698-715                                                  | 给 `workspaceReadFinalizedAudioSegmentSupplementResponseSchema.value` 追加 `transcript: { exists, text }`，镜像 segment response 字段。                                                                     |
+| `test/main/workspaceContract.test.ts`                                    | 修改 line 1040-1064                                                | 更新已有 `workspaceReadFinalizedAudioSegmentSupplementResponseSchema.parse(...)` 断言，包含 transcript 字段（exists+text）。                                                                                |
+| `src/main/recordingDrafts.ts`                                            | 修改 line 1297-1334 / 1336-1423 / 1425-1519                        | 将 `readOptionalFinalizedTranscript` 泛化为 `readOptionalFinalizedTranscriptFile({ markdownFileName, objectType })`；segment 与 supplement read 都通过它；supplement read 在 audio 后追加 transcript 字段。 |
+| `test/main/workspaceIpc.test.ts`                                         | 修改 line 1561-1627；新增"supplement returns transcript text" 一例 | 翻转 `'transcript' in result.value === false` 断言；新增 transcript exists 与 empty 两态覆盖。                                                                                                              |
+| `src/renderer/src/workspace/SegmentTranscriptView.tsx`                   | 创建                                                               | 4 态只读展示组件，props 化文案，无 scroll surface。                                                                                                                                                         |
+| `src/renderer/src/workspace/SegmentTranscriptView.test.tsx`              | 创建                                                               | loading / error / ready+exists / ready+empty 四态文案 + 关键 class 断言。                                                                                                                                   |
+| `src/renderer/src/workspace/MemoryStudio.tsx`                            | 修改 line 1856-1883 / line 848-894                                 | Segment transcript tab 与 supplement audio panel 都改用 `SegmentTranscriptView`；supplement panel 在播放行下方插入。                                                                                        |
+| `src/renderer/src/App.tsx`                                               | 修改 line 1554-1601                                                | `handleSegmentSupplementFinalized` 末尾追加 exact `segmentSupplementContentQueryKey` invalidate。                                                                                                           |
+| `src/renderer/src/App.test.tsx`                                          | 修改 fixture + 新增一例                                            | 给 supplement panel 增加 transcript 4 态渲染断言；新增"supplement 录音保存后 invalidate supplement content cache" 断言。                                                                                    |
+| `docs/current/frontend.md`                                               | 修改 line 105                                                      | 改成"supplement audio panel 在播放行下方使用同一 `SegmentTranscriptView` 显示 transcript"。                                                                                                                 |
+| `docs/current/data.md`                                                   | 修改 line 92                                                       | 改"不返回 transcript text" 为"返回 transcript text（exists+text），保存成功后 invalidate supplement content Query"。                                                                                        |
+| `docs/specs/2026-05-16-0026-supplement-transcript-panel/verification.md` | 修改                                                               | 命令与视觉证据完成后勾选并附 artifacts。                                                                                                                                                                    |
 
 ---
 
 ## Task 1: 扩展 supplement read response schema
 
 **Files:**
+
 - Modify: `src/workspace-contract/workspace-contract.ts:698-715`
 - Modify (test): `test/main/workspaceContract.test.ts:1040-1064`
 
@@ -65,7 +66,7 @@ assert.deepEqual(
       audio: new Uint8Array([4, 5]),
       audioByteLength: 2,
       transcript: { exists: true, text: '补充录音转写正文' },
-    }
+    },
   }
 );
 ```
@@ -124,6 +125,7 @@ EOF
 ## Task 2: 泛化 finalized transcript reader（refactor，保持 segment 行为）
 
 **Files:**
+
 - Modify: `src/main/recordingDrafts.ts:1297-1334` 及 `:1398-1411`
 
 - [ ] **Step 1: 把 helper 改成接受 markdownFileName / objectType**
@@ -200,6 +202,7 @@ EOF
 ## Task 3: supplement read 返回 transcript
 
 **Files:**
+
 - Modify (test): `test/main/workspaceIpc.test.ts:1561-1627`，新增一例覆盖 transcript exists
 - Modify: `src/main/recordingDrafts.ts:1425-1519`
 
@@ -403,6 +406,7 @@ EOF
 ## Task 4: 新建 `SegmentTranscriptView` 组件（TDD）
 
 **Files:**
+
 - Create: `src/renderer/src/workspace/SegmentTranscriptView.test.tsx`
 - Create: `src/renderer/src/workspace/SegmentTranscriptView.tsx`
 
@@ -434,11 +438,7 @@ describe('SegmentTranscriptView', () => {
 
   it('shows empty copy when transcript does not exist', () => {
     render(
-      <SegmentTranscriptView
-        status="ready"
-        transcript={{ exists: false, text: '' }}
-        copy={copy}
-      />
+      <SegmentTranscriptView status="ready" transcript={{ exists: false, text: '' }} copy={copy} />
     );
     expect(screen.getByText('还没有转录。')).toBeInTheDocument();
   });
@@ -490,8 +490,7 @@ export type SegmentTranscriptViewProps = {
 };
 
 const MUTED_PARAGRAPH = 'text-body leading-body text-muted-foreground';
-const TRANSCRIPT_PARAGRAPH =
-  'select-text max-w-[820px] text-body leading-[1.78] text-foreground';
+const TRANSCRIPT_PARAGRAPH = 'select-text max-w-[820px] text-body leading-[1.78] text-foreground';
 
 export function SegmentTranscriptView({ status, transcript, copy }: SegmentTranscriptViewProps) {
   if (status === 'loading') {
@@ -527,6 +526,7 @@ EOF
 ## Task 5: 把 Segment transcript tab 切换到共享组件
 
 **Files:**
+
 - Modify: `src/renderer/src/workspace/MemoryStudio.tsx:1856-1883`
 
 - [ ] **Step 1: 替换 inline JSX**
@@ -589,6 +589,7 @@ EOF
 ## Task 6: supplement panel 接入转录区 + cache invalidate（TDD）
 
 **Files:**
+
 - Modify (test): `src/renderer/src/App.test.tsx`（fixture + 新增两例）
 - Modify: `src/renderer/src/workspace/MemoryStudio.tsx`（`SegmentSupplementAudioPlayer`，848-894）
 - Modify: `src/renderer/src/App.tsx:1554-1601`
@@ -840,6 +841,7 @@ EOF
 ## Task 7: 同步 current 文档
 
 **Files:**
+
 - Modify: `docs/current/frontend.md:105`
 - Modify: `docs/current/data.md:92`
 
@@ -879,6 +881,7 @@ EOF
 ## Task 8: 全量验证 + 视觉证据
 
 **Files:**
+
 - Modify: `docs/specs/2026-05-16-0026-supplement-transcript-panel/verification.md`
 - Create (optional): `docs/specs/2026-05-16-0026-supplement-transcript-panel/artifacts/*.png`
 

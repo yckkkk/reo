@@ -20,6 +20,7 @@
 ## 范围
 
 仅做"补充录音 panel 显示已有 transcript（只读）"。不包含：
+
 - 任何转录编辑/重录/复制按钮。
 - supplement 转录之外的内容（注释、标签、视频/图片占位等）。
 - 任何 schema 之外的字段扩展。
@@ -55,7 +56,9 @@
 
    ```tsx
    <SegmentTranscriptView
-     status={segmentContentQuery.isLoading ? 'loading' : segmentContentQuery.isError ? 'error' : 'ready'}
+     status={
+       segmentContentQuery.isLoading ? 'loading' : segmentContentQuery.isError ? 'error' : 'ready'
+     }
      transcript={segmentContent?.transcript ?? null}
      copy={{
        loading: '正在载入片段内容。',
@@ -70,7 +73,13 @@
 
    ```tsx
    <SegmentTranscriptView
-     status={supplementContentQuery.isLoading ? 'loading' : supplementContentQuery.isError ? 'error' : 'ready'}
+     status={
+       supplementContentQuery.isLoading
+         ? 'loading'
+         : supplementContentQuery.isError
+           ? 'error'
+           : 'ready'
+     }
      transcript={supplementContent?.transcript ?? null}
      copy={{
        loading: '正在载入补充录音内容。',
@@ -115,11 +124,12 @@ value: z.strictObject({
     directory: string,
     directoryIdentity: DirectoryIdentity,
     markdownFileName: 'segment.md' | 'supplement.md',
-    objectType: 'segment' | 'supplement',
+    objectType: 'segment' | 'supplement'
   ): Promise<{ readonly exists: boolean; readonly text: string }>;
   ```
 
   `parseWorkspaceMarkdownObject` 和 `extractSegmentTranscript` 已分别支持 `objectType: 'supplement'` 与 supplement.md 正文，是直链复用，不重写。
+
 - `readFinalizedAudioSegmentSupplementContent`（line 1425-1519）在拿到 audio bytes、最终 `assertSameDirectory` 之前调用该 helper 读取 `supplement.md`，将 `transcript` 加进返回值；保留现有 ENOENT → `{ exists: false, text: '' }` 兜底。
 - `readFinalizedAudioSegmentContent`（line 1336-1423）改为通过同一 helper 调用，行为不变（segment.md/objectType='segment'）。
 
