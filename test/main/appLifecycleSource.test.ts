@@ -7,8 +7,8 @@ test('main window teardown releases workspace handles', async () => {
 
   assert.match(source, /closeAllWorkspaceHandles/);
   assert.match(source, /bindWorkspaceHandleLifecycle/);
-  assert.match(source, /closeWorkspaceHandles:\s*closeAllWorkspaceHandles/);
-  assert.match(source, /uncaughtException[\s\S]*closeAllWorkspaceHandles/);
+  assert.match(source, /closeWorkspaceHandles:\s*closeWorkspaceRuntime/);
+  assert.match(source, /uncaughtException[\s\S]*closeWorkspaceRuntime\(\)/);
 });
 
 test('main window uses hidden-inset chrome for the layered app shell', async () => {
@@ -21,6 +21,7 @@ test('main bootstrap wires voice settings store into recording transcription at 
   const source = await readFile('src/main/index.ts', 'utf8');
 
   assert.match(source, /safeStorage/);
+  assert.match(source, /let closeWorkspaceRuntime:\s*\(\)\s*=>\s*Promise<void>\s*=\s*closeAllWorkspaceHandles/);
   assert.match(source, /createVoiceSettingsStore/);
   assert.match(source, /createRecordingTranscriptionSessionRegistry/);
   assert.match(
@@ -31,5 +32,11 @@ test('main bootstrap wires voice settings store into recording transcription at 
     source,
     /createRecordingTranscriptionSessionRegistry\(\{[\s\S]*resolveVoiceSettings:\s*\(\)\s*=>[\s\S]*voiceSettingsStore\.read\(\)[\s\S]*voiceSettingsStore\.readDecryptedApiKey\(\)/
   );
+  assert.match(
+    source,
+    /closeWorkspaceRuntime\s*=\s*async\s*\(\)\s*=>\s*\{[\s\S]*recordingTranscriptionSessions\.closeAll\(\)[\s\S]*closeAllWorkspaceHandles\(\)/
+  );
+  assert.match(source, /closeWorkspaceHandles:\s*closeWorkspaceRuntime/);
+  assert.match(source, /uncaughtException[\s\S]*closeWorkspaceRuntime\(\)/);
   assert.match(source, /registerWorkspaceIpc\(\{[\s\S]*recordingTranscriptionSessions/);
 });

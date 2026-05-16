@@ -31,6 +31,7 @@ registerAppShellScheme();
 const DEV_SERVER_URL = getDevServerUrl();
 
 let mainWindow: BrowserWindow | null = null;
+let closeWorkspaceRuntime: () => Promise<void> = closeAllWorkspaceHandles;
 
 function getPreloadPath(): string {
   return resolvePreloadPath(import.meta.url);
@@ -73,7 +74,7 @@ function createWindow(): void {
 
   bindWorkspaceHandleLifecycle({
     browserWindow: mainWindow,
-    closeWorkspaceHandles: closeAllWorkspaceHandles,
+    closeWorkspaceHandles: closeWorkspaceRuntime,
     isTrustedAppUrl,
     webContents: mainWindow.webContents,
   });
@@ -127,6 +128,10 @@ app
         };
       },
     });
+    closeWorkspaceRuntime = async () => {
+      recordingTranscriptionSessions.closeAll();
+      await closeAllWorkspaceHandles();
+    };
     registerWorkspaceIpc({
       expectedSession: session.defaultSession,
       expectedSessionKey: 'default',
@@ -168,7 +173,7 @@ process.on('uncaughtException', (error: Error) => {
     fields: { errorName },
     level: 'error',
   });
-  void closeAllWorkspaceHandles().finally(() => {
+  void closeWorkspaceRuntime().finally(() => {
     app.exit(1);
   });
 });
