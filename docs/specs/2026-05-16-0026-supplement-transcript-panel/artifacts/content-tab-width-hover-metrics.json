@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "itemClass": "relative inline-flex h-[34px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors max-w-[170px] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none bg-secondary text-foreground group/supplement-tab cursor-grab pr-[14px] active:cursor-grabbing ",
+  "buttonClass": "inline-flex h-full min-w-0 items-center justify-center gap-[6px] text-[13.5px] font-medium leading-none transition-colors max-w-[130px] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none pl-[14px] pr-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+  "moreClass": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/supplement-tab:pointer-events-auto group-hover/supplement-tab:ml-[6px] group-hover/supplement-tab:max-w-20 group-hover/supplement-tab:scale-100 group-hover/supplement-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100",
+  "itemMaxWidth": "170px",
+  "buttonMaxWidth": "130px",
+  "moreOpacity": "1",
+  "itemRect": {
+    "left": 361,
+    "right": 531,
+    "top": 438,
+    "bottom": 472,
+    "width": 170,
+    "height": 34
+  },
+  "buttonRect": {
+    "left": 361,
+    "right": 491,
+    "top": 438,
+    "bottom": 472,
+    "width": 130,
+    "height": 34
+  },
+  "moreRect": {
+    "left": 497,
+    "right": 517,
+    "top": 445,
+    "bottom": 465,
+    "width": 20,
+    "height": 20
+  },
+  "moreGlyphRect": {
+    "left": 497,
+    "right": 517,
+    "top": 445,
+    "bottom": 465,
+    "width": 20,
+    "height": 20
+  },
+  "moreFullyInsidePill": true,
+  "moreGlyphWidthComplete": true
+}

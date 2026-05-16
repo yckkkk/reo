@@ -13,6 +13,20 @@ Captured during Task 8 Step 1 by a fresh Task 8 subagent.
 Final rerun after visual evidence artifacts:
 - npm run verify:quick: passed
 - npm run test:main: 550 tests passed
-- npm run test:renderer: 35 files / 338 tests passed
+- npm run test:renderer: 35 files / 342 tests passed
+- npm run lint: passed
+- npm run format:check: passed
+
+Final rerun after content tab More menu stability fix:
+- npm run verify:quick: passed
+- npm run test:main: 550 tests passed
+- npm run test:renderer: 35 files / 342 tests passed
+- npm run lint: passed
+- npm run format:check: passed
+
+Final rerun after App supplement transcript integration timeout budget alignment:
+- npm run verify:quick: passed
+- npm run test:main: 550 tests passed
+- npm run test:renderer: 35 files / 342 tests passed
 - npm run lint: passed
 - npm run format:check: passed

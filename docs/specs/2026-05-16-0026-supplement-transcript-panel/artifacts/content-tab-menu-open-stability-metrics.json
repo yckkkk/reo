@@ -1,0 +1,152 @@
+{
+  "scenario": "hover supplement content tab, open More menu, move pointer into dropdown menu",
+  "setup": {
+    "ok": true,
+    "tabText": "Runtime Supplement 20260516005001",
+    "moreLabel": "补充录音3 更多操作",
+    "itemRect": {
+      "left": 361,
+      "top": 438,
+      "right": 531,
+      "bottom": 472,
+      "width": 170,
+      "height": 34,
+      "centerX": 446,
+      "centerY": 455
+    },
+    "moreRect": {
+      "left": 497,
+      "top": 445,
+      "right": 517,
+      "bottom": 465,
+      "width": 20,
+      "height": 20,
+      "centerX": 507,
+      "centerY": 455
+    },
+    "moreState": "closed",
+    "moreClassName": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 data-[state=open]:pointer-events-auto data-[state=open]:ml-[6px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100 group-hover/supplement-tab:pointer-events-auto group-hover/supplement-tab:ml-[6px] group-hover/supplement-tab:max-w-20 group-hover/supplement-tab:scale-100 group-hover/supplement-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[6px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100",
+    "itemMaxWidth": "170px",
+    "tabMaxWidth": "130px"
+  },
+  "hover": {
+    "tabText": "Runtime Supplement 20260516005001",
+    "moreLabel": "补充录音3 更多操作",
+    "itemRect": {
+      "left": 361,
+      "top": 438,
+      "right": 531,
+      "bottom": 472,
+      "width": 170,
+      "height": 34,
+      "centerX": 446,
+      "centerY": 455
+    },
+    "moreRect": {
+      "left": 497,
+      "top": 445,
+      "right": 517,
+      "bottom": 465,
+      "width": 20,
+      "height": 20,
+      "centerX": 507,
+      "centerY": 455
+    },
+    "moreState": "closed",
+    "ariaHidden": null,
+    "tabIndex": "0",
+    "itemMaxWidth": "170px",
+    "tabMaxWidth": "130px"
+  },
+  "open": {
+    "tabText": "Runtime Supplement 20260516005001",
+    "moreLabel": "补充录音3 更多操作",
+    "itemRect": {
+      "left": 361,
+      "top": 438,
+      "right": 531,
+      "bottom": 472,
+      "width": 170,
+      "height": 34,
+      "centerX": 446,
+      "centerY": 455
+    },
+    "moreRect": {
+      "left": 497,
+      "top": 445,
+      "right": 517,
+      "bottom": 465,
+      "width": 20,
+      "height": 20,
+      "centerX": 507,
+      "centerY": 455
+    },
+    "moreState": "open",
+    "ariaHidden": null,
+    "tabIndex": "0",
+    "menuRect": {
+      "left": 427,
+      "top": 473,
+      "right": 587,
+      "bottom": 691,
+      "width": 160,
+      "height": 218,
+      "centerX": 507,
+      "centerY": 582
+    },
+    "menuLabel": "补充录音3 更多操作",
+    "menuText": "用默认应用打开在访达中显示复制相对路径复制绝对路径重命名删除"
+  },
+  "afterMove": {
+    "tabText": "Runtime Supplement 20260516005001",
+    "moreLabel": "补充录音3 更多操作",
+    "itemRect": {
+      "left": 361,
+      "top": 438,
+      "right": 531,
+      "bottom": 472,
+      "width": 170,
+      "height": 34,
+      "centerX": 446,
+      "centerY": 455
+    },
+    "moreRect": {
+      "left": 497,
+      "top": 445,
+      "right": 517,
+      "bottom": 465,
+      "width": 20,
+      "height": 20,
+      "centerX": 507,
+      "centerY": 455
+    },
+    "moreState": "open",
+    "ariaHidden": null,
+    "tabIndex": "0",
+    "menuRect": {
+      "left": 427,
+      "top": 473,
+      "right": 587,
+      "bottom": 691,
+      "width": 160,
+      "height": 218,
+      "centerX": 507,
+      "centerY": 582
+    },
+    "menuLabel": "补充录音3 更多操作"
+  },
+  "deltasAfterPointerLeavesTab": {
+    "moreLeft": 0,
+    "moreWidth": 0,
+    "menuLeft": 0,
+    "menuWidth": 0
+  },
+  "expectations": {
+    "moreStateKeptOpen": true,
+    "moreAccessibleWhileOpen": true,
+    "moreWidthStable": true,
+    "menuLeftStable": true,
+    "compactTabWidth": true
+  },
+  "pass": true
+}

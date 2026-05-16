@@ -118,6 +118,8 @@ type MemoryStudioContentTab =
 
 const CONTENT_TAB_MOTION_CLASS =
   'duration-[400ms] ease-[cubic-bezier(0.2,0.9,0.1,1)] motion-reduce:transition-none';
+const CONTENT_TAB_PILL_MAX_WIDTH_CLASS = 'max-w-[130px]';
+const CONTENT_TAB_PILL_WITH_ACTIONS_MAX_WIDTH_CLASS = 'max-w-[170px]';
 const CONTENT_TAB_DRAG_MIME = 'application/x-reo-content-tab';
 
 function durationLabel(durationMs: number) {
@@ -379,9 +381,10 @@ function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
   );
 }
 
-function contentTabPillClassName(active: boolean) {
+function contentTabPillClassName(active: boolean, hasActions = false) {
   return [
-    'relative inline-flex h-[34px] max-w-[260px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors',
+    'relative inline-flex h-[34px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors',
+    hasActions ? CONTENT_TAB_PILL_WITH_ACTIONS_MAX_WIDTH_CLASS : CONTENT_TAB_PILL_MAX_WIDTH_CLASS,
     CONTENT_TAB_MOTION_CLASS,
     active
       ? 'bg-secondary text-foreground'
@@ -392,6 +395,7 @@ function contentTabPillClassName(active: boolean) {
 function contentTabButtonClassName(hasActions = false) {
   return [
     'inline-flex h-full min-w-0 items-center justify-center gap-[6px] text-[13.5px] font-medium leading-none transition-colors',
+    CONTENT_TAB_PILL_MAX_WIDTH_CLASS,
     CONTENT_TAB_MOTION_CLASS,
     hasActions ? 'pl-[14px] pr-0' : 'px-[14px]',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -412,6 +416,7 @@ function contentTabMoreClassName(revealMode: 'drag-source' | 'drag-suppressed' |
     CONTENT_TAB_MOTION_CLASS,
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'pointer-events-none ml-0 max-w-0 scale-75 opacity-0',
+    'data-[state=open]:pointer-events-auto data-[state=open]:ml-[6px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100',
     revealClassName,
   ].join(' ');
 }
@@ -491,7 +496,7 @@ function SegmentSupplementTab({
       data-supplement-type={supplement.type}
       draggable
       className={[
-        contentTabPillClassName(active),
+        contentTabPillClassName(active, true),
         'group/supplement-tab cursor-grab pr-[14px] active:cursor-grabbing',
         dragging ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border' : '',
       ].join(' ')}

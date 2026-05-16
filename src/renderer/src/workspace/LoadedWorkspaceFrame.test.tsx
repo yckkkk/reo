@@ -1452,6 +1452,45 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
+  it('caps content tab pills to the compact rail width', async () => {
+    const longSupplementTitle = 'Runtime Supplement 20260516005001';
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([
+      audioSupplement({ title: longSupplementTitle }),
+    ]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_compact_content_tab',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const transcriptTabItem = within(tabs)
+      .getByRole('tab', { name: '转录' })
+      .closest('[data-slot="memory-studio-transcript-tab-item"]');
+    const supplementTabItem = within(tabs)
+      .getByRole('tab', { name: longSupplementTitle })
+      .closest('[data-slot="memory-studio-supplement-tab-item"]');
+    const supplementTabButton = within(tabs).getByRole('tab', { name: longSupplementTitle });
+    const moreAnchor = supplementTabItem?.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
+    );
+
+    expect(transcriptTabItem).toBeInstanceOf(HTMLElement);
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
+    expect(transcriptTabItem).toHaveClass('max-w-[130px]');
+    expect(supplementTabItem).toHaveClass('max-w-[170px]');
+    expect(supplementTabButton).toHaveClass('max-w-[130px]');
+    expect(moreAnchor).toHaveClass('group-hover/supplement-tab:max-w-20');
+    expect(supplementTabItem).not.toHaveClass('max-w-[260px]');
+  });
+
   it('switches between multiple SegmentSupplement panels without using created time labels', async () => {
     const createObjectURL = vi
       .spyOn(URL, 'createObjectURL')
@@ -1686,7 +1725,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not keep the SegmentSupplement More affordance expanded after selection or menu open', async () => {
+  it('keeps the SegmentSupplement More affordance expanded while its menu is open', async () => {
     const user = userEvent.setup();
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
@@ -1734,9 +1773,11 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveClass('focus-visible:max-w-20');
     expect(moreButton).toHaveClass('focus-visible:opacity-100');
     expect(moreButton).toHaveClass('focus-visible:scale-100');
-    expect(moreButton).not.toHaveClass('data-[state=open]:max-w-20');
-    expect(moreButton).not.toHaveClass('data-[state=open]:opacity-100');
-    expect(moreButton).not.toHaveClass('data-[state=open]:scale-100');
+    expect(moreButton).toHaveClass('data-[state=open]:pointer-events-auto');
+    expect(moreButton).toHaveClass('data-[state=open]:ml-[6px]');
+    expect(moreButton).toHaveClass('data-[state=open]:max-w-20');
+    expect(moreButton).toHaveClass('data-[state=open]:opacity-100');
+    expect(moreButton).toHaveClass('data-[state=open]:scale-100');
 
     await user.click(supplementTab);
     expect(supplementTab).toHaveAttribute('aria-selected', 'true');
@@ -1783,12 +1824,18 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveAttribute('data-state', 'open');
     expect(moreButton).not.toHaveAttribute('aria-hidden');
     expect(moreButton).toHaveAttribute('tabindex', '0');
-    expect(moreButton).toHaveClass('pointer-events-none');
-    expect(moreButton).toHaveClass('max-w-0');
-    expect(moreButton).toHaveClass('opacity-0');
+    expect(moreButton).toHaveClass('data-[state=open]:pointer-events-auto');
+    expect(moreButton).toHaveClass('data-[state=open]:ml-[6px]');
+    expect(moreButton).toHaveClass('data-[state=open]:max-w-20');
+    expect(moreButton).toHaveClass('data-[state=open]:opacity-100');
+    expect(moreButton).toHaveClass('data-[state=open]:scale-100');
 
     await user.keyboard('{Escape}');
     expect(supplementTab).toHaveFocus();
+    expect(moreButton).toHaveAttribute('aria-hidden', 'true');
+    expect(moreButton).toHaveAttribute('tabindex', '-1');
+    expect(moreButton).toHaveClass('max-w-0');
+    expect(moreButton).toHaveClass('opacity-0');
   });
 
   it('closes the SegmentSupplement More menu when the selected Segment changes', async () => {

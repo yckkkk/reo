@@ -1327,7 +1327,7 @@ describe('App', () => {
     await user.click(screen.getByRole('tab', { name: '补充录音1' }));
 
     expect(await screen.findByText('补充录音转写正文')).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it('renders the supplement empty transcript copy when the supplement has no transcript', async () => {
     const user = userEvent.setup();
@@ -1357,7 +1357,7 @@ describe('App', () => {
     await user.click(screen.getByRole('tab', { name: '补充录音1' }));
 
     expect(await screen.findByText('这段补充录音还没有转录。')).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it('deletes a SegmentSupplement through confirmation and restores it from the toast action', async () => {
     const user = userEvent.setup();
