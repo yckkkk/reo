@@ -1,0 +1,5 @@
+$ rg -n "REO_DOUBAO_ASR_APP_ID|REO_DOUBAO_ASR_ACCESS_TOKEN|X-Api-App-Key|X-Api-Access-Key" src/
+exit=1
+
+$ redacted credential-fragment grep outside node_modules/out/.tmp/dist
+exit=1
