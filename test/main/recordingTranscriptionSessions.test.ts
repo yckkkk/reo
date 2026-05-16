@@ -727,6 +727,49 @@ test('recording transcription registry reconnects after a live session drops mid
   ]);
 });
 
+test('recording transcription registry redacts the original reconnect error when reconnect start has no message', async () => {
+  const events: unknown[] = [];
+  let firstInput: DoubaoStreamingAsrSessionInput | null = null;
+  let startCalls = 0;
+  const registry = createRecordingTranscriptionSessionRegistry({
+    createSession: (input) => {
+      startCalls += 1;
+      if (startCalls === 1) {
+        firstInput = input;
+      }
+      return {
+        close() {},
+        async finish() {},
+        sendAudioChunk() {},
+        async start() {
+          if (startCalls > 1) {
+            throw new Error('');
+          }
+        },
+      };
+    },
+    resolveVoiceSettings: () => ({ enabled: true, apiKey: 'api-secret' }),
+    sendEvent: (event) => events.push(event),
+    startAttempts: 1,
+  });
+
+  await registry.start(makeStartInput());
+  const capturedInput = firstInput as DoubaoStreamingAsrSessionInput | null;
+  assert.notEqual(capturedInput, null);
+
+  capturedInput?.onError?.('network dropped api-secret');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(events, [
+    {
+      kind: 'error',
+      message: 'network dropped [redacted]',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+    },
+  ]);
+});
+
 test('recording transcription registry trims replay audio when reconnect starts inside a PCM chunk', async () => {
   const live = createFakeLiveSessionStore();
   const registry = createRecordingTranscriptionSessionRegistry({

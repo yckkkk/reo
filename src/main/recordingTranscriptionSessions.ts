@@ -388,7 +388,7 @@ export function createRecordingTranscriptionSessionRegistry({
         closeEntry(entry);
         entry.sendEvent({
           kind: 'error',
-          message: safeMessage || message,
+          message: safeMessage || redactCredentialText(message, entry.credentials),
           recordingSessionId: entry.recordingSessionId,
           revisionId: entry.revisionId,
         });
