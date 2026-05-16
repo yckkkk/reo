@@ -69,15 +69,23 @@ export interface WorkspaceBridgeInvoker {
 }
 
 type WorkspaceBridgeMethod = keyof ReoWorkspaceBridge;
+type PendingVoiceSettingsBridgeMethod =
+  | 'readVoiceTranscriptionSettings'
+  | 'setVoiceTranscriptionEnabled'
+  | 'saveVoiceTranscriptionApiKey'
+  | 'clearVoiceTranscriptionApiKey'
+  | 'validateVoiceTranscriptionCredentials'
+  | 'openExternalUrl';
+type ImplementedWorkspaceBridge = Omit<ReoWorkspaceBridge, PendingVoiceSettingsBridgeMethod>;
 type WorkspaceBridgeResponse<Method extends WorkspaceBridgeMethod> = Awaited<
   ReturnType<ReoWorkspaceBridge[Method]>
 >;
 
-export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorkspaceBridge {
+export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ImplementedWorkspaceBridge {
   const invoke = <Response>(channel: WorkspaceIpcChannel, payload?: unknown): Promise<Response> =>
     invoker.invoke(channel, payload) as Promise<Response>;
 
-  const bridge: ReoWorkspaceBridge = {
+  const bridge: ImplementedWorkspaceBridge = {
     chooseDirectory: () =>
       invoke<WorkspaceBridgeResponse<'chooseDirectory'>>(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL),
     listMemorySpaces: () =>

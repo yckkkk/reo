@@ -66,6 +66,12 @@ describe('App', () => {
     sendRecordingTranscriptionAudio: vi.fn(),
     finishRecordingTranscription: vi.fn(),
     closeRecordingTranscription: vi.fn(),
+    readVoiceTranscriptionSettings: vi.fn(),
+    setVoiceTranscriptionEnabled: vi.fn(),
+    saveVoiceTranscriptionApiKey: vi.fn(),
+    clearVoiceTranscriptionApiKey: vi.fn(),
+    validateVoiceTranscriptionCredentials: vi.fn(),
+    openExternalUrl: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
   };
 

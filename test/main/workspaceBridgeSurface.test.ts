@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWorkspaceBridge } from '../../src/preload/workspaceBridge.js';
+import type { ReoWorkspaceBridge } from '../../src/workspace-contract/reo-workspace-bridge.js';
 
 const workspaceBridgeKeys = [
   'chooseDirectory',
@@ -78,6 +79,29 @@ const workspaceEntityActionBridgeKeys = [
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
 ] as const;
+
+const voiceSettingsBridgeContractKeys = [
+  'readVoiceTranscriptionSettings',
+  'setVoiceTranscriptionEnabled',
+  'saveVoiceTranscriptionApiKey',
+  'clearVoiceTranscriptionApiKey',
+  'validateVoiceTranscriptionCredentials',
+  'openExternalUrl',
+] as const satisfies readonly (keyof ReoWorkspaceBridge)[];
+
+test('workspace bridge contract declares voice settings methods before preload exposure', () => {
+  assert.deepEqual(
+    [...voiceSettingsBridgeContractKeys],
+    [
+      'readVoiceTranscriptionSettings',
+      'setVoiceTranscriptionEnabled',
+      'saveVoiceTranscriptionApiKey',
+      'clearVoiceTranscriptionApiKey',
+      'validateVoiceTranscriptionCredentials',
+      'openExternalUrl',
+    ]
+  );
+});
 
 test('workspace preload bridge exposes explicit methods and no generic ipc methods', async () => {
   const calls: string[] = [];

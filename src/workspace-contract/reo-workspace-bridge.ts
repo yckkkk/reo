@@ -1,6 +1,8 @@
 import type {
   WorkspaceChooseDirectoryResponse,
   WorkspaceClearMicrophoneIntentResponse,
+  WorkspaceClearVoiceTranscriptionApiKeyRequest,
+  WorkspaceClearVoiceTranscriptionApiKeyResponse,
   WorkspaceCloseRequest,
   WorkspaceCloseResponse,
   WorkspaceCopyMemoryAbsolutePathRequest,
@@ -32,6 +34,8 @@ import type {
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
+  WorkspaceOpenExternalUrlRequest,
+  WorkspaceOpenExternalUrlResponse,
   WorkspaceOpenMemoryDocumentRequest,
   WorkspaceOpenMemorySpaceAgentsFileRequest,
   WorkspaceOpenRequest,
@@ -43,6 +47,8 @@ import type {
   WorkspaceReadFinalizedAudioSegmentSupplementResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
+  WorkspaceReadVoiceTranscriptionSettingsRequest,
+  WorkspaceReadVoiceTranscriptionSettingsResponse,
   WorkspaceReadWorkspaceSnapshotRequest,
   WorkspaceReadWorkspaceSnapshotResponse,
   WorkspaceRestoreDeletedMemoryRequest,
@@ -77,6 +83,10 @@ import type {
   WorkspaceSegmentSupplementMarkdownSaveRequest,
   WorkspaceSegmentSupplementMarkdownSaveResponse,
   WorkspaceRemoveMemorySpaceResponse,
+  WorkspaceSaveVoiceTranscriptionApiKeyRequest,
+  WorkspaceSaveVoiceTranscriptionApiKeyResponse,
+  WorkspaceSetVoiceTranscriptionEnabledRequest,
+  WorkspaceSetVoiceTranscriptionEnabledResponse,
   WorkspaceUpdateMemorySpaceTitleRequest,
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
@@ -85,6 +95,8 @@ import type {
   WorkspaceUpdateSegmentSupplementTitleResponse,
   WorkspaceUpdateSegmentTitleRequest,
   WorkspaceUpdateSegmentTitleResponse,
+  WorkspaceValidateVoiceTranscriptionCredentialsRequest,
+  WorkspaceValidateVoiceTranscriptionCredentialsResponse,
 } from './workspace-contract.js';
 
 export interface ReoWorkspaceBridge {
@@ -245,6 +257,24 @@ export interface ReoWorkspaceBridge {
   readonly closeRecordingTranscription: (
     payload: WorkspaceRecordingTranscriptionCloseRequest
   ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly readVoiceTranscriptionSettings: (
+    payload: WorkspaceReadVoiceTranscriptionSettingsRequest
+  ) => Promise<WorkspaceReadVoiceTranscriptionSettingsResponse>;
+  readonly setVoiceTranscriptionEnabled: (
+    payload: WorkspaceSetVoiceTranscriptionEnabledRequest
+  ) => Promise<WorkspaceSetVoiceTranscriptionEnabledResponse>;
+  readonly saveVoiceTranscriptionApiKey: (
+    payload: WorkspaceSaveVoiceTranscriptionApiKeyRequest
+  ) => Promise<WorkspaceSaveVoiceTranscriptionApiKeyResponse>;
+  readonly clearVoiceTranscriptionApiKey: (
+    payload: WorkspaceClearVoiceTranscriptionApiKeyRequest
+  ) => Promise<WorkspaceClearVoiceTranscriptionApiKeyResponse>;
+  readonly validateVoiceTranscriptionCredentials: (
+    payload: WorkspaceValidateVoiceTranscriptionCredentialsRequest
+  ) => Promise<WorkspaceValidateVoiceTranscriptionCredentialsResponse>;
+  readonly openExternalUrl: (
+    payload: WorkspaceOpenExternalUrlRequest
+  ) => Promise<WorkspaceOpenExternalUrlResponse>;
   readonly onRecordingTranscriptionEvent: (
     callback: (event: WorkspaceRecordingTranscriptionEvent) => void
   ) => () => void;

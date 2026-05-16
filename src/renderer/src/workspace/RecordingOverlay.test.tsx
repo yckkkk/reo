@@ -320,6 +320,66 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       ok: true as const,
       value: { accepted: true as const },
     })),
+    readVoiceTranscriptionSettings: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
+    })),
+    setVoiceTranscriptionEnabled: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
+    })),
+    saveVoiceTranscriptionApiKey: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: true,
+          apiKeyLastFour: '1234',
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
+    })),
+    clearVoiceTranscriptionApiKey: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          lastValidatedAt: null,
+          lastValidationOk: null,
+          lastValidationCode: null,
+        },
+      },
+    })),
+    validateVoiceTranscriptionCredentials: vi.fn(async () => ({
+      ok: true as const,
+      value: { code: 'network' as const },
+    })),
+    openExternalUrl: vi.fn(async () => ({
+      ok: true as const,
+      value: {},
+    })),
     onRecordingTranscriptionEvent: vi.fn(() => () => {}),
     ...overrides,
   };
