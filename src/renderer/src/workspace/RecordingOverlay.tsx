@@ -180,6 +180,13 @@ type TranscriptionAudioQueue = {
   tail: Promise<void>;
 };
 
+type PendingTranscriptionStart = {
+  readonly recordingFlowSessionId: string;
+  readonly recordingSession: number;
+  readonly revisionId: string;
+  readonly timeOffsetMs: number;
+};
+
 function titleForRecordingTarget(target: RecordingTarget, workspaceSession: WorkspaceSession) {
   if (target.title) {
     return target.title;
@@ -317,7 +324,9 @@ export function RecordingOverlay({
   workspaceSession,
 }: RecordingOverlayProps) {
   const { data: voiceSettings } = useQuery(voiceSettingsQueryOptions());
+  const voiceSettingsKnown = voiceSettings !== undefined;
   const transcriptionEnabled = voiceSettings?.enabled === true;
+  const transcriptionDisabled = voiceSettings?.enabled === false;
   const [state, setState] = useState<RecordingState>(() => createInitialRecordingState());
   const [elapsedMs, setElapsedMs] = useState(0);
   const [timeline, setTimeline] = useState(() =>
@@ -346,6 +355,7 @@ export function RecordingOverlay({
   } | null>(null);
   const activeTranscriptionRef = useRef<ActiveTranscriptionSession | null>(null);
   const activeTranscriptionStartPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingTranscriptionStartRef = useRef<PendingTranscriptionStart | null>(null);
   const transcriptionAudioQueueRef = useRef<TranscriptionAudioQueue | null>(null);
   const liveAudioInputActiveRef = useRef(false);
   const pendingMicrophoneIntentRef = useRef<{
@@ -432,6 +442,25 @@ export function RecordingOverlay({
   useEffect(() => {
     timelineRef.current = timeline;
   }, [timeline]);
+
+  useEffect(() => {
+    if (!voiceSettingsKnown) {
+      return;
+    }
+    const pendingStart = pendingTranscriptionStartRef.current;
+    if (!pendingStart) {
+      return;
+    }
+    pendingTranscriptionStartRef.current = null;
+    if (
+      recordingSessionRef.current !== pendingStart.recordingSession ||
+      activeRevisionIdRef.current !== pendingStart.revisionId ||
+      timelineRef.current.recordingSessionId !== pendingStart.recordingFlowSessionId
+    ) {
+      return;
+    }
+    queueActiveTranscriptionStart(pendingStart);
+  }, [voiceSettingsKnown, transcriptionEnabled]);
 
   useEffect(() => {
     if (!open || !recoveredDraft) {
@@ -598,6 +627,7 @@ export function RecordingOverlay({
       replacementCopySessionRef.current = null;
       const activeTranscription = activeTranscriptionRef.current;
       activeTranscriptionStartPromiseRef.current = null;
+      pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
       transcriptionAudioQueueRef.current = null;
       if (activeTranscription) {
@@ -708,8 +738,9 @@ export function RecordingOverlay({
   }
 
   async function finishActiveTranscription(recordingSession: number) {
-    if (!transcriptionEnabled) {
+    if (!voiceSettingsKnown || !transcriptionEnabled) {
       activeTranscriptionStartPromiseRef.current = null;
+      pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
       transcriptionAudioQueueRef.current = null;
       finalTranscriptionNeedsBackfillRef.current = false;
@@ -841,12 +872,13 @@ export function RecordingOverlay({
     flushBufferedTranscriptionAudio(recordingSession, timeOffsetMs);
   }
 
-  function queueActiveTranscriptionStart(input: {
-    readonly recordingFlowSessionId: string;
-    readonly recordingSession: number;
-    readonly revisionId: string;
-    readonly timeOffsetMs: number;
-  }) {
+  function queueActiveTranscriptionStart(input: PendingTranscriptionStart) {
+    if (!voiceSettingsKnown) {
+      pendingTranscriptionStartRef.current = input;
+      return;
+    }
+
+    pendingTranscriptionStartRef.current = null;
     if (!transcriptionEnabled) {
       activeTranscriptionStartPromiseRef.current = null;
       activeTranscriptionRef.current = null;
@@ -2868,9 +2900,9 @@ export function RecordingOverlay({
   return (
     <RecordingSurface
       description={
-        transcriptionEnabled
-          ? '录制本地音频，并在完成后保存声音和实时转写。'
-          : '录制本地音频，语音识别已关闭。'
+        transcriptionDisabled
+          ? '录制本地音频，语音识别已关闭。'
+          : '录制本地音频，并在完成后保存声音和实时转写。'
       }
       closeBlocked={!canClose}
       immersive
@@ -2963,7 +2995,14 @@ export function RecordingOverlay({
               className="row-start-2 flex h-full w-full items-center justify-center"
               data-testid="recording-copy-slot"
             >
-              {transcriptionEnabled ? (
+              {transcriptionDisabled ? (
+                <p
+                  className={`max-w-[680px] text-balance text-muted-foreground ${RECORDING_SPEECH_TEXT_CLASS}`}
+                  role="status"
+                >
+                  语音识别已关闭，本次只保存本地录音。
+                </p>
+              ) : (
                 <RecordingTranscriptPreview
                   autoScrollMode={
                     state.status === 'paused' || state.status === 'replacing' ? 'focus' : 'latest'
@@ -2972,13 +3011,6 @@ export function RecordingOverlay({
                   focusTimeMs={transcriptFocusTimeMs}
                   segments={timeline.transcriptSegments}
                 />
-              ) : (
-                <p
-                  className={`max-w-[680px] text-balance text-muted-foreground ${RECORDING_SPEECH_TEXT_CLASS}`}
-                  role="status"
-                >
-                  语音识别已关闭，本次只保存本地录音。
-                </p>
               )}
             </div>
             <div

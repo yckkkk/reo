@@ -1,5 +1,10 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render as renderTestingLibrary, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render as renderTestingLibrary,
+  screen,
+} from '@testing-library/react';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
@@ -61,9 +66,11 @@ function createVoiceSettingsSnapshot(enabled: boolean = true): VoiceTranscriptio
 
 let voiceSettingsForTest = createVoiceSettingsSnapshot();
 
-function render(ui: ReactElement) {
+function render(ui: ReactElement, options: { readonly seedVoiceSettings?: boolean } = {}) {
   const queryClient = createReoQueryClient();
-  queryClient.setQueryData(voiceSettingsQueryKey(), voiceSettingsForTest);
+  if (options.seedVoiceSettings !== false) {
+    queryClient.setQueryData(voiceSettingsQueryKey(), voiceSettingsForTest);
+  }
   function Wrapper({ children }: { readonly children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
@@ -1155,6 +1162,64 @@ describe('RecordingOverlay', () => {
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('starts live transcription after voice settings finish loading enabled', async () => {
+    const deferredSettings = createDeferred<
+      Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
+    >();
+    const bridge = installWorkspaceBridge({
+      readVoiceTranscriptionSettings: vi.fn(() => deferredSettings.promise),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />,
+      { seedVoiceSettings: false }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deferredSettings.resolve({
+        ok: true,
+        value: {
+          settings: createVoiceSettingsSnapshot(true),
+        },
+      });
+      await deferredSettings.promise;
+    });
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(0));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).toHaveBeenCalledWith({
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      timeOffsetMs: 0,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
+    expect(bridge.sendRecordingTranscriptionAudio).toHaveBeenCalledWith({
+      chunk: new Uint8Array([1, 2, 3, 4]),
+      recordingFlowSessionId: 'recording-1',
+      recordingSessionId: 'recording-1',
+      revisionId: 'recording-1-revision-0',
+      workspaceHandle: workspaceSession.workspaceHandle,
+    });
   });
 
   it('starts durable capture before live transcription accepts and flushes buffered PCM', async () => {
