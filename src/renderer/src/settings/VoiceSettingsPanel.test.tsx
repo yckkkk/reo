@@ -283,6 +283,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
     expect(input).toBeDisabled();
     expect(input).toHaveAttribute('placeholder', '已配置 · ●●●● 1234');
     expect(screen.getByText(/末 4 位 1234/)).toBeInTheDocument();
+    expect(screen.queryByText(/已验证/)).not.toBeInTheDocument();
   });
 
   it('marks an old successful validation as stale and allows revalidation without polling', async () => {

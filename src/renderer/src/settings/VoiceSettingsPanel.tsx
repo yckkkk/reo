@@ -112,6 +112,7 @@ export function VoiceSettingsPanel() {
     settings.lastValidatedAt !== null &&
     Date.now() - new Date(settings.lastValidatedAt).getTime() > STALE_VALIDATION_THRESHOLD_MS;
   const showVerifiedStatus =
+    settings.enabled &&
     !isBusy &&
     !isValidationStale &&
     settings.lastValidationCode === 'ok' &&
@@ -124,7 +125,7 @@ export function VoiceSettingsPanel() {
       : '请输入火山引擎 X-Api-Key';
   const saveButtonLabel = saveApiKeyMutation.isPending
     ? '验证中'
-    : isValidationFailed
+    : settings.enabled && isValidationFailed
       ? '重试'
       : '保存';
 
@@ -200,12 +201,12 @@ export function VoiceSettingsPanel() {
             正在验证 X-Api-Key
           </p>
         ) : null}
-        {!isBusy && settings.lastValidationCode === 'auth' ? (
+        {settings.enabled && !isBusy && settings.lastValidationCode === 'auth' ? (
           <VoiceValidationStatus tone="auth">
             X-Api-Key 验证失败，请确认密钥后重试。
           </VoiceValidationStatus>
         ) : null}
-        {!isBusy && settings.lastValidationCode === 'network' ? (
+        {settings.enabled && !isBusy && settings.lastValidationCode === 'network' ? (
           <VoiceValidationStatus tone="network">
             暂时无法连接豆包服务，请稍后重试。
           </VoiceValidationStatus>
