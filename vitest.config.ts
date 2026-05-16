@@ -18,7 +18,9 @@ export default defineConfig({
         url: 'http://127.0.0.1/',
       },
     },
+    fileParallelism: false,
     include: ['src/renderer/**/*.test.{ts,tsx}'],
+    maxWorkers: 1,
     setupFiles: ['src/renderer/src/test/setup.ts'],
   },
 });

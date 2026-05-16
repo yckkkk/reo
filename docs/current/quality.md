@@ -4,9 +4,9 @@
 
 ## 当前事实
 
-- 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library 和 `npm run verify:quick`。
+- 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library、`npm run verify:quick` 和 `npm run verify:strict`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 和 preload 纯策略函数。
-- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用。
+- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用；renderer test files 串行执行并限制为 1 个 worker。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
@@ -55,13 +55,22 @@ npm run verify:quick
 
 `verify:quick` 当前包含 typecheck、`test:main`、`test:renderer`、lint 和 format check。
 
+当前严格检查：
+
+```bash
+npm run verify:strict
+```
+
+`verify:strict` 当前包含 typecheck、`test:main`、`test:renderer`、`lint:strict`、format check 和 build。
+
 当前命令边界：
 
 - `dev`：运行 `scripts/run-dev.mjs`，加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
-- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，jsdom URL 固定为 `http://127.0.0.1/`，setup 文件加载 Testing Library DOM matchers、pointer capture、`ResizeObserver` 测试替身和 localStorage 测试存储，并在每个测试后执行 DOM cleanup。
+- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，jsdom URL 固定为 `http://127.0.0.1/`，renderer test files 串行执行且最多使用 1 个 worker；setup 文件加载 Testing Library DOM matchers、pointer capture、`ResizeObserver` 测试替身和 localStorage 测试存储，并在每个测试后执行 DOM cleanup。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
+- `lint:strict`：运行 `eslint . --max-warnings=0`，同一 flat config 下把 warning 作为失败。
 - `format:check`：运行 `prettier --check .`。
 
 当前本地视觉测量：
