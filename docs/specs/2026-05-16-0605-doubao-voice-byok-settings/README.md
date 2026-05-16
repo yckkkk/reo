@@ -39,7 +39,7 @@
 - 当前 AppShell 无 `mode` 概念，只区分 starter Home 与 loaded workspace。
 - 当前未安装/未使用 `shell.openExternal`（`docs/current/electron.md:119`）。本 spec 要新增 host allowlist 受限的扩展。
 - 当前未引入 shadcn `Switch` source；本 spec 需要新增 `src/renderer/src/components/ui/switch.tsx`。
-- WebSocket endpoint `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` 在代码中标为流式实时使用；按官方文档 `bigmodel_async` 实为异步长文本接口、`bigmodel` 才是流式实时——此疑点列入 follow-up E，**本 spec 不修改 endpoint**，避免改变现状行为。
+- WebSocket endpoint `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` 在代码中标为流式实时使用；官方大模型流式语音识别 API 文档把 `bigmodel_async` 描述为双向流式优化版本，并要求 `X-Api-Resource-Id: volc.seedasr.sauc.duration`。本 spec 不修改 endpoint，只把鉴权从旧双 header 切到新版控制台单 `X-Api-Key`。
 
 ## 设计
 
@@ -467,8 +467,8 @@ A 收口后必须为下列每一项独立走完整 brainstorm → spec → plan 
 | ID | 名称 | 一句话目标 | 依赖 |
 |---|---|---|---|
 | B | 未转录状态可视化 | finalized audio segment / supplement 在 Memory Studio 标记「待转录」+ 录音 overlay 在 toggle disabled 时显示「语音转录已停用」占位 | 依赖 A 提供的 `transcriptionMode` 字段与 `transcript.exists` 派生字段 |
-| C | 网络 / 凭证恢复后自动轮询补转录 | 应用启动 / 网络恢复 / 凭证保存成功后，扫描未转录 finalized audio，逐个走异步转录 | 依赖 A 的 voice settings store，B 的「待转录」集合，以及一条新的离线转录引擎（可能从流式 endpoint 切到 `bigmodel_async` 异步长文本接口） |
+| C | 网络 / 凭证恢复后自动轮询补转录 | 应用启动 / 网络恢复 / 凭证保存成功后，扫描未转录 finalized audio，逐个走异步转录 | 依赖 A 的 voice settings store，B 的「待转录」集合，以及一条新的离线转录引擎（endpoint 需在 C/E 独立核对） |
 | D | 转录 tab More 菜单 + 手动重新生成转录 | 在 Segment / Supplement 的 transcript surface 加入 More 下拉，提供「重新生成转录」动作；同一引擎服务 C 的自动路径 | 依赖 C 的离线转录引擎 |
-| E | Endpoint 校正 | 核对 `bigmodel_async`（异步长文本）与 `bigmodel`（流式实时）的实际语义；如有必要把流式实时切到 `bigmodel`，长文本批处理切到 `bigmodel_async` | 独立技术调研，可与 C 合并启动 |
+| E | Endpoint 校正 | 独立核对 `bigmodel_async` 与 `bigmodel` 在当前火山引擎控制台和计费资源下的实际语义、成本与稳定性；如有必要再调整流式实时或离线批处理 endpoint | 独立技术调研，可与 C 合并启动 |
 
 每一项必须在 `docs/specs/` 当前空闲、本次 A 已归档之后才能开新 spec，遵守 CLAUDE.md 「同一时间只推进一个可验证基础工作单元」约束。

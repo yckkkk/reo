@@ -46,7 +46,7 @@
 
 ### renderer 修改
 
-- `src/renderer/src/app-shell/AppShell.tsx` — 引入 `appMode: 'app' | 'settings'` 顶层 state；sidebar 底部添加齿轮按钮并与主题按钮水平并列；`appMode === 'settings'` 时渲染 `SettingsShell` 替代主内容；录音中阻止 mode 切换。
+- `src/renderer/src/App.tsx` / `src/renderer/src/app-shell/AppShell.tsx` — `App.tsx` 持有 `appMode: 'app' | 'settings'` 顶层 state；`AppShell` 只暴露 sidebar 底部齿轮入口并与主题按钮水平并列；`appMode === 'settings'` 时在同一 AppShell 主内容区渲染 `SettingsShell`；录音中阻止 mode 切换。
 - `src/renderer/src/workspace/RecordingOverlay.tsx` — 从 `useVoiceTranscriptionSettings()` 读 `enabled`；disabled 时不发起 `startRecordingTranscription` IPC，不渲染 transcript 容器。
 - `src/renderer/src/workspaceApi.ts`（如存在）— 包装 6 个新 preload 方法。
 
@@ -218,7 +218,7 @@ test('voiceSettingsStore: writeApiKey throws when safeStorage unavailable', () =
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx tsx --test test/main/voiceSettingsStore.test.ts`
+Run: `npm run test:main`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement voiceSettingsStore**
@@ -374,7 +374,7 @@ export type VoiceSettingsStore = ReturnType<typeof createVoiceSettingsStore>;
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx tsx --test test/main/voiceSettingsStore.test.ts`
+Run: `npm run test:main`
 Expected: PASS all 7 tests.
 
 - [ ] **Step 5: Commit**
@@ -482,7 +482,7 @@ test('voiceTranscriptionProbe: nothing happens within timeout returns network', 
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx tsx --test test/main/voiceTranscriptionProbe.test.ts`
+Run: `npm run test:main`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement voiceTranscriptionProbe**
@@ -576,7 +576,7 @@ export function runVoiceTranscriptionProbe({
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx tsx --test test/main/voiceTranscriptionProbe.test.ts`
+Run: `npm run test:main`
 Expected: PASS all 4 tests.
 
 - [ ] **Step 5: Commit**
@@ -656,7 +656,7 @@ In `test/main/doubaoStreamingAsr.test.ts`:
 
 - [ ] **Step 3: Run tests to verify they pass**
 
-Run: `npx tsx --test test/main/doubaoStreamingAsr.test.ts`
+Run: `npm run test:main`
 Expected: PASS all existing tests with new apiKey shape.
 
 - [ ] **Step 4: grep verify no legacy refs remain**
@@ -727,7 +727,7 @@ test('start returns transcriptionMode=live when enabled with key', async () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx tsx --test test/main/recordingTranscriptionSessions.test.ts`
+Run: `npm run test:main`
 Expected: FAIL — `resolveVoiceSettings` option not accepted; `transcriptionMode` undefined.
 
 - [ ] **Step 3: Refactor recordingTranscriptionSessions.ts**
@@ -983,7 +983,7 @@ export const workspaceSetVoiceTranscriptionEnabledResponseSchema =
   workspaceReadVoiceTranscriptionSettingsResponseSchema;
 
 export const workspaceSaveVoiceTranscriptionApiKeyRequestSchema = z.strictObject({
-  apiKey: z.string().min(1).max(512),
+  apiKey: z.string().min(4).max(1024),
 });
 export const workspaceSaveVoiceTranscriptionApiKeyResponseSchema =
   workspaceReadVoiceTranscriptionSettingsResponseSchema;
@@ -1131,7 +1131,6 @@ Repeat 5 more tests for setEnabled / saveApiKey (with mock probe) / clearApiKey 
 In `src/main/workspaceIpc.ts`:
 
 ```ts
-import { shell } from 'electron';
 import { runVoiceTranscriptionProbe } from './voiceTranscriptionProbe.js';
 import {
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
@@ -1142,24 +1141,20 @@ import {
   WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
 } from '../workspace-contract/workspace-channels.js';
 import {
-  workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceSetVoiceTranscriptionEnabledRequestSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
-  workspaceClearVoiceTranscriptionApiKeyRequestSchema,
-  workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceOpenExternalUrlRequestSchema,
   workspaceError,
 } from '../workspace-contract/workspace-contract.js';
-
-const ALLOWED_EXTERNAL_HOSTS = new Set(['www.volcengine.com', 'volcengine.com', 'console.volcengine.com']);
 
 async function handleSettingsRead(store: VoiceSettingsStore) {
   return { ok: true as const, value: { settings: store.read() } };
 }
 
 async function handleSettingsSetEnabled(store: VoiceSettingsStore, payload: unknown) {
-  const parsed = workspaceSetVoiceTranscriptionEnabledRequestSchema.parse(payload);
-  store.setEnabled(parsed.enabled);
+  const parsed = workspaceSetVoiceTranscriptionEnabledRequestSchema.safeParse(payload);
+  if (!parsed.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings enabled request.', 'none-written');
+  store.setEnabled(parsed.data.enabled);
   return { ok: true as const, value: { settings: store.read() } };
 }
 
@@ -1168,17 +1163,18 @@ async function handleSettingsSaveApiKey(
   probe: (key: string) => Promise<{ ok: boolean; code: 'ok' | 'auth' | 'network'; message?: string }>,
   payload: unknown
 ) {
-  const parsed = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse(payload);
+  const parsed = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.safeParse(payload);
+  if (!parsed.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings API key request.', 'none-written');
   try {
-    store.writeApiKey(parsed.apiKey);
+    store.writeApiKey(parsed.data.apiKey);
   } catch (err) {
     const code = err instanceof Error && err.message === 'safeStorage unavailable'
       ? 'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE'
       : 'ERR_VOICE_SETTINGS_WRITE_FAILED';
     return workspaceError(code, '无法写入本地配置，请检查磁盘或系统安全存储。', 'none-written');
   }
-  const result = await probe(parsed.apiKey);
-  store.recordValidation({ ok: result.code === 'ok', code: result.code });
+  const result = await probe(parsed.data.apiKey);
+  store.recordValidation({ ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null, code: result.code });
   return {
     ok: true as const,
     value: {
@@ -1200,56 +1196,107 @@ async function handleValidate(
   const key = store.readDecryptedApiKey();
   if (!key) return workspaceError('ERR_VOICE_TRANSCRIPTION_PROBE_FAILED', '请先填写 X-Api-Key。', 'none-written');
   const result = await probe(key);
-  store.recordValidation({ ok: result.code === 'ok', code: result.code });
+  store.recordValidation({ ok: result.code === 'ok' ? true : result.code === 'auth' ? false : null, code: result.code });
   return { ok: true as const, value: { code: result.code, ...(result.message ? { message: result.message } : {}) } };
 }
 
 async function handleOpenExternal(payload: unknown) {
-  const parsed = workspaceOpenExternalUrlRequestSchema.parse(payload);
-  const url = new URL(parsed.url);
-  if (!ALLOWED_EXTERNAL_HOSTS.has(url.host)) {
+  const parsed = workspaceOpenExternalUrlRequestSchema.safeParse(payload);
+  if (!parsed.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid open external URL request.', 'none-written');
+  }
+  const url = new URL(parsed.data.url);
+  const hostname = url.hostname.toLowerCase();
+  const isAllowedVolcengineHost = hostname === 'volcengine.com' || hostname.endsWith('.volcengine.com');
+  const hasExplicitPort = url.port.length > 0;
+  if (url.protocol !== 'https:' || url.username || url.password || hasExplicitPort || !isAllowedVolcengineHost) {
     return workspaceError('ERR_OPEN_EXTERNAL_URL_REJECTED', '不允许打开该外部链接。', 'none-written');
   }
-  await shell.openExternal(parsed.url);
+  await requireElectronShellApi().shell.openExternal(url.toString());
   return { ok: true as const, value: {} };
 }
 ```
 
-Register handlers in `registerWorkspaceIpc`:
+Register handlers through the existing `registerWorkspaceIpcHandler` helper inside `registerWorkspaceIpc`; do not create a second IPC registration path:
 
 ```ts
-ipcMain.handle(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);                  // existing helper
-  workspaceReadVoiceTranscriptionSettingsRequestSchema.parse(payload);
+registerWorkspaceIpcHandler(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
+  const request = workspaceNoInputSchema.safeParse(payload);
+  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings read request.', 'none-written');
   return handleSettingsRead(voiceSettingsStore);
 });
-ipcMain.handle(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);
+registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
   return handleSettingsSetEnabled(voiceSettingsStore, payload);
 });
-ipcMain.handle(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);
+registerWorkspaceIpcHandler(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
   return handleSettingsSaveApiKey(
     voiceSettingsStore,
     (k) => runVoiceTranscriptionProbe({ apiKey: k }),
     payload,
   );
 });
-ipcMain.handle(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);
-  workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse(payload);
+registerWorkspaceIpcHandler(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
+  const request = workspaceNoInputSchema.safeParse(payload);
+  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings clear request.', 'none-written');
   return handleSettingsClear(voiceSettingsStore);
 });
-ipcMain.handle(WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);
-  workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse(payload);
+registerWorkspaceIpcHandler(WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
+  const request = workspaceNoInputSchema.safeParse(payload);
+  if (!request.success) return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Invalid voice settings validate request.', 'none-written');
   return handleValidate(
     voiceSettingsStore,
     (k) => runVoiceTranscriptionProbe({ apiKey: k }),
   );
 });
-ipcMain.handle(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, (event, payload) => {
-  requireTrustedSender(event);
+registerWorkspaceIpcHandler(WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL, (event, payload) => {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_EXTERNAL_URL_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) return trusted;
   return handleOpenExternal(payload);
 });
 ```
@@ -1491,7 +1538,7 @@ Create `src/renderer/src/settings/voiceSettingsQueries.ts`：
 
 ```ts
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
-import type { VoiceTranscriptionSettingsSnapshot } from '@/../../../workspace-contract/workspace-contract';
+import type { VoiceTranscriptionSettingsSnapshot } from '../../../workspace-contract/workspace-contract';
 
 export function voiceSettingsQueryKey() {
   return ['settings', 'voice'] as const;
@@ -1514,7 +1561,7 @@ export function invalidateVoiceSettings(qc: QueryClient) {
 }
 ```
 
-(Adjust import path `@/../../../workspace-contract/workspace-contract` to match the project's tsconfig alias; if `@workspace-contract/*` alias exists use it; otherwise relative path.)
+(Use the relative path shown above; the renderer does not have an `@/../../../workspace-contract` alias. Prefer wrapping preload calls in `src/renderer/src/workspace/workspaceApi.ts` if the surrounding code already uses that facade.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1751,7 +1798,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
+import { FieldControl, FieldGroup, FieldHint, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -1797,36 +1844,38 @@ export function VoiceSettingsPanel() {
         />
       </header>
 
-      <Field>
+      <FieldGroup>
         <FieldLabel htmlFor="api-key">X-Api-Key</FieldLabel>
-        <div className="relative">
-          <Input
-            id="api-key"
-            type={showKey ? 'text' : 'password'}
-            value={draftKey}
-            disabled={inputDisabled}
-            onChange={(e) => setDraftKey(e.target.value)}
-            placeholder={settings.apiKeyConfigured ? `已配置 · 末 4 位 ●●●● ${settings.apiKeyLastFour ?? ''}` : 'X-Api-Key'}
-            maxLength={512}
-          />
-          <button
-            type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-            onClick={() => setShowKey((s) => !s)}
-            aria-label={showKey ? '隐藏 key' : '显示 key'}
-            disabled={inputDisabled}
-          >
-            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
+        <FieldControl>
+          <div className="relative">
+            <Input
+              id="api-key"
+              type={showKey ? 'text' : 'password'}
+              value={draftKey}
+              disabled={inputDisabled}
+              onChange={(e) => setDraftKey(e.target.value)}
+              placeholder={settings.apiKeyConfigured ? `已配置 · 末 4 位 ●●●● ${settings.apiKeyLastFour ?? ''}` : 'X-Api-Key'}
+              maxLength={1024}
+            />
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+              onClick={() => setShowKey((s) => !s)}
+              aria-label={showKey ? '隐藏 key' : '显示 key'}
+              disabled={inputDisabled}
+            >
+              {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </FieldControl>
         {showRedHint ? (
           <p className="text-sm text-destructive">启用后需要 X-Api-Key 才能生成转录</p>
         ) : (
-          <FieldDescription>
+          <FieldHint>
             可在火山引擎控制台 → 大模型流式语音识别 获取
-          </FieldDescription>
+          </FieldHint>
         )}
-      </Field>
+      </FieldGroup>
 
       <div className="flex items-center gap-3">
         <Button disabled={!canSave}>保存</Button>
@@ -1836,7 +1885,7 @@ export function VoiceSettingsPanel() {
 }
 ```
 
-(Field/FieldLabel/FieldDescription assumed to exist in `components/ui/field`. If naming differs, adapt to actual exports.)
+(`components/ui/field.tsx` 当前导出 `FieldGroup / FieldControl / FieldHint / FieldLabel / FieldError`，不导出 `Field` 或 `FieldDescription`。实现必须使用当前导出名。)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2605,3 +2654,78 @@ After plan execution, the following must all be true:
 ## Out-of-Scope (Follow-ups — DO NOT START IN THIS PLAN)
 
 The spec end lists B / C / D / E. Each must independently re-run brainstorm → spec → plan → implement → verify after this plan closes. Do not pre-build hooks for them in this plan.
+
+---
+
+## Review Notes
+
+This section is authoritative over earlier illustrative code blocks. Phase 2 review found more than three critical executable/security mismatches, so the plan was revised and mini-reviewed before implementation.
+
+### Official Protocol Evidence
+
+- Volcengine official "大模型流式语音识别API" docs: `https://www.volcengine.com/docs/6561/1354869?lang=zh`
+- Volcengine official "大模型流式语音识别API文档（优化版）" docs: `https://www.volcengine.com/docs/6561/1631584?lang=zh`
+- User-provided official demo: `/Users/yck/Downloads/PM/技术线/reo文件区/sauc_python/sauc_websocket_demo.py`
+
+### Findings And Handling
+
+1. Critical — plan used `npx tsx --test ...`, but `package.json` has no `tsx` and main tests are compiled by `scripts/run-main-tests.mjs`.
+   Handling: plan revised to run `npm run test:main` for main-process TDD gates. Per-file main subsets are not required in this repo until the runner supports them.
+
+2. Critical — `components/ui/field.tsx` exports `FieldGroup / FieldControl / FieldHint / FieldLabel / FieldError`, not `Field` or `FieldDescription`.
+   Handling: plan revised to use current exports. Do not add compatibility aliases.
+
+3. Critical — renderer import path `@/../../../workspace-contract/workspace-contract` is invalid.
+   Handling: plan revised to use `../../../workspace-contract/workspace-contract` or the existing `src/renderer/src/workspace/workspaceApi.ts` facade. Do not add a new alias just for this feature.
+
+4. Critical — `workspaceIpc.ts` has no `requireTrustedSender` helper and existing handlers use `validateWorkspaceSender` / `validateTrustedWorkspaceSender` with `channel`, `expectedSession`, `expectedSessionKey`, and `isTrustedUrl`.
+   Handling: plan revised. New handlers must be registered through the existing `registerWorkspaceIpcHandler` path and use existing sender-validation helpers plus strict `safeParse`; no generic invoke bridge.
+
+5. Critical — `shell.openExternal` allowlist based on `URL.host` is unsafe because ports, case, credentials, and suffix tricks can bypass intended host logic.
+   Handling: plan revised to parse with `new URL()`, require `https:`, reject username/password and explicit ports, compare `url.hostname.toLowerCase()`, allow only `volcengine.com` and `.volcengine.com` subdomains, then call existing `requireElectronShellApi().shell.openExternal(url.toString())`.
+
+6. Critical — Electron 41 local types expose sync `safeStorage.encryptString/decryptString/isEncryptionAvailable` and Linux `getSelectedStorageBackend()`, not async safeStorage APIs.
+   Handling: implementation must use installed sync API. On Linux, `safeStorage.getSelectedStorageBackend() === 'basic_text'` or `'unknown'` is storage-unavailable, not a plaintext fallback. Do not call `setUsePlainTextEncryption` and do not downgrade to plaintext.
+
+7. Critical — `voiceSettingsStore` illustrative sync `writeFileSync` + `renameSync` omits the repo's durability pattern.
+   Handling: implement app-state writes using the existing `writeWorkspaceJsonAtomic` helper or an equivalent fsync-backed atomic writer. Because Reo is unpublished, do the direct replacement; do not preserve a second old store format.
+
+8. Critical — plan classified auth failure through WebSocket `close(401/403)`, but HTTP 401/403 handshake failures surface through `ws` `unexpected-response` rather than valid close codes.
+   Handling: probe socket abstraction must cover `open`, `error`, `close`, and `unexpected-response`. Classify HTTP 401/403 as `auth`; timeout, DNS/TLS, 5xx, and non-auth close as `network`.
+
+9. Critical — `workspace-channels.ts` plan only said "append constants"; current sender validation allowlist uses `WORKSPACE_IPC_CHANNELS`.
+   Handling: each new channel constant must also be appended to `WORKSPACE_IPC_CHANNELS`, and existing contract/bridge surface tests must be updated.
+
+10. Critical — `reo-workspace-bridge.ts` currently imports concrete request/response types from `workspace-contract.ts`; it does not use `z.input/z.infer`.
+    Handling: follow the current concrete type import pattern. Do not introduce a one-off Zod type style in this file.
+
+11. Critical — API key length was inconsistent: spec says max 1KB, plan used 512 and allowed length 1 even though `apiKeyLastFour` is length 4.
+    Handling: request schema and UI `maxLength` revised to 1024; minimum is 4. IME/composition must trim only on submit, not while composing.
+
+12. Critical — `recordValidation({ ok: result.code === 'ok' })` would mark network failures as negative credential validation.
+    Handling: persist `lastValidationOk = true` for `ok`, `false` for `auth`, and `null` for `network`.
+
+13. Important — official docs and current code both support `DOUBAO_STREAMING_ASR_ENDPOINT = wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` with `DOUBAO_STREAMING_ASR_RESOURCE_ID = volc.seedasr.sauc.duration` for the optimized streaming API. The local official demo is an older dual-header sample using `volc.bigasr.sauc.duration`.
+    Handling: README revised. Do not change endpoint or resource id in A. Follow-up E remains a later cost/stability/semantics validation, not a reason to undo A.
+
+14. Important — the user provided a test X-Api-Key for runtime validation.
+    Handling: use it only during manual probe/recording verification. Never commit it, print it, put it in screenshots, or place it in logs/docs.
+
+15. Important — because Reo is unpublished, all implementation should be direct cutover.
+    Handling: remove old env-var reads, old dual-header auth, old type shapes, and related tests outright. Do not add compatibility shims, aliases, migration wrappers, or fallback env paths.
+
+16. Important — `window.reoWorkspace` is already typed as readonly in `src/renderer/src/types/reoWorkspace.d.ts`.
+    Handling: renderer tests should use `Object.defineProperty(window, 'reoWorkspace', { configurable: true, value })`; do not redeclare `Window` with `any`.
+
+17. Important — `AppShell` should not own application routing state.
+    Handling: `src/renderer/src/App.tsx` owns `appMode`; `AppShell` exposes the settings trigger and renders whichever main content App passes. Entering settings must preserve workspace handle/session.
+
+18. Important — the plan's disabled recording surface must stay inside A.
+    Handling: implement only the A behavior: disabled toggle skips ASR start and does not show an error. Do not build B/C/D/E recovery queues, More menu, or auto backfill hooks.
+
+### Mini-Review Result
+
+- CLAUDE hard constraints: PASS after amendments. No renderer Node/Electron API, no generic invoke, sender validation remains narrow, no compatibility fallback.
+- Current source fit: PASS after amendments. Paths, field exports, workspace bridge style, channel allowlist, main test runner, and App/AppShell ownership are now aligned with current repo.
+- Official protocol fit: PASS for A. Keep `bigmodel_async`, `volc.seedasr.sauc.duration`, and single `X-Api-Key`; treat the supplied Python demo as older dual-header reference only.
+- Executability: PASS with caveat that illustrative snippets remain guidance. Workers must inspect current files before coding and follow this Review Notes section when snippets conflict.
