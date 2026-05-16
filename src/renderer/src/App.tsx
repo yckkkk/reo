@@ -3183,6 +3183,7 @@ export function App() {
               currentMemory={currentMemory}
               memoryRailOpen={memoryRailOpen}
               onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
+              onDeleteMemory={openMemoryDeleteDialog}
               onRenameMemory={setMemoryRenameTarget}
               onRenameMemorySpace={() =>
                 openMemorySpaceRenameDialog({
@@ -3190,8 +3191,16 @@ export function App() {
                   title: activeWorkspaceSession.snapshot.title,
                 })
               }
+              onRemoveMemorySpace={() =>
+                openMemorySpaceRemoveDialog({
+                  workspaceId: activeWorkspaceSession.workspaceId,
+                  title: activeWorkspaceSession.snapshot.title,
+                })
+              }
               onToggleMemoryRail={toggleMemoryRail}
               title={activeWorkspaceSession.snapshot.title}
+              workspaceHandle={activeWorkspaceSession.workspaceHandle}
+              workspaceId={activeWorkspaceSession.workspaceId}
             />
           ) : null
         }

@@ -63,6 +63,8 @@ export function LoadedWorkspaceFrame({
           onDeleteMemory={onDeleteMemory}
           onRenameMemory={onRenameMemory}
           onSelectMemory={onSelectMemory}
+          workspaceHandle={workspaceSession.workspaceHandle}
+          workspaceId={workspaceSession.workspaceId}
         />
       }
       dock={<ExpressionDock onStartRecording={onStartRecording} />}

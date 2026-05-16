@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, PencilLine, Plus } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Plus } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -7,13 +7,9 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { MemoryActionsMenu } from './MemoryActionsMenu';
+import { MemorySpaceActionsMenu } from './MemorySpaceActionsMenu';
 import { WORKSPACE_MEMORY_RAIL_ID } from './WorkspaceFrame';
 import type { WorkspaceMemorySummary } from './workspaceApi';
 
@@ -23,20 +19,28 @@ type WorkspaceTitlebarProps = {
   readonly currentMemory?: WorkspaceTitlebarMemory | null;
   readonly memoryRailOpen: boolean;
   readonly onCreateMemory: () => void;
-  readonly onRenameMemory?: ((memory: WorkspaceTitlebarMemory) => void) | undefined;
+  readonly onDeleteMemory: (memory: WorkspaceTitlebarMemory) => void;
+  readonly onRenameMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onRenameMemorySpace: () => void;
+  readonly onRemoveMemorySpace: () => void;
   readonly onToggleMemoryRail: () => void;
   readonly title: string;
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
 };
 
 export function WorkspaceTitlebar({
   currentMemory = null,
   memoryRailOpen,
   onCreateMemory,
+  onDeleteMemory,
   onRenameMemory,
   onRenameMemorySpace,
+  onRemoveMemorySpace,
   onToggleMemoryRail,
   title,
+  workspaceHandle,
+  workspaceId,
 }: WorkspaceTitlebarProps) {
   const ToggleIcon = memoryRailOpen ? PanelRightClose : PanelRightOpen;
   const toggleLabel = memoryRailOpen ? '折叠记忆列表' : '展开记忆列表';
@@ -52,8 +56,13 @@ export function WorkspaceTitlebar({
       >
         <BreadcrumbList className="flex-nowrap gap-4">
           <BreadcrumbItem className="min-w-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <MemorySpaceActionsMenu
+              actionIdentity={{ workspaceId }}
+              contentAlign="start"
+              memorySpaceTitle={title}
+              onRemove={onRemoveMemorySpace}
+              onRename={onRenameMemorySpace}
+              trigger={
                 <button
                   type="button"
                   aria-label={`${title} 记忆空间操作`}
@@ -61,22 +70,26 @@ export function WorkspaceTitlebar({
                 >
                   <span className="min-w-0 truncate">{title}</span>
                 </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="bottom" aria-label={`${title} 记忆空间操作`}>
-                <DropdownMenuItem onSelect={onRenameMemorySpace}>
-                  <PencilLine className="size-16 text-muted-foreground" aria-hidden="true" />
-                  重命名记忆空间
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              }
+              triggerLabel={`${title} 记忆空间操作`}
+            />
           </BreadcrumbItem>
           {currentMemory ? (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem className="min-w-0">
                 <BreadcrumbPage className="min-w-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <MemoryActionsMenu
+                    actionIdentity={{
+                      memoryId: currentMemory.memoryId,
+                      workspaceHandle,
+                      workspaceId,
+                    }}
+                    contentAlign="start"
+                    memoryTitle={currentMemory.title}
+                    onDelete={() => onDeleteMemory(currentMemory)}
+                    onRename={() => onRenameMemory(currentMemory)}
+                    trigger={
                       <button
                         type="button"
                         aria-label={`${currentMemory.title} 记忆操作`}
@@ -84,18 +97,9 @@ export function WorkspaceTitlebar({
                       >
                         <span className="min-w-0 truncate">{currentMemory.title}</span>
                       </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="start"
-                      side="bottom"
-                      aria-label={`${currentMemory.title} 记忆操作`}
-                    >
-                      <DropdownMenuItem onSelect={() => onRenameMemory?.(currentMemory)}>
-                        <PencilLine className="size-16 text-muted-foreground" aria-hidden="true" />
-                        重命名记忆
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    }
+                    triggerLabel={`${currentMemory.title} 记忆操作`}
+                  />
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </>

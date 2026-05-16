@@ -20,6 +20,7 @@ describe('AppShell', () => {
     onHome,
     onLibrary = vi.fn(),
     onOpenLocalWorkspace = vi.fn(),
+    onRenameMemorySpace = vi.fn(),
     onRemoveMemorySpace = vi.fn(),
     onSelectMemorySpace,
     memorySpaces = [
@@ -36,6 +37,10 @@ describe('AppShell', () => {
     readonly onHome?: () => void;
     readonly onLibrary?: () => void;
     readonly onOpenLocalWorkspace?: () => void;
+    readonly onRenameMemorySpace?: (memorySpace: {
+      readonly title: string;
+      readonly workspaceId: string;
+    }) => void;
     readonly onRemoveMemorySpace?: (memorySpace: {
       readonly title: string;
       readonly workspaceId: string;
@@ -62,6 +67,7 @@ describe('AppShell', () => {
         onHome={onHome ?? (() => {})}
         onLibrary={onLibrary}
         onOpenLocalWorkspace={onOpenLocalWorkspace}
+        onRenameMemorySpace={onRenameMemorySpace}
         onRemoveMemorySpace={onRemoveMemorySpace}
         onSelectMemorySpace={onSelectMemorySpace}
       >
@@ -339,6 +345,15 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: 'reo 更多操作' }));
 
     expect(screen.getByRole('menu', { name: 'reo 更多操作' })).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制绝对路径',
+      '重命名',
+      '移除',
+    ]);
+    expect(screen.queryByRole('menuitem', { name: '重命名记忆空间' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '移除记忆空间' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'reo 更多操作' })).toHaveClass(
       'data-[state=open]:pointer-events-auto',
       'data-[state=open]:opacity-100'
@@ -347,7 +362,7 @@ describe('AppShell', () => {
       zIndex: '4',
     });
 
-    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除' }));
 
     expect(onRemoveMemorySpace).toHaveBeenCalledWith({
       title: 'reo',

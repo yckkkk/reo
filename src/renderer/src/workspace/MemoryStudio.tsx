@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Ellipsis, FileText, Mic, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Ellipsis, FileText, Mic, Pause, Play, Plus } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -23,6 +23,11 @@ import {
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
+import { SegmentActionsMenu } from './SegmentActionsMenu';
+import {
+  SegmentSupplementActionsMenu,
+  type SegmentSupplementActionIdentity,
+} from './SegmentSupplementActionsMenu';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
@@ -426,6 +431,7 @@ function SegmentSupplementTab({
   panelId,
   tabIndex,
   tabId,
+  actionIdentity,
   onActionsHidden,
   onActionsVisible,
   onDragEnd,
@@ -442,6 +448,7 @@ function SegmentSupplementTab({
   menuOpen,
 }: {
   readonly active: boolean;
+  readonly actionIdentity: Omit<SegmentSupplementActionIdentity, 'supplementId'>;
   readonly actionsVisible: boolean;
   readonly supplement: MemorySegmentSupplement;
   readonly supplementIndex: number;
@@ -519,8 +526,27 @@ function SegmentSupplementTab({
           <span className="truncate">{supplement.title}</span>
         </span>
       </button>
-      <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
-        <DropdownMenuTrigger asChild>
+      <SegmentSupplementActionsMenu
+        actionIdentity={{ ...actionIdentity, supplementId: supplement.supplementId }}
+        contentAlign="center"
+        onCloseAutoFocus={(event) => {
+          if (!actionsVisible) {
+            event.preventDefault();
+            tabButtonRef.current?.focus();
+          }
+        }}
+        onDelete={() => {
+          onMenuOpenChange(false);
+          onDelete();
+        }}
+        onOpenChange={onMenuOpenChange}
+        onRename={() => {
+          onMenuOpenChange(false);
+          onRename();
+        }}
+        open={menuOpen}
+        supplementTitle={supplement.title}
+        trigger={
           <button
             ref={moreButtonRef}
             type="button"
@@ -534,39 +560,9 @@ function SegmentSupplementTab({
               <Ellipsis className="size-16" strokeWidth={2.5} />
             </span>
           </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          aria-label={`${supplement.title} 操作`}
-          aria-labelledby={undefined}
-          align="center"
-          onCloseAutoFocus={(event) => {
-            if (!actionsVisible) {
-              event.preventDefault();
-              tabButtonRef.current?.focus();
-            }
-          }}
-        >
-          <DropdownMenuItem
-            onSelect={() => {
-              onMenuOpenChange(false);
-              onRename();
-            }}
-          >
-            <Pencil aria-hidden="true" className="size-16" />
-            重命名
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive focus:bg-destructive/10 focus:text-destructive"
-            onSelect={() => {
-              onMenuOpenChange(false);
-              onDelete();
-            }}
-          >
-            <Trash2 aria-hidden="true" className="size-16" />
-            删除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        }
+        triggerLabel={`${supplement.title} 更多操作`}
+      />
     </div>
   );
 }
@@ -1597,13 +1593,28 @@ export function MemoryStudio({
                           </span>
                         </span>
                       </button>
-                      <DropdownMenu
-                        open={openSegmentMenuId === segment.segmentId}
+                      <SegmentActionsMenu
+                        actionIdentity={{
+                          memoryId: memory.memoryId,
+                          segmentId: segment.segmentId,
+                          workspaceHandle: workspaceSession.workspaceHandle,
+                          workspaceId: workspaceSession.workspaceId,
+                        }}
+                        contentAlign="end"
+                        onDelete={() => {
+                          setOpenSegmentMenuId(null);
+                          onDeleteSegment({ memoryId: memory.memoryId, segment });
+                        }}
                         onOpenChange={(open) =>
                           setOpenSegmentMenuId(open ? segment.segmentId : null)
                         }
-                      >
-                        <DropdownMenuTrigger asChild>
+                        onRename={() => {
+                          setOpenSegmentMenuId(null);
+                          onRenameSegment({ memoryId: memory.memoryId, segment });
+                        }}
+                        open={openSegmentMenuId === segment.segmentId}
+                        segmentTitle={segment.title}
+                        trigger={
                           <button
                             type="button"
                             aria-label={`片段 ${segment.title} 更多操作`}
@@ -1613,32 +1624,9 @@ export function MemoryStudio({
                           >
                             <Ellipsis aria-hidden="true" className="size-16" />
                           </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          aria-label={`片段 ${segment.title} 操作`}
-                          aria-labelledby={undefined}
-                          align="end"
-                        >
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenSegmentMenuId(null);
-                              onRenameSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                          >
-                            <Pencil aria-hidden="true" className="size-16" />
-                            重命名
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenSegmentMenuId(null);
-                              onDeleteSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                          >
-                            <Trash2 aria-hidden="true" className="size-16" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        }
+                        triggerLabel={`片段 ${segment.title} 更多操作`}
+                      />
                     </div>
                   );
                 })}
@@ -1735,6 +1723,12 @@ export function MemoryStudio({
                       <SegmentSupplementTab
                         key={contentTab.supplement.supplementId}
                         active={resolvedActiveContentTab === contentTab.value}
+                        actionIdentity={{
+                          memoryId: memory.memoryId,
+                          segmentId: selectedSegment.segmentId,
+                          workspaceHandle: workspaceSession.workspaceHandle,
+                          workspaceId: workspaceSession.workspaceId,
+                        }}
                         actionsVisible={
                           (draggedContentTab === null &&
                             hoveredSupplementActionId === contentTab.supplement.supplementId) ||

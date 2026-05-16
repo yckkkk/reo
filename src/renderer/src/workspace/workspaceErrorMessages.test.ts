@@ -22,4 +22,25 @@ describe('workspaceErrorDisplayMessage', () => {
       })
     ).toBe('无法恢复片段，所属记忆已不存在。');
   });
+
+  it('maps entity action infrastructure errors instead of exposing raw process messages', () => {
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_SHELL_OPEN_FAILED',
+        message: 'shell.openPath returned launch services error',
+      })
+    ).toBe('无法完成系统操作。');
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_CLIPBOARD_WRITE_FAILED',
+        message: 'clipboard.writeText failed',
+      })
+    ).toBe('无法复制路径。');
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+        message: 'SegmentSupplement path could not be resolved',
+      })
+    ).toBe('找不到这个补充内容。');
+  });
 });

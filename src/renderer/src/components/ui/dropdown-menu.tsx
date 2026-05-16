@@ -10,6 +10,7 @@ function DropdownMenu({
 }
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
+const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
 function DropdownMenuContent({
   className,
@@ -48,4 +49,24 @@ function DropdownMenuItem({
   );
 }
 
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger };
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn('my-4 h-px bg-border/60', className)}
+      {...props}
+    />
+  );
+}
+
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+};

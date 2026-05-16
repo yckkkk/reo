@@ -20,6 +20,17 @@ describe('App', () => {
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
+    openMemorySpaceAgentsFile: vi.fn(),
+    openMemoryDocument: vi.fn(),
+    openSegmentDocument: vi.fn(),
+    revealMemorySpaceInFinder: vi.fn(),
+    revealMemoryInFinder: vi.fn(),
+    revealSegmentInFinder: vi.fn(),
+    copyMemorySpaceAbsolutePath: vi.fn(),
+    copyMemoryAbsolutePath: vi.fn(),
+    copyMemoryRelativePath: vi.fn(),
+    copySegmentAbsolutePath: vi.fn(),
+    copySegmentRelativePath: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
     createMemory: vi.fn(),
@@ -120,6 +131,17 @@ describe('App', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
     reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
+    reoWorkspace.openMemorySpaceAgentsFile.mockResolvedValue({ ok: true });
+    reoWorkspace.openMemoryDocument.mockResolvedValue({ ok: true });
+    reoWorkspace.openSegmentDocument.mockResolvedValue({ ok: true });
+    reoWorkspace.revealMemorySpaceInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.revealMemoryInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.revealSegmentInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.copyMemorySpaceAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyMemoryAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyMemoryRelativePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copySegmentAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copySegmentRelativePath.mockResolvedValue({ ok: true });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
     reoWorkspace.createMemory.mockResolvedValue({
@@ -888,7 +910,7 @@ describe('App', () => {
     await screen.findByRole('button', { name: '选择记忆 My seventh birthday' });
 
     await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
 
     const dialog = screen.getByRole('dialog', { name: '重命名记忆' });
     const titleInput = within(dialog).getByLabelText('记忆名称');
@@ -1001,8 +1023,57 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByRole('button', { name: '选择片段 录音1' });
 
-    await user.click(screen.getByRole('button', { name: '片段 录音1 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
+    const openSegmentMenu = async () => {
+      const trigger = screen.getByRole('button', { name: '片段 录音1 更多操作' });
+      expect(trigger).toBeInTheDocument();
+      expect(trigger.querySelector('svg')).toBeInTheDocument();
+      await user.click(trigger);
+      return screen.findByRole('menu');
+    };
+    const waitForSegmentMenuToClose = async () => {
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    };
+    const segmentActionPayload = {
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+    };
+
+    let segmentMenu = await openSegmentMenu();
+    expect(
+      within(segmentMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '用默认应用打开' }));
+    expect(reoWorkspace.openSegmentDocument).toHaveBeenCalledWith(segmentActionPayload);
+    await waitForSegmentMenuToClose();
+
+    segmentMenu = await openSegmentMenu();
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '在访达中显示' }));
+    expect(reoWorkspace.revealSegmentInFinder).toHaveBeenCalledWith(segmentActionPayload);
+    await waitForSegmentMenuToClose();
+
+    segmentMenu = await openSegmentMenu();
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '复制相对路径' }));
+    expect(reoWorkspace.copySegmentRelativePath).toHaveBeenCalledWith(segmentActionPayload);
+    await waitForSegmentMenuToClose();
+
+    segmentMenu = await openSegmentMenu();
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '复制绝对路径' }));
+    expect(reoWorkspace.copySegmentAbsolutePath).toHaveBeenCalledWith(segmentActionPayload);
+    await waitForSegmentMenuToClose();
+
+    segmentMenu = await openSegmentMenu();
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '删除' }));
+    const deleteDialog = screen.getByRole('alertdialog', { name: '删除片段' });
+    expect(deleteDialog).toHaveTextContent('录音1');
+    await user.click(within(deleteDialog).getByRole('button', { name: '取消' }));
+
+    segmentMenu = await openSegmentMenu();
+    await user.click(within(segmentMenu).getByRole('menuitem', { name: '重命名' }));
 
     const dialog = screen.getByRole('dialog', { name: '重命名片段' });
     const titleInput = within(dialog).getByLabelText('片段名称');
@@ -1486,7 +1557,7 @@ describe('App', () => {
     expect((await screen.findAllByText('无法恢复补充内容。')).length).toBeGreaterThan(0);
   }, 20_000);
 
-  it('uses titlebar breadcrumb dropdowns to rename the active memory space and Memory', async () => {
+  it('uses titlebar breadcrumb dropdowns to run memory-space actions and active Memory actions', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -1572,8 +1643,50 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'My seventh birthday' })).not.toBeInTheDocument();
     expect(screen.queryByText('2 个片段 · 02:05')).not.toBeInTheDocument();
 
-    await user.click(within(titlebar).getByRole('button', { name: 'Daily memory 记忆空间操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+    const openMemorySpaceBreadcrumbMenu = async (name: string) => {
+      await user.click(within(titlebar).getByRole('button', { name }));
+      return screen.findByRole('menu', { name });
+    };
+    const openMemoryBreadcrumbMenu = async (name: string) => {
+      await user.click(within(titlebar).getByRole('button', { name }));
+      return screen.findByRole('menu', { name });
+    };
+
+    let memorySpaceMenu = await openMemorySpaceBreadcrumbMenu('Daily memory 记忆空间操作');
+    const memorySpaceMenuItems = within(memorySpaceMenu).getAllByRole('menuitem');
+    expect(memorySpaceMenuItems.map((item) => item.textContent)).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制绝对路径',
+      '重命名',
+      '移除',
+    ]);
+    expect(memorySpaceMenuItems.at(-1)).toHaveTextContent('移除');
+    expect(
+      within(memorySpaceMenu).queryByRole('menuitem', { name: '重命名记忆空间' })
+    ).not.toBeInTheDocument();
+
+    await user.click(within(memorySpaceMenu).getByRole('menuitem', { name: '用默认应用打开' }));
+    expect(reoWorkspace.openMemorySpaceAgentsFile).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+
+    memorySpaceMenu = await openMemorySpaceBreadcrumbMenu('Daily memory 记忆空间操作');
+    await user.click(within(memorySpaceMenu).getByRole('menuitem', { name: '在访达中显示' }));
+    expect(reoWorkspace.revealMemorySpaceInFinder).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+
+    memorySpaceMenu = await openMemorySpaceBreadcrumbMenu('Daily memory 记忆空间操作');
+    await user.click(within(memorySpaceMenu).getByRole('menuitem', { name: '复制绝对路径' }));
+    expect(reoWorkspace.copyMemorySpaceAbsolutePath).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
+
+    memorySpaceMenu = await openMemorySpaceBreadcrumbMenu('Daily memory 记忆空间操作');
+    await user.click(within(memorySpaceMenu).getByRole('menuitem', { name: '移除' }));
+    const removeDialog = screen.getByRole('alertdialog', { name: '移除记忆空间' });
+    expect(removeDialog).toHaveTextContent(
+      '从 Reo 的记忆空间列表中移除“Daily memory”？本地文件夹不会被删除。'
+    );
+    await user.click(within(removeDialog).getByRole('button', { name: '取消' }));
+
+    memorySpaceMenu = await openMemorySpaceBreadcrumbMenu('Daily memory 记忆空间操作');
+    await user.click(within(memorySpaceMenu).getByRole('menuitem', { name: '重命名' }));
 
     const workspaceDialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
     const workspaceTitleInput = within(workspaceDialog).getByLabelText('记忆空间名称');
@@ -1592,10 +1705,51 @@ describe('App', () => {
       within(titlebar).getByRole('button', { name: '测试工作区1 记忆空间操作' })
     ).toBeInTheDocument();
 
-    await user.click(
-      within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
+    let memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    const memoryMenuItems = within(memoryMenu).getAllByRole('menuitem');
+    expect(memoryMenuItems.map((item) => item.textContent)).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '重命名',
+      '删除',
+    ]);
+    expect(
+      within(memoryMenu).queryByRole('menuitem', { name: '重命名记忆' })
+    ).not.toBeInTheDocument();
+
+    const memoryActionPayload = {
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+    };
+
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '用默认应用打开' }));
+    expect(reoWorkspace.openMemoryDocument).toHaveBeenCalledWith(memoryActionPayload);
+
+    memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '在访达中显示' }));
+    expect(reoWorkspace.revealMemoryInFinder).toHaveBeenCalledWith(memoryActionPayload);
+
+    memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '复制相对路径' }));
+    expect(reoWorkspace.copyMemoryRelativePath).toHaveBeenCalledWith(memoryActionPayload);
+
+    memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '复制绝对路径' }));
+    expect(reoWorkspace.copyMemoryAbsolutePath).toHaveBeenCalledWith(memoryActionPayload);
+
+    memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '删除' }));
+    const deleteDialog = screen.getByRole('alertdialog', { name: '删除记忆' });
+    expect(deleteDialog).toHaveTextContent(
+      '删除“My seventh birthday”？片段和补充录音会先进入恢复区。'
     );
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+    await user.click(within(deleteDialog).getByRole('button', { name: '取消' }));
+
+    memoryMenu = await openMemoryBreadcrumbMenu('My seventh birthday 记忆操作');
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '重命名' }));
 
     const memoryDialog = screen.getByRole('dialog', { name: '重命名记忆' });
     const memoryTitleInput = within(memoryDialog).getByLabelText('记忆名称');
@@ -1660,7 +1814,7 @@ describe('App', () => {
 
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
     await user.click(within(titlebar).getByRole('button', { name: '生活记录 记忆空间操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
 
     const dialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
     const titleInput = within(dialog).getByLabelText('记忆空间名称');
@@ -2083,7 +2237,7 @@ describe('App', () => {
     await screen.findByRole('button', { name: '选择记忆 My seventh birthday' });
 
     await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '删除记忆' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
 
     const dialog = screen.getByRole('alertdialog', { name: '删除记忆' });
     expect(dialog).toHaveTextContent('删除“My seventh birthday”？片段和补充录音会先进入恢复区。');
@@ -2806,7 +2960,7 @@ describe('App', () => {
     await user.click(
       within(titlebar).getByRole('button', { name: 'My seventh birthday 记忆操作' })
     );
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
     const renameDialog = screen.getByRole('dialog', { name: '重命名记忆' });
     const titleInput = within(renameDialog).getByLabelText('记忆名称');
     await user.clear(titleInput);
@@ -5556,7 +5710,7 @@ describe('App', () => {
       await screen.findByRole('button', { name: 'Runtime validated memory' })
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Runtime validated memory 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
 
     const dialog = screen.getByRole('dialog', { name: '重命名记忆空间' });
     const titleInput = within(dialog).getByLabelText('记忆空间名称');
@@ -5603,7 +5757,7 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: '测试1' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除' }));
 
     const dialog = screen.getByRole('alertdialog', { name: '移除记忆空间' });
     expect(dialog).toHaveTextContent('从 Reo 的记忆空间列表中移除“测试1”？本地文件夹不会被删除。');
@@ -5619,6 +5773,50 @@ describe('App', () => {
       expect(screen.queryByRole('button', { name: '测试1' })).not.toBeInTheDocument();
     });
     expect(await screen.findByText('已移除记忆空间')).toBeInTheDocument();
+  });
+
+  it('runs memory-space sidebar path bridge actions from the More menu', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_test_1',
+            title: '测试1',
+            description: '',
+            addedAt: '2026-05-08T07:48:00.000Z',
+            lastOpenedAt: '2026-05-08T07:48:00.000Z',
+          },
+        ],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByRole('button', { name: '测试1' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '用默认应用打开' }));
+    expect(reoWorkspace.openMemorySpaceAgentsFile).toHaveBeenCalledWith({
+      workspaceId: 'ws_test_1',
+    });
+
+    await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '在访达中显示' }));
+    expect(reoWorkspace.revealMemorySpaceInFinder).toHaveBeenCalledWith({
+      workspaceId: 'ws_test_1',
+    });
+
+    await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '复制绝对路径' }));
+    expect(reoWorkspace.copyMemorySpaceAbsolutePath).toHaveBeenCalledWith({
+      workspaceId: 'ws_test_1',
+    });
   });
 
   it('shows only toast feedback when removing a persisted workspace fails', async () => {
@@ -5654,7 +5852,7 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: '测试1' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '测试1 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     expect(await screen.findByText('无法移除记忆空间')).toBeInTheDocument();
@@ -5748,7 +5946,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     await waitFor(() => {
@@ -5808,7 +6006,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Daily memory 更多操作' }));
-    await user.click(screen.getByRole('menuitem', { name: '移除记忆空间' }));
+    await user.click(screen.getByRole('menuitem', { name: '移除' }));
     await user.click(screen.getByRole('button', { name: '移除' }));
 
     expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({

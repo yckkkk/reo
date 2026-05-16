@@ -245,6 +245,14 @@ function renderLoadedWorkspaceFrame({
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentSupplementRecording = vi.fn(),
+  openMemoryDocument = vi.fn().mockResolvedValue({ ok: true }),
+  openSegmentSupplementDocument = vi.fn().mockResolvedValue({ ok: true }),
+  revealMemoryInFinder = vi.fn().mockResolvedValue({ ok: true }),
+  revealSegmentSupplementInFinder = vi.fn().mockResolvedValue({ ok: true }),
+  copyMemoryRelativePath = vi.fn().mockResolvedValue({ ok: true }),
+  copyMemoryAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
+  copySegmentSupplementRelativePath = vi.fn().mockResolvedValue({ ok: true }),
+  copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
   readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -275,6 +283,14 @@ function renderLoadedWorkspaceFrame({
     readonly memoryId: string;
     readonly segmentId: string;
   }) => void;
+  readonly openMemoryDocument?: ReturnType<typeof vi.fn>;
+  readonly openSegmentSupplementDocument?: ReturnType<typeof vi.fn>;
+  readonly revealMemoryInFinder?: ReturnType<typeof vi.fn>;
+  readonly revealSegmentSupplementInFinder?: ReturnType<typeof vi.fn>;
+  readonly copyMemoryRelativePath?: ReturnType<typeof vi.fn>;
+  readonly copyMemoryAbsolutePath?: ReturnType<typeof vi.fn>;
+  readonly copySegmentSupplementRelativePath?: ReturnType<typeof vi.fn>;
+  readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
   readonly session?: WorkspaceSession;
@@ -282,6 +298,12 @@ function renderLoadedWorkspaceFrame({
   Object.defineProperty(window, 'reoWorkspace', {
     configurable: true,
     value: {
+      copyMemoryAbsolutePath,
+      copyMemoryRelativePath,
+      copySegmentSupplementAbsolutePath,
+      copySegmentSupplementRelativePath,
+      openMemoryDocument,
+      openSegmentSupplementDocument,
       readFinalizedAudioSegmentSupplement,
       readFinalizedAudioSegment,
       readMemoryDetail: vi.fn().mockResolvedValue({
@@ -291,6 +313,8 @@ function renderLoadedWorkspaceFrame({
           message: 'Memory not found',
         },
       }),
+      revealMemoryInFinder,
+      revealSegmentSupplementInFinder,
     } as unknown as Window['reoWorkspace'],
   });
   const queryClient = createReoQueryClient();
@@ -1752,7 +1776,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).not.toHaveAttribute('aria-hidden');
 
     await user.click(moreButton);
-    expect(screen.getByRole('menu', { name: '补充录音 操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: '补充录音 更多操作' })).toBeInTheDocument();
 
     await user.unhover(supplementTabItem);
     expect(supplementTab).toHaveAttribute('aria-selected', 'true');
@@ -1821,7 +1845,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.hover(supplementTabItem as HTMLElement);
     await user.click(within(content).getByRole('button', { name: '现场补充 更多操作' }));
-    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: '现场补充 更多操作' })).toBeInTheDocument();
 
     await user.click(within(strip).getByRole('button', { name: '选择片段 Birthday song' }));
     await waitFor(() => {
@@ -1830,24 +1854,32 @@ describe('LoadedWorkspaceFrame', () => {
         'false'
       );
     });
-    expect(screen.queryByRole('menu', { name: '现场补充 操作' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '现场补充 更多操作' })).not.toBeInTheDocument();
 
     await user.click(within(strip).getByRole('button', { name: '选择片段 Birthday candles' }));
     await waitFor(() => {
       expect(within(content).getByRole('tab', { name: '现场补充' })).toBeInTheDocument();
     });
-    expect(screen.queryByRole('menu', { name: '现场补充 操作' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '现场补充 更多操作' })).not.toBeInTheDocument();
   });
 
   it('opens the SegmentSupplement sibling More menu and emits a rename intent', async () => {
     const user = userEvent.setup();
     const onRenameSegmentSupplement = vi.fn();
+    const openSegmentSupplementDocument = vi.fn().mockResolvedValue({ ok: true });
+    const revealSegmentSupplementInFinder = vi.fn().mockResolvedValue({ ok: true });
+    const copySegmentSupplementRelativePath = vi.fn().mockResolvedValue({ ok: true });
+    const copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true });
     const supplement = audioSupplement({ title: '现场补充' });
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([supplement]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
+      copySegmentSupplementAbsolutePath,
+      copySegmentSupplementRelativePath,
       onRenameSegmentSupplement,
+      openSegmentSupplementDocument,
+      revealSegmentSupplementInFinder,
       session,
     });
 
@@ -1867,12 +1899,49 @@ describe('LoadedWorkspaceFrame', () => {
     expect(more.parentElement).toBe(tabItem);
 
     await user.click(more);
-    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
-    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
+    let menu = await screen.findByRole('menu', { name: '现场补充 更多操作' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+    const segment = detailWithSupplement.segments[0];
+    if (!segment) {
+      throw new Error('birthday detail fixture must include a segment');
+    }
+    const actionPayload = {
+      workspaceHandle: 'workspace-handle-secret',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: segment.segmentId,
+      supplementId: supplement.supplementId,
+    };
+
+    await user.click(within(menu).getByRole('menuitem', { name: '用默认应用打开' }));
+    expect(openSegmentSupplementDocument).toHaveBeenCalledWith(actionPayload);
+
+    await user.click(more);
+    menu = await screen.findByRole('menu', { name: '现场补充 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '在访达中显示' }));
+    expect(revealSegmentSupplementInFinder).toHaveBeenCalledWith(actionPayload);
+
+    await user.click(more);
+    menu = await screen.findByRole('menu', { name: '现场补充 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '复制相对路径' }));
+    expect(copySegmentSupplementRelativePath).toHaveBeenCalledWith(actionPayload);
+
+    await user.click(more);
+    menu = await screen.findByRole('menu', { name: '现场补充 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '复制绝对路径' }));
+    expect(copySegmentSupplementAbsolutePath).toHaveBeenCalledWith(actionPayload);
+
+    await user.click(more);
+    menu = await screen.findByRole('menu', { name: '现场补充 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '重命名' }));
 
     expect(onRenameSegmentSupplement).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
-      segment: detailWithSupplement.segments[0],
+      segment,
       supplement,
     });
   });
@@ -1903,7 +1972,7 @@ describe('LoadedWorkspaceFrame', () => {
     await user.hover(tabItem as HTMLElement);
 
     await user.click(within(content).getByRole('button', { name: '现场补充 更多操作' }));
-    expect(screen.getByRole('menu', { name: '现场补充 操作' })).toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: '现场补充 更多操作' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
 
     expect(onDeleteSegmentSupplement).toHaveBeenCalledWith({
@@ -2170,18 +2239,76 @@ describe('LoadedWorkspaceFrame', () => {
 
   it('opens the Memory rename action from a compact card menu', async () => {
     const user = userEvent.setup();
+    const copyMemoryAbsolutePath = vi.fn().mockResolvedValue({ ok: true });
+    const copyMemoryRelativePath = vi.fn().mockResolvedValue({ ok: true });
+    const onDeleteMemory = vi.fn();
     const onRenameMemory = vi.fn();
+    const openMemoryDocument = vi.fn().mockResolvedValue({ ok: true });
+    const revealMemoryInFinder = vi.fn().mockResolvedValue({ ok: true });
 
     renderLoadedWorkspaceFrame({
+      copyMemoryAbsolutePath,
+      copyMemoryRelativePath,
+      onDeleteMemory,
       onRenameMemory,
+      openMemoryDocument,
+      revealMemoryInFinder,
       session: workspaceSession({ memories: [birthdayMemory] }),
     });
 
+    const moreTrigger = screen.getByRole('button', { name: 'My seventh birthday 更多操作' });
+    expect(moreTrigger).toHaveClass(
+      'absolute',
+      'right-8',
+      'top-8',
+      'size-24',
+      'text-muted-foreground',
+      'hover:bg-accent',
+      'data-[state=open]:bg-accent',
+      'data-[state=open]:text-accent-foreground'
+    );
+    expect(moreTrigger.querySelector('svg')).toHaveClass('size-[14px]');
+
+    await user.click(moreTrigger);
+    const menu = screen.getByRole('menu', { name: 'My seventh birthday 更多操作' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+    expect(within(menu).queryByText('重命名记忆')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('删除记忆')).not.toBeInTheDocument();
+
+    const memoryActionPayload = {
+      workspaceHandle: 'workspace-handle-secret',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+    };
+
+    await user.click(within(menu).getByRole('menuitem', { name: '用默认应用打开' }));
+    await waitFor(() => expect(openMemoryDocument).toHaveBeenCalledWith(memoryActionPayload));
+
     await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
-    expect(screen.getByRole('menu', { name: 'My seventh birthday 更多操作' })).toBeInTheDocument();
-    await user.click(screen.getByRole('menuitem', { name: '重命名记忆' }));
+    await user.click(screen.getByRole('menuitem', { name: '在访达中显示' }));
+    await waitFor(() => expect(revealMemoryInFinder).toHaveBeenCalledWith(memoryActionPayload));
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '复制相对路径' }));
+    await waitFor(() => expect(copyMemoryRelativePath).toHaveBeenCalledWith(memoryActionPayload));
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '复制绝对路径' }));
+    await waitFor(() => expect(copyMemoryAbsolutePath).toHaveBeenCalledWith(memoryActionPayload));
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '重命名' }));
 
     expect(onRenameMemory).toHaveBeenCalledWith(birthdayMemory);
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+
+    expect(onDeleteMemory).toHaveBeenCalledWith(birthdayMemory);
   });
 
   it('can hide the right-side Memory rail without turning the workspace stage into a timeline', () => {

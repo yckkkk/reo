@@ -5,12 +5,9 @@ import {
   Library,
   Menu,
   MonitorSmartphone,
-  MoreHorizontal,
   Moon,
   PanelLeftClose,
-  PencilLine,
   Sun,
-  Trash2,
 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +20,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { MemorySpaceActionsMenu } from '../workspace/MemorySpaceActionsMenu';
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
@@ -383,50 +381,20 @@ export function AppShell({
                       <Folder className="size-16" aria-hidden="true" />
                       <span className="min-w-0 flex-1 truncate text-left">{memorySpace.title}</span>
                     </Button>
-                    {onRenameMemorySpace || onRemoveMemorySpace ? (
-                      <DropdownMenu
+                    {onRenameMemorySpace && onRemoveMemorySpace ? (
+                      <MemorySpaceActionsMenu
+                        actionIdentity={{ workspaceId: memorySpace.workspaceId }}
+                        memorySpaceTitle={memorySpace.title}
                         open={memorySpaceMenuOpen}
                         onOpenChange={(open) => {
                           setWorkspaceMenuOpen(false);
                           setWorkspaceMemorySpaceMenuOpen(open ? memorySpace.workspaceId : null);
                         }}
-                      >
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghostIcon"
-                            size="icon"
-                            aria-label={`${memorySpace.title} 更多操作`}
-                            className={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
-                          >
-                            <MoreHorizontal className="size-16" aria-hidden="true" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          side="bottom"
-                          aria-label={`${memorySpace.title} 记忆空间操作`}
-                        >
-                          {onRenameMemorySpace ? (
-                            <DropdownMenuItem onSelect={() => handleRenameMemorySpace(memorySpace)}>
-                              <PencilLine
-                                className="size-16 text-muted-foreground"
-                                aria-hidden="true"
-                              />
-                              重命名记忆空间
-                            </DropdownMenuItem>
-                          ) : null}
-                          {onRemoveMemorySpace ? (
-                            <DropdownMenuItem onSelect={() => handleRemoveMemorySpace(memorySpace)}>
-                              <Trash2
-                                className="size-16 text-muted-foreground"
-                                aria-hidden="true"
-                              />
-                              移除记忆空间
-                            </DropdownMenuItem>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        onRename={() => handleRenameMemorySpace(memorySpace)}
+                        onRemove={() => handleRemoveMemorySpace(memorySpace)}
+                        triggerClassName={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
+                        triggerLabel={`${memorySpace.title} 更多操作`}
+                      />
                     ) : null}
                   </div>
                 );

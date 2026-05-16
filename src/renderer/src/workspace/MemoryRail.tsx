@@ -1,13 +1,8 @@
 import { format, isSameDay, isSameYear, isYesterday } from 'date-fns';
-import { MoreHorizontal, PencilLine, Trash2 } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { MemoryActionsMenu } from './MemoryActionsMenu';
 import { countLabel } from './memoryLabels';
 import type { WorkspaceSession } from './workspaceApi';
 
@@ -20,6 +15,8 @@ type MemoryRailProps = {
   readonly onDeleteMemory: (memory: WorkspaceMemory) => void;
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
   readonly onSelectMemory: (memoryId: string) => void;
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
 };
 
 function memoryUpdatedTimestamp(memory: WorkspaceMemory) {
@@ -53,6 +50,8 @@ export function MemoryRail({
   onDeleteMemory,
   onRenameMemory,
   onSelectMemory,
+  workspaceHandle,
+  workspaceId,
 }: MemoryRailProps) {
   const sortedMemories = useMemo(
     () =>
@@ -100,8 +99,17 @@ export function MemoryRail({
                     {updatedLabel(memory.updatedAt)} · {countLabel(memory.segmentCount, '个片段')}
                   </span>
                 </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                <MemoryActionsMenu
+                  actionIdentity={{
+                    memoryId: memory.memoryId,
+                    workspaceHandle,
+                    workspaceId,
+                  }}
+                  contentAlign="end"
+                  memoryTitle={memory.title}
+                  onDelete={() => onDeleteMemory(memory)}
+                  onRename={() => onRenameMemory(memory)}
+                  trigger={
                     <Button
                       variant="ghostIcon"
                       size="icon"
@@ -111,25 +119,9 @@ export function MemoryRail({
                     >
                       <MoreHorizontal className="size-[14px]" aria-hidden="true" />
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    aria-label={`${memory.title} 更多操作`}
-                    side="bottom"
-                  >
-                    <DropdownMenuItem onSelect={() => onRenameMemory(memory)}>
-                      <PencilLine
-                        className="size-[14px] text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      重命名记忆
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onDeleteMemory(memory)}>
-                      <Trash2 className="size-[14px] text-muted-foreground" aria-hidden="true" />
-                      删除记忆
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  }
+                  triggerLabel={`${memory.title} 更多操作`}
+                />
               </div>
             );
           })}

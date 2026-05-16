@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './dropdown-menu';
 
@@ -39,5 +41,31 @@ describe('DropdownMenu primitive', () => {
       'focus:bg-accent',
       'focus:text-accent-foreground'
     );
+  });
+
+  it('supports grouped compact menu items separated by a soft Reo divider', () => {
+    render(
+      <DropdownMenu open modal={false}>
+        <DropdownMenuTrigger>更多</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuGroup>
+            <DropdownMenuItem>重命名片段</DropdownMenuItem>
+            <DropdownMenuItem>删除片段</DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem>恢复片段</DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+    expect(screen.getByRole('separator')).toHaveAttribute('data-slot', 'dropdown-menu-separator');
+    expect(screen.getByRole('separator')).toHaveClass('my-4', 'h-px', 'bg-border/60');
+    expect(screen.getByRole('separator')).not.toHaveClass('border', 'border-border');
+    expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+    expect(screen.getByRole('menuitem', { name: '重命名片段' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '删除片段' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '恢复片段' })).toBeInTheDocument();
   });
 });
