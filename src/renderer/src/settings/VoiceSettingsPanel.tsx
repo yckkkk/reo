@@ -132,6 +132,7 @@ export function VoiceSettingsPanel() {
       : '保存';
   const apiKeyVisibilityLabel = apiKeyVisible ? '隐藏 X-Api-Key' : '显示 X-Api-Key';
   const ApiKeyVisibilityIcon = apiKeyVisible ? EyeOff : Eye;
+  const showApiKeyVisibilityToggle = draftApiKey.length > 0;
 
   function handleSave() {
     if (saveDisabled) return;
@@ -150,6 +151,7 @@ export function VoiceSettingsPanel() {
             data.settings.lastValidationOk === true
           ) {
             setDraftApiKey('');
+            setApiKeyVisible(false);
           }
         },
       }
@@ -158,7 +160,10 @@ export function VoiceSettingsPanel() {
 
   function handleClear() {
     clearApiKeyMutation.mutate(undefined, {
-      onSuccess: () => setClearDialogOpen(false),
+      onSuccess: () => {
+        setApiKeyVisible(false);
+        setClearDialogOpen(false);
+      },
     });
   }
 
@@ -185,39 +190,49 @@ export function VoiceSettingsPanel() {
           <div className="relative">
             <Input
               id={API_KEY_INPUT_ID}
-              type={apiKeyVisible ? 'text' : 'password'}
+              type={apiKeyVisible && showApiKeyVisibilityToggle ? 'text' : 'password'}
               value={draftApiKey}
               disabled={keyInputDisabled}
               maxLength={1024}
               autoComplete="off"
               placeholder={configuredPlaceholder}
-              className="pr-[44px]"
-              onChange={(event) => setDraftApiKey(event.target.value)}
+              className={showApiKeyVisibilityToggle ? 'pr-[44px]' : undefined}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setDraftApiKey(nextValue);
+                if (nextValue.length === 0) {
+                  setApiKeyVisible(false);
+                }
+              }}
             />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghostIcon"
-                    size="icon"
-                    aria-label={apiKeyVisibilityLabel}
-                    className="absolute right-4 top-1/2 size-32 -translate-y-1/2"
-                    disabled={keyInputDisabled}
-                    onClick={() => setApiKeyVisible((current) => !current)}
-                  >
-                    <ApiKeyVisibilityIcon className="size-16" aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{apiKeyVisibilityLabel}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {showApiKeyVisibilityToggle ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghostIcon"
+                      size="icon"
+                      aria-label={apiKeyVisibilityLabel}
+                      className="absolute right-4 top-1/2 size-32 -translate-y-1/2"
+                      disabled={keyInputDisabled}
+                      onClick={() => setApiKeyVisible((current) => !current)}
+                    >
+                      <ApiKeyVisibilityIcon className="size-16" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{apiKeyVisibilityLabel}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
           </div>
         </FieldControl>
         {showRequiredHint ? (
           <FieldError className="text-destructive">启用后需要 X-Api-Key 才能生成转录</FieldError>
         ) : showConfiguredHint ? (
-          <FieldHint>已配置 · 末 4 位 {settings.apiKeyLastFour}</FieldHint>
+          <FieldHint>
+            已配置 · 末 4 位 {settings.apiKeyLastFour}。输入新 X-Api-Key 可替换当前密钥。
+          </FieldHint>
         ) : (
           <FieldHint>密钥只用于本机语音转录设置。</FieldHint>
         )}

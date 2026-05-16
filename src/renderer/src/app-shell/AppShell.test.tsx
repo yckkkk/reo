@@ -138,7 +138,7 @@ describe('AppShell', () => {
     const panelContent = panel.querySelector('[data-slot="app-shell-panel-content"]');
     expect(panelContent).toBeInTheDocument();
     expect(panelContent).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
-    expect(sidebar).toHaveClass('pt-[56px]');
+    expect(sidebar).toHaveClass('pt-[48px]');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');

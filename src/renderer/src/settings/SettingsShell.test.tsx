@@ -11,9 +11,22 @@ describe('SettingsShell', () => {
       </SettingsShell>
     );
 
+    const titlebar = screen.getByRole('banner', { name: '设置标题栏' });
+    expect(titlebar).toHaveAttribute('data-slot', 'settings-titlebar');
+    expect(titlebar).toHaveClass(
+      'left-[240px]',
+      'h-[48px]',
+      'bg-background',
+      '[-webkit-app-region:drag]'
+    );
+    const sidebar = screen.getByRole('complementary', { name: '设置侧边栏' });
+    expect(sidebar).toHaveClass('w-[240px]', 'bg-card', 'pt-[48px]');
+    expect(sidebar).not.toHaveClass('bg-secondary');
     expect(screen.getByRole('button', { name: '返回应用' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: '设置类目' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '语音' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('navigation', { name: '设置类目' })).toHaveClass('mt-4', 'gap-4');
+    const voiceCategory = screen.getByRole('button', { name: '语音' });
+    expect(voiceCategory).toHaveAttribute('aria-current', 'page');
+    expect(voiceCategory).toHaveClass('bg-secondary');
     expect(screen.getByRole('region', { name: '语音设置' })).toHaveTextContent('语音内容');
   });
 

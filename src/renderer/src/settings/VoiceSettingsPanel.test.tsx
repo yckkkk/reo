@@ -302,6 +302,15 @@ describe('VoiceSettingsPanel remaining key states', () => {
     expect(screen.queryByText(/已验证/)).not.toBeInTheDocument();
   });
 
+  it('does not imply that a saved key can be revealed when the replacement draft is empty', async () => {
+    renderVoiceSettingsPanel(verifiedActiveSnapshot);
+
+    await screen.findByLabelText('X-Api-Key');
+
+    expect(screen.queryByRole('button', { name: '显示 X-Api-Key' })).not.toBeInTheDocument();
+    expect(screen.getByText(/输入新 X-Api-Key 可替换当前密钥/)).toBeInTheDocument();
+  });
+
   it('marks an old successful validation as stale and allows revalidation without polling', async () => {
     const validateVoiceTranscriptionCredentials = vi.fn(async () => ({
       ok: true as const,

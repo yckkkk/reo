@@ -273,7 +273,7 @@ export function AppShell({
 
         <aside
           aria-label="记忆空间侧边栏"
-          className="absolute inset-y-0 left-0 flex flex-col bg-card px-12 pb-16 pt-[56px]"
+          className="absolute inset-y-0 left-0 flex flex-col bg-card px-12 pb-16 pt-[48px]"
           style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
         >
           <nav className="flex flex-col gap-4" aria-label="记忆空间">

@@ -31,24 +31,30 @@ export function SettingsShell({
   return (
     <div
       data-slot="settings-shell"
-      className="flex h-dvh min-h-0 w-full overflow-hidden bg-background text-foreground"
+      className="relative flex h-dvh min-h-0 w-full overflow-hidden bg-background text-foreground"
     >
+      <div
+        role="banner"
+        aria-label="设置标题栏"
+        data-slot="settings-titlebar"
+        className="pointer-events-auto absolute left-[240px] right-0 top-0 z-10 h-[48px] bg-background [-webkit-app-region:drag]"
+      />
       <aside
         aria-label="设置侧边栏"
-        className="flex w-[240px] shrink-0 flex-col bg-secondary px-12 pb-16 pt-[64px]"
+        className="flex w-[240px] shrink-0 flex-col bg-card px-12 pb-16 pt-[48px]"
       >
         <Button
           type="button"
           variant="ghostIcon"
           size="compact"
-          className="w-full justify-start px-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground"
           onClick={onReturnToApp}
         >
           <ArrowLeft className="size-16" aria-hidden="true" />
           返回应用
         </Button>
 
-        <nav className="mt-[18px] flex flex-col gap-4" aria-label="设置类目">
+        <nav className="mt-4 flex flex-col gap-4" aria-label="设置类目">
           {SETTINGS_CATEGORIES.map((category) => {
             const current = category === activeCategory;
 
@@ -62,8 +68,8 @@ export function SettingsShell({
                 className={cn(
                   'w-full justify-start px-8',
                   current
-                    ? 'bg-accent text-foreground hover:bg-accent hover:text-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    ? 'bg-secondary text-foreground hover:bg-secondary hover:text-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 )}
                 onClick={() => onSelectCategory(category)}
               >
@@ -77,7 +83,7 @@ export function SettingsShell({
 
       <section
         aria-label={SETTINGS_CATEGORY_REGION_LABEL[activeCategory]}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[44px] py-[92px]"
+        className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-[44px] py-[92px]"
       >
         <div className="flex w-full max-w-[720px] flex-col">
           <h1 className="text-left text-heading-sm font-medium leading-heading-sm">
