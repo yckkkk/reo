@@ -1304,6 +1304,57 @@ describe('RecordingOverlay', () => {
     });
   });
 
+  it('does not start or backfill transcription when delayed voice settings resolve disabled', async () => {
+    const deferredSettings =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
+      >();
+    const bridge = installWorkspaceBridge({
+      readVoiceTranscriptionSettings: vi.fn(() => deferredSettings.promise),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />,
+      { seedVoiceSettings: false }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => media.emitPcm(new Uint8Array([1, 2, 3, 4])));
+    await flushPromises();
+
+    await act(async () => {
+      deferredSettings.resolve({
+        ok: true,
+        value: {
+          settings: createVoiceSettingsSnapshot(false),
+        },
+      });
+      await deferredSettings.promise;
+    });
+    await flushPromises();
+
+    act(() => media.emitPcm(new Uint8Array([5, 6, 7, 8])));
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    act(() => vi.advanceTimersByTime(2000));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.startRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+    expect(bridge.finishRecordingTranscription).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('starts durable capture before live transcription accepts and flushes buffered PCM', async () => {
     const started = createDeferred<TranscriptionStartResponse>();
     const bridge = installWorkspaceBridge({
