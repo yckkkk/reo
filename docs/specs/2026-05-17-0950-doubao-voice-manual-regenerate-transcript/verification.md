@@ -1,0 +1,173 @@
+# 验证
+
+本验收文件描述 D 实施 session 必须执行并留下证据的检查项。当前 spec 准备 session 不写 D 代码，因此下面所有"运行结果"段在本 spec 创建时为空，实施 session 在落地时填入。
+
+## 1. 自动化检查
+
+### 1.1 命令
+
+实施 session 必须运行并通过：
+
+```bash
+npm run typecheck
+npm run test:main -- --test-name-pattern='doubao AUC turbo|backfill audio data|backfill (scanner|queue)|workspace backfill runtime|scanWorkspaceBackfillTargets|workspace (IPC channels include|backfill request schemas|preload bridge exposes explicit)|registered closeWorkspace IPC closes|transcript snapshot guard'
+npm run test:renderer -- --run src/renderer/src/workspace/SegmentTranscriptView.test.tsx
+npm run test:renderer -- --run src/renderer/src/workspace/SegmentActionsMenu.test.tsx
+npm run test:renderer -- --run src/renderer/src/workspace/SegmentSupplementActionsMenu.test.tsx
+npm run test:renderer -- --run src/renderer/src/workspace/entityActionMenu.test.tsx
+npm run test:renderer -- --run src/renderer/src/App.test.tsx --testNamePattern='transcription backfill|regenerate transcript'
+npm run verify:quick
+npm run format:check
+git diff --check
+```
+
+`verify:quick` 已覆盖 typecheck、`test:main`、`test:renderer`、lint 与 format check；上面 targeted 命令是 D 行为的最小保护测试，必须先单独通过再跑全量 `verify:quick`。
+
+### 1.2 期待结果
+
+- 所有 targeted 与全量测试通过。
+- `npm run format:check` 通过。
+- `git diff --check` 干净（无尾随空格、tab 风格违例）。
+- TypeScript strict 通过。
+
+## 2. 必须覆盖的测试
+
+### 2.1 Contract / 类型
+
+- `workspaceRequestSegmentTranscriptionBackfillRequestSchema` 必须显式要求 `mode`；缺失 / 非法 mode → 解析失败。
+- `workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema` 同上。
+- `workspaceErrorCodeSchema` 必须包含 `'ERR_BACKFILL_TRANSCRIPT_CHANGED'`。
+- `workspaceErrorEnvelopeSchema` 派生类型必须接受新错误码。
+
+### 2.2 Main runtime
+
+- `requestSegmentBackfill({ mode: 'fill-missing' })` 走 `requireTranscriptMissing: true`；transcript 已存在 → `ERR_BACKFILL_TARGET_NOT_ELIGIBLE`。
+- `requestSegmentBackfill({ mode: 'regenerate' })`：
+  - transcript 空时 overwrite save 成功；manifest `lastTranscriptionAttempt='success'`。
+  - transcript 非空、in-flight 期间未变 → overwrite save 成功；transcript 文本更新。
+  - in-flight 期间 transcript 被外部修改（mocked file change）→ `ERR_BACKFILL_TRANSCRIPT_CHANGED`；transcript / manifest 不变。
+  - recognize 失败 → 原 C 错误码透传；transcript / manifest 不变。
+- Supplement 路径覆盖以上四个场景。
+- BackfillQueue dedup：automatic fill-missing 在队列 + manual regenerate → `ERR_BACKFILL_ALREADY_RUNNING`。
+- `enqueueAutomaticTargets` / `enqueueAutomaticWorkspace` 内部 mode 固定 fill-missing；mock automatic 调用不允许 regenerate。
+- `cancelAll('workspace-switch')` / `cancelAll('lock-lost')` / `cancelAll('app-quit')` 与 C 一致；regenerate 任务在 cancel 后不写 transcript / manifest。
+- 诊断 allowlist 增加 `mode`；输出诊断中包含 `mode: 'fill-missing'` 或 `mode: 'regenerate'`；不出现 transcript、digest、raw path、X-Api-Key、base64、audio bytes。
+
+### 2.3 IPC handler
+
+- handler 接受 mode 并透传 runtime；mode 缺失 / 非法 → invalid request envelope。
+- sender / handle / lock / settings gate 校验保持。
+
+### 2.4 Renderer 菜单
+
+- `SegmentActionsMenu` / `SegmentSupplementActionsMenu`：
+  - `transcript.exists=false` → 「生成转录」label；点击不打开 Dialog；调用 `workspaceApi` with mode=`fill-missing`。
+  - `transcript.exists=true` → 「重新生成转录」label；点击打开 `WorkspaceDangerConfirmDialog`。
+  - voice settings 关闭 / 未配置 / `auth` → disabled + tooltip 字串匹配。
+  - 录音 overlay open → disabled + tooltip 字串匹配。
+  - manual running Set 包含同 target → disabled + tooltip 字串匹配。
+
+### 2.5 AlertDialog 行为
+
+- title「重新生成转录」、description 与 d-brief 一致、confirm「重新生成」（destructive variant）、cancel「取消」。
+- confirm 按钮 click 不自动关闭 Dialog；mutation pending 时按钮 spinner。
+- mutation 入队成功后关闭 Dialog；mutation 失败时关闭 Dialog 并 root toast。
+- cancel / ESC / 点击 overlay 关闭 Dialog。
+- 切 segment 立即关闭 Dialog；丢弃 confirm intent。
+
+### 2.6 App manual Set
+
+- 点击后立刻把 target 加入 Set；mutation pending 期间菜单 disabled。
+- mutation 成功 / 失败后清除。
+- 切换 / 关闭 workspace 时清空 Set 与 confirming intent。
+
+### 2.7 Cache merge
+
+- mutation 成功 response 通过现有 transcript save response merge 路径更新 Workspace snapshot、Memory detail cache、Segment content cache、SegmentSupplement content cache。
+- 不新增 invalidation 路径；不引入新 Query key。
+
+### 2.8 错误 toast
+
+- `ERR_BACKFILL_ALREADY_RUNNING` 文案保持 C。
+- `ERR_BACKFILL_UNAVAILABLE` 文案保持 C。
+- `ERR_BACKFILL_TARGET_NOT_ELIGIBLE` 文案引导用户改用「重新生成转录」。
+- `ERR_BACKFILL_TRANSCRIPT_CHANGED` 文案中文化；不暴露 digest。
+- 其它 C 已有 backfill 错误码沿用现有文案。
+
+## 3. 操作验证（真实 Electron runtime）
+
+```bash
+REMOTE_DEBUGGING_PORT=9233 npm run dev
+```
+
+实施 session 必须在真实 Electron runtime 上覆盖下列场景，并把每条结果（命中文案、是否覆盖、是否回滚）写在本节 `## 3.x 运行证据` 段。
+
+### 3.1 fill-missing 路径
+
+- 在 transcript.exists=false 的 Segment 上：More → 「生成转录」→ 不弹 Dialog；running outcome；成功后 transcript 文本回到 Memory Studio；`lastTranscriptionAttempt='success'`。
+- 在 transcript.exists=false 的 SegmentSupplement 上重复上述步骤。
+
+### 3.2 regenerate 路径
+
+- 在 transcript.exists=true 的 Segment 上：More → 「重新生成转录」→ AlertDialog 出现 → 「重新生成」→ Dialog 关闭；running outcome 期间继续渲染原 transcript；成功后 transcript 被新内容覆盖。
+- 在 transcript.exists=true 的 SegmentSupplement 上重复上述步骤。
+
+### 3.3 TRANSCRIPT_CHANGED 保护
+
+- 触发 regenerate 任务后，在 ASR 返回前手动用编辑器修改对应 `segment.md` / `supplement.md` 的 `## Transcript` 段；观察任务最终返回 `ERR_BACKFILL_TRANSCRIPT_CHANGED`；root toast 显示文案；transcript 仍保留外部编辑内容；manifest `lastTranscriptionAttempt` 不变。
+
+### 3.4 voice settings gate
+
+- 关闭语音识别 → 菜单项 disabled + tooltip 引导设置。
+- 清除 X-Api-Key → 菜单项 disabled + tooltip。
+- Settings 触发 validation 失败 `auth` → 菜单项 disabled + tooltip。
+- Settings validation `network` 失败 → 菜单项可点击；mutation 命中 `ERR_BACKFILL_AUTH_FAILED` 或网络错时 root toast 显示。
+
+### 3.5 录音 overlay 阻塞
+
+- 打开 RecordingOverlay → 菜单项 disabled + tooltip「先完成或关闭录音」。
+- 关闭 RecordingOverlay → 菜单项恢复可点击。
+
+### 3.6 ALREADY_RUNNING 边界
+
+- 触发 automatic queue（保存 X-Api-Key 后自动 scan）正在跑同一 target 时，手动点击同 target 的 menu 项 → root toast 「该录音正在生成中」；菜单项不会重复入队。
+
+## 4. 敏感信息扫描
+
+实施 session 在 commit 前必须执行下列检查，并把结果写在 `## 4.x 扫描证据` 段：
+
+- 对 `git diff` 与 dev runtime 日志全文搜索：
+  - X-Api-Key 明文（除 last4 投影外）
+  - base64 块（长 ASCII 序列）
+  - WebM / OGG / 临时 ffmpeg 路径
+  - transcript 文本片段
+  - sha256 digest 输出
+- 所有命中必须修复后再 commit。
+
+## 5. docs/current 同步证据
+
+实施 session 完成 docs 同步后填入：
+
+- `docs/current/electron.md`：mode 字段、TRANSCRIPT_CHANGED 错误码、automatic scanner mode-fixed 段已落地。
+- `docs/current/data.md`：manual running Set 仍为 App component-state；mode 不进 query key / store。
+- `docs/current/flow.md`：transcript snapshot guard 段已落地。
+- `docs/current/frontend.md`：菜单项与 AlertDialog 段已落地。
+- `docs/current/quality.md`：测试覆盖扩展段已落地。
+
+## 6. 100% confidence loop 出口条件
+
+- 第 1 节命令全部通过。
+- 第 2 节测试全部覆盖且通过。
+- 第 3 节真实 runtime 6 条场景全部记录证据。
+- 第 4 节敏感信息扫描通过。
+- 第 5 节 5 份 current docs 同步并通过 `prettier --check`。
+- 最终一次 review subagent + ycksimplify 反馈处理完毕。
+- 实施 session 收口提交本 spec 与 initiative 文档归档变更。
+
+## 7. 本 session（spec 准备）的验证
+
+本 spec 准备 session 不写 D 代码，仅写文档；验证范围限于：
+
+- 运行 `npx prettier --check 'docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/**/*.md' 'docs/initiatives/2026-05-16-doubao-voice-followups/**/*.md'`
+- 运行 `git diff --check`
+- 不运行 `npm run verify:quick`。理由：本 session 改动仅限 `docs/specs/` 与 `docs/initiatives/`，无源码或 test 改动，verify:quick 的 typecheck / test / lint 与本 session 无关；下一 D 实施 session 会同批运行 verify:quick。
