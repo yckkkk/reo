@@ -62,6 +62,7 @@ export type BackfillAudioStagingClient = {
 
 export type BackfillAudioUrlErrorCode =
   | 'invalid-remux-output'
+  | 'missing-remuxer'
   | 'missing-staging-client'
   | 'remux-failed'
   | 'aborted'
@@ -144,6 +145,12 @@ export function createBackfillAudioUrlSource({
       }
 
       const activeRemuxer = remuxer ?? createConfiguredFfmpegOggOpusRemuxer(settings);
+      if (!activeRemuxer) {
+        return {
+          error: { code: 'missing-remuxer', diagnostics: diagnosticsFor(input, 'remux') },
+          ok: false,
+        };
+      }
 
       const activeStagingClient =
         stagingClient ?? createVolcengineTosBackfillStagingClient(settings);
@@ -238,7 +245,10 @@ export function createBackfillAudioUrlSource({
 
 export function createConfiguredFfmpegOggOpusRemuxer(
   settings: BackfillAudioUrlConfiguredSettings
-): BackfillAudioRemuxer {
+): BackfillAudioRemuxer | null {
+  if (!settings.ffmpegPath) {
+    return null;
+  }
   return createFfmpegOggOpusRemuxer({ ffmpegPath: settings.ffmpegPath });
 }
 

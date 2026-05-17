@@ -20,7 +20,7 @@ C 自动补转录默认使用火山引擎大模型录音文件识别标准版 2.
 Reo 使用 main-only TOS staging 交付该 URL：
 
 1. Main process 从现有 finalized audio read path 读取 bounded audio bytes。
-2. 使用随应用安装的 ffmpeg binary 将 WebM/Opus remux 为 OGG/Opus；运行环境可用 `REO_BACKFILL_FFMPEG_PATH` 覆盖。
+2. 使用显式 `REO_BACKFILL_FFMPEG_PATH` 将 WebM/Opus remux 为 OGG/Opus。
 3. 使用显式 TOS 配置上传 staged object。
 4. 生成短 TTL GET URL 交给标准版 2.0 submit。
 5. 任务完成、失败或取消后删除 staged object。
@@ -32,9 +32,9 @@ Reo 使用 main-only TOS staging 交付该 URL：
 - `REO_BACKFILL_TOS_BUCKET`
 - `REO_BACKFILL_TOS_ENDPOINT`
 - `REO_BACKFILL_TOS_REGION`
+- `REO_BACKFILL_FFMPEG_PATH`
 - 可选：`REO_BACKFILL_TOS_KEY_PREFIX`
 - 可选：`REO_BACKFILL_TOS_GET_URL_TTL_SECONDS`
-- 可选：`REO_BACKFILL_FFMPEG_PATH`
 
 缺少配置时 backfill fail-fast，不默认上传用户录音。
 
@@ -52,15 +52,14 @@ Reo 使用 main-only TOS staging 交付该 URL：
 - Reo finalized audio 当前是 MediaRecorder WebM/Opus。
 - 标准版 2.0 官方格式支持 raw/wav/mp3/ogg，codec 支持 raw/opus。
 - Reo 采用 WebM/Opus -> OGG/Opus remux，避免第一版重编码。
-- Reo 安装 `@ffmpeg-installer/ffmpeg`，让新安装环境默认具备 remux binary；`REO_BACKFILL_FFMPEG_PATH` 仅用于开发或部署覆盖。
-- `@ffmpeg-installer/ffmpeg@1.1.0` package license 标注 LGPL-2.1；当前 macOS arm64 安装落地的是 `@ffmpeg-installer/darwin-arm64@4.1.5` binary。lockfile 同时记录其它 target optional packages，其中 Linux/Windows target package 标注 GPLv3，因此 packaged distribution 必须先按目标平台核对实际 binary license 和分发义务，不能把当前 dev dependency 视为跨平台发布许可结论。
+- 本轮不安装 ffmpeg npm package；运行时要求显式 ffmpeg binary path。
 - `@volcengine/tos-sdk@2.9.1` 试装后因 axios high vulnerabilities 被拒绝；实现使用 Node `crypto` + `fetch` 做 TOS signing。
 
 ## 凭证与 smoke
 
 Reo 复用 voice settings 中的用户 X-Api-Key 调用 `volc.seedasr.auc`。真实账号 smoke 已验证同一 X-Api-Key 可用于 SAUC settings probe 与 AUC 标准版 2.0 submit/query：公开 demo MP3 URL 调用 `volc.seedasr.auc`，submit HTTP 200 / provider `20000000`，query HTTP 200 / provider `20000000`，返回非空 transcript。
 
-完整 Reo C live backfill 仍需要真实 TOS staging 配置才能覆盖本地 finalized WebM/Opus -> OGG/Opus -> TOS presigned GET -> AUC -> cleanup 的端到端路径。
+完整 Reo C live backfill 仍需要真实 TOS staging 配置与 `REO_BACKFILL_FFMPEG_PATH` 才能覆盖本地 finalized WebM/Opus -> OGG/Opus -> TOS presigned GET -> AUC -> cleanup 的端到端路径。
 
 上线前必须用真实配置执行一次小样本 smoke：
 
@@ -70,7 +69,6 @@ Reo 复用 voice settings 中的用户 X-Api-Key 调用 `volc.seedasr.auc`。真
 - query 返回 success 或可解释的空音频结果
 - staged object 删除成功
 - 日志与 IPC response 不含敏感字段
-- 目标平台 packaged ffmpeg binary license 已完成核对
 - 记录实际费用或确认无额外 probe 常驻成本
 
 ## 理由

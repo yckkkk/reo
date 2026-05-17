@@ -118,7 +118,6 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 
 - 当前没有 packaging、maker、fuse、signing、notarization、publish 或 updater verification command。
 - 引入 packaging 必须同批新增 package/make 验证、packaged app launch evidence、artifact output 检查和 tracked-output exclusion 检查。
-- 包含 `@ffmpeg-installer/ffmpeg` 或其它 bundled media binary 的 packaged artifact 必须验证目标平台实际进入 artifact 的 binary、license 和分发义务；未完成该验证前不得把 packaged artifact 标记为可发布。
 - 引入 fuses 或 ASAR integrity 必须同批验证 packaged artifact 的 fuse/ASAR 状态。
 - 引入 updater 必须同批验证 update metadata、publish target、signed/notarized installed app、update failure path 和 no-secret logging。
 - 没有 packaged app 和 release metadata 前，不创建 updater tests 或 dev update config。

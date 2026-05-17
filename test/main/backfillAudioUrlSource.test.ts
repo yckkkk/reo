@@ -323,7 +323,7 @@ test('backfill audio URL source deletes uploaded OGG when URL creation fails', a
 test('backfill audio URL source reports explicit unconfigured state without side effects', async () => {
   const staging = createFakeStagingClient();
   const remuxer = createFakeRemuxer();
-  const settings = resolveBackfillAudioUrlSettings({}, { packagedFfmpegPath: '/test/ffmpeg' });
+  const settings = resolveBackfillAudioUrlSettings({});
   const source = createBackfillAudioUrlSource({
     remuxer: remuxer.remuxer,
     settings,
@@ -351,24 +351,16 @@ test('backfill audio URL source reports explicit unconfigured state without side
   assert.deepEqual(staging.calls, []);
 });
 
-test('backfill audio URL settings use packaged ffmpeg path when env path is omitted', async () => {
+test('backfill audio URL source treats missing ffmpeg path as unconfigured before remux or upload', async () => {
   const staging = createFakeStagingClient();
   const remuxer = createFakeRemuxer();
-  const settings = resolveBackfillAudioUrlSettings(
-    {
-      REO_BACKFILL_TOS_ACCESS_KEY_ID: 'ak-test-secret',
-      REO_BACKFILL_TOS_ACCESS_KEY_SECRET: 'sk-test-secret',
-      REO_BACKFILL_TOS_BUCKET: 'reo-private-bucket',
-      REO_BACKFILL_TOS_ENDPOINT: 'https://tos-cn-beijing.volces.com',
-      REO_BACKFILL_TOS_REGION: 'cn-beijing',
-    },
-    { packagedFfmpegPath: '/test/ffmpeg' }
-  );
-  assert.equal(settings.configured, true);
-  if (!settings.configured) {
-    return;
-  }
-  assert.equal(settings.ffmpegPath, '/test/ffmpeg');
+  const settings = resolveBackfillAudioUrlSettings({
+    REO_BACKFILL_TOS_ACCESS_KEY_ID: 'ak-test-secret',
+    REO_BACKFILL_TOS_ACCESS_KEY_SECRET: 'sk-test-secret',
+    REO_BACKFILL_TOS_BUCKET: 'reo-private-bucket',
+    REO_BACKFILL_TOS_ENDPOINT: 'https://tos-cn-beijing.volces.com',
+    REO_BACKFILL_TOS_REGION: 'cn-beijing',
+  });
   const source = createBackfillAudioUrlSource({
     remuxer: remuxer.remuxer,
     settings,
@@ -385,63 +377,15 @@ test('backfill audio URL settings use packaged ffmpeg path when env path is omit
     segmentId: 'seg_private',
   });
 
-  assert.equal(result.ok, true);
-  assert.deepEqual(
-    staging.calls.map((call) => call.kind),
-    ['put', 'getUrl']
-  );
-});
-
-test('backfill audio URL settings resolve the installed packaged ffmpeg module by default', () => {
-  const settings = resolveBackfillAudioUrlSettings({
-    REO_BACKFILL_TOS_ACCESS_KEY_ID: 'ak-test-secret',
-    REO_BACKFILL_TOS_ACCESS_KEY_SECRET: 'sk-test-secret',
-    REO_BACKFILL_TOS_BUCKET: 'reo-private-bucket',
-    REO_BACKFILL_TOS_ENDPOINT: 'https://tos-cn-beijing.volces.com',
-    REO_BACKFILL_TOS_REGION: 'cn-beijing',
-  });
-
-  assert.equal(settings.configured, true);
-  if (!settings.configured) {
+  assert.equal(result.ok, false);
+  if (result.ok) {
     return;
   }
-  assert.match(settings.ffmpegPath, /@ffmpeg-installer/);
-  assert.match(settings.ffmpegPath, /ffmpeg$/);
-});
 
-test('backfill audio URL settings prefer env ffmpeg override over packaged ffmpeg', () => {
-  const settings = resolveBackfillAudioUrlSettings(
-    {
-      REO_BACKFILL_FFMPEG_PATH: '/env/ffmpeg',
-      REO_BACKFILL_TOS_ACCESS_KEY_ID: 'ak-test-secret',
-      REO_BACKFILL_TOS_ACCESS_KEY_SECRET: 'sk-test-secret',
-      REO_BACKFILL_TOS_BUCKET: 'reo-private-bucket',
-      REO_BACKFILL_TOS_ENDPOINT: 'https://tos-cn-beijing.volces.com',
-      REO_BACKFILL_TOS_REGION: 'cn-beijing',
-    },
-    { packagedFfmpegPath: '/packaged/ffmpeg' }
-  );
-
-  assert.equal(settings.configured, true);
-  if (!settings.configured) {
-    return;
-  }
-  assert.equal(settings.ffmpegPath, '/env/ffmpeg');
-});
-
-test('backfill audio URL settings report missing ffmpeg when env and packaged paths are absent', () => {
-  const settings = resolveBackfillAudioUrlSettings(
-    {
-      REO_BACKFILL_TOS_ACCESS_KEY_ID: 'ak-test-secret',
-      REO_BACKFILL_TOS_ACCESS_KEY_SECRET: 'sk-test-secret',
-      REO_BACKFILL_TOS_BUCKET: 'reo-private-bucket',
-      REO_BACKFILL_TOS_ENDPOINT: 'https://tos-cn-beijing.volces.com',
-      REO_BACKFILL_TOS_REGION: 'cn-beijing',
-    },
-    { packagedFfmpegPath: null }
-  );
-
-  assert.deepEqual(settings, { configured: false, reason: 'missing-ffmpeg-path' });
+  assert.equal(result.error.code, 'unconfigured');
+  assert.equal(result.error.reason, 'missing-ffmpeg-path');
+  assert.deepEqual(remuxer.calls, []);
+  assert.deepEqual(staging.calls, []);
 });
 
 test('ffmpeg remux waits for child close after abort before settling', async () => {

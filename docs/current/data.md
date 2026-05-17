@@ -35,7 +35,7 @@
 - Finalized audio Segment 的 `.reo/objects/segments/<segmentId>.json` 必须与所在 memory directory 和 segment directory 的 object id 一致；`memoryId` 与 `segmentId` 不由目录 basename 直接推断。Finalized audio Segment 与 SegmentSupplement manifest 的 `lastTranscriptionAttempt` 是 Reo 管理的可选技术状态字段，取值为 `'success'`、`'failed'` 或 `'never'`；读取投影时字段缺失按 `'never'` 投影。
 - Memory space registry entry 属于 main-owned app state，字段包含 `workspaceId`、title、description、rootPath、addedAt 和 lastOpenedAt；renderer 只能读取不含 rootPath 的列表投影。
 - Voice transcription settings 属于 main-owned app state，文件位于 `userData/voice-transcription-settings.json`；X-Api-Key 字段经 Electron `safeStorage` 加密，renderer 只能读取不含明文或密文的 settings snapshot。
-- Backfill audio URL staging 配置只来自 main process 环境配置：TOS access key id/secret、bucket、endpoint、region、key prefix 和短 TTL。WebM/Opus 到 OGG/Opus remux 默认使用随应用安装的 ffmpeg binary；`REO_BACKFILL_FFMPEG_PATH` 只作为运行环境 override。Staging 配置不是用户内容真源，不进入记忆空间文件、registry、Query cache、renderer state 或 IPC response。没有完整 TOS 配置时 backfill audio URL source 返回 typed unconfigured error，目标 manifest 不改变。
+- Backfill audio URL staging 配置只来自 main process 环境配置：TOS access key id/secret、bucket、endpoint、region、key prefix、短 TTL 和 ffmpeg path。它不是用户内容真源，不进入记忆空间文件、registry、Query cache、renderer state 或 IPC response。没有完整配置时 backfill audio URL source 返回 typed unconfigured error，目标 manifest 不改变。
 - `workspaceHandle` 是 main process runtime capability，只用于当前窗口授权 IPC 操作，不进入 query key、DOM、URL、记忆空间文件或 registry。
 
 ## 技术方向
