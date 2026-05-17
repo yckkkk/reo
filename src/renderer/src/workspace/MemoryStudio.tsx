@@ -52,10 +52,17 @@ type MemoryStudioProps = {
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
+  readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
+};
+
+export type SegmentTranscriptionRetryTarget = {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
 };
 
 export type SegmentSupplementRecordingTarget = {
@@ -81,6 +88,7 @@ const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) 
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
+type LastTranscriptionAttempt = MemorySegment['lastTranscriptionAttempt'];
 type TranscriptProjection = { readonly exists: boolean; readonly text: string } | null | undefined;
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
 type SegmentSupplementAudioResource = {
@@ -96,9 +104,21 @@ type SegmentSupplementAudioResource = {
   workspaceId: string;
 };
 
-function deriveTranscriptOutcome(transcript: TranscriptProjection): SegmentTranscriptOutcome {
+function deriveTranscriptOutcome({
+  lastTranscriptionAttempt,
+  transcript,
+}: {
+  readonly lastTranscriptionAttempt: LastTranscriptionAttempt;
+  readonly transcript: TranscriptProjection;
+}): SegmentTranscriptOutcome {
   if (transcript?.exists) {
     return { kind: 'success', text: transcript.text };
+  }
+  if (lastTranscriptionAttempt === 'failed') {
+    return { kind: 'failed-retryable' };
+  }
+  if (lastTranscriptionAttempt === 'success') {
+    return { kind: 'empty-cleared' };
   }
   return { kind: 'empty-never' };
 }
@@ -895,7 +915,10 @@ function SegmentSupplementAudioPlayer({
                 ? 'error'
                 : 'ready'
           }
-          outcome={deriveTranscriptOutcome(supplementContent?.transcript)}
+          outcome={deriveTranscriptOutcome({
+            lastTranscriptionAttempt: 'never',
+            transcript: supplementContent?.transcript,
+          })}
           copy={{
             loading: '正在载入补充录音内容。',
             error: '补充录音转录加载失败，请重试。',
@@ -942,6 +965,7 @@ export function MemoryStudio({
   onDeleteSegmentSupplement,
   onRenameSegmentSupplement,
   onRenameSegment,
+  onRetrySegmentTranscription,
   onSegmentFocusConsumed,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -981,6 +1005,15 @@ export function MemoryStudio({
   const segments = detail?.segments ?? [];
   const selectedSegment =
     segments.find((segment) => segment.segmentId === selectedSegmentId) ?? segments[0] ?? null;
+  const retrySelectedSegmentTranscription =
+    selectedSegment && onRetrySegmentTranscription
+      ? () =>
+          onRetrySegmentTranscription({
+            workspaceId: workspaceSession.workspaceId,
+            memoryId: memory.memoryId,
+            segmentId: selectedSegment.segmentId,
+          })
+      : undefined;
   const segmentContentQuery = useQuery({
     ...segmentContentQueryOptions(
       workspaceSession,
@@ -1904,7 +1937,13 @@ export function MemoryStudio({
                           ? 'error'
                           : 'ready'
                     }
-                    outcome={deriveTranscriptOutcome(segmentContent?.transcript)}
+                    outcome={deriveTranscriptOutcome({
+                      lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
+                      transcript: segmentContent?.transcript,
+                    })}
+                    {...(retrySelectedSegmentTranscription
+                      ? { onRetry: retrySelectedSegmentTranscription }
+                      : {})}
                     copy={{
                       loading: '正在载入片段内容。',
                       error: '片段内容加载失败，请重试。',

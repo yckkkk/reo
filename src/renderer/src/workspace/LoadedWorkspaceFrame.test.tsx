@@ -73,13 +73,18 @@ const birthdayDetail: WorkspaceMemoryDetail = {
   ],
 };
 
-const birthdayDetailWithTwoSegments = {
+const birthdayVoiceSegment = birthdayDetail.segments[0];
+if (!birthdayVoiceSegment) {
+  throw new Error('birthdayDetail fixture must include a segment');
+}
+
+const birthdayDetailWithTwoSegments: WorkspaceMemoryDetail = {
   ...birthdayDetail,
   segmentCount: 2,
   durationMs: 190_000,
   audioByteLength: 3072,
   segments: [
-    birthdayDetail.segments[0],
+    birthdayVoiceSegment,
     {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
@@ -245,6 +250,7 @@ function renderLoadedWorkspaceFrame({
   onRenameMemory = vi.fn(),
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
+  onRetrySegmentTranscription,
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentSupplementRecording = vi.fn(),
@@ -280,6 +286,11 @@ function renderLoadedWorkspaceFrame({
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegment?: () => void;
   readonly onRenameSegmentSupplement?: () => void;
+  readonly onRetrySegmentTranscription?: (target: {
+    readonly workspaceId: string;
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
   readonly onStartSegmentSupplementRecording?: (target: {
@@ -339,6 +350,7 @@ function renderLoadedWorkspaceFrame({
         onRenameMemory={onRenameMemory}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
+        {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
         onSelectMemory={onSelectMemory}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}
@@ -1074,6 +1086,73 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(content).getByRole('button', { name: '暂停片段 Birthday candles' })
     ).toBeInTheDocument();
+  });
+
+  it('calls segment transcription retry only for failed transcript attempts', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:retryable-segment-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const onRetrySegmentTranscription = vi.fn();
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: false,
+          text: '',
+        },
+      },
+    }));
+    const [retryableSegment, neverSegment] = birthdayDetailWithTwoSegments.segments;
+    if (!retryableSegment || !neverSegment) {
+      throw new Error('birthdayDetailWithTwoSegments fixture must include two segments');
+    }
+    const retryableDetail: WorkspaceMemoryDetail = {
+      ...birthdayDetailWithTwoSegments,
+      segments: [
+        {
+          ...retryableSegment,
+          lastTranscriptionAttempt: 'failed',
+          transcript: { exists: false },
+        },
+        neverSegment,
+      ],
+    };
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      onRetrySegmentTranscription,
+      readFinalizedAudioSegment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_transcript_retry',
+      detail: retryableDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    expect(await within(content).findByText('上次生成转录失败。')).toBeInTheDocument();
+
+    await user.click(within(content).getByRole('button', { name: '重试' }));
+
+    expect(onRetrySegmentTranscription).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+    });
+
+    await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday song' }));
+
+    expect(await within(content).findByText('这段录音还没有转录。')).toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
+    expect(onRetrySegmentTranscription).toHaveBeenCalledOnce();
   });
 
   it('announces playback slider value text and supports keyboard seek', async () => {

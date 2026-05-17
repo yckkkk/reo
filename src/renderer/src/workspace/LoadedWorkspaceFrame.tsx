@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
-import { MemoryStudio, type SegmentSupplementRecordingTarget } from './MemoryStudio';
+import {
+  MemoryStudio,
+  type SegmentSupplementRecordingTarget,
+  type SegmentTranscriptionRetryTarget,
+} from './MemoryStudio';
 import { MemoryRail } from './MemoryRail';
 import type {
   SegmentSupplementDeleteTarget,
@@ -23,6 +27,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
+  readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
@@ -41,6 +46,7 @@ export function LoadedWorkspaceFrame({
   onRenameMemory,
   onRenameSegment,
   onRenameSegmentSupplement,
+  onRetrySegmentTranscription,
   onSegmentFocusConsumed,
   onSelectMemory,
   onStartSegmentSupplementRecording,
@@ -77,6 +83,7 @@ export function LoadedWorkspaceFrame({
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegment={onRenameSegment}
+          {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}
