@@ -2318,6 +2318,40 @@ test('finalized segment projection exposes derived lastTranscriptionAttempt', as
   }
 });
 
+test('finalized segment projection treats HTML comment-only transcript as empty without resetting attempt', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_transcript_comment_placeholder';
+  const segmentId = 'seg_20260516_transcript_comment_placeholder';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '清空转写',
+  });
+  const segmentDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '已清空转写',
+    lastTranscriptionAttempt: 'success',
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '已清空转写', kind: 'audio' },
+      content: '# 已清空转写\n\n## Transcript\n\n<!--\n## cleared externally\n-->',
+    })
+  );
+
+  const projection = await readFinalizedSegmentProjection({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(projection.lastTranscriptionAttempt, 'success');
+  assert.deepEqual(projection.transcript, { exists: false });
+});
+
 test('finalized supplement projection exposes lastTranscriptionAttempt from manifest', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_supplement_transcription_status';

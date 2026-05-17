@@ -1089,9 +1089,30 @@ export function extractSegmentTranscript(markdownContent: string): string {
   }
   const bodyStart = heading.index + heading[0].length;
   const remaining = markdownContent.slice(bodyStart);
-  const nextHeading = /^##\s+/m.exec(remaining);
-  const body = nextHeading ? remaining.slice(0, nextHeading.index) : remaining;
+  const visibleRemaining = removeHtmlComments(remaining);
+  const nextHeading = /^##\s+/m.exec(visibleRemaining);
+  const body = nextHeading
+    ? visibleRemaining.slice(0, nextHeading.index)
+    : visibleRemaining;
   return body.replace(/^\r?\n/, '').replace(/\s+$/, '');
+}
+
+function removeHtmlComments(markdownContent: string): string {
+  let cursor = 0;
+  let visible = '';
+  while (cursor < markdownContent.length) {
+    const commentStart = markdownContent.indexOf('<!--', cursor);
+    if (commentStart === -1) {
+      return `${visible}${markdownContent.slice(cursor)}`;
+    }
+    visible += markdownContent.slice(cursor, commentStart);
+    const commentEnd = markdownContent.indexOf('-->', commentStart + 4);
+    if (commentEnd === -1) {
+      return visible;
+    }
+    cursor = commentEnd + 3;
+  }
+  return visible;
 }
 
 export function replaceSegmentTranscript(markdownContent: string, transcript: string): string {
