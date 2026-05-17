@@ -1,7 +1,11 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { voiceSettingsQueryKey } from '@/settings/voiceSettingsQueries';
+import { createVoiceSettingsSnapshot } from '@/settings/voiceSettingsTestFixtures';
+import { createReoQueryClient } from '../queryClient';
 import { AppShell } from './AppShell';
 import { TITLEBAR_HEIGHT } from './appShellGeometry';
 import {
@@ -59,30 +63,37 @@ describe('AppShell', () => {
     }>;
   }) {
     const [themePreference, setThemePreference] = useState<ThemePreference>(initialThemePreference);
+    const [queryClient] = useState(() => {
+      const client = createReoQueryClient();
+      client.setQueryData(voiceSettingsQueryKey(), createVoiceSettingsSnapshot());
+      return client;
+    });
 
     return (
-      <AppShell
-        activeWorkspaceId={activeWorkspaceId}
-        activeSection={activeSection}
-        themePreference={themePreference}
-        effectiveTheme={resolveEffectiveTheme(themePreference, isSystemDark)}
-        memorySpaces={memorySpaces}
-        onCreateWorkspace={onCreateWorkspace}
-        onCycleThemePreference={() =>
-          setThemePreference((current) => cycleThemePreference(current))
-        }
-        onHome={onHome ?? (() => {})}
-        onLibrary={onLibrary}
-        onOpenLocalWorkspace={onOpenLocalWorkspace}
-        onOpenSettings={onOpenSettings}
-        onRenameMemorySpace={onRenameMemorySpace}
-        onRemoveMemorySpace={onRemoveMemorySpace}
-        onSettingsBlocked={onSettingsBlocked}
-        onSelectMemorySpace={onSelectMemorySpace}
-        recordingActive={recordingActive}
-      >
-        {children}
-      </AppShell>
+      <QueryClientProvider client={queryClient}>
+        <AppShell
+          activeWorkspaceId={activeWorkspaceId}
+          activeSection={activeSection}
+          themePreference={themePreference}
+          effectiveTheme={resolveEffectiveTheme(themePreference, isSystemDark)}
+          memorySpaces={memorySpaces}
+          onCreateWorkspace={onCreateWorkspace}
+          onCycleThemePreference={() =>
+            setThemePreference((current) => cycleThemePreference(current))
+          }
+          onHome={onHome ?? (() => {})}
+          onLibrary={onLibrary}
+          onOpenLocalWorkspace={onOpenLocalWorkspace}
+          onOpenSettings={onOpenSettings}
+          onRenameMemorySpace={onRenameMemorySpace}
+          onRemoveMemorySpace={onRemoveMemorySpace}
+          onSettingsBlocked={onSettingsBlocked}
+          onSelectMemorySpace={onSelectMemorySpace}
+          recordingActive={recordingActive}
+        >
+          {children}
+        </AppShell>
+      </QueryClientProvider>
     );
   }
 

@@ -1,11 +1,47 @@
-import { render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render as renderTestingLibrary, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { voiceSettingsQueryKey } from '@/settings/voiceSettingsQueries';
+import {
+  createVoiceSettingsSnapshot,
+  installPendingVoiceSettingsReadBridge,
+} from '@/settings/voiceSettingsTestFixtures';
+import { createReoQueryClient } from '../queryClient';
 import { SidebarSettingsTrigger } from './SidebarSettingsTrigger';
+import type { VoiceTranscriptionSettings } from './workspaceApi';
+
+type SidebarSettingsTriggerTestOptions = {
+  readonly seedVoiceSettings?: boolean;
+  readonly voiceSettings?: VoiceTranscriptionSettings;
+};
+
+function renderSidebarSettingsTrigger(
+  ui: ReactNode,
+  {
+    seedVoiceSettings = true,
+    voiceSettings = createVoiceSettingsSnapshot(),
+  }: SidebarSettingsTriggerTestOptions = {}
+) {
+  const queryClient = createReoQueryClient();
+
+  if (seedVoiceSettings) {
+    queryClient.setQueryData(voiceSettingsQueryKey(), voiceSettings);
+  } else {
+    installPendingVoiceSettingsReadBridge();
+  }
+
+  function Wrapper({ children }: { readonly children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+
+  return renderTestingLibrary(ui, { wrapper: Wrapper });
+}
 
 describe('SidebarSettingsTrigger', () => {
   it('renders the settings button with a Chinese accessible name', () => {
-    render(
+    renderSidebarSettingsTrigger(
       <SidebarSettingsTrigger
         onOpenSettings={vi.fn()}
         onRecordingBlocked={vi.fn()}
@@ -23,7 +59,7 @@ describe('SidebarSettingsTrigger', () => {
     const onOpenSettings = vi.fn();
     const onRecordingBlocked = vi.fn();
 
-    render(
+    renderSidebarSettingsTrigger(
       <SidebarSettingsTrigger
         onOpenSettings={onOpenSettings}
         onRecordingBlocked={onRecordingBlocked}
@@ -42,7 +78,7 @@ describe('SidebarSettingsTrigger', () => {
     const onOpenSettings = vi.fn();
     const onRecordingBlocked = vi.fn();
 
-    render(
+    renderSidebarSettingsTrigger(
       <SidebarSettingsTrigger
         onOpenSettings={onOpenSettings}
         onRecordingBlocked={onRecordingBlocked}
@@ -57,5 +93,50 @@ describe('SidebarSettingsTrigger', () => {
 
     expect(onOpenSettings).not.toHaveBeenCalled();
     expect(onRecordingBlocked).toHaveBeenCalledOnce();
+  });
+
+  it('renders a voice credentials dot inside the settings button for auth validation failure', () => {
+    renderSidebarSettingsTrigger(
+      <SidebarSettingsTrigger
+        onOpenSettings={vi.fn()}
+        onRecordingBlocked={vi.fn()}
+        recordingActive={false}
+      />,
+      { voiceSettings: createVoiceSettingsSnapshot({ lastValidationCode: 'auth' }) }
+    );
+
+    const settingsButton = screen.getByRole('button', { name: '设置' });
+    const dot = screen.getByTestId('voice-credentials-dot');
+
+    expect(settingsButton).toContainElement(dot);
+  });
+
+  it.each([['ok' as const], ['network' as const]])(
+    'does not render a voice credentials dot for %s validation state',
+    (lastValidationCode) => {
+      renderSidebarSettingsTrigger(
+        <SidebarSettingsTrigger
+          onOpenSettings={vi.fn()}
+          onRecordingBlocked={vi.fn()}
+          recordingActive={false}
+        />,
+        { voiceSettings: createVoiceSettingsSnapshot({ lastValidationCode }) }
+      );
+
+      expect(screen.queryByTestId('voice-credentials-dot')).not.toBeInTheDocument();
+    }
+  );
+
+  it('does not render a voice credentials dot while voice settings are loading', () => {
+    renderSidebarSettingsTrigger(
+      <SidebarSettingsTrigger
+        onOpenSettings={vi.fn()}
+        onRecordingBlocked={vi.fn()}
+        recordingActive={false}
+      />,
+      { seedVoiceSettings: false }
+    );
+
+    expect(screen.queryByTestId('voice-credentials-dot')).not.toBeInTheDocument();
   });
 });

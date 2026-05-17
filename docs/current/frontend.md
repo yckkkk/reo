@@ -58,7 +58,7 @@
 
 - 当前无 memory space state 使用 `AppShell` + `WorkspaceStarterHome`；Home 主内容区不显示独立创建按钮，创建入口统一在 sidebar 记忆空间列表。
 - 当前 loaded memory space state 使用 `AppShell` 包裹 loaded workspace frame；创建记忆空间通过受控 `WorkspaceCreateDialog` 弹层承载，不作为页面 route。
-- Sidebar 左下角设置入口由 App 拥有的 app mode 切换驱动：非录音状态点击「设置」进入 settings mode，录音状态点击保持当前 app mode 并使用 root toast 提示先完成或关闭录音。AppShell 只暴露 settings trigger，不持有应用 route state。
+- Sidebar 左下角设置入口由 App 拥有的 app mode 切换驱动：非录音状态点击「设置」进入 settings mode，录音状态点击保持当前 app mode 并使用 root toast 提示先完成或关闭录音。Settings trigger 读取 app-scoped `['settings', 'voice']` 查询，且仅在 `lastValidationCode === 'auth'` 时在齿轮图标上叠加凭证失效红点；settings snapshot 未知、`ok` 或 `network` 时不显示红点。AppShell 只暴露 settings trigger，不持有应用 route state。
 - 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 保持透明 Electron drag region，不画分隔线。窗口控制和 sidebar hide/show control 属于该层。
 - AppShell root 和主内容 panel 使用 `bg-background`；左侧 sidebar 使用 `bg-card`；两者在交界处直接相邻，不增加 underlay、合成层、左侧投影或额外边界。
 - 主内容 panel 同步保留 48px panel titlebar slot；panel titlebar 只是 page panel 内的高度占位，不建立独立实色 surface。
