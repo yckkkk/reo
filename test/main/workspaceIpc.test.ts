@@ -1927,6 +1927,7 @@ test('readMemoryDetail returns current Memory segments without exposing handle o
         updatedAt: '2026-05-06T13:09:00.000Z',
         durationMs: 1000,
         audioByteLength: 3,
+        lastTranscriptionAttempt: 'never',
         transcript: { exists: false },
         supplementCount: 0,
         supplements: [],

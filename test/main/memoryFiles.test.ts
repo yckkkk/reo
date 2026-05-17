@@ -73,6 +73,7 @@ import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from '../../src/main/workspaceMarkdownObjects.js';
+import type { LastTranscriptionAttempt } from '../../src/workspace-contract/workspace-contract.js';
 
 async function workspaceRoot(): Promise<string> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-'));
@@ -444,6 +445,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       updatedAt: '2026-05-06T13:09:00.000Z',
       durationMs: 73_000,
       audioByteLength: 3,
+      lastTranscriptionAttempt: 'never',
       transcript: { exists: false },
       supplementCount: 0,
       supplements: [],
@@ -2282,6 +2284,96 @@ test('reads segment markdown as the segment title source of truth', async () => 
     assert.equal(detail.value.segments[0]?.segmentId, segmentId);
     assert.equal(detail.value.segments[0]?.title, '录音1');
   }
+});
+
+test('finalized segment projection exposes derived lastTranscriptionAttempt', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_transcription_attempts';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '转写状态',
+  });
+  const attempts = ['failed', 'success', undefined] as const satisfies readonly (
+    | LastTranscriptionAttempt
+    | undefined
+  )[];
+
+  for (const [index, attempt] of attempts.entries()) {
+    const segmentId = `seg_20260516_transcription_${index}`;
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: '录音状态',
+      lastTranscriptionAttempt: attempt,
+    });
+
+    const projection = await readFinalizedSegmentProjection({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(projection.lastTranscriptionAttempt, attempt ?? 'never');
+  }
+});
+
+test('finalized supplement projection exposes lastTranscriptionAttempt from manifest', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_supplement_transcription_status';
+  const segmentId = 'seg_20260516_supplement_status_parent';
+  const failedSupplementId = 'sup_20260516_supplement_failed';
+  const successSupplementId = 'sup_20260516_supplement_success';
+  const neverSupplementId = 'sup_20260516_supplement_never';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充转写状态',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '父录音',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: failedSupplementId,
+    title: '失败补充',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    lastTranscriptionAttempt: 'failed',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: successSupplementId,
+    title: '成功补充',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+    lastTranscriptionAttempt: 'success',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: neverSupplementId,
+    title: '未转写补充',
+    finalizedAt: '2026-05-06T13:12:00.000Z',
+  });
+
+  const projection = await readFinalizedSegmentProjection({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  const attemptsBySupplementId = new Map(
+    projection.supplements.map((supplement) => [
+      supplement.supplementId,
+      supplement.lastTranscriptionAttempt,
+    ])
+  );
+
+  assert.equal(attemptsBySupplementId.get(failedSupplementId), 'failed');
+  assert.equal(attemptsBySupplementId.get(successSupplementId), 'success');
+  assert.equal(attemptsBySupplementId.get(neverSupplementId), 'never');
 });
 
 test('memory detail projects valid segment file-space nodes missing from the file-truth scan', async () => {

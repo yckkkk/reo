@@ -59,8 +59,10 @@ import {
   MEMORY_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   isSafeWorkspaceDirectoryName,
+  lastTranscriptionAttemptSchema,
   workspaceError,
   workspaceMemorySummarySchema,
+  type LastTranscriptionAttempt,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
   type WorkspaceMemoryDetailProjection,
@@ -80,8 +82,6 @@ const writeDescriptor = promisify(writeCallback);
 const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
-const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
-type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
 type ManifestLastTranscriptionAttempt = LastTranscriptionAttempt | undefined;
 
 class FinalizeTransactionFailure extends Error {
@@ -656,7 +656,11 @@ const memoryObjectManifestSchema = z
   })
   .strict();
 
-const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
+function deriveLastTranscriptionAttempt(manifest: {
+  readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
+}): LastTranscriptionAttempt {
+  return manifest.lastTranscriptionAttempt ?? 'never';
+}
 
 const segmentObjectManifestSchema = z
   .object({
@@ -2618,6 +2622,7 @@ async function readValidFinalizedSupplementProjection({
       updatedAt,
       durationMs: supplement.durationMs,
       audioByteLength,
+      lastTranscriptionAttempt: deriveLastTranscriptionAttempt(supplement),
       transcript: {
         exists: extractSegmentTranscript(supplement.markdownContent).trim().length > 0,
       },
@@ -3132,6 +3137,7 @@ async function finalizedSegmentProjectionFromFileTruth({
     updatedAt,
     durationMs: metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(metadata),
     transcript: {
       exists: extractSegmentTranscript(metadata.markdownContent).length > 0,
     },

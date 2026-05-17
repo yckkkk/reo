@@ -12,6 +12,9 @@ export const SUPPLEMENT_ID_PATTERN = /^sup_[A-Za-z0-9_-]+$/;
 const memoryIdSchema = z.string().regex(MEMORY_ID_PATTERN);
 const segmentIdSchema = z.string().regex(SEGMENT_ID_PATTERN);
 const supplementIdSchema = z.string().regex(SUPPLEMENT_ID_PATTERN);
+export const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
+export type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
+export const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
 const workspaceTitleTextSchema = z.string().trim().min(1).max(WORKSPACE_TITLE_MAX_LENGTH);
 const workspaceMemorySpaceTitleSchema = workspaceTitleTextSchema.refine(
   isSafeWorkspaceDirectoryName,
@@ -218,6 +221,7 @@ export const workspaceSegmentSupplementProjectionSchema = z.strictObject({
   updatedAt: z.string(),
   durationMs: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
+  lastTranscriptionAttempt: lastTranscriptionAttemptSchema,
   transcript: z.strictObject({
     exists: z.boolean(),
   }),
@@ -233,6 +237,7 @@ export const workspaceSegmentProjectionSchema = z.strictObject({
   updatedAt: z.string(),
   durationMs: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
+  lastTranscriptionAttempt: lastTranscriptionAttemptSchema,
   transcript: z.strictObject({
     exists: z.boolean(),
   }),

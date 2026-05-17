@@ -38,6 +38,7 @@ function segment({
     audioByteLength,
     createdAt: '2026-05-06T13:08:00.000Z',
     durationMs,
+    lastTranscriptionAttempt: 'never' as const,
     memoryId: 'mem_projection',
     segmentId,
     title,

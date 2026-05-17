@@ -63,6 +63,7 @@ const birthdayDetail: WorkspaceMemoryDetail = {
       updatedAt: '2026-05-06T13:10:00.000',
       durationMs: 125_000,
       audioByteLength: 2048,
+      lastTranscriptionAttempt: 'never' as const,
       transcript: {
         exists: true,
       },
@@ -89,6 +90,7 @@ const birthdayDetailWithTwoSegments = {
       updatedAt: '2026-05-06T13:13:05.000',
       durationMs: 65_000,
       audioByteLength: 1024,
+      lastTranscriptionAttempt: 'never' as const,
       transcript: {
         exists: false,
       },
@@ -112,6 +114,7 @@ function audioSupplement(
     updatedAt: '2026-05-06T13:11:05.000',
     durationMs: 5_000,
     audioByteLength: 3,
+    lastTranscriptionAttempt: 'never' as const,
     transcript: { exists: false },
     ...overrides,
   };

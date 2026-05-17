@@ -200,6 +200,7 @@ describe('recordingRecovery', () => {
           updatedAt: '2026-05-09T10:00:00.000Z',
           audioByteLength: 3,
           durationMs: 1000,
+          lastTranscriptionAttempt: 'never' as const,
           transcript: { exists: false },
           supplementCount: 0,
           supplements: [],
