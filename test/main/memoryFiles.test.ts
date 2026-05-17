@@ -51,6 +51,7 @@ import {
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
   readMemoryDetailFromFileTruth,
+  readFinalizedSegmentProjection,
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   restoreDeletedMemoryFromFileTruth,
@@ -278,6 +279,7 @@ async function writeFinalizedAudioSegmentForTest(
     readonly directoryName?: string;
     readonly finalizedAt?: string;
     readonly audioBytes?: readonly number[];
+    readonly lastTranscriptionAttempt?: unknown;
   }
 ): Promise<string> {
   const audioBytes = recording.audioBytes ?? [1, 2, 3];
@@ -315,6 +317,9 @@ async function writeFinalizedAudioSegmentForTest(
         durationMs: 1000,
         nextSequence: 1,
         audioByteLength: audioBytes.length,
+        ...(recording.lastTranscriptionAttempt !== undefined
+          ? { lastTranscriptionAttempt: recording.lastTranscriptionAttempt }
+          : {}),
       },
       null,
       2
@@ -334,6 +339,7 @@ async function writeFinalizedAudioSupplementForTest(
     readonly directoryName?: string;
     readonly audioBytes?: readonly number[];
     readonly transcript?: string;
+    readonly lastTranscriptionAttempt?: unknown;
   }
 ): Promise<void> {
   const audioBytes = supplement.audioBytes ?? [4, 5, 6];
@@ -374,6 +380,9 @@ async function writeFinalizedAudioSupplementForTest(
         durationMs: 500,
         nextSequence: 1,
         audioByteLength: audioBytes.length,
+        ...(supplement.lastTranscriptionAttempt !== undefined
+          ? { lastTranscriptionAttempt: supplement.lastTranscriptionAttempt }
+          : {}),
       },
       null,
       2
@@ -2936,6 +2945,100 @@ test('standalone memory create writes Markdown semantics and Reo-only manifest',
       updatedAt: '2026-05-12T13:10:00.000Z',
     }
   );
+});
+
+test('manifest lastTranscriptionAttempt accepts known segment and supplement states', async () => {
+  const allowedAttempts = ['success', 'failed', 'never', undefined] as const;
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_manifest_attempts';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Manifest attempt',
+  });
+
+  for (const [index, lastTranscriptionAttempt] of allowedAttempts.entries()) {
+    const segmentId = `seg_20260516_manifest_attempt_${index}`;
+    const supplementId = `sup_20260516_manifest_attempt_${index}`;
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId,
+      title: 'Segment attempt',
+      lastTranscriptionAttempt,
+    });
+    await writeFinalizedAudioSupplementForTest(rootPath, {
+      memoryId,
+      segmentId,
+      supplementId,
+      title: 'Supplement attempt',
+      finalizedAt: '2026-05-16T18:10:00.000Z',
+      lastTranscriptionAttempt,
+    });
+
+    const segment = await readFinalizedSegmentProjection({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+    });
+
+    assert.equal(segment.segmentId, segmentId);
+    assert.equal(segment.supplements.length, 1);
+    assert.equal(segment.supplements[0]?.supplementId, supplementId);
+  }
+});
+
+test('manifest lastTranscriptionAttempt rejects unknown segment and supplement states', async () => {
+  const rejectedAttempts: readonly unknown[] = ['unknown', '', 1];
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_manifest_attempt_rejects';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Manifest attempt reject',
+  });
+
+  for (const [index, lastTranscriptionAttempt] of rejectedAttempts.entries()) {
+    const invalidSegmentId = `seg_20260516_manifest_attempt_reject_${index}`;
+    const validSegmentId = `seg_20260516_manifest_attempt_valid_${index}`;
+    const supplementId = `sup_20260516_manifest_attempt_reject_${index}`;
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId: invalidSegmentId,
+      title: 'Segment attempt reject',
+      lastTranscriptionAttempt,
+    });
+    await assert.rejects(
+      readFinalizedSegmentProjection({
+        rootPath,
+        workspaceId: 'ws_memory',
+        memoryId,
+        segmentId: invalidSegmentId,
+      })
+    );
+
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId: validSegmentId,
+      title: 'Segment attempt with invalid supplement',
+      lastTranscriptionAttempt: 'never',
+    });
+    await writeFinalizedAudioSupplementForTest(rootPath, {
+      memoryId,
+      segmentId: validSegmentId,
+      supplementId,
+      title: 'Supplement attempt reject',
+      finalizedAt: '2026-05-16T18:10:00.000Z',
+      lastTranscriptionAttempt,
+    });
+    const segment = await readFinalizedSegmentProjection({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId: validSegmentId,
+    });
+
+    assert.equal(segment.segmentId, validSegmentId);
+    assert.deepEqual(segment.supplements, []);
+  }
 });
 
 test('recording finalize creates a new memory as a file-space node when no memory exists', async () => {

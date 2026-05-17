@@ -80,6 +80,9 @@ const writeDescriptor = promisify(writeCallback);
 const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
+const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
+type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
+type ManifestLastTranscriptionAttempt = LastTranscriptionAttempt | undefined;
 
 class FinalizeTransactionFailure extends Error {
   readonly dataRetention: WorkspaceError['dataRetention'];
@@ -130,6 +133,7 @@ interface SegmentObjectManifest {
   readonly durationMs: number;
   readonly nextSequence: number;
   readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
 }
 
 interface SupplementObjectManifest {
@@ -146,6 +150,7 @@ interface SupplementObjectManifest {
   readonly durationMs: number;
   readonly nextSequence: number;
   readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
 }
 
 interface FinalizedSegmentSemanticTruth extends SegmentObjectManifest {
@@ -651,6 +656,8 @@ const memoryObjectManifestSchema = z
   })
   .strict();
 
+const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
+
 const segmentObjectManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -665,6 +672,7 @@ const segmentObjectManifestSchema = z
     durationMs: z.number().int().nonnegative(),
     nextSequence: z.number().int().nonnegative(),
     audioByteLength: z.number().int().nonnegative(),
+    lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
   })
   .strict();
 
@@ -683,6 +691,7 @@ const supplementObjectManifestSchema = z
     durationMs: z.number().int().nonnegative(),
     nextSequence: z.number().int().nonnegative(),
     audioByteLength: z.number().int().nonnegative(),
+    lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
   })
   .strict();
 
