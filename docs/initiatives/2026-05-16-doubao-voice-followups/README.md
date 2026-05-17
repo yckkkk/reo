@@ -4,7 +4,7 @@
 
 - 状态：active
 - 类型：产品或代码开发 active initiative
-- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C 自动补转录已实现并归档；C 使用标准版 2.0 + main-only TOS staging 方案，真实 X-Api-Key 已通过 `volc.seedasr.auc` submit/query smoke；完整 Reo C live backfill 仍待 TOS/ffmpeg 配置验证；D 可在 C→D readiness gate 后创建 active spec
+- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C 自动补转录已实现并归档；C 使用标准版 2.0 + main-only TOS staging 方案，live provider smoke 待真实配置验证；D 可在 C→D readiness gate 后创建 active spec
 
 ## 目标
 

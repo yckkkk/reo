@@ -19,7 +19,7 @@
 - [x] **C**：自动补转录
   - brief：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
   - 归档：`docs/archive/specs/2026-05-17-0029-doubao-voice-auto-backfill/`
-  - 当前状态：C 已实现；真实 X-Api-Key 已通过 `volc.seedasr.auc` submit/query smoke；完整 Reo C live backfill 待 TOS/ffmpeg 配置验证。
+  - 当前状态：C 已实现；live SeedASR/TOS smoke 待真实配置验证。
   - 进入 C spec 前的硬前置：
     - B 已归档（B 的 manifest 字段是 C 的输入合同）
     - B→C readiness gate 已完成

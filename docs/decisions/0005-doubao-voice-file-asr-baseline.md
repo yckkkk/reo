@@ -57,9 +57,7 @@ Reo 使用 main-only TOS staging 交付该 URL：
 
 ## 凭证与 smoke
 
-Reo 复用 voice settings 中的用户 X-Api-Key 调用 `volc.seedasr.auc`。真实账号 smoke 已验证同一 X-Api-Key 可用于 SAUC settings probe 与 AUC 标准版 2.0 submit/query：公开 demo MP3 URL 调用 `volc.seedasr.auc`，submit HTTP 200 / provider `20000000`，query HTTP 200 / provider `20000000`，返回非空 transcript。
-
-完整 Reo C live backfill 仍需要真实 TOS staging 配置与 `REO_BACKFILL_FFMPEG_PATH` 才能覆盖本地 finalized WebM/Opus -> OGG/Opus -> TOS presigned GET -> AUC -> cleanup 的端到端路径。
+Reo 复用 voice settings 中的用户 X-Api-Key 调用 `volc.seedasr.auc`。本 session 没有真实 SeedASR/TOS 配置和计费授权，因此未执行 live submit/query smoke，也未证明同一 key 在真实账号下同时具备 SAUC streaming 与 AUC 标准版 2.0 权限。
 
 上线前必须用真实配置执行一次小样本 smoke：
 

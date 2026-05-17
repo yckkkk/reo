@@ -3,7 +3,7 @@
 - 时间：2026-05-17 00:29 America/Los_Angeles
 - 来源 initiative：`docs/initiatives/2026-05-16-doubao-voice-followups/`
 - 范围：C-0b gate、SeedASR AUC 标准版 2.0 客户端、main 后台队列、扫描与触发、手动 IPC / preload / renderer retry、录音暂停、breaker、诊断、文档同步与归档
-- 状态：实现完成；真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke；完整 Reo C live backfill 仍缺 TOS/ffmpeg 运行配置
+- 状态：实现完成；live provider smoke 未执行，原因是本 session 没有可用的 TOS/SeedASR 生产凭证与可计费 smoke 输入
 
 ## C-0b 结论
 
@@ -48,7 +48,7 @@ C-0b 采用的安全交付方案是 main-only Volcengine TOS staging：
 
 ## 收口风险
 
-真实 X-Api-Key 已通过 `volc.seedasr.auc` submit/query smoke，证明 AUC 标准版 2.0 key 复用成立。完整 Reo C live backfill 仍缺少 TOS/ffmpeg 运行配置，因此不能声称本地 finalized audio 已在真实 bucket、真实 presigned URL 和 cleanup 环境中通过。代码路径、签名、错误映射、cleanup、IPC/security、renderer running state 和文档已通过本地自动化验证；上线前仍需用真实 TOS 配置执行一次小样本 smoke，记录 TOS PUT/GET/DELETE、Reo 本地音频 remux、submit/query status 和费用。
+本 session 没有 live SeedASR/TOS smoke 证据，因此不能声称外部服务已在真实账号、真实 bucket 和计费环境中通过。代码路径、签名、错误映射、cleanup、IPC/security、renderer running state 和文档已通过本地自动化验证；上线前仍需用真实配置执行一次小样本 smoke，记录 submit/query status、TOS cleanup 和费用。
 
 ## 文件入口
 
