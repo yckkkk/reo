@@ -12,14 +12,19 @@
 - [x] **B**：未转录状态可视化
   - 归档：`docs/archive/specs/2026-05-16-1806-doubao-voice-unfinished-visualization/`
   - 验收：见 spec verification.md
+  - 真机 E2E gate：2026-05-17 America/Los_Angeles 使用 `REMOTE_DEBUGGING_PORT=9233 npm run dev` 验证真实 Electron runtime；覆盖普通 Segment 三态、SegmentSupplement failed retry、Settings auth 红点与设置页失败状态。
   - 收口：current docs 已同步；B→C readiness gate 已执行。
   - **B→C readiness gate**：已执行；C/D brief 与本 tasks.md 已按 B 归档后的 current/code 事实更新
 
 - [ ] **C**：自动补转录
   - brief：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
+  - 当前状态：待重新审视并 spec 化；不得直接按 brief 实施。
   - 进入 C spec 前的硬前置：
     - B 已归档（B 的 manifest 字段是 C 的输入合同）
     - B→C readiness gate 已完成
+    - B 真机 E2E gate 已通过
+    - 下一 session 已重新读取 current docs、B 归档 spec、initiative README/plan/tasks/c-brief/d-brief 与代码事实
+    - 下一 session 已完成 C brainstorm，明确 C 是否保持当前目标、是否裁剪范围、是否重排 C0/C1/C2/C3
   - C spec 内执行顺序：
     - 先完成 C-0 / Gate 0（离线 flash endpoint 可用性 + key 复用 + 单次时长上限）
     - C-0 通过后才允许进入 C-1/C-2/C-3 实施
@@ -44,4 +49,4 @@
 
 ## 时间戳
 
-本任务列表版本：2026-05-16 18:06 America/Los_Angeles
+本任务列表版本：2026-05-17 00:14 America/Los_Angeles

@@ -1,11 +1,19 @@
 # C：自动补转录（brief，待 spec 化）
 
 > 本文是 C 的"准 spec"：按工程师可直接消费的标准撰写，但**不是** active spec。
-> 进入 `docs/specs/` 前必须满足：B 已归档，且 plan.md 的 B→C readiness gate 已完成。
+> 进入 `docs/specs/` 前必须满足：B 已归档、B 真机 E2E gate 已通过，且 plan.md 的 B→C readiness gate 已完成。
+> 下一 session 必须先重新审视本文，完成 C brainstorm 与 active spec 文档；不得直接把本文当作实施清单执行。
 
-- 时间：2026-05-16 18:06 America/Los_Angeles
+- 时间：2026-05-17 00:14 America/Los_Angeles
 - 依赖：B 的 `lastTranscriptionAttempt` manifest 字段
 - 共同约束：见 `plan.md`
+
+## 当前入口
+
+- B 已归档并通过 `npm run dev` 真机 E2E gate。
+- 本文只提供 C 的候选问题模型、状态模型和工程切分。
+- C active spec 必须重新判断：自动补转录是否仍是下一步最小闭环、C0 是否必须先独立验证、C1/C2/C3 是否应保留为同一工作单元。
+- 本文中的文件名、组件名和队列拆分不是实施权威；active spec 必须以当前源码和 `docs/current/*` 为准重新落点。
 
 ## 信息优先级
 

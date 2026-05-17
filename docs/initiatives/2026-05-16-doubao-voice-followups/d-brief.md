@@ -2,6 +2,7 @@
 
 > 本文是 D 的"准 spec"：按工程师可直接消费的标准撰写，但**不是** active spec。
 > 进入 `docs/specs/` 前必须满足：B 已归档、C 已归档，且 plan.md 的 C→D readiness gate 已完成。
+> D 只消费重新审视后完成的 C 合同；C 未归档前不得按本文提前创建 D spec。
 
 - 时间：2026-05-16 18:06 America/Los_Angeles
 - 依赖：B 的 `lastTranscriptionAttempt` manifest 字段；C 的离线 flash engine 与后台事件机制

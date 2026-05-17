@@ -4,7 +4,7 @@
 
 - 状态：active
 - 类型：产品或代码开发 active initiative
-- 当前阶段：等待下一 session 重新进入 brainstorm
+- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；等待下一 session 重新审视 C
 
 ## 目标
 
@@ -26,6 +26,7 @@
 - 不合并 B/C/D/E；同一 session 只推进一个可验证工作单元。
 - 不重新讨论已锁定决策：BYOK、safeStorage、同窗口 Settings、保存时 probe、不使用环境变量凭证或双 header 鉴权、toggle 默认 OFF、start 快照贯穿整段 live session。
 - current 文档同步按实际触碰 surface 执行：IPC、安全和宿主边界更新 `electron.md`；query、cache 和 settings ownership 更新 `data.md`；UI state 和组件模式更新 `frontend.md`；lifecycle、retry、补偿和 background jobs 更新 `flow.md`；测试、错误、日志和验证规则更新 `quality.md`。
+- C 不能直接按 `c-brief.md` 实施；下一 session 必须先把 `c-brief.md` 当作 pre-spec 草案重新审视，完成 brainstorm 与 active spec 文档后，才允许进入实现计划。
 
 ## 完成条件
 

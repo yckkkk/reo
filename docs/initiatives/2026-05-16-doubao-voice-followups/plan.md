@@ -1,20 +1,23 @@
 # 计划
 
-本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B/C/D 三项按 B → C → D 串行推进。
+本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B 已完成、归档并通过真机 E2E gate；剩余 C/D 按 C → D 串行推进。
 `docs/current/*` 与源码事实优先于本计划；本计划只保留剩余工作的顺序、边界和 readiness gate。
 
 ## 已落地输入合同
 
 - B 已归档：`docs/archive/specs/2026-05-16-1806-doubao-voice-unfinished-visualization/`
+- B 真机 E2E gate 已通过：2026-05-17 America/Los_Angeles 使用 `REMOTE_DEBUGGING_PORT=9233 npm run dev` 启动真实 Electron runtime，验证普通 Segment、SegmentSupplement 与 Settings auth 红点路径。
 - `lastTranscriptionAttempt` 字段、派生规则、finalize IPC 字段、transcript UI 与 Sidebar 红点的当前事实以 `docs/current/data.md` / `docs/current/electron.md` / `docs/current/frontend.md` / `docs/current/flow.md` 为准。
 - C/D 只消费这些 current 合同；本 initiative 不再复制字段值域、写入时机或 UI 判定细节。
 
 ## C：自动补转录
 
 - 执行入口：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
+- 当前状态：待重新审视；`c-brief.md` 是 pre-spec 草案，不是可直接实施的 active spec。
+- 下一 session 先完成 C brainstorm，判断是否保留、裁剪或重排 C0/C1/C2/C3，再创建 `docs/specs/YYYY-MM-DD-HHMM-*` active spec。
 - C spec 的 Phase 0 / Gate 0 是 C0 探针；C0 通过前不得实施 C-1/C-2/C-3。
 - C0 findings 必须写入 C active spec；只有长期结论在 C0 通过后压缩进 ADR。
-- C 的产品与工程细节以 c-brief.md 为准。
+- C 的候选产品与工程细节先参考 c-brief.md；只有 active spec 重新确认后的内容才是执行依据。
 
 ## D：手动重新生成转录
 
@@ -24,11 +27,11 @@
 
 ## 推进顺序与 readiness gate
 
-### 顺序：B → C → D（保持）
+### 顺序：C → D（保持）
 
 ### Readiness gates（每个 transition 只执行一次）
 
-- **B→C readiness gate**：B 归档后，重读 current 相关段落、B 归档 spec、initiative plan/tasks/c-brief/d-brief 与代码事实；更新 C/D brief 与 tasks 后，才能创建 C active spec。
+- **B→C readiness gate**：已完成。B 归档后已重读 current 相关段落、B 归档 spec、initiative plan/tasks/c-brief/d-brief 与代码事实；B 真机 E2E gate 已通过。该 gate 只允许下一 session 进入 C 重新审视与 active spec 创建，不授权直接实施 C。
 - **C→D readiness gate**：C 归档后，重读 C 归档 spec、current 相关段落、d-brief 与代码事实；确认 C 的手动触发合同足以支撑 D 后，才能创建 D active spec。
 - **D→archive readiness gate**：D 归档后，重读 current 与 tasks；确认 B/C/D 全部完成后，才能归档本 initiative。
 
@@ -49,4 +52,4 @@
 
 ## 时间戳
 
-本计划版本：2026-05-16 18:06 America/Los_Angeles
+本计划版本：2026-05-17 00:14 America/Los_Angeles
