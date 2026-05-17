@@ -205,7 +205,7 @@
 
 - 进入归档前先把仍然有效的长期结论压缩回 `docs/current/*` 或 `docs/decisions/*`。
 - 把本 spec 从 `docs/specs/` 移入 `docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/`。
-- 在 `docs/initiatives/2026-05-16-doubao-voice-followups/tasks.md` 勾掉 D；同步 plan.md 与 README.md 状态。
+- 在 `docs/archive/initiatives/2026-05-16-doubao-voice-followups/tasks.md` 勾掉 D；同步 plan.md 与 README.md 状态。
 - 如果 D 完成同时确认 E（已完成）/ B / C / D 全部归档，初始化 initiative 归档流程，将 initiative 移入 `docs/archive/initiatives/`，并核对 `docs/specs/` 为空。
 
 ## 本 session（spec 准备）执行项

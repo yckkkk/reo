@@ -1,8 +1,8 @@
 # D：手动重新生成转录（brief，产品意图原文）
 
-> 本文是 D 的产品意图原文，**不是** active spec；D 当前 active spec 是
-> `docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/`，
-> 其中已经把状态机、合同字段、错误码、TDD/subagent/E2E 计划、敏感信息扫描和 current docs 同步清单固化为可执行版本。
+> 本文是 D 的产品意图原文，**不是** spec 真源；D 归档 spec 是
+> `docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/`，
+> 其中已经把状态机、合同字段、错误码、TDD/subagent/E2E 计划、敏感信息扫描、current docs 同步清单和执行证据固化为完成版本。
 > 本 brief 在 spec 化后保留，作为产品意图与边界场景表的可读参考；spec 与 d-brief 冲突时以 spec 为准。
 > C→D readiness gate 已完成。
 
@@ -23,7 +23,7 @@
 - C 当前手动 IPC 在已有 transcript 时会返回 not eligible，并在保存前使用 `requireTranscriptMissing` 防止覆盖用户或 agent 在 Turbo 请求期间写入的 transcript。
 - D 的「重新生成转录」是覆盖式 manual regeneration，不能直接复用 C 当前 missing-only 手动触发语义。
 - D 仍必须复用 C 的 Turbo `audio.data` 引擎、WebM/Opus 到 OGG/Opus remux、队列、cancel/pause/breaker、诊断脱敏和 Electron 安全边界。
-- D active spec 必须定义显式 manual intent：`fill-missing` 用于无 transcript 的生成，`regenerate` 用于用户二次确认后的覆盖式重新生成。Automatic backfill 继续保持 missing-only，永远不覆盖已有 transcript。
+- D 归档 spec 已定义显式 manual intent：`fill-missing` 用于无 transcript 的生成，`regenerate` 用于用户二次确认后的覆盖式重新生成。Automatic backfill 继续保持 missing-only，永远不覆盖已有 transcript。
 - 覆盖式重新生成必须由 main process 在任务执行时捕获当前 transcript snapshot，并在写入前确认 transcript 没有在请求期间被用户或 agent 改动；若已变化，任务失败并保留当前 transcript。
 
 ## 范围
@@ -182,9 +182,9 @@ failed ──[user retry via menu]──→ enqueued
 
 ## 十、接口契约
 
-### 新增（已固化在 active spec）
+### 新增（已固化在归档 spec）
 
-D active spec 锁定当前 manual backfill request 合同：
+D 归档 spec 锁定当前 manual backfill request 合同：
 
 - 在两个现有 channel 上扩展显式 `mode: 'fill-missing' | 'regenerate'` 字段；Reo 未发布，不保留 omitted-mode 兼容垫片。
 - `regenerate` 只允许 renderer 在二次确认后发送；菜单 fill-missing 路径强制 `mode='fill-missing'`，confirm 后强制 `mode='regenerate'`。
@@ -238,7 +238,7 @@ D 的最终交付是：让用户在 Memory Studio 内通过 Segment card 与 Seg
 
 ## 十五、Readiness gate
 
-C→D readiness gate 已完成；结论是 C 的引擎、队列和安全边界足以支撑 D，但 C 当前手动触发合同不足以支撑覆盖式重新生成。覆盖式合同已在 D active spec `docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/` 锁定为 `mode: 'fill-missing' | 'regenerate'` + main 端 transcript snapshot guard + 新增 `ERR_BACKFILL_TRANSCRIPT_CHANGED`。下一步是 D 实施 session 按该 spec tasks.md 执行。
+C→D readiness gate 已完成；结论是 C 的引擎、队列和安全边界足以支撑 D，但 C 当前手动触发合同不足以支撑覆盖式重新生成。覆盖式合同已在 D 归档 spec `docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/` 锁定为 `mode: 'fill-missing' | 'regenerate'` + main 端 transcript snapshot guard + 新增 `ERR_BACKFILL_TRANSCRIPT_CHANGED`。D 已完成实现、验证、真实 Electron runtime QA 与归档。
 
 ## 十六、不实施
 

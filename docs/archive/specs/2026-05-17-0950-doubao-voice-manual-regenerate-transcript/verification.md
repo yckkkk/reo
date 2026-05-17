@@ -247,6 +247,6 @@ REMOTE_DEBUGGING_PORT=9233 npm run dev
 
 本 spec 准备 session 不写 D 代码，仅写文档；验证范围限于：
 
-- 运行 `npx prettier --check 'docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/**/*.md' 'docs/initiatives/2026-05-16-doubao-voice-followups/**/*.md'`
+- 运行 `npx prettier --check 'docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/**/*.md' 'docs/archive/initiatives/2026-05-16-doubao-voice-followups/**/*.md'`
 - 运行 `git diff --check`
 - 不运行 `npm run verify:quick`。理由：本 session 改动仅限 `docs/specs/` 与 `docs/initiatives/`，无源码或 test 改动，verify:quick 的 typecheck / test / lint 与本 session 无关；下一 D 实施 session 会同批运行 verify:quick。

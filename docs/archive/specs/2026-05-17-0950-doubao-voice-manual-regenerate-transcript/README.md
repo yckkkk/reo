@@ -1,10 +1,10 @@
 # 豆包语音手动重新生成转录（D）
 
 - 时间：2026-05-17 09:50 America/Los_Angeles
-- 来源 initiative：`docs/initiatives/2026-05-16-doubao-voice-followups/`
+- 来源 initiative：`docs/archive/initiatives/2026-05-16-doubao-voice-followups/`
 - 上游归档 spec：`docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/`
 - 上游 ADR：`docs/decisions/0005-doubao-voice-file-asr-baseline.md`
-- 上游 brief：`docs/initiatives/2026-05-16-doubao-voice-followups/d-brief.md`
+- 上游 brief：`docs/archive/initiatives/2026-05-16-doubao-voice-followups/d-brief.md`
 
 ## 本 spec 的性质
 
@@ -20,7 +20,7 @@
 ## 目录
 
 ```text
-docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/
+docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/
   README.md         本文件
   goal.md           D 的 objective 与非目标
   plan.md           D 的 PRD + 工程实现说明

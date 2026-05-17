@@ -2,9 +2,9 @@
 
 ## 状态
 
-- 状态：active
-- 类型：产品或代码开发 active initiative
-- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C 已按 Turbo `audio.data` 路径完成、归档并通过真实 Electron E2E/QA；C→D readiness gate 已完成；D active spec 已创建（`docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/`），下一步进入 D 实施 session
+- 状态：archived
+- 类型：已完成产品或代码开发 initiative
+- 当前阶段：B/C/D/E 均已完成；B/C/D specs 已归档；稳定结论已压缩回 `docs/current/*` 或 `docs/decisions/*`
 
 ## 目标
 
@@ -27,7 +27,7 @@
 - 不重新讨论已锁定决策：BYOK、safeStorage、同窗口 Settings、保存时 probe、不使用环境变量凭证或双 header 鉴权、toggle 默认 OFF、start 快照贯穿整段 live session。
 - current 文档同步按实际触碰 surface 执行：IPC、安全和宿主边界更新 `electron.md`；query、cache 和 settings ownership 更新 `data.md`；UI state 和组件模式更新 `frontend.md`；lifecycle、retry、补偿和 background jobs 更新 `flow.md`；测试、错误、日志和验证规则更新 `quality.md`。
 - C 不能按旧标准版 `audio.url` brief 实施；当前 C 结论以 `docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/` 与 ADR 0005 为准。
-- D 复用 C 的 Turbo 引擎、音频转换、安全边界和队列能力，但不能把 C 当前 missing-only 手动补转录请求直接当作覆盖式重新生成；D active spec 必须定义显式 overwrite-safe manual regeneration 合同。
+- D 复用 C 的 Turbo 引擎、音频转换、安全边界和队列能力，但不能把 C 当前 missing-only 手动补转录请求直接当作覆盖式重新生成；D 归档 spec 已定义显式 overwrite-safe manual regeneration 合同。
 
 ## 完成条件
 
