@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppShell,
@@ -15,6 +15,7 @@ import {
 import { ReoToaster, showReoUndoToast, toast } from './components/ui/toaster';
 import { SettingsShell } from './settings/SettingsShell';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
+import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
@@ -80,6 +81,10 @@ import {
   type WorkspaceMemorySummary,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
+import {
+  lastTranscriptionAttemptOnFinalize,
+  type LastTranscriptionAttemptOnFinalize,
+} from './workspace/recordingTranscriptionAttempt';
 import {
   clearRecordingRecoveryDraft,
   readRecordingRecoveryDraft,
@@ -166,6 +171,14 @@ function canShowInlineMemoryRail(): boolean {
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
+
+async function recoveryLastTranscriptionAttemptOnFinalize(
+  queryClient: QueryClient
+): Promise<LastTranscriptionAttemptOnFinalize> {
+  // Recovery markers do not persist this field; finalize uses the current settings snapshot.
+  const voiceSettings = await queryClient.fetchQuery(voiceSettingsQueryOptions());
+  return lastTranscriptionAttemptOnFinalize(voiceSettings.enabled);
+}
 
 function sortByProjectedUpdatedAt<
   T extends { readonly updatedAt: string; readonly createdAt: string },
@@ -1669,9 +1682,12 @@ export function App() {
             });
             return;
           }
+          const finalizeTranscriptionAttempt =
+            await recoveryLastTranscriptionAttemptOnFinalize(queryClient);
           const response = await finalizeSegmentSupplementRecordingDraft({
             supplementId: draft.segmentId,
             durationMs: draft.durationMs,
+            lastTranscriptionAttemptOnFinalize: finalizeTranscriptionAttempt,
             memoryId: draft.memoryId,
             segmentId: draft.parentSegmentId,
             title: draft.title,
@@ -1753,8 +1769,11 @@ export function App() {
       }
 
       if (!finalizedAudio) {
+        const finalizeTranscriptionAttempt =
+          await recoveryLastTranscriptionAttemptOnFinalize(queryClient);
         const response = await finalizeRecordingDraft({
           durationMs: draft.durationMs,
+          lastTranscriptionAttemptOnFinalize: finalizeTranscriptionAttempt,
           memoryId: draft.memoryId,
           segmentId: draft.segmentId,
           title: draft.title,

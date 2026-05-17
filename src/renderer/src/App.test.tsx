@@ -285,6 +285,22 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
+  function mockVoiceTranscriptionSettings(enabled: boolean) {
+    reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
+      ok: true,
+      value: {
+        settings: {
+          enabled,
+          apiKeyConfigured: enabled,
+          apiKeyLastFour: enabled ? '1234' : null,
+          lastValidatedAt: enabled ? '2026-05-09T09:00:00.000Z' : null,
+          lastValidationOk: enabled ? true : null,
+          lastValidationCode: enabled ? 'ok' : null,
+        },
+      },
+    });
+  }
+
   type SegmentSupplementFixture = {
     readonly memory: WorkspaceMemorySummary;
     readonly segment: WorkspaceMemoryDetail['segments'][number];
@@ -5268,6 +5284,7 @@ describe('App', () => {
         segmentId: 'seg_recoverable',
         title: 'Daily memory 录音',
         durationMs: 3720,
+        lastTranscriptionAttemptOnFinalize: 'never',
       })
     );
     await waitFor(() =>
@@ -5297,6 +5314,109 @@ describe('App', () => {
     );
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.queryByText('2 个片段 · 00:03')).not.toBeInTheDocument();
+  });
+
+  it('passes failed transcription attempt when saving a recovered recording with current voice settings enabled', async () => {
+    const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
+    const recoveredMemory = {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-07T14:30:00.000Z',
+      updatedAt: '2026-05-07T14:30:00.000Z',
+      segmentCount: 1,
+      durationMs: 1,
+      audioByteLength: 1,
+      hasTranscript: false,
+      supplementCount: 0,
+    };
+    window.localStorage.setItem(
+      'reo.recordingRecovery.v1.ws_1',
+      JSON.stringify({
+        schemaVersion: 1,
+        workspaceId: 'ws_1',
+        memoryId: 'mem_existing',
+        segmentId: 'seg_recoverable',
+        title: 'Daily memory 录音',
+        durationMs: 3720,
+        transcriptMarkdown: '恢复后转写暂时失败',
+        createdAt: '2026-05-09T10:00:00.000Z',
+        updatedAt: '2026-05-09T10:00:03.720Z',
+      })
+    );
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [recoveredMemory],
+        },
+      },
+    });
+    reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...recoveredMemory,
+          segmentCount: 2,
+          durationMs: 3721,
+          audioByteLength: 24,
+          updatedAt: '2026-05-09T10:00:04.000Z',
+        },
+        segment: audioSegmentProjection({
+          audioByteLength: 23,
+          createdAt: '2026-05-09T10:00:00.000Z',
+          durationMs: 3720,
+          memoryId: 'mem_existing',
+          segmentId: 'seg_recoverable',
+          title: 'Daily memory 录音',
+          updatedAt: '2026-05-09T10:00:04.000Z',
+        }),
+      },
+    });
+    reoWorkspace.saveTranscript.mockRejectedValue(new Error('Transcript write failed'));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const recoveryDialog = await screen.findByRole('dialog', { name: '未完成录音' });
+    await user.click(within(recoveryDialog).getByRole('button', { name: '保存录音' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.finalizeRecordingDraft).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_existing',
+        segmentId: 'seg_recoverable',
+        title: 'Daily memory 录音',
+        durationMs: 3720,
+        lastTranscriptionAttemptOnFinalize: 'failed',
+      })
+    );
+    const retainedMarker = JSON.parse(
+      window.localStorage.getItem('reo.recordingRecovery.v1.ws_1') ?? '{}'
+    );
+    expect(retainedMarker).not.toHaveProperty('lastTranscriptionAttemptOnFinalize');
   });
 
   it('recovers an unfinished SegmentSupplement recording through supplement IPC', async () => {
@@ -5486,6 +5606,7 @@ describe('App', () => {
         supplementId: 'sup_recoverable',
         title: '补充录音',
         durationMs: 3720,
+        lastTranscriptionAttemptOnFinalize: 'never',
       })
     );
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
@@ -5513,6 +5634,124 @@ describe('App', () => {
     expect(supplementContentInvalidations).toHaveLength(1);
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.queryByText('1 个片段 · 00:00')).not.toBeInTheDocument();
+  });
+
+  it('passes failed transcription attempt when saving a recovered SegmentSupplement with current voice settings enabled', async () => {
+    const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
+    const recoveredMemory = {
+      memoryId: 'mem_existing',
+      title: 'Existing memory',
+      createdAt: '2026-05-07T14:30:00.000Z',
+      updatedAt: '2026-05-07T14:30:00.000Z',
+      segmentCount: 1,
+      durationMs: 1,
+      audioByteLength: 1,
+      hasTranscript: false,
+      supplementCount: 0,
+    };
+    window.localStorage.setItem(
+      'reo.recordingRecovery.v1.ws_1',
+      JSON.stringify({
+        schemaVersion: 1,
+        workspaceId: 'ws_1',
+        memoryId: 'mem_existing',
+        parentSegmentId: 'seg_parent',
+        segmentId: 'sup_recoverable',
+        targetKind: 'segment-supplement',
+        title: '补充录音',
+        durationMs: 3720,
+        createdAt: '2026-05-09T10:00:00.000Z',
+        updatedAt: '2026-05-09T10:00:03.720Z',
+      })
+    );
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [recoveredMemory],
+        },
+      },
+    });
+    reoWorkspace.finalizeSegmentSupplementRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...recoveredMemory,
+          supplementCount: 1,
+          updatedAt: '2026-05-09T10:00:04.000Z',
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_existing',
+          segmentId: 'seg_parent',
+          type: 'audio',
+          title: 'Parent recording',
+          createdAt: '2026-05-07T14:30:00.000Z',
+          updatedAt: '2026-05-09T10:00:04.000Z',
+          durationMs: 1,
+          audioByteLength: 1,
+          lastTranscriptionAttempt: 'never' as const,
+          transcript: { exists: false },
+          supplementCount: 1,
+        },
+        supplement: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_existing',
+          segmentId: 'seg_parent',
+          supplementId: 'sup_recoverable',
+          type: 'audio',
+          title: '补充录音',
+          createdAt: '2026-05-09T10:00:00.000Z',
+          updatedAt: '2026-05-09T10:00:04.000Z',
+          durationMs: 3720,
+          audioByteLength: 23,
+          lastTranscriptionAttempt: 'never' as const,
+          transcript: { exists: false },
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const recoveryDialog = await screen.findByRole('dialog', { name: '未完成录音' });
+    await user.click(within(recoveryDialog).getByRole('button', { name: '保存录音' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_existing',
+        segmentId: 'seg_parent',
+        supplementId: 'sup_recoverable',
+        title: '补充录音',
+        durationMs: 3720,
+        lastTranscriptionAttemptOnFinalize: 'failed',
+      })
+    );
   });
 
   it('discards an unfinished SegmentSupplement recovery through supplement IPC', async () => {
@@ -5958,6 +6197,7 @@ describe('App', () => {
         segmentId: 'seg_recoverable',
         title: 'Daily memory 录音',
         durationMs: 3720,
+        lastTranscriptionAttemptOnFinalize: 'never',
       })
     );
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
