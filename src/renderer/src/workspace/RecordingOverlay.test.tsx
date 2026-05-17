@@ -708,6 +708,7 @@ describe('RecordingOverlay', () => {
       supplementId: 'sup_1',
       title: '补充录音1',
       durationMs: expect.any(Number),
+      lastTranscriptionAttemptOnFinalize: 'failed',
     });
     expect(bridge.saveSegmentSupplementTranscript).toHaveBeenCalledWith({
       workspaceHandle: workspaceSession.workspaceHandle,
@@ -720,6 +721,46 @@ describe('RecordingOverlay', () => {
     expect(onSegmentSupplementFinalized).toHaveBeenCalledTimes(2);
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('marks segment supplement transcription as never when voice settings are disabled', async () => {
+    voiceSettingsForTest = createVoiceSettingsSnapshot(false);
+    const bridge = installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        recordingTarget={{
+          kind: 'segment-supplement',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+          title: '补充录音1',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存录音' }));
+    await flushPromises();
+
+    expect(bridge.finalizeSegmentSupplementRecordingDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastTranscriptionAttemptOnFinalize: 'never',
+        memoryId: 'mem_1',
+        segmentId: 'seg_parent',
+        supplementId: 'sup_1',
+        workspaceHandle: workspaceSession.workspaceHandle,
+      })
+    );
   });
 
   it('ignores stale SegmentSupplement transcript save failures after close', async () => {
@@ -1157,6 +1198,7 @@ describe('RecordingOverlay', () => {
     expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        lastTranscriptionAttemptOnFinalize: 'never',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         workspaceHandle: workspaceSession.workspaceHandle,
@@ -1264,7 +1306,7 @@ describe('RecordingOverlay', () => {
     });
   });
 
-  it('backfills after stop when voice settings are still loading', async () => {
+  it('does not backfill or finalize after stop when voice settings are still loading', async () => {
     const deferredSettings =
       createDeferred<
         Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
@@ -1295,20 +1337,10 @@ describe('RecordingOverlay', () => {
     fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
     await flushPromises();
 
-    expect(bridge.startRecordingTranscription).toHaveBeenCalledWith({
-      recordingFlowSessionId: 'recording-1-completion-backfill',
-      recordingSessionId: 'recording-1',
-      revisionId: 'recording-1-revision-0',
-      timeOffsetMs: 0,
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
-    expect(bridge.sendRecordingTranscriptionAudio).toHaveBeenCalledWith({
-      chunk: new Uint8Array([1, 2, 3, 4]),
-      recordingFlowSessionId: 'recording-1-completion-backfill',
-      recordingSessionId: 'recording-1',
-      revisionId: 'recording-1-revision-0',
-      workspaceHandle: workspaceSession.workspaceHandle,
-    });
+    expect(bridge.startRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+    expect(bridge.finishRecordingTranscription).not.toHaveBeenCalled();
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
   });
 
   it('does not start or backfill transcription when delayed voice settings resolve disabled', async () => {
@@ -3872,11 +3904,52 @@ describe('RecordingOverlay', () => {
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 2000,
+      lastTranscriptionAttemptOnFinalize: 'failed',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       title: '录音1',
       workspaceHandle: 'workspace-handle-secret',
     });
+  });
+
+  it('does not finalize a segment supplement while voice settings are still loading', async () => {
+    const deferredSettings =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['readVoiceTranscriptionSettings']>>
+      >();
+    const bridge = installWorkspaceBridge({
+      readVoiceTranscriptionSettings: vi.fn(() => deferredSettings.promise),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        onSegmentSupplementFinalized={() => {}}
+        open
+        recordingTarget={{
+          kind: 'segment-supplement',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+          title: '补充录音1',
+        }}
+        workspaceSession={workspaceSession}
+      />,
+      { seedVoiceSettings: false }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(2000));
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.finalizeRecordingDraft).not.toHaveBeenCalled();
+    expect(bridge.finalizeSegmentSupplementRecordingDraft).not.toHaveBeenCalled();
   });
 
   it('warns before saving an extremely short recording and keeps recording active', async () => {
@@ -4004,6 +4077,7 @@ describe('RecordingOverlay', () => {
 
     expect(bridge.finalizeRecordingDraft).toHaveBeenCalledWith({
       durationMs: 750,
+      lastTranscriptionAttemptOnFinalize: 'failed',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       title: '录音1',
