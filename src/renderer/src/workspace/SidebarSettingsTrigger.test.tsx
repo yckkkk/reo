@@ -111,6 +111,61 @@ describe('SidebarSettingsTrigger', () => {
     expect(settingsButton).toContainElement(dot);
   });
 
+  it('keeps the auth dot hidden from assistive tech and preserves the settings click owner', async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+    const onRecordingBlocked = vi.fn();
+
+    renderSidebarSettingsTrigger(
+      <SidebarSettingsTrigger
+        onOpenSettings={onOpenSettings}
+        onRecordingBlocked={onRecordingBlocked}
+        recordingActive={false}
+      />,
+      { voiceSettings: createVoiceSettingsSnapshot({ lastValidationCode: 'auth' }) }
+    );
+
+    const settingsButton = screen.getByRole('button', { name: '设置' });
+    const dot = screen.getByTestId('voice-credentials-dot');
+
+    expect(dot).toHaveAttribute('aria-hidden', 'true');
+    expect(dot).toHaveClass('pointer-events-none');
+
+    await user.click(settingsButton);
+
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(onRecordingBlocked).not.toHaveBeenCalled();
+  });
+
+  it('does not add the auth dot to the keyboard tab order', async () => {
+    const user = userEvent.setup();
+
+    renderSidebarSettingsTrigger(
+      <>
+        <SidebarSettingsTrigger
+          onOpenSettings={vi.fn()}
+          onRecordingBlocked={vi.fn()}
+          recordingActive={false}
+        />
+        <button type="button">下一个动作</button>
+      </>,
+      { voiceSettings: createVoiceSettingsSnapshot({ lastValidationCode: 'auth' }) }
+    );
+
+    const settingsButton = screen.getByRole('button', { name: '设置' });
+    const nextButton = screen.getByRole('button', { name: '下一个动作' });
+    const dot = screen.getByTestId('voice-credentials-dot');
+
+    expect(dot).toHaveAttribute('aria-hidden', 'true');
+    expect(dot).not.toHaveAttribute('tabindex');
+
+    await user.tab();
+    expect(settingsButton).toHaveFocus();
+
+    await user.tab();
+    expect(nextButton).toHaveFocus();
+  });
+
   it.each([['ok' as const], ['network' as const]])(
     'does not render a voice credentials dot for %s validation state',
     (lastValidationCode) => {
