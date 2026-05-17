@@ -1,6 +1,6 @@
 # 计划
 
-本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B 已完成、归档并通过真机 E2E gate；剩余 C/D 按 C → D 串行推进。
+本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B 已完成、归档并通过真机 E2E gate；C active spec 已创建并完成引擎基线修订；剩余 C/D 按 C → D 串行推进。
 `docs/current/*` 与源码事实优先于本计划；本计划只保留剩余工作的顺序、边界和 readiness gate。
 
 ## 已落地输入合同
@@ -13,11 +13,11 @@
 ## C：自动补转录
 
 - 执行入口：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
-- 当前状态：待重新审视；`c-brief.md` 是 pre-spec 草案，不是可直接实施的 active spec。
-- 下一 session 先完成 C brainstorm，判断是否保留、裁剪或重排 C0/C1/C2/C3，再创建 `docs/specs/YYYY-MM-DD-HHMM-*` active spec。
-- C spec 的 Phase 0 / Gate 0 是 C0 探针；C0 通过前不得实施 C-1/C-2/C-3。
-- C0 findings 必须写入 C active spec；只有长期结论在 C0 通过后压缩进 ADR。
-- C 的候选产品与工程细节先参考 c-brief.md；只有 active spec 重新确认后的内容才是执行依据。
+- 当前状态：active spec 已创建：`docs/specs/2026-05-17-0029-doubao-voice-auto-backfill/`。
+- C 引擎基线已改为大模型录音文件识别标准版 2.0 `volc.seedasr.auc`；极速版 `volc.bigasr.auc_turbo` 因成本与跨族问题不作为默认实现路径。
+- C spec 的 Phase 0 / Gate 0 现在包含两个 gate：C-0a 官方文档选型已完成；C-0b 必须解决本地 finalized audio 到火山可访问 `audio.url` 的交付方案。
+- C-0b 通过前不得实施 C-1/C-2/C-3；不得用公开本地服务、公网隧道或默认对象存储上传绕过。
+- C0 findings 已写入 C active spec；长期结论写入 ADR 0005，C-0b 通过后补具体交付方案。
 
 ## D：手动重新生成转录
 
@@ -40,7 +40,7 @@
 ### 完成条件
 
 - B / C / D 各自 spec 完成、归档；稳定结论压缩进 `docs/current/*` 或 `docs/decisions/*`
-- C0 探针结论沉淀为新 ADR 或扩展 `docs/decisions/0004-doubao-voice-asr-endpoint-baseline.md`
+- C0 探针结论沉淀为 `docs/decisions/0005-doubao-voice-file-asr-baseline.md`
 - 本 initiative 移入 `docs/archive/initiatives/2026-05-16-doubao-voice-followups/`
 
 ## 禁止项（不变）
@@ -52,4 +52,4 @@
 
 ## 时间戳
 
-本计划版本：2026-05-17 00:14 America/Los_Angeles
+本计划版本：2026-05-17 America/Los_Angeles

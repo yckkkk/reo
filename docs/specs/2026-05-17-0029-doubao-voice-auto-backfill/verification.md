@@ -4,12 +4,14 @@
 
 ### 1.1 C-0 探针边界
 
-| #   | 场景                                     | 触发        | 处理规则                                                         | 界面反馈 | 建议文案 | 数据保护规则        | 可恢复规则                | 验收标准         |
-| --- | ---------------------------------------- | ----------- | ---------------------------------------------------------------- | -------- | -------- | ------------------- | ------------------------- | ---------------- |
-| 1   | flash endpoint 不存在或 URL 404          | 探针发现    | 暂停 C 实施，回 brainstorm                                       | n/a      | n/a      | 不动任何文件        | 由用户决定后续方向        | C-0 评估明确记录 |
-| 2   | flash endpoint 存在但 X-Api-Key 不能复用 | 探针 401    | 暂停 C 实施，回 brainstorm；评估是否需要单独 ASR key 配置        | n/a      | n/a      | 不动 voice settings | 由用户决定后续方向        | C-0 评估明确记录 |
-| 3   | flash endpoint 上限 < Reo 单次录音上限   | 探针 / 文档 | 暂停 C-1/C-2/C-3；评估异步 `submit`/`query` 回落是否进入新 spec  | n/a      | n/a      | 不动文件            | 由新 spec 处理            | C-0 评估明确记录 |
-| 4   | flash endpoint probe 触发计费            | 探针测算    | 在 ADR 中明确记录单次 probe 成本；如显著则后续不做开机自动 probe | n/a      | n/a      | n/a                 | 后续 spec 决定 probe 策略 | ADR 0005 内说明  |
+| #   | 场景                                                 | 触发        | 处理规则                                                          | 界面反馈 | 建议文案 | 数据保护规则        | 可恢复规则                | 验收标准         |
+| --- | ---------------------------------------------------- | ----------- | ----------------------------------------------------------------- | -------- | -------- | ------------------- | ------------------------- | ---------------- |
+| 1   | 标准版 2.0 endpoint 不存在或 URL 404                 | 探针发现    | 暂停 C 实施，回 brainstorm                                        | n/a      | n/a      | 不动任何文件        | 由用户决定后续方向        | C-0 评估明确记录 |
+| 2   | 标准版 2.0 endpoint 存在但 X-Api-Key 不能复用        | 探针 401    | 暂停 C 实施，回 brainstorm；评估是否需要单独 ASR key 配置         | n/a      | n/a      | 不动 voice settings | 由用户决定后续方向        | C-0 评估明确记录 |
+| 3   | `audio.url` 交付方案违反本地优先或 Electron 安全边界 | C-0b 评估   | 暂停 C-1/C-2/C-3；不得用公开本地服务、公网隧道或默认对象存储绕过  | n/a      | n/a      | 不上传用户音频      | 由新 spec 或用户决策处理  | C-0 评估明确记录 |
+| 4   | 标准版 2.0 格式不接受 Reo WebM/Opus                  | 探针 / 文档 | 优先评估 remux 到 OGG/Opus；不行再评估 WAV/MP3 转码依赖和打包成本 | n/a      | n/a      | 不动文件            | 由 C-0b 方案处理          | ADR 0005 内说明  |
+| 5   | 标准版 2.0 单次上限 < Reo 单次录音上限               | 探针 / 文档 | 暂停 C-1/C-2/C-3；回 brainstorm 调整切分或引擎策略                | n/a      | n/a      | 不动文件            | 由新 spec 处理            | C-0 评估明确记录 |
+| 6   | 标准版 2.0 probe 触发计费                            | 探针测算    | 在 ADR 中明确记录单次 probe 成本；如显著则后续不做开机自动 probe  | n/a      | n/a      | n/a                 | 后续 spec 决定 probe 策略 | ADR 0005 内说明  |
 
 ### 1.2 自动触发上升沿边界
 
@@ -43,7 +45,7 @@
 | --- | ------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- | -------------- | ----------------- | ------------------------------- | ----------- |
 | 21  | 同一 batch 内连续 K 次 `auth` 失败   | 50 失败 segment + bad key          | breaker trip；丢弃剩余 auto enqueued；记录 `breaker-tripped` 诊断                                | 无可见 UI                 | n/a            | manifest 不动     | 下次触发上升沿 breaker 自动重置 | T3.2        |
 | 22  | 同一 batch 内交替不同 errorCode 失败 | 部分 auth 部分 network             | 不 trip（计数按同 errorCode 连续）                                                               | n/a                       | n/a            | n/a               | n/a                             | T3.2        |
-| 23  | 手动触发不受 breaker 限制            | breaker 已 trip 后用户点重试       | 手动 enqueue 仍接受，调 flash；若仍失败，breaker counter 不累加                                  | 沿用 manual 路径          | 沿用           | n/a               | n/a                             | T3.2        |
+| 23  | 手动触发不受 breaker 限制            | breaker 已 trip 后用户点重试       | 手动 enqueue 仍接受，调 SeedASR AUC 2.0；若仍失败，breaker counter 不累加                        | 沿用 manual 路径          | 沿用           | n/a               | n/a                             | T3.2        |
 | 24  | batch cap 后剩余 segment             | 50 个失败，N=20                    | 20 enqueue，30 留下；下次触发上升沿重新 scan + 入队                                              | 无 UI                     | n/a            | n/a               | 下次触发                        | T3.2        |
 | 25  | scanner IO 失败                      | manifest 不可读                    | 抛 typed error，trigger wiring 记录诊断 `scan-failed`，queue 不入队                              | 无 UI                     | n/a            | n/a               | 下次触发上升沿重试              | T1.3        |
 | 26  | task 内部 saveTranscript 失败        | manifest update / index refresh 错 | task 返回 errorCode；manifest 保持 'failed'（saveTranscript 失败时不推进 attempt）；breaker 计数 | 沿用 manual / auto        | 沿用           | manifest 保持原值 | 下次触发                        | T1.2 + T2.2 |
@@ -81,13 +83,13 @@
 
 ### 1.8 性能 / 用户体验边界
 
-| #   | 场景                            | 触发                    | 处理规则                                                    | 验收标准    |
-| --- | ------------------------------- | ----------------------- | ----------------------------------------------------------- | ----------- |
-| 43  | scanner 性能（大 workspace）    | 1000 + segment          | 单次 scan ≤ 200ms                                           | T1.3        |
-| 44  | flash HTTP timeout（默认 60s）  | 网络极慢                | timeout → `network` errorCode；breaker 计数；下次重试       | T1.1 + T1.2 |
-| 45  | renderer 重渲染（large Memory） | manual running set 变化 | 使用 immutable Set 引用稳定；不全量 re-render Memory Studio | T2.6        |
-| 46  | reduced motion                  | 用户偏好                | running 灰文静态；无 spinner；reduced motion 下无差异       | T2.5        |
-| 47  | 主题切换（light / dark）        | 用户切主题              | running 灰文使用 token `text-muted-foreground`；自动适配    | T2.5        |
+| #   | 场景                            | 触发                       | 处理规则                                                    | 验收标准    |
+| --- | ------------------------------- | -------------------------- | ----------------------------------------------------------- | ----------- |
+| 43  | scanner 性能（大 workspace）    | 1000 + segment             | 单次 scan ≤ 200ms                                           | T1.3        |
+| 44  | submit/query timeout            | 网络极慢或服务长时间处理中 | timeout → `network` errorCode；breaker 计数；下次重试       | T1.1 + T1.2 |
+| 45  | renderer 重渲染（large Memory） | manual running set 变化    | 使用 immutable Set 引用稳定；不全量 re-render Memory Studio | T2.6        |
+| 46  | reduced motion                  | 用户偏好                   | running 灰文静态；无 spinner；reduced motion 下无差异       | T2.5        |
+| 47  | 主题切换（light / dark）        | 用户切主题                 | running 灰文使用 token `text-muted-foreground`；自动适配    | T2.5        |
 
 ### 1.9 工程边界
 
@@ -111,16 +113,18 @@
 
 ### 2.1 C-0 验收
 
-- [ ] Context7 / 官方文档 / 实测 probe 三向交叉验证 endpoint + resource id + body 编码
-- [ ] X-Api-Key 同时支持 SAUC streaming + AUC flash 验证通过
-- [ ] 单次时长上限覆盖 Reo 60min 录音
+- [x] Context7 / 官方文档交叉验证 endpoint + resource id + body 编码，选型改为标准版 2.0 `volc.seedasr.auc`
+- [ ] C-0b 本地音频 `audio.url` 交付方案通过，且不破坏本地优先与 Electron 安全边界
+- [ ] X-Api-Key 同时支持 SAUC streaming + AUC 标准版 2.0 验证通过；本地官方 demo 的旧版双 key 代码不能替代新版控制台 smoke probe
+- [ ] 标准版 2.0 单次时长上限覆盖 Reo 60min 录音
 - [ ] probe 成本评估完成
-- [ ] N 与 K 决定，写入 plan.md `c0-findings`
-- [ ] ADR 0005 草案完成
+- [ ] N 与 K 决定，写入 README.md `C-0 findings`
+- [x] ADR 0005 选型与 gate 草案完成；C-0b 通过后补具体交付方案
 
 ### 2.2 代码事实
 
-- [ ] `src/main/c0FlashClient.ts` 实现 + 完整 errorCode 分类测试
+- [ ] `src/main/c0SeedAsrAucClient.ts` 实现 + 完整 errorCode 分类测试
+- [ ] `src/main/backfillAudioUrlSource.ts` 实现 + URL 交付边界测试
 - [ ] `src/main/backfillQueue.ts` 实现 + dedup + head-insert + pause/resume + cancel + breaker + batch cap 测试
 - [ ] `src/main/backfillScanner.ts` 实现 + 性能 budget 测试
 - [ ] `src/main/backfillTriggerWiring.ts` 实现 + once-per-ready 测试
@@ -148,7 +152,7 @@
 - [ ] `docs/current/data.md`：renderer manual running state；不增 Query key；不增 Zustand
 - [ ] `docs/current/frontend.md`：`SegmentTranscriptView` outcome `'running'`
 - [ ] `docs/current/quality.md`：错误码 + 后台任务诊断 + main 测试覆盖
-- [ ] `docs/decisions/0005-doubao-voice-flash-asr-baseline.md` 写入
+- [ ] `docs/decisions/0005-doubao-voice-file-asr-baseline.md` 写入并随 C-0b 更新
 
 ### 2.4 测试事实
 
@@ -191,7 +195,7 @@
 
 - 本目录 5 个文件（README / goal / plan / tasks / verification）保持完整
 - `docs/current/electron.md` / `flow.md` / `data.md` / `frontend.md` / `quality.md` 已同批更新
-- `docs/decisions/0005-doubao-voice-flash-asr-baseline.md` 已写入
+- `docs/decisions/0005-doubao-voice-file-asr-baseline.md` 已写入并随 C-0b 更新
 - `docs/initiatives/2026-05-16-doubao-voice-followups/tasks.md` C 行从 `[ ]` 改为 `[x]` + 归档路径
 - 进入 archive：`docs/archive/specs/2026-05-17-0029-doubao-voice-auto-backfill/`
 

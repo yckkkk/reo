@@ -14,49 +14,70 @@ C-0 是 spec 内 Gate 0。C-0 未通过禁止进入阶段 1+。
 ### T0.1 Context7 / 官方文档调研
 
 - **TDD 豁免**：纯调研，无代码
-- 通过 Context7 查询火山引擎离线极速版 ASR 的 endpoint、resource id、header、body 编码、计费模型、单次时长上限
-- Context7 无覆盖时使用火山官方控制台、SDK Go 包、第三方实现交叉验证
-- 输出：在 README.md 增加 `c0-findings` 段，包含调研来源 URL、关键引用、未解判定
+- 通过 Context7 查询火山引擎大模型录音文件识别标准版 2.0 的 endpoint、resource id、header、body 编码、计费模型、单次时长上限
+- 使用火山官方网页交叉验证极速版、标准版 2.0、闲时版的输入方式、格式、限制和价格
+- 输出：在 README.md 增加 `C-0 findings` 段，包含调研来源 URL、关键引用、未解判定
 - **不**写代码
 
-### T0.2 手动 probe smoke
+### T0.2 本地音频 URL 交付 gate
+
+- **TDD 豁免**：架构决策 + 一次性手动验证
+- 标准版 2.0 只接受 `audio.url`，必须先决定 Reo finalized `audio.webm` 如何在不破坏本地优先与 Electron 安全边界的前提下成为火山可访问 URL
+- 必须评估并记录：
+  - 禁止：main process 公开 HTTP 服务、公网隧道、默认上传用户本地音频到未配置对象存储
+  - 可选：用户显式配置对象存储临时 URL、官方字节上传替代接口、暂停 C 等待官方字节路径
+  - 格式：WebM/Opus 是否可 remux 为 OGG/Opus；若不行再评估 WAV/MP3 转码依赖和打包成本
+- 输出：README.md `C-0 findings` 与 ADR 0005 更新 Implementation Gate
+- **若无可接受交付方案**：暂停 C-1/C-2/C-3，不实施后台任务
+
+### T0.3 手动 probe smoke
 
 - **TDD 豁免**：一次性手动验证
 - 写一个一次性 main process script 或 main test（在 `__tests__/c0_probe.spec.ts`，临时文件，测试通过后删除或标 `.skip`）
-- 用当前 `voiceSettingsStore` 解密出的真实 X-Api-Key 调 flash endpoint，发送 1 秒静音 WebM / PCM
+- 用当前 `voiceSettingsStore` 解密出的真实 X-Api-Key 调标准版 2.0 submit/query endpoint，使用 C-0b 通过的 `audio.url` 发送 1 秒静音 OGG/Opus 或 WAV
 - 验证：
-  - HTTP 200 + body 含 transcript 字段（空或非空均可）
-  - 同 key 同时仍能跑 SAUC streaming（先跑一个最小 streaming probe，再跑 flash，二者无 conflict）
-- 记录单次时长上限的官方数值；缺失时用 30s / 60s / 90s 边界 probe 找上限
-- 输出：c0-findings 段更新；ADR 草案
+  - submit 返回 `X-Api-Status-Code=20000000`
+  - query 最终返回 `20000000` 且 body 含 `result.text` 字段（空或非空均可）
+  - 同 key 同时仍能跑 SAUC streaming（先跑一个最小 streaming probe，再跑 AUC 2.0，二者无 conflict）
+- 记录轮询间隔、轮询总超时、单次时长 / 文件大小上限的官方数值
+- 输出：C-0 findings 段更新；ADR 0005 更新
 - **若任一项失败**：暂停 C，回 brainstorm，更新 plan.md 中假设段
 
-### T0.3 ADR 起草
+### T0.4 ADR 起草
 
 - **TDD 豁免**：纯文档
-- 起草 `docs/decisions/0005-doubao-voice-flash-asr-baseline.md`（暂留在 spec 目录，不进 main 真源）
-- 内容：endpoint、header、body 编码、计费模型、单次时长上限、回落策略、与 ADR 0004 的关系
-- 等 spec 收口同批进 `docs/decisions/`
+- 起草或更新 `docs/decisions/0005-doubao-voice-file-asr-baseline.md`
+- 内容：endpoint、header、URL-only 输入、计费模型、单次时长上限、音频 URL 交付 gate、与 ADR 0004 的关系
 
-### T0.4 决定 N 与 K
+### T0.5 决定 N 与 K
 
 - **TDD 豁免**
 - 基于 C-0 计费实验决定 batch cap N（默认 20）与 breaker 阈值 K（默认 3）
-- 写入 plan.md `c0-findings` 段
+- 写入 README.md `C-0 findings` 段
 
 ## 阶段 1：C-1 main 后台引擎
 
-### T1.1 `c0FlashClient` 实现
+### T1.1 `c0SeedAsrAucClient` 实现
 
-- **RED**：在 `src/main/__tests__/c0FlashClient.test.ts` 新增测试：
-  - 构造 minimal request → mocked `fetch` 返回 200 + 合法 body → 返回 `{ ok: true, transcriptText }`
+- **RED**：在 `src/main/__tests__/c0SeedAsrAucClient.test.ts` 新增测试：
+  - submit 成功 + query 首次 `20000001` 后最终 `20000000` + 合法 body → 返回 `{ ok: true, transcriptText }`
+  - submit 成功 + query `20000002` 多次后成功 → 正确继续轮询
   - 401 → `{ ok: false, errorCode: 'auth' }`
   - 429 → `{ ok: false, errorCode: 'rate-limit' }`
   - 500 / network error / timeout → `{ ok: false, errorCode: 'network' }`
+  - `45000002` → `{ ok: false, errorCode: 'empty-audio' }`
+  - `45000131` → `{ ok: false, errorCode: 'quota' }`
+  - `45000132` / `45000151` → `{ ok: false, errorCode: 'format' }`
   - body schema invalid → `{ ok: false, errorCode: 'format' }`
   - abort signal fired during fetch → throw AbortError
-- **GREEN**：实现 `src/main/c0FlashClient.ts` 单文件
+- **GREEN**：实现 `src/main/c0SeedAsrAucClient.ts` 单文件
 - **REFACTOR**：抽出 errorCode 分类 helper；保证文件 ≤ 250 LOC
+
+### T1.1a `backfillAudioUrlSource` 实现
+
+- **RED**：在 `src/main/__tests__/backfillAudioUrlSource.test.ts` 新增测试，按 C-0b 选定方案覆盖 URL 生命周期、格式转换、cleanup 和敏感字段不进入 diagnostics
+- **GREEN**：实现 `src/main/backfillAudioUrlSource.ts`
+- **REFACTOR**：不引入通用上传 runtime；只服务 backfill finalized audio
 
 ### T1.2 `backfillQueue` 实现
 
@@ -68,7 +89,7 @@ C-0 是 spec 内 Gate 0。C-0 未通过禁止进入阶段 1+。
   - cancelAll 期间 abort in-flight + 清空所有 auto + manual deque
   - same errorCode 连续 K 次 → trip breaker，剩余 auto 被丢弃但 manual 保留
   - 不同 errorCode 不触发 breaker
-- **GREEN**：实现 `backfillQueue.ts`；mock c0FlashClient
+- **GREEN**：实现 `backfillQueue.ts`；mock c0SeedAsrAucClient
 - **REFACTOR**：抽出 target key helper、breaker counter helper
 
 ### T1.3 `backfillScanner` 实现
@@ -189,7 +210,7 @@ C-0 是 spec 内 Gate 0。C-0 未通过禁止进入阶段 1+。
 ### T3.2 breaker / batch cap 集成测试
 
 - **RED**：新增集成测试 `backfillIntegration.test.ts`：
-  - 50 条 failed segment + bad key（每次 flash 返回 auth）→ batch 只 enqueue N 条；连续 K 次 auth fail 后 breaker trip，剩余被丢弃
+  - 50 条 failed segment + bad key（每次 AUC 2.0 submit/query 返回 auth）→ batch 只 enqueue N 条；连续 K 次 auth fail 后 breaker trip，剩余被丢弃
   - 手动重试不受 breaker 限制
   - 下次 trigger 上升沿 breaker 重置
 - **GREEN**：（实现已在 T1.2 内）；仅补集成测试
@@ -208,7 +229,7 @@ C-0 是 spec 内 Gate 0。C-0 未通过禁止进入阶段 1+。
 - T4.3 更新 `docs/current/data.md`：renderer manual running state 归属；强调不引入新 Query key 与 Zustand
 - T4.4 更新 `docs/current/frontend.md`：`SegmentTranscriptView` outcome `'running'`；App `manualRunning*Targets` set
 - T4.5 更新 `docs/current/quality.md`：错误码列表追加；后台任务诊断要求；新增 main 测试覆盖项
-- T4.6 把 `docs/decisions/0005-doubao-voice-flash-asr-baseline.md` 从 spec 目录移入 `docs/decisions/`
+- T4.6 更新 `docs/decisions/0005-doubao-voice-file-asr-baseline.md`
 
 **TDD 豁免**：文档同步；内容必须与代码事实完全一致
 
@@ -224,32 +245,33 @@ C-0 是 spec 内 Gate 0。C-0 未通过禁止进入阶段 1+。
 
 ## 测试覆盖矩阵
 
-| 路径                          | 单元 / 集成 | 文件                                 |
-| ----------------------------- | ----------- | ------------------------------------ |
-| c0FlashClient HTTP / 错误分类 | unit        | `c0FlashClient.test.ts`              |
-| BackfillQueue enqueue / dedup | unit        | `backfillQueue.test.ts`              |
-| BackfillQueue head insert     | unit        | `backfillQueue.test.ts`              |
-| BackfillQueue pause / resume  | unit        | `backfillQueue.test.ts`              |
-| BackfillQueue cancel + abort  | unit        | `backfillQueue.test.ts`              |
-| BackfillQueue breaker         | unit        | `backfillQueue.test.ts`              |
-| BackfillQueue batch cap       | unit        | `backfillQueue.test.ts`              |
-| BackfillScanner               | unit        | `backfillScanner.test.ts`            |
-| BackfillTriggerWiring         | unit        | `backfillTriggerWiring.test.ts`      |
-| backfillDiagnostics allowlist | unit        | `backfillDiagnostics.test.ts`        |
-| main IPC handler 路径         | unit        | `workspaceIpc.test.ts`               |
-| preload exposure              | unit        | preload test                         |
-| renderer workspaceApi wrapper | unit        | `workspaceApi.test.ts`               |
-| SegmentTranscriptView running | component   | `SegmentTranscriptView.test.tsx`     |
-| MemoryStudio retry segment    | integration | `MemoryStudio.test.tsx`              |
-| MemoryStudio retry supplement | integration | `MemoryStudio.test.tsx`              |
-| App retry handler             | integration | `App.test.tsx`                       |
-| recording 暂停接线            | integration | `App.test.tsx` / main lifecycle test |
-| breaker + batch cap 集成      | integration | `backfillIntegration.test.ts`        |
+| 路径                               | 单元 / 集成 | 文件                                 |
+| ---------------------------------- | ----------- | ------------------------------------ |
+| c0SeedAsrAucClient HTTP / 错误分类 | unit        | `c0SeedAsrAucClient.test.ts`         |
+| backfillAudioUrlSource URL 交付    | unit        | `backfillAudioUrlSource.test.ts`     |
+| BackfillQueue enqueue / dedup      | unit        | `backfillQueue.test.ts`              |
+| BackfillQueue head insert          | unit        | `backfillQueue.test.ts`              |
+| BackfillQueue pause / resume       | unit        | `backfillQueue.test.ts`              |
+| BackfillQueue cancel + abort       | unit        | `backfillQueue.test.ts`              |
+| BackfillQueue breaker              | unit        | `backfillQueue.test.ts`              |
+| BackfillQueue batch cap            | unit        | `backfillQueue.test.ts`              |
+| BackfillScanner                    | unit        | `backfillScanner.test.ts`            |
+| BackfillTriggerWiring              | unit        | `backfillTriggerWiring.test.ts`      |
+| backfillDiagnostics allowlist      | unit        | `backfillDiagnostics.test.ts`        |
+| main IPC handler 路径              | unit        | `workspaceIpc.test.ts`               |
+| preload exposure                   | unit        | preload test                         |
+| renderer workspaceApi wrapper      | unit        | `workspaceApi.test.ts`               |
+| SegmentTranscriptView running      | component   | `SegmentTranscriptView.test.tsx`     |
+| MemoryStudio retry segment         | integration | `MemoryStudio.test.tsx`              |
+| MemoryStudio retry supplement      | integration | `MemoryStudio.test.tsx`              |
+| App retry handler                  | integration | `App.test.tsx`                       |
+| recording 暂停接线                 | integration | `App.test.tsx` / main lifecycle test |
+| breaker + batch cap 集成           | integration | `backfillIntegration.test.ts`        |
 
 ## 提交边界（建议）
 
-- commit 1：T0.1 + T0.2 + T0.3 + T0.4（C-0 探针 + ADR 草案 + 决定 N/K）
-- commit 2：T1.1（c0FlashClient）
+- commit 1：T0.1 + T0.2 + T0.3 + T0.4 + T0.5（C-0 探针 + URL 交付 gate + ADR + 决定 N/K）
+- commit 2：T1.1 + T1.1a（c0SeedAsrAucClient + audio URL source）
 - commit 3：T1.2（BackfillQueue）
 - commit 4：T1.3 + T1.4（scanner + trigger wiring）
 - commit 5：T1.5 + T1.6（diagnostics + main 启动接线）

@@ -5,7 +5,7 @@
 > D 只消费重新审视后完成的 C 合同；C 未归档前不得按本文提前创建 D spec。
 
 - 时间：2026-05-16 18:06 America/Los_Angeles
-- 依赖：B 的 `lastTranscriptionAttempt` manifest 字段；C 的离线 flash engine 与后台事件机制
+- 依赖：B 的 `lastTranscriptionAttempt` manifest 字段；C 归档后的手动触发合同、BackfillQueue 与引擎基线
 - 共同约束：见 `plan.md`
 
 ## 信息优先级
@@ -20,7 +20,7 @@
 - D-1：Segment card More 菜单 + SegmentSupplement tab More 菜单挂载「生成转录」/「重新生成转录」
 - D-2：`exists=false` 无确认 / `exists=true` AlertDialog 覆盖确认
 - D-3：复用现有 saveTranscript / saveSegmentSupplementTranscript IPC，**无新 channel**
-- D-4：复用 C 引擎与中间态展示
+- D-4：复用 C 引擎合同、队列排序与中间态展示
 
 ## 范围外
 
@@ -33,7 +33,7 @@
 ## 硬约束
 
 - 复用现有 saveTranscript IPC
-- 复用 C 的 `C0FlashClient` 与 `BackfillEventBus`
+- 复用 C 归档后的手动触发 IPC 与 BackfillQueue；D 不定义第二套队列或事件通道
 - AlertDialog 使用 `WorkspaceDangerConfirmDialog`，不引入新危险确认结构
 - 不放松 single-active-spec 规则
 
@@ -68,7 +68,7 @@ D 不引入额外引擎、额外 IPC、额外 query；它是 C 引擎合同 + B 
 ## 四、前置条件
 
 - B 已归档：`lastTranscriptionAttempt` 字段稳定；`SegmentTranscriptView` 已支持 `failed-retryable` outcome
-- C 已归档：`C0FlashClient` / `BackfillQueue` / `BackfillEventBus` 已实现
+- C 已归档：BackfillQueue、手动触发 IPC、引擎客户端与音频交付路径已实现
 - voice settings：D 调引擎前 main 侧检查 `enabled=true ∧ apiKeyConfigured=true`；不强制 `lastValidationOk=true`（用户可能主动重试以验证）
 
 ## 五、页面状态 / 流程状态
@@ -119,7 +119,7 @@ D 不是页面，是菜单项 + 二次确认 + 引擎调用。状态：
 
 ### `running` / `succeeded` / `failed`
 
-- 与 C 完全一致（共用 BackfillQueue 与 BackfillEventBus）
+- 与 C 完全一致（共用 BackfillQueue 与手动触发合同）
 
 ## 七、组件元素拆解
 
@@ -160,7 +160,7 @@ failed ──[user retry via menu]──→ enqueued
 
 ## 九、数据如何同步
 
-- 入队事件：D 调 C 已有手动触发入口 → main 按 C 队列合同入队 → BackfillEventBus 发 `enqueued` 事件
+- 入队事件：D 调 C 已有手动触发入口 → main 按 C 队列合同入队；不新增 main → renderer 事件通道
 - transcript text 写入：复用 saveTranscript（C 实施时已做）
 - TanStack Query：saveTranscript success response 触发现有 Memory detail cache merge；无新 invalidation 路径
 
@@ -172,7 +172,7 @@ failed ──[user retry via menu]──→ enqueued
 
 ### 复用
 
-- `workspace:backfillEvent`（C 已建立）
+- C 归档后的手动 backfill IPC
 - `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript`（C 任务内部用）
 - `WorkspaceDangerConfirmDialog`
 
@@ -183,7 +183,7 @@ failed ──[user retry via menu]──→ enqueued
 
 ## 十一、第三方能力
 
-复用 C 的 `C0FlashClient`，不引入新外部 API。
+复用 C 的录音文件识别引擎客户端与音频交付路径，不引入新外部 API。
 
 ## 十二、边界情况补齐
 
@@ -212,7 +212,7 @@ failed ──[user retry via menu]──→ enqueued
 
 ## 十四、最终目标总结（可放在 D spec 顶部）
 
-D 的最终交付是：让用户在 Memory Studio 内通过 Segment card 与 SegmentSupplement tab 的 More 菜单显式触发转录重新生成；菜单项动态显示为「生成转录」（当 transcript 不存在时，无二次确认）或「重新生成转录」（当 transcript 已存在时，AlertDialog 二次确认提示会覆盖外部编辑）。确认后 D 复用 C 已归档的手动触发合同进入同一 BackfillQueue，引擎与事件复用 C 的全部能力；成功通过现有 `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript` 写回，manifest 经 saveTranscript 路径自动变为 'success'；失败只显示 root toast，transcript 与 manifest 保持本次任务前的原值。Voice settings `enabled=false` 或 `apiKeyConfigured=false` 时菜单项 disabled + tooltip；`lastValidationCode='auth'` 时菜单可点但任务会失败，用户由 Sidebar 红点（B-2）和 toast 引导去 Settings 修正。本 spec 不新增 D 专属 IPC channel。验收依据 D spec verification.md：菜单 label 与 exists 动态对应、AlertDialog 仅在 overwrite 路径触发、入队遵守 C 队列合同、saveTranscript 成功后 manifest 自动 'success'、失败不破坏既有 transcript、`enabled=false` 时菜单 disabled、TypeScript strict 与 `npm run verify:quick` 全绿；本 spec 与 `docs/current/frontend.md` / `docs/current/flow.md` / `docs/current/electron.md` 必须在收口时同批更新。
+D 的最终交付是：让用户在 Memory Studio 内通过 Segment card 与 SegmentSupplement tab 的 More 菜单显式触发转录重新生成；菜单项动态显示为「生成转录」（当 transcript 不存在时，无二次确认）或「重新生成转录」（当 transcript 已存在时，AlertDialog 二次确认提示会覆盖外部编辑）。确认后 D 复用 C 已归档的手动触发合同进入同一 BackfillQueue，引擎与队列能力复用 C；成功通过现有 `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript` 写回，manifest 经 saveTranscript 路径自动变为 'success'；失败只显示 root toast，transcript 与 manifest 保持本次任务前的原值。Voice settings `enabled=false` 或 `apiKeyConfigured=false` 时菜单项 disabled + tooltip；`lastValidationCode='auth'` 时菜单可点但任务会失败，用户由 Sidebar 红点（B-2）和 toast 引导去 Settings 修正。本 spec 不新增 D 专属 IPC channel。验收依据 D spec verification.md：菜单 label 与 exists 动态对应、AlertDialog 仅在 overwrite 路径触发、入队遵守 C 队列合同、saveTranscript 成功后 manifest 自动 'success'、失败不破坏既有 transcript、`enabled=false` 时菜单 disabled、TypeScript strict 与 `npm run verify:quick` 全绿；本 spec 与 `docs/current/frontend.md` / `docs/current/flow.md` / `docs/current/electron.md` 必须在收口时同批更新。
 
 ## 十五、Readiness gate
 

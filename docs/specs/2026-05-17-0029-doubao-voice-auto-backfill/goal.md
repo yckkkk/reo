@@ -24,7 +24,7 @@
 
 ### 1.4 当前版本范围
 
-- C-0 探针：endpoint 可用性 + key 复用 + 单次时长上限 + 是否需要异步回落
+- C-0 探针：标准版 2.0 `volc.seedasr.auc` 可用性 + key 复用 + `audio.url` 交付方案 + 轮询上限
 - C-1 main 后台引擎与触发上升沿监听
 - C-2 手动触发 IPC + B inline 重试接通
 - C-3 录音暂停 + circuit breaker + 诊断
@@ -36,7 +36,8 @@
 - 跨 workspace 后台任务
 - segment / supplement manifest schema 扩展（不增 `retryCount`、`lastTranscriptionError`、backoff timestamp）
 - 失败次数上限 / 永久 disable
-- 异步 `submit` / `query` 回落（视 C-0 结论在新 spec 内决定）
+- 极速版 `volc.bigasr.auc_turbo` 作为默认引擎
+- 未通过本地音频 URL 交付 gate 前实施后台补转录
 - 用户编辑 transcript 文本能力
 
 ## 2. 输入信息理解
@@ -49,25 +50,27 @@
 4. 当前唯一的 ASR 引擎是 streaming SAUC 2.0（`bigmodel_async` WebSocket，`volc.seedasr.sauc.duration`，单 X-Api-Key + Connect-Id + Resource-Id）。
 5. 当前没有 offline / batch ASR 客户端、没有 background queue、没有 `workspace:backfillEvent` 类事件 channel。
 6. main 已持有 `voiceSettingsStore.ts` + `voiceTranscriptionProbe.ts`，可解密 X-Api-Key 并对 SAUC 做最小握手 probe。
-7. ADR 0004 明确「离线 / 批处理 ASR endpoint 的选型（C 后台补转录的引擎合同 C0 单独决策）」。
+7. ADR 0004 明确「离线 / 批处理 ASR endpoint 的选型（C 后台补转录的引擎合同 C0 单独决策）」；本 session 已把 C 基线决策推进到 ADR 0005。
 8. `flow.md` 明确「禁止没有 observability 的 hidden background job」。
 
 ### 2.2 信息优先级处理
 
-- c-brief.md 的 IPC 合同 `workspace:backfillEvent`、5 个 main 组件命名、状态机文字都属于 pre-spec 草案；本 spec 与之冲突时以本 spec 为准。
-- 共识：c-brief.md 中 `workspace:backfillEvent` 被本 spec 删除；手动触发 IPC 命名按本 spec 给出。
+- c-brief.md 的文件名、组件命名、状态机文字都属于 pre-spec 草案；本 spec 与之冲突时以本 spec 为准。
+- 共识：不引入 `workspace:backfillEvent`；手动触发 IPC 命名按本 spec 给出。
 
 ### 2.3 假设
 
-- 假设 1：火山引擎离线极速版 `POST /api/v3/auc/bigmodel/recognize/flash` + `volc.bigasr.auc_turbo` 接受与 SAUC streaming 同一把 X-Api-Key（待 C-0 验证）。
-- 假设 2：flash endpoint 单次音频时长上限覆盖 60 分钟（Reo 单次录音硬上限）（待 C-0 验证；若不覆盖需新 spec 处理异步回落）。
-- 假设 3：probe 在按时长计费模型下 0 字节 / 极短音频不产生显著账单（继承 ADR 0004 同款判断；C-0 复核）。
-- 假设 4：N=20（单次触发上升沿 batch cap）与 K=3（同 error code 连续失败 breaker 阈值）作为初始默认，C-0 通过后可在 spec 内微调，最终值落到 ADR。
+- 假设 1：火山引擎大模型录音文件识别标准版 2.0 `volc.seedasr.auc` 是 C 默认引擎；原因是成本低于极速版，且与当前 live streaming SeedASR 2.0 同族。
+- 假设 2：官方文档与本地官方 demo 注释都指向新版控制台使用单 app key 形态；C 默认复用当前 Reo 已保存的 X-Api-Key 授权 SAUC streaming `volc.seedasr.sauc.duration` 与 AUC 标准版 2.0 `volc.seedasr.auc`，但仍需 C-0 smoke 验证。
+- 假设 3：标准版 2.0 只接受火山服务器可访问的 `audio.url`；这是当前 C 的最大实施 gate，未通过前不得进入 C-1/C-2/C-3。
+- 假设 4：BackfillQueue 对外仍保持同步 await，单 task 内部完成 submit + poll；异步轮询不改变 renderer optimistic 语义。
+- 假设 5：N=20（单次触发上升沿 batch cap）与 K=3（同 error code 连续失败 breaker 阈值）作为初始默认，C-0 通过后可在 spec 内微调，最终值落到 ADR。
 
 ### 2.4 待确认项
 
 - C-0 findings 完成前不允许进入 C-1/C-2/C-3 实施
-- 若 C-0 发现 X-Api-Key 不支持 SAUC + flash 同 key 同时授权，整个 C 设计回到 brainstorm；本 spec 标 paused
+- 若 C-0 发现 X-Api-Key 不支持 SAUC + AUC 2.0 同 key 同时授权，整个 C 设计回到 brainstorm；本 spec 标 paused
+- 若 C-0 无法在 Reo 本地优先边界内解决 `audio.url`，C-1/C-2/C-3 暂停；不得用公开本地服务、隧道或默认对象存储上传绕过
 - N 与 K 的最终值
 
 ## 3. 功能类型判断
@@ -129,7 +132,7 @@ C 不引入新页面、不引入新弹层、不改 layout。受影响的 surface
     ↓
   Queue 串行出队（pause / cancel / breaker 保护）
     ↓
-  每个 task 通过 c0FlashClient 调 flash endpoint
+  每个 task 通过 c0SeedAsrAucClient 执行 submit + poll
     ↓
   成功 → main 内部调 saveTranscript / saveSegmentSupplementTranscript → manifest 自动置 'success'
   失败 → main 记录诊断、计数 breaker、继续下一条（除非 breaker trip）
@@ -196,8 +199,8 @@ C 不引入新页面、不引入新弹层、不改 layout。受影响的 surface
 | `not-eligible`     | lastAttempt='success' ∨ 'never' ∨ exists=true         | 不入队                                    | B 决定                                                 | n/a                                           |
 | `eligible-idle`    | lastAttempt='failed' ∧ exists=false ∧ 无 pending task | 等待触发上升沿或手动点击                  | B 失败可重试态                                         | 入队 → `enqueued`                             |
 | `enqueued`         | 已加入 queue 未到队首                                 | 等待                                      | 仍为 B 失败可重试态（无 queued badge）                 | 出队头 → `running`                            |
-| `running`          | 队首；正在调 flash endpoint                           | HTTP POST 进行中                          | manual：renderer optimistic「正在生成」；auto：UI 不变 | 成功 → `succeeded`；失败 → `failed-retryable` |
-| `succeeded`        | flash 成功 + saveTranscript 成功                      | manifest 'success'                        | transcript 正文                                        | 终态                                          |
+| `running`          | 队首；正在执行 SeedASR AUC 2.0 submit + poll          | HTTP submit/query 进行中                  | manual：renderer optimistic「正在生成」；auto：UI 不变 | 成功 → `succeeded`；失败 → `failed-retryable` |
+| `succeeded`        | query 成功 + saveTranscript 成功                      | manifest 'success'                        | transcript 正文                                        | 终态                                          |
 | `failed-retryable` | engine 或 save 失败                                   | manifest 仍 'failed'                      | manual：toast + 回到失败态；auto：UI 不变              | 下次触发上升沿 / 手动重试 → 重新 `enqueued`   |
 | `canceled`         | workspace switch / lock lost / app quit               | 任务从队列移除；in-flight task abort HTTP | manual：response 返回 abort 错误，回到失败态；auto：无 | 下次触发上升沿                                |
 

@@ -36,7 +36,8 @@
 
 ```
 src/main/
-  c0FlashClient.ts            # 单文件；HTTPS POST flash endpoint；no concurrency；AbortController
+  c0SeedAsrAucClient.ts       # 单文件；HTTPS submit/query；no concurrency；AbortController
+  backfillAudioUrlSource.ts   # C-0b 通过后才实现；把 finalized audio 转成火山可访问 URL
   backfillQueue.ts            # 串行 FIFO queue；持有 workspaceHandle scope；breaker + batch cap 计数器
   backfillScanner.ts          # 扫描当前 active workspace 内 eligible segment + supplement
   backfillTriggerWiring.ts    # 监听 voiceSettingsStore + workspace lifecycle 上升沿
@@ -47,51 +48,78 @@ src/main/
 
 ```
 src/main/__tests__/
-  c0FlashClient.test.ts
+  c0SeedAsrAucClient.test.ts
+  backfillAudioUrlSource.test.ts
   backfillQueue.test.ts
   backfillScanner.test.ts
   backfillTriggerWiring.test.ts
 ```
 
-### 3.1 `c0FlashClient.ts`
+### 3.1 `c0SeedAsrAucClient.ts`
 
-**职责**：构造 flash endpoint HTTPS POST request 并解析 response 成 `{ ok: true, transcriptText } | { ok: false, errorCode, message? }`。
+**职责**：对火山大模型录音文件识别标准版 2.0 执行 submit + query 轮询，并解析 response 成 `{ ok: true, transcriptText } | { ok: false, errorCode, message? }`。
 
 **接口**（示意）：
 
 ```ts
-type FlashRequest = {
+type SeedAsrAucRequest = {
   apiKey: string;
-  audioBytes: Uint8Array;
-  audioFormat: 'webm';
-  contentType?: string;
+  audioUrl: string;
+  audioFormat: 'raw' | 'wav' | 'mp3' | 'ogg';
+  audioCodec?: 'raw' | 'opus';
   abortSignal: AbortSignal;
-  timeoutMs: number; // C-0 决定，默认 60000
+  submitTimeoutMs: number; // C-0 决定
+  pollIntervalMs: number; // C-0 决定，初始建议 5000
+  pollTimeoutMs: number; // C-0 决定，覆盖 Reo 60min 内典型补转录
 };
 
-type FlashResult =
+type SeedAsrAucResult =
   | { ok: true; transcriptText: string }
   | {
       ok: false;
-      errorCode: 'auth' | 'network' | 'format' | 'rate-limit' | 'unknown';
+      errorCode: 'auth' | 'network' | 'format' | 'rate-limit' | 'empty-audio' | 'quota' | 'unknown';
       message?: string;
     };
 
-declare function callFlashAsr(req: FlashRequest): Promise<FlashResult>;
+declare function callSeedAsrAuc(req: SeedAsrAucRequest): Promise<SeedAsrAucResult>;
 ```
 
 **实现要点**：
 
-- endpoint 与 header 配置由 C-0 findings 决定；初步假设：`POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash`，header 单 `X-Api-Key` + `X-Api-Resource-Id: volc.bigasr.auc_turbo` + `X-Api-Connect-Id`（按 SAUC 既有约定，C-0 验证是否仍需要）
-- body 编码（base64 PCM？base64 WebM？multipart？）由 C-0 findings 决定，写入新 ADR
+- endpoint：submit `POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit`；query `POST https://openspeech.bytedance.com/api/v3/auc/bigmodel/query`
+- header：新版控制台使用单 `X-Api-Key` + `X-Api-Resource-Id: volc.seedasr.auc` + `X-Api-Request-Id` + `X-Api-Sequence: -1`；submit 与 query 使用同一 request id
+- submit body：`audio.url` 必填，`audio.format` 必填（raw / wav / mp3 / ogg），`audio.codec` 按 format 需要传入；`request.model_name='bigmodel'`
+- query body：空 JSON `{}`；轮询 header 继续携带同一 request id
+- 轮询处理：
+  - `X-Api-Status-Code=20000000` → 读取 body `result.text`
+  - `20000001` / `20000002` → 等待 `pollIntervalMs` 后继续 query
+  - 超过 `pollTimeoutMs` → `network`
 - 错误分类：
   - HTTP 401/403 或 body 显式 auth 错误 → `auth`
   - HTTP 429 → `rate-limit`
   - HTTP 5xx / network error / timeout / TLS / DNS → `network`
+  - `45000002` → `empty-audio`
+  - `45000131` → `quota`
+  - `45000132` → `format`（文件过大按当前错误码体系归入格式/请求边界，文案说明大小限制）
+  - `45000151` → `format`
   - body schema invalid / 非 JSON / 缺 transcript 字段 → `format`
   - 其它 → `unknown`
 - 不实现重试；上层 BackfillQueue 决定是否重试
 - 单文件 ≤ 250 LOC
+
+### 3.1a `backfillAudioUrlSource.ts`
+
+**职责**：在 C-0b 通过后，负责把 Reo finalized audio 转成火山服务器可访问的 `audio.url`。本文件当前是设计落点，不允许在未通过 gate 时实现。
+
+**当前未决 gate**：
+
+- Reo durable audio 是本地 `audio.webm`（MediaRecorder WebM/Opus）。
+- 标准版 2.0 请求要求 `audio.url`，火山服务器无法读取本地文件路径。
+- 标准版 2.0 支持的容器是 raw / wav / mp3 / ogg，不列 WebM；若继续使用 Opus，优先评估 WebM/Opus remux 到 OGG/Opus，而不是重编码；如果官方或实际 probe 不接受 OGG/Opus，再评估 WAV/MP3 转码成本。
+- 禁止方案：main process 起公开 HTTP 服务、ngrok 风格公网隧道、放松 Electron 安全边界、默认把用户本地音频上传到未配置对象存储。
+- 可继续评估的方案：用户显式配置的对象存储临时 URL、火山官方可接受的本地字节上传替代接口（当前标准版 2.0 文档未发现）、或暂停 C 等待官方字节路径。
+
+**通过标准**：C-0b 必须产出一个不会破坏本地优先与安全边界的 `audio.url` 交付方案，并写入 ADR 0005 的 Implementation Gate 段；否则 C-1/C-2/C-3 暂停。
 
 ### 3.2 `backfillQueue.ts`
 
@@ -137,7 +165,7 @@ interface BackfillQueue {
 - 内部维护 deque（head insert vs tail insert）
 - 同 target（按 kind + workspaceId + memoryId + segmentId + supplementId 复合 key）去重；duplicate 直接返回 accepted=false
 - pause 期间不出队但允许 enqueue
-- cancel 期间 abort 当前 in-flight HTTP（通过 c0FlashClient AbortController）并清空 deque
+- cancel 期间 abort 当前 in-flight submit/query（通过 c0SeedAsrAucClient AbortController）并清空 deque
 - batch cap：scanner 触发的 batch enqueue 一次性最多 N 条；超出忽略并写诊断 `batch-capped`
 - circuit breaker：同 batch 内 same errorCode 连续 K 次 → trip，丢弃剩余 auto enqueued，写诊断 `breaker-tripped`；breaker 不影响 manual enqueue
 - breaker / batch cap counter 在下一次 trigger 上升沿时重置
@@ -245,10 +273,10 @@ type WorkspaceRequestSegmentTranscriptionBackfillRequest = {
 - `ERR_BACKFILL_VOICE_DISABLED`：voice settings 未启用
 - `ERR_BACKFILL_API_KEY_MISSING`：未配置 X-Api-Key
 - `ERR_BACKFILL_ALREADY_RUNNING`：同 target 正在 running 或 enqueued
-- `ERR_BACKFILL_ENGINE_AUTH`：flash endpoint 认证失败
-- `ERR_BACKFILL_ENGINE_NETWORK`：flash endpoint 网络 / 超时 / 5xx
-- `ERR_BACKFILL_ENGINE_FORMAT`：flash endpoint 返回 body schema 异常
-- `ERR_BACKFILL_ENGINE_RATE_LIMIT`：flash endpoint 429
+- `ERR_BACKFILL_ENGINE_AUTH`：SeedASR AUC 2.0 认证失败
+- `ERR_BACKFILL_ENGINE_NETWORK`：SeedASR AUC 2.0 网络 / 超时 / 5xx
+- `ERR_BACKFILL_ENGINE_FORMAT`：SeedASR AUC 2.0 请求格式、音频格式、大小限制或返回 body schema 异常
+- `ERR_BACKFILL_ENGINE_RATE_LIMIT`：SeedASR AUC 2.0 429 或配额 / QPS 限制
 - `ERR_BACKFILL_ENGINE_UNKNOWN`：其它
 - `ERR_BACKFILL_CANCELED`：workspace switch / app quit / renderer process gone 期间被取消
 
@@ -371,8 +399,8 @@ build 输出到 `out/preload/index.cjs`，沿用 electron-vite 现有配置；pr
 not-eligible ──[lastAttempt='failed' ∧ exists=false]──→ eligible-idle
 eligible-idle ──[scanner trigger | manual click]──→ enqueued
 enqueued     ──[queue head]──→ running
-running      ──[flash ok + saveTranscript ok]──→ succeeded (manifest='success')
-running      ──[flash fail | save fail]──→ failed-retryable (manifest='failed')
+running      ──[submit/query ok + saveTranscript ok]──→ succeeded (manifest='success')
+running      ──[submit/query fail | save fail]──→ failed-retryable (manifest='failed')
 failed-retryable ──[next trigger | manual click]──→ enqueued
 running      ──[workspace switch | lock lost | app quit]──→ canceled (manifest='failed')
 enqueued     ──[workspace switch | lock lost | app quit]──→ canceled
@@ -418,7 +446,7 @@ C 完全不写 voice settings；只读 `voiceSettingsStore`。
 ### 8.1 性能
 
 - BackfillScanner 单次扫描 ≤ 200ms（即使 Memory 大量）；通过 fixture 测试覆盖
-- flash HTTP timeout 默认 60s（C-0 验证后调整）；超时按 `network` errorCode 计入 breaker
+- submit timeout、poll interval、poll 总超时由 C-0 验证后固定；HTTP 失败与轮询总超时均按 `network` 计入 breaker
 - BackfillQueue 出队是 main thread 同步操作，不阻塞 IPC（每个 task 内部 await HTTP 时让出）
 - main 诊断写入是同步 `electron-log` call；按现有节奏不阻塞 hot path
 
@@ -426,7 +454,7 @@ C 完全不写 voice settings；只读 `voiceSettingsStore`。
 
 - 不持久化 in-flight 任务状态；app crash 后下次启动从 manifest 重新派生
 - saveTranscript 失败 → manifest 不动；下次触发上升沿重新尝试
-- transcript text 仅在 flash 成功后通过 saveTranscript atomic write 写入 `segment.md` / `supplement.md`，沿用现有 `previous-file-preserved` / `file-written-index-stale` 错误信封
+- transcript text 仅在 SeedASR AUC 2.0 query 成功后通过 saveTranscript atomic write 写入 `segment.md` / `supplement.md`，沿用现有 `previous-file-preserved` / `file-written-index-stale` 错误信封
 
 ### 8.3 防重复
 
@@ -448,39 +476,41 @@ C 完全不写 voice settings；只读 `voiceSettingsStore`。
 
 ## 9. 第三方能力
 
-| 项                               | 内容                                                                                         |
-| -------------------------------- | -------------------------------------------------------------------------------------------- |
-| 使用哪个能力                     | 火山引擎离线极速版 ASR `POST /api/v3/auc/bigmodel/recognize/flash` + `volc.bigasr.auc_turbo` |
-| 工程接入边界                     | 全部在 main process；renderer 完全不接触 endpoint 或 audio bytes                             |
-| 页面消费哪些结果                 | 仅 transcript text；其它字段不消费                                                           |
-| 主进程是否参与                   | 是；c0FlashClient + saveTranscript                                                           |
-| preload 是否暴露受控 API         | 是；2 个手动触发 IPC                                                                         |
-| renderer 是否只消费安全结果      | 是；renderer 不收到 transcript 之外的 ASR 元数据                                             |
-| 失败时如何降级                   | 单 task 失败 → manifest 仍 'failed'；breaker 保护批次；不引入额外 retry path                 |
-| 数据如何保存                     | 复用 `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript`                |
-| 异步结果如何回写                 | flash endpoint 同步返回；不需 long-polling                                                   |
-| 是否需要重试                     | 单 task 内不重试；下一次触发上升沿或手动点击作为重试                                         |
-| 是否需要超时处理                 | 是；默认 60s，C-0 验证                                                                       |
-| 是否需要错误日志                 | 是；main 本地诊断按允许 list 写入                                                            |
-| 是否需要上报 Sentry              | 否（Reo 当前无 Sentry）                                                                      |
-| 是否涉及敏感数据                 | 是；X-Api-Key + audio bytes；renderer 不接触；诊断字段不记录                                 |
-| 是否需要用户授权                 | 否；用户已通过 voice settings 启用                                                           |
-| 是否存在平台差异                 | 待 C-0 验证                                                                                  |
-| 是否影响应用打包                 | 否                                                                                           |
-| 是否影响自动更新                 | 否                                                                                           |
-| 是否需要官方文档确认             | 是；必须 Context7 + 火山官方站点交叉验证，结论写入新 ADR 或扩展 ADR 0004                     |
-| 最终以官方文档和实际接口协议为准 | 是；C-0 探针先验证                                                                           |
+| 项                               | 内容                                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 使用哪个能力                     | 火山引擎大模型录音文件识别标准版 2.0 `POST /api/v3/auc/bigmodel/submit` + `query` + `volc.seedasr.auc` |
+| 工程接入边界                     | 全部在 main process；renderer 完全不接触 endpoint、audio URL 交付细节或 audio bytes                    |
+| 页面消费哪些结果                 | 仅 transcript text；其它字段不消费                                                                     |
+| 主进程是否参与                   | 是；c0SeedAsrAucClient + backfillAudioUrlSource + saveTranscript                                       |
+| preload 是否暴露受控 API         | 是；2 个手动触发 IPC                                                                                   |
+| renderer 是否只消费安全结果      | 是；renderer 不收到 transcript 之外的 ASR 元数据                                                       |
+| 失败时如何降级                   | 单 task 失败 → manifest 仍 'failed'；breaker 保护批次；不引入额外 retry path                           |
+| 数据如何保存                     | 复用 `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript`                          |
+| 异步结果如何回写                 | 单 task 内 submit + poll；IPC handler 对外仍同步 await 完成结果                                        |
+| 是否需要重试                     | 单 task 内不重试；下一次触发上升沿或手动点击作为重试                                                   |
+| 是否需要超时处理                 | 是；submit timeout、poll interval、poll 总超时均由 C-0 验证                                            |
+| 是否需要错误日志                 | 是；main 本地诊断按允许 list 写入                                                                      |
+| 是否需要上报 Sentry              | 否（Reo 当前无 Sentry）                                                                                |
+| 是否涉及敏感数据                 | 是；X-Api-Key + audio bytes + 临时 audio URL；renderer 不接触；诊断字段不记录                          |
+| 是否需要用户授权                 | 否；用户已通过 voice settings 启用；若 C-0 选择对象存储，则必须另行定义用户可理解授权                  |
+| 是否存在平台差异                 | 有；本地音频 URL 交付、WebM/Opus remux 或转码路径待 C-0 验证                                           |
+| 是否影响应用打包                 | 若选择转码依赖则会影响；C-0 必须先评估，不默认引入                                                     |
+| 是否影响自动更新                 | 否                                                                                                     |
+| 是否需要官方文档确认             | 是；必须 Context7 + 火山官方站点交叉验证，结论写入 ADR 0005                                            |
+| 最终以官方文档和实际接口协议为准 | 是；C-0 探针先验证                                                                                     |
 
 ## 10. 文件改动清单（参考；详细 TDD 见 tasks.md）
 
 新增：
 
-- `src/main/c0FlashClient.ts`
+- `src/main/c0SeedAsrAucClient.ts`
+- `src/main/backfillAudioUrlSource.ts`
 - `src/main/backfillQueue.ts`
 - `src/main/backfillScanner.ts`
 - `src/main/backfillTriggerWiring.ts`
 - `src/main/backfillDiagnostics.ts`
-- `src/main/__tests__/c0FlashClient.test.ts`
+- `src/main/__tests__/c0SeedAsrAucClient.test.ts`
+- `src/main/__tests__/backfillAudioUrlSource.test.ts`
 - `src/main/__tests__/backfillQueue.test.ts`
 - `src/main/__tests__/backfillScanner.test.ts`
 - `src/main/__tests__/backfillTriggerWiring.test.ts`
@@ -505,8 +535,8 @@ C 完全不写 voice settings；只读 `voiceSettingsStore`。
 - `docs/current/flow.md`：新增 BackfillQueue lifecycle、触发上升沿、recording pause、circuit breaker、batch cap；说明手动 vs 自动入队规则
 - `docs/current/data.md`：renderer manual running state 归属说明；明确不引入新 Query key、不引入 Zustand store
 - `docs/current/frontend.md`：`SegmentTranscriptView` outcome `'running'`；App `manualRunning*Targets` set 持有
-- `docs/current/quality.md`：错误码列表追加 `ERR_BACKFILL_*`；后台任务诊断要求；c0FlashClient + backfillQueue 测试覆盖要求
-- 新 ADR：`docs/decisions/0005-doubao-voice-flash-asr-baseline.md`（C-0 通过后写）
+- `docs/current/quality.md`：错误码列表追加 `ERR_BACKFILL_*`；后台任务诊断要求；c0SeedAsrAucClient + backfillQueue 测试覆盖要求
+- 新 ADR：`docs/decisions/0005-doubao-voice-file-asr-baseline.md`（本 session 写入选型与 gate；C-0b 通过后补具体交付方案）
 
 ## 12. 不实施
 

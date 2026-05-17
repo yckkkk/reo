@@ -18,17 +18,19 @@
 
 - [ ] **C**：自动补转录
   - brief：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
-  - 当前状态：待重新审视并 spec 化；不得直接按 brief 实施。
+  - active spec：`docs/specs/2026-05-17-0029-doubao-voice-auto-backfill/`
+  - 当前状态：C spec 已创建；引擎基线已改为大模型录音文件识别标准版 2.0 `volc.seedasr.auc`；C-0b 本地音频 `audio.url` 交付 gate 未通过前不得进入 C-1/C-2/C-3 实施。
   - 进入 C spec 前的硬前置：
     - B 已归档（B 的 manifest 字段是 C 的输入合同）
     - B→C readiness gate 已完成
     - B 真机 E2E gate 已通过
-    - 下一 session 已重新读取 current docs、B 归档 spec、initiative README/plan/tasks/c-brief/d-brief 与代码事实
-    - 下一 session 已完成 C brainstorm，明确 C 是否保持当前目标、是否裁剪范围、是否重排 C0/C1/C2/C3
+    - C session 已重新读取 current docs、initiative README/plan/tasks/c-brief 与 ADR 0004
+    - C session 已完成 C brainstorm 与引擎选型确认：标准版 2.0 是 C 默认引擎；极速版因成本与跨模型族问题不作为默认路径
   - C spec 内执行顺序：
-    - 先完成 C-0 / Gate 0（离线 flash endpoint 可用性 + key 复用 + 单次时长上限）
-    - C-0 通过后才允许进入 C-1/C-2/C-3 实施
-    - C-0 findings 写入 C active spec；长期结论再压缩到 ADR
+    - C-0a：官方文档选型与能力矩阵已完成；结论写入 C active spec 与 ADR 0005
+    - C-0b：先解决 Reo finalized local audio 到火山可访问 `audio.url` 的交付方案，并验证 X-Api-Key 复用、格式转换、轮询状态与超时
+    - C-0b 通过后才允许进入 C-1/C-2/C-3 实施；不得用公开本地服务、公网隧道或默认对象存储上传绕过
+    - C-0 findings 写入 C active spec；长期结论压缩到 ADR 0005
   - 验收：在 C spec verification.md 内
   - 收口：归档 spec + 同步对应 current docs / decisions
   - **C→D readiness gate**：见 plan.md；只执行一次，完成后再开 D 的 spec
@@ -49,4 +51,4 @@
 
 ## 时间戳
 
-本任务列表版本：2026-05-17 00:14 America/Los_Angeles
+本任务列表版本：2026-05-17 America/Los_Angeles

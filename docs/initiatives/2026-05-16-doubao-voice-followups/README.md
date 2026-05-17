@@ -4,7 +4,7 @@
 
 - 状态：active
 - 类型：产品或代码开发 active initiative
-- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；等待下一 session 重新审视 C
+- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C active spec 已创建并完成引擎基线修订，等待 C-0 本地音频 URL 交付 gate
 
 ## 目标
 
