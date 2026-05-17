@@ -137,6 +137,32 @@ describe('SidebarSettingsTrigger', () => {
     expect(onRecordingBlocked).not.toHaveBeenCalled();
   });
 
+  it('keeps the auth dot visible while recording and preserves the blocked settings owner', async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+    const onRecordingBlocked = vi.fn();
+
+    renderSidebarSettingsTrigger(
+      <SidebarSettingsTrigger
+        onOpenSettings={onOpenSettings}
+        onRecordingBlocked={onRecordingBlocked}
+        recordingActive
+      />,
+      { voiceSettings: createVoiceSettingsSnapshot({ lastValidationCode: 'auth' }) }
+    );
+
+    const settingsButton = screen.getByRole('button', { name: '设置' });
+    const dot = screen.getByTestId('voice-credentials-dot');
+
+    expect(settingsButton).toHaveAttribute('aria-disabled', 'true');
+    expect(settingsButton).toContainElement(dot);
+
+    await user.click(settingsButton);
+
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(onRecordingBlocked).toHaveBeenCalledOnce();
+  });
+
   it('does not add the auth dot to the keyboard tab order', async () => {
     const user = userEvent.setup();
 
