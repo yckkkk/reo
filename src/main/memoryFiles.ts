@@ -61,8 +61,9 @@ import {
   isSafeWorkspaceDirectoryName,
   lastTranscriptionAttemptSchema,
   workspaceError,
-  workspaceMemorySummarySchema,
+  type FinalizeTranscriptionAttempt,
   type LastTranscriptionAttempt,
+  workspaceMemorySummarySchema,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
   type WorkspaceMemoryDetailProjection,
@@ -82,8 +83,7 @@ const writeDescriptor = promisify(writeCallback);
 const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
-type ManifestLastTranscriptionAttempt = LastTranscriptionAttempt | undefined;
-type FinalizeTranscriptionAttempt = Extract<LastTranscriptionAttempt, 'failed' | 'never'>;
+type ManifestLastTranscriptionAttempt = FinalizeTranscriptionAttempt | 'success' | undefined;
 
 class FinalizeTransactionFailure extends Error {
   readonly dataRetention: WorkspaceError['dataRetention'];

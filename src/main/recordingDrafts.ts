@@ -56,7 +56,7 @@ import {
   workspaceError,
   type DraftSegmentSupplementMetadata,
   type DraftSegmentMetadata,
-  type LastTranscriptionAttempt,
+  type FinalizeTranscriptionAttempt,
   type WorkspaceSegmentSupplementProjection,
   type WorkspaceSegmentProjection,
   type WorkspaceErrorEnvelope,
@@ -83,7 +83,6 @@ const readDescriptor = promisify(readCallback);
 const readFileDescriptor = promisify(readFileCallback);
 const writeDescriptor = promisify(writeCallback);
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
-type FinalizeTranscriptionAttempt = Extract<LastTranscriptionAttempt, 'failed' | 'never'>;
 type RecordingMarkdownSaveInput = {
   readonly rootPath: string;
   readonly segmentId: string;

@@ -402,6 +402,10 @@ export interface HandleCreateSegmentSupplementRecordingDraftOptions extends Hand
   readonly now?: () => string;
 }
 
+export interface HandleFinalizeRecordingDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => string;
+}
+
 export interface HandleFinalizeSegmentSupplementRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
@@ -4120,6 +4124,42 @@ export async function handleReadFinalizedAudioSegmentSupplementForTest(
   return handleReadFinalizedAudioSegmentSupplementCore(options);
 }
 
+function handleFinalizeRecordingDraftCore({
+  now = nowIso,
+  ...options
+}: HandleFinalizeRecordingDraftOptions): Promise<
+  z.infer<typeof workspaceRecordingFinalizeResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRecordingFinalizeRequestSchema,
+    invalidMessage: 'finalizeRecordingDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await finalizeRecordingDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          segmentId: request.segmentId,
+          memoryId: request.memoryId,
+          title: request.title,
+          durationMs: request.durationMs,
+          ...(request.lastTranscriptionAttemptOnFinalize
+            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
+            : {}),
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRecordingFinalizeResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { memory: result.memory, segment: result.segment } }
+            : result
+        );
+      }),
+  });
+}
+
 function handleFinalizeSegmentSupplementRecordingDraftCore({
   now = nowIso,
   ...options
@@ -4175,6 +4215,18 @@ export async function handleFinalizeSegmentSupplementRecordingDraft(
   options: HandleFinalizeSegmentSupplementRecordingDraftOptions
 ): Promise<z.infer<typeof workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema>> {
   return handleFinalizeSegmentSupplementRecordingDraftCore(options);
+}
+
+export async function handleFinalizeRecordingDraftForTest(
+  options: HandleFinalizeRecordingDraftOptions
+): Promise<z.infer<typeof workspaceRecordingFinalizeResponseSchema>> {
+  return handleFinalizeRecordingDraftCore(options);
+}
+
+export async function handleFinalizeRecordingDraft(
+  options: HandleFinalizeRecordingDraftOptions
+): Promise<z.infer<typeof workspaceRecordingFinalizeResponseSchema>> {
+  return handleFinalizeRecordingDraftCore(options);
 }
 
 export async function handleFinalizeSegmentSupplementRecordingDraftForTest(
@@ -5033,71 +5085,28 @@ export function registerWorkspaceIpc({
         );
       })
   );
-  registerWorkspaceHandleRequest(
-    WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
-    workspaceRecordingFinalizeRequestSchema,
-    'finalizeRecordingDraft request is invalid',
-    (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await finalizeRecordingDraft({
-          rootPath: handle.canonicalRoot,
-          workspaceId: handle.workspaceId,
-          segmentId: request.segmentId,
-          memoryId: request.memoryId,
-          title: request.title,
-          durationMs: request.durationMs,
-          ...(request.lastTranscriptionAttemptOnFinalize
-            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
-            : {}),
-          now: nowIso,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceRecordingFinalizeResponseSchema.parse(
-          result.ok
-            ? { ok: true, value: { memory: result.memory, segment: result.segment } }
-            : result
-        );
-      })
+  registerWorkspaceIpcHandler(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, (event, input) =>
+    handleFinalizeRecordingDraft({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      now: nowIso,
+    })
   );
-  registerWorkspaceHandleRequest(
+  registerWorkspaceIpcHandler(
     WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
-    'finalizeSegmentSupplementRecordingDraft request is invalid',
-    (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return workspaceError(
-            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment supplement finalize workspace does not match the active handle'
-          );
-        }
-
-        const result = await finalizeSegmentSupplementRecordingDraft({
-          rootPath: handle.canonicalRoot,
-          workspaceId: handle.workspaceId,
-          memoryId: request.memoryId,
-          segmentId: request.segmentId,
-          supplementId: request.supplementId,
-          title: request.title,
-          durationMs: request.durationMs,
-          ...(request.lastTranscriptionAttemptOnFinalize
-            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
-            : {}),
-          now: nowIso,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema.parse(
-          result.ok
-            ? {
-                ok: true,
-                value: {
-                  memory: result.memory,
-                  segment: result.segment,
-                  supplement: result.supplement,
-                },
-              }
-            : result
-        );
+    (event, input) =>
+      handleFinalizeSegmentSupplementRecordingDraft({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        now: nowIso,
       })
   );
   registerWorkspaceHandleRequest(

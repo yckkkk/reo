@@ -19,6 +19,7 @@ export const FINALIZE_TRANSCRIPTION_ATTEMPTS = [
   'failed',
   'never',
 ] as const satisfies readonly LastTranscriptionAttempt[];
+export type FinalizeTranscriptionAttempt = (typeof FINALIZE_TRANSCRIPTION_ATTEMPTS)[number];
 const finalizeTranscriptionAttemptSchema = z.enum(FINALIZE_TRANSCRIPTION_ATTEMPTS);
 const workspaceTitleTextSchema = z.string().trim().min(1).max(WORKSPACE_TITLE_MAX_LENGTH);
 const workspaceMemorySpaceTitleSchema = workspaceTitleTextSchema.refine(

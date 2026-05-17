@@ -27,6 +27,7 @@ import {
   handleDeleteMemoryForTest,
   handleDeleteSegmentSupplementForTest,
   handleDeleteSegmentForTest,
+  handleFinalizeRecordingDraftForTest,
   handleFinalizeSegmentSupplementRecordingDraftForTest,
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
@@ -72,7 +73,10 @@ import {
   handleUpdateSegmentTitleForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
-import { appendSegmentSupplementRecordingAudioChunk } from '../../src/main/recordingDrafts.js';
+import {
+  appendRecordingAudioChunk,
+  appendSegmentSupplementRecordingAudioChunk,
+} from '../../src/main/recordingDrafts.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
 import {
@@ -663,6 +667,16 @@ async function writeFinalizedMemoryRecording({
       audioByteLength: 3,
     })}\n`
   );
+}
+
+async function readObjectManifest(
+  rootPath: string,
+  kind: 'segments' | 'supplements',
+  objectId: string
+): Promise<Record<string, unknown>> {
+  return JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'objects', kind, `${objectId}.json`), 'utf8')
+  ) as Record<string, unknown>;
 }
 
 async function writeFinalizedSegmentSupplement({
@@ -2354,6 +2368,81 @@ test('createRecordingDraft returns a flat IPC response value', async () => {
   });
 });
 
+test('recording finalize IPC forwards transcription attempt to durable manifest', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-recording-finalize-attempt-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 录音完成',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const createdMemory = await handleCreateMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: '完成目标',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createMemoryId: () => 'mem_ipc_finalize_attempt',
+    now: () => '2026-05-08T14:42:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+
+  const createdDraft = await handleCreateRecordingDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createSegmentId: () => 'seg_ipc_finalize_attempt',
+    now: () => '2026-05-08T14:43:00.000Z',
+  });
+  assert.equal(createdDraft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_ipc_finalize_attempt',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  const finalized = await handleFinalizeRecordingDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_ipc_finalize_attempt',
+      segmentId: 'seg_ipc_finalize_attempt',
+      title: '完成录音',
+      durationMs: 1000,
+      lastTranscriptionAttemptOnFinalize: 'failed',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-08T14:44:00.000Z',
+  });
+
+  assert.equal(finalized.ok, true);
+  if (finalized.ok) {
+    assert.equal(finalized.value.segment.lastTranscriptionAttempt, 'failed');
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_ipc_finalize_attempt'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+});
+
 test('segment supplement recording IPC keeps the finalized audio under the parent segment', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-draft-'));
   await initializeWorkspaceFiles({
@@ -2412,6 +2501,7 @@ test('segment supplement recording IPC keeps the finalized audio under the paren
       supplementId: 'sup_ipc_supplement_child',
       title: '补充录音',
       durationMs: 500,
+      lastTranscriptionAttemptOnFinalize: 'never',
     },
     expectedSession,
     expectedSessionKey: 'default',
@@ -2428,9 +2518,16 @@ test('segment supplement recording IPC keeps the finalized audio under the paren
     assert.equal(finalized.value.supplement.supplementId, 'sup_ipc_supplement_child');
     assert.equal(finalized.value.supplement.segmentId, 'seg_ipc_supplement_parent');
     assert.equal(finalized.value.supplement.audioByteLength, 2);
+    assert.equal(finalized.value.supplement.lastTranscriptionAttempt, 'never');
     assert.equal('workspaceHandle' in finalized.value.supplement, false);
     assert.equal('rootPath' in finalized.value.supplement, false);
   }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'supplements', 'sup_ipc_supplement_child'))[
+      'lastTranscriptionAttempt'
+    ],
+    'never'
+  );
   await assert.rejects(
     stat(
       path.join(rootPath, 'memories', 'mem_ipc_supplement', 'segments', 'sup_ipc_supplement_child')
