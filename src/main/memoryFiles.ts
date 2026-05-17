@@ -1091,9 +1091,7 @@ export function extractSegmentTranscript(markdownContent: string): string {
   const remaining = markdownContent.slice(bodyStart);
   const visibleRemaining = removeHtmlComments(remaining);
   const nextHeading = /^##\s+/m.exec(visibleRemaining);
-  const body = nextHeading
-    ? visibleRemaining.slice(0, nextHeading.index)
-    : visibleRemaining;
+  const body = nextHeading ? visibleRemaining.slice(0, nextHeading.index) : visibleRemaining;
   return body.replace(/^\r?\n/, '').replace(/\s+$/, '');
 }
 
