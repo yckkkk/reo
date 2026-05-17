@@ -45,6 +45,10 @@ import {
   segmentSupplementContentQueryOptions,
   segmentContentQueryOptions,
 } from './workspaceQueries';
+import {
+  segmentTranscriptionTargetKey,
+  supplementTranscriptionTargetKey,
+} from './transcriptionBackfillTargets';
 
 type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
@@ -56,6 +60,8 @@ type MemoryStudioProps = {
   readonly onRetrySupplementTranscription?: (
     target: SegmentSupplementTranscriptionRetryTarget
   ) => void;
+  readonly runningSegmentTranscriptionTargets?: ReadonlySet<string>;
+  readonly runningSupplementTranscriptionTargets?: ReadonlySet<string>;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -116,11 +122,16 @@ type SegmentSupplementAudioResource = {
 
 function deriveTranscriptOutcome({
   lastTranscriptionAttempt,
+  running = false,
   transcript,
 }: {
   readonly lastTranscriptionAttempt: LastTranscriptionAttempt;
+  readonly running?: boolean;
   readonly transcript: TranscriptProjection;
 }): SegmentTranscriptOutcome {
+  if (running) {
+    return { kind: 'running' };
+  }
   if (transcript?.exists) {
     return { kind: 'success', text: transcript.text };
   }
@@ -615,6 +626,7 @@ function SegmentSupplementAudioPlayer({
   supplement,
   audioResourceCache,
   onRetrySupplementTranscription,
+  running,
   workspaceSession,
 }: {
   readonly supplement: MemorySegmentSupplement;
@@ -622,6 +634,7 @@ function SegmentSupplementAudioPlayer({
   readonly onRetrySupplementTranscription?: (
     target: SegmentSupplementTranscriptionRetryTarget
   ) => void;
+  readonly running?: boolean;
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -940,6 +953,7 @@ function SegmentSupplementAudioPlayer({
           }
           outcome={deriveTranscriptOutcome({
             lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
+            running: running === true,
             transcript: supplementContent?.transcript,
           })}
           {...(retrySupplementTranscription ? { onRetry: retrySupplementTranscription } : {})}
@@ -948,6 +962,7 @@ function SegmentSupplementAudioPlayer({
             error: '补充录音转录加载失败，请重试。',
             empty: '这段补充录音还没有转录。',
             failedRetryable: '上次生成补充录音转录失败。',
+            running: '正在生成',
             retry: '重试',
           }}
         />
@@ -991,6 +1006,8 @@ export function MemoryStudio({
   onRenameSegment,
   onRetrySegmentTranscription,
   onRetrySupplementTranscription,
+  runningSegmentTranscriptionTargets,
+  runningSupplementTranscriptionTargets,
   onSegmentFocusConsumed,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -1039,6 +1056,16 @@ export function MemoryStudio({
             segmentId: selectedSegment.segmentId,
           })
       : undefined;
+  const selectedSegmentTranscriptionRunning = selectedSegment
+    ? (runningSegmentTranscriptionTargets?.has(
+        segmentTranscriptionTargetKey({
+          workspaceId: workspaceSession.workspaceId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+          memoryId: memory.memoryId,
+          segmentId: selectedSegment.segmentId,
+        })
+      ) ?? false)
+    : false;
   const segmentContentQuery = useQuery({
     ...segmentContentQueryOptions(
       workspaceSession,
@@ -1066,6 +1093,17 @@ export function MemoryStudio({
       : (selectedSegmentSupplements.find(
           (supplement) => supplement.supplementId === activeSupplementId
         ) ?? null);
+  const activeSegmentSupplementTranscriptionRunning = activeSegmentSupplement
+    ? (runningSupplementTranscriptionTargets?.has(
+        supplementTranscriptionTargetKey({
+          workspaceId: workspaceSession.workspaceId,
+          workspaceHandle: workspaceSession.workspaceHandle,
+          memoryId: activeSegmentSupplement.memoryId,
+          segmentId: activeSegmentSupplement.segmentId,
+          supplementId: activeSegmentSupplement.supplementId,
+        })
+      ) ?? false)
+    : false;
   const resolvedActiveContentTab =
     activeSupplementId === null || activeSegmentSupplement ? activeContentTab : 'transcript';
   const selectedSegmentDomId = selectedSegment ? domIdPart(selectedSegment.segmentId) : 'pending';
@@ -1964,6 +2002,7 @@ export function MemoryStudio({
                     }
                     outcome={deriveTranscriptOutcome({
                       lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
+                      running: selectedSegmentTranscriptionRunning,
                       transcript: segmentContent?.transcript,
                     })}
                     {...(retrySelectedSegmentTranscription
@@ -1974,6 +2013,7 @@ export function MemoryStudio({
                       error: '片段内容加载失败，请重试。',
                       empty: '这段录音还没有转录。',
                       failedRetryable: '上次生成转录失败。',
+                      running: '正在生成',
                       retry: '重试',
                     }}
                   />
@@ -1992,6 +2032,7 @@ export function MemoryStudio({
                     supplement={activeSegmentSupplement}
                     audioResourceCache={supplementAudioResourceCacheRef.current}
                     {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
+                    running={activeSegmentSupplementTranscriptionRunning}
                     workspaceSession={workspaceSession}
                   />
                 </section>

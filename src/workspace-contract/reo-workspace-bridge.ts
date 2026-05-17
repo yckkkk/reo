@@ -81,6 +81,10 @@ import type {
   WorkspaceRecordingMarkdownSaveResponse,
   WorkspaceSegmentSupplementMarkdownSaveRequest,
   WorkspaceSegmentSupplementMarkdownSaveResponse,
+  WorkspaceRequestSegmentTranscriptionBackfillRequest,
+  WorkspaceRequestSegmentTranscriptionBackfillResponse,
+  WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest,
+  WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse,
   WorkspaceRemoveMemorySpaceResponse,
   WorkspaceSaveVoiceTranscriptionApiKeyRequest,
   WorkspaceSaveVoiceTranscriptionApiKeyResponse,
@@ -238,6 +242,12 @@ export interface ReoWorkspaceBridge {
   readonly saveSegmentSupplementTranscript: (
     payload: WorkspaceSegmentSupplementMarkdownSaveRequest
   ) => Promise<WorkspaceSegmentSupplementMarkdownSaveResponse>;
+  readonly requestSegmentTranscriptionBackfill: (
+    payload: WorkspaceRequestSegmentTranscriptionBackfillRequest
+  ) => Promise<WorkspaceRequestSegmentTranscriptionBackfillResponse>;
+  readonly requestSegmentSupplementTranscriptionBackfill: (
+    payload: WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest
+  ) => Promise<WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse>;
   readonly beginMicrophoneIntent: (
     payload: WorkspaceMicrophoneIntentRequest
   ) => Promise<WorkspaceMicrophoneIntentResponse>;

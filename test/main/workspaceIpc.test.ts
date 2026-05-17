@@ -62,6 +62,8 @@ import {
   handleRestoreDeletedMemoryForTest,
   handleRestoreDeletedSegmentSupplementForTest,
   handleRestoreDeletedSegmentForTest,
+  handleRequestSegmentTranscriptionBackfillForTest,
+  handleRequestSegmentSupplementTranscriptionBackfillForTest,
   handleSaveSegmentSupplementTranscriptForTest,
   handleSaveVoiceTranscriptionApiKeyForTest,
   handleSetVoiceTranscriptionEnabledForTest,
@@ -72,6 +74,11 @@ import {
   handleUpdateSegmentSupplementTitleForTest,
   handleUpdateSegmentTitleForTest,
 } from '../../src/main/workspaceIpc.js';
+import {
+  BackfillAlreadyRunningError,
+  type BackfillQueue,
+  type BackfillQueueTask,
+} from '../../src/main/backfillQueue.js';
 import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
 import {
   appendRecordingAudioChunk,
@@ -606,12 +613,14 @@ async function assertWorkspaceLockCanBeReacquired(rootPath: string): Promise<voi
 }
 
 async function writeFinalizedMemoryRecording({
+  lastTranscriptionAttempt,
   root,
   workspaceId,
   memoryId,
   segmentId,
   title,
 }: {
+  readonly lastTranscriptionAttempt?: 'failed' | 'never' | 'success';
   readonly root: string;
   readonly workspaceId: string;
   readonly memoryId: string;
@@ -665,6 +674,7 @@ async function writeFinalizedMemoryRecording({
       durationMs: 1000,
       nextSequence: 1,
       audioByteLength: 3,
+      ...(lastTranscriptionAttempt ? { lastTranscriptionAttempt } : {}),
     })}\n`
   );
 }
@@ -680,6 +690,7 @@ async function readObjectManifest(
 }
 
 async function writeFinalizedSegmentSupplement({
+  lastTranscriptionAttempt,
   root,
   workspaceId,
   memoryId,
@@ -688,6 +699,7 @@ async function writeFinalizedSegmentSupplement({
   title,
   directoryTitle = title,
 }: {
+  readonly lastTranscriptionAttempt?: 'failed' | 'never' | 'success';
   readonly root: string;
   readonly workspaceId: string;
   readonly memoryId: string;
@@ -712,11 +724,13 @@ async function writeFinalizedSegmentSupplement({
     supplementId,
     title,
     content: '补充转录',
+    ...(lastTranscriptionAttempt ? { lastTranscriptionAttempt } : {}),
   });
   return supplementDirectory;
 }
 
 async function writeFinalizedSupplementFiles({
+  lastTranscriptionAttempt,
   root,
   directory,
   workspaceId,
@@ -727,6 +741,7 @@ async function writeFinalizedSupplementFiles({
   content = '',
   audioBytes = [4, 5],
 }: {
+  readonly lastTranscriptionAttempt?: 'failed' | 'never' | 'success';
   readonly root: string;
   readonly directory: string;
   readonly workspaceId: string;
@@ -763,6 +778,7 @@ async function writeFinalizedSupplementFiles({
       durationMs: 500,
       nextSequence: 1,
       audioByteLength: audioBytes.length,
+      ...(lastTranscriptionAttempt ? { lastTranscriptionAttempt } : {}),
     })}\n`
   );
 }
@@ -1967,6 +1983,7 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     memoryId: 'mem_ipc_audio',
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
+    lastTranscriptionAttempt: 'failed',
   });
   await writeFile(
     path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'segment.md'),
@@ -2025,6 +2042,7 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     memoryId: 'mem_ipc_audio',
     segmentId: 'seg_ipc_audio',
     title: '生日录音',
+    lastTranscriptionAttempt: 'failed',
   });
   const supplementDirectory = path.join(
     rootPath,
@@ -2332,6 +2350,339 @@ test('saveSegmentSupplementTranscript writes the supplement transcript without e
     assert.equal(result.value.supplement.transcript.exists, true);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
+  }
+});
+
+test('requestSegmentTranscriptionBackfill runs through the manual queue and saves transcript without leaking provider data', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-manual-backfill-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补转录',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+    lastTranscriptionAttempt: 'failed',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'ok' });
+  const queuedTargets: string[] = [];
+
+  const result = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async (task: BackfillQueueTask) => {
+        queuedTargets.push(`${task.kind}:${task.workspaceId}:${task.memoryId}:${task.segmentId}`);
+        return { ok: true, transcriptText: '真实补转录正文' };
+      },
+    } as unknown as BackfillQueue,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(queuedTargets, ['segment:ws_ipc:mem_ipc_audio:seg_ipc_audio']);
+  assert.equal(
+    parseWorkspaceMarkdownObject({
+      objectType: 'segment',
+      markdown: await readFile(
+        path.join(rootPath, 'memories', 'mem_ipc_audio', 'segments', 'seg_ipc_audio', 'segment.md'),
+        'utf8'
+      ),
+    }).content,
+    '# 生日录音\n\n## Transcript\n\n真实补转录正文\n'
+  );
+  assert.equal(JSON.stringify(result).includes('abcd1234SECRET'), false);
+  assert.equal(JSON.stringify(result).includes(rootPath), false);
+  assert.equal(JSON.stringify(result).includes('https://provider.example/audio.ogg'), false);
+});
+
+test('requestSegmentSupplementTranscriptionBackfill saves supplement transcript through manual queue', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-manual-supplement-backfill-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补充补转录',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+    lastTranscriptionAttempt: 'failed',
+  });
+  const supplementDirectory = await writeFinalizedSegmentSupplement({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+    lastTranscriptionAttempt: 'failed',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'ok' });
+
+  const result = await handleRequestSegmentSupplementTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async () => ({ ok: true, transcriptText: '补充真实补转录' }),
+    } as unknown as BackfillQueue,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(
+    await readSupplementContent(supplementDirectory),
+    '补充转录\n\n## Transcript\n\n补充真实补转录\n'
+  );
+});
+
+test('manual backfill IPC rejects non-failed targets before enqueueing provider work', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-manual-backfill-eligibility-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补转录资格',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+    lastTranscriptionAttempt: 'never',
+  });
+  await writeFinalizedSegmentSupplement({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+    lastTranscriptionAttempt: 'never',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'ok' });
+  let runCalls = 0;
+  const backfillQueue = {
+    runManual: async () => {
+      runCalls += 1;
+      return { ok: true, transcriptText: 'must not run' };
+    },
+  } as unknown as BackfillQueue;
+
+  const segmentResult = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue,
+  });
+  const supplementResult = await handleRequestSegmentSupplementTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue,
+  });
+
+  assert.equal(segmentResult.ok, false);
+  if (!segmentResult.ok) {
+    assert.equal(segmentResult.error.code, 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE');
+  }
+  assert.equal(supplementResult.ok, false);
+  if (!supplementResult.ok) {
+    assert.equal(supplementResult.error.code, 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE');
+  }
+  assert.equal(runCalls, 0);
+});
+
+test('manual backfill IPC rejects disabled settings, workspace mismatch and already-running targets before leaking secrets', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-manual-backfill-errors-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 补转录错误',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+    lastTranscriptionAttempt: 'failed',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  let runCalls = 0;
+  const baseInput = {
+    workspaceHandle: 'wh_ipc',
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+  };
+
+  const disabled = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: baseInput,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async () => {
+        runCalls += 1;
+        return { ok: true, transcriptText: 'must not run' };
+      },
+    } as unknown as BackfillQueue,
+  });
+  assert.equal(disabled.ok, false);
+  if (!disabled.ok) {
+    assert.equal(disabled.error.code, 'ERR_BACKFILL_VOICE_DISABLED');
+  }
+  assert.equal(runCalls, 0);
+
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'ok' });
+
+  const mismatch = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: { ...baseInput, workspaceId: 'ws_other' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async () => {
+        throw new Error('must not run');
+      },
+    } as unknown as BackfillQueue,
+  });
+  assert.equal(mismatch.ok, false);
+  if (!mismatch.ok) {
+    assert.equal(mismatch.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+
+  const alreadyRunning = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: baseInput,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async () => {
+        throw new BackfillAlreadyRunningError({
+          kind: 'segment',
+          workspaceHandle: 'wh_ipc',
+          workspaceId: 'ws_ipc',
+          memoryId: 'mem_ipc_audio',
+          segmentId: 'seg_ipc_audio',
+          source: 'manual',
+        });
+      },
+    } as unknown as BackfillQueue,
+  });
+  assert.equal(alreadyRunning.ok, false);
+  if (!alreadyRunning.ok) {
+    assert.equal(alreadyRunning.error.code, 'ERR_BACKFILL_ALREADY_RUNNING');
+    assert.equal(JSON.stringify(alreadyRunning).includes('abcd1234SECRET'), false);
+    assert.equal(JSON.stringify(alreadyRunning).includes(rootPath), false);
+  }
+
+  const missingQueue = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: baseInput,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+  });
+  assert.equal(missingQueue.ok, false);
+  if (!missingQueue.ok) {
+    assert.equal(missingQueue.error.code, 'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED');
+  }
+
+  const unconfiguredUrlSource = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: baseInput,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    voiceSettingsStore: store,
+    backfillQueue: {
+      runManual: async () => ({ errorCode: 'url-source-unconfigured', ok: false }),
+    } as unknown as BackfillQueue,
+  });
+  assert.equal(unconfiguredUrlSource.ok, false);
+  if (!unconfiguredUrlSource.ok) {
+    assert.equal(unconfiguredUrlSource.error.code, 'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED');
   }
 });
 

@@ -43,3 +43,18 @@ test('main bootstrap wires voice settings store into recording transcription at 
   assert.match(source, /uncaughtException[\s\S]*closeWorkspaceRuntime\(\)/);
   assert.match(source, /registerWorkspaceIpc\(\{[\s\S]*recordingTranscriptionSessions/);
 });
+
+test('main bootstrap wires backfill runtime into workspace and app lifecycle', async () => {
+  const source = await readFile('src/main/index.ts', 'utf8');
+
+  assert.match(source, /createWorkspaceBackfillQueue/);
+  assert.match(source, /createBackfillTriggerWiring/);
+  assert.match(source, /scanWorkspaceBackfillTargets/);
+  assert.match(source, /voiceSettingsStore\.onSnapshotChange/);
+  assert.match(source, /backfillTriggerWiring\.workspaceSwitched\(\)/);
+  assert.match(
+    source,
+    /app\.on\('before-quit'[\s\S]*backfillQueue\.cancelAllAndDrain\('app-quit'\)/
+  );
+  assert.match(source, /registerWorkspaceIpc\(\{[\s\S]*backfillQueue[\s\S]*backfillTriggerWiring/);
+});

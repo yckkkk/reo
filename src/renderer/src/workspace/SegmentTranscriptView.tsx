@@ -7,6 +7,7 @@ export type SegmentTranscriptViewCopy = {
   readonly error: string;
   readonly empty: string;
   readonly failedRetryable: string;
+  readonly running: string;
   readonly retry: string;
 };
 
@@ -14,6 +15,7 @@ export type SegmentTranscriptOutcome =
   | { readonly kind: 'success'; readonly text: string }
   | { readonly kind: 'empty-never' }
   | { readonly kind: 'empty-cleared' }
+  | { readonly kind: 'running' }
   | { readonly kind: 'failed-retryable' };
 
 export type SegmentTranscriptViewProps = {
@@ -40,6 +42,9 @@ export function SegmentTranscriptView({
   }
   if (outcome.kind === 'success') {
     return <p className={TRANSCRIPT_PARAGRAPH}>{outcome.text}</p>;
+  }
+  if (outcome.kind === 'running') {
+    return <p className={MUTED_PARAGRAPH}>{copy.running}</p>;
   }
   if (outcome.kind === 'failed-retryable') {
     return (

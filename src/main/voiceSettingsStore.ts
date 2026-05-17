@@ -149,6 +149,18 @@ export function createVoiceSettingsStore({
   const filePath = getVoiceSettingsFilePath(userDataDir);
   let cache = loadFromDisk(filePath);
   let writeQueue: Promise<void> = Promise.resolve();
+  const snapshotListeners = new Set<(snapshot: VoiceSettingsSnapshot) => void>();
+
+  function notifySnapshotChange(): void {
+    const snapshot = fileToSnapshot(cache);
+    for (const listener of snapshotListeners) {
+      try {
+        listener(snapshot);
+      } catch {
+        continue;
+      }
+    }
+  }
 
   async function persist(next: VoiceSettingsFile): Promise<void> {
     await writeJsonAtomic(filePath, next);
@@ -162,6 +174,7 @@ export function createVoiceSettingsStore({
         const next = mutator(cache);
         if (next !== cache) {
           await persist(next);
+          notifySnapshotChange();
         }
       });
     writeQueue = queued.then(
@@ -242,6 +255,13 @@ export function createVoiceSettingsStore({
     return decryptApiKeyFromFile({ file: cache, platform, safeStorage });
   }
 
+  function onSnapshotChange(listener: (snapshot: VoiceSettingsSnapshot) => void): () => void {
+    snapshotListeners.add(listener);
+    return () => {
+      snapshotListeners.delete(listener);
+    };
+  }
+
   return {
     read,
     setEnabled,
@@ -249,6 +269,7 @@ export function createVoiceSettingsStore({
     clearApiKey,
     recordValidation,
     readDecryptedApiKey,
+    onSnapshotChange,
   };
 }
 

@@ -229,6 +229,51 @@ test('voiceSettingsStore: recordValidation maps ok auth and network to tri-state
   }
 });
 
+test('voiceSettingsStore: notifies subscribers after snapshot changes', async () => {
+  const { store, cleanup } = setup();
+  try {
+    const snapshots: ReturnType<typeof store.read>[] = [];
+    const unsubscribe = store.onSnapshotChange((snapshot) => {
+      snapshots.push(snapshot);
+    });
+
+    await store.setEnabled(true);
+    await store.writeApiKey('abcd1234');
+    await store.recordValidation({ apiKey: 'abcd1234', code: 'ok' });
+    unsubscribe();
+    await store.setEnabled(false);
+
+    assert.deepEqual(snapshots, [
+      {
+        enabled: true,
+        apiKeyConfigured: false,
+        apiKeyLastFour: null,
+        lastValidatedAt: null,
+        lastValidationOk: null,
+        lastValidationCode: null,
+      },
+      {
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastValidatedAt: null,
+        lastValidationOk: null,
+        lastValidationCode: null,
+      },
+      {
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastValidatedAt: snapshots[2]?.lastValidatedAt,
+        lastValidationOk: true,
+        lastValidationCode: 'ok',
+      },
+    ]);
+  } finally {
+    cleanup();
+  }
+});
+
 test('voiceSettingsStore: skips stale validation after key changes', async () => {
   const { store, cleanup } = setup();
   try {

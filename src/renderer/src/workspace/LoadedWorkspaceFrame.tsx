@@ -32,6 +32,8 @@ type LoadedWorkspaceFrameProps = {
   readonly onRetrySupplementTranscription?: (
     target: SegmentSupplementTranscriptionRetryTarget
   ) => void;
+  readonly runningSegmentTranscriptionTargets?: ReadonlySet<string>;
+  readonly runningSupplementTranscriptionTargets?: ReadonlySet<string>;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
@@ -52,6 +54,8 @@ export function LoadedWorkspaceFrame({
   onRenameSegmentSupplement,
   onRetrySegmentTranscription,
   onRetrySupplementTranscription,
+  runningSegmentTranscriptionTargets,
+  runningSupplementTranscriptionTargets,
   onSegmentFocusConsumed,
   onSelectMemory,
   onStartSegmentSupplementRecording,
@@ -90,6 +94,10 @@ export function LoadedWorkspaceFrame({
           onRenameSegment={onRenameSegment}
           {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
           {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
+          {...(runningSegmentTranscriptionTargets ? { runningSegmentTranscriptionTargets } : {})}
+          {...(runningSupplementTranscriptionTargets
+            ? { runningSupplementTranscriptionTargets }
+            : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}

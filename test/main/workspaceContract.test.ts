@@ -18,6 +18,8 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
@@ -110,6 +112,10 @@ import {
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceRecordingReadRequestSchema,
@@ -162,6 +168,10 @@ import {
   type WorkspaceCopySegmentRelativePathRequest,
   type WorkspaceCopySegmentSupplementRelativePathRequest,
   type WorkspaceEntityActionResponse,
+  type WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest,
+  type WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse,
+  type WorkspaceRequestSegmentTranscriptionBackfillRequest,
+  type WorkspaceRequestSegmentTranscriptionBackfillResponse,
 } from '../../src/workspace-contract/workspace-contract.js';
 
 type WorkspaceEntityActionRequest =
@@ -212,6 +222,17 @@ function assertVoiceSettingsContracts(
   void _contracts;
 }
 
+function assertBackfillContracts(
+  _contracts: readonly [
+    WorkspaceRequestSegmentTranscriptionBackfillRequest,
+    WorkspaceRequestSegmentTranscriptionBackfillResponse,
+    WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest,
+    WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse,
+  ]
+): void {
+  void _contracts;
+}
+
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
   assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
@@ -249,6 +270,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateSegmentSupplementTitle',
     'workspace:saveTranscript',
     'workspace:saveSegmentSupplementTranscript',
+    'workspace:requestSegmentTranscriptionBackfill',
+    'workspace:requestSegmentSupplementTranscriptionBackfill',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
     'workspace:startRecordingTranscription',
@@ -336,6 +359,14 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:saveSegmentSupplementTranscript'
   );
   assert.equal(
+    WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    'workspace:requestSegmentTranscriptionBackfill'
+  );
+  assert.equal(
+    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    'workspace:requestSegmentSupplementTranscriptionBackfill'
+  );
+  assert.equal(
     WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
     'workspace:readVoiceTranscriptionSettings'
   );
@@ -389,6 +420,146 @@ test('workspace error code schema accepts voice settings and provider console er
   assert.equal(voiceSettingsErrorCodes.length, 4);
 
   for (const code of voiceSettingsErrorCodes) {
+    assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
+  }
+});
+
+test('workspace backfill request contracts require exact segment identities', () => {
+  const segmentRequest = workspaceRequestSegmentTranscriptionBackfillRequestSchema.parse({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  const segmentResponse = workspaceRequestSegmentTranscriptionBackfillResponseSchema.parse({
+    ok: true,
+    value: {
+      memory: {
+        memoryId: 'mem_1',
+        title: '录音',
+        createdAt: '2026-05-17T08:00:00.000Z',
+        updatedAt: '2026-05-17T08:01:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 12,
+        hasTranscript: true,
+        supplementCount: 0,
+      },
+      saved: true,
+    },
+  });
+  const supplementRequest =
+    workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+    });
+  const supplementResponse =
+    workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: '录音',
+          createdAt: '2026-05-17T08:00:00.000Z',
+          updatedAt: '2026-05-17T08:01:00.000Z',
+          segmentCount: 1,
+          durationMs: 1000,
+          audioByteLength: 12,
+          hasTranscript: true,
+          supplementCount: 1,
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          type: 'audio',
+          title: '录音',
+          createdAt: '2026-05-17T08:00:00.000Z',
+          updatedAt: '2026-05-17T08:01:00.000Z',
+          durationMs: 1000,
+          audioByteLength: 12,
+          transcript: { exists: false },
+          lastTranscriptionAttempt: 'failed',
+          supplementCount: 1,
+          supplements: [
+            {
+              workspaceId: 'ws_1',
+              memoryId: 'mem_1',
+              segmentId: 'seg_1',
+              supplementId: 'sup_1',
+              type: 'audio',
+              title: '补充录音',
+              createdAt: '2026-05-17T08:00:30.000Z',
+              updatedAt: '2026-05-17T08:01:00.000Z',
+              durationMs: 500,
+              audioByteLength: 6,
+              transcript: { exists: true },
+              lastTranscriptionAttempt: 'success',
+            },
+          ],
+        },
+        supplement: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          supplementId: 'sup_1',
+          type: 'audio',
+          title: '补充录音',
+          createdAt: '2026-05-17T08:00:30.000Z',
+          updatedAt: '2026-05-17T08:01:00.000Z',
+          durationMs: 500,
+          audioByteLength: 6,
+          transcript: { exists: true },
+          lastTranscriptionAttempt: 'success',
+        },
+        saved: true,
+      },
+    });
+
+  assertBackfillContracts([segmentRequest, segmentResponse, supplementRequest, supplementResponse]);
+  assert.throws(() =>
+    workspaceRequestSegmentTranscriptionBackfillRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+    })
+  );
+  assert.throws(() =>
+    workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'bad',
+    })
+  );
+  assert.throws(() =>
+    workspaceRequestSegmentTranscriptionBackfillResponseSchema.parse({
+      ok: true,
+      value: { saved: true, rootPath: '/private/workspace' },
+    })
+  );
+});
+
+test('workspace error code schema accepts manual backfill errors', () => {
+  const backfillErrorCodes = [
+    'ERR_BACKFILL_ALREADY_RUNNING',
+    'ERR_BACKFILL_API_KEY_MISSING',
+    'ERR_BACKFILL_AUDIO_URL_FAILED',
+    'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED',
+    'ERR_BACKFILL_CANCELED',
+    'ERR_BACKFILL_ENGINE_UNKNOWN',
+    'ERR_BACKFILL_PROVIDER_FAILED',
+    'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+    'ERR_BACKFILL_VOICE_DISABLED',
+  ];
+
+  assert.equal(backfillErrorCodes.length, 9);
+
+  for (const code of backfillErrorCodes) {
     assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
   }
 });

@@ -17,6 +17,10 @@ import { SettingsShell } from './settings/SettingsShell';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
+import type {
+  SegmentSupplementTranscriptionRetryTarget,
+  SegmentTranscriptionRetryTarget,
+} from './workspace/MemoryStudio';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
@@ -67,6 +71,8 @@ import {
   readMemoryDetail,
   readWorkspaceSnapshot,
   removeMemorySpace,
+  requestSegmentSupplementTranscriptionBackfill,
+  requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
@@ -81,6 +87,10 @@ import {
   type WorkspaceMemorySummary,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
+import {
+  segmentTranscriptionTargetKey,
+  supplementTranscriptionTargetKey,
+} from './workspace/transcriptionBackfillTargets';
 import {
   lastTranscriptionAttemptOnFinalize,
   type LastTranscriptionAttemptOnFinalize,
@@ -526,6 +536,24 @@ function replaceSessionMemories(
   };
 }
 
+function addImmutable(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  if (current.has(key)) {
+    return current;
+  }
+  const next = new Set(current);
+  next.add(key);
+  return next;
+}
+
+function removeImmutable(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  if (!current.has(key)) {
+    return current;
+  }
+  const next = new Set(current);
+  next.delete(key);
+  return next;
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [workspaceSession, setWorkspaceSessionState] = useState<WorkspaceSession | null>(null);
@@ -545,6 +573,12 @@ export function App() {
     useState<SegmentSupplementRenameTarget | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
+  const [manualRunningSegmentTargets, setManualRunningSegmentTargets] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const [manualRunningSupplementTargets, setManualRunningSupplementTargets] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
   const [recordingRecoveryActionPending, setRecordingRecoveryActionPending] = useState(false);
   const [recordingRecoveryDraft, setRecordingRecoveryDraft] =
@@ -936,6 +970,8 @@ export function App() {
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
     setSegmentFocusIntent(null);
+    setManualRunningSegmentTargets(new Set());
+    setManualRunningSupplementTargets(new Set());
   }
 
   function setTopLevelWorkspaceView(nextView: TopLevelWorkspaceView) {
@@ -1004,9 +1040,126 @@ export function App() {
     return true;
   }
 
-  const showTranscriptionRetryPlaceholder = useCallback(() => {
-    toast('转录引擎尚未上线');
-  }, []);
+  async function handleRetrySegmentTranscription(target: SegmentTranscriptionRetryTarget) {
+    const activeSession = workspaceSessionRef.current;
+    if (!activeSession || activeSession.workspaceId !== target.workspaceId) {
+      return;
+    }
+    const targetKey = segmentTranscriptionTargetKey({
+      ...target,
+      workspaceHandle: activeSession.workspaceHandle,
+    });
+    let accepted = false;
+    setManualRunningSegmentTargets((currentTargets) => {
+      if (currentTargets.has(targetKey)) {
+        return currentTargets;
+      }
+      accepted = true;
+      return addImmutable(currentTargets, targetKey);
+    });
+    if (!accepted) {
+      return;
+    }
+
+    try {
+      const response = await requestSegmentTranscriptionBackfill({
+        ...target,
+        workspaceHandle: activeSession.workspaceHandle,
+      });
+      const latestSession = workspaceSessionRef.current;
+      if (
+        !latestSession ||
+        latestSession.workspaceHandle !== activeSession.workspaceHandle ||
+        latestSession.workspaceId !== activeSession.workspaceId
+      ) {
+        return;
+      }
+      if (response.ok) {
+        handleRecordingContentSaved({
+          memory: response.value.memory,
+          memoryId: target.memoryId,
+          segmentId: target.segmentId,
+        });
+      } else {
+        toast.error(workspaceErrorDisplayMessage(response.error, '补转录失败，请稍后重试。'));
+      }
+    } catch (error) {
+      const latestSession = workspaceSessionRef.current;
+      if (
+        latestSession?.workspaceHandle === activeSession.workspaceHandle &&
+        latestSession.workspaceId === activeSession.workspaceId
+      ) {
+        toast.error(unknownErrorDisplayMessage(error, '补转录失败，请稍后重试。'));
+      }
+    } finally {
+      setManualRunningSegmentTargets((currentTargets) =>
+        removeImmutable(currentTargets, targetKey)
+      );
+    }
+  }
+
+  async function handleRetrySupplementTranscription(
+    target: SegmentSupplementTranscriptionRetryTarget
+  ) {
+    const activeSession = workspaceSessionRef.current;
+    if (!activeSession || activeSession.workspaceId !== target.workspaceId) {
+      return;
+    }
+    const targetKey = supplementTranscriptionTargetKey({
+      ...target,
+      workspaceHandle: activeSession.workspaceHandle,
+    });
+    let accepted = false;
+    setManualRunningSupplementTargets((currentTargets) => {
+      if (currentTargets.has(targetKey)) {
+        return currentTargets;
+      }
+      accepted = true;
+      return addImmutable(currentTargets, targetKey);
+    });
+    if (!accepted) {
+      return;
+    }
+
+    try {
+      const response = await requestSegmentSupplementTranscriptionBackfill({
+        ...target,
+        workspaceHandle: activeSession.workspaceHandle,
+      });
+      const latestSession = workspaceSessionRef.current;
+      if (
+        !latestSession ||
+        latestSession.workspaceHandle !== activeSession.workspaceHandle ||
+        latestSession.workspaceId !== activeSession.workspaceId
+      ) {
+        return;
+      }
+      if (response.ok) {
+        handleSegmentSupplementFinalized(
+          {
+            memory: response.value.memory,
+            segment: response.value.segment,
+            supplement: response.value.supplement,
+          },
+          { refreshContent: true }
+        );
+      } else {
+        toast.error(workspaceErrorDisplayMessage(response.error, '补转录失败，请稍后重试。'));
+      }
+    } catch (error) {
+      const latestSession = workspaceSessionRef.current;
+      if (
+        latestSession?.workspaceHandle === activeSession.workspaceHandle &&
+        latestSession.workspaceId === activeSession.workspaceId
+      ) {
+        toast.error(unknownErrorDisplayMessage(error, '补转录失败，请稍后重试。'));
+      }
+    } finally {
+      setManualRunningSupplementTargets((currentTargets) =>
+        removeImmutable(currentTargets, targetKey)
+      );
+    }
+  }
 
   function openWorkspaceCreateDialog() {
     if (blockRecordingFlowInterruption()) {
@@ -3314,8 +3467,14 @@ export function App() {
             onRenameMemory={setMemoryRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
-            onRetrySegmentTranscription={showTranscriptionRetryPlaceholder}
-            onRetrySupplementTranscription={showTranscriptionRetryPlaceholder}
+            onRetrySegmentTranscription={(target) => {
+              void handleRetrySegmentTranscription(target);
+            }}
+            onRetrySupplementTranscription={(target) => {
+              void handleRetrySupplementTranscription(target);
+            }}
+            runningSegmentTranscriptionTargets={manualRunningSegmentTargets}
+            runningSupplementTranscriptionTargets={manualRunningSupplementTargets}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
           />
