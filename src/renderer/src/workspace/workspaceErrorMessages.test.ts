@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 describe('workspaceErrorDisplayMessage', () => {
+  it('maps manual transcription backfill conflicts to actionable copy', () => {
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_BACKFILL_TRANSCRIPT_CHANGED',
+        message: 'Transcript changed before save',
+      })
+    ).toBe('转录已在生成期间发生变化，已保留当前内容。请确认后重新生成。');
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+        message: 'Backfill target is not eligible',
+      })
+    ).toBe('这段录音已生成转录；如需覆盖，请使用「重新生成转录」。');
+  });
+
   it('maps Segment delete and restore errors to user-visible recovery copy', () => {
     expect(
       workspaceErrorDisplayMessage({

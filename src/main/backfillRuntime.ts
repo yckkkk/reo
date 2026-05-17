@@ -17,6 +17,7 @@ import { createBackfillDiagnostics, type BackfillDiagnostics } from './backfillD
 import {
   BackfillAlreadyRunningError,
   createBackfillQueue,
+  type BackfillTaskMode,
   type BackfillQueueBatchEnqueueResult,
   type BackfillQueueErrorCode,
   type BackfillQueueTask,
@@ -35,6 +36,7 @@ import {
   saveRecordingMarkdown,
   saveSegmentSupplementMarkdown,
 } from './recordingDrafts.js';
+import { transcriptDigest } from './transcriptDigest.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
 import { readWorkspaceSnapshotFromFileTruth } from './workspaceFiles.js';
 
@@ -83,6 +85,7 @@ export type WorkspaceBackfillRuntime = {
   readonly requestSegmentBackfill: (input: {
     readonly assertWorkspaceUsable: AssertWorkspaceUsable;
     readonly memoryId: string;
+    readonly mode: BackfillTaskMode;
     readonly rootPath: string;
     readonly segmentId: string;
     readonly workspaceHandle: string;
@@ -91,6 +94,7 @@ export type WorkspaceBackfillRuntime = {
   readonly requestSupplementBackfill: (input: {
     readonly assertWorkspaceUsable: AssertWorkspaceUsable;
     readonly memoryId: string;
+    readonly mode: BackfillTaskMode;
     readonly rootPath: string;
     readonly segmentId: string;
     readonly supplementId: string;
@@ -230,6 +234,7 @@ export function createWorkspaceBackfillRuntime({
       .map((target) => ({
         ...target,
         assertWorkspaceUsable,
+        mode: 'fill-missing' as const,
         rootPath,
         source: 'auto' as const,
         workspaceHandle,
@@ -307,15 +312,17 @@ export function createWorkspaceBackfillRuntime({
     pause: queue.pause,
     requestSegmentBackfill: async (input) =>
       (await runManualTask({
-        kind: 'segment',
-        source: 'manual',
         ...input,
+        kind: 'segment',
+        mode: input.mode,
+        source: 'manual',
       })) as WorkspaceRecordingMarkdownSaveResponse,
     requestSupplementBackfill: async (input) =>
       (await runManualTask({
-        kind: 'supplement',
-        source: 'manual',
         ...input,
+        kind: 'supplement',
+        mode: input.mode,
+        source: 'manual',
       })) as WorkspaceSegmentSupplementMarkdownSaveResponse,
     resume: queue.resume,
   };
@@ -371,12 +378,14 @@ async function executeBackfillTask(
   if (!apiKey) {
     return { errorCode: 'auth', ok: false };
   }
-  const eligibility = await readCurrentBackfillEligibility(task, { readMemoryDetail });
-  if (!eligibility.ok) {
-    if (task.source === 'auto' && eligibility.errorCode === 'target-not-eligible') {
-      return { ok: true, transcriptText: '' };
+  if (task.mode === 'fill-missing') {
+    const eligibility = await readCurrentBackfillEligibility(task, { readMemoryDetail });
+    if (!eligibility.ok) {
+      if (task.source === 'auto' && eligibility.errorCode === 'target-not-eligible') {
+        return { ok: true, transcriptText: '' };
+      }
+      return eligibility;
     }
-    return eligibility;
   }
   if (signal.aborted) {
     return { errorCode: 'canceled', ok: false };
@@ -385,12 +394,20 @@ async function executeBackfillTask(
   if (!audio.ok) {
     return { errorCode: mapWorkspaceAudioReadError(audio), ok: false };
   }
-  if (!isBackfillEligibleProjection(audio)) {
+  if (task.mode === 'fill-missing' && !isBackfillEligibleProjection(audio)) {
     if (task.source === 'auto') {
       return { ok: true, transcriptText: audio.transcript.text };
     }
     return { errorCode: 'target-not-eligible', ok: false };
   }
+  if (task.mode === 'regenerate' && audio.audioByteLength <= 0) {
+    return { errorCode: 'target-not-eligible', ok: false };
+  }
+  if (task.mode === 'regenerate' && signal.aborted) {
+    return { errorCode: 'canceled', ok: false };
+  }
+  const expectedTranscriptDigest =
+    task.mode === 'regenerate' ? transcriptDigest(audio.transcript.text) : null;
 
   let audioData: Awaited<ReturnType<typeof prepareBackfillAudioData>>;
   try {
@@ -427,24 +444,54 @@ async function executeBackfillTask(
     task.assertWorkspaceUsable,
     signal
   );
+  const saveAssertWorkspaceUsable =
+    task.mode === 'regenerate' ? task.assertWorkspaceUsable : assertWorkspaceUsable;
 
   if (task.kind === 'segment') {
-    const saved = await saveSegmentTranscript({
-      assertWorkspaceUsable,
-      fileName: 'transcript.md',
-      markdown: recognized.transcriptText,
-      memoryId: task.memoryId,
-      requireTranscriptMissing: true,
-      rootPath: task.rootPath,
-      segmentId: task.segmentId,
-      workspaceId: task.workspaceId,
-    });
+    if (task.mode === 'regenerate' && signal.aborted) {
+      return { errorCode: 'canceled', ok: false };
+    }
+    const saved =
+      task.mode === 'regenerate'
+        ? await saveSegmentTranscript({
+            allowOverwrite: true,
+            assertWorkspaceUsable: saveAssertWorkspaceUsable,
+            expectedTranscriptDigest: requireExpectedTranscriptDigest(expectedTranscriptDigest),
+            fileName: 'transcript.md',
+            isAbortRequested: () => signal.aborted,
+            markdown: recognized.transcriptText,
+            memoryId: task.memoryId,
+            requireTranscriptMissing: false,
+            rootPath: task.rootPath,
+            segmentId: task.segmentId,
+            workspaceId: task.workspaceId,
+          })
+        : await saveSegmentTranscript({
+            assertWorkspaceUsable,
+            fileName: 'transcript.md',
+            markdown: recognized.transcriptText,
+            memoryId: task.memoryId,
+            requireTranscriptMissing: true,
+            rootPath: task.rootPath,
+            segmentId: task.segmentId,
+            workspaceId: task.workspaceId,
+          });
     if (!saved.ok) {
+      if (
+        signal.aborted &&
+        (saved.error.code === 'ERR_BACKFILL_UNAVAILABLE' ||
+          saved.error.code === 'ERR_WORKSPACE_LOCK_LOST')
+      ) {
+        return { errorCode: 'canceled', ok: false };
+      }
       if (saved.error.code === 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE') {
         if (task.source === 'auto') {
           return { ok: true, transcriptText: '' };
         }
         return { errorCode: 'target-not-eligible', ok: false, response: saved };
+      }
+      if (saved.error.code === 'ERR_BACKFILL_TRANSCRIPT_CHANGED') {
+        return { errorCode: 'transcript-changed', ok: false, response: saved };
       }
       return {
         errorCode: saved.error.code === 'ERR_WORKSPACE_LOCK_LOST' ? 'lock-lost' : 'save-failed',
@@ -459,22 +506,50 @@ async function executeBackfillTask(
     };
   }
 
-  const saved = await saveSupplementTranscript({
-    assertWorkspaceUsable,
-    markdown: recognized.transcriptText,
-    memoryId: task.memoryId,
-    requireTranscriptMissing: true,
-    rootPath: task.rootPath,
-    segmentId: task.segmentId,
-    supplementId: task.supplementId,
-    workspaceId: task.workspaceId,
-  });
+  if (task.mode === 'regenerate' && signal.aborted) {
+    return { errorCode: 'canceled', ok: false };
+  }
+  const saved =
+    task.mode === 'regenerate'
+      ? await saveSupplementTranscript({
+          allowOverwrite: true,
+          assertWorkspaceUsable: saveAssertWorkspaceUsable,
+          expectedTranscriptDigest: requireExpectedTranscriptDigest(expectedTranscriptDigest),
+          isAbortRequested: () => signal.aborted,
+          markdown: recognized.transcriptText,
+          memoryId: task.memoryId,
+          requireTranscriptMissing: false,
+          rootPath: task.rootPath,
+          segmentId: task.segmentId,
+          supplementId: task.supplementId,
+          workspaceId: task.workspaceId,
+        })
+      : await saveSupplementTranscript({
+          assertWorkspaceUsable,
+          markdown: recognized.transcriptText,
+          memoryId: task.memoryId,
+          requireTranscriptMissing: true,
+          rootPath: task.rootPath,
+          segmentId: task.segmentId,
+          supplementId: task.supplementId,
+          workspaceId: task.workspaceId,
+        });
   if (!saved.ok) {
+    if (
+      signal.aborted &&
+      (saved.error.code === 'ERR_BACKFILL_UNAVAILABLE' ||
+        saved.error.code === 'ERR_WORKSPACE_LOCK_LOST')
+    ) {
+      return { errorCode: 'canceled', ok: false };
+    }
     if (saved.error.code === 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE') {
       if (task.source === 'auto') {
         return { ok: true, transcriptText: '' };
       }
       return { errorCode: 'target-not-eligible', ok: false, response: saved };
+    }
+    if (saved.error.code === 'ERR_BACKFILL_TRANSCRIPT_CHANGED') {
+      return { errorCode: 'transcript-changed', ok: false, response: saved };
     }
     return {
       errorCode: saved.error.code === 'ERR_WORKSPACE_LOCK_LOST' ? 'lock-lost' : 'save-failed',
@@ -529,9 +604,19 @@ async function readCurrentBackfillEligibility(
       ? segment
       : segment.supplements.find((candidate) => candidate.supplementId === task.supplementId);
 
-  return target && isBackfillEligibleProjection(target)
+  if (!target) {
+    return { errorCode: 'target-not-eligible', ok: false };
+  }
+  return isBackfillEligibleProjection(target)
     ? { ok: true }
     : { errorCode: 'target-not-eligible', ok: false };
+}
+
+function requireExpectedTranscriptDigest(digest: string | null): string {
+  if (digest === null) {
+    throw new Error('Regenerate backfill is missing a transcript snapshot digest');
+  }
+  return digest;
 }
 
 function createCancellationAwareAssertWorkspaceUsable(
@@ -610,6 +695,9 @@ function backfillErrorResponse(errorCode: BackfillQueueErrorCode): WorkspaceErro
   if (errorCode === 'target-not-eligible') {
     return workspaceError('ERR_BACKFILL_TARGET_NOT_ELIGIBLE', 'Backfill target is not eligible');
   }
+  if (errorCode === 'transcript-changed') {
+    return workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
+  }
   if (errorCode === 'empty-audio' || errorCode === 'silent-audio') {
     return workspaceError('ERR_BACKFILL_AUDIO_EMPTY', 'Backfill audio is empty');
   }
@@ -630,6 +718,9 @@ function backfillErrorResponse(errorCode: BackfillQueueErrorCode): WorkspaceErro
   }
   if (errorCode === 'queue-full') {
     return workspaceError('ERR_BACKFILL_UNAVAILABLE', 'Backfill queue is full');
+  }
+  if (errorCode === 'canceled') {
+    return workspaceError('ERR_BACKFILL_UNAVAILABLE', 'Backfill was canceled');
   }
   return workspaceError('ERR_BACKFILL_TRANSCRIBE_FAILED', 'Backfill transcription failed');
 }

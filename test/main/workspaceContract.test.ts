@@ -383,12 +383,14 @@ test('workspace backfill request schemas use explicit entity identity and save r
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
+    mode: 'fill-missing',
   });
   assert.deepEqual(segmentRequest, {
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
+    mode: 'fill-missing',
   });
   assert.equal(
     workspaceRequestSegmentTranscriptionBackfillRequestSchema.safeParse({
@@ -396,6 +398,26 @@ test('workspace backfill request schemas use explicit entity identity and save r
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentTranscriptionBackfillRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'overwrite',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentTranscriptionBackfillRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'regenerate',
       audioData: 'forbidden',
     }).success,
     false
@@ -408,8 +430,41 @@ test('workspace backfill request schemas use explicit entity identity and save r
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       supplementId: 'sup_1',
+      mode: 'regenerate',
     });
-  assert.equal(supplementRequest.supplementId, 'sup_1');
+  assert.deepEqual(supplementRequest, {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    mode: 'regenerate',
+  });
+  assert.equal(
+    workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'overwrite',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceErrorCodeSchema.parse('ERR_BACKFILL_TRANSCRIPT_CHANGED'),
+    'ERR_BACKFILL_TRANSCRIPT_CHANGED'
+  );
   assert.equal(
     workspaceRequestSegmentTranscriptionBackfillResponseSchema.safeParse({
       ok: false,
@@ -420,7 +475,10 @@ test('workspace backfill request schemas use explicit entity identity and save r
   assert.equal(
     workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema.safeParse({
       ok: false,
-      error: { code: 'ERR_BACKFILL_TRANSCRIBE_FAILED', message: 'Transcription failed' },
+      error: {
+        code: 'ERR_BACKFILL_TRANSCRIPT_CHANGED',
+        message: 'Transcript changed before save',
+      },
     }).success,
     true
   );

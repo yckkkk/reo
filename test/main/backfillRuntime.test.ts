@@ -55,8 +55,26 @@ function segmentTask(): SegmentManualInput {
   return {
     assertWorkspaceUsable: usable,
     memoryId: 'mem_1',
+    mode: 'fill-missing',
     rootPath: '/tmp/reo-workspace',
     segmentId: 'seg_1',
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+  };
+}
+
+type SupplementManualInput = Parameters<
+  ReturnType<typeof createWorkspaceBackfillRuntime>['requestSupplementBackfill']
+>[0];
+
+function supplementTask(): SupplementManualInput {
+  return {
+    assertWorkspaceUsable: usable,
+    memoryId: 'mem_1',
+    mode: 'fill-missing',
+    rootPath: '/tmp/reo-workspace',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
   };
@@ -126,6 +144,65 @@ function memoryDetailWithSegment(
   };
 }
 
+function memoryDetailWithSupplement(
+  overrides: Partial<WorkspaceMemoryDetailProjection['segments'][number]['supplements'][number]>
+): WorkspaceMemoryDetailProjection {
+  const detail = memoryDetail();
+  const segment = detail.segments[0];
+  const supplement = segment?.supplements[0];
+  assert.ok(segment);
+  assert.ok(supplement);
+  return {
+    ...detail,
+    segments: [
+      {
+        ...segment,
+        supplements: [
+          {
+            ...supplement,
+            ...overrides,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function savedSegmentResponse() {
+  return {
+    memory: {
+      audioByteLength: 1,
+      createdAt: '2026-05-17T01:00:00.000Z',
+      durationMs: 1000,
+      hasTranscript: true,
+      memoryId: 'mem_1',
+      segmentCount: 1,
+      supplementCount: 1,
+      title: 'Memory',
+      updatedAt: '2026-05-17T01:00:00.000Z',
+    },
+    ok: true as const,
+    saved: true as const,
+  };
+}
+
+function savedSupplementResponse() {
+  const detail = memoryDetail();
+  const segment = detail.segments[0];
+  const supplement = segment?.supplements[0];
+  assert.ok(segment);
+  assert.ok(supplement);
+  return {
+    ...savedSegmentResponse(),
+    segment,
+    supplement: {
+      ...supplement,
+      lastTranscriptionAttempt: 'success' as const,
+      transcript: { exists: true as const },
+    },
+  };
+}
+
 test('workspace backfill runtime runs manual segment backfill with injected remux and Turbo client', async () => {
   const calls: string[] = [];
   const runtime = createWorkspaceBackfillRuntime({
@@ -188,6 +265,567 @@ test('workspace backfill runtime runs manual segment backfill with injected remu
 
   assert.equal(response.ok, true);
   assert.deepEqual(calls, ['prepare:3', 'recognize:api-key-1:b2dnLW9wdXM=', 'save:补转录完成。']);
+});
+
+test('workspace backfill runtime regenerates an existing segment transcript with a snapshot guard', async () => {
+  const calls: string[] = [];
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({
+      ok: true,
+      requestId: 'request-regenerate',
+      transcriptText: '新转录',
+    }),
+    saveSegmentTranscript: async ({
+      allowOverwrite,
+      expectedTranscriptDigest,
+      markdown,
+      requireTranscriptMissing,
+    }) => {
+      assert.equal(allowOverwrite, true);
+      assert.equal(typeof expectedTranscriptDigest, 'string');
+      assert.equal(requireTranscriptMissing, false);
+      calls.push(`save:${markdown}`);
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(calls, ['save:新转录']);
+});
+
+test('workspace backfill runtime skips memory detail preflight for manual regenerate', async () => {
+  let detailRead = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => {
+      detailRead = true;
+      throw new Error('manual regenerate should not read full memory detail before audio');
+    },
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({
+      ok: true,
+      requestId: 'request-regenerate-no-preflight',
+      transcriptText: '新转录',
+    }),
+    saveSegmentTranscript: async () => savedSegmentResponse(),
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(detailRead, false);
+});
+
+test('workspace backfill runtime keeps fill-missing missing-only behavior', async () => {
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => {
+      throw new Error('prepare should not run for existing transcript fill-missing');
+    },
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'failed',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => {
+      throw new Error('audio should not be read for existing transcript fill-missing');
+    },
+    recognize: async () => ({ ok: true, requestId: 'unused', transcriptText: 'unused' }),
+    saveSegmentTranscript: async () => {
+      saved = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill(segmentTask());
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE');
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime reports changed segment transcripts without writing the regenerate result', async () => {
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({ ok: true, requestId: 'request-changed', transcriptText: '新转录' }),
+    saveSegmentTranscript: async ({ allowOverwrite, expectedTranscriptDigest }) => {
+      assert.equal(allowOverwrite, true);
+      assert.equal(typeof expectedTranscriptDigest, 'string');
+      saved = true;
+      return {
+        error: {
+          code: 'ERR_BACKFILL_TRANSCRIPT_CHANGED',
+          message: 'Transcript changed during backfill',
+        },
+        ok: false,
+      };
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'ERR_BACKFILL_TRANSCRIPT_CHANGED');
+  assert.equal(saved, true);
+});
+
+test('workspace backfill runtime keeps transcript and manifest unchanged when regenerate recognition fails', async () => {
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({ errorCode: 'network', ok: false, requestId: 'request-failed' }),
+    saveSegmentTranscript: async () => {
+      saved = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'ERR_BACKFILL_TRANSCRIBE_FAILED');
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime does not re-read or save after regenerate is canceled post snapshot', async () => {
+  let recognizeStarted = false;
+  let releaseRecognize = () => {};
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => {
+      recognizeStarted = true;
+      await new Promise<void>((resolve) => {
+        releaseRecognize = resolve;
+      });
+      return { ok: true, requestId: 'request-canceled', transcriptText: '新转录' };
+    },
+    saveSegmentTranscript: async () => {
+      saved = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const request = runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+  while (!recognizeStarted) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const drain = runtime.cancelAllAndDrain('workspace-switch');
+  releaseRecognize();
+  const response = await request;
+  await drain;
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_BACKFILL_UNAVAILABLE');
+  }
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime returns lock lost before regenerate overwrite write', async () => {
+  let writeAttempted = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({ ok: true, requestId: 'request-lock', transcriptText: '新转录' }),
+    saveSegmentTranscript: async ({ assertWorkspaceUsable, expectedTranscriptDigest }) => {
+      assert.equal(typeof expectedTranscriptDigest, 'string');
+      const usableResult = assertWorkspaceUsable?.();
+      if (usableResult && !usableResult.ok) {
+        return usableResult;
+      }
+      writeAttempted = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    assertWorkspaceUsable: () =>
+      ({
+        error: { code: 'ERR_WORKSPACE_LOCK_LOST', message: 'Workspace lock was lost' },
+        ok: false,
+      }) as WorkspaceErrorEnvelope,
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  assert.equal(writeAttempted, false);
+});
+
+test('workspace backfill runtime mirrors regenerate snapshot guard for supplements', async () => {
+  const calls: string[] = [];
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSupplement({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => {
+      throw new Error('segment audio should not be read for supplement regenerate');
+    },
+    readSupplementAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧补充转录' },
+    }),
+    recognize: async () => ({
+      ok: true,
+      requestId: 'request-supplement-regenerate',
+      transcriptText: '新补充转录',
+    }),
+    saveSegmentTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    saveSupplementTranscript: async ({
+      allowOverwrite,
+      expectedTranscriptDigest,
+      markdown,
+      requireTranscriptMissing,
+    }) => {
+      assert.equal(allowOverwrite, true);
+      assert.equal(typeof expectedTranscriptDigest, 'string');
+      assert.equal(requireTranscriptMissing, false);
+      calls.push(`save:${markdown}`);
+      return savedSupplementResponse();
+    },
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSupplementBackfill({
+    ...supplementTask(),
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(calls, ['save:新补充转录']);
+});
+
+test('workspace backfill runtime does not save a supplement regenerate after cancellation post snapshot', async () => {
+  let recognizeStarted = false;
+  let releaseRecognize = () => {};
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSupplement({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSupplementAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧补充转录' },
+    }),
+    recognize: async () => {
+      recognizeStarted = true;
+      await new Promise<void>((resolve) => {
+        releaseRecognize = resolve;
+      });
+      return { ok: true, requestId: 'request-supplement-canceled', transcriptText: '新补充转录' };
+    },
+    saveSegmentTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    saveSupplementTranscript: async () => {
+      saved = true;
+      return savedSupplementResponse();
+    },
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const request = runtime.requestSupplementBackfill({
+    ...supplementTask(),
+    mode: 'regenerate',
+  });
+  while (!recognizeStarted) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const drain = runtime.cancelAllAndDrain('lock-lost');
+  releaseRecognize();
+  const response = await request;
+  await drain;
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_BACKFILL_UNAVAILABLE');
+  }
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime cancels regenerate on app quit after snapshot', async () => {
+  let recognizeStarted = false;
+  let releaseRecognize = () => {};
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => {
+      recognizeStarted = true;
+      await new Promise<void>((resolve) => {
+        releaseRecognize = resolve;
+      });
+      return { ok: true, requestId: 'request-app-quit-canceled', transcriptText: '新转录' };
+    },
+    saveSegmentTranscript: async () => {
+      saved = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const request = runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+  while (!recognizeStarted) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const drain = runtime.cancelAllAndDrain('app-quit');
+  releaseRecognize();
+  const response = await request;
+  await drain;
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_BACKFILL_UNAVAILABLE');
+  }
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime returns lock lost before supplement regenerate overwrite write', async () => {
+  let writeAttempted = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSupplement({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSupplementAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧补充转录' },
+    }),
+    recognize: async () => ({
+      ok: true,
+      requestId: 'request-supplement-lock',
+      transcriptText: '新补充转录',
+    }),
+    saveSegmentTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    saveSupplementTranscript: async ({ assertWorkspaceUsable, expectedTranscriptDigest }) => {
+      assert.equal(typeof expectedTranscriptDigest, 'string');
+      const usableResult = assertWorkspaceUsable?.();
+      if (usableResult && !usableResult.ok) {
+        return usableResult;
+      }
+      writeAttempted = true;
+      return savedSupplementResponse();
+    },
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const response = await runtime.requestSupplementBackfill({
+    ...supplementTask(),
+    assertWorkspaceUsable: () =>
+      ({
+        error: { code: 'ERR_WORKSPACE_LOCK_LOST', message: 'Workspace lock was lost' },
+        ok: false,
+      }) as WorkspaceErrorEnvelope,
+    mode: 'regenerate',
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+  assert.equal(writeAttempted, false);
 });
 
 test('workspace backfill runtime cancels before transcript save can write', async () => {
@@ -253,6 +891,78 @@ test('workspace backfill runtime cancels before transcript save can write', asyn
   await drain;
 
   assert.equal(response.ok, false);
+  assert.equal(saved, false);
+});
+
+test('workspace backfill runtime treats regenerate save abort checkpoints as canceled', async () => {
+  let saveStarted = false;
+  let releaseSave = () => {};
+  let saved = false;
+  const runtime = createWorkspaceBackfillRuntime({
+    prepareAudioData: async () => ({
+      base64: 'b2dnLW9wdXM=',
+      byteLength: 12,
+      contentType: 'audio/ogg; codecs=opus',
+      format: 'ogg-opus',
+    }),
+    readMemoryDetail: async () => ({
+      ok: true,
+      value: memoryDetailWithSegment({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      }),
+    }),
+    readSegmentAudio: async () => ({
+      audio: new Uint8Array([1]),
+      audioByteLength: 1,
+      lastTranscriptionAttempt: 'success',
+      ok: true,
+      transcript: { exists: true, text: '旧转录' },
+    }),
+    recognize: async () => ({ ok: true, requestId: 'request-cancel-save', transcriptText: '新转录' }),
+    saveSegmentTranscript: async (input) => {
+      saveStarted = true;
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const abortAwareInput = input as typeof input & {
+        readonly isAbortRequested?: () => boolean;
+      };
+      if (abortAwareInput.isAbortRequested?.()) {
+        return {
+          error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'Backfill was canceled' },
+          ok: false,
+        };
+      }
+      const usableResult = input.assertWorkspaceUsable?.();
+      if (usableResult && !usableResult.ok) {
+        return usableResult;
+      }
+      saved = true;
+      return savedSegmentResponse();
+    },
+    saveSupplementTranscript: async () =>
+      ({ error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false }) as never,
+    voiceSettingsStore: validVoiceSettingsStore,
+  });
+
+  const request = runtime.requestSegmentBackfill({
+    ...segmentTask(),
+    mode: 'regenerate',
+  });
+  while (!saveStarted) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const drain = runtime.cancelAllAndDrain('workspace-switch');
+  releaseSave();
+
+  const response = await request;
+  await drain;
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_BACKFILL_UNAVAILABLE');
+  }
   assert.equal(saved, false);
 });
 

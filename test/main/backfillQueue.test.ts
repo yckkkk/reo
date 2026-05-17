@@ -37,11 +37,13 @@ function failure(errorCode: 'auth' | 'lock-lost' | 'network'): BackfillQueueRunR
 function segmentTask(
   id: string,
   source: 'auto' | 'manual' = 'auto',
-  workspaceHandle = 'workspace-handle-1'
+  workspaceHandle = 'workspace-handle-1',
+  mode: 'fill-missing' | 'regenerate' = 'fill-missing'
 ): BackfillQueueTask {
   return {
     kind: 'segment',
     memoryId: `mem_${id}`,
+    mode,
     segmentId: `seg_${id}`,
     source,
     workspaceHandle,
@@ -146,6 +148,50 @@ test('deduplicates by target and rejects same-target manual callers', async () =
   await assert.rejects(
     () => queue.runManual(segmentTask('same', 'manual')),
     BackfillAlreadyRunningError
+  );
+});
+
+test('deduplicates by target identity without using backfill mode', async () => {
+  const { queue } = createControlledQueue();
+  const automatic = segmentTask('same_mode_identity', 'auto', 'workspace-handle-1', 'fill-missing');
+  const regenerate = segmentTask(
+    'same_mode_identity',
+    'manual',
+    'workspace-handle-1',
+    'regenerate'
+  );
+
+  assert.deepEqual(queue.enqueue(automatic, { insertAtHead: false }), {
+    accepted: true,
+    position: 1,
+  });
+  assert.equal(getBackfillTargetKey(automatic), getBackfillTargetKey(regenerate));
+  await assert.rejects(() => queue.runManual(regenerate), BackfillAlreadyRunningError);
+});
+
+test('task diagnostics carry mode for started and terminal queue events', async () => {
+  const events: Array<{ readonly event: string; readonly fields?: Record<string, unknown> }> = [];
+  const queue = createBackfillQueue({
+    automaticBatchLimit: 20,
+    automaticBreakerThreshold: 3,
+    onEvent: (event) => {
+      events.push({
+        event: event.event,
+        ...(event.fields ? { fields: event.fields } : {}),
+      });
+    },
+    runTask: async () => success('done'),
+  });
+  const task = segmentTask('diagnostic_mode', 'manual', 'workspace-handle-1', 'regenerate');
+
+  assert.deepEqual(await queue.runManual(task), { ok: true, transcriptText: 'done' });
+
+  assert.deepEqual(
+    events.filter((event) => event.event === 'task-started' || event.event === 'task-succeeded'),
+    [
+      { event: 'task-started', fields: { mode: 'regenerate', taskCount: 1 } },
+      { event: 'task-succeeded', fields: { mode: 'regenerate', taskCount: 1 } },
+    ]
   );
 });
 

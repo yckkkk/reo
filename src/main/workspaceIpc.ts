@@ -4294,6 +4294,7 @@ function handleRequestSegmentTranscriptionBackfillCore({
           await runtime.requestSegmentBackfill({
             assertWorkspaceUsable: assertUsable,
             memoryId: request.memoryId,
+            mode: request.mode,
             rootPath: handle.canonicalRoot,
             segmentId: request.segmentId,
             workspaceHandle: request.workspaceHandle,
@@ -4331,6 +4332,7 @@ function handleRequestSegmentSupplementTranscriptionBackfillCore({
           await runtime.requestSupplementBackfill({
             assertWorkspaceUsable: assertUsable,
             memoryId: request.memoryId,
+            mode: request.mode,
             rootPath: handle.canonicalRoot,
             segmentId: request.segmentId,
             supplementId: request.supplementId,

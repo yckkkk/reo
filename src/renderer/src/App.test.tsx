@@ -858,6 +858,7 @@ describe('App', () => {
         workspaceId: 'ws_1',
         memoryId: memory.memoryId,
         segmentId: segment.segmentId,
+        mode: 'fill-missing',
       })
     );
     backfill.resolve({
@@ -1056,6 +1057,7 @@ describe('App', () => {
         memoryId: fixture.memory.memoryId,
         segmentId: fixture.segment.segmentId,
         supplementId: fixture.supplement.supplementId,
+        mode: 'fill-missing',
       })
     );
     backfill.resolve({

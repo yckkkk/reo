@@ -14,6 +14,7 @@ type BackfillDiagnosticEvent = (typeof BACKFILL_DIAGNOSTIC_EVENTS)[number];
 type BackfillDiagnosticFields = {
   readonly durationMs?: number;
   readonly errorCode?: string;
+  readonly mode?: 'fill-missing' | 'regenerate';
   readonly taskCount?: number;
 };
 
@@ -27,12 +28,20 @@ type DiagnosticRecorderLike = {
 };
 
 function allowedFields(fields: Record<string, unknown> = {}): BackfillDiagnosticFields {
-  const next: { durationMs?: number; errorCode?: string; taskCount?: number } = {};
+  const next: {
+    durationMs?: number;
+    errorCode?: string;
+    mode?: 'fill-missing' | 'regenerate';
+    taskCount?: number;
+  } = {};
   if (typeof fields['durationMs'] === 'number' && Number.isFinite(fields['durationMs'])) {
     next.durationMs = fields['durationMs'];
   }
   if (typeof fields['errorCode'] === 'string') {
     next.errorCode = fields['errorCode'];
+  }
+  if (fields['mode'] === 'fill-missing' || fields['mode'] === 'regenerate') {
+    next.mode = fields['mode'];
   }
   if (typeof fields['taskCount'] === 'number' && Number.isFinite(fields['taskCount'])) {
     next.taskCount = fields['taskCount'];

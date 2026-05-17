@@ -1,4 +1,5 @@
 export type BackfillTaskSource = 'auto' | 'manual';
+export type BackfillTaskMode = 'fill-missing' | 'regenerate';
 
 export const BACKFILL_QUEUE_ERROR_CODES = [
   'abort',
@@ -20,6 +21,7 @@ export const BACKFILL_QUEUE_ERROR_CODES = [
   'size',
   'timeout',
   'target-not-eligible',
+  'transcript-changed',
   'transcode-failed',
 ] as const;
 
@@ -49,6 +51,7 @@ export type BackfillQueueTask =
   | (BackfillWorkspaceTaskContext & {
       readonly kind: 'segment';
       readonly memoryId: string;
+      readonly mode: BackfillTaskMode;
       readonly segmentId: string;
       readonly source: BackfillTaskSource;
       readonly workspaceHandle: string;
@@ -57,6 +60,7 @@ export type BackfillQueueTask =
   | (BackfillWorkspaceTaskContext & {
       readonly kind: 'supplement';
       readonly memoryId: string;
+      readonly mode: BackfillTaskMode;
       readonly segmentId: string;
       readonly source: BackfillTaskSource;
       readonly supplementId: string;
@@ -278,7 +282,11 @@ export function createBackfillQueue<TResponse = unknown>({
     const signal = abortController.signal;
 
     try {
-      onEvent?.({ event: 'task-started', fields: { taskCount: 1 }, level: 'info' });
+      onEvent?.({
+        event: 'task-started',
+        fields: { mode: entry.task.mode, taskCount: 1 },
+        level: 'info',
+      });
       const result = await runTask({ signal, task: entry.task });
       if (!signal.aborted) {
         return result;
@@ -293,7 +301,9 @@ export function createBackfillQueue<TResponse = unknown>({
     activeTargets.delete(getBackfillTargetKey(entry.task));
     onEvent?.({
       event: result.ok ? 'task-succeeded' : 'task-failed',
-      fields: result.ok ? { taskCount: 1 } : { errorCode: result.errorCode, taskCount: 1 },
+      fields: result.ok
+        ? { mode: entry.task.mode, taskCount: 1 }
+        : { errorCode: result.errorCode, mode: entry.task.mode, taskCount: 1 },
       level: result.ok ? 'info' : 'warn',
     });
     entry.resolve(result);

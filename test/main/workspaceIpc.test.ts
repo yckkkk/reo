@@ -39,6 +39,8 @@ import {
   handleReadFinalizedAudioSegmentForTest,
   handleReadFinalizedAudioSegmentSupplementForTest,
   handleReadMemoryDetailForTest,
+  handleRequestSegmentTranscriptionBackfillForTest,
+  handleRequestSegmentSupplementTranscriptionBackfillForTest,
   handleRevealMemoryInFinderForTest,
   handleRevealMemorySpaceInFinderForTest,
   handleRevealSegmentInFinderForTest,
@@ -802,6 +804,30 @@ function createRegisteredHandleStore(
   return handleStore;
 }
 
+function isBackfillCall(value: unknown): value is {
+  readonly assertWorkspaceUsable: unknown;
+  readonly memoryId: string;
+  readonly mode: 'fill-missing' | 'regenerate';
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId?: string;
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
+} {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate['memoryId'] === 'string' &&
+    (candidate['mode'] === 'fill-missing' || candidate['mode'] === 'regenerate') &&
+    typeof candidate['rootPath'] === 'string' &&
+    typeof candidate['segmentId'] === 'string' &&
+    typeof candidate['workspaceHandle'] === 'string' &&
+    typeof candidate['workspaceId'] === 'string'
+  );
+}
+
 test('initializeWorkspace consumes selection token and never exposes rootPath', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-'));
   const tokenStore = createWorkspaceSelectionTokenStore({
@@ -1200,6 +1226,183 @@ test('closeWorkspace skips global backfill cancellation when the closed handle i
 
   assert.deepEqual(closed, { ok: true, value: { closed: true } });
   assert.deepEqual(canceledReasons, []);
+});
+
+test('request segment backfill IPC forwards mode through validated handle ownership', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-backfill-mode-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const calls: unknown[] = [];
+
+  const response = await handleRequestSegmentTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'regenerate',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    backfillRuntime: {
+      cancelAll: () => {},
+      cancelAllAndDrain: async () => {},
+      enqueueAutomaticTargets: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+      enqueueAutomaticWorkspace: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+      pause: () => {},
+      requestSegmentBackfill: async (input: unknown) => {
+        calls.push(input);
+        return {
+          ok: true as const,
+          value: {
+            memory: {
+              audioByteLength: 1,
+              createdAt: '2026-05-17T01:00:00.000Z',
+              durationMs: 1000,
+              hasTranscript: true,
+              memoryId: 'mem_1',
+              segmentCount: 1,
+              supplementCount: 0,
+              title: 'Memory',
+              updatedAt: '2026-05-17T01:00:00.000Z',
+            },
+            saved: true as const,
+          },
+        };
+      },
+      requestSupplementBackfill: async () =>
+        ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
+      resume: () => {},
+    },
+    voiceSettingsStore: makeVoiceSettingsStoreForIpcTest().store,
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  assert.equal(isBackfillCall(call), true);
+  if (isBackfillCall(call)) {
+    assert.equal(typeof call.assertWorkspaceUsable, 'function');
+    assert.equal(call.memoryId, 'mem_1');
+    assert.equal(call.mode, 'regenerate');
+    assert.equal(call.rootPath, rootPath);
+    assert.equal(call.segmentId, 'seg_1');
+    assert.equal(call.workspaceHandle, 'wh_ipc');
+    assert.equal(call.workspaceId, 'ws_ipc');
+  }
+});
+
+test('request supplement backfill IPC forwards mode and rejects missing mode as invalid request', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-supplement-backfill-mode-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const calls: unknown[] = [];
+  const voiceSettingsStore = makeVoiceSettingsStoreForIpcTest().store;
+  const backfillRuntime = {
+    cancelAll: () => {},
+    cancelAllAndDrain: async () => {},
+    enqueueAutomaticTargets: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+    enqueueAutomaticWorkspace: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+    pause: () => {},
+    requestSegmentBackfill: async () =>
+      ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
+    requestSupplementBackfill: async (input: unknown) => {
+      calls.push(input);
+      return {
+        ok: true as const,
+        value: {
+          memory: {
+            audioByteLength: 1,
+            createdAt: '2026-05-17T01:00:00.000Z',
+            durationMs: 1000,
+            hasTranscript: true,
+            memoryId: 'mem_1',
+            segmentCount: 1,
+            supplementCount: 1,
+            title: 'Memory',
+            updatedAt: '2026-05-17T01:00:00.000Z',
+          },
+          saved: true as const,
+          segment: {
+            audioByteLength: 10,
+            createdAt: '2026-05-17T01:00:00.000Z',
+            durationMs: 1000,
+            lastTranscriptionAttempt: 'failed' as const,
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            supplementCount: 1,
+            supplements: [],
+            title: 'Segment',
+            transcript: { exists: false as const },
+            type: 'audio' as const,
+            updatedAt: '2026-05-17T01:02:00.000Z',
+            workspaceId: 'ws_ipc',
+          },
+          supplement: {
+            audioByteLength: 10,
+            createdAt: '2026-05-17T01:01:00.000Z',
+            durationMs: 1000,
+            lastTranscriptionAttempt: 'success' as const,
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            supplementId: 'sup_1',
+            title: 'Supplement',
+            transcript: { exists: true as const },
+            type: 'audio' as const,
+            updatedAt: '2026-05-17T01:03:00.000Z',
+            workspaceId: 'ws_ipc',
+          },
+        },
+      };
+    },
+    resume: () => {},
+  };
+
+  const invalid = await handleRequestSegmentSupplementTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    backfillRuntime,
+    voiceSettingsStore,
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+
+  const response = await handleRequestSegmentSupplementTranscriptionBackfillForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    backfillRuntime,
+    voiceSettingsStore,
+  });
+
+  assert.equal(response.ok, true);
+  const call = calls[0];
+  assert.equal(isBackfillCall(call), true);
+  if (isBackfillCall(call)) {
+    assert.equal(call.mode, 'regenerate');
+    assert.equal(call.supplementId, 'sup_1');
+  }
 });
 
 test('closeRecordingTranscription clears an active ASR session after workspace lock is lost', async () => {

@@ -230,6 +230,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     workspaceId: 'ws_1',
     memoryId: 'mem_1',
     segmentId: 'seg_1',
+    mode: 'fill-missing',
   });
   await bridge.requestSegmentSupplementTranscriptionBackfill({
     workspaceHandle: 'wh_1',
@@ -237,6 +238,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     supplementId: 'sup_1',
+    mode: 'regenerate',
   });
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',

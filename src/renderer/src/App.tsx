@@ -1120,6 +1120,7 @@ export function App() {
             workspaceId: target.workspaceId,
             memoryId: target.memoryId,
             segmentId: target.segmentId,
+            mode: 'fill-missing',
           }),
         workspaceId: target.workspaceId,
       });
@@ -1147,6 +1148,7 @@ export function App() {
             memoryId: target.memoryId,
             segmentId: target.segmentId,
             supplementId: target.supplementId,
+            mode: 'fill-missing',
           }),
         workspaceId: target.workspaceId,
       });

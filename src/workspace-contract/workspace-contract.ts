@@ -94,6 +94,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_BACKFILL_RATE_LIMITED',
   'ERR_BACKFILL_TRANSCRIBE_FAILED',
   'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+  'ERR_BACKFILL_TRANSCRIPT_CHANGED',
   'ERR_BACKFILL_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_WRITE_FAILED',
@@ -1029,9 +1030,13 @@ export const workspaceSegmentSupplementMarkdownSaveRequestSchema =
     .strict();
 
 export const workspaceRequestSegmentTranscriptionBackfillRequestSchema =
-  workspaceSegmentEntityRequestSchema;
+  workspaceSegmentEntityRequestSchema
+    .extend({ mode: z.enum(['fill-missing', 'regenerate']) })
+    .strict();
 export const workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema =
-  workspaceSegmentSupplementEntityRequestSchema;
+  workspaceSegmentSupplementEntityRequestSchema
+    .extend({ mode: z.enum(['fill-missing', 'regenerate']) })
+    .strict();
 export const workspaceRequestSegmentTranscriptionBackfillResponseSchema =
   workspaceRecordingMarkdownSaveResponseSchema;
 export const workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema =

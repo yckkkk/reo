@@ -55,6 +55,7 @@ import {
   type FinalizeTransactionHooksForTest,
   type MemorySummary,
 } from './memoryFiles.js';
+import { transcriptDigest } from './transcriptDigest.js';
 import {
   draftSegmentMetadataSchema,
   draftSegmentSupplementMetadataSchema,
@@ -93,7 +94,10 @@ type RecordingMarkdownSaveInput = {
   readonly segmentId: string;
   readonly fileName: 'transcript.md';
   readonly markdown: string;
+  readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly expectedTranscriptDigest?: string;
+  readonly isAbortRequested?: () => boolean;
   readonly requireTranscriptMissing?: boolean;
 };
 type FinalizedAudioSegmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
@@ -107,10 +111,18 @@ type FinalizedAudioSegmentSupplementMarkdownSaveInput = {
   readonly segmentId: string;
   readonly supplementId: string;
   readonly markdown: string;
+  readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly expectedTranscriptDigest?: string;
+  readonly isAbortRequested?: () => boolean;
   readonly requireTranscriptMissing?: boolean;
 };
-
+type TranscriptOverwriteRollback = {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly fileName: 'segment.md' | 'supplement.md';
+  readonly previousMarkdown: string;
+};
 function checkWorkspaceUsable(
   assertWorkspaceUsable?: AssertWorkspaceUsable
 ): WorkspaceErrorEnvelope | null {
@@ -123,6 +135,24 @@ function assertWorkspaceUsableForFileWrite(assertWorkspaceUsable?: AssertWorkspa
   if (error) {
     throw error;
   }
+}
+
+function throwIfBackfillSaveAborted(isAbortRequested?: () => boolean): void {
+  if (isAbortRequested?.()) {
+    throw workspaceError(
+      'ERR_BACKFILL_UNAVAILABLE',
+      'Backfill was canceled',
+      'previous-file-preserved'
+    );
+  }
+}
+
+function assertBackfillSaveCanContinue(
+  assertWorkspaceUsable?: AssertWorkspaceUsable,
+  isAbortRequested?: () => boolean
+): void {
+  assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+  throwIfBackfillSaveAborted(isAbortRequested);
 }
 
 function caughtWorkspaceError(error: unknown): WorkspaceErrorEnvelope | null {
@@ -1924,26 +1954,37 @@ export async function discardSegmentSupplementRecordingDraft({
 async function writeSupplementTranscriptInRecordingDirectory({
   recordingDirectory,
   markdown,
+  allowOverwrite = false,
   assertWorkspaceUsable,
+  expectedTranscriptDigest,
+  isAbortRequested,
+  markTranscriptSuccess,
   requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
   readonly markdown: string;
+  readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly expectedTranscriptDigest?: string;
+  readonly isAbortRequested?: () => boolean;
+  readonly markTranscriptSuccess?: () => Promise<void>;
   readonly requireTranscriptMissing?: boolean;
 }): Promise<void> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
+  throwIfBackfillSaveAborted(isAbortRequested);
   await beforeMarkdownWriteForTest?.();
+  throwIfBackfillSaveAborted(isAbortRequested);
   assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
   await assertSameDirectory(recordingDirectory, directoryIdentity);
+  const currentMarkdown = await readTextFileInKnownDirectory(
+    recordingDirectory,
+    directoryIdentity,
+    'supplement.md',
+    MAX_FINALIZED_TRANSCRIPT_READ_BYTES
+  );
   const current = parseWorkspaceMarkdownObject({
     objectType: 'supplement',
-    markdown: await readTextFileInKnownDirectory(
-      recordingDirectory,
-      directoryIdentity,
-      'supplement.md',
-      MAX_FINALIZED_TRANSCRIPT_READ_BYTES
-    ),
+    markdown: currentMarkdown,
   });
   if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
     throw new Error('Finalized supplement markdown kind is unsupported');
@@ -1954,7 +1995,18 @@ async function writeSupplementTranscriptInRecordingDirectory({
       'Backfill target already has a transcript'
     );
   }
+  if (expectedTranscriptDigest !== undefined) {
+    if (!allowOverwrite) {
+      throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Transcript overwrite is not allowed');
+    }
+    const currentTranscriptDigest = transcriptDigest(extractSegmentTranscript(current.content));
+    if (currentTranscriptDigest !== expectedTranscriptDigest) {
+      throw workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
+    }
+  }
   const currentData = current.data as { readonly kind?: 'audio' };
+  assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+  throwIfBackfillSaveAborted(isAbortRequested);
   await writeWorkspaceFileAtomicInKnownDirectory({
     directory: recordingDirectory,
     directoryIdentity,
@@ -1967,34 +2019,62 @@ async function writeSupplementTranscriptInRecordingDirectory({
       },
       content: replaceSegmentTranscript(current.content, markdown),
     }),
-    ...(assertWorkspaceUsable
-      ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+    ...(assertWorkspaceUsable || isAbortRequested
+      ? { assertUsable: () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested) }
       : {}),
   });
+  if (markTranscriptSuccess) {
+    try {
+      await markTranscriptSuccess();
+    } catch (error) {
+      await throwAfterTranscriptOverwriteFailure(
+        error,
+        {
+          directory: recordingDirectory,
+          directoryIdentity,
+          fileName: 'supplement.md',
+          previousMarkdown: currentMarkdown,
+        },
+        assertWorkspaceUsable,
+        'Segment supplement markdown was saved but the transcription attempt manifest could not be updated'
+      );
+    }
+  }
 }
 
 async function writeSegmentTranscriptInRecordingDirectory({
   recordingDirectory,
   markdown,
+  allowOverwrite = false,
   assertWorkspaceUsable,
+  expectedTranscriptDigest,
+  isAbortRequested,
+  markTranscriptSuccess,
   requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
   readonly markdown: string;
+  readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly expectedTranscriptDigest?: string;
+  readonly isAbortRequested?: () => boolean;
+  readonly markTranscriptSuccess?: () => Promise<void>;
   readonly requireTranscriptMissing?: boolean;
 }): Promise<void> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
+  throwIfBackfillSaveAborted(isAbortRequested);
   await beforeMarkdownWriteForTest?.();
+  throwIfBackfillSaveAborted(isAbortRequested);
   assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+  const currentMarkdown = await readTextFileInKnownDirectory(
+    recordingDirectory,
+    directoryIdentity,
+    'segment.md',
+    MAX_FINALIZED_TRANSCRIPT_READ_BYTES
+  );
   const current = parseWorkspaceMarkdownObject({
     objectType: 'segment',
-    markdown: await readTextFileInKnownDirectory(
-      recordingDirectory,
-      directoryIdentity,
-      'segment.md',
-      MAX_FINALIZED_TRANSCRIPT_READ_BYTES
-    ),
+    markdown: currentMarkdown,
   });
   if (requireTranscriptMissing && extractSegmentTranscript(current.content).length > 0) {
     throw workspaceError(
@@ -2002,6 +2082,17 @@ async function writeSegmentTranscriptInRecordingDirectory({
       'Backfill target already has a transcript'
     );
   }
+  if (expectedTranscriptDigest !== undefined) {
+    if (!allowOverwrite) {
+      throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Transcript overwrite is not allowed');
+    }
+    const currentTranscriptDigest = transcriptDigest(extractSegmentTranscript(current.content));
+    if (currentTranscriptDigest !== expectedTranscriptDigest) {
+      throw workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
+    }
+  }
+  assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+  throwIfBackfillSaveAborted(isAbortRequested);
   const nextContent = replaceSegmentTranscript(current.content, markdown);
   await assertSameDirectory(recordingDirectory, directoryIdentity);
   await writeWorkspaceFileAtomicInKnownDirectory({
@@ -2013,10 +2104,76 @@ async function writeSegmentTranscriptInRecordingDirectory({
       data: current.data,
       content: nextContent,
     }),
-    ...(assertWorkspaceUsable
-      ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+    ...(assertWorkspaceUsable || isAbortRequested
+      ? { assertUsable: () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested) }
       : {}),
   });
+  if (markTranscriptSuccess) {
+    try {
+      await markTranscriptSuccess();
+    } catch (error) {
+      await throwAfterTranscriptOverwriteFailure(
+        error,
+        {
+          directory: recordingDirectory,
+          directoryIdentity,
+          fileName: 'segment.md',
+          previousMarkdown: currentMarkdown,
+        },
+        assertWorkspaceUsable,
+        'Recording markdown was saved but the transcription attempt manifest could not be updated'
+      );
+    }
+  }
+}
+
+async function rollbackTranscriptOverwrite(
+  rollback: TranscriptOverwriteRollback,
+  assertWorkspaceUsable?: AssertWorkspaceUsable
+): Promise<boolean> {
+  try {
+    assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
+    await assertSameDirectory(rollback.directory, rollback.directoryIdentity);
+    await writeWorkspaceFileAtomicInKnownDirectory({
+      directory: rollback.directory,
+      directoryIdentity: rollback.directoryIdentity,
+      fileName: rollback.fileName,
+      data: rollback.previousMarkdown,
+      ...(assertWorkspaceUsable
+        ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+        : {}),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function throwAfterTranscriptOverwriteFailure(
+  error: unknown,
+  rollback: TranscriptOverwriteRollback,
+  assertWorkspaceUsable: AssertWorkspaceUsable | undefined,
+  fallbackMessage: string
+): Promise<never> {
+  const rolledBack = await rollbackTranscriptOverwrite(rollback, assertWorkspaceUsable);
+  const workspaceErrorEnvelope = caughtWorkspaceError(error);
+  if (workspaceErrorEnvelope) {
+    throw rolledBack
+      ? workspaceError(
+          workspaceErrorEnvelope.error.code,
+          workspaceErrorEnvelope.error.message,
+          'previous-file-preserved'
+        )
+      : workspaceError(
+          workspaceErrorEnvelope.error.code,
+          workspaceErrorEnvelope.error.message,
+          workspaceErrorEnvelope.error.dataRetention ?? 'file-written-index-stale'
+        );
+  }
+  if (rolledBack) {
+    throw workspaceError('ERR_WORKSPACE_UPDATE_FAILED', fallbackMessage, 'previous-file-preserved');
+  }
+  throw workspaceError('ERR_WORKSPACE_UPDATE_FAILED', fallbackMessage, 'file-written-index-stale');
 }
 
 export async function saveRecordingMarkdown(
@@ -2037,7 +2194,10 @@ async function saveRecordingMarkdownNow({
   memoryId,
   segmentId,
   markdown,
+  allowOverwrite,
   assertWorkspaceUsable,
+  expectedTranscriptDigest,
+  isAbortRequested,
   requireTranscriptMissing,
 }: FinalizedAudioSegmentMarkdownSaveInput): Promise<
   | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
@@ -2055,7 +2215,22 @@ async function saveRecordingMarkdownNow({
     );
     await writeSegmentTranscriptInRecordingDirectory({
       recordingDirectory,
+      ...(allowOverwrite ? { allowOverwrite } : {}),
       markdown,
+      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
+      ...(isAbortRequested ? { isAbortRequested } : {}),
+      ...(expectedTranscriptDigest !== undefined
+        ? {
+            markTranscriptSuccess: () =>
+              markSegmentTranscriptionAttemptSuccess({
+                rootPath,
+                workspaceId,
+                memoryId,
+                segmentId,
+                ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+              }),
+          }
+        : {}),
       ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
@@ -2073,24 +2248,26 @@ async function saveRecordingMarkdownNow({
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    try {
-      await markSegmentTranscriptionAttemptSuccess({
-        rootPath,
-        workspaceId,
-        memoryId,
-        segmentId,
-        ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-      });
-    } catch (error) {
-      const workspaceErrorEnvelope = caughtWorkspaceError(error);
-      if (workspaceErrorEnvelope) {
-        return workspaceErrorEnvelope;
+    if (expectedTranscriptDigest === undefined) {
+      try {
+        await markSegmentTranscriptionAttemptSuccess({
+          rootPath,
+          workspaceId,
+          memoryId,
+          segmentId,
+          ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+        });
+      } catch (error) {
+        const workspaceErrorEnvelope = caughtWorkspaceError(error);
+        if (workspaceErrorEnvelope) {
+          return workspaceErrorEnvelope;
+        }
+        return workspaceError(
+          'ERR_WORKSPACE_UPDATE_FAILED',
+          'Recording markdown was saved but the transcription attempt manifest could not be updated',
+          'file-written-index-stale'
+        );
       }
-      return workspaceError(
-        'ERR_WORKSPACE_UPDATE_FAILED',
-        'Recording markdown was saved but the transcription attempt manifest could not be updated',
-        'file-written-index-stale'
-      );
     }
     return { ok: true, memory, saved: true };
   } catch (error) {
@@ -2131,7 +2308,10 @@ async function saveSegmentSupplementMarkdownNow({
   segmentId,
   supplementId,
   markdown,
+  allowOverwrite,
   assertWorkspaceUsable,
+  expectedTranscriptDigest,
+  isAbortRequested,
   requireTranscriptMissing,
 }: FinalizedAudioSegmentSupplementMarkdownSaveInput): Promise<
   | {
@@ -2158,7 +2338,23 @@ async function saveSegmentSupplementMarkdownNow({
       );
     await writeSupplementTranscriptInRecordingDirectory({
       recordingDirectory: supplementDirectory,
+      ...(allowOverwrite ? { allowOverwrite } : {}),
       markdown,
+      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
+      ...(isAbortRequested ? { isAbortRequested } : {}),
+      ...(expectedTranscriptDigest !== undefined
+        ? {
+            markTranscriptSuccess: () =>
+              markSupplementTranscriptionAttemptSuccess({
+                rootPath,
+                workspaceId,
+                memoryId,
+                segmentId,
+                supplementId,
+                ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+              }),
+          }
+        : {}),
       ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
@@ -2192,25 +2388,27 @@ async function saveSegmentSupplementMarkdownNow({
         'file-written-index-stale'
       );
     }
-    try {
-      await markSupplementTranscriptionAttemptSuccess({
-        rootPath,
-        workspaceId,
-        memoryId,
-        segmentId,
-        supplementId,
-        ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-      });
-    } catch (error) {
-      const workspaceErrorEnvelope = caughtWorkspaceError(error);
-      if (workspaceErrorEnvelope) {
-        return workspaceErrorEnvelope;
+    if (expectedTranscriptDigest === undefined) {
+      try {
+        await markSupplementTranscriptionAttemptSuccess({
+          rootPath,
+          workspaceId,
+          memoryId,
+          segmentId,
+          supplementId,
+          ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+        });
+      } catch (error) {
+        const workspaceErrorEnvelope = caughtWorkspaceError(error);
+        if (workspaceErrorEnvelope) {
+          return workspaceErrorEnvelope;
+        }
+        return workspaceError(
+          'ERR_WORKSPACE_UPDATE_FAILED',
+          'Segment supplement markdown was saved but the transcription attempt manifest could not be updated',
+          'file-written-index-stale'
+        );
       }
-      return workspaceError(
-        'ERR_WORKSPACE_UPDATE_FAILED',
-        'Segment supplement markdown was saved but the transcription attempt manifest could not be updated',
-        'file-written-index-stale'
-      );
     }
     const updatedSupplement = {
       ...supplement,

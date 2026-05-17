@@ -38,6 +38,8 @@ import {
   readWorkspaceSnapshot,
   readRecordingDraftAudio,
   removeMemorySpace,
+  requestSegmentSupplementTranscriptionBackfill,
+  requestSegmentTranscriptionBackfill,
   revealMemoryInFinder,
   revealMemorySpaceInFinder,
   revealSegmentInFinder,
@@ -102,6 +104,8 @@ describe('workspace renderer API wrapper', () => {
     updateMemoryTitle: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
+    requestSegmentTranscriptionBackfill: vi.fn(),
+    requestSegmentSupplementTranscriptionBackfill: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
   };
@@ -639,6 +643,66 @@ describe('workspace renderer API wrapper', () => {
         saved: true,
       },
     });
+    reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          audioByteLength: 1,
+          createdAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 0,
+          supplementCount: 0,
+          hasTranscript: true,
+          memoryId: 'mem_1',
+          segmentCount: 1,
+          title: '录音',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+        },
+        saved: true,
+      },
+    });
+    reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          audioByteLength: 1,
+          createdAt: '2026-05-06T13:08:00.000Z',
+          durationMs: 0,
+          supplementCount: 1,
+          hasTranscript: false,
+          memoryId: 'mem_1',
+          segmentCount: 1,
+          title: '录音',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          type: 'audio',
+          title: '录音',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-06T13:09:00.000Z',
+          durationMs: 1000,
+          audioByteLength: 1,
+          transcript: { exists: false },
+          supplementCount: 1,
+          supplements: [],
+        },
+        supplement: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          supplementId: 'sup_1',
+          type: 'audio',
+          title: '现场补充',
+          createdAt: '2026-05-06T13:10:00.000Z',
+          updatedAt: '2026-05-06T13:11:00.000Z',
+          durationMs: 500,
+          audioByteLength: 2,
+          transcript: { exists: true },
+        },
+      },
+    });
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
       ok: true,
       value: { registered: true },
@@ -775,6 +839,21 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       markdown: '文字',
     });
+    await requestSegmentTranscriptionBackfill({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'fill-missing',
+    });
+    await requestSegmentSupplementTranscriptionBackfill({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
+    });
     await beginMicrophoneIntent({
       workspaceHandle: 'wh_1',
       recordingFlowSessionId: 'recording_flow_1',
@@ -907,6 +986,21 @@ describe('workspace renderer API wrapper', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       restoreToken: 'sup_1',
+    });
+    expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'fill-missing',
+    });
+    expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
     });
     expect(reoWorkspace.beginMicrophoneIntent).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
