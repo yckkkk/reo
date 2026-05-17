@@ -19,7 +19,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
 - 当前 `npm run dev` 通过 `scripts/run-dev.mjs` 先加载 git-ignored `.env.local`，再启动 `electron-vite dev`。`.env.local` 只作为本机 shell 环境注入给 Electron dev process；loader 不注入 `VITE_*` key。
 - 当前豆包流式语音识别凭证使用 Electron `safeStorage` 加密存放在 `userData/voice-transcription-settings.json`，由 main process `voiceSettingsStore` 持有。Renderer/preload 通过 application-scoped voice settings IPC 读取不含密文的 snapshot：`enabled`、`apiKeyConfigured`、`apiKeyLastFour`、`lastValidatedAt`、`lastValidationOk` 和 `lastValidationCode`。X-Api-Key 只在用户保存设置的 request 和 main process 解密后的运行时输入中出现；settings response、录音 IPC response、日志、错误信封和记忆空间内容文件不返回明文或密文。
-- 当前自动补转录在 main process 内使用火山录音文件识别标准版 2.0 `volc.seedasr.auc`。Main 通过配置的 TOS staging 把 finalized `audio.webm` remux 成 OGG/Opus 后上传到用户显式配置的 bucket，生成短 TTL GET URL 交给 provider，并在任务完成或失败后删除 staged object。Renderer、preload、IPC response、Query cache、DOM 和诊断日志不接触 raw path、audio bytes、临时 URL、TOS credential 或 X-Api-Key。没有 TOS 与 ffmpeg 配置时补转录 fail-fast，不启动本地 HTTP 服务、不使用公网隧道、不默认上传到未配置对象存储。
+- 当前自动补转录在 main process 内使用火山录音文件识别标准版 2.0 `volc.seedasr.auc`。Main 通过配置的 TOS staging 把 finalized `audio.webm` 用随应用安装的 ffmpeg binary remux 成 OGG/Opus 后上传到用户显式配置的 bucket，生成短 TTL GET URL 交给 provider，并在任务完成或失败后删除 staged object；`REO_BACKFILL_FFMPEG_PATH` 只作为运行环境 override。Renderer、preload、IPC response、Query cache、DOM 和诊断日志不接触 raw path、audio bytes、临时 URL、TOS credential 或 X-Api-Key。没有完整 TOS 配置时补转录 fail-fast，不启动本地 HTTP 服务、不使用公网隧道、不默认上传到未配置对象存储。
 - 当前 Agentation 只作为 development renderer toolbar 连接本机 `http://localhost:4747`；development CSP 的 `connect-src` 允许该 loopback endpoint 用于 MCP sync、annotation update 和 event stream。Agentation 不新增 preload、IPC、permission、protocol、navigation 或 product runtime surface。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
 - 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL。
@@ -136,6 +136,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 不得把 Electron Forge snippets 混进当前 electron-vite 结构。
 - 当前不安装或配置 Electron Forge、makers、publishers、`electron-updater` 或 `@electron/fuses`。
 - 只有在 packaging 能力同批定义 app identity、platform targets、makers、artifact output、ASAR policy、fuses、signing/notarization、packaged launch verification 和 tracked-output checks 后，才引入 Forge 或 makers。
+- 打包自动补转录时必须核对实际目标平台 ffmpeg binary 的 license、artifact inclusion 和分发义务；未完成目标平台许可结论前，不发布包含该 binary 的 packaged app。
 - 如果未来采用 Forge，必须整体设计 Forge Vite plugin 配置模型、entry、输出路径和 packaging 生命周期。
 - `@electron/fuses` 必须在 package time、code signing 前执行；fuse policy 必须同批说明 ASAR integrity、only-load-from-ASAR、Node options、inspect flags 和 rollback 风险。
 - ASAR policy 必须同批说明 packed/unpacked 边界、native module/resource 例外和 packaged app launch evidence。

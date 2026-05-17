@@ -375,8 +375,7 @@ function mapAudioUrlError(errorCode: BackfillAudioUrlErrorCode): BackfillQueueEr
   if (
     errorCode === 'unsupported-audio-format' ||
     errorCode === 'invalid-remux-output' ||
-    errorCode === 'remux-failed' ||
-    errorCode === 'missing-remuxer'
+    errorCode === 'remux-failed'
   ) {
     return 'format';
   }

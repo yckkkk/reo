@@ -17,7 +17,7 @@
 - C 引擎基线已改为大模型录音文件识别标准版 2.0 `volc.seedasr.auc`；极速版 `volc.bigasr.auc_turbo` 因成本与跨族问题不作为默认实现路径。
 - C-0b 交付方案是 main-only TOS staging + short-lived GET URL + cleanup，配合 WebM/Opus -> OGG/Opus remux；不得用公开本地服务、公网隧道或默认未配置对象存储上传绕过。
 - C0 findings 已写入 C spec；长期结论写入 ADR 0005。
-- 真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke，证明同 key 可访问 AUC；完整 Reo C live backfill 仍需真实 TOS staging 配置与 `REO_BACKFILL_FFMPEG_PATH` 才能验证，不阻塞 D 复用 C 的 manual IPC 合同。
+- 真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke，证明同 key 可访问 AUC；ffmpeg remux 已改为随应用安装 binary；完整 Reo C live backfill 仍需真实 TOS staging 配置才能验证，不阻塞 D 复用 C 的 manual IPC 合同。
 
 ## D：手动重新生成转录
 
@@ -46,7 +46,7 @@
 ## 禁止项（不变）
 
 - 不在没有新 spec 的情况下添加 hidden retry / More menu / 后台任务 / endpoint fallback
-- voice X-Api-Key 不引入环境变量凭证、双 header 鉴权或平台密钥路径；C 的 main-only TOS staging 与 ffmpeg 路径由本机运行环境配置，renderer 不接触这些配置
+- voice X-Api-Key 不引入环境变量凭证、双 header 鉴权或平台密钥路径；C 的 main-only TOS staging 需要运行环境显式配置，ffmpeg 默认使用随应用安装 binary 且 env path 只作为 override；renderer 不接触这些配置
 - 不把 endpoint 选择写成 runtime 自动切换
 - 不跳过 C0 探针直接进入 C-1/C-2/C-3 实施
 

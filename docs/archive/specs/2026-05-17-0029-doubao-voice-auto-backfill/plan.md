@@ -3,7 +3,7 @@
 ## Main Process
 
 - `src/main/c0SeedAsrAucClient.ts`：标准版 2.0 submit/query client，处理 processing、queued、success、auth、rate-limit、network、timeout、empty-audio、quota、size、format、malformed 和 abort。
-- `src/main/backfillAudioUrlSettings.ts`：解析显式 TOS 与 ffmpeg 配置。缺少配置时返回 unconfigured，不默认上传。
+- `src/main/backfillAudioUrlSettings.ts`：解析显式 TOS 配置，ffmpeg 默认使用随应用安装 binary，`REO_BACKFILL_FFMPEG_PATH` 仅作为 override。缺少 TOS 或无法解析 ffmpeg binary 时返回 unconfigured，不默认上传。
 - `src/main/backfillAudioUrlSource.ts`：WebM/Opus -> OGG/Opus remux、TOS PUT、short-lived GET URL、cleanup、abort。
 - `src/main/backfillQueue.ts`：FIFO、manual head insert、dedup、pause/resume、cancel、batch cap、breaker、URL cleanup、manual await。
 - `src/main/backfillRuntime.ts`：把 read finalized audio、URL source、AUC client、auto save 串成 workspace queue。

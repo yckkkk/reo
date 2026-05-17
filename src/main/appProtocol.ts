@@ -2,6 +2,7 @@ import { app, net, protocol } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { APP_SHELL_HOST, APP_SHELL_SCHEME } from './appShellConstants.js';
+import { warnAppProtocolResolveFailure } from './appProtocolDiagnostics.js';
 
 let schemeRegistered = false;
 let protocolRegistered = false;
@@ -69,10 +70,7 @@ export function registerAppShellProtocol(): void {
       const response = await net.fetch(pathToFileURL(assetPath).toString());
       return response.ok ? response : new Response('Not found', { status: 404 });
     } catch (error) {
-      console.warn('[AppProtocol] Failed to resolve renderer asset', {
-        url: request.url,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      warnAppProtocolResolveFailure({ error });
       return new Response('Bad request', { status: 400 });
     }
   });

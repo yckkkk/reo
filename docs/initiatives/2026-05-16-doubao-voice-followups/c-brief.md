@@ -44,7 +44,7 @@
 
 - 单 active workspace scope；切换 workspace 取消未完成任务
 - 串行 FIFO（初始 1）
-- voice X-Api-Key 不引入环境变量凭证；C 的 main-only TOS staging 与 ffmpeg 路径由本机运行环境配置，renderer 不接触这些配置
+- voice X-Api-Key 不引入环境变量凭证；C 的 main-only TOS staging 需要运行环境显式配置，ffmpeg 默认使用随应用安装 binary 且 env path 只作为 override；renderer 不接触这些配置
 - 不引入平台密钥
 - 不动现有 saveTranscript / saveSegmentSupplementTranscript IPC contract（C 任务成功后调用现有 IPC，靠 manifest update 同步置 `'success'`）
 - 不破坏 single-active-spec 规则

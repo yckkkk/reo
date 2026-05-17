@@ -9,7 +9,8 @@
 - [x] WebM/Opus -> OGG/Opus remux 路径有单元测试。
 - [x] TOS PUT/GET/DELETE native signing 有单元测试。
 - [x] 真实 X-Api-Key AUC smoke：公开 demo MP3 URL 调用 `volc.seedasr.auc`，submit HTTP 200 / provider `20000000`，query HTTP 200 / provider `20000000`，109 次 query 后返回非空 transcript；未记录 transcript 正文、X-Api-Key 或 provider log id。
-- [ ] 完整 Reo SeedASR/TOS smoke：未执行；缺少真实 TOS 配置与 `REO_BACKFILL_FFMPEG_PATH`，无法覆盖本地 finalized WebM/Opus -> OGG/Opus -> TOS presigned GET -> AUC -> cleanup。
+- [x] 新安装环境 ffmpeg 前置：无 `REO_BACKFILL_FFMPEG_PATH` 时使用随应用安装的 ffmpeg binary；显式 env path 仅作为 override。
+- [ ] 完整 Reo SeedASR/TOS smoke：未执行；缺少真实 TOS 配置，无法覆盖本地 finalized WebM/Opus -> OGG/Opus -> TOS presigned GET -> AUC -> cleanup。
 
 ## 行为验收
 
@@ -38,6 +39,8 @@
 - 标准版 AUC live smoke：通过；`volc.seedasr.auc` submit/query 均返回 provider `20000000`，transcript length 8590
 - `npm run test:main -- --test-name-pattern "backfill|requestSegmentTranscriptionBackfill|requestSegmentSupplementTranscriptionBackfill|main bootstrap wires backfill"`：通过，662 tests passed
 - `npm run test:renderer -- --run src/renderer/src/workspace/SegmentTranscriptView.test.tsx src/renderer/src/workspace/MemoryStudio.test.tsx src/renderer/src/App.test.tsx src/renderer/src/workspace/workspaceApi.test.ts`：通过，3 files / 95 tests passed
+- `npm run test:main -- --test-name-pattern "packaged ffmpeg|env ffmpeg override|missing ffmpeg|app protocol resolve warnings|app protocol resolve warning call|backfill audio URL|c0SeedAsrAucClient|requestSegmentTranscriptionBackfill|requestSegmentSupplementTranscriptionBackfill|main bootstrap wires backfill"`：通过，667 tests passed；覆盖 packaged ffmpeg default resolution、env override、missing fallback、app protocol warning wrapper、audio URL source、AUC client、manual IPC 和 backfill bootstrap
+- `npm run verify:quick`：通过；typecheck、main tests 667/667、renderer tests 404/404、lint、format check 均通过
 
 ## 100% Confidence Loop
 
@@ -45,4 +48,4 @@
 
 - 本地代码路径、IPC/security、queue lifecycle、renderer running state、diagnostics redaction 和 current docs 同步可由测试与源码证明。
 - 标准版 AUC 外部服务与同 key 复用可由 live smoke 证明。
-- 完整 Reo C 本地录音 backfill 仍需要真实 TOS + ffmpeg 配置和一次小样本调用证明。最终状态必须标记为 DONE_WITH_CONCERNS，不能声称 TOS staging 已 live 验证。
+- 完整 Reo C 本地录音 backfill 仍需要真实 TOS 配置和一次小样本调用证明。最终状态必须标记为 DONE_WITH_CONCERNS，不能声称 TOS staging 已 live 验证。

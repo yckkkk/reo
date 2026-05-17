@@ -3,7 +3,7 @@
 - 时间：2026-05-17 00:29 America/Los_Angeles
 - 来源 initiative：`docs/initiatives/2026-05-16-doubao-voice-followups/`
 - 范围：C-0b gate、SeedASR AUC 标准版 2.0 客户端、main 后台队列、扫描与触发、手动 IPC / preload / renderer retry、录音暂停、breaker、诊断、文档同步与归档
-- 状态：实现完成；真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke；完整 Reo C live backfill 仍缺 TOS/ffmpeg 运行配置
+- 状态：实现完成；真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke；ffmpeg remux 已改为随应用安装 binary；完整 Reo C live backfill 仍缺 TOS staging 运行配置
 
 ## C-0b 结论
 
@@ -18,12 +18,12 @@
 C-0b 采用的安全交付方案是 main-only Volcengine TOS staging：
 
 1. Main process 读取 finalized `audio.webm` bytes。
-2. 使用用户显式配置的 `REO_BACKFILL_FFMPEG_PATH` 把 WebM/Opus remux 为 OGG/Opus。
+2. 使用随应用安装的 ffmpeg binary 把 WebM/Opus remux 为 OGG/Opus；运行环境可用 `REO_BACKFILL_FFMPEG_PATH` 覆盖。
 3. 使用用户显式配置的 TOS bucket、endpoint、region、access key id/secret 上传 staged OGG object。
 4. 生成短 TTL GET URL 交给标准版 2.0 submit。
 5. task 完成、失败或取消时删除 staged object。
 
-该方案不启动公开本地 HTTP 服务，不使用公网隧道，不默认上传到未配置对象存储，不把 raw path、audio bytes、临时 URL、TOS credential、X-Api-Key、title、用户文本或 transcript 暴露给 renderer、preload、IPC response、Query cache、DOM 或诊断日志。缺少 TOS 或 ffmpeg 配置时 fail-fast 为 backfill audio URL typed error。
+该方案不启动公开本地 HTTP 服务，不使用公网隧道，不默认上传到未配置对象存储，不把 raw path、audio bytes、临时 URL、TOS credential、X-Api-Key、title、用户文本或 transcript 暴露给 renderer、preload、IPC response、Query cache、DOM 或诊断日志。缺少完整 TOS 配置，或安装环境无法解析随应用安装的 ffmpeg binary 且没有 `REO_BACKFILL_FFMPEG_PATH` override 时，fail-fast 为 backfill audio URL typed error。
 
 ## 官方与本地依据
 
@@ -34,7 +34,8 @@ C-0b 采用的安全交付方案是 main-only Volcengine TOS staging：
 - 计费页确认标准版 2.0 成本低于极速版。
 - 本地 demo `/Users/yck/Downloads/PM/技术线/reo文件区/auc_python` 只作为旧版 / 极速版示例和 key 形态补充证据，不能作为新版标准版 2.0 客户端基线。
 - `@volcengine/tos-sdk@2.9.1` 试装后 `npm audit` 暴露 axios high vulnerabilities，本实现改用 Node crypto/fetch 原生 TOS signing，不引入 SDK 依赖。
-- ffmpeg 包评估后不引入 bundled dependency；运行时要求显式 `REO_BACKFILL_FFMPEG_PATH`。
+- Reo 安装 `@ffmpeg-installer/ffmpeg`，让新安装环境默认具备 remux binary；`REO_BACKFILL_FFMPEG_PATH` 仅用于开发或部署覆盖。
+- `@ffmpeg-installer/ffmpeg@1.1.0` package license 标注 LGPL-2.1；当前 macOS arm64 安装落地 `@ffmpeg-installer/darwin-arm64@4.1.5`，lockfile 还记录 GPLv3 Linux/Windows optional target packages。打包发布前必须按目标平台完成实际 binary license 和 artifact inclusion 核对。
 
 ## 运行时行为
 
@@ -48,7 +49,7 @@ C-0b 采用的安全交付方案是 main-only Volcengine TOS staging：
 
 ## 收口风险
 
-真实 X-Api-Key 已通过 `volc.seedasr.auc` submit/query smoke，证明 AUC 标准版 2.0 key 复用成立。完整 Reo C live backfill 仍缺少 TOS/ffmpeg 运行配置，因此不能声称本地 finalized audio 已在真实 bucket、真实 presigned URL 和 cleanup 环境中通过。代码路径、签名、错误映射、cleanup、IPC/security、renderer running state 和文档已通过本地自动化验证；上线前仍需用真实 TOS 配置执行一次小样本 smoke，记录 TOS PUT/GET/DELETE、Reo 本地音频 remux、submit/query status 和费用。
+真实 X-Api-Key 已通过 `volc.seedasr.auc` submit/query smoke，证明 AUC 标准版 2.0 key 复用成立。完整 Reo C live backfill 仍缺少 TOS staging 运行配置，因此不能声称本地 finalized audio 已在真实 bucket、真实 presigned URL 和 cleanup 环境中通过。代码路径、签名、错误映射、cleanup、IPC/security、renderer running state 和文档已通过本地自动化验证；上线前仍需用真实 TOS 配置执行一次小样本 smoke，记录 TOS PUT/GET/DELETE、Reo 本地音频 remux、submit/query status 和费用。
 
 ## 文件入口
 

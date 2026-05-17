@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 export type BackfillAudioUrlTosSettings = {
   readonly accessKeyId: string;
   readonly accessKeySecret: string;
@@ -9,7 +11,7 @@ export type BackfillAudioUrlTosSettings = {
 
 export type BackfillAudioUrlConfiguredSettings = {
   readonly configured: true;
-  readonly ffmpegPath?: string;
+  readonly ffmpegPath: string;
   readonly presignedUrlTtlSeconds: number;
   readonly tos: BackfillAudioUrlTosSettings;
 };
@@ -24,14 +26,20 @@ export type BackfillAudioUrlSettings =
   | BackfillAudioUrlUnconfiguredSettings;
 
 type BackfillAudioUrlEnv = Record<string, string | undefined>;
+type PackagedFfmpegModule = {
+  readonly path?: unknown;
+};
 
 const DEFAULT_KEY_PREFIX = 'reo/backfill-audio';
 const DEFAULT_PRESIGNED_URL_TTL_SECONDS = 60;
 const MAX_PRESIGNED_URL_TTL_SECONDS = 900;
 const MIN_PRESIGNED_URL_TTL_SECONDS = 1;
+const requireFromHere = createRequire(import.meta.url);
+let cachedPackagedFfmpegPath: string | null | undefined;
 
 export function resolveBackfillAudioUrlSettings(
-  env: BackfillAudioUrlEnv = process.env
+  env: BackfillAudioUrlEnv = process.env,
+  { packagedFfmpegPath }: { readonly packagedFfmpegPath?: string | null } = {}
 ): BackfillAudioUrlSettings {
   const accessKeyId = normalizedEnvValue(env['REO_BACKFILL_TOS_ACCESS_KEY_ID']);
   const accessKeySecret = normalizedEnvValue(env['REO_BACKFILL_TOS_ACCESS_KEY_SECRET']);
@@ -46,7 +54,11 @@ export function resolveBackfillAudioUrlSettings(
   const keyPrefix = trimSlashes(
     normalizedEnvValue(env['REO_BACKFILL_TOS_KEY_PREFIX']) ?? DEFAULT_KEY_PREFIX
   );
-  const ffmpegPath = normalizedEnvValue(env['REO_BACKFILL_FFMPEG_PATH']);
+  const resolvedPackagedFfmpegPath =
+    packagedFfmpegPath === undefined ? cachedResolvePackagedFfmpegPath() : packagedFfmpegPath;
+  const ffmpegPath =
+    normalizedEnvValue(env['REO_BACKFILL_FFMPEG_PATH']) ??
+    normalizedEnvValue(resolvedPackagedFfmpegPath ?? undefined);
   if (!ffmpegPath) {
     return { configured: false, reason: 'missing-ffmpeg-path' };
   }
@@ -83,4 +95,20 @@ function parsePresignedUrlTtl(value: string | undefined): number {
 function trimSlashes(value: string): string {
   const trimmed = value.replace(/^\/+|\/+$/g, '');
   return trimmed || DEFAULT_KEY_PREFIX;
+}
+
+function resolvePackagedFfmpegPath(): string | null {
+  try {
+    const ffmpeg = requireFromHere('@ffmpeg-installer/ffmpeg') as PackagedFfmpegModule;
+    return typeof ffmpeg.path === 'string' ? ffmpeg.path : null;
+  } catch {
+    return null;
+  }
+}
+
+function cachedResolvePackagedFfmpegPath(): string | null {
+  if (cachedPackagedFfmpegPath === undefined) {
+    cachedPackagedFfmpegPath = resolvePackagedFfmpegPath();
+  }
+  return cachedPackagedFfmpegPath;
 }
