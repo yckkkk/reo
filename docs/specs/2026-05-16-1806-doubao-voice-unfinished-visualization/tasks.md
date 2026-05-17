@@ -73,9 +73,9 @@
 
 ### T3.2 `'success' ∧ exists=false` 路径
 
-- **RED**：构造 fixture：manifest `'success'` + segment.md 不含 `## Transcript`；projection `(lastAttempt='success', exists=false)`
-- **GREEN**：T1.2 已实现
-- **REFACTOR**：fixture 集中
+- **VERIFY-ONLY（RED 豁免）**：当前源码已把 manifest attempt 派生与 transcript presence 解耦，且没有 `## Transcript` 时 transcript 为空；本节只补回归断言，不作为 RED → GREEN 任务执行。
+- **回归补测**：构造 fixture：manifest `'success'` + `segment.md` 不含 `## Transcript`；projection `(lastAttempt='success', exists=false)`
+- **REFACTOR**：优先复用现有 finalized segment fixture，只覆盖 markdown content 差异
 
 ## 阶段 4：B-1 SegmentTranscriptView 重构
 

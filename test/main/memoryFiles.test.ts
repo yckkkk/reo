@@ -2353,6 +2353,40 @@ test('finalized segment projection treats HTML comment-only transcript as empty 
   assert.deepEqual(projection.transcript, { exists: false });
 });
 
+test('finalized segment projection keeps success without transcript heading as exists=false', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_success_without_transcript';
+  const segmentId = 'seg_20260516_success_without_transcript';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '无转写标题',
+  });
+  const segmentDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '成功但无转写标题',
+    lastTranscriptionAttempt: 'success',
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '成功但无转写标题', kind: 'audio' },
+      content: '# 成功但无转写标题\n\n这段正文不是转写区。',
+    })
+  );
+
+  const projection = await readFinalizedSegmentProjection({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(projection.lastTranscriptionAttempt, 'success');
+  assert.deepEqual(projection.transcript, { exists: false });
+});
+
 test('finalized supplement projection exposes lastTranscriptionAttempt from manifest', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_supplement_transcription_status';
