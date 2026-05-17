@@ -1,6 +1,7 @@
 # 豆包语音自动补转录（C）
 
 - 时间：2026-05-17 00:29 America/Los_Angeles
+- 归档状态：superseded。该标准版 2.0 `audio.url` / TOS staging 方案不满足 Reo 当前普通个人用户只配置 `X-Api-Key` 的产品约束。C 交付证据归档在 `docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/`。
 - 来源 initiative：`docs/initiatives/2026-05-16-doubao-voice-followups/`
 - 本 spec 类别：跨数据模型 + IPC + 前端 + 主进程后台任务的功能 spec
 - 范围：C-0 SeedASR AUC 2.0 引擎基线与本地音频 URL 交付 gate（Phase 0 / Gate 0）；C-1 BackfillQueue + scanner + 触发上升沿；C-2 手动触发 IPC 与 B inline 重试的真实接通；C-3 录音暂停、circuit breaker 与诊断

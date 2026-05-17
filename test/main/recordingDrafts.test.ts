@@ -9,6 +9,7 @@ import {
   rm,
   stat,
   symlink,
+  truncate,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -25,6 +26,8 @@ import {
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
   initializeRecordingDraftWorkspace,
+  readFinalizedAudioSegmentContent,
+  readFinalizedAudioSegmentSupplementContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
   saveSegmentSupplementMarkdown,
@@ -36,6 +39,10 @@ import {
   setBeforeDraftDirectoryCreateForTest,
   setBeforeMarkdownWriteForTest,
 } from '../../src/main/recordingDrafts.js';
+import {
+  MAX_BACKFILL_AUDIO_READ_BYTES,
+  MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+} from '../../src/workspace-contract/recording-audio.js';
 import {
   createMemoryFromFileTruth,
   findSegmentDirectoryById,
@@ -125,6 +132,17 @@ function workspaceLockLost() {
   } as const;
 }
 
+async function rewriteObjectManifest(
+  rootPath: string,
+  kind: 'segments' | 'supplements',
+  objectId: string,
+  update: (manifest: Record<string, unknown>) => Record<string, unknown>
+): Promise<void> {
+  const manifestPath = path.join(rootPath, '.reo', 'objects', kind, `${objectId}.json`);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(manifestPath, `${JSON.stringify(update(manifest))}\n`);
+}
+
 async function findSupplementDirectoryById(
   segmentDirectory: string,
   supplementId: string
@@ -162,6 +180,119 @@ async function createMemoryForDraftFinalize({
   });
   assert.equal(created.ok, true);
 }
+
+test('finalized audio backfill reads accept the Turbo 100MB limit without using the preview cap', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_backfill_large';
+  const memoryId = 'mem_active_draft_clear';
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  const segmentAudioPath = path.join(segmentDirectory, 'audio.webm');
+  const backfillReadableSize = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES + 1;
+
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  await truncate(segmentAudioPath, backfillReadableSize);
+  await rewriteObjectManifest(rootPath, 'segments', segmentId, (manifest) => ({
+    ...manifest,
+    audioByteLength: backfillReadableSize,
+    lastTranscriptionAttempt: 'failed',
+  }));
+
+  const segment = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+
+  assert.equal(segment.ok, true);
+  if (segment.ok) {
+    assert.equal(segment.audioByteLength, backfillReadableSize);
+    assert.equal(segment.audio.byteLength, backfillReadableSize);
+    assert.equal(segment.lastTranscriptionAttempt, 'failed');
+  }
+
+  const supplementId = 'sup_backfill_large';
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', supplementId);
+  await mkdir(supplementDirectory, { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'audio.webm'), new Uint8Array());
+  await truncate(path.join(supplementDirectory, 'audio.webm'), backfillReadableSize);
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: 'Large supplement', kind: 'audio' },
+      content: '# Large supplement\n\n## Transcript\n\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'supplement',
+      workspaceId: 'ws_draft',
+      memoryId,
+      segmentId,
+      supplementId,
+      kind: 'audio',
+      createdAt: '2026-05-06T13:10:00.000Z',
+      finalizedAt: '2026-05-06T13:11:00.000Z',
+      updatedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 500,
+      nextSequence: 1,
+      audioByteLength: backfillReadableSize,
+      lastTranscriptionAttempt: 'failed',
+    })}\n`
+  );
+
+  const supplement = await readFinalizedAudioSegmentSupplementContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(supplement.ok, true);
+  if (supplement.ok) {
+    assert.equal(supplement.audioByteLength, backfillReadableSize);
+    assert.equal(supplement.audio.byteLength, backfillReadableSize);
+    assert.equal(supplement.lastTranscriptionAttempt, 'failed');
+  }
+
+  const tooLargeSegmentId = 'seg_backfill_too_large';
+  const tooLargeSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    tooLargeSegmentId
+  );
+  await writeFinalizedAudioSegmentForTest(rootPath, tooLargeSegmentId);
+  await truncate(
+    path.join(tooLargeSegmentDirectory, 'audio.webm'),
+    MAX_BACKFILL_AUDIO_READ_BYTES + 1
+  );
+  await rewriteObjectManifest(rootPath, 'segments', tooLargeSegmentId, (manifest) => ({
+    ...manifest,
+    audioByteLength: MAX_BACKFILL_AUDIO_READ_BYTES + 1,
+  }));
+  const tooLarge = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
+    memoryId,
+    rootPath,
+    segmentId: tooLargeSegmentId,
+  });
+
+  assert.equal(tooLarge.ok, false);
+  if (!tooLarge.ok) {
+    assert.equal(tooLarge.error.code, 'ERR_RECORDING_CHUNK_TOO_LARGE');
+  }
+});
 
 test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits for append idle', async () => {
   const rootPath = await workspaceRoot();
@@ -480,6 +611,134 @@ test('transcript save marks segment and supplement transcription attempts succes
       'lastTranscriptionAttempt'
     ],
     'success'
+  );
+});
+
+test('backfill transcript save refuses to overwrite an existing transcript', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_backfill_no_overwrite',
+    title: 'Backfill no overwrite',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260516_backfill_no_overwrite',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    memoryId: 'mem_backfill_no_overwrite',
+    title: 'Segment backfill no overwrite',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const initialSegmentSave = await saveRecordingMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    fileName: 'transcript.md',
+    markdown: 'User segment transcript',
+  });
+  assert.equal(initialSegmentSave.ok, true);
+
+  const staleSegmentBackfill = await saveRecordingMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    fileName: 'transcript.md',
+    markdown: 'Stale backfill transcript',
+    requireTranscriptMissing: true,
+  });
+  assert.equal(staleSegmentBackfill.ok, false);
+  if (!staleSegmentBackfill.ok) {
+    assert.equal(staleSegmentBackfill.error.code, 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE');
+  }
+  const segmentDirectory = await findSegmentDirectoryById(
+    rootPath,
+    'seg_20260516_backfill_no_overwrite'
+  );
+  assert.match(await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'), /User segment/);
+  assert.doesNotMatch(
+    await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    /Stale backfill/
+  );
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    createSupplementId: () => 'sup_20260516_backfill_no_overwrite',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260516_backfill_no_overwrite',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    supplementId: 'sup_20260516_backfill_no_overwrite',
+    title: 'Supplement backfill no overwrite',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+  const initialSupplementSave = await saveSegmentSupplementMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    supplementId: 'sup_20260516_backfill_no_overwrite',
+    markdown: 'User supplement transcript',
+  });
+  assert.equal(initialSupplementSave.ok, true);
+
+  const staleSupplementBackfill = await saveSegmentSupplementMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_backfill_no_overwrite',
+    segmentId: 'seg_20260516_backfill_no_overwrite',
+    supplementId: 'sup_20260516_backfill_no_overwrite',
+    markdown: 'Stale supplement backfill transcript',
+    requireTranscriptMissing: true,
+  });
+  assert.equal(staleSupplementBackfill.ok, false);
+  if (!staleSupplementBackfill.ok) {
+    assert.equal(staleSupplementBackfill.error.code, 'ERR_BACKFILL_TARGET_NOT_ELIGIBLE');
+  }
+  const supplementDirectory = await findSupplementDirectoryById(
+    segmentDirectory,
+    'sup_20260516_backfill_no_overwrite'
+  );
+  assert.match(
+    await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    /User supplement/
+  );
+  assert.doesNotMatch(
+    await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    /Stale supplement/
   );
 });
 

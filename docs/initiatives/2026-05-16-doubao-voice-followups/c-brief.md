@@ -1,18 +1,18 @@
-# C：自动补转录（brief，待 spec 化）
+# C：自动补转录
 
-> 本文是 C 的"准 spec"：按工程师可直接消费的标准撰写，但**不是** active spec。
-> 进入 `docs/specs/` 前必须满足：B 已归档、B 真机 E2E gate 已通过，且 plan.md 的 B→C readiness gate 已完成。
-> C active spec 已创建：`docs/specs/2026-05-17-0029-doubao-voice-auto-backfill/`。C 执行以 active spec 为准；本文只保留候选问题模型，不作为实施清单。
+当前事实以 `docs/current/*`、`docs/decisions/0005-doubao-voice-file-asr-baseline.md` 和 `docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/` 为准。
+
+旧标准版 `audio.url` 方向不作为 Reo 默认路径：Reo 面向普通个人用户，用户只配置 X-Api-Key，不配置 TOS/对象存储/AK/SK，也不依赖 Reo 托管服务。
 
 - 时间：2026-05-17 00:14 America/Los_Angeles
 - 依赖：B 的 `lastTranscriptionAttempt` manifest 字段
 - 共同约束：见 `plan.md`
 
-## 当前入口
+## 当前状态
 
 - B 已归档并通过 `npm run dev` 真机 E2E gate。
-- 本文只提供 C 的候选问题模型、状态模型和工程切分；C active spec 已完成重新判断。
-- 本文中的文件名、组件名和队列拆分不是实施权威；active spec 必须以当前源码和 `docs/current/*` 为准重新落点。
+- C 已完成重新判断和交付。
+- C 默认引擎是豆包录音文件识别极速版 flash `audio.data`，鉴权只使用用户配置的 X-Api-Key。
 
 ## 信息优先级
 
@@ -21,12 +21,12 @@
    - `docs/decisions/0004-doubao-voice-asr-endpoint-baseline.md`
    - `docs/archive/specs/2026-05-16-1720-doubao-voice-endpoint-billing-audit/`
    - `docs/archive/specs/2026-05-16-1806-doubao-voice-unfinished-visualization/`
-3. 用户在 brainstorm 中确认的产品意图（plan.md C 段）
+3. 用户确认的产品意图（plan.md C 段）
 4. 本 brief 内的早期判断与新信息冲突时，以最新版本为准
 
 ## 范围
 
-- C-0：标准版 2.0 引擎选型、`audio.url` 本地音频交付 gate 与 submit/query 探针调研（独立技术调研子任务）
+- C-0：Turbo flash `audio.data`、单 X-Api-Key、本地 remux 与真实 smoke 验证
 - C-1：后台任务 lifecycle owner（main process）
 - C-2：触发上升沿接线（凭证保存成功 + workspace ready）
 - C-3：与 B 状态字段联动（任务运行中 renderer 中间态 + 成功调 saveTranscript）
@@ -60,14 +60,14 @@
 1. 用户在 Settings 内保存 key 后，response snapshot 的 `settings.lastValidationOk === true`（且 `enabled=true`）；或用户主动 validate 返回 `code === 'ok'` 后，main settings store 从非 ok 进入 ok
 2. App 启动后 / workspace 切换后，新 active workspace ready 且 `enabled=true ∧ apiKeyConfigured=true ∧ lastValidationOk=true`
 
-main process 会扫描当前 active workspace 内 `lastTranscriptionAttempt='failed' ∧ transcript.exists=false` 的 segment 与 supplement，按 finalized `updatedAt` 倒序（或某确定序）逐条进入串行 FIFO 后台队列；每条任务用标准版 2.0 SeedASR AUC 把 finalized audio 转录成文本，成功后调用现有 `workspace:saveTranscript` / `workspace:saveSegmentSupplementTranscript` 写回，自动把 manifest `lastTranscriptionAttempt` 置为 `'success'`；失败则保持 `'failed'`，由下一次触发上升沿驱动重试。
+main process 会扫描当前 active workspace 内 `lastTranscriptionAttempt='failed' ∧ transcript.exists=false` 的 segment 与 supplement，按确定顺序逐条进入串行 FIFO 后台队列；每条任务用 Turbo flash `audio.data` 把 finalized audio 转录成文本，成功后调用现有 transcript save 写回，自动把 manifest `lastTranscriptionAttempt` 置为 `'success'`；失败则保持 `'failed'`，由下一次触发上升沿或用户手动重试驱动重试。
 
 手动任务运行中 UI 在 transcript view 内显示「正在生成」（renderer-only 中间态，不持久化）；自动任务对 renderer 静默。
 
 ## 二、用户角色
 
 - 单用户本机使用者
-- BYOK；标准版 2.0 AUC 与 streaming SAUC 共用 X-Api-Key（C0 必须验证）
+- BYOK；Turbo flash 与 streaming SAUC 共用用户保存的 X-Api-Key（C0 已验证）
 
 ## 三、使用入口
 
@@ -82,7 +82,7 @@ C 是后台行为；用户的"使用"是隐性的：
 ## 四、前置条件
 
 - B 已归档：`lastTranscriptionAttempt` 字段已存在；派生规则已稳定
-- C0 探针通过：标准版 2.0 submit/query 可用、`audio.url` 本地音频交付 gate 已通过、key 复用合法、单次时长上限已知
+- C0 探针通过：Turbo flash `audio.data`、单 X-Api-Key、WebM/Opus 本地 remux、真实 API smoke 和账号 turbo 权限均已验证或明确记录外部阻断
 - voice settings：`enabled=true ∧ apiKeyConfigured=true ∧ lastValidationOk=true`
 - 当前 active workspace handle 仍有效（lock 未失去）
 
@@ -130,7 +130,7 @@ C 是后台行为；用户的"使用"是隐性的：
 
 - 进入条件：`lastAttempt='failed' ∧ exists=false` ∧ 当前 workspace 内无 C 任务
 - 页面表现：B 的失败 + 重试按钮
-- 用户能做什么：手动点重试（D 接通后）
+- 用户能做什么：手动点重试
 - 用户不能做什么：感知到 C 在工作（因为还没触发）
 - 系统正在做什么：等待
 - 数据如何变化：无
@@ -142,7 +142,7 @@ C 是后台行为；用户的"使用"是隐性的：
 
 - 进入条件：已加入队列，未到队首
 - 页面表现：仍是 B 的失败 + 重试（不显示"排队中"）
-- 用户能做什么：点重试 → 走 D 路径复用 C 的手动触发入口；同 target 已在队列中时按 C 队列合同去重，不取消、不抢占
+- 用户能做什么：点重试 → 复用 C 的手动触发入口；同 target 已在队列中时按 C 队列合同去重，不取消、不抢占
 - 用户不能做什么：取消排队（不暴露 UI）
 - 系统正在做什么：等待队首
 - 数据如何变化：无
@@ -156,7 +156,7 @@ C 是后台行为；用户的"使用"是隐性的：
 - 页面表现：manual 任务在 transcript view 显示「正在生成」覆盖重试按钮；auto 任务 UI 不变
 - 用户能做什么：等待 / 切到其他 segment
 - 用户不能做什么：取消（不暴露 UI）
-- 系统正在做什么：提交标准版 2.0 submit 请求并轮询 query；成功后调 saveTranscript
+- 系统正在做什么：提交 Turbo flash `audio.data` 请求；成功后调 saveTranscript
 - 数据如何变化：成功 → segment.md ## Transcript 写入；manifest 'success'
 - 如何退出：成功 → succeeded；失败 → failed-retryable
 - 异常如何处理：HTTP error / save error 都映射为 failed-retryable
@@ -191,21 +191,21 @@ C 是后台行为；用户的"使用"是隐性的：
 
 ### main process 组件
 
-| 元素                     | 解决问题                                                    | 实现要点                                                             |
-| ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| `C0SeedAsrAucClient`     | 调标准版 2.0 submit/query，处理状态码、轮询、超时和错误分类 | 单文件 `src/main/c0SeedAsrAucClient.ts`；no concurrency；abort 支持  |
-| `BackfillAudioUrlSource` | 把 finalized audio 交付为火山可访问 `audio.url`             | C-0b 通过后实现；不公开本地服务、不默认对象存储上传                  |
-| `BackfillQueue`          | 串行 FIFO 队列                                              | 单文件 `src/main/backfillQueue.ts`；持有 workspaceHandle scope       |
-| `BackfillScanner`        | 扫描 active workspace manifest 收集 eligible 集合           | 复用现有 Memory detail projection 投影；按 updatedAt 倒序            |
-| `BackfillTriggerWiring`  | 监听 voice settings 上升沿 + workspace ready 上升沿         | 在 main 注册 settings store 变更 callback + workspace lifecycle hook |
+| 元素                      | 解决问题                                                                | 实现要点                                                                        |
+| ------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `DoubaoAucTurboClient`    | 调 Turbo flash `audio.data`，处理 header status、超时、abort 和错误分类 | `src/main/doubaoAucTurboClient.ts`；单 request 返回结果                         |
+| `BackfillAudioDataSource` | 把 finalized WebM/Opus 转为 OGG/Opus base64                             | `src/main/backfillAudioDataSource.ts`；随包 ffmpeg；临时文件清理；不暴露 base64 |
+| `BackfillQueue`           | 串行 FIFO 队列                                                          | `src/main/backfillQueue.ts`；持有 workspaceHandle scope                         |
+| `BackfillScanner`         | 扫描 active workspace manifest 收集 eligible 集合                       | `src/main/backfillScanner.ts`；复用现有 Memory detail projection 投影           |
+| `BackfillRuntime`         | 绑定 voice settings、audio read、Turbo client 与 transcript save        | `src/main/backfillRuntime.ts`；manual/auto 共用同一 queue                       |
 
 ### renderer 组件
 
-| 元素                             | 解决问题                                                            | 实现要点                                                                                     |
-| -------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `BackfillEventListener`          | 接收 main 事件，更新 feature-local Zustand store 或 component state | 跨 Memory Studio 与 Sidebar 红点（red dot 不变）共享；可能引入 Zustand store（待 spec 决定） |
-| `SegmentTranscriptView` 扩展     | 增加 `'running'` outcome（仍由 B 重构后的 model 承载）              | outcome model 扩 `kind: 'running'`；C spec 内重构                                            |
-| MemoryStudio 注入 backfill state | 把 target identity 映射到 `running?` 状态                           | feature-local；target 覆盖 Segment 与 SegmentSupplement                                      |
+| 元素                             | 解决问题                                      | 实现要点                                                  |
+| -------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
+| `SegmentTranscriptView` 扩展     | 增加 `'running'` outcome                      | running 态不显示重试按钮，不持久化                        |
+| MemoryStudio 注入 backfill state | 把 target identity 映射到 `running?` 状态     | feature-local；target 覆盖 Segment 与 SegmentSupplement   |
+| App 手动 backfill state          | 持有 Segment 与 SegmentSupplement running Set | 不新增 Query key、Zustand store 或 main-to-renderer event |
 
 ## 八、状态切换规则（状态机）
 
@@ -263,34 +263,32 @@ canceling ──[abort done]──→ idle
 
 ## 十一、第三方能力
 
-| 项                           | 内容                                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 使用哪个能力                 | 火山引擎大模型录音文件识别标准版 2.0 `POST /api/v3/auc/bigmodel/submit` + `query` + `volc.seedasr.auc` |
-| 工程接入边界                 | 全部在 main process；renderer 完全不接触                                                               |
-| 页面消费哪些结果             | transcript text；其它字段（confidence、utterances 等）不消费                                           |
-| 失败时如何降级               | retry 不在任务内部进行；交给下一次触发上升沿                                                           |
-| 数据如何保存                 | 复用现有 `workspace:saveTranscript` IPC；写入 segment.md `## Transcript`                               |
-| 异步结果如何回写             | BackfillQueue 单 task 内部 submit + poll；对外仍是同步 await                                           |
-| 以官方文档和实际接口协议为准 | C-0 探针子任务先验证                                                                                   |
+| 项                           | 内容                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 使用哪个能力                 | 火山引擎大模型录音文件极速版 `POST /api/v3/auc/bigmodel/recognize/flash` + `volc.bigasr.auc_turbo` + `audio.data` |
+| 工程接入边界                 | 全部在 main process；renderer 完全不接触                                                                          |
+| 页面消费哪些结果             | transcript text；其它字段（confidence、utterances 等）不消费                                                      |
+| 失败时如何降级               | retry 不在任务内部进行；交给下一次触发上升沿                                                                      |
+| 数据如何保存                 | 复用现有 `workspace:saveTranscript` IPC；写入 segment.md `## Transcript`                                          |
+| 异步结果如何回写             | BackfillQueue 单 task 内部等待 flash response；对外仍是同步 await                                                 |
+| 以官方文档和实际接口协议为准 | C-0 探针子任务先验证                                                                                              |
 
 ## 十二、C-0 探针子任务
 
-C-0 是 C spec 的 Phase 0 / Gate 0；C-0 失败 → 暂停 C-1/C-2/C-3 实施，回到 brainstorm。
+C-0 是 C spec 的 Phase 0 / Gate 0；当前通过条件是 Turbo flash `audio.data`、单 X-Api-Key、本地 remux 和真实 smoke 均成立。
 
 C-0 验证项：
 
-1. **endpoint 可用性**：构造最小 submit/query request（极短 audio sample，如 1 秒静音），用现有 BYOK key 调用标准版 2.0 endpoint
-2. **resource id 一致性**：header 用 `X-Api-Resource-Id: volc.seedasr.auc`，确认 submit/query 可用
-3. **key 复用**：使用 voice settings 现存的 X-Api-Key，确认同 key 同时授权 SAUC 流式与 AUC 离线
-4. **单次时长上限**：优先以官方文档确认；若官方文档缺失或与 smoke request 冲突，再做边界时长 probe
-5. **本地音频 URL 交付**：确认 Reo finalized local audio 如何在不破坏本地优先与 Electron 安全边界的前提下成为火山可访问 `audio.url`
+1. **endpoint 可用性**：用现有 BYOK key 调用 Turbo flash endpoint
+2. **resource id 一致性**：header 用 `X-Api-Resource-Id: volc.bigasr.auc_turbo`
+3. **key 复用**：使用 voice settings 现存的 X-Api-Key，确认单 key 可授权 Turbo flash
+4. **单次时长上限**：官方文档确认 2h / 100MB
+5. **本地音频交付**：Reo finalized local WebM/Opus 在 main process 内 remux 为 OGG/Opus 后用 `audio.data` 提交
 
 C-0 产出物：
 
-- C active spec 内的 C0 findings 段
-- C0 通过后，把长期 endpoint / billing / limit 结论压缩进 ADR 0004 扩展段，或新 ADR 0005
-
-C-0 不实施 C-1/C-2/C-3 任何代码。
+- C 归档 spec 内的 C0 findings 段
+- C0 通过后，把长期 endpoint / billing / limit 结论压缩进 ADR 0005
 
 ## 十三、边界情况补齐（必做）
 
@@ -324,7 +322,7 @@ C-0 不实施 C-1/C-2/C-3 任何代码。
 
 ## 十六、最终目标总结（可放在 C spec 顶部）
 
-C 的最终交付是：让用户在凭证恢复 / 启动 Reo / 切换 workspace 时，所有"上次系统失败、转录仍空"的 segment 与 supplement 自动按串行 FIFO 后台补齐转录，不需要用户主动点任何按钮；整个流程对用户透明，成功后 transcript 文本出现、manifest 自动置 `'success'`；失败保留 `'failed'`，下次触发上升沿继续。后台引擎使用火山引擎大模型录音文件识别标准版 2.0 `POST /api/v3/auc/bigmodel/submit` + `query` + `volc.seedasr.auc`，C-0 必须先确认 endpoint 可用、key 复用、轮询策略、单次时长上限与本地音频 `audio.url` 交付方案。任务持有当前 active workspace handle，切 workspace / lock lost / app quit 即中断并清空队列；录音中暂停队列但不取消。复用现有 `workspace:saveTranscript` 与 `workspace:saveSegmentSupplementTranscript` 写回，依赖 B 的 `lastTranscriptionAttempt` manifest 字段判断 eligible 集合。C 同批建立手动触发合同，把 D 与 B 的 inline 重试请求送入同一 `BackfillQueue`，但不实现 D 菜单、确认弹层、任务取消或第二套排序规则；不新增 main → renderer 事件 channel。新增的外部依赖是 C0 验证后的 SeedASR AUC 2.0 客户端实现与音频 URL 交付适配。验收依据 C spec verification.md：scanner 正确收集 failed-eligible 集合、串行队列正确执行、submit/query 成功调 saveTranscript / 失败保留 manifest、workspace 切换正确取消、录音中正确暂停、saveTranscript 成功后 manifest 自动 'success'、手动触发同 target 去重且不抢占、TypeScript strict 与 `npm run verify:quick` 全绿；本 spec 与 `docs/current/electron.md` / `docs/current/flow.md` / `docs/current/data.md` / `docs/current/frontend.md` / `docs/current/quality.md` 必须在收口时同批更新。
+C 的最终交付是：让用户在凭证恢复 / 启动 Reo / 切换 workspace 时，所有"上次系统失败、转录仍空"的 segment 与 supplement 自动按串行 FIFO 后台补齐转录；手动失败重试复用同一队列并显示本地 running 态。后台引擎使用火山引擎大模型录音文件极速版 `POST /api/v3/auc/bigmodel/recognize/flash` + `volc.bigasr.auc_turbo` + `audio.data`，用户只配置 X-Api-Key，不配置 TOS、对象存储、AK/SK 或平台服务。任务持有当前 active workspace handle，切 workspace / lock lost / app quit 即中断并清空队列；录音中暂停队列但不取消。复用现有 transcript save 路径写回，依赖 B 的 `lastTranscriptionAttempt` manifest 字段判断 eligible 集合。不新增 main → renderer 事件 channel、不新增 Query key、不新增 Zustand store。验收依据 C spec verification.md：scanner 正确收集 failed-eligible 集合、串行队列正确执行、Turbo flash 成功调 saveTranscript / 失败保留 manifest、workspace 切换正确取消、录音中正确暂停、saveTranscript 成功后 manifest 自动 'success'、手动触发同 target 去重且不抢占、TypeScript strict 与 `npm run verify:quick` 全绿；本 spec 与 `docs/current/electron.md` / `docs/current/flow.md` / `docs/current/data.md` / `docs/current/frontend.md` / `docs/current/quality.md` 必须在收口时同批更新。
 
 ## 十七、Readiness gate
 

@@ -27,6 +27,8 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
@@ -110,6 +112,10 @@ import {
   workspaceRecordingDraftAudioRequestSchema,
   workspaceRecordingFinalizeRequestSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceRecordingReadRequestSchema,
@@ -249,6 +255,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateSegmentSupplementTitle',
     'workspace:saveTranscript',
     'workspace:saveSegmentSupplementTranscript',
+    'workspace:requestSegmentTranscriptionBackfill',
+    'workspace:requestSegmentSupplementTranscriptionBackfill',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
     'workspace:startRecordingTranscription',
@@ -336,6 +344,14 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:saveSegmentSupplementTranscript'
   );
   assert.equal(
+    WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    'workspace:requestSegmentTranscriptionBackfill'
+  );
+  assert.equal(
+    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    'workspace:requestSegmentSupplementTranscriptionBackfill'
+  );
+  assert.equal(
     WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
     'workspace:readVoiceTranscriptionSettings'
   );
@@ -358,6 +374,55 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(
     WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
     'workspace:openVoiceTranscriptionProviderConsole'
+  );
+});
+
+test('workspace backfill request schemas use explicit entity identity and save response shapes', () => {
+  const segmentRequest = workspaceRequestSegmentTranscriptionBackfillRequestSchema.parse({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  assert.deepEqual(segmentRequest, {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  assert.equal(
+    workspaceRequestSegmentTranscriptionBackfillRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      audioData: 'forbidden',
+    }).success,
+    false
+  );
+
+  const supplementRequest =
+    workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+    });
+  assert.equal(supplementRequest.supplementId, 'sup_1');
+  assert.equal(
+    workspaceRequestSegmentTranscriptionBackfillResponseSchema.safeParse({
+      ok: false,
+      error: { code: 'ERR_BACKFILL_ALREADY_RUNNING', message: 'Already running' },
+    }).success,
+    true
+  );
+  assert.equal(
+    workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema.safeParse({
+      ok: false,
+      error: { code: 'ERR_BACKFILL_TRANSCRIBE_FAILED', message: 'Transcription failed' },
+    }).success,
+    true
   );
 });
 

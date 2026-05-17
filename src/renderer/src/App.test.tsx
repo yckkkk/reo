@@ -61,6 +61,8 @@ describe('App', () => {
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
+    requestSegmentTranscriptionBackfill: vi.fn(),
+    requestSegmentSupplementTranscriptionBackfill: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
     startRecordingTranscription: vi.fn(),
@@ -757,7 +759,7 @@ describe('App', () => {
     expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
   });
 
-  it('shows a placeholder toast when retrying a failed segment transcription from the loaded workspace', async () => {
+  it('requests segment transcription backfill when retrying a failed segment transcription from the loaded workspace', async () => {
     const user = userEvent.setup();
     const memory = {
       memoryId: 'mem_retry_transcription',
@@ -841,12 +843,159 @@ describe('App', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     expect(await within(content).findByText('上次生成转录失败。')).toBeInTheDocument();
 
+    const backfill =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['requestSegmentTranscriptionBackfill']>>
+      >();
+    reoWorkspace.requestSegmentTranscriptionBackfill.mockReturnValueOnce(backfill.promise);
+
     await user.click(within(content).getByRole('button', { name: '重试' }));
 
-    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
+    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+      })
+    );
+    backfill.resolve({
+      ok: true,
+      value: { memory: { ...memory, hasTranscript: true }, saved: true },
+    });
+    expect(await screen.findByText('已生成转录')).toBeInTheDocument();
   });
 
-  it('shows a placeholder toast when retrying a failed supplement transcription from the loaded workspace', async () => {
+  it('ignores an in-flight segment transcription backfill response after reopening the same workspace with a new handle', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_retry_reopen_transcription',
+      title: 'Retry reopen transcription memory',
+      createdAt: '2026-05-16T18:20:00.000Z',
+      updatedAt: '2026-05-16T18:21:00.000Z',
+      segmentCount: 1,
+      durationMs: 4200,
+      audioByteLength: 12,
+      hasTranscript: false,
+      supplementCount: 0,
+    };
+    const segment = {
+      ...audioSegmentProjection({
+        audioByteLength: 12,
+        durationMs: 4200,
+        memoryId: memory.memoryId,
+        segmentId: 'seg_retry_reopen_transcription',
+        title: 'Failed reopen transcription segment',
+      }),
+      lastTranscriptionAttempt: 'failed' as const,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+    const backfill =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['requestSegmentTranscriptionBackfill']>>
+      >();
+    reoWorkspace.requestSegmentTranscriptionBackfill.mockReturnValueOnce(backfill.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(within(content).getByRole('button', { name: '重试' }));
+    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+
+    reoWorkspace.initializeWorkspace.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-2',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    expect(await findTitlebarMemoryControl(memory.title)).toBeInTheDocument();
+
+    await act(async () => {
+      backfill.resolve({
+        ok: true,
+        value: { memory: { ...memory, hasTranscript: true }, saved: true },
+      });
+      await backfill.promise;
+    });
+
+    expect(screen.queryByText('已生成转录')).not.toBeInTheDocument();
+  }, 10_000);
+
+  it('requests supplement transcription backfill when retrying a failed supplement transcription from the loaded workspace', async () => {
     const user = userEvent.setup();
     const fixture = createSegmentSupplementFixture();
     mockSegmentSupplementWorkspace({
@@ -889,9 +1038,36 @@ describe('App', () => {
     await user.click(screen.getByRole('tab', { name: '补充录音1' }));
     expect(await screen.findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
 
+    const backfill =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['requestSegmentSupplementTranscriptionBackfill']>>
+      >();
+    reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockReturnValueOnce(
+      backfill.promise
+    );
+
     await user.click(screen.getByRole('button', { name: '重试' }));
 
-    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
+    expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: fixture.memory.memoryId,
+        segmentId: fixture.segment.segmentId,
+        supplementId: fixture.supplement.supplementId,
+      })
+    );
+    backfill.resolve({
+      ok: true,
+      value: {
+        memory: fixture.memory,
+        segment: fixture.segment,
+        supplement: fixture.supplement,
+        saved: true,
+      },
+    });
+    expect(await screen.findByText('已生成转录')).toBeInTheDocument();
   });
 
   it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {

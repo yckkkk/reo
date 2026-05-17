@@ -86,6 +86,15 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_RECORDING_FINALIZE_FAILED',
   'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE',
   'ERR_RECORDING_TRANSCRIPTION_FAILED',
+  'ERR_BACKFILL_ALREADY_RUNNING',
+  'ERR_BACKFILL_AUDIO_EMPTY',
+  'ERR_BACKFILL_AUDIO_TOO_LARGE',
+  'ERR_BACKFILL_AUDIO_TRANSCODE_FAILED',
+  'ERR_BACKFILL_AUTH_FAILED',
+  'ERR_BACKFILL_RATE_LIMITED',
+  'ERR_BACKFILL_TRANSCRIBE_FAILED',
+  'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+  'ERR_BACKFILL_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_WRITE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
@@ -1019,6 +1028,15 @@ export const workspaceSegmentSupplementMarkdownSaveRequestSchema =
     })
     .strict();
 
+export const workspaceRequestSegmentTranscriptionBackfillRequestSchema =
+  workspaceSegmentEntityRequestSchema;
+export const workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema;
+export const workspaceRequestSegmentTranscriptionBackfillResponseSchema =
+  workspaceRecordingMarkdownSaveResponseSchema;
+export const workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema =
+  workspaceSegmentSupplementMarkdownSaveResponseSchema;
+
 export const workspaceMicrophoneIntentResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -1296,6 +1314,18 @@ export type WorkspaceRecordingMarkdownSaveResponse = z.infer<
 >;
 export type WorkspaceSegmentSupplementMarkdownSaveResponse = z.infer<
   typeof workspaceSegmentSupplementMarkdownSaveResponseSchema
+>;
+export type WorkspaceRequestSegmentTranscriptionBackfillRequest = z.infer<
+  typeof workspaceRequestSegmentTranscriptionBackfillRequestSchema
+>;
+export type WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest = z.infer<
+  typeof workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema
+>;
+export type WorkspaceRequestSegmentTranscriptionBackfillResponse = z.infer<
+  typeof workspaceRequestSegmentTranscriptionBackfillResponseSchema
+>;
+export type WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse = z.infer<
+  typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema
 >;
 export type WorkspaceMicrophoneIntentRequest = z.infer<
   typeof workspaceMicrophoneIntentRequestSchema

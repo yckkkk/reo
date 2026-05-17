@@ -52,10 +52,7 @@ type MemoryStudioProps = {
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
-  readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
-  readonly onRetrySupplementTranscription?: (
-    target: SegmentSupplementTranscriptionRetryTarget
-  ) => void;
+  readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -73,6 +70,13 @@ export type SegmentSupplementTranscriptionRetryTarget = {
   readonly memoryId: string;
   readonly segmentId: string;
   readonly supplementId: string;
+};
+
+export type TranscriptionBackfillController = {
+  readonly isSegmentRunning?: (target: SegmentTranscriptionRetryTarget) => boolean;
+  readonly isSupplementRunning?: (target: SegmentSupplementTranscriptionRetryTarget) => boolean;
+  readonly retrySegment?: (target: SegmentTranscriptionRetryTarget) => void;
+  readonly retrySupplement?: (target: SegmentSupplementTranscriptionRetryTarget) => void;
 };
 
 export type SegmentSupplementRecordingTarget = {
@@ -614,14 +618,12 @@ function SegmentSupplementTab({
 function SegmentSupplementAudioPlayer({
   supplement,
   audioResourceCache,
-  onRetrySupplementTranscription,
+  transcriptionBackfill,
   workspaceSession,
 }: {
   readonly supplement: MemorySegmentSupplement;
   readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
-  readonly onRetrySupplementTranscription?: (
-    target: SegmentSupplementTranscriptionRetryTarget
-  ) => void;
+  readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -647,15 +649,22 @@ function SegmentSupplementAudioPlayer({
   const supplementSegmentId = supplement.segmentId;
   const supplementAudio = supplementContent?.audio ?? null;
   const supplementAudioByteLength = supplementContent?.audioByteLength ?? null;
-  const retrySupplementTranscription = onRetrySupplementTranscription
+  const retrySupplementTranscription = transcriptionBackfill?.retrySupplement
     ? () =>
-        onRetrySupplementTranscription({
+        transcriptionBackfill.retrySupplement?.({
           workspaceId: workspaceSession.workspaceId,
           memoryId: supplement.memoryId,
           segmentId: supplement.segmentId,
           supplementId: supplement.supplementId,
         })
     : undefined;
+  const supplementTranscriptionRunning =
+    transcriptionBackfill?.isSupplementRunning?.({
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      supplementId: supplement.supplementId,
+    }) === true;
   const supplementRequestId = supplementContent?.requestId ?? null;
   const workspaceHandle = workspaceSession.workspaceHandle;
   const workspaceId = workspaceSession.workspaceId;
@@ -938,16 +947,21 @@ function SegmentSupplementAudioPlayer({
                 ? 'error'
                 : 'ready'
           }
-          outcome={deriveTranscriptOutcome({
-            lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
-            transcript: supplementContent?.transcript,
-          })}
+          outcome={
+            supplementTranscriptionRunning
+              ? { kind: 'running' }
+              : deriveTranscriptOutcome({
+                  lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
+                  transcript: supplementContent?.transcript,
+                })
+          }
           {...(retrySupplementTranscription ? { onRetry: retrySupplementTranscription } : {})}
           copy={{
             loading: '正在载入补充录音内容。',
             error: '补充录音转录加载失败，请重试。',
             empty: '这段补充录音还没有转录。',
             failedRetryable: '上次生成补充录音转录失败。',
+            running: '正在生成补充录音转录。',
             retry: '重试',
           }}
         />
@@ -989,8 +1003,7 @@ export function MemoryStudio({
   onDeleteSegmentSupplement,
   onRenameSegmentSupplement,
   onRenameSegment,
-  onRetrySegmentTranscription,
-  onRetrySupplementTranscription,
+  transcriptionBackfill,
   onSegmentFocusConsumed,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -1031,14 +1044,21 @@ export function MemoryStudio({
   const selectedSegment =
     segments.find((segment) => segment.segmentId === selectedSegmentId) ?? segments[0] ?? null;
   const retrySelectedSegmentTranscription =
-    selectedSegment && onRetrySegmentTranscription
+    selectedSegment && transcriptionBackfill?.retrySegment
       ? () =>
-          onRetrySegmentTranscription({
+          transcriptionBackfill.retrySegment?.({
             workspaceId: workspaceSession.workspaceId,
             memoryId: memory.memoryId,
             segmentId: selectedSegment.segmentId,
           })
       : undefined;
+  const selectedSegmentTranscriptionRunning =
+    selectedSegment &&
+    transcriptionBackfill?.isSegmentRunning?.({
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: memory.memoryId,
+      segmentId: selectedSegment.segmentId,
+    }) === true;
   const segmentContentQuery = useQuery({
     ...segmentContentQueryOptions(
       workspaceSession,
@@ -1962,10 +1982,14 @@ export function MemoryStudio({
                           ? 'error'
                           : 'ready'
                     }
-                    outcome={deriveTranscriptOutcome({
-                      lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
-                      transcript: segmentContent?.transcript,
-                    })}
+                    outcome={
+                      selectedSegmentTranscriptionRunning
+                        ? { kind: 'running' }
+                        : deriveTranscriptOutcome({
+                            lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
+                            transcript: segmentContent?.transcript,
+                          })
+                    }
                     {...(retrySelectedSegmentTranscription
                       ? { onRetry: retrySelectedSegmentTranscription }
                       : {})}
@@ -1974,6 +1998,7 @@ export function MemoryStudio({
                       error: '片段内容加载失败，请重试。',
                       empty: '这段录音还没有转录。',
                       failedRetryable: '上次生成转录失败。',
+                      running: '正在生成转录。',
                       retry: '重试',
                     }}
                   />
@@ -1991,7 +2016,7 @@ export function MemoryStudio({
                   <SegmentSupplementAudioPlayer
                     supplement={activeSegmentSupplement}
                     audioResourceCache={supplementAudioResourceCacheRef.current}
-                    {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
+                    {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
                     workspaceSession={workspaceSession}
                   />
                 </section>

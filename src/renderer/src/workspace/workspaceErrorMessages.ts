@@ -6,6 +6,15 @@ type WorkspaceErrorLike = {
 };
 
 const workspaceErrorMessages = {
+  ERR_BACKFILL_ALREADY_RUNNING: '这段录音正在生成转录。',
+  ERR_BACKFILL_AUDIO_EMPTY: '这段录音没有可识别的音频。',
+  ERR_BACKFILL_AUDIO_TOO_LARGE: '这段录音太大，暂时无法生成转录。',
+  ERR_BACKFILL_AUDIO_TRANSCODE_FAILED: '录音音频暂时无法转换为识别格式。',
+  ERR_BACKFILL_AUTH_FAILED: '请先填写或重新保存 X-Api-Key。',
+  ERR_BACKFILL_RATE_LIMITED: '豆包识别请求过于频繁，请稍后重试。',
+  ERR_BACKFILL_TARGET_NOT_ELIGIBLE: '这段录音当前不需要补转录。',
+  ERR_BACKFILL_TRANSCRIBE_FAILED: '豆包暂时无法完成这段录音的转录。',
+  ERR_BACKFILL_UNAVAILABLE: '补转录暂时不可用。',
   ERR_MEMORY_CREATE_FAILED: '无法新建记忆。',
   ERR_MEMORY_NOT_FOUND: '找不到这条记忆。',
   ERR_MEMORY_UPDATE_FAILED: '无法更新这条记忆。',

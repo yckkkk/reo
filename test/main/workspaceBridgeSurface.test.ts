@@ -53,6 +53,8 @@ const workspaceBridgeKeys = [
   'updateSegmentSupplementTitle',
   'saveTranscript',
   'saveSegmentSupplementTranscript',
+  'requestSegmentTranscriptionBackfill',
+  'requestSegmentSupplementTranscriptionBackfill',
   'beginMicrophoneIntent',
   'clearMicrophoneIntent',
   'startRecordingTranscription',
@@ -223,6 +225,19 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     supplementId: 'sup_1',
     markdown: '补充录音转写',
   });
+  await bridge.requestSegmentTranscriptionBackfill({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  await bridge.requestSegmentSupplementTranscriptionBackfill({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+  });
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
@@ -247,6 +262,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:finalizeSegmentSupplementRecordingDraft',
     'workspace:discardSegmentSupplementRecordingDraft',
     'workspace:saveSegmentSupplementTranscript',
+    'workspace:requestSegmentTranscriptionBackfill',
+    'workspace:requestSegmentSupplementTranscriptionBackfill',
   ]);
 });
 

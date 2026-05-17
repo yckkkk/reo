@@ -3,6 +3,12 @@ import {
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   workspaceErrorCodeSchema,
 } from '../workspace-contract/workspace-contract.js';
+import {
+  BACKFILL_QUEUE_CANCEL_REASONS,
+  BACKFILL_QUEUE_ERROR_CODES,
+  BACKFILL_QUEUE_PAUSE_REASONS,
+} from './backfillQueue.js';
+import { BACKFILL_SCAN_FAILED_ERROR_CODE } from './backfillDiagnosticConstants.js';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error';
 type DiagnosticFieldValue = string | number | boolean | null;
@@ -67,6 +73,12 @@ const SAFE_DATA_RETENTION_VALUES = new Set([
   'unknown',
 ]);
 const SAFE_ERROR_CODES = new Set<string>(workspaceErrorCodeSchema.options);
+const SAFE_BACKFILL_ERROR_CODES = new Set([
+  ...BACKFILL_QUEUE_ERROR_CODES,
+  ...BACKFILL_QUEUE_CANCEL_REASONS,
+  ...BACKFILL_QUEUE_PAUSE_REASONS,
+  BACKFILL_SCAN_FAILED_ERROR_CODE,
+]);
 const SAFE_ERROR_NAMES = new Set([
   'AbortError',
   'AggregateError',
@@ -156,7 +168,9 @@ function sanitizeStringField(key: string, value: string): DiagnosticFieldValue {
   }
 
   if (key === 'errorCode') {
-    return SAFE_ERROR_CODES.has(value) ? value : 'ERR_UNKNOWN';
+    return SAFE_ERROR_CODES.has(value) || SAFE_BACKFILL_ERROR_CODES.has(value)
+      ? value
+      : 'ERR_UNKNOWN';
   }
 
   if (key === 'errorName') {

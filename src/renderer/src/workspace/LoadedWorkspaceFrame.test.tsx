@@ -15,6 +15,7 @@ import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
 import type {
   SegmentSupplementTranscriptionRetryTarget,
   SegmentTranscriptionRetryTarget,
+  TranscriptionBackfillController,
 } from './MemoryStudio';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import { seedWorkspaceSnapshot, workspaceSnapshotQueryKey } from './workspaceQueries';
@@ -343,6 +344,15 @@ function renderLoadedWorkspaceFrame({
       : {
           memoryRailOpen,
         };
+  const transcriptionBackfill: TranscriptionBackfillController | undefined =
+    onRetrySegmentTranscription || onRetrySupplementTranscription
+      ? {
+          ...(onRetrySegmentTranscription ? { retrySegment: onRetrySegmentTranscription } : {}),
+          ...(onRetrySupplementTranscription
+            ? { retrySupplement: onRetrySupplementTranscription }
+            : {}),
+        }
+      : undefined;
   const renderResult = render(
     <QueryClientProvider client={queryClient}>
       <LoadedWorkspaceFrame
@@ -354,8 +364,7 @@ function renderLoadedWorkspaceFrame({
         onRenameMemory={onRenameMemory}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
-        {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
-        {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
+        {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
         onSelectMemory={onSelectMemory}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}

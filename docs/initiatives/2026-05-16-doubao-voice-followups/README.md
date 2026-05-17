@@ -4,7 +4,7 @@
 
 - 状态：active
 - 类型：产品或代码开发 active initiative
-- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C active spec 已创建并完成引擎基线修订，等待 C-0 本地音频 URL 交付 gate
+- 当前阶段：B 已归档并通过 `npm run dev` 真机 E2E gate；C 已按 Turbo `audio.data` 路径完成并进入归档收口；下一步是 C→D readiness gate
 
 ## 目标
 
@@ -26,7 +26,7 @@
 - 不合并 B/C/D/E；同一 session 只推进一个可验证工作单元。
 - 不重新讨论已锁定决策：BYOK、safeStorage、同窗口 Settings、保存时 probe、不使用环境变量凭证或双 header 鉴权、toggle 默认 OFF、start 快照贯穿整段 live session。
 - current 文档同步按实际触碰 surface 执行：IPC、安全和宿主边界更新 `electron.md`；query、cache 和 settings ownership 更新 `data.md`；UI state 和组件模式更新 `frontend.md`；lifecycle、retry、补偿和 background jobs 更新 `flow.md`；测试、错误、日志和验证规则更新 `quality.md`。
-- C 不能直接按 `c-brief.md` 实施；下一 session 必须先把 `c-brief.md` 当作 pre-spec 草案重新审视，完成 brainstorm 与 active spec 文档后，才允许进入实现计划。
+- C 不能按旧标准版 `audio.url` brief 实施；当前 C 结论以 `docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/` 与 ADR 0005 为准。
 
 ## 完成条件
 

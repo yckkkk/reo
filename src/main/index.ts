@@ -12,6 +12,7 @@ import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from
 import { diagnosticErrorName, recordDiagnosticEvent } from './diagnostics.js';
 import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
+import { createWorkspaceBackfillRuntime } from './backfillRuntime.js';
 import { createRecordingTranscriptionSessionRegistry } from './recordingTranscriptionSessions.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
@@ -128,11 +129,14 @@ app
         };
       },
     });
+    const backfillRuntime = createWorkspaceBackfillRuntime({ voiceSettingsStore });
     closeWorkspaceRuntime = async () => {
+      await backfillRuntime.cancelAllAndDrain('app-quit');
       recordingTranscriptionSessions.closeAll();
       await closeAllWorkspaceHandles();
     };
     registerWorkspaceIpc({
+      backfillRuntime,
       expectedSession: session.defaultSession,
       expectedSessionKey: 'default',
       isTrustedUrl: isTrustedAppUrl,

@@ -29,11 +29,13 @@ const enabledNoKeySnapshot: VoiceTranscriptionSettings = {
   enabled: true,
 };
 
+const recentValidationIso = new Date(Date.now() - 60_000).toISOString();
+
 const verifiedActiveSnapshot: VoiceTranscriptionSettings = {
   enabled: true,
   apiKeyConfigured: true,
   apiKeyLastFour: '1234',
-  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidatedAt: recentValidationIso,
   lastValidationCode: 'ok',
   lastValidationOk: true,
 };
@@ -47,7 +49,7 @@ const authFailedSnapshot: VoiceTranscriptionSettings = {
   enabled: true,
   apiKeyConfigured: true,
   apiKeyLastFour: '1234',
-  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidatedAt: recentValidationIso,
   lastValidationCode: 'auth',
   lastValidationOk: false,
 };
@@ -56,7 +58,7 @@ const networkFailedSnapshot: VoiceTranscriptionSettings = {
   enabled: true,
   apiKeyConfigured: true,
   apiKeyLastFour: '1234',
-  lastValidatedAt: '2026-05-16T13:00:00.000Z',
+  lastValidatedAt: recentValidationIso,
   lastValidationCode: 'network',
   lastValidationOk: null,
 };

@@ -172,6 +172,22 @@ test('diagnostic error names and statuses reject attacker-controlled strings', a
       status: 'error:ERR_WORKSPACE_LOCK_LOST',
     }
   );
+  assert.deepEqual(
+    sanitizeDiagnosticFields({
+      errorCode: 'rate-limit',
+    }),
+    {
+      errorCode: 'rate-limit',
+    }
+  );
+  assert.deepEqual(
+    sanitizeDiagnosticFields({
+      errorCode: 'recording',
+    }),
+    {
+      errorCode: 'recording',
+    }
+  );
 });
 
 test('diagnostic field sanitizer bounds primitives and never expands objects', () => {

@@ -56,6 +56,8 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -158,6 +160,10 @@ import {
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRecordingMarkdownSaveResponseSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentTranscriptionBackfillRequestSchema,
+  workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceHandleRequestSchema,
   workspaceUpdateActiveMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
@@ -264,6 +270,10 @@ import {
   type VoiceTranscriptionProbeResult,
 } from './voiceTranscriptionProbe.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
+import {
+  createWorkspaceBackfillRuntime,
+  type WorkspaceBackfillRuntime,
+} from './backfillRuntime.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
@@ -332,6 +342,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly handleStore?: WorkspaceHandleStore;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
+  readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly voiceSettingsStore: VoiceSettingsStore;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
   readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
@@ -369,7 +380,9 @@ interface HandleWorkspaceRequestOptions {
   readonly expectedSession: Session | object;
   readonly expectedSessionKey: string;
   readonly isTrustedUrl: (url: string) => boolean;
+  readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly handleStore?: WorkspaceHandleStore;
+  readonly onBeforeBackfillCancel?: (workspaceHandle: string) => boolean;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
 }
 
@@ -3340,12 +3353,14 @@ export async function handleClearMicrophoneIntentForTest(
 }
 
 async function handleCloseWorkspaceCore({
+  backfillRuntime,
   event,
   input,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
   handleStore = createWorkspaceHandleStore(),
+  onBeforeBackfillCancel,
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
 }: HandleWorkspaceRequestOptions): Promise<z.infer<typeof workspaceCloseResponseSchema>> {
   const trusted = validateWorkspaceSender({
@@ -3374,6 +3389,9 @@ async function handleCloseWorkspaceCore({
 
   clearMicrophoneIntentsForWorkspaceHandle(request.data.workspaceHandle);
   recordingTranscriptionSessions.closeForWorkspaceHandle(request.data.workspaceHandle);
+  if (onBeforeBackfillCancel?.(request.data.workspaceHandle) ?? true) {
+    await backfillRuntime?.cancelAllAndDrain('workspace-switch');
+  }
   const closed = await handleStore.closeHandle({
     workspaceHandle: request.data.workspaceHandle,
     sender: trusted.sender,
@@ -4249,6 +4267,99 @@ function handleSaveSegmentSupplementTranscriptCore(
   });
 }
 
+function handleRequestSegmentTranscriptionBackfillCore({
+  backfillRuntime,
+  voiceSettingsStore,
+  ...options
+}: HandleWorkspaceRequestOptions & {
+  readonly backfillRuntime?: WorkspaceBackfillRuntime;
+  readonly voiceSettingsStore: VoiceSettingsStore;
+}): Promise<z.infer<typeof workspaceRequestSegmentTranscriptionBackfillResponseSchema>> {
+  const runtime = backfillRuntime ?? createWorkspaceBackfillRuntime({ voiceSettingsStore });
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRequestSegmentTranscriptionBackfillRequestSchema,
+    invalidMessage: 'requestSegmentTranscriptionBackfill request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Backfill workspace does not match the active handle'
+          );
+        }
+        return workspaceRequestSegmentTranscriptionBackfillResponseSchema.parse(
+          await runtime.requestSegmentBackfill({
+            assertWorkspaceUsable: assertUsable,
+            memoryId: request.memoryId,
+            rootPath: handle.canonicalRoot,
+            segmentId: request.segmentId,
+            workspaceHandle: request.workspaceHandle,
+            workspaceId: request.workspaceId,
+          })
+        );
+      }),
+  });
+}
+
+function handleRequestSegmentSupplementTranscriptionBackfillCore({
+  backfillRuntime,
+  voiceSettingsStore,
+  ...options
+}: HandleWorkspaceRequestOptions & {
+  readonly backfillRuntime?: WorkspaceBackfillRuntime;
+  readonly voiceSettingsStore: VoiceSettingsStore;
+}): Promise<z.infer<typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema>> {
+  const runtime = backfillRuntime ?? createWorkspaceBackfillRuntime({ voiceSettingsStore });
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
+    invalidMessage: 'requestSegmentSupplementTranscriptionBackfill request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Backfill supplement workspace does not match the active handle'
+          );
+        }
+        return workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema.parse(
+          await runtime.requestSupplementBackfill({
+            assertWorkspaceUsable: assertUsable,
+            memoryId: request.memoryId,
+            rootPath: handle.canonicalRoot,
+            segmentId: request.segmentId,
+            supplementId: request.supplementId,
+            workspaceHandle: request.workspaceHandle,
+            workspaceId: request.workspaceId,
+          })
+        );
+      }),
+  });
+}
+
+export async function handleRequestSegmentTranscriptionBackfillForTest(
+  options: HandleWorkspaceRequestOptions & {
+    readonly backfillRuntime?: WorkspaceBackfillRuntime;
+    readonly voiceSettingsStore: VoiceSettingsStore;
+  }
+): Promise<z.infer<typeof workspaceRequestSegmentTranscriptionBackfillResponseSchema>> {
+  return handleRequestSegmentTranscriptionBackfillCore(options);
+}
+
+export async function handleRequestSegmentSupplementTranscriptionBackfillForTest(
+  options: HandleWorkspaceRequestOptions & {
+    readonly backfillRuntime?: WorkspaceBackfillRuntime;
+    readonly voiceSettingsStore: VoiceSettingsStore;
+  }
+): Promise<z.infer<typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema>> {
+  return handleRequestSegmentSupplementTranscriptionBackfillCore(options);
+}
+
 function saveSegmentSupplementTranscriptWithHandle(
   request: z.infer<typeof workspaceSegmentSupplementMarkdownSaveRequestSchema>,
   handle: RequiredWorkspaceHandle,
@@ -4371,6 +4482,7 @@ export function registerWorkspaceIpc({
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   voiceSettingsStore,
+  backfillRuntime = createWorkspaceBackfillRuntime({ voiceSettingsStore }),
   voiceTranscriptionProbe = runDefaultVoiceTranscriptionProbe,
   openExternal = openSystemExternalUrl,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
@@ -4392,6 +4504,95 @@ export function registerWorkspaceIpc({
       )
     );
   };
+  type ReadyBackfillWorkspace = {
+    readonly assertWorkspaceUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
+    readonly isCurrent: () => boolean;
+    readonly rootPath: string;
+    readonly workspaceHandle: string;
+    readonly workspaceId: string;
+  };
+  let readyBackfillWorkspace: ReadyBackfillWorkspace | null = null;
+  let readyBackfillGeneration = 0;
+  let lastFiredBackfillReadyKey: string | null = null;
+
+  function voiceSettingsReadyForBackfill(): boolean {
+    const settings = voiceSettingsStore.read();
+    return settings.enabled && settings.apiKeyConfigured && settings.lastValidationOk === true;
+  }
+
+  function maybeTriggerAutomaticBackfill(): void {
+    if (!readyBackfillWorkspace || !voiceSettingsReadyForBackfill()) {
+      return;
+    }
+    const readyKey = `${readyBackfillWorkspace.workspaceId}:${readyBackfillWorkspace.workspaceHandle}`;
+    if (lastFiredBackfillReadyKey === readyKey) {
+      return;
+    }
+    lastFiredBackfillReadyKey = readyKey;
+    void backfillRuntime.enqueueAutomaticWorkspace(readyBackfillWorkspace);
+  }
+
+  function rememberReadyBackfillWorkspace(
+    event: TrustedSenderEventAdapter,
+    channel: string,
+    response: WorkspaceInitializeResponse
+  ): WorkspaceInitializeResponse {
+    if (!response.ok) {
+      return response;
+    }
+    const trusted = validateWorkspaceSender({
+      event,
+      channel,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    });
+    if (!trusted.ok) {
+      return response;
+    }
+    const required = handleStore.requireHandle({
+      workspaceHandle: response.value.workspaceHandle,
+      sender: trusted.sender,
+      workspaceId: response.value.workspaceId,
+    });
+    if (!required.ok) {
+      return response;
+    }
+    const workspaceHandle = response.value.workspaceHandle;
+    const workspaceId = response.value.workspaceId;
+    const generation = (readyBackfillGeneration += 1);
+    readyBackfillWorkspace = {
+      assertWorkspaceUsable: required.handle.assertUsable,
+      isCurrent: () =>
+        readyBackfillWorkspace?.workspaceHandle === workspaceHandle &&
+        readyBackfillWorkspace.workspaceId === workspaceId &&
+        readyBackfillGeneration === generation,
+      rootPath: required.handle.canonicalRoot,
+      workspaceHandle,
+      workspaceId,
+    };
+    maybeTriggerAutomaticBackfill();
+    return response;
+  }
+
+  function handleVoiceSettingsResult<Response extends { readonly ok: boolean }>(
+    response: Response
+  ): Response {
+    if (response.ok) {
+      maybeTriggerAutomaticBackfill();
+    }
+    return response;
+  }
+
+  function afterOk<Response extends { readonly ok: boolean }>(
+    response: Response,
+    after: () => void
+  ): Response {
+    if (response.ok) {
+      after();
+    }
+    return response;
+  }
 
   registerWorkspaceIpcHandler(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
@@ -4414,40 +4615,52 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
-    handleInitializeWorkspace({
+  registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>
+    rememberReadyBackfillWorkspace(
       event,
-      input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-      tokenStore,
-      handleStore,
-      memorySpaceRegistry,
-    })
+      WORKSPACE_INITIALIZE_CHANNEL,
+      await handleInitializeWorkspace({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        tokenStore,
+        handleStore,
+        memorySpaceRegistry,
+      })
+    )
   );
-  registerWorkspaceIpcHandler(WORKSPACE_OPEN_CHANNEL, (event, input) =>
-    handleOpenWorkspace({
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_CHANNEL, async (event, input) =>
+    rememberReadyBackfillWorkspace(
       event,
-      input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-      tokenStore,
-      handleStore,
-      memorySpaceRegistry,
-    })
+      WORKSPACE_OPEN_CHANNEL,
+      await handleOpenWorkspace({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        tokenStore,
+        handleStore,
+        memorySpaceRegistry,
+      })
+    )
   );
-  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, (event, input) =>
-    handleOpenWorkspaceMemorySpace({
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, async (event, input) =>
+    rememberReadyBackfillWorkspace(
       event,
-      input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-      handleStore,
-      memorySpaceRegistry,
-    })
+      WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
+      await handleOpenWorkspaceMemorySpace({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        memorySpaceRegistry,
+      })
+    )
   );
   registerWorkspaceIpcHandler(WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL, (event, input) =>
     handleRemoveMemorySpace({
@@ -4723,6 +4936,34 @@ export function registerWorkspaceIpc({
       recordingTranscriptionSessions,
     })
   );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    (event, input) =>
+      handleRequestSegmentTranscriptionBackfillCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        backfillRuntime,
+        voiceSettingsStore,
+      })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+    (event, input) =>
+      handleRequestSegmentSupplementTranscriptionBackfillCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        backfillRuntime,
+        voiceSettingsStore,
+      })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, input) =>
     handleReadVoiceTranscriptionSettingsCore({
       event,
@@ -4741,7 +4982,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       store: voiceSettingsStore,
-    })
+    }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
     handleSaveVoiceTranscriptionApiKeyCore({
@@ -4752,7 +4993,7 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       store: voiceSettingsStore,
       probe: voiceTranscriptionProbe,
-    })
+    }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
     handleClearVoiceTranscriptionApiKeyCore({
@@ -4762,7 +5003,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       store: voiceSettingsStore,
-    })
+    }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
@@ -4775,7 +5016,7 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         store: voiceSettingsStore,
         probe: voiceTranscriptionProbe,
-      })
+      }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
@@ -4930,7 +5171,17 @@ export function registerWorkspaceIpc({
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
+      backfillRuntime,
       handleStore,
+      onBeforeBackfillCancel: (workspaceHandle) => {
+        if (readyBackfillWorkspace && readyBackfillWorkspace.workspaceHandle !== workspaceHandle) {
+          return false;
+        }
+        readyBackfillGeneration += 1;
+        readyBackfillWorkspace = null;
+        lastFiredBackfillReadyKey = null;
+        return true;
+      },
       recordingTranscriptionSessions,
     })
   );
@@ -4982,7 +5233,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
-    })
+    }).then((response) => afterOk(response, () => backfillRuntime.pause('recording')))
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -4994,7 +5245,7 @@ export function registerWorkspaceIpc({
         expectedSessionKey,
         isTrustedUrl,
         handleStore,
-      })
+      }).then((response) => afterOk(response, () => backfillRuntime.pause('recording')))
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -5094,7 +5345,7 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    })
+    }).then((response) => afterOk(response, () => backfillRuntime.resume('recording')))
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -5107,7 +5358,7 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
         now: nowIso,
-      })
+      }).then((response) => afterOk(response, () => backfillRuntime.resume('recording')))
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
@@ -5120,9 +5371,13 @@ export function registerWorkspaceIpc({
           segmentId: request.segmentId,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceDiscardRecordingDraftResponseSchema.parse(
+        const response = workspaceDiscardRecordingDraftResponseSchema.parse(
           result.ok ? { ok: true, value: { discarded: true } } : result
         );
+        if (response.ok) {
+          backfillRuntime.resume('recording');
+        }
+        return response;
       })
   );
   registerWorkspaceHandleRequest(
@@ -5136,9 +5391,13 @@ export function registerWorkspaceIpc({
           supplementId: request.supplementId,
           assertWorkspaceUsable: assertUsable,
         });
-        return workspaceDiscardRecordingDraftResponseSchema.parse(
+        const response = workspaceDiscardRecordingDraftResponseSchema.parse(
           result.ok ? { ok: true, value: { discarded: true } } : result
         );
+        if (response.ok) {
+          backfillRuntime.resume('recording');
+        }
+        return response;
       })
   );
   registerWorkspaceHandleRequest(

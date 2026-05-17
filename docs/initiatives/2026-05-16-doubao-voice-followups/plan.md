@@ -1,6 +1,6 @@
 # 计划
 
-本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B 已完成、归档并通过真机 E2E gate；C active spec 已创建并完成引擎基线修订；剩余 C/D 按 C → D 串行推进。
+本计划承接 2026-05-16 brainstorm 收口共识。E 已完成；B 已完成、归档并通过真机 E2E gate；C 已按普通个人用户只配置 X-Api-Key 的约束完成；剩余 D 按 C→D readiness gate 推进。
 `docs/current/*` 与源码事实优先于本计划；本计划只保留剩余工作的顺序、边界和 readiness gate。
 
 ## 已落地输入合同
@@ -13,11 +13,10 @@
 ## C：自动补转录
 
 - 执行入口：`docs/initiatives/2026-05-16-doubao-voice-followups/c-brief.md`
-- 当前状态：active spec 已创建：`docs/specs/2026-05-17-0029-doubao-voice-auto-backfill/`。
-- C 引擎基线已改为大模型录音文件识别标准版 2.0 `volc.seedasr.auc`；极速版 `volc.bigasr.auc_turbo` 因成本与跨族问题不作为默认实现路径。
-- C spec 的 Phase 0 / Gate 0 现在包含两个 gate：C-0a 官方文档选型已完成；C-0b 必须解决本地 finalized audio 到火山可访问 `audio.url` 的交付方案。
-- C-0b 通过前不得实施 C-1/C-2/C-3；不得用公开本地服务、公网隧道或默认对象存储上传绕过。
-- C0 findings 已写入 C active spec；长期结论写入 ADR 0005，C-0b 通过后补具体交付方案。
+- 当前状态：已完成，归档 spec：`docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/`。
+- C 引擎基线是大模型录音文件极速版 `volc.bigasr.auc_turbo` 的 `audio.data` 路径；标准版 2.0 `audio.url` 不满足当前本地个人用户只配置 X-Api-Key 的产品约束。
+- C 的 Gate 0 是确认 Turbo flash 单 X-Api-Key、`audio.data`、WebM/Opus 本地 remux 和真实 API smoke。不得引入 TOS、对象存储、公网隧道、公开视频 URL 或本地公开 HTTP 服务。
+- C0 findings 已写入 C 归档 spec；长期结论写入 ADR 0005。
 
 ## D：手动重新生成转录
 
@@ -40,13 +39,13 @@
 ### 完成条件
 
 - B / C / D 各自 spec 完成、归档；稳定结论压缩进 `docs/current/*` 或 `docs/decisions/*`
-- C0 探针结论沉淀为 `docs/decisions/0005-doubao-voice-file-asr-baseline.md`
+- C0/Turbo 探针结论沉淀为 `docs/decisions/0005-doubao-voice-file-asr-baseline.md`
 - 本 initiative 移入 `docs/archive/initiatives/2026-05-16-doubao-voice-followups/`
 
 ## 禁止项（不变）
 
 - 不在没有新 spec 的情况下添加 hidden retry / More menu / 后台任务 / endpoint fallback
-- 不引入环境变量凭证、双 header 鉴权或平台密钥路径
+- 不引入环境变量凭证、双 header 鉴权、平台密钥路径、TOS 配置或对象存储配置
 - 不把 endpoint 选择写成 runtime 自动切换
 - 不跳过 C0 探针直接进入 C-1/C-2/C-3 实施
 

@@ -1166,6 +1166,42 @@ test('closeWorkspace closes the injected recording transcription registry for th
   assert.deepEqual(closedHandles, ['wh_ipc']);
 });
 
+test('closeWorkspace skips global backfill cancellation when the closed handle is not the ready backfill workspace', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-backfill-scope-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const canceledReasons: string[] = [];
+
+  const closed = await handleCloseWorkspaceForTest({
+    event,
+    input: { workspaceHandle: 'wh_ipc' },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    backfillRuntime: {
+      cancelAll: () => {},
+      cancelAllAndDrain: async (reason: string) => {
+        canceledReasons.push(reason);
+      },
+      enqueueAutomaticTargets: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+      enqueueAutomaticWorkspace: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+      pause: () => {},
+      requestSegmentBackfill: async () =>
+        ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
+      requestSupplementBackfill: async () =>
+        ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
+      resume: () => {},
+    },
+    handleStore,
+    onBeforeBackfillCancel: (workspaceHandle) => {
+      assert.equal(workspaceHandle, 'wh_ipc');
+      return false;
+    },
+  });
+
+  assert.deepEqual(closed, { ok: true, value: { closed: true } });
+  assert.deepEqual(canceledReasons, []);
+});
+
 test('closeRecordingTranscription clears an active ASR session after workspace lock is lost', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-asr-lock-lost-'));
   const handleStore = createRegisteredHandleStore(rootPath, () => false);

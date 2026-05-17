@@ -17,6 +17,10 @@ import { SettingsShell } from './settings/SettingsShell';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
+import type {
+  SegmentSupplementTranscriptionRetryTarget,
+  SegmentTranscriptionRetryTarget,
+} from './workspace/MemoryStudio';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
@@ -67,6 +71,8 @@ import {
   readMemoryDetail,
   readWorkspaceSnapshot,
   removeMemorySpace,
+  requestSegmentSupplementTranscriptionBackfill,
+  requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
@@ -79,6 +85,7 @@ import {
   type FinalizedSegmentSupplementRecording,
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
+  type WorkspaceError,
   type WorkspaceSession,
 } from './workspace/workspaceApi';
 import {
@@ -124,6 +131,17 @@ type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
 };
+type TranscriptionBackfillResponse<TValue> =
+  | { readonly ok: true; readonly value: TValue }
+  | { readonly ok: false; readonly error: WorkspaceError };
+type SegmentTranscriptionBackfillValue = Extract<
+  Awaited<ReturnType<typeof requestSegmentTranscriptionBackfill>>,
+  { readonly ok: true }
+>['value'];
+type SegmentSupplementTranscriptionBackfillValue = Extract<
+  Awaited<ReturnType<typeof requestSegmentSupplementTranscriptionBackfill>>,
+  { readonly ok: true }
+>['value'];
 type SegmentSupplementRestoreContext = {
   readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
   readonly memoryId: string;
@@ -171,6 +189,32 @@ function canShowInlineMemoryRail(): boolean {
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
+const TRANSCRIPTION_BACKFILL_ERROR = '无法生成转录。';
+const TRANSCRIPTION_BACKFILL_SUCCESS = '已生成转录';
+
+function segmentBackfillKey(target: SegmentTranscriptionRetryTarget): string {
+  return [target.workspaceId, target.memoryId, target.segmentId].join(':');
+}
+
+function segmentSupplementBackfillKey(target: SegmentSupplementTranscriptionRetryTarget): string {
+  return [target.workspaceId, target.memoryId, target.segmentId, target.supplementId].join(':');
+}
+
+function addRunningKey(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  if (current.has(key)) {
+    return current;
+  }
+  return new Set([...current, key]);
+}
+
+function removeRunningKey(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  if (!current.has(key)) {
+    return current;
+  }
+  const next = new Set(current);
+  next.delete(key);
+  return next;
+}
 
 async function recoveryLastTranscriptionAttemptOnFinalize(
   queryClient: QueryClient
@@ -549,6 +593,9 @@ export function App() {
   const [recordingRecoveryActionPending, setRecordingRecoveryActionPending] = useState(false);
   const [recordingRecoveryDraft, setRecordingRecoveryDraft] =
     useState<RecordingRecoveryDraft | null>(null);
+  const [runningTranscriptionBackfills, setRunningTranscriptionBackfills] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
@@ -952,13 +999,11 @@ export function App() {
     nextWorkspaceSession: WorkspaceSession,
     failureFallback = OPEN_MEMORY_SPACE_ERROR
   ) {
-    if (
-      workspaceSession &&
-      workspaceSession.workspaceHandle !== nextWorkspaceSession.workspaceHandle
-    ) {
+    const currentSession = workspaceSessionRef.current;
+    if (currentSession && currentSession.workspaceHandle !== nextWorkspaceSession.workspaceHandle) {
       try {
         const closePrevious = await closeWorkspace({
-          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceHandle: currentSession.workspaceHandle,
         });
         if (!closePrevious.ok) {
           await closeReplacementWorkspace(nextWorkspaceSession);
@@ -1004,9 +1049,110 @@ export function App() {
     return true;
   }
 
-  const showTranscriptionRetryPlaceholder = useCallback(() => {
-    toast('转录引擎尚未上线');
-  }, []);
+  const runTranscriptionBackfill = useCallback(
+    <TValue,>({
+      applySuccess,
+      key,
+      request,
+      workspaceId,
+    }: {
+      readonly applySuccess: (value: TValue) => void;
+      readonly key: string;
+      readonly request: (
+        session: WorkspaceSession
+      ) => Promise<TranscriptionBackfillResponse<TValue>>;
+      readonly workspaceId: string;
+    }) => {
+      if (runningTranscriptionBackfills.has(key)) {
+        return;
+      }
+      const session = workspaceSessionRef.current;
+      if (!session || session.workspaceId !== workspaceId) {
+        return;
+      }
+      setRunningTranscriptionBackfills((current) => addRunningKey(current, key));
+      void (async () => {
+        try {
+          const response = await request(session);
+          const currentSession = workspaceSessionRef.current;
+          if (
+            currentSession?.workspaceId !== workspaceId ||
+            currentSession.workspaceHandle !== session.workspaceHandle
+          ) {
+            return;
+          }
+          if (!response.ok) {
+            toast.error(TRANSCRIPTION_BACKFILL_ERROR, {
+              description: workspaceErrorDisplayMessage(
+                response.error,
+                TRANSCRIPTION_BACKFILL_ERROR
+              ),
+            });
+            return;
+          }
+          applySuccess(response.value);
+          toast.success(TRANSCRIPTION_BACKFILL_SUCCESS);
+        } catch (error) {
+          toast.error(TRANSCRIPTION_BACKFILL_ERROR, {
+            description: unknownErrorDisplayMessage(error, TRANSCRIPTION_BACKFILL_ERROR),
+          });
+        } finally {
+          setRunningTranscriptionBackfills((current) => removeRunningKey(current, key));
+        }
+      })();
+    },
+    [runningTranscriptionBackfills, workspaceSession]
+  );
+
+  const retrySegmentTranscriptionBackfill = useCallback(
+    (target: SegmentTranscriptionRetryTarget) => {
+      runTranscriptionBackfill<SegmentTranscriptionBackfillValue>({
+        applySuccess: (value) =>
+          handleRecordingContentSaved({
+            memory: value.memory,
+            memoryId: target.memoryId,
+            segmentId: target.segmentId,
+          }),
+        key: segmentBackfillKey(target),
+        request: (session) =>
+          requestSegmentTranscriptionBackfill({
+            workspaceHandle: session.workspaceHandle,
+            workspaceId: target.workspaceId,
+            memoryId: target.memoryId,
+            segmentId: target.segmentId,
+          }),
+        workspaceId: target.workspaceId,
+      });
+    },
+    [runTranscriptionBackfill]
+  );
+
+  const retrySupplementTranscriptionBackfill = useCallback(
+    (target: SegmentSupplementTranscriptionRetryTarget) => {
+      runTranscriptionBackfill<SegmentSupplementTranscriptionBackfillValue>({
+        applySuccess: (value) =>
+          handleSegmentSupplementFinalized(
+            {
+              memory: value.memory,
+              segment: value.segment,
+              supplement: value.supplement,
+            },
+            { refreshContent: true }
+          ),
+        key: segmentSupplementBackfillKey(target),
+        request: (session) =>
+          requestSegmentSupplementTranscriptionBackfill({
+            workspaceHandle: session.workspaceHandle,
+            workspaceId: target.workspaceId,
+            memoryId: target.memoryId,
+            segmentId: target.segmentId,
+            supplementId: target.supplementId,
+          }),
+        workspaceId: target.workspaceId,
+      });
+    },
+    [runTranscriptionBackfill]
+  );
 
   function openWorkspaceCreateDialog() {
     if (blockRecordingFlowInterruption()) {
@@ -3314,8 +3460,14 @@ export function App() {
             onRenameMemory={setMemoryRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
-            onRetrySegmentTranscription={showTranscriptionRetryPlaceholder}
-            onRetrySupplementTranscription={showTranscriptionRetryPlaceholder}
+            transcriptionBackfill={{
+              isSegmentRunning: (target) =>
+                runningTranscriptionBackfills.has(segmentBackfillKey(target)),
+              isSupplementRunning: (target) =>
+                runningTranscriptionBackfills.has(segmentSupplementBackfillKey(target)),
+              retrySegment: retrySegmentTranscriptionBackfill,
+              retrySupplement: retrySupplementTranscriptionBackfill,
+            }}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
           />

@@ -35,11 +35,15 @@ test('main bootstrap wires voice settings store into recording transcription at 
     source,
     /createRecordingTranscriptionSessionRegistry\(\{[\s\S]*resolveVoiceSettings:\s*\(\)\s*=>[\s\S]*voiceSettingsStore\.read\(\)[\s\S]*voiceSettingsStore\.readDecryptedApiKey\(\)/
   );
+  assert.match(source, /createWorkspaceBackfillRuntime\(\{\s*voiceSettingsStore\s*\}\)/);
   assert.match(
     source,
-    /closeWorkspaceRuntime\s*=\s*async\s*\(\)\s*=>\s*\{[\s\S]*recordingTranscriptionSessions\.closeAll\(\)[\s\S]*closeAllWorkspaceHandles\(\)/
+    /closeWorkspaceRuntime\s*=\s*async\s*\(\)\s*=>\s*\{[\s\S]*backfillRuntime\.cancelAllAndDrain\('app-quit'\)[\s\S]*recordingTranscriptionSessions\.closeAll\(\)[\s\S]*closeAllWorkspaceHandles\(\)/
   );
   assert.match(source, /closeWorkspaceHandles:\s*closeWorkspaceRuntime/);
   assert.match(source, /uncaughtException[\s\S]*closeWorkspaceRuntime\(\)/);
-  assert.match(source, /registerWorkspaceIpc\(\{[\s\S]*recordingTranscriptionSessions/);
+  assert.match(
+    source,
+    /registerWorkspaceIpc\(\{[\s\S]*backfillRuntime[\s\S]*recordingTranscriptionSessions/
+  );
 });

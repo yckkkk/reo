@@ -8,6 +8,7 @@ const copy = {
   error: '加载失败，请重试。',
   empty: '还没有转录。',
   failedRetryable: '上次生成转录失败。',
+  running: '正在生成转录。',
   retry: '重试',
 } as const;
 
@@ -76,5 +77,12 @@ describe('SegmentTranscriptView', () => {
     );
 
     expect(screen.getByRole('button', { name: '重试' })).toBeDisabled();
+  });
+
+  it('shows running copy without a retry button while backfill is in progress', () => {
+    render(<SegmentTranscriptView status="ready" outcome={{ kind: 'running' }} copy={copy} />);
+
+    expect(screen.getByText('正在生成转录。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
   });
 });

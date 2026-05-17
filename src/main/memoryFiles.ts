@@ -181,6 +181,7 @@ export interface MemorySegmentSummary {
   readonly title: string;
   readonly durationMs: number;
   readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }
 
 interface FinalizedSegmentFileTruth {
@@ -2371,6 +2372,7 @@ async function summarizeRecording(
     title: fileTruth.metadata.title,
     durationMs: fileTruth.metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
   };
 }
 

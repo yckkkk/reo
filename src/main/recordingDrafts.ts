@@ -15,7 +15,10 @@ import {
 import { rmdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MAX_RECORDING_DRAFT_AUDIO_READ_BYTES } from '../workspace-contract/recording-audio.js';
+import {
+  MAX_BACKFILL_AUDIO_READ_BYTES,
+  MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+} from '../workspace-contract/recording-audio.js';
 import {
   writeWorkspaceFileAtomicInKnownDirectory,
   writeWorkspaceJsonAtomicInKnownDirectory,
@@ -91,6 +94,7 @@ type RecordingMarkdownSaveInput = {
   readonly fileName: 'transcript.md';
   readonly markdown: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly requireTranscriptMissing?: boolean;
 };
 type FinalizedAudioSegmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
   readonly workspaceId: string;
@@ -104,6 +108,7 @@ type FinalizedAudioSegmentSupplementMarkdownSaveInput = {
   readonly supplementId: string;
   readonly markdown: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly requireTranscriptMissing?: boolean;
 };
 
 function checkWorkspaceUsable(
@@ -255,6 +260,7 @@ async function resolveFinalizedAudioSegmentReadTarget(
 ): Promise<{
   readonly directory: string;
   readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }> {
   const cacheKey = recordingKey(rootPath, `${memoryId}:${segmentId}`);
   const directory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
@@ -283,6 +289,7 @@ async function resolveFinalizedAudioSegmentReadTarget(
   return {
     directory,
     audioByteLength: summary.audioByteLength,
+    lastTranscriptionAttempt: summary.lastTranscriptionAttempt,
   };
 }
 
@@ -295,6 +302,7 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
 ): Promise<{
   readonly directory: string;
   readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }> {
   const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
   const segmentDirectoryIdentity = await readDirectoryIdentity(segmentDirectory);
@@ -345,6 +353,7 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
   return {
     directory: supplementDirectory,
     audioByteLength,
+    lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
   };
 }
 
@@ -1354,6 +1363,7 @@ export async function readFinalizedAudioSegmentContent({
       readonly ok: true;
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
       readonly transcript: { readonly exists: boolean; readonly text: string };
     }
   | WorkspaceErrorEnvelope
@@ -1367,16 +1377,26 @@ export async function readFinalizedAudioSegmentContent({
     const target = await resolveFinalizedAudioSegmentReadTarget(rootPath, memoryId, segmentId);
     const maxReadableBytes = Math.max(
       1,
-      Math.min(Math.trunc(maxBytes), MAX_RECORDING_DRAFT_AUDIO_READ_BYTES)
+      Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
     );
+
+    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeAudio) {
+      return stillUsableBeforeAudio;
+    }
     if (target.audioByteLength > maxReadableBytes) {
       return workspaceError(
         'ERR_RECORDING_CHUNK_TOO_LARGE',
         'Finalized audio is too large to read'
       );
     }
+    const transcript = await readOptionalFinalizedTranscriptFile(
+      target.directory,
+      recordingDirectoryIdentity,
+      { markdownFileName: 'segment.md', objectType: 'segment' }
+    );
 
-    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
     const audioFd = openFileForReadInDirectory(
       target.directory,
       recordingDirectoryIdentity,
@@ -1399,11 +1419,6 @@ export async function readFinalizedAudioSegmentContent({
           'durable-marker-recovery-required'
         );
       }
-      const transcript = await readOptionalFinalizedTranscriptFile(
-        target.directory,
-        recordingDirectoryIdentity,
-        { markdownFileName: 'segment.md', objectType: 'segment' }
-      );
       const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
       if (stillUsable) {
         return stillUsable;
@@ -1413,6 +1428,7 @@ export async function readFinalizedAudioSegmentContent({
         ok: true,
         audio: new Uint8Array(content),
         audioByteLength: target.audioByteLength,
+        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
         transcript,
       };
     } finally {
@@ -1448,6 +1464,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
       readonly ok: true;
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
       readonly transcript: { readonly exists: boolean; readonly text: string };
     }
   | WorkspaceErrorEnvelope
@@ -1467,16 +1484,26 @@ export async function readFinalizedAudioSegmentSupplementContent({
     );
     const maxReadableBytes = Math.max(
       1,
-      Math.min(Math.trunc(maxBytes), MAX_RECORDING_DRAFT_AUDIO_READ_BYTES)
+      Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
     );
+
+    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeAudio) {
+      return stillUsableBeforeAudio;
+    }
     if (target.audioByteLength > maxReadableBytes) {
       return workspaceError(
         'ERR_RECORDING_CHUNK_TOO_LARGE',
         'Finalized segment supplement audio is too large to read'
       );
     }
+    const transcript = await readOptionalFinalizedTranscriptFile(
+      target.directory,
+      supplementDirectoryIdentity,
+      { markdownFileName: 'supplement.md', objectType: 'supplement' }
+    );
 
-    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
     const audioFd = openFileForReadInDirectory(
       target.directory,
       supplementDirectoryIdentity,
@@ -1499,11 +1526,6 @@ export async function readFinalizedAudioSegmentSupplementContent({
           'durable-marker-recovery-required'
         );
       }
-      const transcript = await readOptionalFinalizedTranscriptFile(
-        target.directory,
-        supplementDirectoryIdentity,
-        { markdownFileName: 'supplement.md', objectType: 'supplement' }
-      );
       const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
       if (stillUsable) {
         return stillUsable;
@@ -1513,6 +1535,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
         ok: true,
         audio: new Uint8Array(content),
         audioByteLength: target.audioByteLength,
+        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
         transcript,
       };
     } finally {
@@ -1902,10 +1925,12 @@ async function writeSupplementTranscriptInRecordingDirectory({
   recordingDirectory,
   markdown,
   assertWorkspaceUsable,
+  requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
   readonly markdown: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly requireTranscriptMissing?: boolean;
 }): Promise<void> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   await beforeMarkdownWriteForTest?.();
@@ -1922,6 +1947,12 @@ async function writeSupplementTranscriptInRecordingDirectory({
   });
   if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
     throw new Error('Finalized supplement markdown kind is unsupported');
+  }
+  if (requireTranscriptMissing && extractSegmentTranscript(current.content).length > 0) {
+    throw workspaceError(
+      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+      'Backfill target already has a transcript'
+    );
   }
   const currentData = current.data as { readonly kind?: 'audio' };
   await writeWorkspaceFileAtomicInKnownDirectory({
@@ -1946,10 +1977,12 @@ async function writeSegmentTranscriptInRecordingDirectory({
   recordingDirectory,
   markdown,
   assertWorkspaceUsable,
+  requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
   readonly markdown: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly requireTranscriptMissing?: boolean;
 }): Promise<void> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   await beforeMarkdownWriteForTest?.();
@@ -1963,6 +1996,12 @@ async function writeSegmentTranscriptInRecordingDirectory({
       MAX_FINALIZED_TRANSCRIPT_READ_BYTES
     ),
   });
+  if (requireTranscriptMissing && extractSegmentTranscript(current.content).length > 0) {
+    throw workspaceError(
+      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
+      'Backfill target already has a transcript'
+    );
+  }
   const nextContent = replaceSegmentTranscript(current.content, markdown);
   await assertSameDirectory(recordingDirectory, directoryIdentity);
   await writeWorkspaceFileAtomicInKnownDirectory({
@@ -1999,6 +2038,7 @@ async function saveRecordingMarkdownNow({
   segmentId,
   markdown,
   assertWorkspaceUsable,
+  requireTranscriptMissing,
 }: FinalizedAudioSegmentMarkdownSaveInput): Promise<
   | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
   | WorkspaceErrorEnvelope
@@ -2016,6 +2056,7 @@ async function saveRecordingMarkdownNow({
     await writeSegmentTranscriptInRecordingDirectory({
       recordingDirectory,
       markdown,
+      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
   } catch (error) {
@@ -2091,6 +2132,7 @@ async function saveSegmentSupplementMarkdownNow({
   supplementId,
   markdown,
   assertWorkspaceUsable,
+  requireTranscriptMissing,
 }: FinalizedAudioSegmentSupplementMarkdownSaveInput): Promise<
   | {
       readonly ok: true;
@@ -2117,6 +2159,7 @@ async function saveSegmentSupplementMarkdownNow({
     await writeSupplementTranscriptInRecordingDirectory({
       recordingDirectory: supplementDirectory,
       markdown,
+      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
   } catch (error) {
