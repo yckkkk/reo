@@ -42,7 +42,8 @@
 ### T2.1 finalize request DTO 加字段
 
 - **RED**：在 `src/workspace-contract/__tests__/` 与 `recordingDrafts.test.ts` 新增测试：
-  - `WorkspaceFinalizeRecordingDraftRequest` Zod schema 必须接受 `lastTranscriptionAttemptOnFinalize: 'failed' | 'never'`
+  - `WorkspaceFinalizeRecordingDraftRequest` Zod schema 必须接受可选 `lastTranscriptionAttemptOnFinalize?: 'failed' | 'never'`
+  - 缺字段按 `'never'` 派生
   - 不接受 `'success'`（renderer 不许在 finalize 时声称成功）
 - **GREEN**：修改 `src/workspace-contract/recordingDrafts.ts` 内的 request schema；preload bridge 类型自动跟随
 - **REFACTOR**：supplement finalize DTO 对称添加
