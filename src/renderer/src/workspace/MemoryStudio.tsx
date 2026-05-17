@@ -28,7 +28,7 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
-import { SegmentTranscriptView } from './SegmentTranscriptView';
+import { SegmentTranscriptView, type SegmentTranscriptOutcome } from './SegmentTranscriptView';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
@@ -81,6 +81,7 @@ const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) 
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
+type TranscriptProjection = { readonly exists: boolean; readonly text: string } | null | undefined;
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
 type SegmentSupplementAudioResource = {
   supplementId: string;
@@ -94,6 +95,13 @@ type SegmentSupplementAudioResource = {
   workspaceHandle: string;
   workspaceId: string;
 };
+
+function deriveTranscriptOutcome(transcript: TranscriptProjection): SegmentTranscriptOutcome {
+  if (transcript?.exists) {
+    return { kind: 'success', text: transcript.text };
+  }
+  return { kind: 'empty-never' };
+}
 type ActiveContentTab = 'transcript' | `supplement:${string}`;
 type DraggedContentTab = {
   readonly segmentId: string;
@@ -887,11 +895,13 @@ function SegmentSupplementAudioPlayer({
                 ? 'error'
                 : 'ready'
           }
-          transcript={supplementContent?.transcript ?? null}
+          outcome={deriveTranscriptOutcome(supplementContent?.transcript)}
           copy={{
             loading: '正在载入补充录音内容。',
             error: '补充录音转录加载失败，请重试。',
             empty: '这段补充录音还没有转录。',
+            failedRetryable: '上次生成补充录音转录失败。',
+            retry: '重试',
           }}
         />
       </div>
@@ -1894,11 +1904,13 @@ export function MemoryStudio({
                           ? 'error'
                           : 'ready'
                     }
-                    transcript={segmentContent?.transcript ?? null}
+                    outcome={deriveTranscriptOutcome(segmentContent?.transcript)}
                     copy={{
                       loading: '正在载入片段内容。',
                       error: '片段内容加载失败，请重试。',
                       empty: '这段录音还没有转录。',
+                      failedRetryable: '上次生成转录失败。',
+                      retry: '重试',
                     }}
                   />
                 </section>

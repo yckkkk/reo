@@ -1,36 +1,46 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { SegmentTranscriptView } from './SegmentTranscriptView';
 
 const copy = {
   loading: '正在载入。',
   error: '加载失败，请重试。',
   empty: '还没有转录。',
+  failedRetryable: '上次生成转录失败。',
+  retry: '重试',
 } as const;
 
 describe('SegmentTranscriptView', () => {
   it('shows loading copy when status is loading', () => {
-    render(<SegmentTranscriptView status="loading" transcript={null} copy={copy} />);
+    render(
+      <SegmentTranscriptView status="loading" outcome={{ kind: 'empty-never' }} copy={copy} />
+    );
     expect(screen.getByText('正在载入。')).toBeInTheDocument();
   });
 
   it('shows error copy when status is error', () => {
-    render(<SegmentTranscriptView status="error" transcript={null} copy={copy} />);
+    render(<SegmentTranscriptView status="error" outcome={{ kind: 'empty-never' }} copy={copy} />);
     expect(screen.getByText('加载失败，请重试。')).toBeInTheDocument();
   });
 
-  it('shows empty copy when transcript does not exist', () => {
+  it('shows empty copy for a never-created transcript outcome', () => {
+    render(<SegmentTranscriptView status="ready" outcome={{ kind: 'empty-never' }} copy={copy} />);
+    expect(screen.getByText('还没有转录。')).toBeInTheDocument();
+  });
+
+  it('shows empty copy for a cleared transcript outcome', () => {
     render(
-      <SegmentTranscriptView status="ready" transcript={{ exists: false, text: '' }} copy={copy} />
+      <SegmentTranscriptView status="ready" outcome={{ kind: 'empty-cleared' }} copy={copy} />
     );
     expect(screen.getByText('还没有转录。')).toBeInTheDocument();
   });
 
-  it('shows transcript text with selectable styling when transcript exists', () => {
+  it('shows transcript text with selectable styling for a successful outcome', () => {
     render(
       <SegmentTranscriptView
         status="ready"
-        transcript={{ exists: true, text: '补充录音转写正文' }}
+        outcome={{ kind: 'success', text: '补充录音转写正文' }}
         copy={copy}
       />
     );
@@ -41,8 +51,30 @@ describe('SegmentTranscriptView', () => {
     expect(paragraph.className).toContain('text-foreground');
   });
 
-  it('treats null transcript in ready state as empty', () => {
-    render(<SegmentTranscriptView status="ready" transcript={null} copy={copy} />);
-    expect(screen.getByText('还没有转录。')).toBeInTheDocument();
+  it('calls onRetry from a retryable failed outcome', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+
+    render(
+      <SegmentTranscriptView
+        status="ready"
+        outcome={{ kind: 'failed-retryable' }}
+        onRetry={onRetry}
+        copy={copy}
+      />
+    );
+
+    expect(screen.getByText('上次生成转录失败。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '重试' }));
+
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('disables retry when onRetry is missing', () => {
+    render(
+      <SegmentTranscriptView status="ready" outcome={{ kind: 'failed-retryable' }} copy={copy} />
+    );
+
+    expect(screen.getByRole('button', { name: '重试' })).toBeDisabled();
   });
 });
