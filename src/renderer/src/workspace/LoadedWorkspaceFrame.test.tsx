@@ -12,6 +12,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
 import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
+import type {
+  SegmentSupplementTranscriptionRetryTarget,
+  SegmentTranscriptionRetryTarget,
+} from './MemoryStudio';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import { seedWorkspaceSnapshot, workspaceSnapshotQueryKey } from './workspaceQueries';
 
@@ -251,6 +255,7 @@ function renderLoadedWorkspaceFrame({
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
   onRetrySegmentTranscription,
+  onRetrySupplementTranscription,
   onSelectMemory = vi.fn(),
   onStartRecording = vi.fn(),
   onStartSegmentSupplementRecording = vi.fn(),
@@ -286,11 +291,10 @@ function renderLoadedWorkspaceFrame({
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegment?: () => void;
   readonly onRenameSegmentSupplement?: () => void;
-  readonly onRetrySegmentTranscription?: (target: {
-    readonly workspaceId: string;
-    readonly memoryId: string;
-    readonly segmentId: string;
-  }) => void;
+  readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
+  readonly onRetrySupplementTranscription?: (
+    target: SegmentSupplementTranscriptionRetryTarget
+  ) => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartRecording?: () => void;
   readonly onStartSegmentSupplementRecording?: (target: {
@@ -351,6 +355,7 @@ function renderLoadedWorkspaceFrame({
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
         {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
+        {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
         onSelectMemory={onSelectMemory}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}
@@ -1532,6 +1537,59 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(content).getByRole('button', { name: '暂停补充录音 补充录音' })
     ).toBeInTheDocument();
+  });
+
+  it('calls supplement transcription retry for failed supplement transcript attempts', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:retryable-supplement-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const onRetrySupplementTranscription = vi.fn();
+    const failedSupplement = audioSupplement({ lastTranscriptionAttempt: 'failed' });
+    const detailWithFailedSupplement = birthdayDetailWithSupplements([failedSupplement]);
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: false,
+          text: '',
+        },
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onRetrySupplementTranscription,
+      readFinalizedAudioSegmentSupplement,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_supplement_retry',
+      detail: detailWithFailedSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(within(content).getByRole('tab', { name: '补充录音' }));
+
+    expect(await within(content).findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
+
+    await user.click(within(content).getByRole('button', { name: '重试' }));
+
+    expect(onRetrySupplementTranscription).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+    });
+    expect(onRetrySupplementTranscription).toHaveBeenCalledOnce();
   });
 
   it('caps content tab pills to the compact rail width', async () => {

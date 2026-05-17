@@ -53,6 +53,9 @@ type MemoryStudioProps = {
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
+  readonly onRetrySupplementTranscription?: (
+    target: SegmentSupplementTranscriptionRetryTarget
+  ) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -63,6 +66,13 @@ export type SegmentTranscriptionRetryTarget = {
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
+};
+
+export type SegmentSupplementTranscriptionRetryTarget = {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
 };
 
 export type SegmentSupplementRecordingTarget = {
@@ -604,10 +614,14 @@ function SegmentSupplementTab({
 function SegmentSupplementAudioPlayer({
   supplement,
   audioResourceCache,
+  onRetrySupplementTranscription,
   workspaceSession,
 }: {
   readonly supplement: MemorySegmentSupplement;
   readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
+  readonly onRetrySupplementTranscription?: (
+    target: SegmentSupplementTranscriptionRetryTarget
+  ) => void;
   readonly workspaceSession: WorkspaceSession;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -633,6 +647,15 @@ function SegmentSupplementAudioPlayer({
   const supplementSegmentId = supplement.segmentId;
   const supplementAudio = supplementContent?.audio ?? null;
   const supplementAudioByteLength = supplementContent?.audioByteLength ?? null;
+  const retrySupplementTranscription = onRetrySupplementTranscription
+    ? () =>
+        onRetrySupplementTranscription({
+          workspaceId: workspaceSession.workspaceId,
+          memoryId: supplement.memoryId,
+          segmentId: supplement.segmentId,
+          supplementId: supplement.supplementId,
+        })
+    : undefined;
   const supplementRequestId = supplementContent?.requestId ?? null;
   const workspaceHandle = workspaceSession.workspaceHandle;
   const workspaceId = workspaceSession.workspaceId;
@@ -916,9 +939,10 @@ function SegmentSupplementAudioPlayer({
                 : 'ready'
           }
           outcome={deriveTranscriptOutcome({
-            lastTranscriptionAttempt: 'never',
+            lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
             transcript: supplementContent?.transcript,
           })}
+          {...(retrySupplementTranscription ? { onRetry: retrySupplementTranscription } : {})}
           copy={{
             loading: '正在载入补充录音内容。',
             error: '补充录音转录加载失败，请重试。',
@@ -966,6 +990,7 @@ export function MemoryStudio({
   onRenameSegmentSupplement,
   onRenameSegment,
   onRetrySegmentTranscription,
+  onRetrySupplementTranscription,
   onSegmentFocusConsumed,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -1966,6 +1991,7 @@ export function MemoryStudio({
                   <SegmentSupplementAudioPlayer
                     supplement={activeSegmentSupplement}
                     audioResourceCache={supplementAudioResourceCacheRef.current}
+                    {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
                     workspaceSession={workspaceSession}
                   />
                 </section>

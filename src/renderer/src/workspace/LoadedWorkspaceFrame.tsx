@@ -3,6 +3,7 @@ import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
   type SegmentSupplementRecordingTarget,
+  type SegmentSupplementTranscriptionRetryTarget,
   type SegmentTranscriptionRetryTarget,
 } from './MemoryStudio';
 import { MemoryRail } from './MemoryRail';
@@ -28,6 +29,9 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
+  readonly onRetrySupplementTranscription?: (
+    target: SegmentSupplementTranscriptionRetryTarget
+  ) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
@@ -47,6 +51,7 @@ export function LoadedWorkspaceFrame({
   onRenameSegment,
   onRenameSegmentSupplement,
   onRetrySegmentTranscription,
+  onRetrySupplementTranscription,
   onSegmentFocusConsumed,
   onSelectMemory,
   onStartSegmentSupplementRecording,
@@ -84,6 +89,7 @@ export function LoadedWorkspaceFrame({
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegment={onRenameSegment}
           {...(onRetrySegmentTranscription ? { onRetrySegmentTranscription } : {})}
+          {...(onRetrySupplementTranscription ? { onRetrySupplementTranscription } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}
