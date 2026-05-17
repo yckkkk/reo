@@ -50,7 +50,9 @@ git diff --check
 - Supplement 路径覆盖以上四个场景。
 - BackfillQueue dedup：automatic fill-missing 在队列 + manual regenerate → `ERR_BACKFILL_ALREADY_RUNNING`。
 - `enqueueAutomaticTargets` / `enqueueAutomaticWorkspace` 内部 mode 固定 fill-missing；mock automatic 调用不允许 regenerate。
-- `cancelAll('workspace-switch')` / `cancelAll('lock-lost')` / `cancelAll('app-quit')` 与 C 一致；regenerate 任务在 cancel 后不写 transcript / manifest。
+- `cancelAll('workspace-switch')` / `cancelAll('lock-lost')` / `cancelAll('app-quit')` 三种 reason 各一条独立断言：regenerate 任务在 digest 捕获后被 cancel → 返回 `canceled` errorCode；不重读 transcript、不写 `segment.md` / `supplement.md` 正文、不改 manifest `lastTranscriptionAttempt`。
+- regenerate overwrite-save helper 锁内顺序不变量：mock `assertWorkspaceUsable` 在 digest 比对通过后、写入前返回 `ERR_WORKSPACE_LOCK_LOST`，断言不写 transcript / manifest 并返回 lock-lost typed error，不返回 success；这条断言锁定 plan.md §12.10 的"重读→比对→ownership→覆盖写→改 manifest 必须在同一持锁段"硬不变量。
+- overwrite-save 半成功保留语义：`dataRetention='previous-file-preserved'`（写文件失败）保留旧 transcript / manifest 并返回原值；`dataRetention='file-written-index-stale'`（文件已覆盖写但 index 刷新失败）manifest 已是 `'success'`，response 仍带 stale 标记，与 C 现有 saveTranscript 半成功契约一致。
 - 诊断 allowlist 增加 `mode`；输出诊断中包含 `mode: 'fill-missing'` 或 `mode: 'regenerate'`；不出现 transcript、digest、raw path、X-Api-Key、base64、audio bytes。
 
 ### 2.3 IPC handler
@@ -58,7 +60,7 @@ git diff --check
 - handler 接受 mode 并透传 runtime；mode 缺失 / 非法 → invalid request envelope。
 - sender / handle / lock / settings gate 校验保持。
 
-### 2.4 Renderer 菜单
+### 2.4 Renderer 菜单与转录视图
 
 - `SegmentActionsMenu` / `SegmentSupplementActionsMenu`：
   - `transcript.exists=false` → 「生成转录」label；点击不打开 Dialog；调用 `workspaceApi` with mode=`fill-missing`。
@@ -66,6 +68,10 @@ git diff --check
   - voice settings 关闭 / 未配置 / `auth` → disabled + tooltip 字串匹配。
   - 录音 overlay open → disabled + tooltip 字串匹配。
   - manual running Set 包含同 target → disabled + tooltip 字串匹配。
+- `SegmentTranscriptView`（renderer unit）：
+  - regenerate running 期间，当 selected segment 当前 transcript text 非空时必须**继续渲染该正文**（不主动隐藏），并叠加进行中文案；任务 settle 切回 success 后文本被新结果覆盖。
+  - regenerate running 期间，当 selected segment 当前 transcript text 为空时（race：用户外部清空但 confirming Dialog 未关闭），按 fill-missing running 一致渲染空态 + 进行中文案，不渲染陈旧/缓存文本。
+  - fill-missing running 期间使用 B 当前 running outcome（保留 B 既有视觉）。
 
 ### 2.5 AlertDialog 行为
 
@@ -80,6 +86,7 @@ git diff --check
 - 点击后立刻把 target 加入 Set；mutation pending 期间菜单 disabled。
 - mutation 成功 / 失败后清除。
 - 切换 / 关闭 workspace 时清空 Set 与 confirming intent。
+- 切换 selected segment（不切 workspace）时立刻关闭 `WorkspaceDangerConfirmDialog` 并丢弃 confirm intent；该断言在 renderer App 或 MemoryStudio scope unit 测试中单独存在，不只依赖 §2.5 AlertDialog 自身的"切 segment 立即关闭"断言（两个断言分别覆盖 Dialog 生命周期与 App-level intent 清理）。
 
 ### 2.7 Cache merge
 

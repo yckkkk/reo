@@ -22,7 +22,7 @@
   - `workspaceRequestSegmentTranscriptionBackfillRequestSchema` 必须要求 `mode: 'fill-missing' | 'regenerate'`；缺失或非法 mode 解析失败。
   - `workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema` 同上。
   - `workspaceErrorCodeSchema` 必须包含 `'ERR_BACKFILL_TRANSCRIPT_CHANGED'`。
-- [ ] GREEN：扩展 schema 与 enum；同步派生类型 `WorkspaceRequestSegmentTranscriptionBackfillRequest` 等。
+- [ ] GREEN：扩展 schema 与 enum；同步派生类型 `WorkspaceRequestSegmentTranscriptionBackfillRequest` 等。扩展两个 backfill request schema 时显式使用 `.extend({ mode: z.enum(['fill-missing', 'regenerate']) }).strict()`，保持与 `workspace-contract.ts` 当前 backfill / supplement request 都以 strictObject/`.strict()` 收尾的风格一致，禁止 unknown 字段静默通过。
 - [ ] RED：`workspaceErrorMessages` 测试：`ERR_BACKFILL_TRANSCRIPT_CHANGED` 必须返回中文文案；`ERR_BACKFILL_TARGET_NOT_ELIGIBLE` 文案需要更新以引导覆盖。
 - [ ] GREEN：扩展文案 map。
 - [ ] REFACTOR + 重跑 targeted tests。
@@ -43,12 +43,15 @@
   - `requestSegmentBackfill({ mode: 'regenerate' })` 在 task in-flight 开始时捕获 transcript snapshot digest；save 前重新读取并比对；digest 一致 → overwrite save 成功，manifest `lastTranscriptionAttempt='success'`。
   - `requestSegmentBackfill({ mode: 'regenerate' })` save 前 digest 不匹配 → 返回 `ERR_BACKFILL_TRANSCRIPT_CHANGED`；transcript / manifest 不变。
   - `requestSegmentBackfill({ mode: 'regenerate' })` recognize 失败 / 网络错 → 返回原 C 错误码；transcript / manifest 不变。
+  - `requestSegmentBackfill({ mode: 'regenerate' })` 在 in-flight 已捕获 digest 后被 `cancelAll('workspace-switch' | 'lock-lost' | 'app-quit')` → 返回 `canceled` errorCode；**不** 重新读取 transcript、**不** 写 `segment.md` / `supplement.md` 正文、**不** 改 manifest `lastTranscriptionAttempt`。三种 cancel reason 各覆盖一条独立用例。
+  - `requestSegmentBackfill({ mode: 'regenerate' })` overwrite-save helper 的"重读 transcript → 重算 digest → 比对 → ownership 复核 → 覆盖写 → 改 manifest"必须发生在同一持锁段内：用 mock `assertWorkspaceUsable` 在比对后写入前返回 `ERR_WORKSPACE_LOCK_LOST`，断言不写入 transcript / manifest 并返回 lock-lost typed error，不返回 `success`。
   - `enqueueAutomaticTargets` / `enqueueAutomaticWorkspace` 内部 mode 固定 fill-missing；任何 regenerate 调用走不进 automatic 路径。
   - BackfillQueue dedup 不区分 mode：automatic fill-missing 在队列 + 用户 manual regenerate → `ERR_BACKFILL_ALREADY_RUNNING`。
-  - Supplement 路径镜像 segment 行为。
+  - Supplement 路径镜像 segment 行为（含 cancel + 锁内顺序两条新用例）。
 - [ ] GREEN：runtime 与 queue / save helper 实施。
   - `BackfillQueueTask` 增加 internal `mode` 字段（不暴露 IPC response）。
-  - `saveSegmentTranscript` / `saveSupplementTranscript` 暴露 `allowOverwrite` 旗标 + digest 比对；overwrite 前必须复核 workspace/memory/segment(/supplement) ownership。
+  - `saveSegmentTranscript` / `saveSupplementTranscript` 暴露 `allowOverwrite` 旗标 + digest 比对；overwrite 前必须复核 workspace/memory/segment(/supplement) ownership；helper 必须在 plan.md §12.10 锁内顺序不变量描述的同一持锁 critical section 内完成"重读 → 比对 → 复核 → 覆盖写 → 改 manifest"，不允许调用方拆段。
+  - 在 plan.md §12.10 列出的 4 个检查点（(a) digest 捕获前 / (b) recognize 完成后但锁未拿到前 / (c) 拿锁后但首次重读 transcript 前 / (d) 写文件前）各插入一次 `signal.aborted` 检查，命中返回 `canceled`。
   - 诊断 allowlist 增加 `mode`；不增加 digest / transcript / raw path / key。
 - [ ] REFACTOR + 重跑 targeted tests。
 
@@ -71,7 +74,7 @@
   - 点击 fill-missing → 不打开 Dialog；调用 `workspaceApi` with mode=`fill-missing`。
   - 点击 regenerate → 打开 `WorkspaceDangerConfirmDialog`；cancel/ESC 关闭；confirm 在 mutation pending 时显示 spinner；mutation 入队成功后关闭 Dialog；mutation 失败时关闭 Dialog 并 root toast；切 segment 立即关闭。
 - [ ] RED：`SegmentTranscriptView.test`：
-  - regenerate running 期间继续渲染当前 transcript 文本（按假设 3 选择 outcome 形态）。
+  - regenerate running 期间必须继续渲染当前 transcript 文本并叠加进行中文案（plan §2.3 假设 3 锁定行为；实现路径由 implementer 选择）。
   - fill-missing running 期间渲染 B 当前 running outcome。
 - [ ] RED：`App.test`（manual backfill 段）：
   - mutation 成功 → 复用 transcript save response merge；清除 manual Set。
@@ -104,21 +107,20 @@
 文档与代码同批落盘；本阶段不豁免 verify。
 
 - [ ] 更新 `docs/current/electron.md`：
-  - 两个 backfill request 合同字段（含 mode）。
-  - 新增错误码 `ERR_BACKFILL_TRANSCRIPT_CHANGED` 的语义。
-  - automatic scanner 永远只入队 fill-missing；regenerate 只允许 manual。
+  - anchor：`workspace:requestSegmentTranscriptionBackfill` / `workspace:requestSegmentSupplementTranscriptionBackfill` 条目（当前文件中描述这两个 channel 的段落，包含 audio.data Turbo 路径与 ffmpeg remux 的那段）扩展 `mode: 'fill-missing' | 'regenerate'` 字段。
+  - anchor：错误码描述段加入 `ERR_BACKFILL_TRANSCRIPT_CHANGED` 语义。
+  - anchor：automatic 与 manual 区别说明段加入"automatic 永远只入队 fill-missing；regenerate 只允许 manual"。
 - [ ] 更新 `docs/current/data.md`：
-  - manual backfill running Set 仍是 App component-state；不新增 Query key 或 Zustand。
-  - manifest 字段不变。
+  - anchor：manual backfill running state 描述段（当前以 "手动补转录 running state 使用按 workspace/entity identity 建立的 feature-local Set" 开头）保持 App component-state；显式声明 mode 不进 query key / store / manifest。
+  - anchor：finalized audio Segment / SegmentSupplement manifest 字段描述段 — 确认 `lastTranscriptionAttempt` 字段不扩展。
 - [ ] 更新 `docs/current/flow.md`：
-  - in-flight 段加入 transcript snapshot digest 捕获与 save-time guard。
-  - automatic batch 与 manual 路径区别。
+  - anchor：自动补转录 background queue 描述段加入"manual regenerate 路径在 in-flight 捕获 transcript snapshot digest，save 前比对（同一持锁段内重读→比对→ownership 复核→覆盖写→改 manifest）；digest 不匹配返回 `ERR_BACKFILL_TRANSCRIPT_CHANGED`；automatic 路径与该段不交叉"。
 - [ ] 更新 `docs/current/frontend.md`：
-  - `SegmentActionsMenu` / `SegmentSupplementActionsMenu` 新增「生成转录 / 重新生成转录」菜单项。
-  - `WorkspaceDangerConfirmDialog` 用于 regenerate 二次确认。
+  - anchor：`SegmentActionsMenu` / `SegmentSupplementActionsMenu` 菜单项列表段加入「生成转录 / 重新生成转录」动态项与 disable 触发条件。
+  - anchor：`WorkspaceDangerConfirmDialog` 危险确认段加入 regenerate 用法（与 Memory delete / Segment delete 同结构）。
 - [ ] 更新 `docs/current/quality.md`：
-  - 扩展 main + renderer 测试覆盖到 mode + snapshot guard + TRANSCRIPT_CHANGED + AlertDialog + dedup + diagnostics allowlist + automatic scanner mode-fixed。
-- [ ] 同步过程中如果发现 current docs 与 C 已交付事实不一致，先修正错误事实，再写 D 增量。
+  - anchor：main tests 覆盖列表与 renderer tests 覆盖列表扩展 mode 校验、snapshot guard、cancel-during-regenerate、锁内顺序、TRANSCRIPT_CHANGED、AlertDialog、dedup、diagnostics allowlist、automatic scanner mode-fixed。
+- [ ] 同步过程中如果发现 current docs 与 C 已交付事实不一致，先修正错误事实，再写 D 增量；anchor 命中之外的章节不动。
 
 ## Subagent 分配建议
 
@@ -136,7 +138,7 @@
 - Spec reviewer C：并发 / cancel / 测试完整度复核（automatic+manual 同 target、cancel/lock-lost、AlertDialog 切 segment、manual Set 边界、TRANSCRIPT_CHANGED race coverage、TARGET_NOT_ELIGIBLE 引导文案）。
 - Code quality reviewer：ycksimplify 三 agent（代码复用 / 代码质量 / 效率），按 C 现有 ycksimplify SKILL 串。
 
-每轮 reviewer 发现的 BLOCKER/MAJOR 必须由对应 implementer 回到 TDD 循环修复，再次 dispatch reviewer。所有 reviewer 全部 ✅ 后才能进入下一阶段或最终归档。
+每轮 reviewer 必须输出 `结论（READY-TO-IMPLEMENT / READY-WITH-MINOR / NEEDS-FIXES）+ BLOCKER / MAJOR / MINOR / PASS-CHECKS` 四档结构化结论；缺少结构化结论的 reviewer 视为未完成，必须重新 dispatch。每轮 reviewer 发现的 BLOCKER / MAJOR 必须由对应 implementer 回到 TDD 循环修复，再次 dispatch reviewer。所有 reviewer 全部 ✅ 后才能进入下一阶段或最终归档。
 
 ## Review / ycksimplify 阶段
 
@@ -147,12 +149,13 @@
 ## E2E / QA 阶段
 
 - 启动 `REMOTE_DEBUGGING_PORT=9233 npm run dev`，使用真实 Electron runtime。
-- 必须覆盖场景（详见 `verification.md`）：
+- 必须覆盖场景（详见 `verification.md` §3.1–§3.6）：
   1. fill-missing 路径：transcript.exists=false 的 Segment 与 SegmentSupplement 各重试一次。
   2. regenerate 路径：transcript.exists=true 的 Segment 与 SegmentSupplement 各重试一次。
   3. regenerate 期间手动改写 transcript 文件（外部编辑），观察 TRANSCRIPT_CHANGED toast 且 transcript 保留外部编辑。
   4. voice settings 关闭 / 未配置 / `auth` 三态：菜单 disabled + tooltip。
   5. 录音 overlay open：菜单 disabled + tooltip。
+  6. ALREADY_RUNNING 边界：触发 automatic queue 正在跑同一 target 时，手动点击同 target 菜单 → root toast「该录音正在生成中」；菜单项不会重复入队。
 - 真实 API smoke 必须确认没有打印 X-Api-Key、base64、raw path、transcript 原文或 digest。
 - 真实 runtime QA 通过后记录证据（命中场景、CDP 结构检查结果）写入 verification.md 的 `## QA 证据` 段。
 
@@ -179,7 +182,7 @@
 2. `npm run verify:quick` 全绿（typecheck + main test + renderer test + lint + format）。
 3. `npm run format:check` 全绿。
 4. `git diff --check` 干净。
-5. 真实 Electron runtime QA 覆盖 5 条 E2E 场景并记录证据。
+5. 真实 Electron runtime QA 覆盖 6 条 E2E 场景并记录证据（与 verification.md §3.1–§3.6 对齐）。
 6. 真实 API smoke 通过（或外部账号阻断时显式记录 DONE_WITH_CONCERNS 与原因）。
 7. 敏感信息扫描全部通过。
 8. 所有 `docs/current/*` 已同步到 D 当前事实，并通过 `prettier --check`。
