@@ -56,6 +56,7 @@ import {
   workspaceError,
   type DraftSegmentSupplementMetadata,
   type DraftSegmentMetadata,
+  type LastTranscriptionAttempt,
   type WorkspaceSegmentSupplementProjection,
   type WorkspaceSegmentProjection,
   type WorkspaceErrorEnvelope,
@@ -82,6 +83,7 @@ const readDescriptor = promisify(readCallback);
 const readFileDescriptor = promisify(readFileCallback);
 const writeDescriptor = promisify(writeCallback);
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
+type FinalizeTranscriptionAttempt = Extract<LastTranscriptionAttempt, 'failed' | 'never'>;
 type RecordingMarkdownSaveInput = {
   readonly rootPath: string;
   readonly segmentId: string;
@@ -1533,6 +1535,7 @@ interface FinalizeRecordingDraftInput {
   readonly memoryId: string;
   readonly title: string;
   readonly durationMs: number;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
   readonly now: () => string;
   readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
@@ -1558,6 +1561,7 @@ async function finalizeRecordingDraftWithHooks(
     memoryId,
     title,
     durationMs,
+    lastTranscriptionAttemptOnFinalize,
     now,
     rebuildIndex,
     assertWorkspaceUsable,
@@ -1603,6 +1607,7 @@ async function finalizeRecordingDraftWithHooks(
           segmentId,
           title,
           durationMs,
+          ...(lastTranscriptionAttemptOnFinalize ? { lastTranscriptionAttemptOnFinalize } : {}),
           now,
           ...(rebuildIndex ? { rebuildIndex } : {}),
           ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
@@ -1615,6 +1620,7 @@ async function finalizeRecordingDraftWithHooks(
           segmentId,
           title,
           durationMs,
+          ...(lastTranscriptionAttemptOnFinalize ? { lastTranscriptionAttemptOnFinalize } : {}),
           now,
           ...(rebuildIndex ? { rebuildIndex } : {}),
           ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
@@ -1668,6 +1674,7 @@ type FinalizeSegmentSupplementRecordingDraftInput = {
   readonly supplementId: string;
   readonly title: string;
   readonly durationMs: number;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
   readonly now: () => string;
   readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
@@ -1690,6 +1697,7 @@ export async function finalizeSegmentSupplementRecordingDraft({
   supplementId,
   title,
   durationMs,
+  lastTranscriptionAttemptOnFinalize,
   now,
   rebuildIndex,
   assertWorkspaceUsable,
@@ -1739,6 +1747,7 @@ export async function finalizeSegmentSupplementRecordingDraft({
       supplementId,
       title,
       durationMs,
+      ...(lastTranscriptionAttemptOnFinalize ? { lastTranscriptionAttemptOnFinalize } : {}),
       now,
       ...(rebuildIndex ? { rebuildIndex } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),

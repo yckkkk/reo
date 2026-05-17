@@ -83,6 +83,7 @@ const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
 type ManifestLastTranscriptionAttempt = LastTranscriptionAttempt | undefined;
+type FinalizeTranscriptionAttempt = Extract<LastTranscriptionAttempt, 'failed' | 'never'>;
 
 class FinalizeTransactionFailure extends Error {
   readonly dataRetention: WorkspaceError['dataRetention'];
@@ -254,6 +255,7 @@ export interface CreateMemoryForAudioSegmentInput {
   readonly segmentId: string;
   readonly title: string;
   readonly durationMs: number;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
   readonly now: () => string;
   readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
@@ -278,6 +280,7 @@ export interface AppendAudioSupplementToSegmentInput {
   readonly supplementId: string;
   readonly title: string;
   readonly durationMs: number;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
   readonly now: () => string;
   readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
@@ -660,6 +663,12 @@ function deriveLastTranscriptionAttempt(manifest: {
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
 }): LastTranscriptionAttempt {
   return manifest.lastTranscriptionAttempt ?? 'never';
+}
+
+function initialFinalizeTranscriptionAttempt(
+  value: FinalizeTranscriptionAttempt | undefined
+): FinalizeTranscriptionAttempt {
+  return value ?? 'never';
 }
 
 const segmentObjectManifestSchema = z
@@ -4087,6 +4096,7 @@ async function writeFinalizedSegmentFiles({
   title,
   durationMs,
   finalizedAt,
+  lastTranscriptionAttemptOnFinalize,
 }: {
   readonly targetRecordingDirectory: string;
   readonly workspaceId: string;
@@ -4095,6 +4105,7 @@ async function writeFinalizedSegmentFiles({
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
 }): Promise<SegmentObjectManifest> {
   const targetIdentity = await readDirectoryIdentity(
     targetRecordingDirectory,
@@ -4147,6 +4158,9 @@ async function writeFinalizedSegmentFiles({
     durationMs,
     nextSequence: draftMetadata.nextSequence,
     audioByteLength: audio.size,
+    lastTranscriptionAttempt: initialFinalizeTranscriptionAttempt(
+      lastTranscriptionAttemptOnFinalize
+    ),
   };
 }
 
@@ -4159,6 +4173,7 @@ async function writeFinalizedSupplementFiles({
   title,
   durationMs,
   finalizedAt,
+  lastTranscriptionAttemptOnFinalize,
 }: {
   readonly targetSupplementDirectory: string;
   readonly workspaceId: string;
@@ -4168,6 +4183,7 @@ async function writeFinalizedSupplementFiles({
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
 }): Promise<SupplementObjectManifest> {
   const targetIdentity = await readDirectoryIdentity(
     targetSupplementDirectory,
@@ -4223,6 +4239,9 @@ async function writeFinalizedSupplementFiles({
     durationMs,
     nextSequence: draftMetadata.nextSequence,
     audioByteLength: audio.size,
+    lastTranscriptionAttempt: initialFinalizeTranscriptionAttempt(
+      lastTranscriptionAttemptOnFinalize
+    ),
   };
 }
 
@@ -4238,6 +4257,7 @@ async function finishFinalizeTransaction({
   title,
   durationMs,
   finalizedAt,
+  lastTranscriptionAttemptOnFinalize,
   rebuildIndex,
   hooks,
   assertUsable,
@@ -4253,6 +4273,7 @@ async function finishFinalizeTransaction({
   readonly title: string;
   readonly durationMs: number;
   readonly finalizedAt: string;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
   readonly rebuildIndex: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly hooks?: FinalizeTransactionHooks;
   readonly assertUsable?: AssertWorkspaceUsable;
@@ -4274,6 +4295,7 @@ async function finishFinalizeTransaction({
       title,
       durationMs,
       finalizedAt,
+      ...(lastTranscriptionAttemptOnFinalize ? { lastTranscriptionAttemptOnFinalize } : {}),
     });
     await fsyncDirectoryTree(stagingSegmentDirectory);
     await hooks?.afterStagingTreeFsync?.();
@@ -4470,6 +4492,9 @@ async function createMemoryWithRecordingForTestFixture(
         title: input.title,
         durationMs: input.durationMs,
         finalizedAt: createdAt,
+        ...(input.lastTranscriptionAttemptOnFinalize
+          ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
+          : {}),
         rebuildIndex:
           input.rebuildIndex ??
           ((rootPath) =>
@@ -5520,6 +5545,9 @@ async function appendAudioSegmentToMemoryWithHooks(
         title: input.title,
         durationMs: input.durationMs,
         finalizedAt: updatedAt,
+        ...(input.lastTranscriptionAttemptOnFinalize
+          ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
+          : {}),
         rebuildIndex:
           input.rebuildIndex ??
           ((rootPath) =>
@@ -5650,6 +5678,9 @@ export async function appendAudioSupplementToSegment(
         title: input.title,
         durationMs: input.durationMs,
         finalizedAt: updatedAt,
+        ...(input.lastTranscriptionAttemptOnFinalize
+          ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
+          : {}),
       });
       await fsyncDirectoryTree(stagingSupplementDirectory);
       assertWorkspaceUsable(input.assertWorkspaceUsable);

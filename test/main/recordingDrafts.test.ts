@@ -134,6 +134,12 @@ async function findSupplementDirectoryById(
   return path.join(supplementsDirectory, supplementDirectoryName);
 }
 
+async function readObjectManifest(rootPath: string, kind: string, objectId: string) {
+  return JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'objects', kind, `${objectId}.json`), 'utf8')
+  ) as Record<string, unknown>;
+}
+
 async function createMemoryForDraftFinalize({
   rootPath,
   memoryId,
@@ -301,6 +307,82 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
   );
   assert.equal(markdownAfterLateAppend, finalizedMarkdown);
   assert.deepEqual(manifestAfterLateAppend, finalizedManifest);
+});
+
+test('recording finalize writes last transcription attempt into segment and supplement manifests', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_finalize_attempt',
+    title: 'Finalize attempt',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260506_attempt_failed',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260506_attempt_failed',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  const finalizedSegment = await finalizeRecordingDraft({
+    durationMs: 3000,
+    rootPath,
+    segmentId: 'seg_20260506_attempt_failed',
+    memoryId: 'mem_finalize_attempt',
+    title: 'Attempt failed',
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+
+  const segmentManifest = await readObjectManifest(
+    rootPath,
+    'segments',
+    'seg_20260506_attempt_failed'
+  );
+  assert.equal(segmentManifest['lastTranscriptionAttempt'], 'failed');
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_finalize_attempt',
+    segmentId: 'seg_20260506_attempt_failed',
+    createSupplementId: () => 'sup_20260506_attempt_never',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260506_attempt_never',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_finalize_attempt',
+    segmentId: 'seg_20260506_attempt_failed',
+    supplementId: 'sup_20260506_attempt_never',
+    title: 'Attempt never',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'never',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+
+  const supplementManifest = await readObjectManifest(
+    rootPath,
+    'supplements',
+    'sup_20260506_attempt_never'
+  );
+  assert.equal(supplementManifest['lastTranscriptionAttempt'], 'never');
 });
 
 test('segment supplement recording finalizes under the selected segment without creating a sibling segment', async () => {

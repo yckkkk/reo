@@ -490,6 +490,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       durationMs: 73_000,
       nextSequence: 1,
       audioByteLength: 3,
+      lastTranscriptionAttempt: 'never',
     }
   );
   assert.equal(

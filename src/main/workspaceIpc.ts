@@ -4149,6 +4149,9 @@ function handleFinalizeSegmentSupplementRecordingDraftCore({
           supplementId: request.supplementId,
           title: request.title,
           durationMs: request.durationMs,
+          ...(request.lastTranscriptionAttemptOnFinalize
+            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
+            : {}),
           now,
           assertWorkspaceUsable: assertUsable,
         });
@@ -5043,6 +5046,9 @@ export function registerWorkspaceIpc({
           memoryId: request.memoryId,
           title: request.title,
           durationMs: request.durationMs,
+          ...(request.lastTranscriptionAttemptOnFinalize
+            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
+            : {}),
           now: nowIso,
           assertWorkspaceUsable: assertUsable,
         });
@@ -5074,6 +5080,9 @@ export function registerWorkspaceIpc({
           supplementId: request.supplementId,
           title: request.title,
           durationMs: request.durationMs,
+          ...(request.lastTranscriptionAttemptOnFinalize
+            ? { lastTranscriptionAttemptOnFinalize: request.lastTranscriptionAttemptOnFinalize }
+            : {}),
           now: nowIso,
           assertWorkspaceUsable: assertUsable,
         });
