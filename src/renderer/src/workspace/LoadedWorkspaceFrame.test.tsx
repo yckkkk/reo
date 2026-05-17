@@ -1160,6 +1160,7 @@ describe('LoadedWorkspaceFrame', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
+      mode: 'fill-missing',
     });
 
     await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday song' }));
@@ -1597,6 +1598,7 @@ describe('LoadedWorkspaceFrame', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_followup',
+      mode: 'fill-missing',
     });
     expect(onRetrySupplementTranscription).toHaveBeenCalledOnce();
   });

@@ -2,6 +2,18 @@
 
 本任务清单是 D 实施 session 的直接消费入口。本 session 不执行 D 代码；下面所有 `[ ]` 都属于实施 session 的执行项。
 
+## 实施 session 收口状态
+
+- [x] Stage 1-4：contract、错误码、preload/workspaceApi、main runtime mode 派发、snapshot guard、IPC handler、diagnostics 已按 TDD 落地；targeted main tests 与 typecheck 通过；spec reviewer 与 ycksimplify 无 BLOCKER / MAJOR。
+- [x] Stage 5-6：Segment / SegmentSupplement 菜单、AlertDialog、App manual running Set、错误 toast、`SegmentTranscriptView` regenerate running 展示已按 TDD 落地；targeted renderer tests 通过；spec reviewer 与 ycksimplify 无 BLOCKER / MAJOR。
+- [x] Stage 7：diagnostics allowlist 只增加 `mode`，不记录 transcript / digest / raw path / key / base64 / audio bytes；main targeted tests 通过。
+- [x] Stage 8：`docs/current/electron.md`、`data.md`、`flow.md`、`frontend.md`、`quality.md` 已同步并通过格式检查。
+- [x] 最终 ycksimplify：代码复用 / 代码质量 / 效率三 agent 均 `READY-TO-LAND`；唯一已处理 MINOR 是 App tests workspace setup helper 复用。
+- [x] 自动化收口：targeted tests、`npm run verify:quick`、`npm run format:check`、`git diff --check` 全部通过。
+- [x] 真实 Electron runtime QA：6 类场景已覆盖，证据写入 `verification.md`。
+- [x] 敏感信息扫描：`git diff 29f3b141..HEAD`、`git diff` 与 `/tmp/reo-d-runtime.log` 已扫描；无真实 key、base64、runtime raw path、digest 或 QA transcript 泄漏。
+- [x] 100% confidence loop：`verification.md` §6.1 已记录出口结果；本 spec 可归档，initiative D 可勾选完成。
+
 ## 入口契约
 
 - 实施 session 启动时必须先确认：

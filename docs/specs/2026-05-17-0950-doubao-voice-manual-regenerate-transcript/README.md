@@ -1,4 +1,4 @@
-# 豆包语音手动重新生成转录（D，spec 准备）
+# 豆包语音手动重新生成转录（D）
 
 - 时间：2026-05-17 09:50 America/Los_Angeles
 - 来源 initiative：`docs/initiatives/2026-05-16-doubao-voice-followups/`
@@ -8,14 +8,14 @@
 
 ## 本 spec 的性质
 
-本 spec 是 **D 实施 session 的执行入口准备**。本 session 不写 D 代码，只产出：
+本 spec 是 D 的执行与收口证据。Spec 准备 session 产出：
 
 - `goal.md`：D 的产品与工程目标，以及不在范围内的项
 - `plan.md`：D 的完整 PRD + 工程实现说明，按状态、组件、状态机、数据、权限、接口、异常、验收顺序展开
 - `tasks.md`：下一 session 直接消费的执行清单（含 TDD RED/GREEN/REFACTOR、subagent 拆分、review/ycksimplify 阶段、E2E/QA、敏感信息检查、current docs 同步与 100% confidence loop 条件）
 - `verification.md`：D 落地后的验收依据（测试命令、真实 Electron runtime QA、敏感信息扫描、文档同步检查）
 
-`/goal` 工具本 session 不可用，本 spec 的 `goal.md` 同时承担 session goal 真源。
+实施 session 已完成 D 代码、测试、review、ycksimplify、真实 Electron runtime QA、敏感信息扫描和 current docs 同步；最终证据写入 `tasks.md` 与 `verification.md`。实施 session 已成功创建 `/goal`，`goal.md` 保留 D 产品与工程目标。
 
 ## 目录
 
@@ -65,7 +65,13 @@ docs/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/
 - C 已归档：`docs/archive/specs/2026-05-17-0512-doubao-voice-auto-backfill-turbo/`
 - B→C readiness gate 已执行；C→D readiness gate 已执行（见 initiative plan.md）
 
+## 实施收口
+
+- 实施完成：2026-05-17 America/Los_Angeles
+- 代码提交：`e87f8ce9 feat(voice): wire manual regenerate backfill mode`、`54db4529 feat(voice): add manual regenerate transcript UI`
+- 收口状态：`verification.md` §6.1 已满足 100% confidence loop；本 spec 可移入 `docs/archive/specs/2026-05-17-0950-doubao-voice-manual-regenerate-transcript/`。
+
 ## 时间戳
 
 - 本 spec 版本：2026-05-17 09:50 America/Los_Angeles
-- 实施开始前由下一 session 创建新的 active spec 版本时间戳。
+- 实施收口：2026-05-17 America/Los_Angeles

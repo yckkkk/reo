@@ -1864,7 +1864,15 @@ describe('App', () => {
       within(segmentMenu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+    ).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '生成转录',
+      '重命名',
+      '删除',
+    ]);
 
     await user.click(within(segmentMenu).getByRole('menuitem', { name: '用默认应用打开' }));
     expect(reoWorkspace.openSegmentDocument).toHaveBeenCalledWith(segmentActionPayload);
