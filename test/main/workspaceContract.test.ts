@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  FINALIZE_TRANSCRIPTION_ATTEMPTS,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
@@ -1876,7 +1877,7 @@ test('recording finalize contract requires explicit durable duration', () => {
 });
 
 test('recording finalize contract accepts only failed or never transcription-attempt outcomes', () => {
-  for (const lastTranscriptionAttemptOnFinalize of ['failed', 'never'] as const) {
+  for (const lastTranscriptionAttemptOnFinalize of FINALIZE_TRANSCRIPTION_ATTEMPTS) {
     assert.deepEqual(
       workspaceRecordingFinalizeRequestSchema.parse({
         durationMs: 2000,
@@ -1911,7 +1912,7 @@ test('recording finalize contract accepts only failed or never transcription-att
 });
 
 test('segment supplement finalize contract accepts only failed or never transcription-attempt outcomes', () => {
-  for (const lastTranscriptionAttemptOnFinalize of ['failed', 'never'] as const) {
+  for (const lastTranscriptionAttemptOnFinalize of FINALIZE_TRANSCRIPTION_ATTEMPTS) {
     assert.deepEqual(
       workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema.parse({
         durationMs: 2000,

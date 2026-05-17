@@ -15,7 +15,11 @@ const supplementIdSchema = z.string().regex(SUPPLEMENT_ID_PATTERN);
 export const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
 export type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
 export const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
-const finalizeTranscriptionAttemptSchema = z.enum(['failed', 'never']);
+export const FINALIZE_TRANSCRIPTION_ATTEMPTS = [
+  'failed',
+  'never',
+] as const satisfies readonly LastTranscriptionAttempt[];
+const finalizeTranscriptionAttemptSchema = z.enum(FINALIZE_TRANSCRIPTION_ATTEMPTS);
 const workspaceTitleTextSchema = z.string().trim().min(1).max(WORKSPACE_TITLE_MAX_LENGTH);
 const workspaceMemorySpaceTitleSchema = workspaceTitleTextSchema.refine(
   isSafeWorkspaceDirectoryName,
