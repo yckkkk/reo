@@ -50,8 +50,6 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
-  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-  WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -302,16 +300,6 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     saveSegmentSupplementTranscript: (payload) =>
       invoke<WorkspaceBridgeResponse<'saveSegmentSupplementTranscript'>>(
         WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
-        payload
-      ),
-    requestSegmentTranscriptionBackfill: (payload) =>
-      invoke<WorkspaceBridgeResponse<'requestSegmentTranscriptionBackfill'>>(
-        WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-        payload
-      ),
-    requestSegmentSupplementTranscriptionBackfill: (payload) =>
-      invoke<WorkspaceBridgeResponse<'requestSegmentSupplementTranscriptionBackfill'>>(
-        WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
         payload
       ),
     beginMicrophoneIntent: (payload) =>

@@ -44,8 +44,6 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
-  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-  WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
@@ -111,10 +109,6 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
-  workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
-  workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
-  workspaceRequestSegmentTranscriptionBackfillRequestSchema,
-  workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
@@ -264,18 +258,12 @@ import {
   createRecordingTranscriptionSessionRegistry,
   type RecordingTranscriptionSessionRegistry,
 } from './recordingTranscriptionSessions.js';
-import { diagnosticErrorName, recordDiagnosticEvent, withDiagnosticSpan } from './diagnostics.js';
+import { withDiagnosticSpan } from './diagnostics.js';
 import {
   runVoiceTranscriptionProbe,
   type VoiceTranscriptionProbeResult,
 } from './voiceTranscriptionProbe.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
-import {
-  BackfillAlreadyRunningError,
-  type BackfillQueue,
-  type BackfillQueueErrorCode,
-} from './backfillQueue.js';
-import { isBackfillEligibleProjection } from './backfillScanner.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
@@ -296,18 +284,6 @@ type OpenPath = (filePath: string) => Promise<string>;
 type OpenVoiceTranscriptionProviderConsole = (url: string) => Promise<void>;
 type WriteClipboardText = (text: string) => void;
 type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
-type ManualBackfillQueue = Pick<BackfillQueue, 'runManual'>;
-type WorkspaceBackfillTriggerWiring = {
-  readonly recordingClosed?: () => void;
-  readonly recordingOpened?: () => void;
-  readonly workspaceReady?: (workspace: {
-    readonly assertWorkspaceUsable?: AssertWorkspaceHandleUsable | undefined;
-    readonly rootPath?: string | undefined;
-    readonly workspaceHandle: string;
-    readonly workspaceId: string;
-  }) => Promise<void> | void;
-  readonly workspaceSwitched?: () => void;
-};
 type ResolveMemorySpacePaths = (
   workspaceId: string,
   deps?: {
@@ -357,8 +333,6 @@ export interface RegisterWorkspaceIpcOptions {
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
   readonly voiceSettingsStore: VoiceSettingsStore;
-  readonly backfillQueue?: ManualBackfillQueue;
-  readonly backfillTriggerWiring?: WorkspaceBackfillTriggerWiring;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
   readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
@@ -397,8 +371,6 @@ interface HandleWorkspaceRequestOptions {
   readonly isTrustedUrl: (url: string) => boolean;
   readonly handleStore?: WorkspaceHandleStore;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
-  readonly backfillQueue?: ManualBackfillQueue;
-  readonly voiceSettingsStore?: VoiceSettingsStore;
 }
 
 export interface HandleMicrophoneIntentOptions extends HandleWorkspaceRequestOptions {
@@ -4314,321 +4286,6 @@ function saveSegmentSupplementTranscriptWithHandle(
   });
 }
 
-function backfillQueueError(errorCode: BackfillQueueErrorCode): WorkspaceErrorEnvelope {
-  if (errorCode === 'canceled') {
-    return workspaceError('ERR_BACKFILL_CANCELED', 'Transcription backfill was canceled');
-  }
-  if (errorCode === 'lock-lost') {
-    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost');
-  }
-  if (errorCode === 'target-not-eligible') {
-    return workspaceError(
-      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
-      'Transcription backfill target is not eligible'
-    );
-  }
-  if (errorCode === 'url-source-unconfigured') {
-    return workspaceError(
-      'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED',
-      'Transcription backfill audio URL source is not configured'
-    );
-  }
-  if (errorCode === 'url-source-failed') {
-    return workspaceError(
-      'ERR_BACKFILL_AUDIO_URL_FAILED',
-      'Transcription backfill audio URL could not be prepared'
-    );
-  }
-  return workspaceError(
-    'ERR_BACKFILL_PROVIDER_FAILED',
-    'Transcription backfill provider request failed'
-  );
-}
-
-function manualBackfillPreflight(
-  store: VoiceSettingsStore | undefined
-): WorkspaceErrorEnvelope | null {
-  if (!store) {
-    return workspaceError(
-      'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED',
-      'Transcription backfill is not configured'
-    );
-  }
-  const snapshot = store.read();
-  if (!snapshot.enabled) {
-    return workspaceError('ERR_BACKFILL_VOICE_DISABLED', 'Voice transcription is disabled');
-  }
-  if (!snapshot.apiKeyConfigured || store.readDecryptedApiKey() === null) {
-    return workspaceError('ERR_BACKFILL_API_KEY_MISSING', 'Voice transcription API key is missing');
-  }
-  if (snapshot.lastValidationOk !== true) {
-    return workspaceError(
-      'ERR_BACKFILL_PROVIDER_FAILED',
-      'Voice transcription API key has not been validated'
-    );
-  }
-  return null;
-}
-
-async function requireManualSegmentBackfillEligible({
-  assertWorkspaceUsable,
-  memoryId,
-  rootPath,
-  segmentId,
-  workspaceId,
-}: {
-  readonly assertWorkspaceUsable: AssertWorkspaceHandleUsable;
-  readonly memoryId: string;
-  readonly rootPath: string;
-  readonly segmentId: string;
-  readonly workspaceId: string;
-}): Promise<WorkspaceErrorEnvelope | null> {
-  const detail = await readMemoryDetailFromFileTruth({
-    assertWorkspaceUsable,
-    memoryId,
-    rootPath,
-    workspaceId,
-  });
-  if (!detail.ok) {
-    return detail;
-  }
-  const segment = detail.value.segments.find((candidate) => candidate.segmentId === segmentId);
-  if (!segment || !isBackfillEligibleProjection(segment)) {
-    return workspaceError(
-      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
-      'Transcription backfill target is not eligible'
-    );
-  }
-  return null;
-}
-
-async function requireManualSupplementBackfillEligible({
-  assertWorkspaceUsable,
-  memoryId,
-  rootPath,
-  segmentId,
-  supplementId,
-  workspaceId,
-}: {
-  readonly assertWorkspaceUsable: AssertWorkspaceHandleUsable;
-  readonly memoryId: string;
-  readonly rootPath: string;
-  readonly segmentId: string;
-  readonly supplementId: string;
-  readonly workspaceId: string;
-}): Promise<WorkspaceErrorEnvelope | null> {
-  const detail = await readMemoryDetailFromFileTruth({
-    assertWorkspaceUsable,
-    memoryId,
-    rootPath,
-    workspaceId,
-  });
-  if (!detail.ok) {
-    return detail;
-  }
-  const segment = detail.value.segments.find((candidate) => candidate.segmentId === segmentId);
-  const supplement = segment?.supplements.find(
-    (candidate) => candidate.supplementId === supplementId
-  );
-  if (!supplement || !isBackfillEligibleProjection(supplement)) {
-    return workspaceError(
-      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
-      'Transcription backfill target is not eligible'
-    );
-  }
-  return null;
-}
-
-function handleRequestSegmentTranscriptionBackfillCore({
-  backfillQueue,
-  voiceSettingsStore: manualVoiceSettingsStore,
-  ...options
-}: HandleWorkspaceRequestOptions): Promise<
-  z.infer<typeof workspaceRequestSegmentTranscriptionBackfillResponseSchema>
-> {
-  return withWorkspaceHandleRequest({
-    ...options,
-    channel: WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceRequestSegmentTranscriptionBackfillRequestSchema,
-    invalidMessage: 'request segment transcription backfill request is invalid',
-    run: async (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return workspaceError(
-            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment transcription backfill workspace does not match the active handle'
-          );
-        }
-        const preflightError = manualBackfillPreflight(manualVoiceSettingsStore);
-        if (preflightError) {
-          return preflightError;
-        }
-        const eligibilityError = await requireManualSegmentBackfillEligible({
-          assertWorkspaceUsable: assertUsable,
-          memoryId: request.memoryId,
-          rootPath: handle.canonicalRoot,
-          segmentId: request.segmentId,
-          workspaceId: request.workspaceId,
-        });
-        if (eligibilityError) {
-          return eligibilityError;
-        }
-        if (!backfillQueue) {
-          return workspaceError(
-            'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED',
-            'Transcription backfill is not configured'
-          );
-        }
-        try {
-          const result = await backfillQueue.runManual({
-            assertWorkspaceUsable: assertUsable,
-            kind: 'segment',
-            memoryId: request.memoryId,
-            rootPath: handle.canonicalRoot,
-            segmentId: request.segmentId,
-            source: 'manual',
-            workspaceHandle: request.workspaceHandle,
-            workspaceId: request.workspaceId,
-          });
-          if (!result.ok) {
-            return backfillQueueError(result.errorCode);
-          }
-          const saved = await saveRecordingMarkdown({
-            rootPath: handle.canonicalRoot,
-            workspaceId: handle.workspaceId,
-            memoryId: request.memoryId,
-            segmentId: request.segmentId,
-            fileName: 'transcript.md',
-            markdown: result.transcriptText,
-            assertWorkspaceUsable: assertUsable,
-          });
-          return workspaceRequestSegmentTranscriptionBackfillResponseSchema.parse(
-            saved.ok ? { ok: true, value: { memory: saved.memory, saved: true } } : saved
-          );
-        } catch (error) {
-          if (error instanceof BackfillAlreadyRunningError) {
-            return workspaceError(
-              'ERR_BACKFILL_ALREADY_RUNNING',
-              'Transcription backfill is already running for this target'
-            );
-          }
-          return workspaceError(
-            'ERR_BACKFILL_PROVIDER_FAILED',
-            'Transcription backfill could not be started'
-          );
-        }
-      }),
-  });
-}
-
-function handleRequestSegmentSupplementTranscriptionBackfillCore({
-  backfillQueue,
-  voiceSettingsStore: manualVoiceSettingsStore,
-  ...options
-}: HandleWorkspaceRequestOptions): Promise<
-  z.infer<typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema>
-> {
-  return withWorkspaceHandleRequest({
-    ...options,
-    channel: WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
-    invalidMessage: 'request segment supplement transcription backfill request is invalid',
-    run: async (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return workspaceError(
-            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
-            'Segment supplement transcription backfill workspace does not match the active handle'
-          );
-        }
-        const preflightError = manualBackfillPreflight(manualVoiceSettingsStore);
-        if (preflightError) {
-          return preflightError;
-        }
-        const eligibilityError = await requireManualSupplementBackfillEligible({
-          assertWorkspaceUsable: assertUsable,
-          memoryId: request.memoryId,
-          rootPath: handle.canonicalRoot,
-          segmentId: request.segmentId,
-          supplementId: request.supplementId,
-          workspaceId: request.workspaceId,
-        });
-        if (eligibilityError) {
-          return eligibilityError;
-        }
-        if (!backfillQueue) {
-          return workspaceError(
-            'ERR_BACKFILL_AUDIO_URL_UNCONFIGURED',
-            'Transcription backfill is not configured'
-          );
-        }
-        try {
-          const result = await backfillQueue.runManual({
-            assertWorkspaceUsable: assertUsable,
-            kind: 'supplement',
-            memoryId: request.memoryId,
-            rootPath: handle.canonicalRoot,
-            segmentId: request.segmentId,
-            source: 'manual',
-            supplementId: request.supplementId,
-            workspaceHandle: request.workspaceHandle,
-            workspaceId: request.workspaceId,
-          });
-          if (!result.ok) {
-            return backfillQueueError(result.errorCode);
-          }
-          const saved = await saveSegmentSupplementMarkdown({
-            rootPath: handle.canonicalRoot,
-            workspaceId: handle.workspaceId,
-            memoryId: request.memoryId,
-            segmentId: request.segmentId,
-            supplementId: request.supplementId,
-            markdown: result.transcriptText,
-            assertWorkspaceUsable: assertUsable,
-          });
-          return workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema.parse(
-            saved.ok
-              ? {
-                  ok: true,
-                  value: {
-                    memory: saved.memory,
-                    segment: saved.segment,
-                    supplement: saved.supplement,
-                    saved: true,
-                  },
-                }
-              : saved
-          );
-        } catch (error) {
-          if (error instanceof BackfillAlreadyRunningError) {
-            return workspaceError(
-              'ERR_BACKFILL_ALREADY_RUNNING',
-              'Transcription backfill is already running for this target'
-            );
-          }
-          return workspaceError(
-            'ERR_BACKFILL_PROVIDER_FAILED',
-            'Transcription backfill could not be started'
-          );
-        }
-      }),
-  });
-}
-
-export async function handleRequestSegmentTranscriptionBackfillForTest(
-  options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceRequestSegmentTranscriptionBackfillResponseSchema>> {
-  return handleRequestSegmentTranscriptionBackfillCore(options);
-}
-
-export async function handleRequestSegmentSupplementTranscriptionBackfillForTest(
-  options: HandleWorkspaceRequestOptions
-): Promise<z.infer<typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema>> {
-  return handleRequestSegmentSupplementTranscriptionBackfillCore(options);
-}
-
 export async function handleSaveSegmentSupplementTranscriptForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceSegmentSupplementMarkdownSaveResponseSchema>> {
@@ -4705,78 +4362,6 @@ export async function handleFinishRecordingTranscriptionForTest(
   return finishRecordingTranscriptionCore(options);
 }
 
-async function notifyBackfillWorkspaceReady<Result>(
-  response: Result,
-  options: {
-    readonly backfillTriggerWiring: WorkspaceBackfillTriggerWiring | undefined;
-    readonly channel: string;
-    readonly event: TrustedSenderEventAdapter;
-    readonly expectedSession: Session | object;
-    readonly expectedSessionKey: string;
-    readonly handleStore: WorkspaceHandleStore;
-    readonly isTrustedUrl: (url: string) => boolean;
-  }
-): Promise<Result> {
-  const {
-    backfillTriggerWiring,
-    channel,
-    event,
-    expectedSession,
-    expectedSessionKey,
-    handleStore,
-    isTrustedUrl,
-  } = options;
-  if (
-    backfillTriggerWiring?.workspaceReady &&
-    typeof response === 'object' &&
-    response !== null &&
-    'ok' in response &&
-    response.ok === true &&
-    'value' in response &&
-    typeof response.value === 'object' &&
-    response.value !== null &&
-    'workspaceHandle' in response.value &&
-    typeof response.value.workspaceHandle === 'string' &&
-    'workspaceId' in response.value &&
-    typeof response.value.workspaceId === 'string'
-  ) {
-    const trusted = validateWorkspaceSender({
-      event,
-      channel,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
-    });
-    if (!trusted.ok) {
-      return response;
-    }
-    const required = handleStore.requireHandle({
-      sender: trusted.sender,
-      workspaceHandle: response.value.workspaceHandle,
-      workspaceId: response.value.workspaceId,
-    });
-    if (!required.ok) {
-      return response;
-    }
-    void Promise.resolve(
-      backfillTriggerWiring.workspaceReady({
-        assertWorkspaceUsable: required.handle.assertUsable,
-        rootPath: required.handle.canonicalRoot,
-        workspaceHandle: response.value.workspaceHandle,
-        workspaceId: response.value.workspaceId,
-      })
-    ).catch((error: unknown) => {
-      recordDiagnosticEvent({
-        area: 'backfill',
-        event: 'workspace-ready.failed',
-        fields: { errorName: diagnosticErrorName(error) },
-        level: 'warn',
-      });
-    });
-  }
-  return response;
-}
-
 export function registerWorkspaceIpc({
   expectedSession,
   expectedSessionKey,
@@ -4786,8 +4371,6 @@ export function registerWorkspaceIpc({
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   voiceSettingsStore,
-  backfillQueue,
-  backfillTriggerWiring,
   voiceTranscriptionProbe = runDefaultVoiceTranscriptionProbe,
   openExternal = openSystemExternalUrl,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
@@ -4831,73 +4414,40 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>
-    notifyBackfillWorkspaceReady(
-      await handleInitializeWorkspace({
-        event,
-        input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
-        tokenStore,
-        handleStore,
-        memorySpaceRegistry,
-      }),
-      {
-        backfillTriggerWiring,
-        channel: WORKSPACE_INITIALIZE_CHANNEL,
-        event,
-        expectedSession,
-        expectedSessionKey,
-        handleStore,
-        isTrustedUrl,
-      }
-    )
+  registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, (event, input) =>
+    handleInitializeWorkspace({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      tokenStore,
+      handleStore,
+      memorySpaceRegistry,
+    })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_OPEN_CHANNEL, async (event, input) =>
-    notifyBackfillWorkspaceReady(
-      await handleOpenWorkspace({
-        event,
-        input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
-        tokenStore,
-        handleStore,
-        memorySpaceRegistry,
-      }),
-      {
-        backfillTriggerWiring,
-        channel: WORKSPACE_OPEN_CHANNEL,
-        event,
-        expectedSession,
-        expectedSessionKey,
-        handleStore,
-        isTrustedUrl,
-      }
-    )
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_CHANNEL, (event, input) =>
+    handleOpenWorkspace({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      tokenStore,
+      handleStore,
+      memorySpaceRegistry,
+    })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, async (event, input) =>
-    notifyBackfillWorkspaceReady(
-      await handleOpenWorkspaceMemorySpace({
-        event,
-        input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
-        handleStore,
-        memorySpaceRegistry,
-      }),
-      {
-        backfillTriggerWiring,
-        channel: WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
-        event,
-        expectedSession,
-        expectedSessionKey,
-        handleStore,
-        isTrustedUrl,
-      }
-    )
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL, (event, input) =>
+    handleOpenWorkspaceMemorySpace({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
+    })
   );
   registerWorkspaceIpcHandler(WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL, (event, input) =>
     handleRemoveMemorySpace({
@@ -5362,20 +4912,6 @@ export function registerWorkspaceIpc({
     })
   );
   registerWorkspaceIpcHandler(
-    WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    (event, input) =>
-      handleRequestSegmentTranscriptionBackfillCore({
-        event,
-        input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
-        handleStore,
-        voiceSettingsStore,
-        ...(backfillQueue ? { backfillQueue } : {}),
-      })
-  );
-  registerWorkspaceIpcHandler(
     WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
     (event, input) =>
       handleReadFinalizedAudioSegmentSupplement({
@@ -5387,22 +4923,8 @@ export function registerWorkspaceIpc({
         handleStore,
       })
   );
-  registerWorkspaceIpcHandler(
-    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    (event, input) =>
-      handleRequestSegmentSupplementTranscriptionBackfillCore({
-        event,
-        input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
-        handleStore,
-        voiceSettingsStore,
-        ...(backfillQueue ? { backfillQueue } : {}),
-      })
-  );
-  registerWorkspaceIpcHandler(WORKSPACE_CLOSE_CHANNEL, async (event, input) => {
-    const result = await handleCloseWorkspace({
+  registerWorkspaceIpcHandler(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
+    handleCloseWorkspace({
       event,
       input,
       expectedSession,
@@ -5410,12 +4932,8 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       recordingTranscriptionSessions,
-    });
-    if (result.ok) {
-      backfillTriggerWiring?.workspaceSwitched?.();
-    }
-    return result;
-  });
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, (event, input) =>
     handleReadWorkspaceSnapshot({
       event,
@@ -5456,36 +4974,27 @@ export function registerWorkspaceIpc({
     );
   }
 
-  registerWorkspaceIpcHandler(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, async (event, input) => {
-    const result = await handleCreateRecordingDraft({
+  registerWorkspaceIpcHandler(WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL, (event, input) =>
+    handleCreateRecordingDraft({
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
-    });
-    if (result.ok) {
-      backfillTriggerWiring?.recordingOpened?.();
-    }
-    return result;
-  });
+    })
+  );
   registerWorkspaceIpcHandler(
     WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    async (event, input) => {
-      const result = await handleCreateSegmentSupplementRecordingDraft({
+    (event, input) =>
+      handleCreateSegmentSupplementRecordingDraft({
         event,
         input,
         expectedSession,
         expectedSessionKey,
         isTrustedUrl,
         handleStore,
-      });
-      if (result.ok) {
-        backfillTriggerWiring?.recordingOpened?.();
-      }
-      return result;
-    }
+      })
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -5576,8 +5085,8 @@ export function registerWorkspaceIpc({
         );
       })
   );
-  registerWorkspaceIpcHandler(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, async (event, input) => {
-    const result = await handleFinalizeRecordingDraft({
+  registerWorkspaceIpcHandler(WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL, (event, input) =>
+    handleFinalizeRecordingDraft({
       event,
       input,
       expectedSession,
@@ -5585,16 +5094,12 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    });
-    if (result.ok) {
-      backfillTriggerWiring?.recordingClosed?.();
-    }
-    return result;
-  });
+    })
+  );
   registerWorkspaceIpcHandler(
     WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    async (event, input) => {
-      const result = await handleFinalizeSegmentSupplementRecordingDraft({
+    (event, input) =>
+      handleFinalizeSegmentSupplementRecordingDraft({
         event,
         input,
         expectedSession,
@@ -5602,12 +5107,7 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
         now: nowIso,
-      });
-      if (result.ok) {
-        backfillTriggerWiring?.recordingClosed?.();
-      }
-      return result;
-    }
+      })
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
@@ -5620,9 +5120,6 @@ export function registerWorkspaceIpc({
           segmentId: request.segmentId,
           assertWorkspaceUsable: assertUsable,
         });
-        if (result.ok) {
-          backfillTriggerWiring?.recordingClosed?.();
-        }
         return workspaceDiscardRecordingDraftResponseSchema.parse(
           result.ok ? { ok: true, value: { discarded: true } } : result
         );
@@ -5639,9 +5136,6 @@ export function registerWorkspaceIpc({
           supplementId: request.supplementId,
           assertWorkspaceUsable: assertUsable,
         });
-        if (result.ok) {
-          backfillTriggerWiring?.recordingClosed?.();
-        }
         return workspaceDiscardRecordingDraftResponseSchema.parse(
           result.ok ? { ok: true, value: { discarded: true } } : result
         );

@@ -61,8 +61,6 @@ describe('App', () => {
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
-    requestSegmentTranscriptionBackfill: vi.fn(),
-    requestSegmentSupplementTranscriptionBackfill: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
     startRecordingTranscription: vi.fn(),
@@ -220,14 +218,6 @@ describe('App', () => {
     reoWorkspace.readFinalizedAudioSegmentSupplement.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement recording not found' },
-    });
-    reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
-      ok: false,
-      error: { code: 'ERR_BACKFILL_PROVIDER_FAILED', message: 'Backfill failed' },
-    });
-    reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockResolvedValue({
-      ok: false,
-      error: { code: 'ERR_BACKFILL_PROVIDER_FAILED', message: 'Backfill failed' },
     });
     reoWorkspace.readRecordingDraftAudio.mockResolvedValue({
       ok: false,
@@ -767,13 +757,8 @@ describe('App', () => {
     expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
   });
 
-  it('runs a manual segment transcription backfill from the loaded workspace', async () => {
+  it('shows a placeholder toast when retrying a failed segment transcription from the loaded workspace', async () => {
     const user = userEvent.setup();
-    const backfillFinished =
-      createDeferred<
-        Awaited<ReturnType<typeof reoWorkspace.requestSegmentTranscriptionBackfill>>
-      >();
-    let transcriptAvailable = false;
     const memory = {
       memoryId: 'mem_retry_transcription',
       title: 'Retry transcription memory',
@@ -836,14 +821,9 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
-        transcript: transcriptAvailable
-          ? { exists: true, text: '后台补齐后的片段转录' }
-          : { exists: false, text: '' },
+        transcript: { exists: false, text: '' },
       },
     }));
-    reoWorkspace.requestSegmentTranscriptionBackfill.mockImplementation(
-      () => backfillFinished.promise
-    );
 
     render(
       <ReoQueryProvider>
@@ -863,40 +843,11 @@ describe('App', () => {
 
     await user.click(within(content).getByRole('button', { name: '重试' }));
 
-    expect(await within(content).findByText('正在生成')).toBeInTheDocument();
-    expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
-    expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
-      workspaceHandle: 'workspace-handle-1',
-      workspaceId: 'ws_1',
-      memoryId: memory.memoryId,
-      segmentId: 'seg_retry_transcription',
-    });
-
-    transcriptAvailable = true;
-    await act(async () => {
-      backfillFinished.resolve({
-        ok: true,
-        value: {
-          memory: {
-            ...memory,
-            hasTranscript: true,
-            updatedAt: '2026-05-16T18:22:00.000Z',
-          },
-          saved: true,
-        },
-      });
-      await backfillFinished.promise;
-    });
-
-    expect(await within(content).findByText('后台补齐后的片段转录')).toBeInTheDocument();
+    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
   });
 
-  it('returns a failed supplement transcription backfill to the retryable state', async () => {
+  it('shows a placeholder toast when retrying a failed supplement transcription from the loaded workspace', async () => {
     const user = userEvent.setup();
-    const backfillFinished =
-      createDeferred<
-        Awaited<ReturnType<typeof reoWorkspace.requestSegmentSupplementTranscriptionBackfill>>
-      >();
     const fixture = createSegmentSupplementFixture();
     mockSegmentSupplementWorkspace({
       ...fixture,
@@ -927,9 +878,6 @@ describe('App', () => {
         transcript: { exists: false, text: '' },
       },
     }));
-    reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockImplementation(
-      () => backfillFinished.promise
-    );
 
     render(
       <ReoQueryProvider>
@@ -943,30 +891,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '重试' }));
 
-    expect(await screen.findByText('正在生成')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
-    expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledWith({
-      workspaceHandle: 'workspace-handle-1',
-      workspaceId: 'ws_1',
-      memoryId: 'mem_birthday',
-      segmentId: 'seg_birthday_voice',
-      supplementId: 'sup_birthday_followup',
-    });
-
-    await act(async () => {
-      backfillFinished.resolve({
-        ok: false,
-        error: {
-          code: 'ERR_BACKFILL_PROVIDER_FAILED',
-          message: 'Provider failed',
-        },
-      });
-      await backfillFinished.promise;
-    });
-
-    expect(await screen.findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重试' })).toBeEnabled();
-    expect(await screen.findByText('补转录失败，请稍后重试。')).toBeInTheDocument();
+    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
   });
 
   it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {

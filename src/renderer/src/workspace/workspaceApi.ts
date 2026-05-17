@@ -278,18 +278,6 @@ export function saveSegmentSupplementTranscript(
   return window.reoWorkspace.saveSegmentSupplementTranscript(payload);
 }
 
-export function requestSegmentTranscriptionBackfill(
-  payload: Parameters<Window['reoWorkspace']['requestSegmentTranscriptionBackfill']>[0]
-) {
-  return window.reoWorkspace.requestSegmentTranscriptionBackfill(payload);
-}
-
-export function requestSegmentSupplementTranscriptionBackfill(
-  payload: Parameters<Window['reoWorkspace']['requestSegmentSupplementTranscriptionBackfill']>[0]
-) {
-  return window.reoWorkspace.requestSegmentSupplementTranscriptionBackfill(payload);
-}
-
 export function beginMicrophoneIntent(
   payload: Parameters<Window['reoWorkspace']['beginMicrophoneIntent']>[0]
 ) {

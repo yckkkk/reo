@@ -333,14 +333,6 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
         saved: true as const,
       },
     })),
-    requestSegmentTranscriptionBackfill: vi.fn(async () => ({
-      ok: false as const,
-      error: { code: 'ERR_BACKFILL_PROVIDER_FAILED' as const, message: 'Backfill failed' },
-    })),
-    requestSegmentSupplementTranscriptionBackfill: vi.fn(async () => ({
-      ok: false as const,
-      error: { code: 'ERR_BACKFILL_PROVIDER_FAILED' as const, message: 'Backfill failed' },
-    })),
     beginMicrophoneIntent: vi.fn(async () => ({
       ok: true as const,
       value: { registered: true as const },

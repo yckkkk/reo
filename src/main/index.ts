@@ -9,8 +9,6 @@ import {
   type WebContentsWillRedirectEventParams,
 } from 'electron';
 import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from './appProtocol.js';
-import { createWorkspaceBackfillQueue, scanWorkspaceBackfillTargets } from './backfillRuntime.js';
-import { createBackfillTriggerWiring } from './backfillTriggerWiring.js';
 import { diagnosticErrorName, recordDiagnosticEvent } from './diagnostics.js';
 import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
@@ -34,7 +32,6 @@ const DEV_SERVER_URL = getDevServerUrl();
 
 let mainWindow: BrowserWindow | null = null;
 let closeWorkspaceRuntime: () => Promise<void> = closeAllWorkspaceHandles;
-let cancelBackfillRuntime: (reason: 'app-quit' | 'workspace-switch') => void = () => {};
 
 function getPreloadPath(): string {
   return resolvePreloadPath(import.meta.url);
@@ -58,7 +55,6 @@ function createWindow(): void {
   });
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[Main] Renderer process gone', details.reason);
-    cancelBackfillRuntime('workspace-switch');
     recordDiagnosticEvent({
       area: 'app',
       event: 'renderer.gone',
@@ -132,67 +128,7 @@ app
         };
       },
     });
-    const backfillTriggerWiringRef: {
-      current?: ReturnType<typeof createBackfillTriggerWiring>;
-    } = {};
-    const backfillQueue = createWorkspaceBackfillQueue({
-      onLockLost: () => backfillTriggerWiringRef.current?.lockLost(),
-      voiceSettingsStore,
-    });
-    const backfillTriggerWiring = createBackfillTriggerWiring({
-      cancelAll: (reason) => backfillQueue.cancelAll(reason),
-      enqueueAutoBatch: (targets, workspace) => {
-        backfillQueue.enqueueAutomaticBatch(
-          targets.map((target) => ({
-            ...target,
-            assertWorkspaceUsable: workspace.assertWorkspaceUsable,
-            rootPath: workspace.rootPath,
-            source: 'auto',
-            workspaceHandle: workspace.workspaceHandle ?? workspace.workspaceId,
-          }))
-        );
-      },
-      pauseQueue: () => backfillQueue.pause('recording'),
-      readVoiceSettings: () => voiceSettingsStore.read(),
-      resumeQueue: () => backfillQueue.resume('recording'),
-      scan: async (workspace) => {
-        if (!workspace.rootPath) {
-          return [];
-        }
-        return scanWorkspaceBackfillTargets({
-          limit: 20,
-          rootPath: workspace.rootPath,
-          workspaceId: workspace.workspaceId,
-          ...(workspace.assertWorkspaceUsable
-            ? { assertWorkspaceUsable: workspace.assertWorkspaceUsable }
-            : {}),
-        });
-      },
-    });
-    backfillTriggerWiringRef.current = backfillTriggerWiring;
-    voiceSettingsStore.onSnapshotChange((snapshot) => {
-      void backfillTriggerWiring.voiceSettingsChanged(snapshot);
-    });
-    let isQuittingAfterBackfillDrain = false;
-    app.on('before-quit', (event) => {
-      if (isQuittingAfterBackfillDrain) {
-        return;
-      }
-      event.preventDefault();
-      void backfillQueue.cancelAllAndDrain('app-quit').finally(() => {
-        isQuittingAfterBackfillDrain = true;
-        app.quit();
-      });
-    });
-    cancelBackfillRuntime = (reason) => {
-      if (reason === 'workspace-switch') {
-        backfillTriggerWiring.workspaceSwitched();
-        return;
-      }
-      backfillQueue.cancelAll(reason);
-    };
     closeWorkspaceRuntime = async () => {
-      backfillTriggerWiring.workspaceSwitched();
       recordingTranscriptionSessions.closeAll();
       await closeAllWorkspaceHandles();
     };
@@ -201,8 +137,6 @@ app
       expectedSessionKey: 'default',
       isTrustedUrl: isTrustedAppUrl,
       recordingTranscriptionSessions,
-      backfillQueue,
-      backfillTriggerWiring,
       voiceSettingsStore,
     });
     registerAppShellProtocol();

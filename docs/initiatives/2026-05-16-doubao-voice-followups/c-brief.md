@@ -1,8 +1,8 @@
-# C：自动补转录（已归档参考 brief）
+# C：自动补转录（brief，待 spec 化）
 
 > 本文是 C 的"准 spec"：按工程师可直接消费的标准撰写，但**不是** active spec。
 > 进入 `docs/specs/` 前必须满足：B 已归档、B 真机 E2E gate 已通过，且 plan.md 的 B→C readiness gate 已完成。
-> C spec 已归档：`docs/archive/specs/2026-05-17-0029-doubao-voice-auto-backfill/`。C 执行结果以归档 spec、current docs 和 ADR 0005 为准；本文只保留候选问题模型，不作为实施清单。
+> C active spec 已创建：`docs/specs/2026-05-17-0029-doubao-voice-auto-backfill/`。C 执行以 active spec 为准；本文只保留候选问题模型，不作为实施清单。
 
 - 时间：2026-05-17 00:14 America/Los_Angeles
 - 依赖：B 的 `lastTranscriptionAttempt` manifest 字段
@@ -11,7 +11,7 @@
 ## 当前入口
 
 - B 已归档并通过 `npm run dev` 真机 E2E gate。
-- 本文只提供 C 的候选问题模型、状态模型和工程切分；C 归档 spec 已完成重新判断。
+- 本文只提供 C 的候选问题模型、状态模型和工程切分；C active spec 已完成重新判断。
 - 本文中的文件名、组件名和队列拆分不是实施权威；active spec 必须以当前源码和 `docs/current/*` 为准重新落点。
 
 ## 信息优先级
@@ -44,7 +44,7 @@
 
 - 单 active workspace scope；切换 workspace 取消未完成任务
 - 串行 FIFO（初始 1）
-- voice X-Api-Key 不引入环境变量凭证；C 的 main-only TOS staging 与 ffmpeg 路径由本机运行环境配置，renderer 不接触这些配置
+- 不引入环境变量凭证
 - 不引入平台密钥
 - 不动现有 saveTranscript / saveSegmentSupplementTranscript IPC contract（C 任务成功后调用现有 IPC，靠 manifest update 同步置 `'success'`）
 - 不破坏 single-active-spec 规则
@@ -201,11 +201,11 @@ C 是后台行为；用户的"使用"是隐性的：
 
 ### renderer 组件
 
-| 元素                             | 解决问题                                               | 实现要点                                                                       |
-| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| feature-local running set        | 手动触发时在 App 内标记 target running                 | 不新增 main-to-renderer backfill event，不新增 Query key，不新增 Zustand store |
-| `SegmentTranscriptView` 扩展     | 增加 `'running'` outcome（仍由 B 重构后的 model 承载） | outcome model 扩 `kind: 'running'`；C spec 内重构                              |
-| MemoryStudio 注入 backfill state | 把 target identity 映射到 `running?` 状态              | feature-local；target 覆盖 Segment 与 SegmentSupplement                        |
+| 元素                             | 解决问题                                                            | 实现要点                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `BackfillEventListener`          | 接收 main 事件，更新 feature-local Zustand store 或 component state | 跨 Memory Studio 与 Sidebar 红点（red dot 不变）共享；可能引入 Zustand store（待 spec 决定） |
+| `SegmentTranscriptView` 扩展     | 增加 `'running'` outcome（仍由 B 重构后的 model 承载）              | outcome model 扩 `kind: 'running'`；C spec 内重构                                            |
+| MemoryStudio 注入 backfill state | 把 target identity 映射到 `running?` 状态                           | feature-local；target 覆盖 Segment 与 SegmentSupplement                                      |
 
 ## 八、状态切换规则（状态机）
 
@@ -287,7 +287,7 @@ C-0 验证项：
 
 C-0 产出物：
 
-- C 归档 spec 内的 C0 findings 段
+- C active spec 内的 C0 findings 段
 - C0 通过后，把长期 endpoint / billing / limit 结论压缩进 ADR 0004 扩展段，或新 ADR 0005
 
 C-0 不实施 C-1/C-2/C-3 任何代码。
