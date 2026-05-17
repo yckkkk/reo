@@ -26,12 +26,15 @@ import {
   finalizeSegmentSupplementRecordingDraft,
   initializeRecordingDraftWorkspace,
   readRecordingDraftAudio,
+  saveRecordingMarkdown,
+  saveSegmentSupplementMarkdown,
   setAfterDraftAudioReadForTest,
   setAfterDraftDirectoryCreateForTest,
   setAfterDraftPrefixBytesCopiedForTest,
   setBeforeDraftAudioCreateForTest,
   setBeforeDraftAudioOpenForTest,
   setBeforeDraftDirectoryCreateForTest,
+  setBeforeMarkdownWriteForTest,
 } from '../../src/main/recordingDrafts.js';
 import {
   createMemoryFromFileTruth,
@@ -383,6 +386,209 @@ test('recording finalize writes last transcription attempt into segment and supp
     'sup_20260506_attempt_never'
   );
   assert.equal(supplementManifest['lastTranscriptionAttempt'], 'never');
+});
+
+test('transcript save marks segment and supplement transcription attempts successful', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_transcript_save_success',
+    title: 'Transcript save success',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260516_transcript_save_success',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260516_transcript_save_success',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260516_transcript_save_success',
+    memoryId: 'mem_transcript_save_success',
+    title: 'Segment transcript save',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+
+  const savedSegment = await saveRecordingMarkdown({
+    rootPath,
+    memoryId: 'mem_transcript_save_success',
+    segmentId: 'seg_20260516_transcript_save_success',
+    fileName: 'transcript.md',
+    markdown: 'Segment transcript text',
+  });
+
+  assert.equal(savedSegment.ok, true);
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_20260516_transcript_save_success'))[
+      'lastTranscriptionAttempt'
+    ],
+    'success'
+  );
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_success',
+    segmentId: 'seg_20260516_transcript_save_success',
+    createSupplementId: () => 'sup_20260516_transcript_save_success',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260516_transcript_save_success',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_success',
+    segmentId: 'seg_20260516_transcript_save_success',
+    supplementId: 'sup_20260516_transcript_save_success',
+    title: 'Supplement transcript save',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+
+  const savedSupplement = await saveSegmentSupplementMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_success',
+    segmentId: 'seg_20260516_transcript_save_success',
+    supplementId: 'sup_20260516_transcript_save_success',
+    markdown: 'Supplement transcript text',
+  });
+
+  assert.equal(savedSupplement.ok, true);
+  assert.equal(
+    (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_transcript_save_success'))[
+      'lastTranscriptionAttempt'
+    ],
+    'success'
+  );
+});
+
+test('transcript save failures keep existing transcription attempt manifests', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_transcript_save_failure',
+    title: 'Transcript save failure',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260516_transcript_save_previous',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260516_transcript_save_previous',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260516_transcript_save_previous',
+    memoryId: 'mem_transcript_save_failure',
+    title: 'Previous file preserved',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+
+  setBeforeMarkdownWriteForTest(() => {
+    throw new Error('markdown write blocked');
+  });
+  try {
+    const failedSegmentSave = await saveRecordingMarkdown({
+      rootPath,
+      memoryId: 'mem_transcript_save_failure',
+      segmentId: 'seg_20260516_transcript_save_previous',
+      fileName: 'transcript.md',
+      markdown: 'Segment transcript text',
+    });
+
+    assert.equal(failedSegmentSave.ok, false);
+    if (!failedSegmentSave.ok) {
+      assert.equal(failedSegmentSave.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMarkdownWriteForTest(null);
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_20260516_transcript_save_previous'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_failure',
+    segmentId: 'seg_20260516_transcript_save_previous',
+    createSupplementId: () => 'sup_20260516_transcript_save_stale_index',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260516_transcript_save_stale_index',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_failure',
+    segmentId: 'seg_20260516_transcript_save_previous',
+    supplementId: 'sup_20260516_transcript_save_stale_index',
+    title: 'Index stale supplement',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+  await rm(path.join(rootPath, '.reo', 'index.json'));
+  await mkdir(path.join(rootPath, '.reo', 'index.json'));
+
+  const failedSupplementSave = await saveSegmentSupplementMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_transcript_save_failure',
+    segmentId: 'seg_20260516_transcript_save_previous',
+    supplementId: 'sup_20260516_transcript_save_stale_index',
+    markdown: 'Supplement transcript text',
+  });
+
+  assert.equal(failedSupplementSave.ok, false);
+  if (!failedSupplementSave.ok) {
+    assert.equal(failedSupplementSave.error.dataRetention, 'file-written-index-stale');
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_transcript_save_stale_index'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
 });
 
 test('segment supplement recording finalizes under the selected segment without creating a sibling segment', async () => {

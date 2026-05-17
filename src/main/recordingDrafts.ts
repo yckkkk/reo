@@ -40,6 +40,8 @@ import {
   assertNoDuplicateSegmentDirectoryById,
   extractSegmentTranscript,
   lookupSegmentDirectoryById,
+  markSegmentTranscriptionAttemptSuccess,
+  markSupplementTranscriptionAttemptSuccess,
   segmentSupplementDirectory,
   memorySegmentDirectory,
   readFinalizedSegmentProjection,
@@ -2028,6 +2030,11 @@ async function saveRecordingMarkdownNow({
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    await markSegmentTranscriptionAttemptSuccess({
+      rootPath,
+      segmentId,
+      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+    });
     return { ok: true, memory, saved: true };
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
@@ -2126,7 +2133,27 @@ async function saveSegmentSupplementMarkdownNow({
         'file-written-index-stale'
       );
     }
-    return { ok: true, memory, segment, supplement, saved: true };
+    await markSupplementTranscriptionAttemptSuccess({
+      rootPath,
+      supplementId,
+      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+    });
+    const updatedSupplement = {
+      ...supplement,
+      lastTranscriptionAttempt: 'success' as const,
+    };
+    return {
+      ok: true,
+      memory,
+      segment: {
+        ...segment,
+        supplements: segment.supplements.map((candidate) =>
+          candidate.supplementId === supplementId ? updatedSupplement : candidate
+        ),
+      },
+      supplement: updatedSupplement,
+      saved: true,
+    };
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
     if (workspaceErrorEnvelope) {

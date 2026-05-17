@@ -1216,6 +1216,66 @@ async function writeSupplementObjectManifest({
   );
 }
 
+async function markTranscriptionAttemptSuccess<
+  T extends SegmentObjectManifest | SupplementObjectManifest,
+>({
+  manifestPath,
+  parseManifest,
+  writeManifest,
+}: {
+  readonly manifestPath: string;
+  readonly parseManifest: (manifest: unknown) => T;
+  readonly writeManifest: (manifest: T) => Promise<void>;
+}): Promise<void> {
+  const manifest = parseManifest(JSON.parse(await readWorkspaceTextFile(manifestPath)));
+  await writeManifest({
+    ...manifest,
+    lastTranscriptionAttempt: 'success',
+  });
+}
+
+export async function markSegmentTranscriptionAttemptSuccess({
+  rootPath,
+  segmentId,
+  assertUsable,
+}: {
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<void> {
+  await markTranscriptionAttemptSuccess({
+    manifestPath: await segmentObjectManifestPath(rootPath, segmentId),
+    parseManifest: (manifest) => segmentObjectManifestSchema.parse(manifest),
+    writeManifest: (segment) =>
+      writeSegmentObjectManifest({
+        rootPath,
+        segment,
+        ...(assertUsable ? { assertUsable } : {}),
+      }),
+  });
+}
+
+export async function markSupplementTranscriptionAttemptSuccess({
+  rootPath,
+  supplementId,
+  assertUsable,
+}: {
+  readonly rootPath: string;
+  readonly supplementId: string;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<void> {
+  await markTranscriptionAttemptSuccess({
+    manifestPath: await supplementObjectManifestPath(rootPath, supplementId),
+    parseManifest: (manifest) => supplementObjectManifestSchema.parse(manifest),
+    writeManifest: (supplement) =>
+      writeSupplementObjectManifest({
+        rootPath,
+        supplement,
+        ...(assertUsable ? { assertUsable } : {}),
+      }),
+  });
+}
+
 function latestIsoTimestamp(...timestamps: readonly string[]): string {
   return timestamps.reduce((latest, current) =>
     current.localeCompare(latest) > 0 ? current : latest
