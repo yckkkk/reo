@@ -17,7 +17,7 @@
 - C 引擎基线已改为大模型录音文件识别标准版 2.0 `volc.seedasr.auc`；极速版 `volc.bigasr.auc_turbo` 因成本与跨族问题不作为默认实现路径。
 - C-0b 交付方案是 main-only TOS staging + short-lived GET URL + cleanup，配合 WebM/Opus -> OGG/Opus remux；不得用公开本地服务、公网隧道或默认未配置对象存储上传绕过。
 - C0 findings 已写入 C spec；长期结论写入 ADR 0005。
-- Live SeedASR/TOS smoke 未在本 session 执行；后续上线前需要真实配置验证，但不阻塞 D 复用 C 的 manual IPC 合同。
+- 真实 X-Api-Key 已通过标准版 2.0 `volc.seedasr.auc` submit/query smoke，证明同 key 可访问 AUC；完整 Reo C live backfill 仍需真实 TOS staging 配置与 `REO_BACKFILL_FFMPEG_PATH` 才能验证，不阻塞 D 复用 C 的 manual IPC 合同。
 
 ## D：手动重新生成转录
 

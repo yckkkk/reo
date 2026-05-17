@@ -9,7 +9,8 @@
 - [x] 确认 WebM/Opus 先 remux 为 OGG/Opus；不引入 bundled ffmpeg dependency，要求显式 ffmpeg path。
 - [x] 评估 TOS SDK 并拒绝引入；实现 native TOS signing。
 - [x] N=20、K=3 保持。
-- [ ] Live SeedASR/TOS smoke：未执行，缺少真实配置和计费授权。
+- [x] Live SeedASR AUC smoke：真实 X-Api-Key 调用 `volc.seedasr.auc` submit/query 成功。
+- [ ] Live Reo SeedASR/TOS smoke：未执行，缺少真实 TOS 配置与 `REO_BACKFILL_FFMPEG_PATH`。
 
 ## T1：Main 后台引擎
 
