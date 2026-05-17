@@ -2020,7 +2020,10 @@ async function writeSupplementTranscriptInRecordingDirectory({
       content: replaceSegmentTranscript(current.content, markdown),
     }),
     ...(assertWorkspaceUsable || isAbortRequested
-      ? { assertUsable: () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested) }
+      ? {
+          assertUsable: () =>
+            assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
+        }
       : {}),
   });
   if (markTranscriptSuccess) {
@@ -2105,7 +2108,10 @@ async function writeSegmentTranscriptInRecordingDirectory({
       content: nextContent,
     }),
     ...(assertWorkspaceUsable || isAbortRequested
-      ? { assertUsable: () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested) }
+      ? {
+          assertUsable: () =>
+            assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
+        }
       : {}),
   });
   if (markTranscriptSuccess) {

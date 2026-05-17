@@ -919,7 +919,11 @@ test('workspace backfill runtime treats regenerate save abort checkpoints as can
       ok: true,
       transcript: { exists: true, text: '旧转录' },
     }),
-    recognize: async () => ({ ok: true, requestId: 'request-cancel-save', transcriptText: '新转录' }),
+    recognize: async () => ({
+      ok: true,
+      requestId: 'request-cancel-save',
+      transcriptText: '新转录',
+    }),
     saveSegmentTranscript: async (input) => {
       saveStarted = true;
       await new Promise<void>((resolve) => {

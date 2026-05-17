@@ -32,13 +32,24 @@ const segmentActionPayload = {
   workspaceId: 'wsp-1',
 };
 
-function renderMenu(props: { onDelete?: () => void; onRename?: () => void } = {}) {
+function renderMenu(
+  props: {
+    onDelete?: () => void;
+    onRename?: () => void;
+    onRequestTranscriptionBackfill?: () => void;
+    transcriptExists?: boolean;
+    transcriptionBackfillDisabledReason?: string | null;
+  } = {}
+) {
   render(
     <SegmentActionsMenu
       actionIdentity={segmentActionPayload}
       onDelete={props.onDelete ?? vi.fn()}
+      onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onRename={props.onRename ?? vi.fn()}
       segmentTitle="My Segment"
+      transcriptExists={props.transcriptExists ?? false}
+      transcriptionBackfillDisabledReason={props.transcriptionBackfillDisabledReason ?? null}
     />
   );
 }
@@ -167,5 +178,44 @@ describe('SegmentActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'My Segment 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the generate transcript action when the segment has no transcript', async () => {
+    const onRequestTranscriptionBackfill = vi.fn();
+    renderMenu({ onRequestTranscriptionBackfill, transcriptExists: false });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
+
+    expect(onRequestTranscriptionBackfill).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menuitem', { name: '重新生成转录' })).not.toBeInTheDocument();
+  });
+
+  it('shows the regenerate transcript action when the segment already has a transcript', async () => {
+    const onRequestTranscriptionBackfill = vi.fn();
+    renderMenu({ onRequestTranscriptionBackfill, transcriptExists: true });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '重新生成转录' }));
+
+    expect(onRequestTranscriptionBackfill).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
+  });
+
+  it('disables the transcript action with tooltip copy when backfill is unavailable', async () => {
+    renderMenu({
+      onRequestTranscriptionBackfill: vi.fn(),
+      transcriptExists: false,
+      transcriptionBackfillDisabledReason: '先在设置里启用并填写 X-Api-Key',
+    });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    const item = screen.getByRole('menuitem', { name: '生成转录' });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    await user.hover(item);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('先在设置里启用并填写 X-Api-Key');
+    await user.click(item);
+    expect(reoWorkspace.copySegmentAbsolutePath).not.toHaveBeenCalled();
   });
 });

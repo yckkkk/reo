@@ -11,9 +11,12 @@ export type SegmentActionsMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly onDelete: () => void;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly open?: boolean;
   readonly segmentTitle: string;
+  readonly transcriptExists?: boolean | undefined;
+  readonly transcriptionBackfillDisabledReason?: string | null | undefined;
   readonly trigger?: ReactElement;
   readonly triggerLabel?: string;
 };
@@ -23,9 +26,12 @@ export function SegmentActionsMenu({
   contentAlign = 'end',
   onDelete,
   onOpenChange,
+  onRequestTranscriptionBackfill,
   onRename,
   open,
   segmentTitle,
+  transcriptExists = false,
+  transcriptionBackfillDisabledReason = null,
   trigger,
   triggerLabel,
 }: SegmentActionsMenuProps) {
@@ -44,6 +50,15 @@ export function SegmentActionsMenu({
       onRename={onRename}
       onRevealInFinder={actionBindings.onRevealInFinder}
       open={open}
+      transcriptionAction={
+        onRequestTranscriptionBackfill
+          ? {
+              disabledReason: transcriptionBackfillDisabledReason,
+              label: transcriptExists ? '重新生成转录' : '生成转录',
+              onSelect: onRequestTranscriptionBackfill,
+            }
+          : undefined
+      }
       trigger={trigger}
     />
   );

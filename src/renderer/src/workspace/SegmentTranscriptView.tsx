@@ -16,7 +16,8 @@ export type SegmentTranscriptOutcome =
   | { readonly kind: 'empty-never' }
   | { readonly kind: 'empty-cleared' }
   | { readonly kind: 'failed-retryable' }
-  | { readonly kind: 'running' };
+  | { readonly kind: 'running' }
+  | { readonly kind: 'running-overwrite'; readonly text: string };
 
 export type SegmentTranscriptViewProps = {
   readonly status: TranscriptStatus;
@@ -42,6 +43,16 @@ export function SegmentTranscriptView({
   }
   if (outcome.kind === 'success') {
     return <p className={TRANSCRIPT_PARAGRAPH}>{outcome.text}</p>;
+  }
+  if (outcome.kind === 'running-overwrite') {
+    return (
+      <div className="flex flex-col gap-8">
+        <p className={TRANSCRIPT_PARAGRAPH}>{outcome.text}</p>
+        <p role="status" className={MUTED_PARAGRAPH}>
+          {copy.running}
+        </p>
+      </div>
+    );
   }
   if (outcome.kind === 'running') {
     return <p className={MUTED_PARAGRAPH}>{copy.running}</p>;

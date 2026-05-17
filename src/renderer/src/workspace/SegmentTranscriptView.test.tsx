@@ -85,4 +85,18 @@ describe('SegmentTranscriptView', () => {
     expect(screen.getByText('正在生成转录。')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
   });
+
+  it('keeps the current transcript visible while a regenerate backfill is running', () => {
+    render(
+      <SegmentTranscriptView
+        status="ready"
+        outcome={{ kind: 'running-overwrite', text: '这是一段已有转录。' }}
+        copy={copy}
+      />
+    );
+
+    expect(screen.getByText('这是一段已有转录。')).toBeInTheDocument();
+    expect(screen.getByText('正在生成转录。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
+  });
 });

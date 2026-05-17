@@ -987,9 +987,9 @@ test('recording draft regenerate segment rollback preserves transcript when mani
   assert.match(segmentMarkdown, /User segment transcript/);
   assert.doesNotMatch(segmentMarkdown, /Regenerated segment transcript/);
   assert.equal(
-    (
-      await readObjectManifest(rootPath, 'segments', 'seg_20260516_regenerate_manifest_failure')
-    )['lastTranscriptionAttempt'],
+    (await readObjectManifest(rootPath, 'segments', 'seg_20260516_regenerate_manifest_failure'))[
+      'lastTranscriptionAttempt'
+    ],
     'failed'
   );
 });
@@ -1205,13 +1205,16 @@ test('recording draft regenerate supplement rollback preserves transcript when m
     segmentDirectory,
     'sup_20260516_regenerate_manifest_failure'
   );
-  const supplementMarkdown = await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8');
+  const supplementMarkdown = await readFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    'utf8'
+  );
   assert.match(supplementMarkdown, /User supplement transcript/);
   assert.doesNotMatch(supplementMarkdown, /Regenerated supplement transcript/);
   assert.equal(
-    (
-      await readObjectManifest(rootPath, 'supplements', 'sup_20260516_regenerate_manifest_failure')
-    )['lastTranscriptionAttempt'],
+    (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_regenerate_manifest_failure'))[
+      'lastTranscriptionAttempt'
+    ],
     'failed'
   );
 });
@@ -1445,7 +1448,10 @@ test('recording draft regenerate save checks abort inside atomic markdown writes
     segmentDirectory,
     'sup_20260516_regenerate_atomic_abort'
   );
-  const supplementMarkdown = await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8');
+  const supplementMarkdown = await readFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    'utf8'
+  );
   assert.match(segmentMarkdown, /User segment transcript/);
   assert.doesNotMatch(segmentMarkdown, /Regenerated segment transcript/);
   assert.match(supplementMarkdown, /User supplement transcript/);

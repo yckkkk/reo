@@ -425,6 +425,99 @@ describe('App', () => {
     await screen.findByRole('tab', { name: '补充录音1' });
   }
 
+  async function createWorkspaceWithSingleSegment(user: ReturnType<typeof userEvent.setup>) {
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+  }
+
+  function mockWorkspaceWithSingleSegment({
+    memoryId = 'mem_transcription_menu',
+    segmentId = 'seg_transcription_menu',
+    segmentTitle = 'Transcription menu segment',
+    transcriptExists = false,
+  }: {
+    readonly memoryId?: string;
+    readonly segmentId?: string;
+    readonly segmentTitle?: string;
+    readonly transcriptExists?: boolean;
+  } = {}) {
+    const memory = {
+      memoryId,
+      title: 'Transcription menu memory',
+      createdAt: '2026-05-16T18:20:00.000Z',
+      updatedAt: '2026-05-16T18:21:00.000Z',
+      segmentCount: 1,
+      durationMs: 4200,
+      audioByteLength: 12,
+      hasTranscript: transcriptExists,
+      supplementCount: 0,
+    };
+    const segment = {
+      ...audioSegmentProjection({
+        audioByteLength: 12,
+        durationMs: 4200,
+        memoryId,
+        segmentId,
+        title: segmentTitle,
+        transcriptExists,
+      }),
+      lastTranscriptionAttempt: transcriptExists ? ('success' as const) : ('failed' as const),
+    };
+
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: transcriptExists,
+          text: transcriptExists ? '已有转录正文' : '',
+        },
+      },
+    }));
+
+    return { memory, segment };
+  }
+
   async function submitSegmentSupplementRename(
     user: ReturnType<typeof userEvent.setup>,
     currentTitle: string,
@@ -1071,6 +1164,279 @@ describe('App', () => {
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
   });
+
+  it('confirms before regenerating an existing supplement transcript', async () => {
+    const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
+    const fixture = createSegmentSupplementFixture();
+    const transcriptSupplement = {
+      ...fixture.supplement,
+      lastTranscriptionAttempt: 'success' as const,
+      transcript: { exists: true },
+    };
+    const transcriptSegment = {
+      ...fixture.segment,
+      supplements: [transcriptSupplement],
+    };
+    mockSegmentSupplementWorkspace({
+      ...fixture,
+      segment: transcriptSegment,
+      supplement: transcriptSupplement,
+    });
+    const backfill =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['requestSegmentSupplementTranscriptionBackfill']>>
+      >();
+    reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockReturnValueOnce(
+      backfill.promise
+    );
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentSupplement(user);
+    await user.click(screen.getByRole('tab', { name: transcriptSupplement.title }));
+    expect(await screen.findByText('补充录音转写正文')).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: `${transcriptSupplement.title} 更多操作` })
+    );
+    await user.click(screen.getByRole('menuitem', { name: '重新生成转录' }));
+    expect(screen.getByRole('alertdialog', { name: '重新生成转录？' })).toBeInTheDocument();
+    expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '重新生成' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: fixture.memory.memoryId,
+        segmentId: fixture.segment.segmentId,
+        supplementId: transcriptSupplement.supplementId,
+        mode: 'regenerate',
+      })
+    );
+    expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
+    expect(screen.getByText('补充录音转写正文')).toBeInTheDocument();
+    backfill.resolve({
+      ok: true,
+      value: {
+        memory: fixture.memory,
+        segment: transcriptSegment,
+        supplement: transcriptSupplement,
+        saved: true,
+      },
+    });
+    expect(await screen.findByText('已生成转录')).toBeInTheDocument();
+  });
+
+  it('confirms before regenerating an existing segment transcript', async () => {
+    const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
+    const { memory, segment } = mockWorkspaceWithSingleSegment({
+      memoryId: 'mem_regenerate_segment_transcript',
+      segmentId: 'seg_regenerate_transcript',
+      segmentTitle: 'Existing transcript segment',
+      transcriptExists: true,
+    });
+    const backfill =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['requestSegmentTranscriptionBackfill']>>
+      >();
+    reoWorkspace.requestSegmentTranscriptionBackfill.mockReturnValueOnce(backfill.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSingleSegment(user);
+    expect(await screen.findByText('已有转录正文')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '重新生成转录' }));
+    expect(screen.getByRole('alertdialog', { name: '重新生成转录？' })).toBeInTheDocument();
+    expect(reoWorkspace.requestSegmentTranscriptionBackfill).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '重新生成' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        mode: 'regenerate',
+      })
+    );
+    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
+    expect(screen.getByText('已有转录正文')).toBeInTheDocument();
+    backfill.resolve({
+      ok: true,
+      value: { memory: { ...memory, hasTranscript: true }, saved: true },
+    });
+    expect(await screen.findByText('已生成转录')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
+    );
+  });
+
+  it.each([
+    [
+      'voice recognition is disabled',
+      {
+        enabled: false,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastValidatedAt: '2026-05-16T18:00:00.000Z',
+        lastValidationOk: true,
+        lastValidationCode: 'ok',
+      },
+      '先在设置里启用语音识别。',
+    ],
+    [
+      'the X-Api-Key is missing',
+      {
+        enabled: true,
+        apiKeyConfigured: false,
+        apiKeyLastFour: null,
+        lastValidatedAt: null,
+        lastValidationOk: null,
+        lastValidationCode: null,
+      },
+      '先在设置里填写 X-Api-Key。',
+    ],
+    [
+      'the last credential validation failed with auth',
+      {
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastValidatedAt: '2026-05-16T18:00:00.000Z',
+        lastValidationOk: false,
+        lastValidationCode: 'auth',
+      },
+      'X-Api-Key 验证失败，请在设置中更新。',
+    ],
+  ] as const)(
+    'disables manual transcription backfill when %s',
+    async (_caseName, settings, disabledReason) => {
+      const user = userEvent.setup();
+      const { segment } = mockWorkspaceWithSingleSegment();
+      reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
+        ok: true,
+        value: { settings },
+      });
+
+      render(
+        <ReoQueryProvider>
+          <App />
+        </ReoQueryProvider>
+      );
+
+      await createWorkspaceWithSingleSegment(user);
+
+      await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+      const item = screen.getByRole('menuitem', { name: '生成转录' });
+
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      await user.hover(item);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(disabledReason);
+      await user.click(item);
+      expect(reoWorkspace.requestSegmentTranscriptionBackfill).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps manual transcription backfill clickable after a network validation failure', async () => {
+    const user = userEvent.setup();
+    const { memory, segment } = mockWorkspaceWithSingleSegment();
+    reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
+      ok: true,
+      value: {
+        settings: {
+          enabled: true,
+          apiKeyConfigured: true,
+          apiKeyLastFour: '1234',
+          lastValidatedAt: '2026-05-16T18:00:00.000Z',
+          lastValidationOk: false,
+          lastValidationCode: 'network',
+        },
+      },
+    });
+    reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
+      ok: true,
+      value: { memory, saved: true },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSingleSegment(user);
+
+    await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        mode: 'fill-missing',
+      })
+    );
+  });
+
+  it('blocks manual transcription backfill while the recording overlay is open', async () => {
+    const user = userEvent.setup();
+    installRecordingBrowserMocks();
+    mockVoiceTranscriptionSettings(true);
+    const { segment } = mockWorkspaceWithSingleSegment({
+      segmentTitle: 'Recording blocks transcription',
+    });
+    reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
+      ok: true,
+      value: { registered: true },
+    });
+    reoWorkspace.createRecordingDraft.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 0, segmentId: 'seg_new_recording' },
+    });
+    reoWorkspace.appendRecordingAudioChunk.mockResolvedValue({
+      ok: true,
+      value: { nextSequence: 1 },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSingleSegment(user);
+    const segmentMenuButton = await screen.findByRole('button', {
+      name: `片段 ${segment.title} 更多操作`,
+    });
+
+    await user.click(screen.getByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '录音' }));
+    expect(screen.getByRole('dialog', { name: '录音' })).toBeInTheDocument();
+
+    fireEvent.click(segmentMenuButton);
+
+    expect(
+      screen.queryByRole('menuitem', { hidden: true, name: '生成转录' })
+    ).not.toBeInTheDocument();
+    expect(reoWorkspace.requestSegmentTranscriptionBackfill).not.toHaveBeenCalled();
+  }, 20_000);
 
   it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {
     vi.stubGlobal(

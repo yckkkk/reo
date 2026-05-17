@@ -20,6 +20,7 @@ import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import type {
   SegmentSupplementTranscriptionRetryTarget,
   SegmentTranscriptionRetryTarget,
+  TranscriptionBackfillMode,
 } from './workspace/MemoryStudio';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
@@ -87,6 +88,7 @@ import {
   type WorkspaceMemorySummary,
   type WorkspaceError,
   type WorkspaceSession,
+  type VoiceTranscriptionSettings,
 } from './workspace/workspaceApi';
 import {
   lastTranscriptionAttemptOnFinalize,
@@ -214,6 +216,33 @@ function removeRunningKey(current: ReadonlySet<string>, key: string): ReadonlySe
   const next = new Set(current);
   next.delete(key);
   return next;
+}
+
+function voiceBackfillDisabledReason({
+  recordingActive,
+  settings,
+  settingsLoading,
+}: {
+  readonly recordingActive: boolean;
+  readonly settings: VoiceTranscriptionSettings | undefined;
+  readonly settingsLoading: boolean;
+}): string | null {
+  if (recordingActive) {
+    return '当前录音尚未完成，请先完成或关闭录音。';
+  }
+  if (settingsLoading || !settings) {
+    return '正在载入语音设置。';
+  }
+  if (!settings.enabled) {
+    return '先在设置里启用语音识别。';
+  }
+  if (!settings.apiKeyConfigured) {
+    return '先在设置里填写 X-Api-Key。';
+  }
+  if (settings.lastValidationCode === 'auth') {
+    return 'X-Api-Key 验证失败，请在设置中更新。';
+  }
+  return null;
 }
 
 async function recoveryLastTranscriptionAttemptOnFinalize(
@@ -648,11 +677,17 @@ export function App() {
     []
   );
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
+  const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
   const activeRecordingFlow = recordingFlow.status === 'active' ? recordingFlow : null;
   const recordingTarget = activeRecordingFlow?.target ?? null;
   const recordingOverlayOpen = activeRecordingFlow?.open ?? false;
   const recordingCloseBlocked = activeRecordingFlow?.closeBlocked ?? false;
   const recordingRecoveryReviewDraft = activeRecordingFlow?.recoveredDraft ?? null;
+  const transcriptionBackfillDisabledReason = voiceBackfillDisabledReason({
+    recordingActive: recordingTarget !== null,
+    settings: voiceSettingsQuery.data,
+    settingsLoading: voiceSettingsQuery.isLoading,
+  });
   const handleRecordingCloseBlockedChange = useCallback((closeBlocked: boolean) => {
     setRecordingFlow((currentFlow) =>
       currentFlow.status === 'active' ? { ...currentFlow, closeBlocked } : currentFlow
@@ -1064,14 +1099,14 @@ export function App() {
       readonly workspaceId: string;
     }) => {
       if (runningTranscriptionBackfills.has(key)) {
-        return;
+        return Promise.resolve();
       }
       const session = workspaceSessionRef.current;
       if (!session || session.workspaceId !== workspaceId) {
-        return;
+        return Promise.resolve();
       }
       setRunningTranscriptionBackfills((current) => addRunningKey(current, key));
-      void (async () => {
+      const operation = (async () => {
         try {
           const response = await request(session);
           const currentSession = workspaceSessionRef.current;
@@ -1100,13 +1135,14 @@ export function App() {
           setRunningTranscriptionBackfills((current) => removeRunningKey(current, key));
         }
       })();
+      return operation;
     },
     [runningTranscriptionBackfills, workspaceSession]
   );
 
   const retrySegmentTranscriptionBackfill = useCallback(
-    (target: SegmentTranscriptionRetryTarget) => {
-      runTranscriptionBackfill<SegmentTranscriptionBackfillValue>({
+    (target: SegmentTranscriptionRetryTarget & { readonly mode: TranscriptionBackfillMode }) => {
+      return runTranscriptionBackfill<SegmentTranscriptionBackfillValue>({
         applySuccess: (value) =>
           handleRecordingContentSaved({
             memory: value.memory,
@@ -1120,7 +1156,7 @@ export function App() {
             workspaceId: target.workspaceId,
             memoryId: target.memoryId,
             segmentId: target.segmentId,
-            mode: 'fill-missing',
+            mode: target.mode,
           }),
         workspaceId: target.workspaceId,
       });
@@ -1129,8 +1165,12 @@ export function App() {
   );
 
   const retrySupplementTranscriptionBackfill = useCallback(
-    (target: SegmentSupplementTranscriptionRetryTarget) => {
-      runTranscriptionBackfill<SegmentSupplementTranscriptionBackfillValue>({
+    (
+      target: SegmentSupplementTranscriptionRetryTarget & {
+        readonly mode: TranscriptionBackfillMode;
+      }
+    ) => {
+      return runTranscriptionBackfill<SegmentSupplementTranscriptionBackfillValue>({
         applySuccess: (value) =>
           handleSegmentSupplementFinalized(
             {
@@ -1148,7 +1188,7 @@ export function App() {
             memoryId: target.memoryId,
             segmentId: target.segmentId,
             supplementId: target.supplementId,
-            mode: 'fill-missing',
+            mode: target.mode,
           }),
         workspaceId: target.workspaceId,
       });
@@ -3463,6 +3503,7 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={{
+              disabledReason: transcriptionBackfillDisabledReason,
               isSegmentRunning: (target) =>
                 runningTranscriptionBackfills.has(segmentBackfillKey(target)),
               isSupplementRunning: (target) =>

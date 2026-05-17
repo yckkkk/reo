@@ -1,4 +1,12 @@
-import { Copy, ExternalLink, FolderOpen, MoreHorizontal, PencilLine, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  ExternalLink,
+  FolderOpen,
+  MoreHorizontal,
+  PencilLine,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceEntityActionResponse } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
@@ -10,12 +18,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/toaster';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 export const entityActionMenuSeparatorClassName = 'mx-8 bg-foreground/20';
 
 type EntityActionMenuAction = () => Promise<WorkspaceEntityActionResponse>;
+type EntityActionMenuSyncAction = () => void;
+
+export type EntityActionMenuTranscriptionAction = {
+  readonly disabledReason?: string | null;
+  readonly label: '生成转录' | '重新生成转录';
+  readonly onSelect: EntityActionMenuSyncAction;
+};
 
 export type EntityActionMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
@@ -32,6 +48,7 @@ export type EntityActionMenuProps = {
   readonly onRename: () => void;
   readonly onRevealInFinder: EntityActionMenuAction;
   readonly open?: boolean | undefined;
+  readonly transcriptionAction?: EntityActionMenuTranscriptionAction | undefined;
   readonly trigger?: ReactElement | undefined;
   readonly triggerClassName?: string | undefined;
 };
@@ -75,6 +92,43 @@ async function handleEntityPathCopy(action: EntityActionMenuAction) {
   }
 }
 
+function EntityActionTranscriptionItem({
+  action,
+}: {
+  readonly action: EntityActionMenuTranscriptionAction;
+}) {
+  const disabled = action.disabledReason !== null && action.disabledReason !== undefined;
+  const item = (
+    <DropdownMenuItem
+      aria-disabled={disabled ? true : undefined}
+      data-disabled={disabled ? '' : undefined}
+      onSelect={(event) => {
+        if (disabled) {
+          event.preventDefault();
+          return;
+        }
+        action.onSelect();
+      }}
+    >
+      <EntityActionMenuIcon icon={RefreshCw} />
+      {action.label}
+    </DropdownMenuItem>
+  );
+
+  if (!disabled) {
+    return item;
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{item}</TooltipTrigger>
+        <TooltipContent side="right">{action.disabledReason}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function EntityActionMenu({
   contentAlign = 'end',
   deleteLabel = '删除',
@@ -88,6 +142,7 @@ export function EntityActionMenu({
   onRename,
   onRevealInFinder,
   open,
+  transcriptionAction,
   trigger,
   triggerClassName,
 }: EntityActionMenuProps) {
@@ -139,6 +194,14 @@ export function EntityActionMenu({
             复制绝对路径
           </DropdownMenuItem>
         </DropdownMenuGroup>
+        {transcriptionAction ? (
+          <>
+            <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
+            <DropdownMenuGroup>
+              <EntityActionTranscriptionItem action={transcriptionAction} />
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={onRename}>
