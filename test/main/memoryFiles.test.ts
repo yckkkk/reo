@@ -2439,6 +2439,7 @@ test('memory detail projects valid segment file-space nodes missing from the fil
     assert.equal(detail.value.segments.length, 1);
     assert.equal(detail.value.segments[0]?.segmentId, segmentId);
     assert.equal(detail.value.segments[0]?.title, '录音25');
+    assert.equal(detail.value.segments[0]?.lastTranscriptionAttempt, 'never');
   }
 });
 

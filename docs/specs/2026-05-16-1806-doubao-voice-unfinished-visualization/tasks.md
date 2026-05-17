@@ -67,9 +67,9 @@
 
 ### T3.1 absent → `'never'` 端到端验证
 
-- **RED**：构造 fixture：现有 finalized segment manifest 缺失 `lastTranscriptionAttempt`；调 `readMemoryDetail` 返回的 projection.segments[*].lastTranscriptionAttempt === `'never'`
-- **GREEN**：T1.2 已实现；本节是端到端验证
-- **REFACTOR**：fixture 集中
+- **VERIFY-ONLY（RED 豁免）**：当前源码已在 T1.2 实现 absent → `'never'`，且 projection 层已有覆盖；本节只补 `readMemoryDetail` 端到端回归断言，不作为 RED → GREEN 任务执行。
+- **回归补测**：构造或复用 fixture：现有 finalized segment manifest 缺失 `lastTranscriptionAttempt`；调 `readMemoryDetail` 返回的 projection.segments[*].lastTranscriptionAttempt === `'never'`
+- **REFACTOR**：优先复用现有 readMemoryDetail fixture，不新增重复 fixture
 
 ### T3.2 `'success' ∧ exists=false` 路径
 
@@ -175,20 +175,20 @@
 
 ## 测试覆盖矩阵
 
-| 路径 | 单元 / 集成 | 文件 |
-|---|---|---|
-| manifest schema | unit | `memoryFiles.test.ts` |
-| finalize write | unit | `recordingDrafts.test.ts` |
-| saveTranscript update | unit | `memoryFiles.test.ts` (transcript save 段) |
-| projection derive | unit | `workspaceFiles.test.ts` |
-| absent 行为 | unit | `memoryFiles.test.ts` |
-| user-cleared 行为 | unit | `memoryFiles.test.ts` + `MemoryStudio.test.tsx` |
-| SegmentTranscriptView 渲染 | component | `SegmentTranscriptView.test.tsx` |
-| MemoryStudio 集成 | integration | `MemoryStudio.test.tsx` / `LoadedWorkspaceFrame.test.tsx` |
-| App stub callback | integration | `App.test.tsx` |
-| RecordingOverlay finalize call | integration | `RecordingOverlay.test.tsx` |
-| Sidebar dot | component | `AppShell.test.tsx` |
-| recovery marker 恢复 finalize | integration | `App.test.tsx` 恢复 marker 段 |
+| 路径                           | 单元 / 集成 | 文件                                                      |
+| ------------------------------ | ----------- | --------------------------------------------------------- |
+| manifest schema                | unit        | `memoryFiles.test.ts`                                     |
+| finalize write                 | unit        | `recordingDrafts.test.ts`                                 |
+| saveTranscript update          | unit        | `memoryFiles.test.ts` (transcript save 段)                |
+| projection derive              | unit        | `workspaceFiles.test.ts`                                  |
+| absent 行为                    | unit        | `memoryFiles.test.ts`                                     |
+| user-cleared 行为              | unit        | `memoryFiles.test.ts` + `MemoryStudio.test.tsx`           |
+| SegmentTranscriptView 渲染     | component   | `SegmentTranscriptView.test.tsx`                          |
+| MemoryStudio 集成              | integration | `MemoryStudio.test.tsx` / `LoadedWorkspaceFrame.test.tsx` |
+| App stub callback              | integration | `App.test.tsx`                                            |
+| RecordingOverlay finalize call | integration | `RecordingOverlay.test.tsx`                               |
+| Sidebar dot                    | component   | `AppShell.test.tsx`                                       |
+| recovery marker 恢复 finalize  | integration | `App.test.tsx` 恢复 marker 段                             |
 
 ## 提交边界（建议）
 
@@ -200,5 +200,5 @@
 - commit 6：T4.2 + T4.3 + T4.4（MemoryStudio + App callback）
 - commit 7：T5.1 + T5.2（RecordingOverlay finalize call）
 - commit 8：T6.1 + T6.2 + T6.3（Sidebar dot）
-- commit 9：T7.* 文档同步
+- commit 9：T7.\* 文档同步
 - commit 10：归档移动
