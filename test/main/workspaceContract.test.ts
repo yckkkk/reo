@@ -1303,6 +1303,7 @@ test('segment supplement recording contract keeps parent identity explicit', () 
       supplementId: 'sup_1',
       title: 'Supplement',
       durationMs: 500,
+      lastTranscriptionAttemptOnFinalize: 'never',
     }),
     {
       workspaceHandle: 'wh_1',
@@ -1312,6 +1313,7 @@ test('segment supplement recording contract keeps parent identity explicit', () 
       supplementId: 'sup_1',
       title: 'Supplement',
       durationMs: 500,
+      lastTranscriptionAttemptOnFinalize: 'never',
     }
   );
   assert.deepEqual(
@@ -1840,6 +1842,7 @@ test('recording finalize contract requires explicit durable duration', () => {
   assert.deepEqual(
     workspaceRecordingFinalizeRequestSchema.parse({
       durationMs: 2000,
+      lastTranscriptionAttemptOnFinalize: 'never',
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
       title: '录音',
@@ -1847,6 +1850,7 @@ test('recording finalize contract requires explicit durable duration', () => {
     }),
     {
       durationMs: 2000,
+      lastTranscriptionAttemptOnFinalize: 'never',
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
       title: '录音',
@@ -1868,6 +1872,82 @@ test('recording finalize contract requires explicit durable duration', () => {
       title: '录音',
       workspaceHandle: 'wh_1',
     })
+  );
+});
+
+test('recording finalize contract accepts only failed or never transcription-attempt outcomes', () => {
+  for (const lastTranscriptionAttemptOnFinalize of ['failed', 'never'] as const) {
+    assert.deepEqual(
+      workspaceRecordingFinalizeRequestSchema.parse({
+        durationMs: 2000,
+        lastTranscriptionAttemptOnFinalize,
+        memoryId: 'mem_20260506_000001',
+        segmentId: 'seg_20260506_000001',
+        title: '录音',
+        workspaceHandle: 'wh_1',
+      }),
+      {
+        durationMs: 2000,
+        lastTranscriptionAttemptOnFinalize,
+        memoryId: 'mem_20260506_000001',
+        segmentId: 'seg_20260506_000001',
+        title: '录音',
+        workspaceHandle: 'wh_1',
+      }
+    );
+  }
+
+  assert.equal(
+    workspaceRecordingFinalizeRequestSchema.safeParse({
+      durationMs: 2000,
+      lastTranscriptionAttemptOnFinalize: 'success',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      title: '录音',
+      workspaceHandle: 'wh_1',
+    }).success,
+    false
+  );
+});
+
+test('segment supplement finalize contract accepts only failed or never transcription-attempt outcomes', () => {
+  for (const lastTranscriptionAttemptOnFinalize of ['failed', 'never'] as const) {
+    assert.deepEqual(
+      workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema.parse({
+        durationMs: 2000,
+        lastTranscriptionAttemptOnFinalize,
+        memoryId: 'mem_20260506_000001',
+        segmentId: 'seg_20260506_000001',
+        supplementId: 'sup_20260506_000001',
+        title: '补充录音',
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_20260506_000001',
+      }),
+      {
+        durationMs: 2000,
+        lastTranscriptionAttemptOnFinalize,
+        memoryId: 'mem_20260506_000001',
+        segmentId: 'seg_20260506_000001',
+        supplementId: 'sup_20260506_000001',
+        title: '补充录音',
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_20260506_000001',
+      }
+    );
+  }
+
+  assert.equal(
+    workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema.safeParse({
+      durationMs: 2000,
+      lastTranscriptionAttemptOnFinalize: 'success',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      supplementId: 'sup_20260506_000001',
+      title: '补充录音',
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_20260506_000001',
+    }).success,
+    false
   );
 });
 

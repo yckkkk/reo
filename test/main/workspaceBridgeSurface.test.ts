@@ -209,6 +209,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     supplementId: 'sup_1',
     title: '补充录音',
     durationMs: 1200,
+    lastTranscriptionAttemptOnFinalize: 'never',
   });
   await bridge.discardSegmentSupplementRecordingDraft({
     workspaceHandle: 'wh_1',
