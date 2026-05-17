@@ -991,6 +991,10 @@ export function App() {
     return true;
   }
 
+  const showTranscriptionRetryPlaceholder = useCallback(() => {
+    toast('转录引擎尚未上线');
+  }, []);
+
   function openWorkspaceCreateDialog() {
     if (blockRecordingFlowInterruption()) {
       return;
@@ -3291,6 +3295,8 @@ export function App() {
             onRenameMemory={setMemoryRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
+            onRetrySegmentTranscription={showTranscriptionRetryPlaceholder}
+            onRetrySupplementTranscription={showTranscriptionRetryPlaceholder}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
           />

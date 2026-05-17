@@ -6,6 +6,7 @@ import { App, mergeMemoryIntoSession } from './App';
 import { THEME_PREFERENCE_STORAGE_KEY } from './app-shell/themePreference';
 import { toast } from './components/ui/toaster';
 import { createReoQueryClient, ReoQueryProvider } from './queryClient';
+import type { WorkspaceMemoryDetail, WorkspaceMemorySummary } from './workspace/workspaceApi';
 import {
   memoryDetailQueryKey,
   segmentSupplementContentQueryKey,
@@ -284,7 +285,13 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
-  function createSegmentSupplementFixture() {
+  type SegmentSupplementFixture = {
+    readonly memory: WorkspaceMemorySummary;
+    readonly segment: WorkspaceMemoryDetail['segments'][number];
+    readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
+  };
+
+  function createSegmentSupplementFixture(): SegmentSupplementFixture {
     const memory = {
       memoryId: 'mem_birthday',
       title: 'My seventh birthday',
@@ -329,9 +336,7 @@ describe('App', () => {
     return { supplement, memory, segment };
   }
 
-  function mockSegmentSupplementWorkspace(
-    fixture: ReturnType<typeof createSegmentSupplementFixture>
-  ) {
+  function mockSegmentSupplementWorkspace(fixture: SegmentSupplementFixture) {
     const { memory, segment } = fixture;
 
     reoWorkspace.chooseDirectory.mockResolvedValue({
@@ -734,6 +739,143 @@ describe('App', () => {
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Memory Studio' })).toBeInTheDocument();
     expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('shows a placeholder toast when retrying a failed segment transcription from the loaded workspace', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_retry_transcription',
+      title: 'Retry transcription memory',
+      createdAt: '2026-05-16T18:20:00.000Z',
+      updatedAt: '2026-05-16T18:21:00.000Z',
+      segmentCount: 1,
+      durationMs: 4200,
+      audioByteLength: 12,
+      hasTranscript: false,
+      supplementCount: 0,
+    };
+    const segment = {
+      ...audioSegmentProjection({
+        audioByteLength: 12,
+        durationMs: 4200,
+        memoryId: memory.memoryId,
+        segmentId: 'seg_retry_transcription',
+        title: 'Failed transcription segment',
+      }),
+      lastTranscriptionAttempt: 'failed' as const,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    expect(await within(content).findByText('上次生成转录失败。')).toBeInTheDocument();
+
+    await user.click(within(content).getByRole('button', { name: '重试' }));
+
+    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
+  });
+
+  it('shows a placeholder toast when retrying a failed supplement transcription from the loaded workspace', async () => {
+    const user = userEvent.setup();
+    const fixture = createSegmentSupplementFixture();
+    mockSegmentSupplementWorkspace({
+      ...fixture,
+      supplement: {
+        ...fixture.supplement,
+        lastTranscriptionAttempt: 'failed',
+      },
+      segment: {
+        ...fixture.segment,
+        supplements: [
+          {
+            ...fixture.supplement,
+            lastTranscriptionAttempt: 'failed',
+          },
+        ],
+      },
+    });
+    reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        supplementId: payload.supplementId,
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+        transcript: { exists: false, text: '' },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithSegmentSupplement(user);
+    await user.click(screen.getByRole('tab', { name: '补充录音1' }));
+    expect(await screen.findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '重试' }));
+
+    expect(await screen.findByText('转录引擎尚未上线')).toBeInTheDocument();
   });
 
   it('defaults the theme preference to "system" and resolves the effective theme from prefers-color-scheme', async () => {
