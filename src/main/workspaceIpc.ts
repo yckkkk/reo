@@ -5149,6 +5149,7 @@ export function registerWorkspaceIpc({
       withUsableWorkspaceHandle(assertUsable, async () => {
         const result = await saveRecordingMarkdown({
           rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
           fileName: 'transcript.md',

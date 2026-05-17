@@ -5077,10 +5077,12 @@ describe('App', () => {
       },
     });
 
+    const queryClient = createReoQueryClient();
+
     render(
-      <ReoQueryProvider>
+      <QueryClientProvider client={queryClient}>
         <App />
-      </ReoQueryProvider>
+      </QueryClientProvider>
     );
 
     await openCreateWorkspaceDialog(user);
@@ -5090,6 +5092,30 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     const recoveryDialog = await screen.findByRole('dialog', { name: '未完成录音' });
+    queryClient.setQueryData(
+      memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: 'mem_existing' }),
+      {
+        requestId: 'cached_recovered_memory_detail',
+        detail: {
+          ...recoveredMemory,
+          workspaceId: 'ws_1',
+          segments: [
+            {
+              ...audioSegmentProjection({
+                audioByteLength: 23,
+                createdAt: '2026-05-09T10:00:00.000Z',
+                durationMs: 3720,
+                memoryId: 'mem_existing',
+                segmentId: 'seg_recoverable',
+                title: 'Daily memory 录音',
+                updatedAt: '2026-05-09T10:00:04.000Z',
+              }),
+              lastTranscriptionAttempt: 'failed' as const,
+            },
+          ],
+        },
+      }
+    );
     expect(within(recoveryDialog).getByText('检测到一段未完成的录音。')).toBeInTheDocument();
     await user.click(within(recoveryDialog).getByRole('button', { name: '保存录音' }));
 
@@ -5111,6 +5137,22 @@ describe('App', () => {
       })
     );
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{
+          readonly detail: {
+            readonly segments: readonly {
+              readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+              readonly transcript: { readonly exists: boolean };
+            }[];
+          };
+        }>(memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: 'mem_existing' }))?.detail
+          .segments[0]
+      ).toMatchObject({
+        lastTranscriptionAttempt: 'success',
+        transcript: { exists: true },
+      })
+    );
     expect(await findTitlebarMemoryControl('Existing memory')).toBeInTheDocument();
     expect(screen.queryByText('2 个片段 · 00:03')).not.toBeInTheDocument();
   });

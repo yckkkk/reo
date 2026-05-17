@@ -3173,6 +3173,7 @@ export function App() {
               segment.segmentId === segmentId
                 ? {
                     ...segment,
+                    lastTranscriptionAttempt: 'success' as const,
                     transcript: { exists: true },
                   }
                 : segment

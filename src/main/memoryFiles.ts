@@ -1221,13 +1221,16 @@ async function markTranscriptionAttemptSuccess<
 >({
   manifestPath,
   parseManifest,
+  validateManifest,
   writeManifest,
 }: {
   readonly manifestPath: string;
   readonly parseManifest: (manifest: unknown) => T;
+  readonly validateManifest: (manifest: T) => void;
   readonly writeManifest: (manifest: T) => Promise<void>;
 }): Promise<void> {
   const manifest = parseManifest(JSON.parse(await readWorkspaceTextFile(manifestPath)));
+  validateManifest(manifest);
   await writeManifest({
     ...manifest,
     lastTranscriptionAttempt: 'success',
@@ -1236,16 +1239,33 @@ async function markTranscriptionAttemptSuccess<
 
 export async function markSegmentTranscriptionAttemptSuccess({
   rootPath,
+  workspaceId,
+  memoryId,
   segmentId,
   assertUsable,
 }: {
   readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
   readonly segmentId: string;
   readonly assertUsable?: AssertWorkspaceUsable;
 }): Promise<void> {
   await markTranscriptionAttemptSuccess({
     manifestPath: await segmentObjectManifestPath(rootPath, segmentId),
     parseManifest: (manifest) => segmentObjectManifestSchema.parse(manifest),
+    validateManifest: (segment) => {
+      if (
+        segment.workspaceId !== workspaceId ||
+        segment.memoryId !== memoryId ||
+        segment.segmentId !== segmentId
+      ) {
+        throw workspaceError(
+          'ERR_WORKSPACE_METADATA_INVALID',
+          'Segment transcription attempt manifest ownership mismatch',
+          'file-written-index-stale'
+        );
+      }
+    },
     writeManifest: (segment) =>
       writeSegmentObjectManifest({
         rootPath,
@@ -1257,16 +1277,36 @@ export async function markSegmentTranscriptionAttemptSuccess({
 
 export async function markSupplementTranscriptionAttemptSuccess({
   rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
   supplementId,
   assertUsable,
 }: {
   readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
   readonly supplementId: string;
   readonly assertUsable?: AssertWorkspaceUsable;
 }): Promise<void> {
   await markTranscriptionAttemptSuccess({
     manifestPath: await supplementObjectManifestPath(rootPath, supplementId),
     parseManifest: (manifest) => supplementObjectManifestSchema.parse(manifest),
+    validateManifest: (supplement) => {
+      if (
+        supplement.workspaceId !== workspaceId ||
+        supplement.memoryId !== memoryId ||
+        supplement.segmentId !== segmentId ||
+        supplement.supplementId !== supplementId
+      ) {
+        throw workspaceError(
+          'ERR_WORKSPACE_METADATA_INVALID',
+          'Segment supplement transcription attempt manifest ownership mismatch',
+          'file-written-index-stale'
+        );
+      }
+    },
     writeManifest: (supplement) =>
       writeSupplementObjectManifest({
         rootPath,

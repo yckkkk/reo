@@ -93,6 +93,7 @@ type RecordingMarkdownSaveInput = {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 };
 type FinalizedAudioSegmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
+  readonly workspaceId: string;
   readonly memoryId: string;
 };
 type FinalizedAudioSegmentSupplementMarkdownSaveInput = {
@@ -1993,6 +1994,7 @@ export async function saveRecordingMarkdown(
 
 async function saveRecordingMarkdownNow({
   rootPath,
+  workspaceId,
   memoryId,
   segmentId,
   markdown,
@@ -2030,11 +2032,25 @@ async function saveRecordingMarkdownNow({
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    await markSegmentTranscriptionAttemptSuccess({
-      rootPath,
-      segmentId,
-      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-    });
+    try {
+      await markSegmentTranscriptionAttemptSuccess({
+        rootPath,
+        workspaceId,
+        memoryId,
+        segmentId,
+        ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+      });
+    } catch (error) {
+      const workspaceErrorEnvelope = caughtWorkspaceError(error);
+      if (workspaceErrorEnvelope) {
+        return workspaceErrorEnvelope;
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_UPDATE_FAILED',
+        'Recording markdown was saved but the transcription attempt manifest could not be updated',
+        'file-written-index-stale'
+      );
+    }
     return { ok: true, memory, saved: true };
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
@@ -2133,11 +2149,26 @@ async function saveSegmentSupplementMarkdownNow({
         'file-written-index-stale'
       );
     }
-    await markSupplementTranscriptionAttemptSuccess({
-      rootPath,
-      supplementId,
-      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-    });
+    try {
+      await markSupplementTranscriptionAttemptSuccess({
+        rootPath,
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+      });
+    } catch (error) {
+      const workspaceErrorEnvelope = caughtWorkspaceError(error);
+      if (workspaceErrorEnvelope) {
+        return workspaceErrorEnvelope;
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_UPDATE_FAILED',
+        'Segment supplement markdown was saved but the transcription attempt manifest could not be updated',
+        'file-written-index-stale'
+      );
+    }
     const updatedSupplement = {
       ...supplement,
       lastTranscriptionAttempt: 'success' as const,

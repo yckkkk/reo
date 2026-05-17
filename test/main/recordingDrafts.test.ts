@@ -422,6 +422,7 @@ test('transcript save marks segment and supplement transcription attempts succes
 
   const savedSegment = await saveRecordingMarkdown({
     rootPath,
+    workspaceId: 'ws_draft',
     memoryId: 'mem_transcript_save_success',
     segmentId: 'seg_20260516_transcript_save_success',
     fileName: 'transcript.md',
@@ -520,6 +521,7 @@ test('transcript save failures keep existing transcription attempt manifests', a
   try {
     const failedSegmentSave = await saveRecordingMarkdown({
       rootPath,
+      workspaceId: 'ws_draft',
       memoryId: 'mem_transcript_save_failure',
       segmentId: 'seg_20260516_transcript_save_previous',
       fileName: 'transcript.md',
@@ -585,6 +587,181 @@ test('transcript save failures keep existing transcription attempt manifests', a
   }
   assert.equal(
     (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_transcript_save_stale_index'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+});
+
+test('transcript save rejects manifest ownership changes before marking attempts successful', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_transcript_save_owner',
+    title: 'Transcript save owner',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260516_transcript_save_owner',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260516_transcript_save_owner',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260516_transcript_save_owner',
+    memoryId: 'mem_transcript_save_owner',
+    title: 'Owner checked segment',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+
+  setBeforeMarkdownWriteForTest(async () => {
+    const manifestPath = path.join(
+      rootPath,
+      '.reo',
+      'objects',
+      'segments',
+      'seg_20260516_transcript_save_owner.json'
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify({
+        ...manifest,
+        workspaceId: 'ws_replaced_owner',
+      })}\n`
+    );
+  });
+  try {
+    const failedSegmentSave = await saveRecordingMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_transcript_save_owner',
+      segmentId: 'seg_20260516_transcript_save_owner',
+      fileName: 'transcript.md',
+      markdown: 'Segment transcript text',
+    });
+
+    assert.equal(failedSegmentSave.ok, false);
+    if (!failedSegmentSave.ok) {
+      assert.equal(failedSegmentSave.error.code, 'ERR_WORKSPACE_METADATA_INVALID');
+      assert.equal(failedSegmentSave.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMarkdownWriteForTest(null);
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_20260516_transcript_save_owner'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+});
+
+test('segment supplement transcript save rejects manifest ownership changes before marking attempts successful', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_supplement_save_owner',
+    title: 'Supplement save owner',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260516_supplement_save_owner',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260516_supplement_save_owner',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260516_supplement_save_owner',
+    memoryId: 'mem_supplement_save_owner',
+    title: 'Supplement owner parent',
+    durationMs: 3000,
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_supplement_save_owner',
+    segmentId: 'seg_20260516_supplement_save_owner',
+    createSupplementId: () => 'sup_20260516_supplement_save_owner',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260516_supplement_save_owner',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_supplement_save_owner',
+    segmentId: 'seg_20260516_supplement_save_owner',
+    supplementId: 'sup_20260516_supplement_save_owner',
+    title: 'Owner checked supplement',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+
+  setBeforeMarkdownWriteForTest(async () => {
+    const manifestPath = path.join(
+      rootPath,
+      '.reo',
+      'objects',
+      'supplements',
+      'sup_20260516_supplement_save_owner.json'
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify({
+        ...manifest,
+        segmentId: 'seg_replaced_owner',
+      })}\n`
+    );
+  });
+  try {
+    const failedSupplementSave = await saveSegmentSupplementMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_supplement_save_owner',
+      segmentId: 'seg_20260516_supplement_save_owner',
+      supplementId: 'sup_20260516_supplement_save_owner',
+      markdown: 'Supplement transcript text',
+    });
+
+    assert.equal(failedSupplementSave.ok, false);
+    if (!failedSupplementSave.ok) {
+      assert.equal(failedSupplementSave.error.dataRetention, 'file-written-index-stale');
+    }
+  } finally {
+    setBeforeMarkdownWriteForTest(null);
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_supplement_save_owner'))[
       'lastTranscriptionAttempt'
     ],
     'failed'
