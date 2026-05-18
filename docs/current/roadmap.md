@@ -116,20 +116,22 @@
 
 ## P6 AI-ready 验证
 
-目标：证明 Reo 记忆空间可以被外部 Codex-class agent 清楚读取和协作。
+目标：证明 Reo 记忆空间可以被外部 Codex-class agent 清楚读取和协作，包括用户主动触发和外部 scheduled 任务（Codex CLI / Claude Code 自带能力）读写。
 
 范围：
 
-- 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、结构和协作规则。
+- 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、结构和协作规则；Workspace root 的 `users.md` 描述用户个人 context。
 - Memory、Segment、SegmentSupplement 文件结构清楚。
 - Codex CLI 可以进入记忆空间读取、解释和整理当前文件。
-- 验证不依赖 Reo runtime 内嵌 AI。
+- 外部 scheduled agent 任务（Codex CLI 内置定时 / Claude Code background tasks / 用户自配 cron）写回的新内容（reminder、教学 HTML、补充建议）能被 Reo 正确识别和投影。
+- 验证不依赖 Reo runtime 内嵌 AI；也不依赖 Reo 自己实现 schedule（AI 公司已提供）。
 
 质量门槛：
 
 - 不实现内嵌 AI chat、agent runtime、tool use 或自动整理。
 - 不展示假 AI 功能。
-- Codex CLI 验证只读边界、写入边界和用户文件真源。
+- 不重复实现 AI 公司已有的 scheduled task 能力。
+- Codex CLI 验证只读边界、写入边界、scheduled 写回投影一致性和用户文件真源。
 
 ## 产品本质长期轨道
 
@@ -141,7 +143,7 @@ P0-P6 是 audio 单模态的 enabling phase。Reo 的产品本质长期轨道在
 
 - **多模态 Segment / SegmentSupplement 类型（核心必经）**：实现 `video`、`photo`、`note`、`imported_file` 与 `html` Segment 类型及对应 SegmentSupplement，并把 Memory Studio、Segment 卡片、播放 / 浏览 / 编辑区扩展到跨模态。这是 Reo "围绕一件事的所有材料"承诺成立的前提；缺这层 Reo 只是录音工具。每个新类型必须先有文件合同、IPC contract、查询更新、恢复路径、craft 门槛验证。
 - **回顾 mechanics（粘性核心）**：结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + widget 形态实现，做成跨模态沉浸式回顾而非碎片推送。
-- **AGENTS.md 模板与 skills 目录**：记忆空间 root 的 `AGENTS.md` 模板由 Reo 出厂提供。默认 skills 共 8 项：引导 / 回顾 / 整理总结 / widget 生成（基础四类）+ 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考（思考视角 starter）。skills 在跨模态 Memory 上工作；引导 skills 提示用户用最合适的模态做下一步补充。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
+- **AGENTS.md + users.md 模板与 skills 目录**：记忆空间 root 与 Memory root 的 `AGENTS.md` 模板由 Reo 出厂提供；Workspace root 的 `users.md` 模板由 Reo 出厂 + 首次启动引导用户填写，承担"用户是谁 / 长期目标 / 偏好"的个人 context 层。默认 skills 分两层：原子 skill 共 8 项（引导 / 回顾 / 整理总结 / widget 生成 + 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考），use-xxx 组合 skill 共 3 项（`use-学习闭环` / `use-记忆回顾循环` / `use-内容创作支援`）。skill 组合是 agent 责任，不是用户责任。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
 - **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、Widget 的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
 - **Widget runtime**：Workspace-level widget（Home 区域、Gallery 走马灯）与 Memory-level widget（Memory rail tab）的对象合同、manifest、渲染沙箱、craft 门槛实现。日历 / 时间线 widget 作为 Day 1 示例；成长册、关系曲线、概念时间线等跨模态 widget 作为完整形态示例。
 - **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 跨模态混合呈现（录音 + 视频 + 照片节奏感切换），是 craft 不变量的核心承担页之一。

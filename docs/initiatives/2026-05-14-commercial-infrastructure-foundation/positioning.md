@@ -142,6 +142,66 @@ memories/2025-某次旅程/
 
 Agent：生成游记 HTML、做时间线 widget、按情绪曲线做回顾走马灯、提取你下次想去的地方。
 
+### 学习闭环 Memory（最重要的一个 pattern）
+
+这是 Reo 服务学习者的核心 pattern：用户表达 → agent 分析表达不足 → 生成教学 HTML → 用户补充 → agent 再分析 → 定期提醒 → agent 决策是否需要再次表达。两个具体 instance：
+
+**instance A：读一本书的学习闭环**
+
+```
+memories/2026-我读《认知觉醒》的思考/
+  segments/
+    001--第一章读后表达/
+      audio.webm
+      transcript.md
+    002--agent-第一章反馈/                # 类型 html
+      segment.html                       # 教学 HTML：你哪里没说清、书里你漏了什么
+    003--第二章读后表达/
+      audio.webm
+      transcript.md
+      supplements/
+        001--agent-提示要补充的角度/      # 类型 html
+          supplement.html
+        002--你按提示补的录音/
+          audio.webm
+          transcript.md
+    004--agent-跨章节深化建议/            # 类型 html
+      segment.html                       # 整合 001-003 后的整体反思
+    005--agent-回顾提醒/                  # 类型 html
+      segment.html                       # 提示你回看 002 的反馈点
+  widgets/
+    learning-progress/                    # Memory-level widget
+      widget.json                        # 表达次数、深度评分、下次推荐表达时机
+```
+
+**instance B：学习产品经理的闭环**
+
+```
+memories/2026-学习产品经理/
+  上传文件/
+    - 《俞军产品方法论》PDF
+    - 网课讲义 PDF
+    - 知乎文章打印件
+    - 我做过的 PRD 模板
+  segments/
+    001--每周学习后的表达/
+      audio.webm
+    002--agent-本周认知评估/              # 类型 html
+      segment.html                       # 你对哪些概念理解最浅、哪些和你之前的理解冲突
+    003--根据 agent 提示的补充表达/
+      audio.webm
+      supplements/
+        001--agent-知识地图 widget 建议/   # 类型 html
+          supplement.html
+  widgets/
+    pm-concept-map/                       # 跨学习记录积累的概念图
+      widget.json
+```
+
+两个 instance 共享同一个底层 pattern。Agent 通过 `use-学习闭环` skill 编排：调用表达深度分析（默认洞察 / 二阶思考原子 skill）→ 生成教学反馈 HTML → 引导用户补充（引导 skill）→ 配合回顾 skill 推送提醒 → 决策是否需要再次表达。**用户体验是"帮我做学习闭环"，不是"请你按顺序运行 A → B → C 三个 skill"** —— 组合是 agent 的责任。
+
+Agent 输出的所有教学 HTML 都根据 Workspace root 的 users.md 个性化：知道你是谁、知道你的学习风格、知道你期望的反馈深度、知道你的语言偏好。同一个 use-学习闭环 skill 在不同用户的 Workspace 上输出风格完全不同。
+
 ## 用户的"使用 Reo 一年后"
 
 不是一堆录音。是这样的东西：
@@ -158,14 +218,14 @@ Agent：生成游记 HTML、做时间线 widget、按情绪曲线做回顾走马
 
 ### Reo 替代的
 
-| 你现在用的 | Reo 替代的角色 |
-|---|---|
-| Voice Memos | 录音夹（但 Reo 给录音一个主题家） |
-| Apple Photos / 相册 | 媒体堆（但 Reo 按主题聚合） |
-| Notion 草稿 | 半成品笔记（但 Reo 把它变成 agent 可操作的素材） |
-| 桌面文件夹 | 参考资料堆（但 Reo 让它和你的思考在同一个容器里） |
-| 微信收藏 | 灵感收集器（但 Reo 不依赖云端） |
-| 半完成的博客草稿 | 想表达没完成的内容（但 Reo 让 agent 帮你完成） |
+| 你现在用的          | Reo 替代的角色                                    |
+| ------------------- | ------------------------------------------------- |
+| Voice Memos         | 录音夹（但 Reo 给录音一个主题家）                 |
+| Apple Photos / 相册 | 媒体堆（但 Reo 按主题聚合）                       |
+| Notion 草稿         | 半成品笔记（但 Reo 把它变成 agent 可操作的素材）  |
+| 桌面文件夹          | 参考资料堆（但 Reo 让它和你的思考在同一个容器里） |
+| 微信收藏            | 灵感收集器（但 Reo 不依赖云端）                   |
+| 半完成的博客草稿    | 想表达没完成的内容（但 Reo 让 agent 帮你完成）    |
 
 ### Reo 启用的（其他工具做不到的）
 

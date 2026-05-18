@@ -70,7 +70,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 Reo 的目标用户是有持续主题关注的 prosumer 创作者与思考者：Obsidian 用户、专业写作者、研究者、podcasters / video essayists、深度学习者、parent journalers、有强烈记录欲的领域专家。共同特征：有思考深度、愿意尝试新工具、愿意配置和使用 AI 工具、在意"我产生的材料应该能变成属于我的作品"。Reo 不为零摩擦上手优化。
 
-记忆空间文件夹是真实产物源。DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。每个记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口，Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。
+记忆空间文件夹是真实产物源。DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。每个记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口；Workspace root 使用 `users.md` 作为用户个人 context 层（agent 操作前读取，让所有 skill 输出根据用户个性化）。Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。
 
 当前阶段优先完成 `roadmap.md` P1-P6，把以 audio 单模态实现的表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证落地。**P1-P6 是 enabling phase，不是 Reo 完整形态。** Reo 的完整产品形态需要多模态 Segment 类型（视频 / 图片 / 笔记 / 上传文件）+ widget runtime + HTML Segment 渲染 + Gallery 走马灯 + AGENTS.md / skills 模板 + prompt-bridge UI 全部到位，这些属于产品本质长期轨道，在表达主链稳固后启动独立 initiative。
 

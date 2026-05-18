@@ -12,18 +12,21 @@ Reo 在求职作品集中的定位句：
 
 ## 差异化在求职作品集中的呈现
 
-| 差异化判断（源自 ADR 0006 + positioning.md） | 放入哪个主交付物 |
-| --- | --- |
-| 多模态主题容器（Memory）作为组织轴 | Product case study 主叙事 |
-| Agent 在用户完整 Memory 上转化成作品 | Product case study 主叙事、Demo video |
-| 唯一作品 moat（材料是你的 + agent 替你做）| Product case study、Pitch deck |
-| 本地文件真源 + AGENTS.md / skills | Product case study appendix、Beta field loop pack |
-| 跨模态 Widget runtime（成长册 / 关系曲线 / 概念时间线等）| Demo video |
-| HTML Segment / SegmentSupplement（agent 生成的作品落到文件合同）| Demo video 的未来扩展示例或 appendix |
-| Gallery 走马灯（跨模态视觉听觉沉浸回顾）| Demo video、Product case study |
-| Prompt-bridge 入口 + Day 1 skills（引导 / 回顾 / 整理 / widget 生成 / 思考视角）| Product case study、Beta field loop pack |
-| Craft 不变量（各模态捕获 / 回放场景感、Gallery 节奏）| Demo video |
-| Record-to-create loop（积累 → agent 转化 → 作品 → 回到 Memory）| Product case study 主叙事 |
+| 差异化判断（源自 ADR 0006 + positioning.md）                                     | 放入哪个主交付物                                  |
+| -------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 多模态主题容器（Memory）作为组织轴                                               | Product case study 主叙事                         |
+| Agent 在用户完整 Memory 上转化成作品                                             | Product case study 主叙事、Demo video             |
+| 唯一作品 moat（材料是你的 + agent 替你做）                                       | Product case study、Pitch deck                    |
+| 本地文件真源 + AGENTS.md / skills                                                | Product case study appendix、Beta field loop pack |
+| AGENTS.md + users.md 双层 agent context（agent 知道项目也知道用户）              | Product case study、Demo video（个性化输出对比）  |
+| 原子 + use-xxx 组合双层 skill（组合是 agent 责任，不是用户责任）                 | Product case study、Beta field loop pack          |
+| Day 1 use-xxx 出厂三件（学习闭环 / 记忆回顾循环 / 内容创作支援）                 | Demo video（场景演示）                            |
+| 跨模态 Widget runtime（成长册 / 关系曲线 / 概念时间线等）                        | Demo video                                        |
+| HTML Segment / SegmentSupplement（agent 生成的作品落到文件合同）                 | Demo video 的未来扩展示例或 appendix              |
+| Gallery 走马灯（跨模态视觉听觉沉浸回顾）                                         | Demo video、Product case study                    |
+| Prompt-bridge 入口 + Day 1 skills（引导 / 回顾 / 整理 / widget 生成 / 思考视角） | Product case study、Beta field loop pack          |
+| Craft 不变量（各模态捕获 / 回放场景感、Gallery 节奏）                            | Demo video                                        |
+| Record-to-create loop（积累 → agent 转化 → 作品 → 回到 Memory）                  | Product case study 主叙事                         |
 
 ## 与 5 个主交付物的关系
 

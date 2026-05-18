@@ -58,20 +58,24 @@ Reo 的美感来自对注意力的尊重：本地优先带来安全感，agent-n
 
 ## 当前页面模型
 
-AppShell 顶层入口为 Home、Gallery 和当前 Loaded Workspace。
+AppShell 顶层入口为 Home、资料库和当前 Loaded Workspace。
 
 ### Home
 
-Home 当前是全局入口 shell。它提供进入记忆空间、Gallery 和创建或打开 Workspace 的入口，不承载 Workspace 内的 Memory 导航。Home 是 Workspace-level widget 的承载页之一。
+Home 当前是全局入口 shell，不承载 Workspace 内的 Memory 导航，也不承载创建或打开 Workspace 的主入口。
 
-### Gallery
+### 资料库
+
+资料库是当前创建、打开、导入、恢复和移除记忆空间的入口。未打开 Workspace 时，资料库展示记忆空间列表、创建按钮和打开本地文件夹入口；打开 Workspace 后，资料库仍作为 AppShell 顶层入口存在，不替代 Loaded Workspace 的 Memory rail 或 Memory Studio。
+
+### Gallery 定位
 
 Gallery 是 Workspace 级别独立页面，承载跨 Memory 的沉浸式回顾和清晰信息呈现。Gallery 内部两个 tab：
 
 - **走马灯艺术 tab**：沉浸式记忆走马灯，记忆片段的录音 / 视频 / 图片以视觉听觉节奏感呈现和消失。走马灯艺术 tab 是 craft 不变量的核心承担页之一。
 - **列表 tab**：跨 Memory 的清晰信息呈现，承担资料库式的清单查阅职责。
 
-Gallery 当前不是 runtime surface。落地由独立 spec 处理；本节只记录信息架构定位。
+Gallery 当前不是 runtime surface，也不是 AppShell 当前 route。落地由独立 spec 处理；本节只记录信息架构定位。
 
 ### Loaded Workspace
 
@@ -132,12 +136,18 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 
 当前不实现 Reo runtime 内嵌的 AI chat、tool use、自动整理或 AI side effects。Reo 自身不调用任何远程 AI 服务（语音设置中的 ASR 凭证除外，见 `decisions/0004-doubao-voice-asr-endpoint-baseline.md`）。
 
-当前 agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现：
+当前 agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。Agent 在 Memory 上工作时同时读两层 context：
 
-- 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
-- Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单计划挂统一 `agent 操作 ▸` 子菜单。每条菜单项点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。
-- 默认 skills 涵盖引导、回顾（结合记忆曲线）、整理总结、widget 生成四类；widget example 在 widget 生成 skills 中维护。
+- **AGENTS.md**（项目 / Workspace 真源）：记忆空间 root 与每个 Memory root 的 AGENTS.md 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
+- **users.md**（用户个人 context）：Workspace root 的 users.md 描述用户是谁、长期目标、当前关注、表达偏好、agent 输出风格偏好；agent 每次操作前读取，让所有 skill 输出根据用户个性化。Memory level users.md override 由未来 spec 决定。
 
-Prompt-bridge UI、AGENTS.md 模板、skills 目录、widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
+Reo skills 分两层：
+
+- **原子 skill**：单一职责的 prompt 模板。Day 1 出厂 8 项：引导、回顾（结合记忆曲线）、整理总结、widget 生成四类基础 skill，加默认洞察、价值澄清、二阶思考、逆向思考四类思考视角 skill。
+- **use-xxx 组合 skill**：use case 编排 skill。Day 1 出厂 3 项：`use-学习闭环`、`use-记忆回顾循环`、`use-内容创作支援`。**skill 组合是 agent 的责任，不是用户的责任**——用户体验是"帮我做学习闭环"，agent 自己决定按 use case 流程调用哪些原子 skill。
+
+Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单计划挂统一 `agent 操作 ▸` 子菜单。每条菜单项点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。
+
+Prompt-bridge UI、AGENTS.md 模板、users.md 模板、skills 目录、widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
 
 Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、audio segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。
