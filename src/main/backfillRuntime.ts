@@ -25,6 +25,7 @@ import {
 import {
   collectEligibleBackfillTargets,
   isBackfillEligibleProjection,
+  isManualFillMissingEligibleProjection,
   limitBackfillTargets,
   type BackfillEligibleTarget,
 } from './backfillScanner.js';
@@ -394,7 +395,11 @@ async function executeBackfillTask(
   if (!audio.ok) {
     return { errorCode: mapWorkspaceAudioReadError(audio), ok: false };
   }
-  if (task.mode === 'fill-missing' && !isBackfillEligibleProjection(audio)) {
+  const fillMissingEligible =
+    task.source === 'auto'
+      ? isBackfillEligibleProjection(audio)
+      : isManualFillMissingEligibleProjection(audio);
+  if (task.mode === 'fill-missing' && !fillMissingEligible) {
     if (task.source === 'auto') {
       return { ok: true, transcriptText: audio.transcript.text };
     }
@@ -607,9 +612,11 @@ async function readCurrentBackfillEligibility(
   if (!target) {
     return { errorCode: 'target-not-eligible', ok: false };
   }
-  return isBackfillEligibleProjection(target)
-    ? { ok: true }
-    : { errorCode: 'target-not-eligible', ok: false };
+  const eligible =
+    task.source === 'auto'
+      ? isBackfillEligibleProjection(target)
+      : isManualFillMissingEligibleProjection(target);
+  return eligible ? { ok: true } : { errorCode: 'target-not-eligible', ok: false };
 }
 
 function requireExpectedTranscriptDigest(digest: string | null): string {

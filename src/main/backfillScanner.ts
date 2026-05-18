@@ -52,6 +52,10 @@ export function isBackfillEligibleProjection(projection: BackfillScannerProjecti
   );
 }
 
+export function isManualFillMissingEligibleProjection(projection: BackfillScannerProjection) {
+  return projection.audioByteLength > 0 && !projection.transcript.exists;
+}
+
 export function collectEligibleBackfillTargets(
   input: BackfillScannerInput,
   limit = Number.POSITIVE_INFINITY

@@ -18,7 +18,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前没有 Forge config、makers、publishers、buildIdentifier、app bundle id、release channel 或 publish target。
 - 当前构建权威是 `electron-vite`，不是 Electron Forge。
 - 当前 `npm run dev` 通过 `scripts/run-dev.mjs` 先加载 git-ignored `.env.local`，再启动 `electron-vite dev`。`.env.local` 只作为本机 shell 环境注入给 Electron dev process；loader 不注入 `VITE_*` key。
-- 当前豆包语音能力凭证使用 Electron `safeStorage` 加密存放在 `userData/voice-transcription-settings.json`，由 main process `voiceSettingsStore` 持有。Renderer/preload 通过 application-scoped voice settings IPC 读取不含密文的 snapshot：`enabled`、`apiKeyConfigured`、`apiKeyLastFour`、`lastValidatedAt`、`lastValidationOk` 和 `lastValidationCode`。同一 X-Api-Key 服务录音中流式识别和 finalized audio 自动补转录；X-Api-Key 只在用户保存设置的 request 和 main process 解密后的运行时输入中出现；settings response、录音 IPC response、补转录 IPC response、日志、错误信封和记忆空间内容文件不返回明文或密文。
+- 当前豆包语音能力凭证使用 Electron `safeStorage` 加密存放在 `userData/voice-transcription-settings.json`，由 main process `voiceSettingsStore` 持有。Renderer/preload 通过 application-scoped voice settings IPC 读取不含密文的 snapshot：`enabled`、`apiKeyConfigured`、`apiKeyLastFour`、`lastValidatedAt`、`lastValidationOk` 和 `lastValidationCode`。同一 X-Api-Key 服务录音中流式识别、finalized audio 自动补转录和手动重新生成转录；X-Api-Key 只在用户保存设置的 request 和 main process 解密后的运行时输入中出现；settings response、录音 IPC response、补转录 IPC response、日志、错误信封和记忆空间内容文件不返回明文或密文。
 - 当前 Agentation 只作为 development renderer toolbar 连接本机 `http://localhost:4747`；development CSP 的 `connect-src` 允许该 loopback endpoint 用于 MCP sync、annotation update 和 event stream。Agentation 不新增 preload、IPC、permission、protocol、navigation 或 product runtime surface。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
 - 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL。

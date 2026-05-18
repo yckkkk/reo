@@ -202,15 +202,15 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
 
   return (
     <div className="flex max-w-[720px] flex-col gap-24">
-      <section aria-label="流式语音识别" className="flex items-start justify-between gap-24">
+      <section aria-label="豆包语音识别" className="flex items-start justify-between gap-24">
         <div className="min-w-0">
-          <h2 className="text-heading-xs font-medium leading-heading-xs">流式语音识别</h2>
+          <h2 className="text-heading-xs font-medium leading-heading-xs">豆包语音识别</h2>
           <p className="mt-6 text-ui-sm leading-ui-sm text-muted-foreground">
-            录音时使用火山引擎豆包大模型流式语音识别生成转录。
+            同一个 X-Api-Key 用于录音实时转写，以及录音文件的生成转录和重新生成转录。
           </p>
         </div>
         <Switch
-          aria-label="启用流式语音识别"
+          aria-label="启用豆包语音识别"
           checked={settings.enabled}
           disabled={isBusy}
           onCheckedChange={(enabled) => setEnabledMutation.mutate({ enabled })}
@@ -261,13 +261,16 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
           </div>
         </FieldControl>
         {showRequiredHint ? (
-          <FieldError className="text-destructive">启用后需要 X-Api-Key 才能生成转录</FieldError>
+          <FieldError className="text-destructive">
+            启用后需要 X-Api-Key 才能进行语音识别和文件转录
+          </FieldError>
         ) : showConfiguredHint ? (
           <FieldHint>
-            已配置 · 末 4 位 {settings.apiKeyLastFour}。输入新 X-Api-Key 可替换当前密钥。
+            已配置 · 末 4 位 {settings.apiKeyLastFour}
+            。此密钥同时用于流式语音识别和录音文件转录；输入新 X-Api-Key 可替换当前密钥。
           </FieldHint>
         ) : (
-          <FieldHint>密钥只用于本机语音转录设置。</FieldHint>
+          <FieldHint>密钥只用于本机语音识别和文件转录设置。</FieldHint>
         )}
         <Button
           type="button"
@@ -337,7 +340,7 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
         open={clearDialogOpen}
         onOpenChange={setClearDialogOpen}
         title="清除 X-Api-Key？"
-        description="清除后，录音不会再使用这枚密钥生成流式转录。"
+        description="清除后，录音实时转写和录音文件转录都不会再使用这枚密钥。"
         confirmLabel={clearApiKeyMutation.isPending ? '清除中' : '清除'}
         disabled={clearApiKeyMutation.isPending}
         onConfirm={handleClear}

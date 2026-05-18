@@ -291,7 +291,7 @@ export function createBackfillQueue<TResponse = unknown>({
       if (!signal.aborted) {
         return result;
       }
-      return !result.ok && result.response ? result : CANCELED_RESULT;
+      return result.response !== undefined ? result : CANCELED_RESULT;
     } catch {
       return signal.aborted ? CANCELED_RESULT : { errorCode: 'network', ok: false };
     }

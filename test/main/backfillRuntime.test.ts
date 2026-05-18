@@ -267,6 +267,113 @@ test('workspace backfill runtime runs manual segment backfill with injected remu
   assert.deepEqual(calls, ['prepare:3', 'recognize:api-key-1:b2dnLW9wdXM=', 'save:补转录完成。']);
 });
 
+test('workspace backfill runtime allows manual fill-missing for finalized audio without transcript', async () => {
+  for (const lastTranscriptionAttempt of ['never', 'success'] as const) {
+    const calls: string[] = [];
+    const runtime = createWorkspaceBackfillRuntime({
+      prepareAudioData: async ({ finalizedWebmBytes }) => {
+        calls.push(`prepare:${finalizedWebmBytes.byteLength}`);
+        return {
+          base64: 'b2dnLW9wdXM=',
+          byteLength: 12,
+          contentType: 'audio/ogg; codecs=opus',
+          format: 'ogg-opus',
+        };
+      },
+      readMemoryDetail: async () => ({
+        ok: true,
+        value: memoryDetailWithSegment({
+          lastTranscriptionAttempt,
+          transcript: { exists: false },
+        }),
+      }),
+      readSegmentAudio: async () => ({
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        lastTranscriptionAttempt,
+        ok: true,
+        transcript: { exists: false, text: '' },
+      }),
+      recognize: async () => ({
+        ok: true,
+        requestId: `request-${lastTranscriptionAttempt}`,
+        transcriptText: '首次转录。',
+      }),
+      saveSegmentTranscript: async ({ markdown, requireTranscriptMissing }) => {
+        assert.equal(requireTranscriptMissing, true, lastTranscriptionAttempt);
+        calls.push(`save:${markdown}`);
+        return savedSegmentResponse();
+      },
+      saveSupplementTranscript: async () =>
+        ({
+          error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' },
+          ok: false,
+        }) as WorkspaceErrorEnvelope,
+      voiceSettingsStore: validVoiceSettingsStore,
+    });
+
+    const response = await runtime.requestSegmentBackfill(segmentTask());
+
+    assert.equal(response.ok, true, lastTranscriptionAttempt);
+    assert.deepEqual(calls, ['prepare:3', 'save:首次转录。'], lastTranscriptionAttempt);
+  }
+});
+
+test('workspace backfill runtime allows manual supplement fill-missing for finalized audio without transcript', async () => {
+  for (const lastTranscriptionAttempt of ['never', 'success'] as const) {
+    const calls: string[] = [];
+    const runtime = createWorkspaceBackfillRuntime({
+      prepareAudioData: async ({ finalizedWebmBytes }) => {
+        calls.push(`prepare:${finalizedWebmBytes.byteLength}`);
+        return {
+          base64: 'b2dnLW9wdXM=',
+          byteLength: 12,
+          contentType: 'audio/ogg; codecs=opus',
+          format: 'ogg-opus',
+        };
+      },
+      readMemoryDetail: async () => ({
+        ok: true,
+        value: memoryDetailWithSupplement({
+          lastTranscriptionAttempt,
+          transcript: { exists: false },
+        }),
+      }),
+      readSegmentAudio: async () => {
+        throw new Error('segment audio should not be read for supplement fill-missing');
+      },
+      readSupplementAudio: async () => ({
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        lastTranscriptionAttempt,
+        ok: true,
+        transcript: { exists: false, text: '' },
+      }),
+      recognize: async () => ({
+        ok: true,
+        requestId: `request-supplement-${lastTranscriptionAttempt}`,
+        transcriptText: '补充首次转录。',
+      }),
+      saveSegmentTranscript: async () =>
+        ({
+          error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' },
+          ok: false,
+        }) as WorkspaceErrorEnvelope,
+      saveSupplementTranscript: async ({ markdown, requireTranscriptMissing }) => {
+        assert.equal(requireTranscriptMissing, true, lastTranscriptionAttempt);
+        calls.push(`save:${markdown}`);
+        return savedSupplementResponse();
+      },
+      voiceSettingsStore: validVoiceSettingsStore,
+    });
+
+    const response = await runtime.requestSupplementBackfill(supplementTask());
+
+    assert.equal(response.ok, true, lastTranscriptionAttempt);
+    assert.deepEqual(calls, ['prepare:3', 'save:补充首次转录。'], lastTranscriptionAttempt);
+  }
+});
+
 test('workspace backfill runtime regenerates an existing segment transcript with a snapshot guard', async () => {
   const calls: string[] = [];
   const runtime = createWorkspaceBackfillRuntime({
@@ -1127,6 +1234,70 @@ test('workspace backfill runtime skips stale automatic targets before reading au
   assert.equal(saved, false);
 });
 
+test('workspace backfill runtime skips automatic targets that are no longer failed-only before remux', async () => {
+  for (const lastTranscriptionAttempt of ['never', 'success'] as const) {
+    let prepared = false;
+    let saved = false;
+    const runtime = createWorkspaceBackfillRuntime({
+      prepareAudioData: async () => {
+        prepared = true;
+        return {
+          base64: 'b2dnLW9wdXM=',
+          byteLength: 12,
+          contentType: 'audio/ogg; codecs=opus',
+          format: 'ogg-opus',
+        };
+      },
+      readMemoryDetail: async () => ({
+        ok: true,
+        value: memoryDetailWithSegment({
+          lastTranscriptionAttempt: 'failed',
+          transcript: { exists: false },
+        }),
+      }),
+      readSegmentAudio: async () => ({
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        lastTranscriptionAttempt,
+        ok: true,
+        transcript: { exists: false, text: '' },
+      }),
+      recognize: async () => ({ ok: true, requestId: 'unused', transcriptText: 'unused' }),
+      saveSegmentTranscript: async () => {
+        saved = true;
+        return { error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' }, ok: false };
+      },
+      saveSupplementTranscript: async () =>
+        ({
+          error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' },
+          ok: false,
+        }) as never,
+      voiceSettingsStore: validVoiceSettingsStore,
+    });
+
+    const result = await runtime.enqueueAutomaticTargets({
+      assertWorkspaceUsable: usable,
+      rootPath: '/tmp/reo-workspace',
+      targets: [
+        {
+          kind: 'segment',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          updatedAt: '2026-05-17T01:02:00.000Z',
+          workspaceId: 'ws_1',
+        },
+      ],
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    });
+
+    assert.deepEqual(result, { accepted: 1, capped: 0, duplicates: 0 }, lastTranscriptionAttempt);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(prepared, false, lastTranscriptionAttempt);
+    assert.equal(saved, false, lastTranscriptionAttempt);
+  }
+});
+
 test('workspace backfill runtime applies automatic batch cap through the queue', async () => {
   const runtime = createWorkspaceBackfillRuntime({
     automaticBatchLimit: 1,
@@ -1349,7 +1520,6 @@ test('workspace backfill runtime rejects manual targets when voice settings are 
 
 test('workspace backfill runtime rejects manual target that is not eligible before reading audio', async () => {
   for (const [name, lastTranscriptionAttempt, transcript, audioByteLength] of [
-    ['success attempt', 'success' as const, { exists: false, text: '' }, 1],
     ['existing transcript', 'failed' as const, { exists: true, text: 'done' }, 1],
     ['zero byte audio', 'failed' as const, { exists: false, text: '' }, 0],
   ] as const) {

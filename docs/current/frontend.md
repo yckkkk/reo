@@ -48,7 +48,7 @@
 - Dialog、AlertDialog 与 Drawer：使用 `bg-popover text-popover-foreground shadow-modal`，由 Radix/Vaul 承担 overlay mechanics。危险确认统一通过 workspace-level `WorkspaceDangerConfirmDialog` 使用 AlertDialog 的 title / description / footer 线性结构；Memory delete、Segment delete、Memory space remove 和手动重新生成转录不在确认弹层内嵌套重内容卡，确认按钮不得依赖 Radix 自动关闭弹层，是否关闭由对应业务 flow 决定。
 - Toast：root 只挂载一次，toast surface 使用 `bg-popover text-popover-foreground shadow-float`。所有 toast action 使用同一 action button 结构；默认态透明、无边框、无填充底色，hover/active 只用 `color-mix` 填充高光，不画描边，focus-visible 保留键盘可达 ring。恢复 action 使用 icon+文字，不使用裸文字按钮。可撤销删除 toast 统一通过 `showReoUndoToast` 使用同一 neutral surface、目标标题、icon+文字恢复 action、无 close button、`dismissible: false` 和底部 2px 进度条；Memory delete 的 undo 调用 main restore，Segment delete 的 undo 只回滚 renderer pending projection。10 秒 toast duration 是 Segment delete grace-period 唯一时钟。
 - Separator：保留语义和命中区，不默认画可见线。
-- Switch：Radix mechanics，source 位于 `components/ui/switch.tsx`，当前 consumer 是 `VoiceSettingsPanel` 的「启用流式语音识别」开关；轨道使用 `bg-secondary`，checked 使用 `bg-primary`，disabled 使用 `bg-muted`，thumb 使用 `bg-background`，不使用描边或阴影。
+- Switch：Radix mechanics，source 位于 `components/ui/switch.tsx`，当前 consumer 是 `VoiceSettingsPanel` 的「启用豆包语音识别」开关；轨道使用 `bg-secondary`，checked 使用 `bg-primary`，disabled 使用 `bg-muted`，thumb 使用 `bg-background`，不使用描边或阴影。
 - Breadcrumb：用于 AppShell panel titlebar；trigger 使用 `rounded-sm` 方圆角，层级之间使用圆点 separator，不使用 chevron。
 - Floating Action Button Speed Dial：用于底部表达入口；trigger 使用 `bg-brand-ember` 红色，trigger 和 action 都是全圆 FAB 控件；普通菜单 action 不继承该例外。PrimeReact action 自带圆形样式，Reo primitive 在该层明确保留 `rounded-full`，不能让业务 consumer 处理；结构展开动效不表达基础阴影。
 - Waveform：保留 canvas waveform renderer、静态 dots、动态 bars、播放进度双色切分和录音编辑 cursor；主题切换后重新读取 token 并重绘；当 data 为空或样本为零时不绘制占位 bars。
@@ -71,7 +71,7 @@
 - Settings mode 由 App 顶层 `appMode` 切换进入，Sidebar 左下角齿轮「设置」按钮是入口。Settings shell 渲染在现有 AppShell 主内容区，不打开第二个 BrowserWindow，不引入 router package。
 - Settings shell 使用左侧设置 nav rail 和右侧内容 panel；设置 nav rail 复用 AppShell sidebar 的宽度、`bg-card` 画布、8px 左右内距和 48px 原生 titlebar 几何，顶部「返回应用」与 macOS 红绿灯底部保持同一视觉间距，下方按类目切换，当前唯一类目是「语音」。Settings titlebar 保持全宽可拖拽且不画分割线；可点击控件使用 no-drag region。
 - 返回应用只把 `appMode` 切回 `'app'`，不释放当前 workspace handle，不重置当前 workspace view、selected Memory、Memory detail cache 或 recording lifecycle owner。
-- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；主内容标题「语音」与设置表单列左对齐，整列在内容区居中。它使用 `Switch` 控制流式语音识别启用状态，使用 password `Input` 编辑 X-Api-Key，眼睛按钮只显示当前未保存草稿；保存成功后输入框清空，已保存 key 只显示 last4，清除 X-Api-Key 使用 `WorkspaceDangerConfirmDialog` 二次确认。若保存时 key 已写入但 validation snapshot 未刷新，renderer 清空草稿并重新读取 `['settings', 'voice']`。
+- 语音内容由 `VoiceSettingsPanel` 渲染，读取 main-owned voice transcription settings projection；主内容标题「语音」与设置表单列左对齐，整列在内容区居中。它使用 `Switch` 控制豆包语音识别启用状态，同一 X-Api-Key 同时用于录音实时转写、录音文件生成转录和重新生成转录；使用 password `Input` 编辑 X-Api-Key，眼睛按钮只显示当前未保存草稿；保存成功后输入框清空，已保存 key 只显示 last4 和验证状态，清除 X-Api-Key 使用 `WorkspaceDangerConfirmDialog` 二次确认，并说明实时转写和录音文件转录都会停止使用该密钥。若保存时 key 已写入但 validation snapshot 未刷新，renderer 清空草稿并重新读取 `['settings', 'voice']`。
 - 录音 overlay open 时 Sidebar settings trigger 保持当前 app mode，并通过 root toast 提示先完成或关闭录音。
 
 ## Loaded Workspace

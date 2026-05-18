@@ -715,7 +715,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '语音' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '启用豆包语音识别' })).toBeInTheDocument();
     expect(screen.queryByRole('main', { name: '记忆空间内容' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '首页' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '资料库' })).not.toBeInTheDocument();

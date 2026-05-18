@@ -142,7 +142,7 @@ describe('VoiceSettingsPanel disabled-no-key', () => {
   it('follows the disabled settings snapshot and locks key entry', async () => {
     renderVoiceSettingsPanel(disabledNoKeySnapshot);
 
-    expect(await screen.findByRole('switch', { name: '启用流式语音识别' })).toHaveAttribute(
+    expect(await screen.findByRole('switch', { name: '启用豆包语音识别' })).toHaveAttribute(
       'aria-checked',
       'false'
     );
@@ -159,12 +159,12 @@ describe('VoiceSettingsPanel enabled-no-key', () => {
   it('follows the enabled settings snapshot and requires a key', async () => {
     renderVoiceSettingsPanel(enabledNoKeySnapshot);
 
-    expect(await screen.findByRole('switch', { name: '启用流式语音识别' })).toHaveAttribute(
+    expect(await screen.findByRole('switch', { name: '启用豆包语音识别' })).toHaveAttribute(
       'aria-checked',
       'true'
     );
     expect(screen.getByLabelText('X-Api-Key')).not.toBeDisabled();
-    expect(screen.getByText('启用后需要 X-Api-Key 才能生成转录')).toBeInTheDocument();
+    expect(screen.getByText('启用后需要 X-Api-Key 才能进行语音识别和文件转录')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   });
 
@@ -197,7 +197,9 @@ describe('VoiceSettingsPanel editing-with-key', () => {
     expect(keyInput).toHaveAttribute('type', 'password');
     expect(keyInput).toHaveValue('  sk-test-1234  ');
     expect(screen.getByRole('button', { name: '保存' })).toBeEnabled();
-    expect(screen.queryByText('启用后需要 X-Api-Key 才能生成转录')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('启用后需要 X-Api-Key 才能进行语音识别和文件转录')
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('sk-test-1234')).not.toBeInTheDocument();
   });
 
@@ -244,7 +246,7 @@ describe('VoiceSettingsPanel validating and verified-active', () => {
     expect(screen.getByRole('status')).not.toHaveTextContent('sk-test-1234');
     expect(screen.getByRole('button', { name: '验证中' })).toBeDisabled();
     expect(keyInput).toBeDisabled();
-    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: '启用豆包语音识别' })).toBeDisabled();
 
     saveDeferred.resolve({
       ok: true,
@@ -396,7 +398,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
 
     const input = await screen.findByLabelText('X-Api-Key');
 
-    expect(screen.getByRole('switch', { name: '启用流式语音识别' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: '启用豆包语音识别' })).toHaveAttribute(
       'aria-checked',
       'false'
     );
@@ -412,7 +414,7 @@ describe('VoiceSettingsPanel remaining key states', () => {
     await screen.findByLabelText('X-Api-Key');
 
     expect(screen.queryByRole('button', { name: '显示 X-Api-Key' })).not.toBeInTheDocument();
-    expect(screen.getByText(/输入新 X-Api-Key 可替换当前密钥/)).toBeInTheDocument();
+    expect(screen.getByText(/此密钥同时用于流式语音识别和录音文件转录/)).toBeInTheDocument();
   });
 
   it('marks an old successful validation as stale and allows revalidation without polling', async () => {
@@ -443,7 +445,9 @@ describe('VoiceSettingsPanel remaining key states', () => {
     await user.click(await screen.findByRole('button', { name: '清除 X-Api-Key' }));
 
     expect(screen.getByRole('alertdialog', { name: '清除 X-Api-Key？' })).toBeInTheDocument();
-    expect(screen.getByText('清除后，录音不会再使用这枚密钥生成流式转录。')).toBeInTheDocument();
+    expect(
+      screen.getByText('清除后，录音实时转写和录音文件转录都不会再使用这枚密钥。')
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '清除' }));
 

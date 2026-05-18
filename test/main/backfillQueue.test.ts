@@ -216,6 +216,46 @@ test('pause resume and cancel preserve queue semantics', async () => {
   assert.deepEqual(await queue.awaitTask(queued), { errorCode: 'canceled', ok: false });
 });
 
+test('cancel after a committed successful result preserves the response', async () => {
+  const { calls, pending, queue } = createControlledQueue();
+  const running = segmentTask('committed_success', 'manual', 'workspace-handle-1', 'regenerate');
+  const committedResult: BackfillQueueRunResult<{ readonly saved: true }> = {
+    ok: true,
+    response: { saved: true },
+    transcriptText: 'committed transcript',
+  };
+
+  const manualResult = queue.runManual(running);
+  await flushQueue();
+
+  queue.cancelAll('workspace-switch');
+  assert.equal(calls[0]?.signal.aborted, true);
+  pending[0]?.resolve(committedResult);
+
+  assert.deepEqual(await manualResult, committedResult);
+  assert.deepEqual(await queue.awaitTask(running), committedResult);
+});
+
+test('cancel after a committed falsey response preserves the result', async () => {
+  const { calls, pending, queue } = createControlledQueue();
+  const running = segmentTask('committed_falsey', 'manual', 'workspace-handle-1', 'regenerate');
+  const committedResult: BackfillQueueRunResult<false> = {
+    ok: true,
+    response: false,
+    transcriptText: 'committed transcript',
+  };
+
+  const manualResult = queue.runManual(running);
+  await flushQueue();
+
+  queue.cancelAll('workspace-switch');
+  assert.equal(calls[0]?.signal.aborted, true);
+  pending[0]?.resolve(committedResult);
+
+  assert.deepEqual(await manualResult, committedResult);
+  assert.deepEqual(await queue.awaitTask(running), committedResult);
+});
+
 test('cancelAllAndDrain waits for the in-flight task to settle after abort', async () => {
   const { calls, pending, queue } = createControlledQueue();
   const running = segmentTask('drain');
