@@ -4,11 +4,13 @@
 
 ## 路线原则
 
+- Reo 长期 wedge 是 agent-first；当前 P1-P6 是 enabling phase，建立 agent 进入记忆空间工作的前提：录音表达、文件真源、信息架构、Move Memory、Review 基础、AI-ready 验证。
 - 方案以表达主链为主，吸收组件工艺质量门槛，保留记忆空间信息架构边界。
 - 每个阶段必须让一个真实用户流程更顺。
-- 先证明用户愿意表达，再扩展整理、重温和 AI runtime。
-- 组件必须满足表达主链的体验标准；未达到体验标准的组件不能作为阶段完成依据。
-- 第一阶段不实现 AI runtime，只做 AI-ready 文件结构和 Codex CLI 验证。
+- 先证明用户愿意表达，再扩展整理、回顾和产品本质长期轨道。
+- 组件必须过 craft 不变量门槛；未达到门槛的组件不能作为阶段完成依据，必要时先不做或留在 spec 中作为已知 gap。
+- 当前阶段不实现 Reo runtime 内嵌 AI，agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。
+- 录音主链通后，笔记 / 图片 / 视频会更快打通；表达主链稳固后启动产品本质长期轨道独立 initiative。
 
 ## P0 产品基线与结构
 
@@ -114,30 +116,45 @@
 
 ## P6 AI-ready 验证
 
-目标：证明 Reo 记忆空间可以被外部 AI 清楚读取和协作。
+目标：证明 Reo 记忆空间可以被外部 Codex-class agent 清楚读取和协作。
 
 范围：
 
 - 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、结构和协作规则。
 - Memory、Segment、SegmentSupplement 文件结构清楚。
 - Codex CLI 可以进入记忆空间读取、解释和整理当前文件。
-- 验证不依赖 Reo runtime 内 AI。
+- 验证不依赖 Reo runtime 内嵌 AI。
 
 质量门槛：
 
-- 不实现 AI chat、agent runtime、tool use 或自动整理。
+- 不实现内嵌 AI chat、agent runtime、tool use 或自动整理。
 - 不展示假 AI 功能。
 - Codex CLI 验证只读边界、写入边界和用户文件真源。
 
-## 后续方向
+## 产品本质长期轨道
 
-后续方向必须在第一阶段主链稳定后再进入：
+P0-P6 是 enabling phase。Reo 的产品本质长期轨道在表达主链稳固后启动独立 active initiative，不与当前 active initiative 并行。本节列出该轨道范围，作为对齐入口；不作为当前 session 推进对象。
 
-- 草稿记忆空间：Home 入口的低摩擦录制设计（draft memory space / inbox 录制入口），让用户在未选定记忆空间时也能先表达、后归入。延期能力，第一阶段不设计。
-- 视频 Segment。
-- 图片 Segment。
-- 笔记 Segment 和 editor 深化。
-- 单个 Segment 级移动。
+范围条目按优先级排列：
+
+- **回顾 mechanics（最高优先级）**：粘性核心。结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + widget 形态实现，做成沉浸式回顾而非碎片推送。
+- **AGENTS.md 模板与 skills 目录**：记忆空间 root 的 `AGENTS.md` 模板由 Reo 出厂提供。默认 skills 共 8 项：引导 / 回顾 / 整理总结 / widget 生成（基础四类）+ 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考（思考视角 starter）。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
+- **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、Widget 的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
+- **Widget runtime**：Workspace-level widget（Home 区域、Gallery 走马灯）与 Memory-level widget（Memory rail tab）的对象合同、manifest、渲染沙箱、craft 门槛实现。日历 / 时间线 widget 作为 Day 1 示例。
+- **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 是 craft 不变量的核心承担页之一。
+- **HTML Segment / SegmentSupplement 渲染**：Segment / SegmentSupplement 新类型 `html`，agent 生成的 HTML 报告 / 作品页 / 复盘文档作为该类型落到现有文件合同；渲染必须先实现隔离预览能力。
+
+实施时序与完成门槛由该轨道启动时的 initiative 与 spec 定义。本路线图只确立轨道存在和范围。
+
+产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，竞品对比与差异化叙事见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/competitive-analysis.md`。
+
+## 长期方向
+
+下列方向在产品本质长期轨道之外，进入主线前需要独立判断和 spec：
+
+- 草稿记忆空间：Home 入口的低摩擦录制设计（draft memory space / inbox 录制入口），让用户在未选定记忆空间时也能先表达、后归入。
+- 视频 Segment、图片 Segment、笔记 Segment 与 editor 深化。
+- 单个 Segment 级跨记忆空间移动。
 - 更完整的 SRS。
-- Reo runtime 内 AI agent。
+- Reo runtime 内嵌 AI agent（取代 prompt-bridge 外部 agent 协作）。
 - 数据库、auth、同步、分享和发布能力。

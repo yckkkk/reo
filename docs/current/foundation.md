@@ -53,13 +53,19 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 ## 产品方向
 
-Reo 面向本地优先的 AI-ready 记忆空间。记忆空间是用户选择的本地文件夹，用于保存一个用户定义的记忆主题，例如一本书的笔记、一门课、一次生活经历、一个生日派对或零碎灵感。
+Reo 是给 prosumer 用户的 agent-native 个人记忆 studio。产品差异化由三件套同时约束，缺一不是 Reo：
 
-Reo 的第一阶段产品主线是让用户更愿意表达，并把表达沉淀成可移动、可重温、AI-readable 的 memory。产品基线见 `product.md`，路线图见 `roadmap.md`。
+- **本地文件真源**：记忆空间是用户选择的本地文件夹，用于保存一个用户定义的记忆主题，例如一本书的笔记、一门课、一次生活经历、一个生日派对或零碎灵感。记忆内容以普通文件保存，供用户、文件系统工具和 Codex-class agent 直接读取。
+- **Agent-native 协作能力**：Codex-class agent 是产品第一公民。用户通过 AGENTS.md、skills、prompt-bridge 入口让 agent 读取、筛选、深化、生成、回顾记忆空间内容。原始记忆不被假设为资产；价值在 agent 与用户共同筛选、深化、重新表达之后才出现。
+- **极致交互气质（craft）**：录音场景感、Memory Studio 节奏、Gallery 走马灯视觉听觉、widget 渲染一致性、prompt-bridge 反馈细节是产品不变量。所有功能必须过 craft 门槛；任何拼凑、敷衍或"先做能用版本"的功能不能进入主链。
 
-记忆空间文件夹是真实产物源。用户记忆内容以普通文件保存，供用户、文件系统工具、Codex CLI 和未来 Reo 内置 AI 直接读取。DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。
+Reo 的目标用户是 Obsidian 类 prosumer：有思考深度、愿意尝试新工具、愿意配置和使用 AI 工具的用户。Reo 不为零摩擦上手优化；用户被允许、被预期理解记忆空间是本地文件夹、自行配置 agent 凭证、通过 Entity More 菜单复制 prompt 到外部 agent。
 
-每个记忆空间 root 使用 `AGENTS.md` 作为 AI 协作入口，Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。长期决策见 `docs/decisions/0003-local-memory-workspace.md`。
+记忆空间文件夹是真实产物源。DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。每个记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口，Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。
+
+当前阶段优先完成 `roadmap.md` P1-P6，把表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证落地，作为 agent 进入记忆空间工作的前提。Widget runtime、HTML Segment 渲染、prompt-bridge UI、Gallery 走马灯、AGENTS.md / skills 模板等产品本质长期轨道工作在表达主链稳固后启动独立 initiative，不与当前 active initiative 并行。
+
+长期产品本质决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，文件真源底层决策见 `docs/decisions/0003-local-memory-workspace.md`。
 
 ## Agent 行为
 

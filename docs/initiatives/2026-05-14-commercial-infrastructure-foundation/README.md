@@ -45,7 +45,8 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 
 - `career-roadmap.md`：AI 产品经理主线、增长产品经理副线、作品集交付物和阶段路线。
 - `interview-readiness.md`：求职 ROI 准则、最小作品集、内测运营、2/4/8 周路线和风险修正。
-- `product-thesis.md`：Reo 的产品创新主张，包括 agent-ready memory space、Codex-style 创作、设计系统约束 HTML 和功能更新纪律。
+- `product-thesis.md`：商业化与求职差异化叙事。产品本质判断引用 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
+- `competitive-analysis.md`：Reo vs Obsidian / MindBack / Notion / Mem / Cursor / Granola / Tana / Apple Notes 的完整竞品地图与短期决策建议。
 - `role-evolution.md`：AI-native PM、FDE、增长和工程协作能力变化，以及 Reo 的能力映射。
 - `plan.md`：商业化基础设施架构、阶段和数据模型草案。
 - `reuse-evaluation.md`：成熟开源方案复用评估。
@@ -63,7 +64,7 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 ## 完成条件
 
 - 完成 AI 产品经理求职作品集路线图，并明确增长产品经理副线的展示边界。
-- 完成 Reo 产品创新主张，明确记录平台、agent-ready memory space、Codex-style 创作和设计系统约束 artifact 的关系。
+- 完成 Reo 商业化与求职差异化叙事，并把竞品地图沉淀到 `competitive-analysis.md`。产品本质判断在 ADR 0006 中确立后引用。
 - 选定商业化基础设施的复用优先方案和拒绝原因。
 - 完成账号、会员、用量、支付、云资源、遥测、后台和合规的边界设计。
 - 明确公开付费发布前必须完成的合规、备案、支付、打包、更新和运维门禁。

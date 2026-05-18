@@ -4,31 +4,60 @@
 
 ## 定位
 
-Reo 是本地优先的 AI-ready 记忆空间。它不是单纯录音工具，也不是文件管理器；录音、笔记、照片、视频和外部导入文件都进入同一个 Workspace -> Memory -> Segment -> SegmentSupplement 模型。
+Reo 是给 prosumer 用户的 agent-native 个人记忆 studio。产品差异化由本地文件真源、Codex-class agent 协作能力、极致交互气质三件套同时约束，缺一不是 Reo。
 
-一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责组织。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文。
+Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，不是聊天助手；录音、笔记、照片、视频、外部导入文件、agent 生成的 widget 和 HTML 产物都进入同一个 Workspace -> Memory -> Segment -> SegmentSupplement 与 Workspace -> Widget 的对象图。
+
+一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责组织。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文。Widget 是 agent 根据用户需求生成的可交互定制面板，是 Workspace / Memory 的兄弟级实体，不是 Segment 的子类。
+
+产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充。`note`、`photo`、`video`、`imported_file` 和其他 SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。
+当前已实现的 Segment 类型是 `audio`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充。`note`、`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。
 
-Reo 的核心目标是降低表达阻力，让用户更愿意记录、回看、继续补充，并让这些记忆保持用户拥有、可迁移、AI-readable。
+Reo 的核心目标是让 agent 与用户共同筛选、深化、回顾、生成；用户负责表达、思考、判断，agent 负责筛选、整理、深化、引导用户做更深表达。原始记忆不被假设为资产，价值在 agent 与用户共同筛选、深化、重新表达之后才出现。SegmentSupplement 既是用户主动的补录，也是 agent 引导更深表达的载体。
+
+Reo 的目标用户是 Obsidian 类 prosumer，不为零摩擦上手优化。Reo 允许并预期用户理解记忆空间是本地文件夹、自行配置 ASR / agent 凭证、通过 Entity More 菜单复制 prompt 到外部 agent。
 
 ## 产品气质
 
 Reo 是安静、克制、柔和的私人表达工作室。用户打开 Reo 的第一印象不应是管理、协作、数据库、项目推进或效率压迫，而应是一个可以慢慢说话、慢慢回想、慢慢沉淀自己的空间。
 
-Reo 的美感来自对注意力的尊重：本地优先带来安全感，AI-ready 带来未来感，留白带来呼吸感，Memory 与 Segment 的生长关系带来生命感。产品 UI 使用 Soft Flat Design System：纯净画布、低对比灰度填充、大圆角、克制动效、真实音频波形和少量高饱和品牌色。界面不用同平面描边、基础阴影、装饰性渐变或伪媒体制造完成感。
+Reo 的美感来自对注意力的尊重：本地优先带来安全感，agent-native 带来未来感，留白带来呼吸感，Memory 与 Segment 的生长关系带来生命感，Gallery 走马灯带来沉浸感。产品 UI 使用 Soft Flat Design System：纯净画布、低对比灰度填充、大圆角、克制动效、真实音频波形和少量高饱和品牌色。界面不用同平面描边、基础阴影、装饰性渐变或伪媒体制造完成感。
+
+极致交互气质是 Reo 产品不变量。录音 / 播放 / 转录的场景感、Memory Studio 的节奏、Gallery 走马灯的视觉听觉节奏、widget 渲染一致性、prompt-bridge 操作反馈细节都必须过 craft 门槛；任何拼凑、敷衍或"先做能用版本"的功能不能进入主链，必要时先不做或留在 spec 中作为已知 gap。
+
+## 非目标
+
+为强化产品哲学一致性与目标用户聚焦，以下方向不进 Reo 主线，不在 runtime、roadmap、ADR 中作为产品能力出现：
+
+- **被动监听、后台屏幕捕获**：与 Reo studio 主动表达气质冲突，与"原始记忆不是资产"判断冲突。Reo 不做 Granola / Limitless / Rewind 类被动捕获。
+- **AI 自动整理 / 自动生成**：所有 agent 操作必须用户触发；Reo 不假装是自动化助手。
+- **替代用户思考的 chatbot**：Reo 强化用户主动思考，不做"问我任何问题"式 AI 伙伴。
+- **云端真源**：本地文件真源不可让步；云端只能是同步层 / 服务层，不替代用户记忆内容真源。
+- **声音复刻类创作工具能力**：属于创作工具不属于记忆 studio，目标用户偏移，且有 IP / 监管风险。如用户需要，可外部工具加工 Reo 导出的录音。
+- **移动碎片捕获入口**：包括独立移动 app、微信服务号、系统通知 / widget 快记。Reo 的赢法是低频高价值场景（深度访谈、播客录制、研究记录、创作素材、长形思考），不是高频碎片捕获。微信 + 移动碎片赛道已被 Flomo / MindBack 占据，Reo 不进入。
+- **平台强制绑定第三方模型**：Reo 不预设特定模型供应商；用户用自己 Codex / Claude credits 通过 prompt-bridge 操作。如未来 Reo 内嵌 AI runtime 需要选择供应商，需要独立 ADR 决定。
+
+完整非目标判断与产品本质决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
 
 ## 当前页面模型
 
+AppShell 顶层入口为 Home、Gallery 和当前 Loaded Workspace。
+
 ### Home
 
-Home 当前是全局入口 shell。它提供进入记忆空间、资料库和创建或打开 Workspace 的入口，不承载 Workspace 内的 Memory 导航。
+Home 当前是全局入口 shell。它提供进入记忆空间、Gallery 和创建或打开 Workspace 的入口，不承载 Workspace 内的 Memory 导航。Home 是 Workspace-level widget 的承载页之一。
 
-### Library
+### Gallery
 
-Library 当前是资料库占位入口。它只显示资料库页面标题，不展示 Memory、Segment 或 Workspace 管理内容。Workspace 创建、打开、切换和移除当前由 AppShell sidebar 的记忆空间列表承担。
+Gallery 是 Workspace 级别独立页面，承载跨 Memory 的沉浸式回顾和清晰信息呈现。Gallery 内部两个 tab：
+
+- **走马灯艺术 tab**：沉浸式记忆走马灯，记忆片段的录音 / 视频 / 图片以视觉听觉节奏感呈现和消失。走马灯艺术 tab 是 craft 不变量的核心承担页之一。
+- **列表 tab**：跨 Memory 的清晰信息呈现，承担资料库式的清单查阅职责。
+
+Gallery 当前不是 runtime surface。落地由独立 spec 处理；本节只记录信息架构定位。
 
 ### Loaded Workspace
 
@@ -85,8 +114,16 @@ Segment 删除是当前 Memory Studio 内 audio Segment 的危险操作。用户
 
 SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用户只能从对应 supplement tab 的 More 菜单进入删除确认；确认后 main process 把真实 supplement 目录移入 `.reo/trash/supplements/`，保留音频、转录和 manifest，并刷新父 Memory 的 supplementCount。删除成功后该 supplement tab 从 selected Segment 的 tab rail 消失，若当前正选中它则回到 `转录`；toast 提供可见 `恢复` action，把同一 supplement 目录移回 parent Segment `supplements/` 下。恢复要求 parent Memory 和 parent Segment 仍存在；parent missing 时 trash 保持可恢复。若删除或恢复已经移动文件但投影刷新失败，UI 保持与文件真源一致的删除或恢复投影并显示错误。删除和恢复都不暴露本地路径。
 
-## AI 边界
+## Agent 边界
 
-当前不实现 Reo runtime 内的 AI agent、chat、tool use、自动整理或 AI side effects。
+当前不实现 Reo runtime 内嵌的 AI chat、tool use、自动整理或 AI side effects。Reo 自身不调用任何远程 AI 服务（语音设置中的 ASR 凭证除外，见 `decisions/0004-doubao-voice-asr-endpoint-baseline.md`）。
 
-AI-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、audio segment 和已保存 transcript 可以被外部 AI 工具读取并理解。
+当前 agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现：
+
+- 记忆空间 root 的 `AGENTS.md` 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
+- Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单计划挂统一 `agent 操作 ▸` 子菜单。每条菜单项点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。
+- 默认 skills 涵盖引导、回顾（结合记忆曲线）、整理总结、widget 生成四类；widget example 在 widget 生成 skills 中维护。
+
+Prompt-bridge UI、AGENTS.md 模板、skills 目录、widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
+
+Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、audio segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。
