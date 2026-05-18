@@ -26,8 +26,9 @@ import {
   discardRecordingDraft,
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
-  initializeRecordingDraftWorkspace,
+  readFinalizedAudioSegmentBackfillSource,
   readFinalizedAudioSegmentContent,
+  readFinalizedAudioSegmentSupplementBackfillSource,
   readFinalizedAudioSegmentSupplementContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
@@ -48,6 +49,9 @@ import {
   createMemoryFromFileTruth,
   findSegmentDirectoryById,
   readMemoryDetailFromFileTruth,
+  setBeforeDuplicateRecordingCheckForTest,
+  setBeforeMemoryDirectoryCandidateScanForTest,
+  setBeforeMemoryIndexEntryReadForTest,
 } from '../../src/main/memoryFiles.js';
 import {
   parseWorkspaceMarkdownObject,
@@ -111,6 +115,57 @@ async function writeFinalizedAudioSegmentForTest(
   );
 }
 
+async function writeFinalizedAudioSupplementForTest({
+  memoryId = 'mem_active_draft_clear',
+  rootPath,
+  segmentId,
+  supplementId,
+}: {
+  readonly memoryId?: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<void> {
+  const supplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements',
+    supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'audio.webm'), new Uint8Array([2]));
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: 'Supplement', kind: 'audio' },
+      content: '# Supplement\n\n## Transcript\n\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'supplement',
+      workspaceId: 'ws_draft',
+      memoryId,
+      segmentId,
+      supplementId,
+      kind: 'audio',
+      createdAt: '2026-05-06T13:10:00.000Z',
+      finalizedAt: '2026-05-06T13:11:00.000Z',
+      updatedAt: '2026-05-06T13:11:00.000Z',
+      durationMs: 500,
+      nextSequence: 1,
+      audioByteLength: 1,
+    })}\n`
+  );
+}
+
 async function workspaceRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-draft-'));
   await initializeWorkspaceFiles({
@@ -120,7 +175,6 @@ async function workspaceRoot(): Promise<string> {
     createWorkspaceId: () => 'ws_draft',
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  await initializeRecordingDraftWorkspace({ rootPath: root });
   return root;
 }
 
@@ -293,6 +347,290 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
   assert.equal(tooLarge.ok, false);
   if (!tooLarge.ok) {
     assert.equal(tooLarge.error.code, 'ERR_RECORDING_CHUNK_TOO_LARGE');
+  }
+});
+
+test('finalized audio backfill source can reuse fill-missing transcript preflight', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_backfill_preflight_reuse';
+  const memoryId = 'mem_active_draft_clear';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  await writeFile(
+    path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Active draft clear', kind: 'audio' },
+      content: '# Active draft clear\n\n## Transcript\n\nExisting transcript',
+    })
+  );
+
+  const segment = await readFinalizedAudioSegmentBackfillSource({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    transcriptReadMode: 'assume-missing',
+  });
+
+  assert.equal(segment.ok, true);
+  if (segment.ok) {
+    try {
+      assert.equal(segment.transcript.exists, false);
+      assert.equal(segment.audioByteLength, 1);
+    } finally {
+      segment.dispose();
+    }
+  }
+
+  const supplementId = 'sup_backfill_preflight_reuse';
+  await writeFinalizedAudioSupplementForTest({
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+  });
+  await writeFile(
+    path.join(
+      rootPath,
+      'memories',
+      memoryId,
+      'segments',
+      segmentId,
+      'supplements',
+      supplementId,
+      'supplement.md'
+    ),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: 'Supplement', kind: 'audio' },
+      content: '# Supplement\n\n## Transcript\n\nExisting supplement transcript',
+    })
+  );
+
+  const supplement = await readFinalizedAudioSegmentSupplementBackfillSource({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    transcriptReadMode: 'assume-missing',
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(supplement.ok, true);
+  if (supplement.ok) {
+    try {
+      assert.equal(supplement.transcript.exists, false);
+      assert.equal(supplement.audioByteLength, 1);
+    } finally {
+      supplement.dispose();
+    }
+  }
+});
+
+test('finalized audio reads recheck duplicate segment validation on every public read', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_duplicate_cache';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  clearRecordingRuntimeStateForRoot(rootPath);
+
+  let duplicateChecks = 0;
+  setBeforeDuplicateRecordingCheckForTest(() => {
+    duplicateChecks += 1;
+  });
+  try {
+    const first = await readFinalizedAudioSegmentContent({
+      assertWorkspaceUsable: () => ({ ok: true }),
+      memoryId,
+      rootPath,
+      segmentId,
+    });
+    const second = await readFinalizedAudioSegmentContent({
+      assertWorkspaceUsable: () => ({ ok: true }),
+      memoryId,
+      rootPath,
+      segmentId,
+    });
+
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    assert.equal(duplicateChecks, 2);
+  } finally {
+    setBeforeDuplicateRecordingCheckForTest(null);
+  }
+});
+
+test('duplicate segment validation scans other Memory segment parents without reparsing each Memory', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_duplicate_linear_scan';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_duplicate_linear_other_1',
+    title: 'Other one',
+    now: '2026-05-17T01:00:00.000Z',
+  });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_duplicate_linear_other_2',
+    title: 'Other two',
+    now: '2026-05-17T01:01:00.000Z',
+  });
+
+  let memoryDirectoryCandidateScans = 0;
+  setBeforeMemoryDirectoryCandidateScanForTest(() => {
+    memoryDirectoryCandidateScans += 1;
+  });
+  try {
+    const result = await readFinalizedAudioSegmentContent({
+      assertWorkspaceUsable: () => ({ ok: true }),
+      memoryId,
+      rootPath,
+      segmentId,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(memoryDirectoryCandidateScans, 1);
+  } finally {
+    setBeforeMemoryDirectoryCandidateScanForTest(null);
+  }
+});
+
+test('recording finalize duplicate preflight scans segment parents without reparsing each Memory', async () => {
+  const rootPath = await workspaceRoot();
+  const segmentId = 'seg_finalize_duplicate_linear_scan';
+  const memoryId = 'mem_finalize_duplicate_linear_target';
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId,
+    title: 'Target',
+    now: '2026-05-17T01:00:00.000Z',
+  });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_finalize_duplicate_linear_other_1',
+    title: 'Other one',
+    now: '2026-05-17T01:01:00.000Z',
+  });
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_finalize_duplicate_linear_other_2',
+    title: 'Other two',
+    now: '2026-05-17T01:02:00.000Z',
+  });
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-17T01:03:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  let duplicatePreflightStarted = false;
+  let duplicatePreflightMemoryDirectoryScans = 0;
+  setBeforeDuplicateRecordingCheckForTest(() => {
+    duplicatePreflightStarted = true;
+  });
+  setBeforeMemoryDirectoryCandidateScanForTest(() => {
+    if (duplicatePreflightStarted) {
+      duplicatePreflightMemoryDirectoryScans += 1;
+    }
+  });
+  try {
+    const finalized = await finalizeRecordingDraft({
+      durationMs: 1000,
+      rootPath,
+      segmentId,
+      memoryId,
+      title: 'Target recording',
+      now: () => '2026-05-17T01:04:00.000Z',
+    });
+
+    assert.equal(finalized.ok, true);
+    assert.equal(duplicatePreflightMemoryDirectoryScans, 0);
+  } finally {
+    setBeforeDuplicateRecordingCheckForTest(null);
+    setBeforeMemoryDirectoryCandidateScanForTest(null);
+  }
+});
+
+test('finalized supplement audio reads reject duplicate parent segment identity', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const duplicateMemoryId = 'mem_duplicate_parent';
+  const segmentId = 'seg_duplicate_parent_for_supplement';
+  const supplementId = 'sup_duplicate_parent';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  await writeFinalizedAudioSupplementForTest({ rootPath, segmentId, supplementId });
+
+  const duplicateMemoryDirectory = path.join(rootPath, 'memories', duplicateMemoryId);
+  const duplicateSegmentDirectory = path.join(duplicateMemoryDirectory, 'segments', segmentId);
+  await mkdir(duplicateSegmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(duplicateMemoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: 'Duplicate parent' },
+      content: '# Duplicate parent\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'memories', `${duplicateMemoryId}.json`),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId: duplicateMemoryId,
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+    })}\n`
+  );
+  await writeFile(path.join(duplicateSegmentDirectory, 'audio.webm'), new Uint8Array([1]));
+  await writeFile(
+    path.join(duplicateSegmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Duplicate parent', kind: 'audio' },
+      content: '# Duplicate parent\n\n## Transcript\n\n',
+    })
+  );
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'segment',
+      workspaceId: 'ws_draft',
+      memoryId: duplicateMemoryId,
+      segmentId,
+      kind: 'audio',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      finalizedAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+      durationMs: 1000,
+      nextSequence: 1,
+      audioByteLength: 1,
+    })}\n`
+  );
+
+  const supplement = await readFinalizedAudioSegmentSupplementContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(supplement.ok, false);
+  if (!supplement.ok) {
+    assert.equal(supplement.error.code, 'ERR_RECORDING_NOT_FOUND');
   }
 });
 
@@ -898,6 +1236,180 @@ test('regenerate transcript save overwrites only when the transcript digest stil
   );
 });
 
+test('regenerate transcript save does not mark success when index refresh fails', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_regenerate_index_failure',
+    title: 'Regenerate index failure',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260518_regenerate_index_failure',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    memoryId: 'mem_regenerate_index_failure',
+    title: 'Regenerate index failure segment',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const initialSegmentSave = await saveRecordingMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_regenerate_index_failure',
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    fileName: 'transcript.md',
+    markdown: 'User segment transcript',
+  });
+  assert.equal(initialSegmentSave.ok, true);
+  await rewriteObjectManifest(
+    rootPath,
+    'segments',
+    'seg_20260518_regenerate_index_failure',
+    (manifest) => ({
+      ...manifest,
+      lastTranscriptionAttempt: 'failed',
+    })
+  );
+
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    throw new Error('index read blocked');
+  });
+  try {
+    const failedSegmentRegenerate = await saveRecordingMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_regenerate_index_failure',
+      segmentId: 'seg_20260518_regenerate_index_failure',
+      fileName: 'transcript.md',
+      markdown: 'Regenerated segment transcript',
+      allowOverwrite: true,
+      expectedTranscriptDigest: transcriptDigest('User segment transcript'),
+    });
+
+    assert.equal(failedSegmentRegenerate.ok, false);
+    if (!failedSegmentRegenerate.ok) {
+      assert.equal(failedSegmentRegenerate.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  const segmentDirectory = await findSegmentDirectoryById(
+    rootPath,
+    'seg_20260518_regenerate_index_failure'
+  );
+  const segmentMarkdown = await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8');
+  assert.match(segmentMarkdown, /User segment transcript/);
+  assert.doesNotMatch(segmentMarkdown, /Regenerated segment transcript/);
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_20260518_regenerate_index_failure'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_regenerate_index_failure',
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    createSupplementId: () => 'sup_20260518_regenerate_index_failure',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260518_regenerate_index_failure',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_regenerate_index_failure',
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    supplementId: 'sup_20260518_regenerate_index_failure',
+    title: 'Regenerate index failure supplement',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+  const initialSupplementSave = await saveSegmentSupplementMarkdown({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_regenerate_index_failure',
+    segmentId: 'seg_20260518_regenerate_index_failure',
+    supplementId: 'sup_20260518_regenerate_index_failure',
+    markdown: 'User supplement transcript',
+  });
+  assert.equal(initialSupplementSave.ok, true);
+  await rewriteObjectManifest(
+    rootPath,
+    'supplements',
+    'sup_20260518_regenerate_index_failure',
+    (manifest) => ({
+      ...manifest,
+      lastTranscriptionAttempt: 'failed',
+    })
+  );
+
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    throw new Error('index read blocked');
+  });
+  try {
+    const failedSupplementRegenerate = await saveSegmentSupplementMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_regenerate_index_failure',
+      segmentId: 'seg_20260518_regenerate_index_failure',
+      supplementId: 'sup_20260518_regenerate_index_failure',
+      markdown: 'Regenerated supplement transcript',
+      allowOverwrite: true,
+      expectedTranscriptDigest: transcriptDigest('User supplement transcript'),
+    });
+
+    assert.equal(failedSupplementRegenerate.ok, false);
+    if (!failedSupplementRegenerate.ok) {
+      assert.equal(failedSupplementRegenerate.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  const supplementDirectory = await findSupplementDirectoryById(
+    segmentDirectory,
+    'sup_20260518_regenerate_index_failure'
+  );
+  const supplementMarkdown = await readFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    'utf8'
+  );
+  assert.match(supplementMarkdown, /User supplement transcript/);
+  assert.doesNotMatch(supplementMarkdown, /Regenerated supplement transcript/);
+  assert.equal(
+    (await readObjectManifest(rootPath, 'supplements', 'sup_20260518_regenerate_index_failure'))[
+      'lastTranscriptionAttempt'
+    ],
+    'failed'
+  );
+});
+
 test('recording draft regenerate segment rollback preserves transcript when manifest success fails', async () => {
   const rootPath = await workspaceRoot();
   await createMemoryForDraftFinalize({
@@ -994,7 +1506,192 @@ test('recording draft regenerate segment rollback preserves transcript when mani
   );
 });
 
-test('recording draft regenerate segment reports file-written-index-stale when rollback fails', async () => {
+test('recording draft fill-missing rollback refreshes index after manifest success fails', async () => {
+  const rootPath = await workspaceRoot();
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId: 'mem_fill_missing_manifest_failure',
+    title: 'Fill missing manifest failure',
+    now: '2026-05-06T13:09:00.000Z',
+  });
+  await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    createSegmentId: () => 'seg_20260518_fill_missing_manifest_failure',
+    now: () => '2026-05-06T13:10:00.000Z',
+  });
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId: 'seg_20260518_fill_missing_manifest_failure',
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+  const finalizedSegment = await finalizeRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    segmentId: 'seg_20260518_fill_missing_manifest_failure',
+    memoryId: 'mem_fill_missing_manifest_failure',
+    title: 'Fill missing manifest failure segment',
+    durationMs: 3000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:11:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+
+  let segmentIndexRefreshes = 0;
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    segmentIndexRefreshes += 1;
+  });
+  setBeforeMarkdownWriteForTest(async () => {
+    await rewriteObjectManifest(
+      rootPath,
+      'segments',
+      'seg_20260518_fill_missing_manifest_failure',
+      (manifest) => ({
+        ...manifest,
+        workspaceId: 'ws_replaced_owner',
+      })
+    );
+  });
+  try {
+    const failedSegmentSave = await saveRecordingMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_fill_missing_manifest_failure',
+      segmentId: 'seg_20260518_fill_missing_manifest_failure',
+      fileName: 'transcript.md',
+      markdown: 'Backfilled segment transcript',
+      requireTranscriptMissing: true,
+    });
+
+    assert.equal(failedSegmentSave.ok, false);
+    if (!failedSegmentSave.ok) {
+      assert.equal(failedSegmentSave.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMarkdownWriteForTest(null);
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  const segmentDirectory = await findSegmentDirectoryById(
+    rootPath,
+    'seg_20260518_fill_missing_manifest_failure'
+  );
+  assert.equal(segmentIndexRefreshes, 2);
+  assert.doesNotMatch(
+    await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    /Backfilled segment transcript/
+  );
+  const indexAfterSegmentRollback = JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8')
+  ) as {
+    readonly memories?: readonly { readonly memoryId: string; readonly hasTranscript: boolean }[];
+  };
+  assert.notEqual(
+    indexAfterSegmentRollback.memories?.find(
+      (candidate) => candidate.memoryId === 'mem_fill_missing_manifest_failure'
+    )?.hasTranscript,
+    true
+  );
+  await rewriteObjectManifest(
+    rootPath,
+    'segments',
+    'seg_20260518_fill_missing_manifest_failure',
+    (manifest) => ({
+      ...manifest,
+      workspaceId: 'ws_draft',
+    })
+  );
+
+  const supplementDraft = await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_fill_missing_manifest_failure',
+    segmentId: 'seg_20260518_fill_missing_manifest_failure',
+    createSupplementId: () => 'sup_20260518_fill_missing_manifest_failure',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId: 'sup_20260518_fill_missing_manifest_failure',
+    sequence: 0,
+    chunk: new Uint8Array([4, 5]),
+  });
+  const finalizedSupplement = await finalizeSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_fill_missing_manifest_failure',
+    segmentId: 'seg_20260518_fill_missing_manifest_failure',
+    supplementId: 'sup_20260518_fill_missing_manifest_failure',
+    title: 'Fill missing manifest failure supplement',
+    durationMs: 2000,
+    lastTranscriptionAttemptOnFinalize: 'failed',
+    now: () => '2026-05-06T13:13:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+
+  let supplementIndexRefreshes = 0;
+  setBeforeMemoryIndexEntryReadForTest(() => {
+    supplementIndexRefreshes += 1;
+  });
+  setBeforeMarkdownWriteForTest(async () => {
+    await rewriteObjectManifest(
+      rootPath,
+      'supplements',
+      'sup_20260518_fill_missing_manifest_failure',
+      (manifest) => ({
+        ...manifest,
+        segmentId: 'seg_replaced_owner',
+      })
+    );
+  });
+  try {
+    const failedSupplementSave = await saveSegmentSupplementMarkdown({
+      rootPath,
+      workspaceId: 'ws_draft',
+      memoryId: 'mem_fill_missing_manifest_failure',
+      segmentId: 'seg_20260518_fill_missing_manifest_failure',
+      supplementId: 'sup_20260518_fill_missing_manifest_failure',
+      markdown: 'Backfilled supplement transcript',
+      requireTranscriptMissing: true,
+    });
+
+    assert.equal(failedSupplementSave.ok, false);
+    if (!failedSupplementSave.ok) {
+      assert.equal(failedSupplementSave.error.dataRetention, 'previous-file-preserved');
+    }
+  } finally {
+    setBeforeMarkdownWriteForTest(null);
+    setBeforeMemoryIndexEntryReadForTest(null);
+  }
+
+  const supplementDirectory = await findSupplementDirectoryById(
+    segmentDirectory,
+    'sup_20260518_fill_missing_manifest_failure'
+  );
+  assert.equal(supplementIndexRefreshes, 2);
+  assert.doesNotMatch(
+    await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    /Backfilled supplement transcript/
+  );
+  const detailAfterSupplementRollback = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_draft',
+    memoryId: 'mem_fill_missing_manifest_failure',
+  });
+  assert.equal(detailAfterSupplementRollback.ok, true);
+  if (detailAfterSupplementRollback.ok) {
+    const rolledBackSupplement = detailAfterSupplementRollback.value.segments
+      .find((candidate) => candidate.segmentId === 'seg_20260518_fill_missing_manifest_failure')
+      ?.supplements.find(
+        (candidate) => candidate.supplementId === 'sup_20260518_fill_missing_manifest_failure'
+      );
+    assert.notEqual(rolledBackSupplement?.transcript.exists, true);
+  }
+});
+
+test('recording draft regenerate segment rollback preserves transcript when index refresh fails', async () => {
   const rootPath = await workspaceRoot();
   await createMemoryForDraftFinalize({
     rootPath,
@@ -1076,8 +1773,8 @@ test('recording draft regenerate segment reports file-written-index-stale when r
 
     assert.equal(failedRegenerate.ok, false);
     if (!failedRegenerate.ok) {
-      assert.equal(failedRegenerate.error.code, 'ERR_WORKSPACE_METADATA_INVALID');
-      assert.equal(failedRegenerate.error.dataRetention, 'file-written-index-stale');
+      assert.equal(failedRegenerate.error.code, 'ERR_WORKSPACE_UPDATE_FAILED');
+      assert.equal(failedRegenerate.error.dataRetention, 'previous-file-preserved');
     }
   } finally {
     setBeforeMarkdownWriteForTest(null);
@@ -1089,8 +1786,9 @@ test('recording draft regenerate segment reports file-written-index-stale when r
     'seg_20260516_regenerate_rollback_failure'
   );
   const segmentMarkdown = await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8');
-  assert.equal(atomicCommitCount, 2);
-  assert.match(segmentMarkdown, /Regenerated segment transcript/);
+  assert.ok(atomicCommitCount >= 1);
+  assert.match(segmentMarkdown, /User segment transcript/);
+  assert.doesNotMatch(segmentMarkdown, /Regenerated segment transcript/);
 });
 
 test('recording draft regenerate supplement rollback preserves transcript when manifest success fails', async () => {
@@ -1558,7 +2256,7 @@ test('transcript save failures keep existing transcription attempt manifests', a
 
   assert.equal(failedSupplementSave.ok, false);
   if (!failedSupplementSave.ok) {
-    assert.equal(failedSupplementSave.error.dataRetention, 'file-written-index-stale');
+    assert.equal(failedSupplementSave.error.dataRetention, 'previous-file-preserved');
   }
   assert.equal(
     (await readObjectManifest(rootPath, 'supplements', 'sup_20260516_transcript_save_stale_index'))[
@@ -1630,7 +2328,7 @@ test('transcript save rejects manifest ownership changes before marking attempts
     assert.equal(failedSegmentSave.ok, false);
     if (!failedSegmentSave.ok) {
       assert.equal(failedSegmentSave.error.code, 'ERR_WORKSPACE_METADATA_INVALID');
-      assert.equal(failedSegmentSave.error.dataRetention, 'file-written-index-stale');
+      assert.equal(failedSegmentSave.error.dataRetention, 'previous-file-preserved');
     }
   } finally {
     setBeforeMarkdownWriteForTest(null);
@@ -1730,7 +2428,7 @@ test('segment supplement transcript save rejects manifest ownership changes befo
 
     assert.equal(failedSupplementSave.ok, false);
     if (!failedSupplementSave.ok) {
-      assert.equal(failedSupplementSave.error.dataRetention, 'file-written-index-stale');
+      assert.equal(failedSupplementSave.error.dataRetention, 'previous-file-preserved');
     }
   } finally {
     setBeforeMarkdownWriteForTest(null);

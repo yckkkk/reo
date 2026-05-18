@@ -7,6 +7,10 @@ import { countLabel } from './memoryLabels';
 import type { WorkspaceSession } from './workspaceApi';
 
 type WorkspaceMemory = WorkspaceSession['snapshot']['memories'][number];
+type MemoryRailRow = {
+  readonly memory: WorkspaceMemory;
+  readonly updatedAtLabel: string;
+};
 
 type MemoryRailProps = {
   readonly activeMemoryId?: string | null;
@@ -19,18 +23,12 @@ type MemoryRailProps = {
   readonly workspaceId: string;
 };
 
-function memoryUpdatedTimestamp(memory: WorkspaceMemory) {
-  const updatedAt = new Date(memory.updatedAt).getTime();
-  return Number.isNaN(updatedAt) ? 0 : updatedAt;
-}
-
-function updatedLabel(updatedAt: string) {
+function updatedLabel(updatedAt: string, now: Date) {
   const date = new Date(updatedAt);
   if (Number.isNaN(date.getTime())) {
     return '时间未知';
   }
 
-  const now = new Date();
   if (isSameDay(date, now)) {
     return format(date, 'HH:mm');
   }
@@ -43,6 +41,14 @@ function updatedLabel(updatedAt: string) {
   return format(date, 'yyyy/MM/dd HH:mm');
 }
 
+function memoryRailRows(memories: readonly WorkspaceMemory[]): readonly MemoryRailRow[] {
+  const now = new Date();
+  return memories.map((memory) => ({
+    memory,
+    updatedAtLabel: updatedLabel(memory.updatedAt, now),
+  }));
+}
+
 export function MemoryRail({
   activeMemoryId = null,
   id,
@@ -53,13 +59,7 @@ export function MemoryRail({
   workspaceHandle,
   workspaceId,
 }: MemoryRailProps) {
-  const sortedMemories = useMemo(
-    () =>
-      [...memories].sort(
-        (left, right) => memoryUpdatedTimestamp(right) - memoryUpdatedTimestamp(left)
-      ),
-    [memories]
-  );
+  const rows = useMemo(() => memoryRailRows(memories), [memories]);
 
   return (
     <nav
@@ -67,14 +67,14 @@ export function MemoryRail({
       aria-label="记忆列表"
       className="flex h-full min-h-0 w-full flex-col bg-background px-8 py-20"
     >
-      {sortedMemories.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="flex min-h-[96px] flex-col justify-center rounded-xl bg-card px-16 py-16">
           <p className="text-body font-medium leading-body text-foreground">还没有记忆</p>
           <p className="mt-4 text-ui-sm leading-ui-sm text-muted-foreground">先为这一刻命名。</p>
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {sortedMemories.map((memory) => {
+          {rows.map(({ memory, updatedAtLabel }) => {
             const isActive = memory.memoryId === activeMemoryId;
             return (
               <div
@@ -96,7 +96,7 @@ export function MemoryRail({
                     {memory.title}
                   </span>
                   <span className="mt-4 block truncate text-ui-sm leading-ui-sm text-muted-foreground">
-                    {updatedLabel(memory.updatedAt)} · {countLabel(memory.segmentCount, '个片段')}
+                    {updatedAtLabel} · {countLabel(memory.segmentCount, '个片段')}
                   </span>
                 </button>
                 <MemoryActionsMenu

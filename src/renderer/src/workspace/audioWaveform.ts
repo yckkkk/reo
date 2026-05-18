@@ -1,8 +1,11 @@
 export const MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT = 160;
+export const MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES = 20 * 1024 * 1024;
 
 type DecodedAudioBuffer = Pick<AudioBuffer, 'getChannelData' | 'length' | 'numberOfChannels'>;
 
 type AudioContextConstructor = new () => AudioContext;
+
+let sharedAudioContext: AudioContext | null = null;
 
 function createExactArrayBuffer(audioBytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(audioBytes.byteLength);
@@ -23,7 +26,13 @@ export function createWaveformDataFromAudioBuffer(
     return Array.from({ length: safeBarCount }, () => 0);
   }
 
-  const peaks = Array.from({ length: safeBarCount }, (_, barIndex) => {
+  const channelData = Array.from({ length: audioBuffer.numberOfChannels }, (_, channelIndex) =>
+    audioBuffer.getChannelData(channelIndex)
+  );
+  const peaks = new Array<number>(safeBarCount);
+  let maxPeak = 0;
+
+  for (let barIndex = 0; barIndex < safeBarCount; barIndex += 1) {
     const start = Math.floor((barIndex / safeBarCount) * audioBuffer.length);
     const end = Math.max(
       start + 1,
@@ -31,30 +40,29 @@ export function createWaveformDataFromAudioBuffer(
     );
     let peak = 0;
 
-    for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex += 1) {
-      const channelData = audioBuffer.getChannelData(channelIndex);
-      const safeEnd = Math.min(channelData.length, end);
+    for (const channel of channelData) {
+      const safeEnd = Math.min(channel.length, end);
 
       for (let sampleIndex = start; sampleIndex < safeEnd; sampleIndex += 1) {
-        peak = Math.max(peak, Math.abs(channelData[sampleIndex] ?? 0));
+        peak = Math.max(peak, Math.abs(channel[sampleIndex] ?? 0));
       }
     }
 
-    return peak;
-  });
-  const maxPeak = Math.max(...peaks);
+    peaks[barIndex] = peak;
+    maxPeak = Math.max(maxPeak, peak);
+  }
 
   if (maxPeak <= 0) {
     return peaks;
   }
 
-  return peaks.map((peak) => Math.min(1, peak / maxPeak));
+  for (let index = 0; index < peaks.length; index += 1) {
+    peaks[index] = Math.min(1, (peaks[index] ?? 0) / maxPeak);
+  }
+  return peaks;
 }
 
-export async function decodeAudioBytesToWaveformData(
-  audioBytes: Uint8Array,
-  barCount = MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
-): Promise<readonly number[]> {
+function getSharedAudioContext(): AudioContext {
   const AudioContextCtor =
     window.AudioContext ??
     (window as Window & { readonly webkitAudioContext?: AudioContextConstructor })
@@ -64,12 +72,32 @@ export async function decodeAudioBytesToWaveformData(
     throw new Error('AudioContext unavailable');
   }
 
-  const audioContext = new AudioContextCtor();
+  sharedAudioContext ??= new AudioContextCtor();
+  return sharedAudioContext;
+}
 
-  try {
-    const audioBuffer = await audioContext.decodeAudioData(createExactArrayBuffer(audioBytes));
-    return createWaveformDataFromAudioBuffer(audioBuffer, barCount);
-  } finally {
+export async function closeAudioWaveformDecoder(): Promise<void> {
+  const audioContext = sharedAudioContext;
+  sharedAudioContext = null;
+  if (audioContext) {
     await audioContext.close();
   }
+}
+
+export async function decodeAudioBytesToWaveformData(
+  audioBytes: Uint8Array,
+  barCount = MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
+): Promise<readonly number[]> {
+  const audioBuffer = await getSharedAudioContext().decodeAudioData(
+    createExactArrayBuffer(audioBytes)
+  );
+  return createWaveformDataFromAudioBuffer(audioBuffer, barCount);
+}
+
+export function canDecodeAudioBytesToWaveformData(byteLength: number): boolean {
+  return (
+    Number.isFinite(byteLength) &&
+    byteLength > 0 &&
+    byteLength <= MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES
+  );
 }

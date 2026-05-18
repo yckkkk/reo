@@ -50,6 +50,7 @@ const WORKSPACE_SCHEMA_VERSION = 1;
 const MAX_WORKSPACE_JSON_BYTES = 1_048_576;
 const EMPTY_WORKSPACE_IGNORED_ENTRIES = new Set(['.DS_Store']);
 const EMPTY_WORKSPACE_LOCK_REO_ENTRIES = new Set(['workspace.lock', 'workspace.lock.lock']);
+const WORKSPACE_ROOT_RENAME_TIMEOUT_MS = 5000;
 const DARWIN_MOVE_ITEM_NO_REPLACE_SCRIPT =
   'function run(argv) { ObjC.import("Foundation"); const ok = $.NSFileManager.defaultManager.moveItemAtPathToPathError(argv[0], argv[1], null); if (!ok) throw new Error("move failed"); }';
 
@@ -69,6 +70,9 @@ const workspaceIndexSchema = z
     memories: z.array(workspaceMemorySummarySchema),
   })
   .strict();
+
+type WorkspaceMetadata = z.infer<typeof workspaceMetadataSchema>;
+type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
 
 interface InitializeWorkspaceFilesOptions {
   readonly rootPath: string;
@@ -160,10 +164,24 @@ export type WorkspaceInitializeTarget =
     }
   | WorkspaceErrorEnvelope;
 
-export type WorkspaceOpenTarget =
+export type WorkspaceValidatedOpenTarget =
   | {
       readonly ok: true;
-      readonly kind: 'existing' | 'empty';
+      readonly canonicalRoot: string;
+      readonly metadata: WorkspaceMetadata;
+      readonly rootIdentity: DirectoryIdentity;
+    }
+  | WorkspaceErrorEnvelope;
+
+export type WorkspaceOpenTarget =
+  | ({
+      readonly ok: true;
+      readonly kind: 'existing';
+      readonly canonicalRoot: string;
+    } & Omit<Extract<WorkspaceValidatedOpenTarget, { readonly ok: true }>, 'ok' | 'canonicalRoot'>)
+  | {
+      readonly ok: true;
+      readonly kind: 'empty';
       readonly canonicalRoot: string;
     }
   | WorkspaceErrorEnvelope;
@@ -301,6 +319,7 @@ function renameDirectoryNoReplaceSync({
           {
             encoding: 'utf8',
             stdio: 'pipe',
+            timeout: WORKSPACE_ROOT_RENAME_TIMEOUT_MS,
             windowsHide: true,
           }
         )
@@ -308,6 +327,7 @@ function renameDirectoryNoReplaceSync({
         ? spawnSync('/bin/mv', ['-T', '-n', sourcePath, targetPath], {
             encoding: 'utf8',
             stdio: 'pipe',
+            timeout: WORKSPACE_ROOT_RENAME_TIMEOUT_MS,
             windowsHide: true,
           })
         : null;
@@ -435,10 +455,7 @@ function finalizeWorkspaceRootDirectoryRename({
   }
 }
 
-function snapshotFrom(
-  metadata: z.infer<typeof workspaceMetadataSchema>,
-  index: z.infer<typeof workspaceIndexSchema>
-): WorkspaceSnapshot {
+function snapshotFrom(metadata: WorkspaceMetadata, index: WorkspaceIndex): WorkspaceSnapshot {
   return {
     workspaceId: metadata.workspaceId,
     title: metadata.title,
@@ -453,9 +470,9 @@ async function repairWorkspaceTitleMetadataMirror({
   assertWorkspaceUsable: assertUsable,
 }: {
   readonly canonicalRoot: string;
-  readonly metadata: z.infer<typeof workspaceMetadataSchema>;
+  readonly metadata: WorkspaceMetadata;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
-}): Promise<z.infer<typeof workspaceMetadataSchema>> {
+}): Promise<WorkspaceMetadata> {
   const rootTitle = path.basename(canonicalRoot);
   if (metadata.title === rootTitle) {
     return metadata;
@@ -543,9 +560,7 @@ export async function createWorkspaceInitializeTargetInParent(
   return { ok: true, canonicalRoot: createdRoot };
 }
 
-async function readMetadata(
-  canonicalRoot: string
-): Promise<z.infer<typeof workspaceMetadataSchema> | null> {
+async function readMetadata(canonicalRoot: string): Promise<WorkspaceMetadata | null> {
   return readWorkspaceJsonNoFollow(
     getWorkspaceMetadataPath(canonicalRoot),
     workspaceMetadataSchema
@@ -554,7 +569,7 @@ async function readMetadata(
 
 async function validateWorkspaceOpenCanonicalTarget(
   canonicalRoot: string
-): Promise<WorkspaceInitializeTarget> {
+): Promise<WorkspaceValidatedOpenTarget> {
   const reoDirectory = await checkWorkspaceReoDirectory(canonicalRoot);
   if (typeof reoDirectory !== 'string') {
     return reoDirectory;
@@ -577,12 +592,25 @@ async function validateWorkspaceOpenCanonicalTarget(
     );
   }
 
-  return { ok: true, canonicalRoot };
+  try {
+    return {
+      ok: true,
+      canonicalRoot,
+      metadata,
+      rootIdentity: readDirectoryIdentitySync(canonicalRoot),
+    };
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Workspace metadata is invalid',
+      'none-written'
+    );
+  }
 }
 
 export async function validateWorkspaceOpenTarget(
   rootPath: string
-): Promise<WorkspaceInitializeTarget> {
+): Promise<WorkspaceValidatedOpenTarget> {
   const canonicalRoot = await resolveWorkspaceRoot(rootPath);
   if (typeof canonicalRoot !== 'string') {
     return canonicalRoot;
@@ -603,8 +631,7 @@ export async function validateWorkspaceOpenTargetWorkspaceId({
     return target;
   }
 
-  const metadata = await readMetadata(target.canonicalRoot);
-  if (!metadata || metadata.workspaceId !== workspaceId) {
+  if (target.metadata.workspaceId !== workspaceId) {
     return workspaceError(
       'ERR_WORKSPACE_METADATA_INVALID',
       'Workspace metadata is invalid',
@@ -734,7 +761,7 @@ async function readOrRebuildIndex(
     readonly assertBeforePersist?: () => Promise<void>;
     readonly rebuiltMemories?: readonly MemorySummary[];
   } = {}
-): Promise<z.infer<typeof workspaceIndexSchema>> {
+): Promise<WorkspaceIndex> {
   const parsedIndex = await readWorkspaceJsonNoFollow(
     getWorkspaceIndexPath(canonicalRoot),
     workspaceIndexSchema
@@ -752,10 +779,13 @@ async function readOrRebuildIndex(
   }
 
   if (persistReconciliation) {
+    const shouldRebuildDuringPersist = beforeWorkspaceIndexReconciliationPersistForTest !== null;
     memories = [
       ...(await replaceWorkspaceIndex(
         canonicalRoot,
-        async () => rebuildMemoryIndex(canonicalRoot, { persist: false }),
+        shouldRebuildDuringPersist
+          ? async () => rebuildMemoryIndex(canonicalRoot, { persist: false })
+          : () => memories,
         async () => {
           await beforeWorkspaceIndexReconciliationPersistForTest?.();
           await assertBeforePersist?.();
@@ -852,8 +882,8 @@ export async function openWorkspaceFiles({
   rootPath,
   assertWorkspaceUsable: assertUsable,
 }: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
-  let index: z.infer<typeof workspaceIndexSchema>;
-  let metadata: z.infer<typeof workspaceMetadataSchema>;
+  let index: WorkspaceIndex;
+  let metadata: WorkspaceMetadata;
   try {
     assertWorkspaceUsable(assertUsable);
     const target = await validateWorkspaceOpenTarget(rootPath);
@@ -862,17 +892,8 @@ export async function openWorkspaceFiles({
       return target;
     }
     const { canonicalRoot } = target;
-
-    const parsedMetadata = await readMetadata(canonicalRoot);
+    metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
-    if (!parsedMetadata) {
-      return workspaceError(
-        'ERR_WORKSPACE_METADATA_INVALID',
-        'Workspace metadata is invalid',
-        'none-written'
-      );
-    }
-    metadata = parsedMetadata;
     const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
     if (typeof draftsDirectory !== 'string') {
       return draftsDirectory;
@@ -921,9 +942,9 @@ export async function repairWorkspaceTitleMirrorFromRootName({
     }
 
     const { canonicalRoot } = target;
-    const metadata = await readMetadata(canonicalRoot);
+    const metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
-    if (!metadata || (workspaceId !== undefined && metadata.workspaceId !== workspaceId)) {
+    if (workspaceId !== undefined && metadata.workspaceId !== workspaceId) {
       return workspaceError(
         'ERR_WORKSPACE_METADATA_INVALID',
         'Workspace metadata is invalid',
@@ -972,11 +993,10 @@ export async function renameWorkspaceRootFromFileTruth({
       assertWorkspaceUsable(assertUsable);
       return target;
     }
-    const { canonicalRoot } = target;
-    const rootIdentity = readDirectoryIdentitySync(canonicalRoot);
-    const metadata = await readMetadata(canonicalRoot);
+    const { canonicalRoot, rootIdentity } = target;
+    const metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
-    if (!metadata || metadata.workspaceId !== workspaceId) {
+    if (metadata.workspaceId !== workspaceId) {
       return workspaceError(
         'ERR_WORKSPACE_METADATA_INVALID',
         'Workspace metadata is invalid',
@@ -1042,7 +1062,7 @@ export async function renameWorkspaceRootFromFileTruth({
       );
     }
 
-    let index: z.infer<typeof workspaceIndexSchema>;
+    let index: WorkspaceIndex;
     try {
       index = await readOrRebuildIndex(nextCanonicalRoot, {
         assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
@@ -1090,9 +1110,9 @@ export async function readWorkspaceSnapshotFromFileTruth({
     }
 
     const { canonicalRoot } = target;
-    let metadata = await readMetadata(canonicalRoot);
+    let metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
-    if (!metadata || metadata.workspaceId !== workspaceId) {
+    if (metadata.workspaceId !== workspaceId) {
       return workspaceError(
         'ERR_WORKSPACE_METADATA_INVALID',
         'Workspace metadata is invalid',
@@ -1105,7 +1125,9 @@ export async function readWorkspaceSnapshotFromFileTruth({
       metadata,
       ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
-    const readModel = await rebuildWorkspaceReadModel(canonicalRoot);
+    const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
     assertWorkspaceUsable(assertUsable);
     const index = await readOrRebuildIndex(canonicalRoot, {
       assertBeforePersist: async () => {
@@ -1114,6 +1136,66 @@ export async function readWorkspaceSnapshotFromFileTruth({
       },
       rebuiltMemories: readModel.memories,
     });
+    assertWorkspaceUsable(assertUsable);
+    return {
+      ok: true,
+      snapshot: snapshotFrom(metadata, index),
+    };
+  } catch (error) {
+    if (error instanceof WorkspaceOpenAborted) {
+      return error.envelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_OPEN_FAILED',
+      'Workspace snapshot could not be read',
+      'previous-file-preserved'
+    );
+  }
+}
+
+export async function readWorkspaceSnapshotFromIndex({
+  rootPath,
+  workspaceId,
+  assertWorkspaceUsable: assertUsable,
+}: ReadWorkspaceSnapshotOptions): Promise<WorkspaceFilesResult> {
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const target = await validateWorkspaceOpenTarget(rootPath);
+    if (!target.ok) {
+      assertWorkspaceUsable(assertUsable);
+      return target;
+    }
+
+    const { canonicalRoot } = target;
+    let metadata = target.metadata;
+    assertWorkspaceUsable(assertUsable);
+    if (metadata.workspaceId !== workspaceId) {
+      return workspaceError(
+        'ERR_WORKSPACE_METADATA_INVALID',
+        'Workspace metadata is invalid',
+        'previous-file-preserved'
+      );
+    }
+
+    metadata = await repairWorkspaceTitleMetadataMirror({
+      canonicalRoot,
+      metadata,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
+    assertWorkspaceUsable(assertUsable);
+
+    const index = await readWorkspaceJsonNoFollow(
+      getWorkspaceIndexPath(canonicalRoot),
+      workspaceIndexSchema
+    );
+    if (!index) {
+      return readWorkspaceSnapshotFromFileTruth({
+        rootPath,
+        workspaceId,
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+      });
+    }
+
     assertWorkspaceUsable(assertUsable);
     return {
       ok: true,

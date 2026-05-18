@@ -1,5 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createWaveformDataFromAudioBuffer, decodeAudioBytesToWaveformData } from './audioWaveform';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  canDecodeAudioBytesToWaveformData,
+  closeAudioWaveformDecoder,
+  createWaveformDataFromAudioBuffer,
+  decodeAudioBytesToWaveformData,
+  MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES,
+} from './audioWaveform';
+
+afterEach(async () => {
+  await closeAudioWaveformDecoder();
+  vi.unstubAllGlobals();
+});
 
 describe('audioWaveform', () => {
   it('derives normalized peaks from decoded audio samples across channels', () => {
@@ -60,8 +71,65 @@ describe('audioWaveform', () => {
     }
     const decodedBytes = new Uint8Array(decodedBuffer);
     expect([...decodedBytes]).toEqual([1, 2, 3]);
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
 
-    vi.unstubAllGlobals();
+    await closeAudioWaveformDecoder();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies exact Uint8Array buffers before WebAudio can detach them', async () => {
+    const samples = Float32Array.from([1]);
+    const decodeAudioData = vi.fn(async (_audioData: ArrayBuffer) => ({
+      length: samples.length,
+      numberOfChannels: 1,
+      getChannelData: () => samples,
+    }));
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+
+    const audioBytes = new Uint8Array([1, 2, 3]);
+    await decodeAudioBytesToWaveformData(audioBytes, 1);
+
+    const decodedBuffer = decodeAudioData.mock.calls[0]?.[0];
+    expect(decodedBuffer).toBeInstanceOf(ArrayBuffer);
+    expect(decodedBuffer).not.toBe(audioBytes.buffer);
+    expect([...(decodedBuffer ? new Uint8Array(decodedBuffer) : [])]).toEqual([1, 2, 3]);
+    expect([...audioBytes]).toEqual([1, 2, 3]);
+  });
+
+  it('reuses one AudioContext across repeated waveform decodes', async () => {
+    const decodeAudioData = vi.fn(async () => ({
+      length: 1,
+      numberOfChannels: 1,
+      getChannelData: () => Float32Array.from([1]),
+    }));
+    const close = vi.fn(async () => undefined);
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close, decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+
+    await decodeAudioBytesToWaveformData(new Uint8Array([1]), 1);
+    await decodeAudioBytesToWaveformData(new Uint8Array([2]), 1);
+
+    expect(AudioContextMock).toHaveBeenCalledTimes(1);
+    expect(decodeAudioData).toHaveBeenCalledTimes(2);
+    expect(close).not.toHaveBeenCalled();
+
+    await closeAudioWaveformDecoder();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps decoded waveform input size before WebAudio expansion', () => {
+    expect(canDecodeAudioBytesToWaveformData(1)).toBe(true);
+    expect(
+      canDecodeAudioBytesToWaveformData(MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES)
+    ).toBe(true);
+    expect(
+      canDecodeAudioBytesToWaveformData(MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES + 1)
+    ).toBe(false);
+    expect(canDecodeAudioBytesToWaveformData(0)).toBe(false);
   });
 });

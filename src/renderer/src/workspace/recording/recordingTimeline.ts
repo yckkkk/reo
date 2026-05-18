@@ -65,6 +65,37 @@ export function applyTranscriptResult(
   };
 }
 
+export function applyTranscriptResults(
+  timeline: RecordingTimeline,
+  segments: readonly TranscriptSegment[]
+): RecordingTimeline {
+  if (segments.length === 0) {
+    return timeline;
+  }
+
+  const acceptedSegments: TranscriptSegment[] = [];
+  let maxEndTimeMs = timeline.totalDurationMs;
+  for (const segment of segments) {
+    if (
+      isNonEmptyTranscriptSegment(segment) &&
+      segment.recordingSessionId === timeline.recordingSessionId &&
+      segment.revisionId === timeline.revisionId
+    ) {
+      acceptedSegments.push(segment);
+      maxEndTimeMs = Math.max(maxEndTimeMs, segment.endTimeMs);
+    }
+  }
+  if (acceptedSegments.length === 0) {
+    return timeline;
+  }
+
+  return {
+    ...timeline,
+    transcriptSegments: mergeTranscriptSegments(timeline.transcriptSegments, acceptedSegments),
+    totalDurationMs: maxEndTimeMs,
+  };
+}
+
 export function transcriptMarkdownFromSegments(segments: readonly TranscriptSegment[]) {
   return segments
     .filter((segment) => segment.text.trim().length > 0)
@@ -77,11 +108,51 @@ export function findTranscriptSegmentAtTime(
   timeMs: number
 ): TranscriptSegment | null {
   const safeTimeMs = Math.max(0, Math.round(timeMs));
-  return (
-    segments.find(
-      (segment) => segment.startTimeMs <= safeTimeMs && safeTimeMs < segment.endTimeMs
-    ) ?? null
-  );
+  let low = 0;
+  let high = segments.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const segment = segments[mid];
+    if (!segment) {
+      return null;
+    }
+    if (safeTimeMs < segment.startTimeMs) {
+      high = mid - 1;
+    } else if (safeTimeMs >= segment.endTimeMs) {
+      low = mid + 1;
+    } else {
+      return segment;
+    }
+  }
+
+  return null;
+}
+
+export function findTranscriptSegmentAtOrBeforeTime(
+  segments: readonly TranscriptSegment[],
+  timeMs: number
+): TranscriptSegment | null {
+  const safeTimeMs = Math.max(0, Math.round(timeMs));
+  let low = 0;
+  let high = segments.length - 1;
+  let candidate: TranscriptSegment | null = null;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const segment = segments[mid];
+    if (!segment) {
+      return candidate;
+    }
+    if (segment.startTimeMs <= safeTimeMs) {
+      candidate = segment;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return candidate;
 }
 
 export function hasTailAfterCursor(timeline: RecordingTimeline, epsilonMs = 50) {

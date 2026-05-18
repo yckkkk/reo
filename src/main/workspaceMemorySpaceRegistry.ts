@@ -1,7 +1,7 @@
 import { lstat, mkdir, opendir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
+import { writeWorkspaceFileAtomic } from './atomicWorkspaceFile.js';
 import {
   workspaceMemorySpaceSchema,
   type WorkspaceSnapshot,
@@ -14,6 +14,9 @@ const MAX_REGISTRY_MEMORY_SPACES = 100;
 const MAX_REGISTRY_TEXT_LENGTH = 4096;
 const MAX_REGISTRY_ROOT_PATH_LENGTH = 4096;
 const MAX_RENAMED_ROOT_SIBLING_SCAN = 200;
+const MAX_RENAMED_ROOT_TOTAL_SIBLING_SCAN = 1000;
+let renamedRootSiblingScanLimitForTest: number | null = null;
+let renamedRootTotalSiblingScanLimitForTest: number | null = null;
 
 const workspaceMetadataSchema = z
   .object({
@@ -40,7 +43,7 @@ const workspaceMemorySpaceRegistryEntrySchema = workspaceMemorySpaceSchema
 const workspaceMemorySpaceRegistrySchema = z
   .object({
     schemaVersion: z.literal(MEMORY_SPACE_REGISTRY_VERSION),
-    memorySpaces: z.array(workspaceMemorySpaceRegistryEntrySchema),
+    memorySpaces: z.array(workspaceMemorySpaceRegistryEntrySchema).max(MAX_REGISTRY_MEMORY_SPACES),
   })
   .strict();
 
@@ -72,6 +75,14 @@ export class WorkspaceMemorySpaceRegistryReadError extends Error {
   constructor() {
     super('Workspace memory space registry could not be read');
   }
+}
+
+export function setRenamedRootSiblingScanLimitForTest(limit: number | null): void {
+  renamedRootSiblingScanLimitForTest = limit;
+}
+
+export function setRenamedRootTotalSiblingScanLimitForTest(limit: number | null): void {
+  renamedRootTotalSiblingScanLimitForTest = limit;
 }
 
 export function createWorkspaceMemorySpaceRegistry({
@@ -117,9 +128,13 @@ export function createWorkspaceMemorySpaceRegistry({
   }
 
   async function writeRegistry(registry: WorkspaceMemorySpaceRegistryFile): Promise<void> {
+    const serialized = `${JSON.stringify(registry, null, 2)}\n`;
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_REGISTRY_BYTES) {
+      throw new Error('Memory space registry is too large');
+    }
     const directory = path.dirname(registryPath);
     await mkdir(directory, { recursive: true });
-    await writeWorkspaceJsonAtomic(registryPath, registry);
+    await writeWorkspaceFileAtomic(registryPath, serialized);
   }
 
   async function isSafeDirectory(directoryPath: string): Promise<boolean> {
@@ -140,25 +155,32 @@ export function createWorkspaceMemorySpaceRegistry({
     }
 
     try {
-      let inspected = 0;
-      const parent = await opendir(parentPath);
-      try {
-        for await (const entry of parent) {
-          inspected += 1;
-          if (inspected > MAX_RENAMED_ROOT_SIBLING_SCAN) {
-            return null;
-          }
-          if (!entry.isDirectory() || entry.isSymbolicLink()) {
-            continue;
-          }
-          const candidateRoot = path.join(parentPath, entry.name);
-          const metadata = await readWorkspaceMetadata(candidateRoot);
-          if (metadata?.workspaceId === memorySpace.workspaceId) {
-            return await realpath(candidateRoot);
-          }
+      const parentDirectory = await opendir(parentPath);
+      const scanLimit = renamedRootSiblingScanLimitForTest ?? MAX_RENAMED_ROOT_SIBLING_SCAN;
+      const totalScanLimit =
+        renamedRootTotalSiblingScanLimitForTest ?? MAX_RENAMED_ROOT_TOTAL_SIBLING_SCAN;
+      let scannedEntries = 0;
+      let scannedDirectoryCandidates = 0;
+      for await (const entry of parentDirectory) {
+        scannedEntries += 1;
+        if (scannedEntries > totalScanLimit) {
+          return null;
         }
-      } finally {
-        await parent.close().catch(() => {});
+        if (!entry.isDirectory() || entry.isSymbolicLink()) {
+          continue;
+        }
+        const candidateRoot = path.join(parentPath, entry.name);
+        const metadata = await readWorkspaceMetadata(candidateRoot);
+        if (!metadata) {
+          continue;
+        }
+        scannedDirectoryCandidates += 1;
+        if (scannedDirectoryCandidates > scanLimit) {
+          return null;
+        }
+        if (metadata?.workspaceId === memorySpace.workspaceId) {
+          return await realpath(candidateRoot);
+        }
       }
     } catch {
       return null;
@@ -202,12 +224,10 @@ export function createWorkspaceMemorySpaceRegistry({
   async function resolveMemorySpaceById(
     workspaceId: string
   ): Promise<WorkspaceMemorySpaceWithRoot | null> {
-    return withRegistryWriteLock(async () => {
-      const registry = await readRegistry();
-      const memorySpace =
-        registry.memorySpaces.find((candidate) => candidate.workspaceId === workspaceId) ?? null;
-      return memorySpace ? reconcileMemorySpace(memorySpace) : null;
-    });
+    const registry = await withRegistryWriteLock(readRegistry);
+    const memorySpace =
+      registry.memorySpaces.find((candidate) => candidate.workspaceId === workspaceId) ?? null;
+    return memorySpace ? reconcileMemorySpace(memorySpace) : null;
   }
 
   return {

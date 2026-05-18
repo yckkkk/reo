@@ -22,6 +22,7 @@ import {
   initializeWorkspaceFiles,
   openWorkspaceFiles,
   readWorkspaceSnapshotFromFileTruth,
+  readWorkspaceSnapshotFromIndex,
   repairWorkspaceTitleMirrorFromRootName,
   renameWorkspaceRootFromFileTruth,
   setBeforeWorkspaceRootRenameCommitForTest,
@@ -371,6 +372,41 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
   });
 });
 
+test('open workspace reconciles a corrupt index from one read model rebuild', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-rebuild-index-once-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '单次索引重建',
+    description: '',
+    createWorkspaceId: () => 'ws_rebuild_once',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root,
+    workspaceId: 'ws_rebuild_once',
+    memoryId: 'mem_rebuild_once',
+    segmentId: 'seg_rebuild_once',
+    title: '单次索引重建',
+    audio: new Uint8Array([1, 2, 3]),
+    durationMs: 3000,
+  });
+  await writeFile(path.join(root, '.reo', 'index.json'), '{not json');
+
+  let readModelRebuilds = 0;
+  setBeforeReadModelReaddirForTest(() => {
+    readModelRebuilds += 1;
+  });
+
+  try {
+    const opened = await openWorkspaceFiles({ rootPath: root });
+
+    assert.equal(opened.ok, true);
+    assert.equal(readModelRebuilds, 1);
+  } finally {
+    setBeforeReadModelReaddirForTest(null);
+  }
+});
+
 test('open workspace uses a valid index without scanning finalized memory files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-fast-open-index-'));
   await initializeWorkspaceFiles({
@@ -409,6 +445,55 @@ test('open workspace uses a valid index without scanning finalized memory files'
         memories: [indexedMemory],
       },
     });
+  } finally {
+    setBeforeReadModelReaddirForTest(null);
+  }
+});
+
+test('workspace index snapshot reads a valid index without rebuilding finalized memory files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-index-snapshot-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '索引快照',
+    description: '',
+    createWorkspaceId: () => 'ws_index_snapshot',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const indexedMemory = {
+    memoryId: 'mem_index_snapshot',
+    title: '索引里的记忆',
+    createdAt: '2026-05-06T13:08:00.000Z',
+    updatedAt: '2026-05-06T13:09:00.000Z',
+    segmentCount: 1,
+    durationMs: 3000,
+    audioByteLength: 3,
+    hasTranscript: false,
+    supplementCount: 0,
+  };
+  await writeFile(
+    path.join(root, '.reo', 'index.json'),
+    `${JSON.stringify({ schemaVersion: 1, memories: [indexedMemory] }, null, 2)}\n`
+  );
+  setBeforeReadModelReaddirForTest(() => {
+    throw new Error('index snapshot should not rebuild the read model when index is valid');
+  });
+
+  try {
+    assert.deepEqual(
+      await readWorkspaceSnapshotFromIndex({
+        rootPath: root,
+        workspaceId: 'ws_index_snapshot',
+      }),
+      {
+        ok: true,
+        snapshot: {
+          workspaceId: 'ws_index_snapshot',
+          title: path.basename(root),
+          description: '',
+          memories: [indexedMemory],
+        },
+      }
+    );
   } finally {
     setBeforeReadModelReaddirForTest(null);
   }

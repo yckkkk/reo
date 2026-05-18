@@ -240,6 +240,7 @@ test('recording transcription registry sends only current revision segments', as
   assert.deepEqual(events, [
     {
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       segments: [
@@ -310,6 +311,7 @@ test('recording transcription registry offsets service timestamps without exposi
   assert.deepEqual(events, [
     {
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       segments: [
@@ -711,6 +713,7 @@ test('recording transcription registry reconnects after a live session drops mid
   assert.deepEqual(events, [
     {
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       segments: [
@@ -763,6 +766,7 @@ test('recording transcription registry redacts the original reconnect error when
   assert.deepEqual(events, [
     {
       kind: 'error',
+      recordingFlowSessionId: 'recording-1',
       message: 'network dropped [redacted]',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
@@ -852,6 +856,7 @@ test('recording transcription registry closes terminal service errors without re
   assert.deepEqual(events, [
     {
       kind: 'error',
+      recordingFlowSessionId: 'recording-1',
       message: 'server rejected [redacted]',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',

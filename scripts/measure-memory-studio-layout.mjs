@@ -7,6 +7,9 @@ const defaultPort = Number(process.env.REMOTE_DEBUGGING_PORT || 9233);
 const defaultTolerance = 1.5;
 const defaultMinCardWidth = 136;
 const defaultMaxCardWidth = 150;
+const defaultHttpTimeoutMs = 5000;
+const defaultCdpCommandTimeoutMs = 10000;
+const defaultMaxItems = 24;
 
 function printHelp() {
   console.log(`Usage:
@@ -22,6 +25,8 @@ Options:
   --tolerance <px>         Allowed center alignment delta. Default: ${defaultTolerance}
   --min-card-width <px>    Minimum compact Segment card width. Default: ${defaultMinCardWidth}
   --max-card-width <px>    Maximum compact Segment card width. Default: ${defaultMaxCardWidth}
+  --max-items <number>     Measure a bounded sample across rendered Segment items. Default: ${defaultMaxItems}.
+  --full                   Measure every Segment item.
   --screenshot <path>      Write a viewport screenshot after measurement.
   --metrics <path>         Write machine-readable metrics JSON.
   --json                   Print metrics JSON to stdout.
@@ -43,11 +48,19 @@ function parseArgs(argv) {
     maxCardWidth: defaultMaxCardWidth,
     interaction: 'click-scroll',
     json: false,
+    maxItems: defaultMaxItems,
+  };
+
+  const readValue = (index, option) => {
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) {
+      fail(`${option} requires a value.`);
+    }
+    return value;
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    const next = argv[index + 1];
 
     switch (arg) {
       case '--help':
@@ -55,39 +68,46 @@ function parseArgs(argv) {
         options.help = true;
         break;
       case '--host':
-        options.host = next;
+        options.host = readValue(index, arg);
         index += 1;
         break;
       case '--port':
-        options.port = Number(next);
+        options.port = Number(readValue(index, arg));
         index += 1;
         break;
       case '--viewport':
-        options.viewport = parseViewport(next);
+        options.viewport = parseViewport(readValue(index, arg));
         index += 1;
         break;
       case '--interaction':
-        options.interaction = next;
+        options.interaction = readValue(index, arg);
         index += 1;
         break;
       case '--tolerance':
-        options.tolerance = Number(next);
+        options.tolerance = Number(readValue(index, arg));
         index += 1;
         break;
       case '--min-card-width':
-        options.minCardWidth = Number(next);
+        options.minCardWidth = Number(readValue(index, arg));
         index += 1;
         break;
       case '--max-card-width':
-        options.maxCardWidth = Number(next);
+        options.maxCardWidth = Number(readValue(index, arg));
         index += 1;
         break;
+      case '--max-items':
+        options.maxItems = Number(readValue(index, arg));
+        index += 1;
+        break;
+      case '--full':
+        options.maxItems = undefined;
+        break;
       case '--screenshot':
-        options.screenshot = next;
+        options.screenshot = readValue(index, arg);
         index += 1;
         break;
       case '--metrics':
-        options.metrics = next;
+        options.metrics = readValue(index, arg);
         index += 1;
         break;
       case '--json':
@@ -109,6 +129,12 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(options.maxCardWidth) || options.maxCardWidth < options.minCardWidth) {
     fail('--max-card-width must be greater than or equal to --min-card-width.');
+  }
+  if (
+    options.maxItems !== undefined &&
+    (!Number.isInteger(options.maxItems) || options.maxItems <= 0)
+  ) {
+    fail('--max-items must be a positive integer.');
   }
   if (!['click-scroll', 'none'].includes(options.interaction)) {
     fail('--interaction must be click-scroll or none.');
@@ -134,13 +160,17 @@ function parseViewport(value) {
 }
 
 async function fetchJson(url) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), defaultHttpTimeoutMs);
   let response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: controller.signal });
   } catch (error) {
     fail(
       `Cannot reach Electron remote debugging endpoint ${url}. Start runtime with REMOTE_DEBUGGING_PORT=<port> npm run dev. ${error.message}`
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
   if (!response.ok) {
     fail(`Remote debugging endpoint ${url} returned ${response.status}.`);
@@ -153,35 +183,80 @@ async function connectCdp(webSocketDebuggerUrl) {
   const pending = new Map();
   let nextId = 1;
 
+  const rejectPending = (error) => {
+    for (const { reject, timeoutId } of pending.values()) {
+      clearTimeout(timeoutId);
+      reject(error);
+    }
+    pending.clear();
+  };
+
   socket.on('message', (data) => {
     const message = JSON.parse(data.toString());
     if (!message.id || !pending.has(message.id)) {
       return;
     }
-    const { resolve, reject } = pending.get(message.id);
+    const { resolve, reject, timeoutId } = pending.get(message.id);
     pending.delete(message.id);
+    clearTimeout(timeoutId);
     if (message.error) {
       reject(new Error(message.error.message || JSON.stringify(message.error)));
       return;
     }
     resolve(message.result);
   });
+  socket.on('error', (error) => {
+    rejectPending(error);
+  });
+  socket.on('close', () => {
+    rejectPending(new Error('CDP socket closed before pending commands completed.'));
+  });
 
   await new Promise((resolve, reject) => {
-    socket.once('open', resolve);
-    socket.once('error', reject);
+    const timeoutId = setTimeout(() => {
+      socket.close();
+      reject(new Error(`CDP socket did not open within ${defaultCdpCommandTimeoutMs}ms.`));
+    }, defaultCdpCommandTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off('open', handleOpen);
+      socket.off('error', handleError);
+    };
+    const handleOpen = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once('open', handleOpen);
+    socket.once('error', handleError);
   });
 
   return {
     send(method, params = {}) {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return Promise.reject(new Error(`CDP socket is not open for ${method}.`));
+      }
       const id = nextId;
       nextId += 1;
       const payload = JSON.stringify({ id, method, params });
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        const timeoutId = setTimeout(() => {
+          pending.delete(id);
+          reject(
+            new Error(`CDP command timed out after ${defaultCdpCommandTimeoutMs}ms: ${method}`)
+          );
+        }, defaultCdpCommandTimeoutMs);
+        pending.set(id, { method, resolve, reject, timeoutId });
         socket.send(payload, (error) => {
           if (error) {
+            const pendingCommand = pending.get(id);
             pending.delete(id);
+            if (pendingCommand) {
+              clearTimeout(pendingCommand.timeoutId);
+            }
             reject(error);
           }
         });
@@ -205,7 +280,8 @@ async function evaluate(client, expression) {
   return result.result.value;
 }
 
-function measurementExpression() {
+function measurementExpression(maxItems) {
+  const maxMeasuredItems = maxItems === undefined ? 'null' : JSON.stringify(maxItems);
   return `(() => {
     const studio = document.querySelector('[aria-label="Memory Studio"]');
     if (!studio) {
@@ -223,6 +299,58 @@ function measurementExpression() {
     const studioLayout = studio.querySelector('[data-slot="memory-studio-layout"]');
     const scroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const items = Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-item"]'));
+    const maxMountedItems = 96;
+    if (items.length > maxMountedItems) {
+      return {
+        ok: false,
+        reason: 'Too many mounted Segment items; Segment strip windowing is not bounded.',
+        itemCount: items.length,
+        maxMountedItems,
+      };
+    }
+    const maxMeasuredItems = ${maxMeasuredItems};
+    const selectMeasuredItems = () => {
+      if (maxMeasuredItems === null || items.length <= maxMeasuredItems) {
+        return items.map((item, index) => ({ item, index }));
+      }
+      const selectedIndex = items.findIndex(
+        (item) => item.getAttribute('aria-current') === 'true'
+      );
+      const indexes = new Set();
+      const addIndex = (index) => {
+        if (Number.isInteger(index) && index >= 0 && index < items.length) {
+          indexes.add(index);
+        }
+      };
+      addIndex(0);
+      addIndex(items.length - 1);
+      addIndex(selectedIndex);
+      const visibleStart = scroll.scrollLeft;
+      const visibleEnd = scroll.scrollLeft + scroll.clientWidth;
+      for (let index = 0; index < items.length; index += 1) {
+        if (indexes.size >= maxMeasuredItems) break;
+        const item = items[index];
+        if (!item) continue;
+        const itemStart = item.offsetLeft;
+        const itemEnd = itemStart + item.offsetWidth;
+        if (itemEnd >= visibleStart && itemStart <= visibleEnd) {
+          addIndex(index);
+        }
+      }
+      let left = 0;
+      let right = items.length - 1;
+      while (indexes.size < maxMeasuredItems && left <= right) {
+        addIndex(left);
+        if (indexes.size >= maxMeasuredItems) break;
+        addIndex(right);
+        left += 1;
+        right -= 1;
+      }
+      return [...indexes]
+        .sort((leftIndex, rightIndex) => leftIndex - rightIndex)
+        .map((index) => ({ item: items[index], index }));
+    };
+    const measuredItems = selectMeasuredItems();
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
     const player = studio.querySelector('[data-slot="memory-studio-player"]');
     const playerTime = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
@@ -245,7 +373,7 @@ function measurementExpression() {
       };
     };
 
-    const itemMetrics = items.map((item, index) => {
+    const itemMetrics = measuredItems.map(({ item, index }) => {
       const card = item.querySelector('[data-slot="memory-studio-segment-card"]');
       const dot = item.querySelector('[data-slot="memory-studio-segment-timeline-dot"]');
       const time = item.querySelector('[data-slot="memory-studio-segment-timeline-time"]');
@@ -344,6 +472,8 @@ function measurementExpression() {
       standaloneTimelineExists: Boolean(nav),
       stripScrollOwnerCount: studio.querySelectorAll('[data-slot="memory-studio-segment-strip-scroll"]').length,
       itemCount: items.length,
+      measuredItemCount: measuredItems.length,
+      itemSampled: measuredItems.length < items.length,
       selectedItemCount: items.filter((item) => item.getAttribute('aria-current') === 'true').length,
       scroll: {
         left: scroll.scrollLeft,
@@ -689,7 +819,7 @@ async function main() {
     );
     await evaluate(client, waitExpression());
 
-    const before = await evaluate(client, measurementExpression());
+    const before = await evaluate(client, measurementExpression(options.maxItems));
     if (!before.ok) {
       fail(before.reason);
     }
@@ -721,7 +851,7 @@ async function main() {
       }
     }
 
-    let after = await evaluate(client, measurementExpression());
+    let after = await evaluate(client, measurementExpression(options.maxItems));
     if (options.interaction === 'click-scroll') {
       const scrollCenter = await evaluate(
         client,
@@ -739,7 +869,7 @@ async function main() {
         await evaluate(client, waitExpression());
       }
 
-      after = await evaluate(client, measurementExpression());
+      after = await evaluate(client, measurementExpression(options.maxItems));
       if (
         before.scroll.width > before.scroll.clientWidth &&
         after.scroll.left === before.scroll.left
@@ -756,7 +886,7 @@ async function main() {
         })()`
         );
         await evaluate(client, waitExpression());
-        after = await evaluate(client, measurementExpression());
+        after = await evaluate(client, measurementExpression(options.maxItems));
         scrollMethod = 'dom-scroll-fallback';
       }
     }
@@ -774,6 +904,7 @@ async function main() {
         min: options.minCardWidth,
         max: options.maxCardWidth,
       },
+      maxItems: options.maxItems ?? null,
       before,
       after,
       failures,
@@ -795,7 +926,7 @@ async function main() {
       console.log(JSON.stringify(metrics, null, 2));
     } else {
       console.log(
-        `Memory Studio layout telemetry: ${metrics.ok ? 'PASS' : 'FAIL'}; items=${after.itemCount}; scrollLeft=${after.scroll.left}; clickedSecondItem=${clickedSecondItem}; scrollMethod=${scrollMethod}`
+        `Memory Studio layout telemetry: ${metrics.ok ? 'PASS' : 'FAIL'}; items=${after.itemCount}; measuredItems=${after.measuredItemCount}; scrollLeft=${after.scroll.left}; clickedSecondItem=${clickedSecondItem}; scrollMethod=${scrollMethod}`
       );
     }
 
@@ -803,20 +934,20 @@ async function main() {
       fail(`Memory Studio layout telemetry failed:\n- ${failures.join('\n- ')}`);
     }
   } finally {
+    await evaluate(
+      client,
+      `(() => {
+        window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+        if (scroll) {
+          scroll.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        }
+        window.dispatchEvent(new Event('resize'));
+        return true;
+      })()`
+    ).catch(() => undefined);
     if (viewportOverrideApplied) {
       await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
-      await evaluate(
-        client,
-        `(() => {
-          window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
-          const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
-          if (scroll) {
-            scroll.scrollTo({ left: 0, top: 0, behavior: 'auto' });
-          }
-          window.dispatchEvent(new Event('resize'));
-          return true;
-        })()`
-      ).catch(() => undefined);
     }
     client.close();
   }

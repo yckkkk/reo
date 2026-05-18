@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { ESLint } from 'eslint';
 
+const eslint = new ESLint({ cwd: process.cwd() });
+
 function preloadSourceFiles(directory = 'src/preload'): readonly string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const filePath = `${directory}/${entry.name}`;
@@ -34,7 +36,6 @@ test('preload source does not import Zod-backed contracts or regular Node packag
 });
 
 test('preload source lint rejects ordinary package imports', async () => {
-  const eslint = new ESLint({ cwd: process.cwd() });
   const results = await eslint.lintText(
     ["import { format } from 'date-fns';", "export const value = format(new Date(), 'yyyy');"].join(
       '\n'
@@ -51,7 +52,6 @@ test('preload source lint rejects ordinary package imports', async () => {
 });
 
 test('preload source lint rejects relative imports outside preload and safe contract modules', async () => {
-  const eslint = new ESLint({ cwd: process.cwd() });
   const results = await eslint.lintText(
     ["import { createWindow } from '../main/index.js';", 'export const value = createWindow;'].join(
       '\n'
@@ -68,7 +68,6 @@ test('preload source lint rejects relative imports outside preload and safe cont
 });
 
 test('preload source lint rejects unsafe dynamic imports', async () => {
-  const eslint = new ESLint({ cwd: process.cwd() });
   const packageResults = await eslint.lintText(
     ["const dateFns = await import('date-fns');", 'export const value = Boolean(dateFns);'].join(
       '\n'

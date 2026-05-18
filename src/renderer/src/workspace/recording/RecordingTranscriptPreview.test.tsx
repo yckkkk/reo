@@ -31,6 +31,20 @@ const thirdSegment: TranscriptSegment = {
   text: '第三段转写',
 };
 
+function createTranscriptSegments(count: number) {
+  return Array.from({ length: count }, (_, index): TranscriptSegment => {
+    const startTimeMs = index * 1_000;
+    return {
+      endTimeMs: startTimeMs + 1_000,
+      isFinal: true,
+      recordingSessionId: 'recording-1',
+      revisionId: 'revision-1',
+      startTimeMs,
+      text: `段落${index}`,
+    };
+  });
+}
+
 function setScrollMetrics(
   element: HTMLElement,
   {
@@ -271,6 +285,53 @@ describe('RecordingTranscriptPreview', () => {
 
     expect(scrollTo).toHaveBeenCalledTimes(2);
     expect(scrollTo).toHaveBeenLastCalledWith({ behavior: 'instant', top: 360 });
+  });
+
+  it('windows long transcript segments around the focused segment', () => {
+    render(
+      <RecordingTranscriptPreview
+        fallback="实时转写会在你说话时安静地出现在这里。"
+        focusTimeMs={60_500}
+        segments={createTranscriptSegments(120)}
+      />
+    );
+
+    const scrollContainer = screen.getByTestId('recording-transcript-scroll');
+    expect(scrollContainer.querySelectorAll('span')).toHaveLength(82);
+    expect(screen.getByText('段落60')).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByText('段落29')).not.toBeInTheDocument();
+    expect(screen.getByText('段落30')).toBeInTheDocument();
+    expect(screen.getByText('段落109')).toBeInTheDocument();
+    expect(screen.queryByText('段落110')).not.toBeInTheDocument();
+    expect(screen.queryByText('段落0', { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText('段落119', { exact: false })).not.toBeInTheDocument();
+    expect(scrollContainer.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+  });
+
+  it('keeps off-window transcript text out of the rendered preview when hidden segments change', () => {
+    const longSegments = createTranscriptSegments(120);
+    const { rerender } = render(
+      <RecordingTranscriptPreview
+        fallback="实时转写会在你说话时安静地出现在这里。"
+        focusTimeMs={60_500}
+        segments={longSegments}
+      />
+    );
+
+    expect(screen.queryByText(/段落0/)).not.toBeInTheDocument();
+
+    rerender(
+      <RecordingTranscriptPreview
+        fallback="实时转写会在你说话时安静地出现在这里。"
+        focusTimeMs={60_500}
+        segments={longSegments.map((segment, index) =>
+          index === 0 ? { ...segment, text: '更新后的隐藏段落' } : segment
+        )}
+      />
+    );
+
+    expect(screen.queryByText(/更新后的隐藏段落/)).not.toBeInTheDocument();
+    expect(screen.getByText('段落60')).toHaveAttribute('aria-current', 'true');
   });
 
   it('does not reserve a pane-like filled transcript block', () => {

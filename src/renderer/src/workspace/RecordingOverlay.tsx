@@ -59,12 +59,13 @@ import { RecordingTranscriptPreview } from './recording/RecordingTranscriptPrevi
 import { RecordingWaveform } from './recording/RecordingWaveform';
 import { RECORDING_SPEECH_TEXT_CLASS } from './recording/recordingTypography';
 import {
-  applyTranscriptResult,
+  applyTranscriptResults,
   createRecordingTimeline,
   hasTailAfterCursor,
   moveRecordingCursor,
   startReplacementAtCursor,
   transcriptMarkdownFromSegments,
+  type RecordingTimeline,
   type TranscriptSegment,
 } from './recording/recordingTimeline';
 import {
@@ -123,11 +124,14 @@ const RECORDING_TIMER_INTERVAL_MS = 40;
 const SILENCE_NOTICE_THRESHOLD_MS = 15_000;
 const AUDIBLE_LEVEL_THRESHOLD = 0.08;
 const WAVEFORM_SAMPLE_INTERVAL_MS = 80;
+const WAVEFORM_RENDER_INTERVAL_MS = 240;
 const WAVEFORM_SEEK_EPSILON_MS = 50;
 const MAX_WAVEFORM_SAMPLES = 2400;
 const MAX_COMPLETION_BACKFILL_PCM_DURATION_MS = 10 * 60 * 1000;
 const TRANSCRIPTION_START_BUFFER_MS = 10_000;
 const MAX_TRANSCRIPTION_AUDIO_QUEUE_BYTES = 1024 * 1024;
+const TRANSCRIPTION_SEGMENT_BATCH_DELAY_MS = 100;
+const TRANSCRIPTION_RECOVERY_SNAPSHOT_INTERVAL_MS = 1000;
 const DRAFT_PLAYBACK_READY_TIMEOUT_MS = 1500;
 const SHORT_RECORDING_NOTICE =
   '录音时间较短，可能无法生成有效内容。你可以继续录音，或再次点击完成保存。';
@@ -160,6 +164,13 @@ type DraftPlaybackPreview = {
   readonly session: number | null;
   readonly status: DraftPlaybackStatus;
   readonly url: string | null;
+};
+
+type DraftPlaybackUrlCache = {
+  readonly byteLength: number;
+  readonly chunkCount: number;
+  readonly session: number;
+  readonly url: string;
 };
 
 const EMPTY_DRAFT_PLAYBACK_PREVIEW: DraftPlaybackPreview = {
@@ -231,21 +242,97 @@ function formatRecordingTime(durationMs: number) {
     .padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
 }
 
+function RecordingElapsedTimer({
+  cursorTimeMs,
+  elapsedMs,
+  readElapsedMs,
+  status,
+}: {
+  readonly cursorTimeMs: number;
+  readonly elapsedMs: number;
+  readonly readElapsedMs: () => number;
+  readonly status: RecordingState['status'];
+}) {
+  const [liveElapsedMs, setLiveElapsedMs] = useState(elapsedMs);
+
+  useEffect(() => {
+    setLiveElapsedMs(elapsedMs);
+  }, [elapsedMs]);
+
+  useEffect(() => {
+    if (status !== 'recording') {
+      setLiveElapsedMs(elapsedMs);
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      setLiveElapsedMs(readElapsedMs());
+    }, RECORDING_TIMER_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [elapsedMs, readElapsedMs, status]);
+
+  const visibleTimerMs =
+    status === 'paused' || status === 'replacing' ? cursorTimeMs : liveElapsedMs;
+
+  return (
+    <p className="font-sans text-heading-lg font-bold leading-none text-foreground">
+      {formatRecordingTime(visibleTimerMs)}
+    </p>
+  );
+}
+
+function RecordingElapsedStatus({
+  elapsedMs,
+  readElapsedMs,
+  status,
+  statusText,
+}: {
+  readonly elapsedMs: number;
+  readonly readElapsedMs: () => number;
+  readonly status: RecordingState['status'];
+  readonly statusText: string;
+}) {
+  const [announcedElapsedMs, setAnnouncedElapsedMs] = useState(elapsedMs);
+
+  useEffect(() => {
+    setAnnouncedElapsedMs(elapsedMs);
+  }, [elapsedMs]);
+
+  useEffect(() => {
+    if (status !== 'recording') {
+      setAnnouncedElapsedMs(elapsedMs);
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      setAnnouncedElapsedMs(readElapsedMs());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [elapsedMs, readElapsedMs, status]);
+
+  const elapsedSeconds = Math.floor(announcedElapsedMs / 1000);
+
+  return (
+    <p className="sr-only">
+      {statusText} 已录制：{elapsedSeconds} 秒。
+    </p>
+  );
+}
+
 function recordingSessionNumberFrom(recordingSessionId: string) {
   const match = /^recording-(\d+)$/.exec(recordingSessionId);
   return match ? Number.parseInt(match[1] ?? '0', 10) : null;
 }
 
-function appendBoundedWaveformSample(samples: readonly number[], sample: number) {
-  const next = [...samples, sample];
-  if (next.length <= MAX_WAVEFORM_SAMPLES) {
-    return next;
+function appendBoundedWaveformSampleInPlace(samples: number[], sample: number): void {
+  samples.push(sample);
+  if (samples.length <= MAX_WAVEFORM_SAMPLES) {
+    return;
   }
-  const compacted: number[] = [];
-  for (let index = 0; index < next.length; index += 2) {
-    compacted.push(Math.max(next[index] ?? 0, next[index + 1] ?? 0));
+  let writeIndex = 0;
+  for (let readIndex = 0; readIndex < samples.length; readIndex += 2) {
+    samples[writeIndex] = Math.max(samples[readIndex] ?? 0, samples[readIndex + 1] ?? 0);
+    writeIndex += 1;
   }
-  return compacted.slice(-MAX_WAVEFORM_SAMPLES);
+  samples.length = Math.min(writeIndex, MAX_WAVEFORM_SAMPLES);
 }
 
 function resolveReplacementStartMs({
@@ -336,6 +423,8 @@ export function RecordingOverlay({
   const transcriptionDisabled = voiceSettings?.enabled === false;
   const [state, setState] = useState<RecordingState>(() => createInitialRecordingState());
   const [elapsedMs, setElapsedMs] = useState(0);
+  const elapsedMsRef = useRef(0);
+  const lastElapsedRenderSecondRef = useRef(0);
   const [timeline, setTimeline] = useState(() =>
     createRecordingTimeline({ recordingSessionId: 'recording-0', revisionId: 'revision-0' })
   );
@@ -351,11 +440,17 @@ export function RecordingOverlay({
   const appendQueueRef = useRef<Promise<void>>(Promise.resolve());
   const timelineRef = useRef(timeline);
   const capturedChunksRef = useRef<CapturedRecordingChunk[]>([]);
+  const capturedChunkByteLengthRef = useRef(0);
   const recoveryAudioChunksRef = useRef<RecordingRecoveryAudioChunk[]>([]);
   const capturedPcmChunksRef = useRef<CapturedPcmChunk[]>([]);
+  const capturedPcmChunksHeadIndexRef = useRef(0);
   const controllerRef = useRef<RecordingMediaController | null>(null);
   const draftAudioRef = useRef<HTMLAudioElement | null>(null);
   const draftPlaybackPreviewRef = useRef<DraftPlaybackPreview>(EMPTY_DRAFT_PLAYBACK_PREVIEW);
+  const draftPlaybackUrlCacheRef = useRef<DraftPlaybackUrlCache | null>(null);
+  const waveformSamplesRef = useRef<readonly number[]>(waveformSamples);
+  const waveformSampleBufferRef = useRef<number[]>([]);
+  const lastWaveformRenderAtMsRef = useRef(0);
   const activeDraftRef = useRef<{
     readonly segmentId: string;
     readonly recordingSession: number;
@@ -375,6 +470,12 @@ export function RecordingOverlay({
   const playbackSessionRef = useRef(0);
   const replacementCopySessionRef = useRef<number | null>(null);
   const transcriptDraftRef = useRef('');
+  const transcriptDraftDirtyRef = useRef(false);
+  const pendingTranscriptionSegmentsRef = useRef<TranscriptSegment[]>([]);
+  const transcriptionSegmentFlushTimerRef = useRef<number | null>(null);
+  const pendingTranscriptionRecoveryTimelineRef = useRef<RecordingTimeline | null>(null);
+  const transcriptionRecoverySnapshotTimerRef = useRef<number | null>(null);
+  const lastTranscriptionRecoverySnapshotAtMsRef = useRef(0);
   const completionBackfillTooLargeRef = useRef(false);
   const finalTranscriptionNeedsBackfillRef = useRef(false);
   const appendFailureRef = useRef<string | null>(null);
@@ -415,9 +516,31 @@ export function RecordingOverlay({
   }, []);
 
   function clearCapturedTranscriptionPcm() {
-    capturedPcmChunksRef.current = [];
+    replaceCapturedPcmChunks([]);
+    capturedPcmChunksHeadIndexRef.current = 0;
     completionBackfillTooLargeRef.current = false;
     lastCapturedPcmChunkEndMsRef.current = readRecordingDurationMs();
+  }
+
+  function readCapturedPcmChunks() {
+    const headIndex = capturedPcmChunksHeadIndexRef.current;
+    if (headIndex <= 0) {
+      return capturedPcmChunksRef.current;
+    }
+    return capturedPcmChunksRef.current.slice(headIndex);
+  }
+
+  function replaceCapturedPcmChunks(chunks: CapturedPcmChunk[]) {
+    capturedPcmChunksRef.current = chunks;
+    capturedPcmChunksHeadIndexRef.current = 0;
+  }
+
+  function compactCapturedPcmChunksIfNeeded() {
+    const headIndex = capturedPcmChunksHeadIndexRef.current;
+    if (headIndex < 64 || headIndex * 2 < capturedPcmChunksRef.current.length) {
+      return;
+    }
+    replaceCapturedPcmChunks(capturedPcmChunksRef.current.slice(headIndex));
   }
 
   function clearTranscriptionRuntime({ clearPcm = false }: { readonly clearPcm?: boolean } = {}) {
@@ -441,41 +564,138 @@ export function RecordingOverlay({
 
   const replaceTranscriptDraft = useCallback((nextTranscript: string) => {
     transcriptDraftRef.current = nextTranscript;
+    transcriptDraftDirtyRef.current = false;
   }, []);
+
+  const readCurrentTranscriptDraft = useCallback(() => {
+    if (transcriptDraftDirtyRef.current) {
+      transcriptDraftRef.current = transcriptMarkdownFromSegments(
+        timelineRef.current.transcriptSegments
+      );
+      transcriptDraftDirtyRef.current = false;
+    }
+    return transcriptDraftRef.current;
+  }, []);
+
+  const clearPendingTranscriptionSegmentFlush = useCallback(() => {
+    if (transcriptionSegmentFlushTimerRef.current !== null) {
+      window.clearTimeout(transcriptionSegmentFlushTimerRef.current);
+      transcriptionSegmentFlushTimerRef.current = null;
+    }
+    pendingTranscriptionSegmentsRef.current = [];
+  }, []);
+
+  const persistTranscriptionRecoveryTimeline = useCallback(
+    (next: RecordingTimeline) => {
+      const activeDraft = activeDraftRef.current;
+      if (!activeDraft) {
+        return;
+      }
+      updateRecordingRecoverySnapshot({
+        patch: {
+          durationMs: next.totalDurationMs,
+          recordingSessionId: next.recordingSessionId,
+          revisionId: next.revisionId,
+          transcriptSegments: next.transcriptSegments,
+        },
+        segmentId: activeDraft.segmentId,
+        workspaceId: workspaceSession.workspaceId,
+      });
+      lastTranscriptionRecoverySnapshotAtMsRef.current = Date.now();
+    },
+    [workspaceSession.workspaceId]
+  );
+
+  const flushPendingTranscriptionRecoverySnapshot = useCallback(() => {
+    if (transcriptionRecoverySnapshotTimerRef.current !== null) {
+      window.clearTimeout(transcriptionRecoverySnapshotTimerRef.current);
+      transcriptionRecoverySnapshotTimerRef.current = null;
+    }
+    const pendingTimeline = pendingTranscriptionRecoveryTimelineRef.current;
+    pendingTranscriptionRecoveryTimelineRef.current = null;
+    if (pendingTimeline) {
+      persistTranscriptionRecoveryTimeline(pendingTimeline);
+    }
+  }, [persistTranscriptionRecoveryTimeline]);
+
+  const scheduleTranscriptionRecoverySnapshot = useCallback(
+    (next: RecordingTimeline) => {
+      pendingTranscriptionRecoveryTimelineRef.current = next;
+      const elapsedSinceLastSnapshot =
+        Date.now() - lastTranscriptionRecoverySnapshotAtMsRef.current;
+      if (
+        lastTranscriptionRecoverySnapshotAtMsRef.current === 0 ||
+        elapsedSinceLastSnapshot >= TRANSCRIPTION_RECOVERY_SNAPSHOT_INTERVAL_MS
+      ) {
+        flushPendingTranscriptionRecoverySnapshot();
+        return;
+      }
+      if (transcriptionRecoverySnapshotTimerRef.current !== null) {
+        return;
+      }
+      transcriptionRecoverySnapshotTimerRef.current = window.setTimeout(
+        flushPendingTranscriptionRecoverySnapshot,
+        TRANSCRIPTION_RECOVERY_SNAPSHOT_INTERVAL_MS - elapsedSinceLastSnapshot
+      );
+    },
+    [flushPendingTranscriptionRecoverySnapshot]
+  );
+
+  const flushPendingTranscriptionSegments = useCallback(() => {
+    if (transcriptionSegmentFlushTimerRef.current !== null) {
+      window.clearTimeout(transcriptionSegmentFlushTimerRef.current);
+      transcriptionSegmentFlushTimerRef.current = null;
+    }
+    const pendingSegments = pendingTranscriptionSegmentsRef.current;
+    if (pendingSegments.length === 0) {
+      return;
+    }
+    pendingTranscriptionSegmentsRef.current = [];
+
+    const current = timelineRef.current;
+    const next = applyTranscriptResults(current, pendingSegments);
+    if (next === current) {
+      return;
+    }
+
+    timelineRef.current = next;
+    transcriptDraftDirtyRef.current = true;
+    scheduleTranscriptionRecoverySnapshot(next);
+    setTimeline(next);
+  }, [scheduleTranscriptionRecoverySnapshot]);
 
   const applyTranscriptionSegments = useCallback(
     (segments: readonly TranscriptSegment[]) => {
       if (segments.length === 0) {
         return;
       }
-      const current = timelineRef.current;
-      const next = segments.reduce(applyTranscriptResult, current);
-      if (next === current) {
+      pendingTranscriptionSegmentsRef.current.push(...segments);
+      if (transcriptionSegmentFlushTimerRef.current !== null) {
         return;
       }
-      timelineRef.current = next;
-      replaceTranscriptDraft(transcriptMarkdownFromSegments(next.transcriptSegments));
-      const activeDraft = activeDraftRef.current;
-      if (activeDraft) {
-        updateRecordingRecoverySnapshot({
-          patch: {
-            durationMs: next.totalDurationMs,
-            recordingSessionId: next.recordingSessionId,
-            revisionId: next.revisionId,
-            transcriptSegments: next.transcriptSegments,
-          },
-          segmentId: activeDraft.segmentId,
-          workspaceId: workspaceSession.workspaceId,
-        });
-      }
-      setTimeline(next);
+      transcriptionSegmentFlushTimerRef.current = window.setTimeout(
+        flushPendingTranscriptionSegments,
+        TRANSCRIPTION_SEGMENT_BATCH_DELAY_MS
+      );
     },
-    [replaceTranscriptDraft, workspaceSession.workspaceId]
+    [flushPendingTranscriptionSegments]
   );
 
   useEffect(() => {
     timelineRef.current = timeline;
   }, [timeline]);
+
+  useEffect(() => {
+    return () => {
+      flushPendingTranscriptionSegments();
+      flushPendingTranscriptionRecoverySnapshot();
+      clearPendingTranscriptionSegmentFlush();
+    };
+  }, [
+    clearPendingTranscriptionSegmentFlush,
+    flushPendingTranscriptionRecoverySnapshot,
+    flushPendingTranscriptionSegments,
+  ]);
 
   useEffect(() => {
     if (!voiceSettingsKnown) {
@@ -541,7 +761,7 @@ export function RecordingOverlay({
     appendFailureRef.current = null;
     appendQueueRef.current = Promise.resolve();
     setCapturedChunks([]);
-    capturedPcmChunksRef.current = [];
+    replaceCapturedPcmChunks([]);
     controllerRef.current = null;
     liveAudioInputActiveRef.current = false;
     completionBackfillTooLargeRef.current = false;
@@ -557,8 +777,9 @@ export function RecordingOverlay({
     lastWaveformSampleAtMsRef.current = durationMs;
     recordingDurationRef.current = { accumulatedMs: durationMs, startedAtMs: null };
 
-    setElapsedMs(durationMs);
-    setWaveformSamples([...(recoveredDraft.waveformSamples ?? [])]);
+    setElapsedMsSnapshot(durationMs);
+    setWaveformSamplesSnapshot([...(recoveredDraft.waveformSamples ?? [])]);
+    clearPendingTranscriptionSegmentFlush();
     timelineRef.current = restoredTimeline;
     setTimeline(restoredTimeline);
     replaceTranscriptDraft(recoveredTranscriptMarkdown);
@@ -580,24 +801,37 @@ export function RecordingOverlay({
     recoveredDraft,
     recordingTarget.kind,
     recordingTarget.memoryId,
+    clearPendingTranscriptionSegmentFlush,
     replaceTranscriptDraft,
     workspaceSession.workspaceId,
   ]);
 
   useEffect(() => {
+    function eventMatchesActiveTranscription(event: {
+      readonly recordingFlowSessionId: string;
+      readonly recordingSessionId: string;
+      readonly revisionId: string;
+    }) {
+      const activeTranscription = activeTranscriptionRef.current;
+      return (
+        activeTranscription?.recordingFlowSessionId === event.recordingFlowSessionId &&
+        activeTranscription.recordingSessionId === event.recordingSessionId &&
+        activeTranscription.revisionId === event.revisionId
+      );
+    }
+
     return onRecordingTranscriptionEvent((event) => {
       if (event.kind === 'error') {
-        const activeTranscription = activeTranscriptionRef.current;
-        if (
-          activeTranscription?.recordingSessionId === event.recordingSessionId &&
-          activeTranscription.revisionId === event.revisionId
-        ) {
+        if (eventMatchesActiveTranscription(event)) {
           finalTranscriptionNeedsBackfillRef.current = true;
           notifyRecordingError(event.message);
         }
         return;
       }
       if (event.kind !== 'segments') {
+        return;
+      }
+      if (!eventMatchesActiveTranscription(event)) {
         return;
       }
       applyTranscriptionSegments(event.segments);
@@ -623,7 +857,7 @@ export function RecordingOverlay({
         longRecordingWarningShownRef.current = true;
         toast(LONG_RECORDING_WARNING_NOTICE);
       }
-      setElapsedMs(nextDurationMs);
+      setElapsedMsSnapshot(nextDurationMs, { realtime: true });
       persistRecoveryDuration(nextDurationMs);
       if (shortRecordingNoticeVisible && nextDurationMs >= MIN_EFFECTIVE_RECORDING_DURATION_MS) {
         clearShortRecordingNotice();
@@ -638,6 +872,7 @@ export function RecordingOverlay({
       if (draftPlaybackPreviewRef.current.url) {
         draftAudioRef.current?.pause();
       }
+      revokeDraftPlaybackUrlCache();
       liveAudioInputActiveRef.current = false;
       draftPlaybackPreviewRef.current = EMPTY_DRAFT_PLAYBACK_PREVIEW;
       playbackSessionRef.current += 1;
@@ -702,9 +937,58 @@ export function RecordingOverlay({
     setDraftPlaybackPreviewState(nextPreview);
   }
 
+  function setWaveformSamplesSnapshot(nextSamples: readonly number[]) {
+    const snapshot = [...nextSamples];
+    waveformSampleBufferRef.current = snapshot;
+    waveformSamplesRef.current = snapshot;
+    setWaveformSamples(snapshot);
+  }
+
+  function updateWaveformSamples(
+    update: (current: readonly number[]) => readonly number[]
+  ): readonly number[] {
+    const nextSamples = update(waveformSamplesRef.current);
+    setWaveformSamplesSnapshot(nextSamples);
+    return nextSamples;
+  }
+
+  function appendLiveWaveformSample(sample: number, durationMs: number) {
+    appendBoundedWaveformSampleInPlace(waveformSampleBufferRef.current, sample);
+    waveformSamplesRef.current = waveformSampleBufferRef.current;
+    persistRecoveryWaveformSnapshot(durationMs, waveformSampleBufferRef.current);
+    if (durationMs - lastWaveformRenderAtMsRef.current >= WAVEFORM_RENDER_INTERVAL_MS) {
+      lastWaveformRenderAtMsRef.current = durationMs;
+      setWaveformSamples([...waveformSampleBufferRef.current]);
+    }
+  }
+
+  function setElapsedMsSnapshot(durationMs: number, options: { readonly realtime?: boolean } = {}) {
+    const safeDurationMs = Math.max(0, Math.round(durationMs));
+    elapsedMsRef.current = safeDurationMs;
+    const nextSecond = Math.floor(safeDurationMs / 1000);
+    if (options.realtime && nextSecond === lastElapsedRenderSecondRef.current) {
+      return;
+    }
+    if (options.realtime) {
+      lastElapsedRenderSecondRef.current = nextSecond;
+      return;
+    }
+    lastElapsedRenderSecondRef.current = nextSecond;
+    setElapsedMs(safeDurationMs);
+  }
+
+  function revokeDraftPlaybackUrlCache() {
+    const cache = draftPlaybackUrlCacheRef.current;
+    if (!cache) {
+      return;
+    }
+    URL.revokeObjectURL(cache.url);
+    draftPlaybackUrlCacheRef.current = null;
+  }
+
   useEffect(() => {
     return () => {
-      if (draftPlaybackUrl) {
+      if (draftPlaybackUrl && draftPlaybackUrlCacheRef.current?.url !== draftPlaybackUrl) {
         URL.revokeObjectURL(draftPlaybackUrl);
       }
     };
@@ -786,7 +1070,7 @@ export function RecordingOverlay({
       pendingTranscriptionStartRef.current = null;
       activeTranscriptionRef.current = null;
       transcriptionAudioQueueRef.current = null;
-      finalTranscriptionNeedsBackfillRef.current = capturedPcmChunksRef.current.length > 0;
+      finalTranscriptionNeedsBackfillRef.current = readCapturedPcmChunks().length > 0;
       return;
     }
 
@@ -860,6 +1144,7 @@ export function RecordingOverlay({
       return;
     }
     applyTranscriptionSegments(response.value.segments ?? []);
+    flushPendingTranscriptionSegments();
     finalTranscriptionNeedsBackfillRef.current = false;
   }
 
@@ -958,7 +1243,7 @@ export function RecordingOverlay({
   }
 
   function flushBufferedTranscriptionAudio(recordingSession: number, timeOffsetMs: number) {
-    for (const capturedPcmChunk of capturedPcmChunksRef.current) {
+    for (const capturedPcmChunk of readCapturedPcmChunks()) {
       if (capturedPcmChunk.endTimeMs <= timeOffsetMs) {
         continue;
       }
@@ -1126,7 +1411,7 @@ export function RecordingOverlay({
       accumulatedMs: safeDurationMs,
       startedAtMs: null,
     };
-    setElapsedMs(safeDurationMs);
+    setElapsedMsSnapshot(safeDurationMs);
     setTimeline((current) =>
       moveRecordingCursor(
         createRecordingTimeline({
@@ -1137,7 +1422,7 @@ export function RecordingOverlay({
       )
     );
     persistRecoveryAudioChunksSnapshot(safeDurationMs, { force: true });
-    persistRecoveryWaveformSnapshot(safeDurationMs, waveformSamples, { force: true });
+    persistRecoveryWaveformSnapshot(safeDurationMs, waveformSamplesRef.current, { force: true });
     liveAudioInputActiveRef.current = false;
     const controller = controllerRef.current;
     controller?.pause();
@@ -1202,12 +1487,35 @@ export function RecordingOverlay({
     });
   }
 
-  function buildDraftPlaybackUrl() {
-    const chunks = capturedChunksRef.current.map((capturedChunk) => capturedChunk.chunk);
-    if (chunks.length === 0) {
+  function capturedChunkByteLength() {
+    return capturedChunkByteLengthRef.current;
+  }
+
+  function buildDraftPlaybackUrl(recordingSession: number) {
+    const chunkCount = capturedChunksRef.current.length;
+    if (chunkCount === 0) {
       return null;
     }
-    return URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' }));
+    const byteLength = capturedChunkByteLength();
+    const cached = draftPlaybackUrlCacheRef.current;
+    if (
+      cached &&
+      cached.session === recordingSession &&
+      cached.chunkCount === chunkCount &&
+      cached.byteLength === byteLength
+    ) {
+      return cached.url;
+    }
+    const chunks = capturedChunksRef.current.map((capturedChunk) => capturedChunk.chunk);
+    revokeDraftPlaybackUrlCache();
+    const url = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: 'audio/webm' }));
+    draftPlaybackUrlCacheRef.current = {
+      byteLength,
+      chunkCount,
+      session: recordingSession,
+      url,
+    };
+    return url;
   }
 
   function isDraftAudioSource(audio: HTMLAudioElement, source: string) {
@@ -1281,7 +1589,7 @@ export function RecordingOverlay({
       return;
     }
     stopDraftPlayback();
-    const playbackSource = buildDraftPlaybackUrl();
+    const playbackSource = buildDraftPlaybackUrl(recordingSession);
     if (!playbackSource) {
       setDraftPlaybackPreview({
         chunkCount: 0,
@@ -1346,6 +1654,7 @@ export function RecordingOverlay({
   function setCapturedChunks(chunks: readonly CapturedRecordingChunk[]) {
     cancelDraftPlaybackPreview();
     capturedChunksRef.current = [...chunks];
+    capturedChunkByteLengthRef.current = byteLengthForChunks(chunks);
     recoveryAudioChunksRef.current = chunks.map(recoveryAudioChunkFromCaptured);
   }
 
@@ -1610,6 +1919,7 @@ export function RecordingOverlay({
     lastCapturedChunkEndMsRef.current = endTimeMs;
     const capturedChunk = { chunk, endTimeMs, startTimeMs };
     capturedChunksRef.current.push(capturedChunk);
+    capturedChunkByteLengthRef.current += chunk.byteLength;
     recoveryAudioChunksRef.current.push(recoveryAudioChunkFromCaptured(capturedChunk));
     persistRecoveryAudioChunksSnapshot(endTimeMs);
     const pausedPreviewSession = draftPlaybackPreviewRef.current.session;
@@ -1634,9 +1944,16 @@ export function RecordingOverlay({
       completionBackfillTooLargeRef.current = true;
       const minimumStartMs = Math.max(0, endTimeMs - TRANSCRIPTION_START_BUFFER_MS);
       capturedPcmChunksRef.current.push(nextChunk);
-      capturedPcmChunksRef.current = capturedPcmChunksRef.current.filter(
-        (capturedPcmChunk) => capturedPcmChunk.endTimeMs > minimumStartMs
-      );
+      let firstRetainedIndex = capturedPcmChunksHeadIndexRef.current;
+      while (
+        firstRetainedIndex < capturedPcmChunksRef.current.length &&
+        (capturedPcmChunksRef.current[firstRetainedIndex]?.endTimeMs ?? Number.POSITIVE_INFINITY) <=
+          minimumStartMs
+      ) {
+        firstRetainedIndex += 1;
+      }
+      capturedPcmChunksHeadIndexRef.current = firstRetainedIndex;
+      compactCapturedPcmChunksIfNeeded();
       return;
     }
     capturedPcmChunksRef.current.push(nextChunk);
@@ -1648,9 +1965,14 @@ export function RecordingOverlay({
       return;
     }
     lastWaveformSampleAtMsRef.current = durationMs;
-    const rawAverageLevel =
-      samples.reduce((sum, sample) => sum + Math.min(1, Math.max(0, sample)), 0) /
-      Math.max(1, samples.length);
+    let rawLevelSum = 0;
+    let displayLevelSum = 0;
+    for (const sample of samples) {
+      rawLevelSum += Math.min(1, Math.max(0, sample));
+      displayLevelSum += Math.min(1, Math.max(0.06, sample));
+    }
+    const divisor = Math.max(1, samples.length);
+    const rawAverageLevel = rawLevelSum / divisor;
     if (rawAverageLevel >= AUDIBLE_LEVEL_THRESHOLD) {
       lastNoticeableAudioAtMsRef.current = durationMs;
       silenceNoticeShownRef.current = false;
@@ -1661,18 +1983,12 @@ export function RecordingOverlay({
       silenceNoticeShownRef.current = true;
       toast(SILENCE_NOTICE);
     }
-    const averageLevel =
-      samples.reduce((sum, sample) => sum + Math.min(1, Math.max(0.06, sample)), 0) /
-      Math.max(1, samples.length);
-    setWaveformSamples((current) => {
-      const next = appendBoundedWaveformSample(current, averageLevel);
-      persistRecoveryWaveformSnapshot(durationMs, next);
-      return next;
-    });
+    const averageLevel = displayLevelSum / divisor;
+    appendLiveWaveformSample(averageLevel, durationMs);
   }
 
   function truncateWaveformSamplesAt(cursorMs: number, totalDurationMs: number) {
-    setWaveformSamples((current) => {
+    updateWaveformSamples((current) => {
       if (totalDurationMs <= 0 || current.length === 0) {
         return [];
       }
@@ -1826,7 +2142,7 @@ export function RecordingOverlay({
     appendQueueRef.current = Promise.resolve();
     cancelDraftPlaybackPreview();
     setCapturedChunks([]);
-    capturedPcmChunksRef.current = [];
+    replaceCapturedPcmChunks([]);
     controllerRef.current = null;
     lastCapturedChunkEndMsRef.current = 0;
     lastCapturedPcmChunkEndMsRef.current = 0;
@@ -1839,9 +2155,11 @@ export function RecordingOverlay({
     revisionIndexRef.current = 0;
     longRecordingWarningShownRef.current = false;
     silenceNoticeShownRef.current = false;
-    setElapsedMs(0);
-    setWaveformSamples([]);
+    setElapsedMsSnapshot(0);
+    setWaveformSamplesSnapshot([]);
+    revokeDraftPlaybackUrlCache();
     replaceTranscriptDraft('');
+    clearPendingTranscriptionSegmentFlush();
     completionBackfillTooLargeRef.current = false;
     finalTranscriptionNeedsBackfillRef.current = false;
     transcriptionDisabledByMainRef.current = false;
@@ -2015,7 +2333,9 @@ export function RecordingOverlay({
 
     clearShortRecordingNotice();
     cancelDraftPlaybackPreview();
+    revokeDraftPlaybackUrlCache();
     clearRecordingError();
+    flushPendingTranscriptionSegments();
     const recordingSession = recordingSessionRef.current;
     const recordingFlowSessionId = timeline.recordingSessionId;
     replacementCopySessionRef.current = recordingSession;
@@ -2026,7 +2346,7 @@ export function RecordingOverlay({
       })
     );
     closeActiveTranscription(recordingSession);
-    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
+    const totalDurationMs = Math.max(elapsedMsRef.current, timelineRef.current.totalDurationMs);
     const replacementStartMs = resolveReplacementStartMs({
       chunks: capturedChunksRef.current,
       cursorTimeMs,
@@ -2042,10 +2362,7 @@ export function RecordingOverlay({
     const retainedChunks = capturedChunksRef.current.filter(
       (chunk) => chunk.endTimeMs <= replacementStartMs + WAVEFORM_SEEK_EPSILON_MS
     );
-    const retainedPcmChunks = retainPcmChunksThrough(
-      capturedPcmChunksRef.current,
-      replacementStartMs
-    );
+    const retainedPcmChunks = retainPcmChunksThrough(readCapturedPcmChunks(), replacementStartMs);
     const retainedByteLength = byteLengthForChunks(retainedChunks);
     const replacementNeedsTranscriptBackfill = timelineRef.current.transcriptSegments.some(
       (segment) =>
@@ -2057,10 +2374,11 @@ export function RecordingOverlay({
     const previousActiveDraft = activeDraftRef.current;
     const previousCapturedChunks = capturedChunksRef.current;
     const previousCapturedPcmChunks = capturedPcmChunksRef.current;
+    const previousCapturedPcmChunksHeadIndex = capturedPcmChunksHeadIndexRef.current;
     const previousRecoveryAudioChunks = recoveryAudioChunksRef.current;
-    const previousElapsedMs = elapsedMs;
+    const previousElapsedMs = elapsedMsRef.current;
     const previousTimeline = timelineRef.current;
-    const previousWaveformSamples = waveformSamples;
+    const previousWaveformSamples = waveformSamplesRef.current;
     const previousRecordingDuration = recordingDurationRef.current;
     const previousLastCapturedChunkEndMs = lastCapturedChunkEndMsRef.current;
     const previousLastCapturedPcmChunkEndMs = lastCapturedPcmChunkEndMsRef.current;
@@ -2071,7 +2389,7 @@ export function RecordingOverlay({
       lastRecoveryAudioChunkCountPersistedRef.current;
     const previousRecoveryWaveformPersistedMs = lastRecoveryWaveformPersistedMsRef.current;
     const previousActiveRevisionId = activeRevisionIdRef.current;
-    const previousTranscriptDraft = transcriptDraftRef.current;
+    const previousTranscriptDraft = readCurrentTranscriptDraft();
     const previousAppendQueue = appendQueueRef.current;
     const previousAppendFailure = appendFailureRef.current;
     const previousFinalTranscriptionNeedsBackfill = finalTranscriptionNeedsBackfillRef.current;
@@ -2120,7 +2438,7 @@ export function RecordingOverlay({
         recordingSession: nextRecordingSession,
       };
       setCapturedChunks(retainedChunks);
-      capturedPcmChunksRef.current = retainedPcmChunks;
+      replaceCapturedPcmChunks(retainedPcmChunks);
       lastCapturedChunkEndMsRef.current = replacementStartMs;
       lastCapturedPcmChunkEndMsRef.current = replacementStartMs;
       writeRecoveryMarker(replacementSegmentId, replacementStartMs, {
@@ -2136,7 +2454,7 @@ export function RecordingOverlay({
       activeRevisionIdRef.current = nextRevisionId;
       finalTranscriptionNeedsBackfillRef.current = replacementNeedsTranscriptBackfill;
       completionBackfillTooLargeRef.current = false;
-      setElapsedMs(replacementStartMs);
+      setElapsedMsSnapshot(replacementStartMs);
       truncateWaveformSamplesAt(replacementStartMs, totalDurationMs);
       const replacementTimeline = createRecordingTimeline({
         ...startReplacementAtCursor(
@@ -2249,6 +2567,7 @@ export function RecordingOverlay({
       setCapturedChunks(previousCapturedChunks);
       recoveryAudioChunksRef.current = [...previousRecoveryAudioChunks];
       capturedPcmChunksRef.current = previousCapturedPcmChunks;
+      capturedPcmChunksHeadIndexRef.current = previousCapturedPcmChunksHeadIndex;
       lastCapturedChunkEndMsRef.current = previousLastCapturedChunkEndMs;
       lastCapturedPcmChunkEndMsRef.current = previousLastCapturedPcmChunkEndMs;
       lastRecoveryDurationPersistedMsRef.current = previousRecoveryDurationPersistedMs;
@@ -2266,10 +2585,10 @@ export function RecordingOverlay({
       lastNoticeableAudioAtMsRef.current = previousLastNoticeableAudioAtMs;
       recordingDurationRef.current = previousRecordingDuration;
       liveAudioInputActiveRef.current = false;
-      setElapsedMs(previousElapsedMs);
+      setElapsedMsSnapshot(previousElapsedMs);
       timelineRef.current = previousTimeline;
       setTimeline(previousTimeline);
-      setWaveformSamples(previousWaveformSamples);
+      setWaveformSamplesSnapshot(previousWaveformSamples);
       if (previousActiveDraft) {
         writeRecoveryMarker(previousActiveDraft.segmentId, previousElapsedMs, {
           recordingSessionId: timeline.recordingSessionId,
@@ -2333,7 +2652,7 @@ export function RecordingOverlay({
     nextCursorTimeMs: number,
     { syncDraftAudio = true }: { readonly syncDraftAudio?: boolean } = {}
   ) {
-    const totalDurationMs = Math.max(elapsedMs, timeline.totalDurationMs);
+    const totalDurationMs = Math.max(elapsedMsRef.current, timelineRef.current.totalDurationMs);
     const safeCursorTimeMs = Math.min(totalDurationMs, Math.max(0, Math.round(nextCursorTimeMs)));
     const draftAudio = draftAudioRef.current;
     if (
@@ -2393,7 +2712,7 @@ export function RecordingOverlay({
     audio.src = playbackSource;
     const playbackStartMs = resolveDraftPlaybackStartMs({
       cursorTimeMs,
-      totalDurationMs: Math.max(elapsedMs, timeline.totalDurationMs),
+      totalDurationMs: Math.max(elapsedMsRef.current, timelineRef.current.totalDurationMs),
     });
     audio.currentTime = playbackStartMs / 1000;
     try {
@@ -2418,7 +2737,9 @@ export function RecordingOverlay({
 
   function handleDraftPlaybackEnded() {
     setIsDraftPlaybackPlaying(false);
-    setCursor(Math.max(elapsedMs, timeline.totalDurationMs), { syncDraftAudio: false });
+    setCursor(Math.max(elapsedMsRef.current, timelineRef.current.totalDurationMs), {
+      syncDraftAudio: false,
+    });
   }
 
   async function saveFinalTranscript({
@@ -2430,7 +2751,8 @@ export function RecordingOverlay({
     readonly segmentId: string;
     readonly recordingSession: number;
   }) {
-    const markdown = transcriptDraftRef.current.trim();
+    flushPendingTranscriptionSegments();
+    const markdown = readCurrentTranscriptDraft().trim();
     if (markdown.length === 0) {
       return true;
     }
@@ -2475,7 +2797,8 @@ export function RecordingOverlay({
     readonly recordingSession: number;
     readonly segmentId: string;
   }) {
-    const markdown = transcriptDraftRef.current.trim();
+    flushPendingTranscriptionSegments();
+    const markdown = readCurrentTranscriptDraft().trim();
     if (markdown.length === 0) {
       return true;
     }
@@ -2489,10 +2812,11 @@ export function RecordingOverlay({
         workspaceHandle: workspaceSession.workspaceHandle,
         workspaceId: workspaceSession.workspaceId,
       });
+      if (recordingSessionRef.current !== recordingSession) {
+        return false;
+      }
       if (response.ok) {
-        if (recordingSessionRef.current === recordingSession) {
-          clearRecordingError();
-        }
+        clearRecordingError();
         onSegmentSupplementFinalized?.(
           {
             supplement: response.value.supplement,
@@ -2520,13 +2844,15 @@ export function RecordingOverlay({
   }
 
   function persistRecoveryTranscriptSnapshot(segmentId: string) {
+    flushPendingTranscriptionSegments();
+    flushPendingTranscriptionRecoverySnapshot();
     const currentTimeline = timelineRef.current;
     updateRecordingRecoverySnapshot({
       patch: {
         durationMs: currentTimeline.totalDurationMs,
         recordingSessionId: currentTimeline.recordingSessionId,
         revisionId: currentTimeline.revisionId,
-        transcriptMarkdown: transcriptDraftRef.current,
+        transcriptMarkdown: readCurrentTranscriptDraft(),
         transcriptSegments: currentTimeline.transcriptSegments,
       },
       segmentId,
@@ -2544,8 +2870,10 @@ export function RecordingOverlay({
       return;
     }
 
+    flushPendingTranscriptionSegments();
     const needsBackfill =
-      finalTranscriptionNeedsBackfillRef.current || transcriptDraftRef.current.trim().length === 0;
+      finalTranscriptionNeedsBackfillRef.current ||
+      readCurrentTranscriptDraft().trim().length === 0;
     if (!needsBackfill) {
       return;
     }
@@ -2553,7 +2881,7 @@ export function RecordingOverlay({
       notifyRecordingError(COMPLETION_BACKFILL_UNAVAILABLE_NOTICE);
       return;
     }
-    const pcmChunks = capturedPcmChunksRef.current;
+    const pcmChunks = readCapturedPcmChunks();
     if (pcmChunks.length === 0) {
       return;
     }
@@ -2561,8 +2889,17 @@ export function RecordingOverlay({
     const recordingSessionId = `recording-${recordingSession}`;
     const recordingFlowSessionId = `${recordingSessionId}-completion-backfill`;
     const revisionId = activeRevisionIdRef.current;
+    const backfillTranscription: ActiveTranscriptionSession = {
+      acceptsAudio: true,
+      recordingFlowSessionId,
+      recordingSession,
+      recordingSessionId,
+      revisionId,
+      workspaceHandle: workspaceSession.workspaceHandle,
+    };
     let shouldCloseBackfill = false;
     try {
+      activeTranscriptionRef.current = backfillTranscription;
       const started = await startRecordingTranscription({
         recordingFlowSessionId,
         recordingSessionId,
@@ -2628,6 +2965,7 @@ export function RecordingOverlay({
         return;
       }
       applyTranscriptionSegments(finished.value.segments ?? []);
+      flushPendingTranscriptionSegments();
       finalTranscriptionNeedsBackfillRef.current = false;
     } catch (backfillError) {
       if (recordingSessionRef.current === recordingSession) {
@@ -2636,6 +2974,9 @@ export function RecordingOverlay({
         );
       }
     } finally {
+      if (activeTranscriptionRef.current === backfillTranscription) {
+        activeTranscriptionRef.current = null;
+      }
       if (shouldCloseBackfill) {
         closeTranscriptionSilently({
           recordingFlowSessionId,
@@ -2674,6 +3015,7 @@ export function RecordingOverlay({
     if (!controller && state.status !== 'paused') {
       return;
     }
+    flushPendingTranscriptionSegments();
     const durationMs = readRecordingDurationMs();
     if (!bypassShortRecordingHold && shouldHoldShortRecordingSave(durationMs)) {
       return;
@@ -2683,8 +3025,8 @@ export function RecordingOverlay({
     pauseRecordingDurationClock();
     liveAudioInputActiveRef.current = false;
     persistRecoveryAudioChunksSnapshot(durationMs, { force: true });
-    persistRecoveryWaveformSnapshot(durationMs, waveformSamples, { force: true });
-    setElapsedMs(durationMs);
+    persistRecoveryWaveformSnapshot(durationMs, waveformSamplesRef.current, { force: true });
+    setElapsedMsSnapshot(durationMs);
     setState((current) => transitionRecordingState(current, { type: 'stop-requested' }));
     if (closeImmediately) {
       onOpenChange(false);
@@ -2908,7 +3250,7 @@ export function RecordingOverlay({
     replacementCopySessionRef.current = null;
     controllerRef.current = null;
     setCapturedChunks([]);
-    capturedPcmChunksRef.current = [];
+    replaceCapturedPcmChunks([]);
     playbackSessionRef.current += 1;
     cancelDraftPlaybackPreview();
     resetRecordingDurationClock();
@@ -2919,7 +3261,7 @@ export function RecordingOverlay({
     restoredSegmentIdRef.current = null;
     longRecordingWarningShownRef.current = false;
     silenceNoticeShownRef.current = false;
-    setElapsedMs(0);
+    setElapsedMsSnapshot(0);
     setExitConfirmationOpen(false);
     setExitActionPending(false);
     clearRecordingError();
@@ -2936,7 +3278,9 @@ export function RecordingOverlay({
     timelineRef.current = initialTimeline;
     setTimeline(initialTimeline);
     replaceTranscriptDraft('');
-    setWaveformSamples([]);
+    clearPendingTranscriptionSegmentFlush();
+    revokeDraftPlaybackUrlCache();
+    setWaveformSamplesSnapshot([]);
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -2956,14 +3300,21 @@ export function RecordingOverlay({
   }, [canClose, onCloseBlockedChange]);
 
   const statusText = statusTextFor(state);
-  const totalWaveformDurationMs = Math.max(elapsedMs, cursorTimeMs, timeline.totalDurationMs);
-  const visibleTimerMs =
-    state.status === 'paused' || state.status === 'replacing' ? cursorTimeMs : elapsedMs;
+  const readElapsedMsSnapshot = useCallback(() => {
+    const clock = recordingDurationRef.current;
+    const activeMs =
+      clock.startedAtMs === null ? 0 : Math.max(0, performance.now() - clock.startedAtMs);
+    return Math.round(clock.accumulatedMs + activeMs);
+  }, []);
+  const totalWaveformDurationMs = Math.max(
+    elapsedMsRef.current,
+    cursorTimeMs,
+    timeline.totalDurationMs
+  );
   const transcriptFocusTimeMs =
     state.status === 'paused' || state.status === 'replacing'
       ? cursorTimeMs
       : timeline.totalDurationMs;
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
   const pausedPrimaryAction: PausedRecordingPrimaryAction =
     state.status !== 'paused' || !activeDraftRef.current || !controllerRef.current
       ? 'none'
@@ -3034,9 +3385,12 @@ export function RecordingOverlay({
           ref={draftAudioRef}
           src={draftPlaybackUrl ?? undefined}
         />
-        <p className="sr-only">
-          {statusText} 已录制：{elapsedSeconds} 秒。
-        </p>
+        <RecordingElapsedStatus
+          elapsedMs={elapsedMs}
+          readElapsedMs={readElapsedMsSnapshot}
+          status={state.status}
+          statusText={statusText}
+        />
         <div
           className="row-start-1 flex h-full w-full items-center justify-center"
           data-testid="recording-waveform-slot"
@@ -3110,9 +3464,12 @@ export function RecordingOverlay({
               className="relative row-start-3 flex h-full items-center justify-center"
               data-testid="recording-timer-slot"
             >
-              <p className="font-sans text-heading-lg font-bold leading-none text-foreground">
-                {formatRecordingTime(visibleTimerMs)}
-              </p>
+              <RecordingElapsedTimer
+                cursorTimeMs={cursorTimeMs}
+                elapsedMs={elapsedMs}
+                readElapsedMs={readElapsedMsSnapshot}
+                status={state.status}
+              />
               {shortRecordingNoticeVisible ? (
                 <p
                   className="absolute top-full mt-4 w-[min(80vw,680px)] text-balance text-ui-sm font-medium leading-ui-sm text-muted-foreground"

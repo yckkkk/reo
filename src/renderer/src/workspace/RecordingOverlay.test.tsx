@@ -113,12 +113,11 @@ type TranscriptionStartResponse = Awaited<
 async function flushPromises() {
   await act(async () => {
     await Promise.resolve();
-    await Promise.resolve();
   });
 }
 
-function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {}) {
-  const bridge: Window['reoWorkspace'] = {
+function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
+  return {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(async () => ({ ok: true as const, value: { memorySpaces: [] } })),
     initializeWorkspace: vi.fn(),
@@ -419,8 +418,14 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
       value: {},
     })),
     onRecordingTranscriptionEvent: vi.fn(() => () => {}),
-    ...overrides,
   };
+}
+
+function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {}) {
+  const bridge: Window['reoWorkspace'] = Object.freeze({
+    ...createWorkspaceBridgeDefaults(),
+    ...overrides,
+  });
   Object.defineProperty(window, 'reoWorkspace', {
     configurable: true,
     value: bridge,
@@ -663,6 +668,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -813,6 +819,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -849,6 +856,114 @@ describe('RecordingOverlay', () => {
     });
 
     expect(toast.error).not.toHaveBeenCalledWith('补充录音已保存，转写暂时无法写入。');
+  });
+
+  it('ignores stale SegmentSupplement transcript save successes after close', async () => {
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    const transcriptSave =
+      createDeferred<
+        Awaited<ReturnType<Window['reoWorkspace']['saveSegmentSupplementTranscript']>>
+      >();
+    const bridge = installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+      saveSegmentSupplementTranscript: vi.fn(() => transcriptSave.promise),
+    });
+    const media = createMediaAdapter();
+    const onSegmentSupplementFinalized = vi.fn();
+
+    const { unmount } = render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        onSegmentSupplementFinalized={onSegmentSupplementFinalized}
+        open
+        recordingTarget={{
+          kind: 'segment-supplement',
+          memoryId: 'mem_1',
+          segmentId: 'seg_parent',
+          title: '补充录音1',
+        }}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    await emitRecordedAudio(media);
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1600,
+            isFinal: true,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 200,
+            text: '现场补充转写',
+          },
+        ],
+      })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存录音' }));
+    await flushPromises();
+
+    expect(bridge.saveSegmentSupplementTranscript).toHaveBeenCalledTimes(1);
+    expect(onSegmentSupplementFinalized).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await act(async () => {
+      transcriptSave.resolve({
+        ok: true,
+        value: {
+          memory: { ...savedMemorySummary, supplementCount: 1 },
+          segment: {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_parent',
+            type: 'audio',
+            title: 'Daily memory 录音',
+            createdAt: '2026-05-06T13:08:00.000Z',
+            updatedAt: '2026-05-06T13:10:00.000Z',
+            durationMs: 0,
+            audioByteLength: 3,
+            lastTranscriptionAttempt: 'never',
+            transcript: { exists: false },
+            supplementCount: 1,
+            supplements: [],
+          },
+          supplement: {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_parent',
+            supplementId: 'sup_1',
+            type: 'audio',
+            title: '补充录音1',
+            createdAt: '2026-05-06T13:09:00.000Z',
+            updatedAt: '2026-05-06T13:10:00.000Z',
+            durationMs: 0,
+            audioByteLength: 1,
+            lastTranscriptionAttempt: 'never',
+            transcript: { exists: true },
+          },
+          saved: true,
+        },
+      });
+      await transcriptSave.promise;
+    });
+
+    expect(onSegmentSupplementFinalized).toHaveBeenCalledTimes(1);
   });
 
   it('does not expose mid-track replacement for segment supplement recording', async () => {
@@ -1124,6 +1239,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'stale-revision',
         segments: [
@@ -1143,6 +1259,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -1157,8 +1274,29 @@ describe('RecordingOverlay', () => {
         ],
       })
     );
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 2200,
+            isFinal: true,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 1800,
+            text: '批量里的第二段',
+          },
+        ],
+      })
+    );
 
+    expect(screen.queryByText('新的实时转写')).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(100));
     expect(screen.getByText('新的实时转写')).toBeInTheDocument();
+    expect(screen.getByText('批量里的第二段')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '暂停录音' }));
     await flushPromises();
@@ -1172,6 +1310,135 @@ describe('RecordingOverlay', () => {
     act(() => media.emitPcm(new Uint8Array([5, 6, 7, 8])));
     await flushPromises();
     expect(bridge.sendRecordingTranscriptionAudio).not.toHaveBeenCalled();
+  });
+
+  it('throttles full transcript recovery marker writes during live transcription batches', async () => {
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+    });
+    const media = createMediaAdapter();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    setItem.mockClear();
+
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1100,
+            isFinal: false,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 1000,
+            text: '第一段转写',
+          },
+        ],
+      })
+    );
+    act(() => vi.advanceTimersByTime(100));
+    expect(
+      setItem.mock.calls.filter((call) => String(call[1]).includes('第一段转写'))
+    ).toHaveLength(1);
+
+    setItem.mockClear();
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1200,
+            isFinal: false,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 1100,
+            text: '第二段转写',
+          },
+        ],
+      })
+    );
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByText('第二段转写')).toBeInTheDocument();
+    expect(setItem).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(
+      setItem.mock.calls.filter((call) => String(call[1]).includes('第二段转写'))
+    ).toHaveLength(1);
+  });
+
+  it('flushes pending live transcript segments into recovery before unmount', async () => {
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+    });
+    const media = createMediaAdapter();
+
+    const { unmount } = render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1200,
+            isFinal: false,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 1000,
+            text: '卸载前待写转写',
+          },
+        ],
+      })
+    );
+
+    unmount();
+
+    expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toContain(
+      '卸载前待写转写'
+    );
   });
 
   it('saves recording without live transcription when voice settings are disabled', async () => {
@@ -1577,6 +1844,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -1652,6 +1920,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -1689,6 +1958,58 @@ describe('RecordingOverlay', () => {
     expect(screen.queryByRole('textbox', { name: '反思' })).not.toBeInTheDocument();
   });
 
+  it('ignores live transcription events from an old recording flow with colliding session ids', async () => {
+    let transcriptionListener: Parameters<
+      Window['reoWorkspace']['onRecordingTranscriptionEvent']
+    >[0] = () => {};
+    const bridge = installWorkspaceBridge({
+      onRecordingTranscriptionEvent: vi.fn((listener) => {
+        transcriptionListener = listener;
+        return () => {};
+      }),
+    });
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '开始录音' }));
+    await flushPromises();
+    act(() =>
+      transcriptionListener({
+        kind: 'segments',
+        recordingFlowSessionId: 'old-recording-1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segments: [
+          {
+            endTimeMs: 1400,
+            isFinal: true,
+            recordingSessionId: 'recording-1',
+            revisionId: 'recording-1-revision-0',
+            startTimeMs: 400,
+            text: '旧录音不应保存',
+          },
+        ],
+      })
+    );
+    act(() => media.emitChunk(new Uint8Array([1, 2, 3])));
+    act(() => vi.advanceTimersByTime(2000));
+    await flushPromises();
+
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }));
+    await flushPromises();
+
+    expect(bridge.saveTranscript).not.toHaveBeenCalled();
+  });
+
   it('keeps finalized audio recovery truth when transcript save fails after live finalize', async () => {
     let transcriptionListener: Parameters<
       Window['reoWorkspace']['onRecordingTranscriptionEvent']
@@ -1723,6 +2044,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -1805,6 +2127,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2089,6 +2412,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1-completion-backfill',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2160,6 +2484,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2195,6 +2520,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1-completion-backfill',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2256,6 +2582,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2289,6 +2616,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1-completion-backfill',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2348,6 +2676,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2382,6 +2711,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1-completion-backfill',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -2462,6 +2792,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1-completion-backfill',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [
@@ -3477,6 +3808,7 @@ describe('RecordingOverlay', () => {
     act(() =>
       transcriptionListener({
         kind: 'segments',
+        recordingFlowSessionId: 'recording-1',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',
         segments: [

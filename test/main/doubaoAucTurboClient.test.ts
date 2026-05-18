@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DOUBAO_AUC_TURBO_ENDPOINT,
+  DOUBAO_AUC_TURBO_MAX_AUDIO_DATA_BASE64_BYTES,
   DOUBAO_AUC_TURBO_RESOURCE_ID,
   recognizeDoubaoAucTurboAudioData,
 } from '../../src/main/doubaoAucTurboClient.js';
@@ -164,6 +165,21 @@ test('doubao AUC Turbo client maps abort timeout and network failures without le
   assert.equal(networkResult.errorCode, 'network');
   assert.equal(JSON.stringify(networkResult).includes('secret-api-key'), false);
   assert.equal(JSON.stringify(networkResult).includes('audio-data'), false);
+});
+
+test('doubao AUC Turbo client rejects oversized audio data before building the request body', async () => {
+  let fetchCalls = 0;
+  const result = await recognizeDoubaoAucTurboAudioData({
+    apiKey: 'secret-api-key',
+    audioDataBase64: 'a'.repeat(DOUBAO_AUC_TURBO_MAX_AUDIO_DATA_BASE64_BYTES + 1),
+    fetch: async () => {
+      fetchCalls += 1;
+      return createJsonResponse({});
+    },
+  });
+
+  assert.deepEqual(result, { errorCode: 'size', ok: false });
+  assert.equal(fetchCalls, 0);
 });
 
 test('doubao AUC Turbo client removes external abort listener after timeout', async () => {

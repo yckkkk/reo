@@ -169,6 +169,21 @@ test('deduplicates by target identity without using backfill mode', async () => 
   await assert.rejects(() => queue.runManual(regenerate), BackfillAlreadyRunningError);
 });
 
+test('manual head insert reports its effective queued position', async () => {
+  const { queue } = createControlledQueue();
+  const automatic = segmentTask('manual_position_auto');
+  const manual = segmentTask('manual_position_manual', 'manual');
+
+  assert.deepEqual(queue.enqueue(automatic, { insertAtHead: false }), {
+    accepted: true,
+    position: 1,
+  });
+  assert.deepEqual(queue.enqueue(manual, { insertAtHead: true }), {
+    accepted: true,
+    position: 1,
+  });
+});
+
 test('task diagnostics carry mode for started and terminal queue events', async () => {
   const events: Array<{ readonly event: string; readonly fields?: Record<string, unknown> }> = [];
   const queue = createBackfillQueue({

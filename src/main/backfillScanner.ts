@@ -56,16 +56,14 @@ export function isManualFillMissingEligibleProjection(projection: BackfillScanne
   return projection.audioByteLength > 0 && !projection.transcript.exists;
 }
 
-export function collectEligibleBackfillTargets(
+export function addEligibleBackfillTargets(
   input: BackfillScannerInput,
-  limit = Number.POSITIVE_INFINITY
-): BackfillEligibleTarget[] {
-  const targets: BackfillEligibleTarget[] = [];
-
+  selector: ReturnType<typeof createBackfillTargetSelector>
+): void {
   for (const memory of input.memories) {
     for (const segment of memory.segments) {
       if (isBackfillEligibleProjection(segment)) {
-        targets.push({
+        selector.add({
           kind: 'segment',
           memoryId: segment.memoryId,
           segmentId: segment.segmentId,
@@ -75,7 +73,7 @@ export function collectEligibleBackfillTargets(
       }
       for (const supplement of segment.supplements) {
         if (isBackfillEligibleProjection(supplement)) {
-          targets.push({
+          selector.add({
             kind: 'supplement',
             memoryId: supplement.memoryId,
             segmentId: supplement.segmentId,
@@ -87,15 +85,143 @@ export function collectEligibleBackfillTargets(
       }
     }
   }
+}
 
-  return limitBackfillTargets(targets, limit);
+export function collectEligibleBackfillTargets(
+  input: BackfillScannerInput,
+  limit = Number.POSITIVE_INFINITY
+): BackfillEligibleTarget[] {
+  const normalizedLimit = normalizeBackfillTargetLimit(limit);
+  if (normalizedLimit === 0) {
+    return [];
+  }
+  const selector = createBackfillTargetSelector(normalizedLimit);
+  addEligibleBackfillTargets(input, selector);
+
+  return selector.toArray();
 }
 
 export function limitBackfillTargets(
   targets: readonly BackfillEligibleTarget[],
   limit = Number.POSITIVE_INFINITY
 ): BackfillEligibleTarget[] {
-  return [...targets]
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .slice(0, Math.max(0, Math.trunc(limit)));
+  const normalizedLimit = normalizeBackfillTargetLimit(limit);
+  if (normalizedLimit === 0) {
+    return [];
+  }
+  const selector = createBackfillTargetSelector(normalizedLimit);
+  for (const target of targets) {
+    selector.add(target);
+  }
+  return selector.toArray();
+}
+
+export function normalizeBackfillTargetLimit(limit: number): number {
+  if (!Number.isFinite(limit)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(0, Math.trunc(limit));
+}
+
+type SequencedBackfillTarget = {
+  readonly sequence: number;
+  readonly target: BackfillEligibleTarget;
+};
+
+export function createBackfillTargetSelector(limit: number) {
+  const selected: SequencedBackfillTarget[] = [];
+  let sequence = 0;
+
+  return {
+    add(target: BackfillEligibleTarget) {
+      const item = { sequence, target };
+      sequence += 1;
+      if (!Number.isFinite(limit)) {
+        selected.push(item);
+        return;
+      }
+      if (selected.length < limit) {
+        heapPushWorstFirst(selected, item);
+        return;
+      }
+      const worst = selected[0];
+      if (worst && compareBackfillTargetPriority(item, worst) > 0) {
+        selected[0] = item;
+        heapifyWorstFirstDown(selected, 0);
+      }
+    },
+    peekOldestSelected() {
+      return selected[0]?.target ?? null;
+    },
+    isFull() {
+      return Number.isFinite(limit) && selected.length >= limit;
+    },
+    toArray() {
+      return selected
+        .slice()
+        .sort((left, right) => -compareBackfillTargetPriority(left, right))
+        .map((item) => item.target);
+    },
+  };
+}
+
+function compareBackfillTargetPriority(
+  left: SequencedBackfillTarget,
+  right: SequencedBackfillTarget
+): number {
+  const updatedAtOrder = left.target.updatedAt.localeCompare(right.target.updatedAt);
+  if (updatedAtOrder !== 0) {
+    return updatedAtOrder;
+  }
+  return right.sequence - left.sequence;
+}
+
+function heapPushWorstFirst(heap: SequencedBackfillTarget[], item: SequencedBackfillTarget) {
+  heap.push(item);
+  heapifyWorstFirstUp(heap, heap.length - 1);
+}
+
+function heapifyWorstFirstUp(heap: SequencedBackfillTarget[], startIndex: number) {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    const parent = heap[parentIndex];
+    const item = heap[index];
+    if (!parent || !item || compareBackfillTargetPriority(item, parent) >= 0) {
+      return;
+    }
+    heap[parentIndex] = item;
+    heap[index] = parent;
+    index = parentIndex;
+  }
+}
+
+function heapifyWorstFirstDown(heap: SequencedBackfillTarget[], startIndex: number) {
+  let index = startIndex;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    const rightIndex = leftIndex + 1;
+    let worstIndex = index;
+    const left = heap[leftIndex];
+    const right = heap[rightIndex];
+    const worst = heap[worstIndex];
+    if (left && worst && compareBackfillTargetPriority(left, worst) < 0) {
+      worstIndex = leftIndex;
+    }
+    const currentWorst = heap[worstIndex];
+    if (right && currentWorst && compareBackfillTargetPriority(right, currentWorst) < 0) {
+      worstIndex = rightIndex;
+    }
+    if (worstIndex === index) {
+      return;
+    }
+    const item = heap[index];
+    const replacement = heap[worstIndex];
+    if (!item || !replacement) {
+      return;
+    }
+    heap[index] = replacement;
+    heap[worstIndex] = item;
+    index = worstIndex;
+  }
 }

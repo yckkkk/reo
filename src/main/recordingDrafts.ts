@@ -45,12 +45,15 @@ import {
   lookupSegmentDirectoryById,
   markSegmentTranscriptionAttemptSuccess,
   markSupplementTranscriptionAttemptSuccess,
-  segmentSupplementDirectory,
   memorySegmentDirectory,
   readFinalizedSegmentProjection,
+  readFinalizedSegmentSupplementProjectionFromKnownDirectory,
   readFinalizedSegmentSummary,
+  readFinalizedSegmentSummaryFromKnownDirectory,
   replaceSegmentTranscript,
+  resolveSegmentSupplementDirectoryInSegmentDirectory,
   refreshMemoryIndexEntry,
+  refreshMemoryIndexEntryWithDetail,
   removeSafeWorkspaceDirectory,
   type FinalizeTransactionHooksForTest,
   type MemorySummary,
@@ -169,15 +172,8 @@ const finalizingRecordings = new Set<string>();
 const finalizingSupplements = new Set<string>();
 const activeDrafts = new Set<string>();
 const activeSupplementDrafts = new Set<string>();
+const recordingRuntimeKeysByRoot = new Map<string, Set<string>>();
 const markdownSaveQueues = new Map<string, Promise<void>>();
-const finalizedAudioTargets = new Map<
-  string,
-  {
-    readonly memoryId: string;
-    readonly audioByteLength: number;
-  }
->();
-const MAX_FINALIZED_AUDIO_TARGETS = 128;
 let beforeDraftDirectoryCreateForTest: (() => MaybePromise<void>) | null = null;
 let afterDraftDirectoryCreateForTest: (() => MaybePromise<void>) | null = null;
 let beforeDraftAudioCreateForTest: (() => MaybePromise<void>) | null = null;
@@ -190,8 +186,12 @@ function recordingKey(rootPath: string, segmentId: string): string {
   return `${path.resolve(rootPath)}:${segmentId}`;
 }
 
-function clearRecordingRuntimeStateByPrefix(prefix: string): void {
-  for (const store of [
+function recordingRootKey(rootPath: string): string {
+  return path.resolve(rootPath);
+}
+
+function recordingRuntimeStores(): readonly Set<string>[] {
+  return [
     inFlightAppends,
     inFlightSupplementAppends,
     inFlightDraftPrefixCopies,
@@ -200,13 +200,52 @@ function clearRecordingRuntimeStateByPrefix(prefix: string): void {
     finalizingSupplements,
     activeDrafts,
     activeSupplementDrafts,
-  ]) {
-    for (const key of store) {
-      if (key.startsWith(prefix)) {
-        store.delete(key);
-      }
+  ];
+}
+
+function trackRecordingRuntimeKey(rootPath: string, key: string): void {
+  const rootKey = recordingRootKey(rootPath);
+  const rootKeys = recordingRuntimeKeysByRoot.get(rootKey) ?? new Set<string>();
+  rootKeys.add(key);
+  recordingRuntimeKeysByRoot.set(rootKey, rootKeys);
+}
+
+function untrackRecordingRuntimeKey(rootPath: string, key: string): void {
+  if (recordingRuntimeStores().some((store) => store.has(key))) {
+    return;
+  }
+  const rootKey = recordingRootKey(rootPath);
+  const rootKeys = recordingRuntimeKeysByRoot.get(rootKey);
+  if (!rootKeys) {
+    return;
+  }
+  rootKeys.delete(key);
+  if (rootKeys.size === 0) {
+    recordingRuntimeKeysByRoot.delete(rootKey);
+  }
+}
+
+function addRecordingRuntimeKey(store: Set<string>, rootPath: string, key: string): void {
+  store.add(key);
+  trackRecordingRuntimeKey(rootPath, key);
+}
+
+function deleteRecordingRuntimeKey(store: Set<string>, rootPath: string, key: string): void {
+  store.delete(key);
+  untrackRecordingRuntimeKey(rootPath, key);
+}
+
+function clearRecordingRuntimeStateForRootKey(rootKey: string): void {
+  const keys = recordingRuntimeKeysByRoot.get(rootKey);
+  if (!keys) {
+    return;
+  }
+  for (const key of keys) {
+    for (const store of recordingRuntimeStores()) {
+      store.delete(key);
     }
   }
+  recordingRuntimeKeysByRoot.delete(rootKey);
 }
 
 export function clearRecordingRuntimeState(): void {
@@ -218,18 +257,18 @@ export function clearRecordingRuntimeState(): void {
   finalizingSupplements.clear();
   activeDrafts.clear();
   activeSupplementDrafts.clear();
+  recordingRuntimeKeysByRoot.clear();
   markdownSaveQueues.clear();
-  clearFinalizedAudioTargetCache();
 }
 
 export function clearRecordingRuntimeStateForRoot(rootPath: string): void {
-  clearRecordingRuntimeStateByPrefix(`${path.resolve(rootPath)}:`);
+  const rootKey = recordingRootKey(rootPath);
+  clearRecordingRuntimeStateForRootKey(rootKey);
   for (const key of markdownSaveQueues.keys()) {
-    if (key.startsWith(`${path.resolve(rootPath)}:`)) {
+    if (key.startsWith(`${rootKey}:`)) {
       markdownSaveQueues.delete(key);
     }
   }
-  clearFinalizedAudioTargetCacheForRoot(rootPath);
 }
 
 async function withMarkdownSaveQueue<T>(key: string, run: () => Promise<T>): Promise<T> {
@@ -292,30 +331,19 @@ async function resolveFinalizedAudioSegmentReadTarget(
   readonly audioByteLength: number;
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }> {
-  const cacheKey = recordingKey(rootPath, `${memoryId}:${segmentId}`);
   const directory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
-  const cached = finalizedAudioTargets.get(cacheKey);
-  await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
-  const summary = await readFinalizedSegmentSummary(rootPath, memoryId, segmentId);
-  if (
-    summary.segmentId !== segmentId ||
-    (cached && summary.audioByteLength !== cached.audioByteLength)
-  ) {
-    finalizedAudioTargets.delete(cacheKey);
+  const directoryIdentity = await readDirectoryIdentity(directory);
+  const summary = await readFinalizedSegmentSummaryFromKnownDirectory({
+    rootPath,
+    memoryId,
+    segmentId,
+    recordingDirectory: directory,
+    recordingDirectoryIdentity: directoryIdentity,
+  });
+  if (summary.segmentId !== segmentId) {
     throw new Error('Recording durable truth is invalid');
   }
-  if (!cached) {
-    finalizedAudioTargets.set(cacheKey, {
-      memoryId,
-      audioByteLength: summary.audioByteLength,
-    });
-    if (finalizedAudioTargets.size > MAX_FINALIZED_AUDIO_TARGETS) {
-      const oldestKey = finalizedAudioTargets.keys().next().value;
-      if (oldestKey) {
-        finalizedAudioTargets.delete(oldestKey);
-      }
-    }
-  }
+  await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
   return {
     directory,
     audioByteLength: summary.audioByteLength,
@@ -338,51 +366,34 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
   const segmentDirectoryIdentity = await readDirectoryIdentity(segmentDirectory);
   const supplementsDirectory = path.join(segmentDirectory, 'supplements');
   const supplementsDirectoryIdentity = await readDirectoryIdentity(supplementsDirectory);
-  const supplementDirectory = await segmentSupplementDirectory(
+  const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
     rootPath,
     memoryId,
+    segmentDirectory,
     segmentId,
-    supplementId
-  );
+    supplementId,
+  });
   const relative = path.relative(supplementsDirectory, supplementDirectory);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Segment supplement path escapes parent segment');
   }
 
   const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
-  const audioFd = openFileForReadInDirectory(
+  await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
+  const supplement = await readFinalizedSegmentSupplementProjectionFromKnownDirectory({
     supplementDirectory,
-    supplementDirectoryIdentity,
-    'audio.webm'
-  );
-  let audioByteLength: number;
-  try {
-    const audioStat = fstatSync(audioFd);
-    if (!audioStat.isFile()) {
-      throw new Error('Segment supplement audio path is unsafe');
-    }
-    audioByteLength = audioStat.size;
-  } finally {
-    closeSync(audioFd);
-  }
-  const segment = await readFinalizedSegmentProjection({
     rootPath,
     workspaceId,
     memoryId,
     segmentId,
+    supplementId,
   });
-  const supplement = segment?.supplements.find(
-    (candidate) => candidate.supplementId === supplementId
-  );
-  if (!supplement || supplement.audioByteLength !== audioByteLength) {
-    throw new Error('Segment supplement durable truth is invalid');
-  }
   await assertSameDirectory(segmentDirectory, segmentDirectoryIdentity);
   await assertSameDirectory(supplementsDirectory, supplementsDirectoryIdentity);
   await assertSameDirectory(supplementDirectory, supplementDirectoryIdentity);
   return {
     directory: supplementDirectory,
-    audioByteLength,
+    audioByteLength: supplement.audioByteLength,
     lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
   };
 }
@@ -393,47 +404,17 @@ async function readMetadata(
 ): Promise<DraftSegmentMetadata | null> {
   try {
     const recordingDirectory = resolveDraftRecordingDirectory(rootPath, segmentId);
-    return await readMetadataFromDirectory(recordingDirectory);
+    const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
+    return await readMetadataInKnownDirectory(recordingDirectory, directoryIdentity);
   } catch {
     return null;
   }
 }
 
-async function readSupplementMetadata(
-  rootPath: string,
-  supplementId: string
-): Promise<DraftSegmentSupplementMetadata | null> {
-  try {
-    const supplementDirectory = resolveDraftSupplementDirectory(rootPath, supplementId);
-    const directoryIdentity = await readDirectoryIdentity(supplementDirectory);
-    const fileFd = openFileForReadInDirectory(
-      supplementDirectory,
-      directoryIdentity,
-      'supplement.json'
-    );
-    try {
-      const metadata = fstatSync(fileFd);
-      if (!metadata.isFile()) {
-        throw new Error('Segment supplement metadata path is unsafe');
-      }
-      if (metadata.size > MAX_RECORDING_METADATA_BYTES) {
-        throw new Error('Segment supplement metadata is too large');
-      }
-      const content = (await readFileDescriptor(fileFd, 'utf8')) as string;
-      await assertSameDirectory(supplementDirectory, directoryIdentity);
-      return draftSegmentSupplementMetadataSchema.parse(JSON.parse(content));
-    } finally {
-      closeSync(fileFd);
-    }
-  } catch {
-    return null;
-  }
-}
-
-async function readMetadataFromDirectory(
-  recordingDirectory: string
+async function readMetadataInKnownDirectory(
+  recordingDirectory: string,
+  directoryIdentity: DirectoryIdentity
 ): Promise<DraftSegmentMetadata> {
-  const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   const fileFd = openFileForReadInDirectory(recordingDirectory, directoryIdentity, 'segment.json');
   try {
     const metadata = fstatSync(fileFd);
@@ -446,6 +427,44 @@ async function readMetadataFromDirectory(
     const content = (await readFileDescriptor(fileFd, 'utf8')) as string;
     await assertSameDirectory(recordingDirectory, directoryIdentity);
     return draftSegmentMetadataSchema.parse(JSON.parse(content));
+  } finally {
+    closeSync(fileFd);
+  }
+}
+
+async function readSupplementMetadata(
+  rootPath: string,
+  supplementId: string
+): Promise<DraftSegmentSupplementMetadata | null> {
+  try {
+    const supplementDirectory = resolveDraftSupplementDirectory(rootPath, supplementId);
+    const directoryIdentity = await readDirectoryIdentity(supplementDirectory);
+    return await readSupplementMetadataInKnownDirectory(supplementDirectory, directoryIdentity);
+  } catch {
+    return null;
+  }
+}
+
+async function readSupplementMetadataInKnownDirectory(
+  supplementDirectory: string,
+  directoryIdentity: DirectoryIdentity
+): Promise<DraftSegmentSupplementMetadata> {
+  const fileFd = openFileForReadInDirectory(
+    supplementDirectory,
+    directoryIdentity,
+    'supplement.json'
+  );
+  try {
+    const metadata = fstatSync(fileFd);
+    if (!metadata.isFile()) {
+      throw new Error('Segment supplement metadata path is unsafe');
+    }
+    if (metadata.size > MAX_RECORDING_METADATA_BYTES) {
+      throw new Error('Segment supplement metadata is too large');
+    }
+    const content = (await readFileDescriptor(fileFd, 'utf8')) as string;
+    await assertSameDirectory(supplementDirectory, directoryIdentity);
+    return draftSegmentSupplementMetadataSchema.parse(JSON.parse(content));
   } finally {
     closeSync(fileFd);
   }
@@ -539,19 +558,6 @@ export function setAfterDraftPrefixBytesCopiedForTest(hook: (() => void) | null)
 
 export function setBeforeMarkdownWriteForTest(hook: (() => MaybePromise<void>) | null): void {
   beforeMarkdownWriteForTest = hook;
-}
-
-export function clearFinalizedAudioTargetCacheForRoot(rootPath: string): void {
-  const rootPrefix = `${path.resolve(rootPath)}:`;
-  for (const cacheKey of finalizedAudioTargets.keys()) {
-    if (cacheKey.startsWith(rootPrefix)) {
-      finalizedAudioTargets.delete(cacheKey);
-    }
-  }
-}
-
-export function clearFinalizedAudioTargetCache(): void {
-  finalizedAudioTargets.clear();
 }
 
 async function createEmptyDraftAudioFile(
@@ -676,7 +682,7 @@ export async function createRecordingDraft({
     await assertSameDirectory(recordingDirectory, recordingDirectoryIdentity);
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     await writeMetadata(recordingDirectory, recordingDirectoryIdentity, metadata);
-    activeDrafts.add(key);
+    addRecordingRuntimeKey(activeDrafts, rootPath, key);
     return { ok: true, segmentId, nextSequence: 0 };
   } catch (error) {
     if (draftDirectoryCreated && recordingDirectory && recordingDirectoryIdentity) {
@@ -771,7 +777,7 @@ export async function createSegmentSupplementRecordingDraft({
     await assertSameDirectory(supplementDirectory, supplementDirectoryIdentity);
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     await writeSupplementMetadata(supplementDirectory, supplementDirectoryIdentity, metadata);
-    activeSupplementDrafts.add(key);
+    addRecordingRuntimeKey(activeSupplementDrafts, rootPath, key);
     return { ok: true, supplementId, nextSequence: 0 };
   } catch (error) {
     if (draftDirectoryCreated && supplementDirectory && supplementDirectoryIdentity) {
@@ -831,7 +837,7 @@ export async function appendRecordingAudioChunk({
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording draft audio read in flight');
   }
 
-  inFlightAppends.add(key);
+  addRecordingRuntimeKey(inFlightAppends, rootPath, key);
   let draftKnown = false;
   try {
     if (!activeDrafts.has(key)) {
@@ -853,7 +859,10 @@ export async function appendRecordingAudioChunk({
 
     const recordingDirectory = resolveDraftRecordingDirectory(rootPath, segmentId);
     const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-    const metadata = await readMetadata(rootPath, segmentId);
+    const metadata = await readMetadataInKnownDirectory(
+      recordingDirectory,
+      recordingDirectoryIdentity
+    ).catch(() => null);
     if (!metadata) {
       return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
     }
@@ -911,7 +920,7 @@ export async function appendRecordingAudioChunk({
         )
       : workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
   } finally {
-    inFlightAppends.delete(key);
+    deleteRecordingRuntimeKey(inFlightAppends, rootPath, key);
   }
 }
 
@@ -947,7 +956,7 @@ export async function appendSegmentSupplementRecordingAudioChunk({
     );
   }
 
-  inFlightSupplementAppends.add(key);
+  addRecordingRuntimeKey(inFlightSupplementAppends, rootPath, key);
   let draftKnown = false;
   try {
     if (!activeSupplementDrafts.has(key)) {
@@ -959,7 +968,10 @@ export async function appendSegmentSupplementRecordingAudioChunk({
 
     const supplementDirectory = resolveDraftSupplementDirectory(rootPath, supplementId);
     const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
-    const metadata = await readSupplementMetadata(rootPath, supplementId);
+    const metadata = await readSupplementMetadataInKnownDirectory(
+      supplementDirectory,
+      supplementDirectoryIdentity
+    ).catch(() => null);
     if (!metadata) {
       return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment supplement draft not found');
     }
@@ -1021,7 +1033,7 @@ export async function appendSegmentSupplementRecordingAudioChunk({
         )
       : workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment supplement draft not found');
   } finally {
-    inFlightSupplementAppends.delete(key);
+    deleteRecordingRuntimeKey(inFlightSupplementAppends, rootPath, key);
   }
 }
 
@@ -1107,8 +1119,8 @@ export async function cloneRecordingDraftPrefix({
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording draft copy in flight');
   }
 
-  inFlightDraftPrefixCopies.add(sourceKey);
-  inFlightDraftPrefixCopies.add(targetKey);
+  addRecordingRuntimeKey(inFlightDraftPrefixCopies, rootPath, sourceKey);
+  addRecordingRuntimeKey(inFlightDraftPrefixCopies, rootPath, targetKey);
   let sourceKnown = false;
   let targetKnown = false;
   try {
@@ -1117,8 +1129,14 @@ export async function cloneRecordingDraftPrefix({
     const targetDirectory = resolveDraftRecordingDirectory(rootPath, targetSegmentId);
     const sourceDirectoryIdentity = await readDirectoryIdentity(sourceDirectory);
     const targetDirectoryIdentity = await readDirectoryIdentity(targetDirectory);
-    const sourceMetadata = await readMetadata(rootPath, sourceSegmentId);
-    const targetMetadata = await readMetadata(rootPath, targetSegmentId);
+    const sourceMetadata = await readMetadataInKnownDirectory(
+      sourceDirectory,
+      sourceDirectoryIdentity
+    ).catch(() => null);
+    const targetMetadata = await readMetadataInKnownDirectory(
+      targetDirectory,
+      targetDirectoryIdentity
+    ).catch(() => null);
     if (!sourceMetadata) {
       return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording source draft not found');
     }
@@ -1219,8 +1237,8 @@ export async function cloneRecordingDraftPrefix({
       'draft-preserved'
     );
   } finally {
-    inFlightDraftPrefixCopies.delete(sourceKey);
-    inFlightDraftPrefixCopies.delete(targetKey);
+    deleteRecordingRuntimeKey(inFlightDraftPrefixCopies, rootPath, sourceKey);
+    deleteRecordingRuntimeKey(inFlightDraftPrefixCopies, rootPath, targetKey);
   }
 }
 
@@ -1264,11 +1282,14 @@ export async function readRecordingDraftAudio({
   if (inFlightDraftAudioReads.has(key)) {
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording draft audio read in flight');
   }
-  inFlightDraftAudioReads.add(key);
+  addRecordingRuntimeKey(inFlightDraftAudioReads, rootPath, key);
   try {
     const recordingDirectory = resolveDraftRecordingDirectory(rootPath, segmentId);
     const recordingDirectoryIdentity = await readDirectoryIdentity(recordingDirectory);
-    const metadata = await readMetadata(rootPath, segmentId);
+    const metadata = await readMetadataInKnownDirectory(
+      recordingDirectory,
+      recordingDirectoryIdentity
+    ).catch(() => null);
     if (!metadata) {
       return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
     }
@@ -1319,7 +1340,7 @@ export async function readRecordingDraftAudio({
       await assertSameDirectory(recordingDirectory, recordingDirectoryIdentity);
       return {
         ok: true,
-        audio: new Uint8Array(content),
+        audio: content,
         audioByteLength: metadata.audioByteLength,
         nextSequence: metadata.nextSequence,
       };
@@ -1333,7 +1354,7 @@ export async function readRecordingDraftAudio({
     }
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
   } finally {
-    inFlightDraftAudioReads.delete(key);
+    deleteRecordingRuntimeKey(inFlightDraftAudioReads, rootPath, key);
   }
 }
 
@@ -1456,13 +1477,116 @@ export async function readFinalizedAudioSegmentContent({
       await assertSameDirectory(target.directory, recordingDirectoryIdentity);
       return {
         ok: true,
-        audio: new Uint8Array(content),
+        audio: content,
         audioByteLength: target.audioByteLength,
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
         transcript,
       };
     } finally {
       closeSync(audioFd);
+    }
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Finalized audio segment not found');
+  }
+}
+
+export async function readFinalizedAudioSegmentBackfillSource({
+  maxBytes = MAX_BACKFILL_AUDIO_READ_BYTES,
+  rootPath,
+  memoryId,
+  segmentId,
+  assertWorkspaceUsable,
+  transcriptReadMode = 'read',
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly transcriptReadMode?: 'read' | 'assume-missing';
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audioByteLength: number;
+      readonly audioFileDescriptor: number;
+      readonly dispose: () => void;
+      readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+      readonly transcript: { readonly exists: boolean; readonly text: string };
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentReadTarget(rootPath, memoryId, segmentId);
+    const maxReadableBytes = Math.max(
+      1,
+      Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
+    );
+
+    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeAudio) {
+      return stillUsableBeforeAudio;
+    }
+    if (target.audioByteLength > maxReadableBytes) {
+      return workspaceError(
+        'ERR_RECORDING_CHUNK_TOO_LARGE',
+        'Finalized audio is too large to read'
+      );
+    }
+    const transcript =
+      transcriptReadMode === 'assume-missing'
+        ? { exists: false, text: '' }
+        : await readOptionalFinalizedTranscriptFile(target.directory, recordingDirectoryIdentity, {
+            markdownFileName: 'segment.md',
+            objectType: 'segment',
+          });
+
+    const audioFd = openFileForReadInDirectory(
+      target.directory,
+      recordingDirectoryIdentity,
+      'audio.webm'
+    );
+    let fdOwned = true;
+    try {
+      const audio = fstatSync(audioFd);
+      if (!audio.isFile() || audio.size !== target.audioByteLength) {
+        closeSync(audioFd);
+        fdOwned = false;
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+      if (stillUsable) {
+        closeSync(audioFd);
+        fdOwned = false;
+        return stillUsable;
+      }
+      await assertSameDirectory(target.directory, recordingDirectoryIdentity);
+      fdOwned = false;
+      return {
+        ok: true,
+        audioByteLength: target.audioByteLength,
+        audioFileDescriptor: audioFd,
+        dispose: () => closeSync(audioFd),
+        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+        transcript,
+      };
+    } finally {
+      if (fdOwned) {
+        closeSync(audioFd);
+      }
     }
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
@@ -1563,13 +1687,129 @@ export async function readFinalizedAudioSegmentSupplementContent({
       await assertSameDirectory(target.directory, supplementDirectoryIdentity);
       return {
         ok: true,
-        audio: new Uint8Array(content),
+        audio: content,
         audioByteLength: target.audioByteLength,
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
         transcript,
       };
     } finally {
       closeSync(audioFd);
+    }
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Finalized segment supplement audio not found'
+    );
+  }
+}
+
+export async function readFinalizedAudioSegmentSupplementBackfillSource({
+  maxBytes = MAX_BACKFILL_AUDIO_READ_BYTES,
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  assertWorkspaceUsable,
+  transcriptReadMode = 'read',
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly transcriptReadMode?: 'read' | 'assume-missing';
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audioByteLength: number;
+      readonly audioFileDescriptor: number;
+      readonly dispose: () => void;
+      readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+      readonly transcript: { readonly exists: boolean; readonly text: string };
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentSupplementReadTarget(
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId
+    );
+    const maxReadableBytes = Math.max(
+      1,
+      Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
+    );
+
+    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeAudio) {
+      return stillUsableBeforeAudio;
+    }
+    if (target.audioByteLength > maxReadableBytes) {
+      return workspaceError(
+        'ERR_RECORDING_CHUNK_TOO_LARGE',
+        'Finalized segment supplement audio is too large to read'
+      );
+    }
+    const transcript =
+      transcriptReadMode === 'assume-missing'
+        ? { exists: false, text: '' }
+        : await readOptionalFinalizedTranscriptFile(target.directory, supplementDirectoryIdentity, {
+            markdownFileName: 'supplement.md',
+            objectType: 'supplement',
+          });
+
+    const audioFd = openFileForReadInDirectory(
+      target.directory,
+      supplementDirectoryIdentity,
+      'audio.webm'
+    );
+    let fdOwned = true;
+    try {
+      const audio = fstatSync(audioFd);
+      if (!audio.isFile() || audio.size !== target.audioByteLength) {
+        closeSync(audioFd);
+        fdOwned = false;
+        return workspaceError(
+          'ERR_WORKSPACE_UNSAFE_PATH',
+          'Finalized segment supplement audio path is unsafe',
+          'durable-marker-recovery-required'
+        );
+      }
+      const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+      if (stillUsable) {
+        closeSync(audioFd);
+        fdOwned = false;
+        return stillUsable;
+      }
+      await assertSameDirectory(target.directory, supplementDirectoryIdentity);
+      fdOwned = false;
+      return {
+        ok: true,
+        audioByteLength: target.audioByteLength,
+        audioFileDescriptor: audioFd,
+        dispose: () => closeSync(audioFd),
+        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+        transcript,
+      };
+    } finally {
+      if (fdOwned) {
+        closeSync(audioFd);
+      }
     }
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
@@ -1644,7 +1884,7 @@ async function finalizeRecordingDraftWithHooks(
     return workspaceError('ERR_RECORDING_APPEND_IN_FLIGHT', 'Recording draft audio read in flight');
   }
 
-  finalizingRecordings.add(key);
+  addRecordingRuntimeKey(finalizingRecordings, rootPath, key);
   try {
     const metadata = await readMetadata(rootPath, segmentId);
     if (!metadata) {
@@ -1703,8 +1943,8 @@ async function finalizeRecordingDraftWithHooks(
       'draft-preserved'
     );
   } finally {
-    activeDrafts.delete(key);
-    finalizingRecordings.delete(key);
+    deleteRecordingRuntimeKey(activeDrafts, rootPath, key);
+    deleteRecordingRuntimeKey(finalizingRecordings, rootPath, key);
   }
 }
 
@@ -1772,7 +2012,7 @@ export async function finalizeSegmentSupplementRecordingDraft({
     );
   }
 
-  finalizingSupplements.add(key);
+  addRecordingRuntimeKey(finalizingSupplements, rootPath, key);
   try {
     const metadata = await readSupplementMetadata(rootPath, supplementId);
     if (!metadata) {
@@ -1840,8 +2080,8 @@ export async function finalizeSegmentSupplementRecordingDraft({
       'draft-preserved'
     );
   } finally {
-    activeSupplementDrafts.delete(key);
-    finalizingSupplements.delete(key);
+    deleteRecordingRuntimeKey(activeSupplementDrafts, rootPath, key);
+    deleteRecordingRuntimeKey(finalizingSupplements, rootPath, key);
   }
 }
 
@@ -1894,7 +2134,7 @@ export async function discardRecordingDraft({
     }
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Recording draft not found');
   } finally {
-    activeDrafts.delete(recordingKey(rootPath, segmentId));
+    deleteRecordingRuntimeKey(activeDrafts, rootPath, recordingKey(rootPath, segmentId));
   }
 }
 
@@ -1947,7 +2187,11 @@ export async function discardSegmentSupplementRecordingDraft({
     }
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment supplement draft not found');
   } finally {
-    activeSupplementDrafts.delete(recordingKey(rootPath, supplementId));
+    deleteRecordingRuntimeKey(
+      activeSupplementDrafts,
+      rootPath,
+      recordingKey(rootPath, supplementId)
+    );
   }
 }
 
@@ -1958,7 +2202,6 @@ async function writeSupplementTranscriptInRecordingDirectory({
   assertWorkspaceUsable,
   expectedTranscriptDigest,
   isAbortRequested,
-  markTranscriptSuccess,
   requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
@@ -1967,9 +2210,8 @@ async function writeSupplementTranscriptInRecordingDirectory({
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly expectedTranscriptDigest?: string;
   readonly isAbortRequested?: () => boolean;
-  readonly markTranscriptSuccess?: () => Promise<void>;
   readonly requireTranscriptMissing?: boolean;
-}): Promise<void> {
+}): Promise<TranscriptOverwriteRollback> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   throwIfBackfillSaveAborted(isAbortRequested);
   await beforeMarkdownWriteForTest?.();
@@ -2026,23 +2268,12 @@ async function writeSupplementTranscriptInRecordingDirectory({
         }
       : {}),
   });
-  if (markTranscriptSuccess) {
-    try {
-      await markTranscriptSuccess();
-    } catch (error) {
-      await throwAfterTranscriptOverwriteFailure(
-        error,
-        {
-          directory: recordingDirectory,
-          directoryIdentity,
-          fileName: 'supplement.md',
-          previousMarkdown: currentMarkdown,
-        },
-        assertWorkspaceUsable,
-        'Segment supplement markdown was saved but the transcription attempt manifest could not be updated'
-      );
-    }
-  }
+  return {
+    directory: recordingDirectory,
+    directoryIdentity,
+    fileName: 'supplement.md',
+    previousMarkdown: currentMarkdown,
+  };
 }
 
 async function writeSegmentTranscriptInRecordingDirectory({
@@ -2052,7 +2283,6 @@ async function writeSegmentTranscriptInRecordingDirectory({
   assertWorkspaceUsable,
   expectedTranscriptDigest,
   isAbortRequested,
-  markTranscriptSuccess,
   requireTranscriptMissing = false,
 }: {
   readonly recordingDirectory: string;
@@ -2061,9 +2291,8 @@ async function writeSegmentTranscriptInRecordingDirectory({
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly expectedTranscriptDigest?: string;
   readonly isAbortRequested?: () => boolean;
-  readonly markTranscriptSuccess?: () => Promise<void>;
   readonly requireTranscriptMissing?: boolean;
-}): Promise<void> {
+}): Promise<TranscriptOverwriteRollback> {
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   throwIfBackfillSaveAborted(isAbortRequested);
   await beforeMarkdownWriteForTest?.();
@@ -2114,23 +2343,12 @@ async function writeSegmentTranscriptInRecordingDirectory({
         }
       : {}),
   });
-  if (markTranscriptSuccess) {
-    try {
-      await markTranscriptSuccess();
-    } catch (error) {
-      await throwAfterTranscriptOverwriteFailure(
-        error,
-        {
-          directory: recordingDirectory,
-          directoryIdentity,
-          fileName: 'segment.md',
-          previousMarkdown: currentMarkdown,
-        },
-        assertWorkspaceUsable,
-        'Recording markdown was saved but the transcription attempt manifest could not be updated'
-      );
-    }
-  }
+  return {
+    directory: recordingDirectory,
+    directoryIdentity,
+    fileName: 'segment.md',
+    previousMarkdown: currentMarkdown,
+  };
 }
 
 async function rollbackTranscriptOverwrite(
@@ -2159,16 +2377,28 @@ async function throwAfterTranscriptOverwriteFailure(
   error: unknown,
   rollback: TranscriptOverwriteRollback,
   assertWorkspaceUsable: AssertWorkspaceUsable | undefined,
-  fallbackMessage: string
+  fallbackMessage: string,
+  refreshIndexAfterRollback?: () => Promise<void>
 ): Promise<never> {
   const rolledBack = await rollbackTranscriptOverwrite(rollback, assertWorkspaceUsable);
+  let rollbackIndexRefreshed = false;
+  if (rolledBack && refreshIndexAfterRollback) {
+    try {
+      await refreshIndexAfterRollback();
+      rollbackIndexRefreshed = true;
+    } catch {
+      rollbackIndexRefreshed = false;
+    }
+  }
   const workspaceErrorEnvelope = caughtWorkspaceError(error);
   if (workspaceErrorEnvelope) {
     throw rolledBack
       ? workspaceError(
           workspaceErrorEnvelope.error.code,
           workspaceErrorEnvelope.error.message,
-          'previous-file-preserved'
+          refreshIndexAfterRollback && !rollbackIndexRefreshed
+            ? 'file-written-index-stale'
+            : 'previous-file-preserved'
         )
       : workspaceError(
           workspaceErrorEnvelope.error.code,
@@ -2177,7 +2407,13 @@ async function throwAfterTranscriptOverwriteFailure(
         );
   }
   if (rolledBack) {
-    throw workspaceError('ERR_WORKSPACE_UPDATE_FAILED', fallbackMessage, 'previous-file-preserved');
+    throw workspaceError(
+      'ERR_WORKSPACE_UPDATE_FAILED',
+      fallbackMessage,
+      refreshIndexAfterRollback && !rollbackIndexRefreshed
+        ? 'file-written-index-stale'
+        : 'previous-file-preserved'
+    );
   }
   throw workspaceError('ERR_WORKSPACE_UPDATE_FAILED', fallbackMessage, 'file-written-index-stale');
 }
@@ -2213,30 +2449,19 @@ async function saveRecordingMarkdownNow({
   if (usable) {
     return usable;
   }
+  let rollback: TranscriptOverwriteRollback;
   try {
     const { directory: recordingDirectory } = await resolveFinalizedAudioSegmentReadTarget(
       rootPath,
       memoryId,
       segmentId
     );
-    await writeSegmentTranscriptInRecordingDirectory({
+    rollback = await writeSegmentTranscriptInRecordingDirectory({
       recordingDirectory,
       ...(allowOverwrite ? { allowOverwrite } : {}),
       markdown,
       ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
       ...(isAbortRequested ? { isAbortRequested } : {}),
-      ...(expectedTranscriptDigest !== undefined
-        ? {
-            markTranscriptSuccess: () =>
-              markSegmentTranscriptionAttemptSuccess({
-                rootPath,
-                workspaceId,
-                memoryId,
-                segmentId,
-                ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-              }),
-          }
-        : {}),
       ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
@@ -2251,41 +2476,42 @@ async function saveRecordingMarkdownNow({
       'previous-file-preserved'
     );
   }
+  let indexRefreshed = false;
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
     const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    if (expectedTranscriptDigest === undefined) {
-      try {
-        await markSegmentTranscriptionAttemptSuccess({
-          rootPath,
-          workspaceId,
-          memoryId,
-          segmentId,
-          ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-        });
-      } catch (error) {
-        const workspaceErrorEnvelope = caughtWorkspaceError(error);
-        if (workspaceErrorEnvelope) {
-          return workspaceErrorEnvelope;
-        }
-        return workspaceError(
-          'ERR_WORKSPACE_UPDATE_FAILED',
-          'Recording markdown was saved but the transcription attempt manifest could not be updated',
-          'file-written-index-stale'
-        );
-      }
-    }
+    indexRefreshed = true;
+    await markSegmentTranscriptionAttemptSuccess({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+    });
     return { ok: true, memory, saved: true };
   } catch (error) {
-    const workspaceErrorEnvelope = caughtWorkspaceError(error);
-    if (workspaceErrorEnvelope) {
-      return workspaceErrorEnvelope;
+    try {
+      await throwAfterTranscriptOverwriteFailure(
+        error,
+        rollback,
+        assertWorkspaceUsable,
+        'Recording markdown was saved but the workspace index or transcription attempt manifest could not be updated',
+        indexRefreshed
+          ? () => refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable).then(() => {})
+          : undefined
+      );
+    } catch (rollbackError) {
+      const workspaceErrorEnvelope = caughtWorkspaceError(rollbackError);
+      if (workspaceErrorEnvelope) {
+        return workspaceErrorEnvelope;
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_INDEX_WRITE_FAILED',
+        'Recording markdown was saved but the workspace index or transcription attempt manifest could not be updated',
+        'file-written-index-stale'
+      );
     }
-    return workspaceError(
-      'ERR_WORKSPACE_INDEX_WRITE_FAILED',
-      'Recording markdown was saved but the workspace index could not be refreshed',
-      'file-written-index-stale'
-    );
+    throw new Error('Unreachable transcript save rollback branch', { cause: error });
   }
 }
 
@@ -2333,6 +2559,7 @@ async function saveSegmentSupplementMarkdownNow({
   if (usable) {
     return usable;
   }
+  let rollback: TranscriptOverwriteRollback;
   try {
     const { directory: supplementDirectory } =
       await resolveFinalizedAudioSegmentSupplementReadTarget(
@@ -2342,25 +2569,12 @@ async function saveSegmentSupplementMarkdownNow({
         segmentId,
         supplementId
       );
-    await writeSupplementTranscriptInRecordingDirectory({
+    rollback = await writeSupplementTranscriptInRecordingDirectory({
       recordingDirectory: supplementDirectory,
       ...(allowOverwrite ? { allowOverwrite } : {}),
       markdown,
       ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
       ...(isAbortRequested ? { isAbortRequested } : {}),
-      ...(expectedTranscriptDigest !== undefined
-        ? {
-            markTranscriptSuccess: () =>
-              markSupplementTranscriptionAttemptSuccess({
-                rootPath,
-                workspaceId,
-                memoryId,
-                segmentId,
-                supplementId,
-                ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-              }),
-          }
-        : {}),
       ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     });
@@ -2375,54 +2589,51 @@ async function saveSegmentSupplementMarkdownNow({
       'previous-file-preserved'
     );
   }
+  let indexRefreshed = false;
   try {
     assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-    const memory = await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    const segment = await readFinalizedSegmentProjection({
+    const refreshed = await refreshMemoryIndexEntryWithDetail({
       rootPath,
       workspaceId,
       memoryId,
-      segmentId,
+      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
     });
-    const supplement = segment.supplements.find(
-      (candidate) => candidate.supplementId === supplementId
+    indexRefreshed = true;
+    const segment = refreshed.detail.segments.find(
+      (candidate) => candidate.segmentId === segmentId
     );
-    if (!supplement) {
-      return workspaceError(
+    if (!segment) {
+      throw workspaceError(
         'ERR_RECORDING_NOT_FOUND',
         'Saved segment supplement markdown projection was not found',
         'file-written-index-stale'
       );
     }
-    if (expectedTranscriptDigest === undefined) {
-      try {
-        await markSupplementTranscriptionAttemptSuccess({
-          rootPath,
-          workspaceId,
-          memoryId,
-          segmentId,
-          supplementId,
-          ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
-        });
-      } catch (error) {
-        const workspaceErrorEnvelope = caughtWorkspaceError(error);
-        if (workspaceErrorEnvelope) {
-          return workspaceErrorEnvelope;
-        }
-        return workspaceError(
-          'ERR_WORKSPACE_UPDATE_FAILED',
-          'Segment supplement markdown was saved but the transcription attempt manifest could not be updated',
-          'file-written-index-stale'
-        );
-      }
+    const supplement = segment.supplements.find(
+      (candidate) => candidate.supplementId === supplementId
+    );
+    if (!supplement) {
+      throw workspaceError(
+        'ERR_RECORDING_NOT_FOUND',
+        'Saved segment supplement markdown projection was not found',
+        'file-written-index-stale'
+      );
     }
+    await markSupplementTranscriptionAttemptSuccess({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId,
+      ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+    });
     const updatedSupplement = {
       ...supplement,
       lastTranscriptionAttempt: 'success' as const,
     };
     return {
       ok: true,
-      memory,
+      memory: refreshed.memory,
       segment: {
         ...segment,
         supplements: segment.supplements.map((candidate) =>
@@ -2433,14 +2644,33 @@ async function saveSegmentSupplementMarkdownNow({
       saved: true,
     };
   } catch (error) {
-    const workspaceErrorEnvelope = caughtWorkspaceError(error);
-    if (workspaceErrorEnvelope) {
-      return workspaceErrorEnvelope;
+    try {
+      await throwAfterTranscriptOverwriteFailure(
+        error,
+        rollback,
+        assertWorkspaceUsable,
+        'Segment supplement markdown was saved but the workspace index or transcription attempt manifest could not be updated',
+        indexRefreshed
+          ? () =>
+              refreshMemoryIndexEntryWithDetail({
+                rootPath,
+                workspaceId,
+                memoryId,
+                ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
+              }).then(() => {})
+          : undefined
+      );
+    } catch (rollbackError) {
+      const workspaceErrorEnvelope = caughtWorkspaceError(rollbackError);
+      if (workspaceErrorEnvelope) {
+        return workspaceErrorEnvelope;
+      }
+      return workspaceError(
+        'ERR_WORKSPACE_INDEX_WRITE_FAILED',
+        'Segment supplement markdown was saved but the workspace index or transcription attempt manifest could not be updated',
+        'file-written-index-stale'
+      );
     }
-    return workspaceError(
-      'ERR_WORKSPACE_INDEX_WRITE_FAILED',
-      'Segment supplement markdown was saved but the workspace index could not be refreshed',
-      'file-written-index-stale'
-    );
+    throw new Error('Unreachable supplement transcript save rollback branch', { cause: error });
   }
 }

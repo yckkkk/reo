@@ -79,18 +79,31 @@ function readDesignTokens(): DesignTokens {
   return JSON.parse(readProjectFile('docs/current/design-system/tokens.json')) as DesignTokens;
 }
 
-function cssVariableValue(css: string, tokenName: string, scope: 'light' | 'dark'): string {
+function cssVariableMap(css: string, scope: 'light' | 'dark'): Map<string, string> {
   const lightMatch = css.match(/:root,\s*\n\[data-theme='light'\]\s*{(?<body>[\s\S]*?)\n}/);
   const darkMatch = css.match(/\[data-theme='dark'\]\s*{(?<body>[\s\S]*?)\n}/);
   const source =
     scope === 'dark' ? (darkMatch?.groups?.['body'] ?? '') : (lightMatch?.groups?.['body'] ?? '');
-  const escapedName = tokenName.replaceAll('-', '\\-');
-  const match = source.match(new RegExp(`--${escapedName}:\\s*([^;]+);`));
+  const variables = new Map<string, string>();
+  for (const match of source.matchAll(/--([\w-]+):\s*([^;]+);/g)) {
+    const name = match[1];
+    const value = match[2];
+    if (name && value) {
+      variables.set(name, value.trim());
+    }
+  }
+  return variables;
+}
 
-  assert.ok(match, `Missing ${scope} token --${tokenName}`);
-  const value = match[1];
+function cssVariableValue(
+  variables: ReadonlyMap<string, string>,
+  tokenName: string,
+  scope: 'light' | 'dark'
+): string {
+  const value = variables.get(tokenName);
+
   assert.ok(value, `Missing ${scope} token value --${tokenName}`);
-  return value.trim();
+  return value;
 }
 
 test('design token source defines compact Soft Flat semantic colors', () => {
@@ -119,13 +132,15 @@ test('runtime and design-system CSS project the same semantic tokens', () => {
 
   for (const path of cssFiles) {
     const css = readProjectFile(path);
+    const lightVariables = cssVariableMap(css, 'light');
+    const darkVariables = cssVariableMap(css, 'dark');
 
     for (const [name, expectedValue] of Object.entries(lightColorContract)) {
-      assert.equal(cssVariableValue(css, name, 'light'), expectedValue, path);
+      assert.equal(cssVariableValue(lightVariables, name, 'light'), expectedValue, path);
     }
 
     for (const [name, expectedValue] of Object.entries(darkColorContract)) {
-      assert.equal(cssVariableValue(css, name, 'dark'), expectedValue, path);
+      assert.equal(cssVariableValue(darkVariables, name, 'dark'), expectedValue, path);
     }
 
     assert.doesNotMatch(css, /--brand-blue|--brand-spectrum/, path);
@@ -141,8 +156,13 @@ test('ordinary control radius stays square-rounded and full radius is reserved',
 
   for (const path of ['src/renderer/src/theme.css', 'docs/current/design-system/theme.css']) {
     const css = readProjectFile(path);
-    assert.equal(cssVariableValue(css, 'radius', 'light'), radiusContract.base, path);
-    assert.equal(cssVariableValue(css, 'radius-full', 'light'), radiusContract.full, path);
+    const lightVariables = cssVariableMap(css, 'light');
+    assert.equal(cssVariableValue(lightVariables, 'radius', 'light'), radiusContract.base, path);
+    assert.equal(
+      cssVariableValue(lightVariables, 'radius-full', 'light'),
+      radiusContract.full,
+      path
+    );
   }
 });
 
@@ -156,9 +176,23 @@ test('floating shadows are scoped and include dark elevation values', () => {
 
   for (const path of ['src/renderer/src/theme.css', 'docs/current/design-system/theme.css']) {
     const css = readProjectFile(path);
-    assert.equal(cssVariableValue(css, 'shadow-float', 'light'), tokens.shadow['float']?.$value);
-    assert.equal(cssVariableValue(css, 'shadow-modal', 'light'), tokens.shadow['modal']?.$value);
-    assert.equal(cssVariableValue(css, 'shadow-float', 'dark'), tokens.darkShadow['float']?.$value);
-    assert.equal(cssVariableValue(css, 'shadow-modal', 'dark'), tokens.darkShadow['modal']?.$value);
+    const lightVariables = cssVariableMap(css, 'light');
+    const darkVariables = cssVariableMap(css, 'dark');
+    assert.equal(
+      cssVariableValue(lightVariables, 'shadow-float', 'light'),
+      tokens.shadow['float']?.$value
+    );
+    assert.equal(
+      cssVariableValue(lightVariables, 'shadow-modal', 'light'),
+      tokens.shadow['modal']?.$value
+    );
+    assert.equal(
+      cssVariableValue(darkVariables, 'shadow-float', 'dark'),
+      tokens.darkShadow['float']?.$value
+    );
+    assert.equal(
+      cssVariableValue(darkVariables, 'shadow-modal', 'dark'),
+      tokens.darkShadow['modal']?.$value
+    );
   }
 });

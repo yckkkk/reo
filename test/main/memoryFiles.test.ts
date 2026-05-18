@@ -28,7 +28,6 @@ import {
   createRecordingDraft,
   createSegmentSupplementRecordingDraft,
   finalizeRecordingDraftForTest as finalizeRecordingDraft,
-  initializeRecordingDraftWorkspace,
 } from '../../src/main/recordingDrafts.js';
 import {
   setAfterAtomicWorkspaceFileBackupRemoveForTest,
@@ -41,7 +40,7 @@ import {
   writeWorkspaceFileNoReplaceAtomicForTest,
 } from '../../src/main/atomicWorkspaceFile.js';
 import {
-  appendAudioSupplementToSegment,
+  appendAudioSupplementToSegmentForTest as appendAudioSupplementToSegment,
   appendAudioSegmentToMemoryForTest as appendAudioSegmentToMemory,
   createMemoryFromFileTruth,
   createMemoryWithRecordingForTest as createMemoryWithRecording,
@@ -59,6 +58,7 @@ import {
   restoreDeletedSegmentFromFileTruth,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
+  setBeforeMemoryDirectoryCandidateScanForTest,
   setBeforeMemoryIndexEntryReadForTest,
   setBeforeReadModelReaddirForTest,
   setBeforeReadModelPersistForTest,
@@ -84,7 +84,6 @@ async function workspaceRoot(): Promise<string> {
     createWorkspaceId: () => 'ws_memory',
     now: () => '2026-05-06T13:08:00.000Z',
   });
-  await initializeRecordingDraftWorkspace({ rootPath });
   return rootPath;
 }
 
@@ -192,6 +191,8 @@ async function readProjectedSegmentIdsFromMemoryDirectoryForTest(
   memoryDirectory: string
 ): Promise<readonly string[]> {
   const segmentsDirectory = path.join(memoryDirectory, 'segments');
+  const rootPath = await workspaceRootFromNodeDirectory(memoryDirectory);
+  const memoryId = path.basename(memoryDirectory).split('--')[0] ?? '';
   try {
     const entries = await readdir(segmentsDirectory, { withFileTypes: true });
     const projectedSegmentIds: string[] = [];
@@ -201,15 +202,11 @@ async function readProjectedSegmentIdsFromMemoryDirectoryForTest(
       }
       try {
         const segmentId = entry.name.split('--')[0] ?? '';
-        const rootPath = await workspaceRootFromNodeDirectory(memoryDirectory);
         const manifest = (await readJson(
           path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
         )) as { readonly segmentId?: unknown; readonly memoryId?: unknown };
         await readFile(path.join(segmentsDirectory, entry.name, 'segment.md'), 'utf8');
-        if (
-          manifest.memoryId === path.basename(memoryDirectory).split('--')[0] &&
-          typeof manifest.segmentId === 'string'
-        ) {
+        if (manifest.memoryId === memoryId && typeof manifest.segmentId === 'string') {
           projectedSegmentIds.push(manifest.segmentId);
         }
       } catch {
@@ -507,6 +504,61 @@ test('finalizes a draft into a durable memory directory', async () => {
   await assert.rejects(
     stat(path.join(rootPath, '.reo', 'drafts', 'segments', 'seg_20260506_000001'))
   );
+});
+
+test('recording finalize refreshes only the owning memory index entry on success', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_finalize_targeted_refresh';
+  const segmentId = 'seg_finalize_targeted_refresh';
+  await createMemoryForDraftFinalize({
+    rootPath,
+    memoryId,
+    title: 'Targeted refresh',
+    now: '2026-05-06T13:08:00.000Z',
+  });
+  const draft = await createRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_memory',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-06T13:09:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  await appendRecordingAudioChunk({
+    rootPath,
+    segmentId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  let fullRebuildCount = 0;
+  setBeforeReadModelReaddirForTest(() => {
+    fullRebuildCount += 1;
+  });
+
+  try {
+    const finalized = await finalizeRecordingDraft({
+      rootPath,
+      workspaceId: 'ws_memory',
+      segmentId,
+      memoryId,
+      title: 'Targeted segment',
+      durationMs: 1000,
+      now: () => '2026-05-06T13:10:00.000Z',
+    });
+
+    assert.equal(finalized.ok, true);
+    assert.equal(fullRebuildCount, 0);
+    if (finalized.ok) {
+      assert.equal(finalized.memory.memoryId, memoryId);
+      assert.equal(finalized.memory.segmentCount, 1);
+      assert.deepEqual(await readWorkspaceIndex(rootPath), {
+        schemaVersion: 1,
+        memories: [finalized.memory],
+      });
+    }
+  } finally {
+    setBeforeReadModelReaddirForTest(null);
+  }
 });
 
 test('updates titles through file truth before rebuilding the index projection', async () => {
@@ -2716,6 +2768,155 @@ test('supplement finalize rejects duplicate supplement ids even when the existin
   );
 });
 
+test('supplement finalize rolls back exposed directory when manifest write cannot start', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_supplement_manifest_blocked';
+  const segmentId = 'seg_20260518_supplement_manifest_blocked';
+  const supplementId = 'sup_20260518_supplement_manifest_blocked';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充事务回滚',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '父录音',
+  });
+  await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-18T12:00:00.000Z',
+  });
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId,
+    sequence: 0,
+    chunk: new Uint8Array([1, 2, 3]),
+  });
+
+  const finalized = await appendAudioSupplementToSegment({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '补充失败',
+    durationMs: 1200,
+    now: () => '2026-05-18T12:01:00.000Z',
+    transactionHooks: {
+      afterFinalRename: () => {
+        throw new Error('manifest blocked');
+      },
+    },
+  });
+
+  assert.equal(finalized.ok, false);
+  if (!finalized.ok) {
+    assert.equal(finalized.error.dataRetention, 'draft-preserved');
+  }
+  await stat(path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId));
+  await assert.rejects(
+    stat(
+      path.join(
+        rootPath,
+        'memories',
+        memoryId,
+        'segments',
+        segmentId,
+        'supplements',
+        `${supplementId}--补充失败`
+      )
+    )
+  );
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`))
+  );
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: [
+      {
+        memoryId,
+        title: '补充事务回滚',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        updatedAt: '2026-05-06T13:09:00.000Z',
+        segmentCount: 1,
+        durationMs: 1000,
+        audioByteLength: 3,
+        hasTranscript: false,
+        supplementCount: 0,
+      },
+    ],
+  });
+});
+
+test('supplement finalize preserves marker after durable draft cleanup completes', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_supplement_cleanup_fsync_blocked';
+  const segmentId = 'seg_20260518_supplement_cleanup_fsync_blocked';
+  const supplementId = 'sup_20260518_supplement_cleanup_fsync_blocked';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充 marker 保留',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '父录音',
+  });
+  await createSegmentSupplementRecordingDraft({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-18T12:02:00.000Z',
+  });
+  await appendSegmentSupplementRecordingAudioChunk({
+    rootPath,
+    supplementId,
+    sequence: 0,
+    chunk: new Uint8Array([4, 5, 6]),
+  });
+
+  const finalized = await appendAudioSupplementToSegment({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '补充已落盘',
+    durationMs: 1200,
+    now: () => '2026-05-18T12:03:00.000Z',
+    transactionHooks: {
+      afterDraftCleanup: () => {
+        throw new Error('draft parent fsync blocked');
+      },
+    },
+  });
+
+  assert.equal(finalized.ok, false);
+  if (!finalized.ok) {
+    assert.equal(finalized.error.dataRetention, 'durable-marker-recovery-required');
+  }
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId)));
+  await stat(
+    path.join(
+      rootPath,
+      'memories',
+      memoryId,
+      'segments',
+      segmentId,
+      'supplements',
+      `${supplementId}--补充已落盘`,
+      '.reo-finalize-transaction.json'
+    )
+  );
+  await stat(path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`));
+});
+
 test('projects supplement updates to segment and memory ordering', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_projected_updates';
@@ -2788,6 +2989,36 @@ test('rebuild index uses memory markdown as the title source of truth', async ()
       supplementCount: 0,
     },
   ]);
+});
+
+test('rebuild index summarizes memories from the initial directory scan', async () => {
+  const rootPath = await workspaceRoot();
+  for (let index = 0; index < 3; index += 1) {
+    const memoryId = `mem_rebuild_known_directory_${index}`;
+    await writeMemoryForTest(rootPath, {
+      memoryId,
+      title: `Known directory ${index}`,
+    });
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId: `seg_rebuild_known_directory_${index}`,
+      title: `Recording ${index}`,
+    });
+  }
+
+  let memoryDirectoryScanCount = 0;
+  setBeforeMemoryDirectoryCandidateScanForTest(() => {
+    memoryDirectoryScanCount += 1;
+  });
+
+  try {
+    const memories = await rebuildMemoryIndex(rootPath, { persist: false });
+
+    assert.equal(memories.length, 3);
+    assert.equal(memoryDirectoryScanCount, 0);
+  } finally {
+    setBeforeMemoryDirectoryCandidateScanForTest(null);
+  }
 });
 
 test('delete and restore keep externally renamed memory directories addressable by metadata id', async () => {
@@ -3746,6 +3977,39 @@ test('recording lookup rejects duplicate finalized id directories as invalid dur
     findSegmentDirectoryById(rootPath, 'seg_20260506_duplicate_lookup'),
     /Invalid durable recording/
   );
+});
+
+test('recording lookup resolves segments from the initial memory directory scan', async () => {
+  const rootPath = await workspaceRoot();
+  for (let index = 0; index < 3; index += 1) {
+    const memoryId = `mem_lookup_known_directory_${index}`;
+    await writeMemoryForTest(rootPath, {
+      memoryId,
+      title: `Lookup memory ${index}`,
+    });
+    await writeFinalizedAudioSegmentForTest(rootPath, {
+      memoryId,
+      segmentId: `seg_lookup_known_directory_${index}`,
+      title: `Lookup segment ${index}`,
+    });
+  }
+
+  let memoryDirectoryScanCount = 0;
+  setBeforeMemoryDirectoryCandidateScanForTest(() => {
+    memoryDirectoryScanCount += 1;
+  });
+
+  try {
+    const segmentDirectory = await findSegmentDirectoryById(
+      rootPath,
+      'seg_lookup_known_directory_2'
+    );
+
+    assert.equal(path.basename(segmentDirectory), 'seg_lookup_known_directory_2');
+    assert.equal(memoryDirectoryScanCount, 0);
+  } finally {
+    setBeforeMemoryDirectoryCandidateScanForTest(null);
+  }
 });
 
 test('create memory finalize cannot replace an existing memory directory', async () => {

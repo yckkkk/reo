@@ -2604,6 +2604,7 @@ test('recording transcription event contract carries only segment state and safe
   assert.deepEqual(
     workspaceRecordingTranscriptionEventSchema.parse({
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       segments: [
@@ -2619,6 +2620,7 @@ test('recording transcription event contract carries only segment state and safe
     }),
     {
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       segments: [
@@ -2636,6 +2638,7 @@ test('recording transcription event contract carries only segment state and safe
   assert.throws(() =>
     workspaceRecordingTranscriptionEventSchema.parse({
       kind: 'segments',
+      recordingFlowSessionId: 'recording-1',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
       rootPath: '/Users/example/Reo',

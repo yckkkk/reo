@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { MAX_BACKFILL_AUDIO_READ_BYTES } from '../workspace-contract/recording-audio.js';
 
 export const DOUBAO_AUC_TURBO_ENDPOINT =
   'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash';
 export const DOUBAO_AUC_TURBO_RESOURCE_ID = 'volc.bigasr.auc_turbo';
+export const DOUBAO_AUC_TURBO_MAX_AUDIO_DATA_BASE64_BYTES =
+  Math.ceil(MAX_BACKFILL_AUDIO_READ_BYTES / 3) * 4;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SUCCESS_STATUS_CODE = '20000000';
@@ -218,6 +221,9 @@ export async function recognizeDoubaoAucTurboAudioData({
 }: RecognizeDoubaoAucTurboAudioDataInput): Promise<DoubaoAucTurboRecognitionResult> {
   if (signal?.aborted) {
     return buildFailure('abort');
+  }
+  if (audioDataBase64.length > DOUBAO_AUC_TURBO_MAX_AUDIO_DATA_BASE64_BYTES) {
+    return buildFailure('size');
   }
 
   const controller = new AbortController();

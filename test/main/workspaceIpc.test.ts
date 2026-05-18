@@ -199,6 +199,7 @@ test('recording transcription events keep the Electron sender binding', () => {
     { ...event, sender: senderWithSend },
     {
       kind: 'error',
+      recordingFlowSessionId: 'recording-1',
       message: '实时转写暂时不可用。',
       recordingSessionId: 'recording-1',
       revisionId: 'recording-1-revision-0',
@@ -210,6 +211,7 @@ test('recording transcription events keep the Electron sender binding', () => {
       channel: 'workspace:recordingTranscriptionEvent',
       payload: {
         kind: 'error',
+        recordingFlowSessionId: 'recording-1',
         message: '实时转写暂时不可用。',
         recordingSessionId: 'recording-1',
         revisionId: 'recording-1-revision-0',

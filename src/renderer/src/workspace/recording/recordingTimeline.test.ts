@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTranscriptResult,
+  applyTranscriptResults,
   createRecordingTimeline,
+  findTranscriptSegmentAtOrBeforeTime,
   findTranscriptSegmentAtTime,
   hasTailAfterCursor,
   startReplacementAtCursor,
@@ -134,6 +136,37 @@ describe('recordingTimeline', () => {
     expect(current.transcriptSegments.map((segment) => segment.text)).toEqual(['新结果']);
   });
 
+  it('applies a batch of transcript results with the same merge semantics as individual results', () => {
+    const existing = Array.from({ length: 1000 }, (_, index) => ({
+      endTimeMs: index * 1000 + 900,
+      isFinal: true,
+      recordingSessionId: 'recording-1',
+      revisionId: 'rev-1',
+      startTimeMs: index * 1000,
+      text: `旧段落${index}`,
+    }));
+    const incoming = Array.from({ length: 200 }, (_, index) => ({
+      endTimeMs: 1_000_000 + index * 1000 + 900,
+      isFinal: true,
+      recordingSessionId: 'recording-1',
+      revisionId: 'rev-1',
+      startTimeMs: 1_000_000 + index * 1000,
+      text: `新段落${index}`,
+    }));
+    const timeline = createRecordingTimeline({
+      recordingSessionId: 'recording-1',
+      revisionId: 'rev-1',
+      totalDurationMs: 999_900,
+      transcriptSegments: existing,
+    });
+
+    const batchApplied = applyTranscriptResults(timeline, incoming);
+    const individuallyApplied = incoming.reduce(applyTranscriptResult, timeline);
+
+    expect(batchApplied.transcriptSegments).toEqual(individuallyApplied.transcriptSegments);
+    expect(batchApplied.totalDurationMs).toBe(individuallyApplied.totalDurationMs);
+  });
+
   it('replaces growing interim transcript results instead of appending duplicate partials', () => {
     const timeline = createRecordingTimeline({
       recordingSessionId: 'recording-1',
@@ -209,6 +242,9 @@ describe('recordingTimeline', () => {
     );
 
     expect(findTranscriptSegmentAtTime(timeline.transcriptSegments, 4_000)?.text).toBe('中间');
+    expect(findTranscriptSegmentAtOrBeforeTime(timeline.transcriptSegments, 9_000)?.text).toBe(
+      '中间'
+    );
     expect(hasTailAfterCursor(timeline)).toBe(true);
     expect(hasTailAfterCursor({ ...timeline, cursorTimeMs: 10_000 })).toBe(false);
   });

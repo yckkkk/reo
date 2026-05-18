@@ -989,6 +989,7 @@ export const workspaceRecordingTranscriptionControlResponseSchema = z.discrimina
 export const workspaceRecordingTranscriptionEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('segments'),
+    recordingFlowSessionId: z.string().min(1),
     recordingSessionId: z.string().min(1),
     revisionId: z.string().min(1),
     segments: z.array(workspaceTranscriptSegmentSchema),
@@ -996,11 +997,13 @@ export const workspaceRecordingTranscriptionEventSchema = z.discriminatedUnion('
   z.strictObject({
     kind: z.literal('error'),
     message: z.string().min(1),
+    recordingFlowSessionId: z.string().min(1),
     recordingSessionId: z.string().min(1),
     revisionId: z.string().min(1),
   }),
   z.strictObject({
     kind: z.literal('closed'),
+    recordingFlowSessionId: z.string().min(1),
     recordingSessionId: z.string().min(1),
     revisionId: z.string().min(1),
   }),

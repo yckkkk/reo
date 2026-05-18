@@ -52,12 +52,24 @@ export function memorySummaryWithVisibleSegments(
   memory: WorkspaceMemorySummary,
   visibleSegments: readonly WorkspaceMemoryDetail['segments'][number][]
 ): WorkspaceMemorySummary {
+  let audioByteLength = 0;
+  let supplementCount = 0;
+  let durationMs = 0;
+  let hasTranscript = false;
+
+  for (const segment of visibleSegments) {
+    audioByteLength += segment.audioByteLength;
+    supplementCount += segment.supplementCount;
+    durationMs += segment.durationMs;
+    hasTranscript ||= segment.transcript.exists;
+  }
+
   return {
     ...memory,
-    audioByteLength: visibleSegments.reduce((total, segment) => total + segment.audioByteLength, 0),
-    supplementCount: visibleSegments.reduce((total, segment) => total + segment.supplementCount, 0),
-    durationMs: visibleSegments.reduce((total, segment) => total + segment.durationMs, 0),
-    hasTranscript: visibleSegments.some((segment) => segment.transcript.exists),
+    audioByteLength,
+    supplementCount,
+    durationMs,
+    hasTranscript,
     segmentCount: visibleSegments.length,
   };
 }
@@ -137,9 +149,23 @@ export function snapshotWithPendingSegmentDeletes(
     return snapshot;
   }
 
+  const projectionsByMemory = new Map<string, PendingSegmentDeleteProjection[]>();
+  for (const projection of projections) {
+    const pendingForMemory = projectionsByMemory.get(projection.memoryId);
+    if (pendingForMemory) {
+      pendingForMemory.push(projection);
+    } else {
+      projectionsByMemory.set(projection.memoryId, [projection]);
+    }
+  }
+
   let changed = false;
   const memories = snapshot.memories.map((memory) => {
-    const nextMemory = projections.reduce(
+    const pendingForMemory = projectionsByMemory.get(memory.memoryId);
+    if (!pendingForMemory) {
+      return memory;
+    }
+    const nextMemory = pendingForMemory.reduce(
       (currentMemory, projection) =>
         memorySummaryWithPendingSegmentDelete(currentMemory, projection),
       memory

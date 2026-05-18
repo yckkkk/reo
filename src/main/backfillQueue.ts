@@ -91,7 +91,7 @@ export type BackfillQueue<TResponse = unknown> = {
     options: { readonly insertAtHead: boolean }
   ) => BackfillQueueEnqueueResult;
   readonly enqueueAutomaticBatch: (
-    tasks: readonly BackfillQueueTask[]
+    tasks: Iterable<BackfillQueueTask>
   ) => BackfillQueueBatchEnqueueResult;
   readonly pause: (reason: BackfillQueuePauseReason) => void;
   readonly resume: (reason: BackfillQueuePauseReason) => void;
@@ -200,11 +200,15 @@ export function createBackfillQueue<TResponse = unknown>({
   const queue: QueueEntry<TResponse>[] = [];
   const activeTargets = new Set<string>();
   const taskPromises = new Map<string, Promise<BackfillQueueRunResult<TResponse>>>();
-  const terminalTaskKeys: string[] = [];
+  const terminalTaskKeys = new Set<string>();
   const pausedReasons = new Set<BackfillQueuePauseReason>();
   const breakerStates = new Map<number, BreakerState>();
+  const batchPendingCounts = new Map<number, number>();
+  const queuedTaskCountsByWorkspaceHandle = new Map<string, number>();
   let currentBatchId = 0;
   let pumpScheduled = false;
+  let queueHeadIndex = 0;
+  let queuedManualTaskCount = 0;
   let runningEntry: QueueEntry<TResponse> | null = null;
 
   function createEntry(task: BackfillQueueTask, batchId: number | null): QueueEntry<TResponse> {
@@ -220,15 +224,13 @@ export function createBackfillQueue<TResponse = unknown>({
     result: BackfillQueueRunResult<TResponse>
   ) {
     const targetKey = getBackfillTargetKey(task);
-    const existingTerminalIndex = terminalTaskKeys.indexOf(targetKey);
-    if (existingTerminalIndex !== -1) {
-      terminalTaskKeys.splice(existingTerminalIndex, 1);
-    }
+    terminalTaskKeys.delete(targetKey);
     taskPromises.set(targetKey, Promise.resolve(result));
-    terminalTaskKeys.push(targetKey);
-    while (terminalTaskKeys.length > MAX_TERMINAL_TASK_RESULTS) {
-      const expiredKey = terminalTaskKeys.shift();
+    terminalTaskKeys.add(targetKey);
+    while (terminalTaskKeys.size > MAX_TERMINAL_TASK_RESULTS) {
+      const expiredKey = terminalTaskKeys.values().next().value;
       if (expiredKey) {
+        terminalTaskKeys.delete(expiredKey);
         taskPromises.delete(expiredKey);
       }
     }
@@ -247,20 +249,82 @@ export function createBackfillQueue<TResponse = unknown>({
     }
     activeTargets.add(targetKey);
     taskPromises.set(targetKey, entry.promise);
+    registerQueuedEntry(entry);
     if (insertAtHead) {
+      compactQueueIfNeeded(true);
       queue.unshift(entry);
+      schedulePump();
+      return { accepted: true, position: 1 };
     } else {
       queue.push(entry);
     }
     schedulePump();
-    return { accepted: true, position: queue.indexOf(entry) + 1 };
+    return { accepted: true, position: queuedEntryCount() };
   }
 
   function activeManualTaskCount() {
-    return (
-      queue.filter((entry) => entry.task.source === 'manual').length +
-      (runningEntry?.task.source === 'manual' ? 1 : 0)
-    );
+    return queuedManualTaskCount + (runningEntry?.task.source === 'manual' ? 1 : 0);
+  }
+
+  function registerQueuedEntry(entry: QueueEntry<TResponse>) {
+    if (entry.task.source === 'manual') {
+      queuedManualTaskCount += 1;
+    }
+    if (entry.batchId !== null) {
+      batchPendingCounts.set(entry.batchId, (batchPendingCounts.get(entry.batchId) ?? 0) + 1);
+    }
+    incrementCount(queuedTaskCountsByWorkspaceHandle, entry.task.workspaceHandle);
+  }
+
+  function markEntryDequeued(entry: QueueEntry<TResponse>) {
+    if (entry.task.source === 'manual') {
+      queuedManualTaskCount -= 1;
+    }
+    decrementCount(queuedTaskCountsByWorkspaceHandle, entry.task.workspaceHandle);
+  }
+
+  function markEntryComplete(entry: QueueEntry<TResponse>) {
+    if (entry.batchId === null) {
+      return;
+    }
+    const pending = (batchPendingCounts.get(entry.batchId) ?? 0) - 1;
+    if (pending <= 0) {
+      batchPendingCounts.delete(entry.batchId);
+    } else {
+      batchPendingCounts.set(entry.batchId, pending);
+    }
+  }
+
+  function queuedEntryCount() {
+    return queue.length - queueHeadIndex;
+  }
+
+  function queuedEntries(): QueueEntry<TResponse>[] {
+    return queue.slice(queueHeadIndex);
+  }
+
+  function incrementCount(counts: Map<string, number>, key: string) {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  function decrementCount(counts: Map<string, number>, key: string) {
+    const nextCount = (counts.get(key) ?? 0) - 1;
+    if (nextCount <= 0) {
+      counts.delete(key);
+    } else {
+      counts.set(key, nextCount);
+    }
+  }
+
+  function compactQueueIfNeeded(force = false) {
+    if (!force && queueHeadIndex < 64) {
+      return;
+    }
+    if (queueHeadIndex === 0) {
+      return;
+    }
+    queue.splice(0, queueHeadIndex);
+    queueHeadIndex = 0;
   }
 
   function schedulePump() {
@@ -308,16 +372,21 @@ export function createBackfillQueue<TResponse = unknown>({
     });
     entry.resolve(result);
     rememberTerminalResult(entry.task, result);
+    markEntryComplete(entry);
   }
 
   async function pump() {
     if (runningEntry || pausedReasons.size > 0) {
       return;
     }
-    const next = queue.shift();
+    const next = queueHeadIndex < queue.length ? queue[queueHeadIndex] : undefined;
     if (!next) {
+      compactQueueIfNeeded(true);
       return;
     }
+    queueHeadIndex += 1;
+    markEntryDequeued(next);
+    compactQueueIfNeeded();
 
     runningEntry = next;
     const result = await runEntry(next);
@@ -376,7 +445,7 @@ export function createBackfillQueue<TResponse = unknown>({
     if (batchId === null) {
       return;
     }
-    if (!hasBatchEntry(batchId, queue, runningEntry)) {
+    if (!batchPendingCounts.has(batchId)) {
       breakerStates.delete(batchId);
     }
   }
@@ -388,8 +457,10 @@ export function createBackfillQueue<TResponse = unknown>({
       level: 'warn',
     });
     const preserved: QueueEntry<TResponse>[] = [];
-    for (const entry of queue) {
+    for (const entry of queuedEntries()) {
       if (entry.task.source === 'auto' && entry.batchId === batchId) {
+        markEntryDequeued(entry);
+        markEntryComplete(entry);
         activeTargets.delete(getBackfillTargetKey(entry.task));
         entry.resolve(BREAKER_TRIPPED_RESULT);
         rememberTerminalResult(entry.task, BREAKER_TRIPPED_RESULT);
@@ -398,6 +469,7 @@ export function createBackfillQueue<TResponse = unknown>({
       }
     }
     queue.splice(0, queue.length, ...preserved);
+    queueHeadIndex = 0;
     cleanupBatchIfIdle(batchId);
   }
 
@@ -405,32 +477,34 @@ export function createBackfillQueue<TResponse = unknown>({
     result: BackfillQueueRunResult<TResponse>,
     predicate: (entry: QueueEntry<TResponse>) => boolean = () => true
   ) {
-    const canceled: QueueEntry<TResponse>[] = [];
     const preserved: QueueEntry<TResponse>[] = [];
-    for (const entry of queue) {
+    const canceledBatchIds = new Set<number>();
+    let canceledCount = 0;
+    for (const entry of queuedEntries()) {
       if (predicate(entry)) {
-        canceled.push(entry);
+        canceledCount += 1;
+        markEntryDequeued(entry);
+        markEntryComplete(entry);
+        if (entry.batchId !== null) {
+          canceledBatchIds.add(entry.batchId);
+        }
+        activeTargets.delete(getBackfillTargetKey(entry.task));
+        entry.resolve(result);
+        rememberTerminalResult(entry.task, result);
       } else {
         preserved.push(entry);
       }
     }
     queue.splice(0, queue.length, ...preserved);
-    const canceledBatchIds = new Set<number>();
-    for (const entry of canceled) {
-      if (entry.batchId !== null) {
-        canceledBatchIds.add(entry.batchId);
-      }
-      activeTargets.delete(getBackfillTargetKey(entry.task));
-      entry.resolve(result);
-      rememberTerminalResult(entry.task, result);
-    }
+    queueHeadIndex = 0;
     for (const batchId of canceledBatchIds) {
       cleanupBatchIfIdle(batchId);
     }
+    return canceledCount;
   }
 
   function cancelAll(reason: BackfillQueueCancelReason) {
-    const taskCount = queue.length + (runningEntry ? 1 : 0);
+    const taskCount = queuedEntryCount() + (runningEntry ? 1 : 0);
     if (taskCount > 0) {
       onEvent?.({
         event: 'queue-canceled',
@@ -444,9 +518,7 @@ export function createBackfillQueue<TResponse = unknown>({
   }
 
   function cancelWorkspaceHandle(reason: BackfillQueueCancelReason, workspaceHandle: string) {
-    const taskCount = queue.filter(
-      (entry) => entry.task.workspaceHandle === workspaceHandle
-    ).length;
+    const taskCount = queuedTaskCountsByWorkspaceHandle.get(workspaceHandle) ?? 0;
     if (taskCount > 0) {
       onEvent?.({
         event: 'queue-canceled',
@@ -473,7 +545,7 @@ export function createBackfillQueue<TResponse = unknown>({
   }
 
   function enqueueAutomaticBatch(
-    tasks: readonly BackfillQueueTask[]
+    tasks: Iterable<BackfillQueueTask>
   ): BackfillQueueBatchEnqueueResult {
     currentBatchId += 1;
     breakerStates.set(currentBatchId, { count: 0, errorCode: null });
@@ -554,12 +626,4 @@ export function createBackfillQueue<TResponse = unknown>({
     resume,
     runManual,
   };
-}
-
-function hasBatchEntry<TResponse>(
-  batchId: number,
-  queue: readonly QueueEntry<TResponse>[],
-  runningEntry: QueueEntry<TResponse> | null
-): boolean {
-  return runningEntry?.batchId === batchId || queue.some((entry) => entry.batchId === batchId);
 }

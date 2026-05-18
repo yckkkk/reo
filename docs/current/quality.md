@@ -6,13 +6,13 @@
 
 - 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library、`npm run verify:quick` 和 `npm run verify:strict`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 和 preload 纯策略函数。
-- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用；renderer test files 串行执行并限制为 1 个 worker。
+- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用；纯 projection/query/state-machine 测试运行在 `renderer-node` project，browser API jsdom `.test.ts` 运行在可并行 `renderer-jsdom-browser` project，React component `.test.tsx` 运行在串行 `renderer-jsdom-components` project。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
-- 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本。
+- 当前 ESLint 覆盖 renderer、main process、preload、测试、Electron Vite config 和测试脚本；ESLint traversal 忽略 `node_modules`、`out`、`.tmp`、`.agents/skills`、`.claude/skills` 和 `.superpowers`。
 - 当前有 `verify:titlebar` 本地视觉测量脚本，用于从截图像素中计算 macOS traffic-light 行、左侧 sidebar hide/show icon、workspace 标题文字和右侧 MemoryRail 折叠 icon 的视觉中心与标题间距；该脚本依赖本机截图和 ImageMagick，不属于 `verify:quick`。
-- 当前有 `verify:memory-studio-layout` Electron runtime 布局测量脚本，用于通过 remote debugging 端口执行 Memory Studio Segment item 点击、横向 wheel 滚动、截图和结构测量；该脚本支持 `--viewport <width>x<height>` 和 `--interaction click-scroll|none`，检查 AppShell root、panel、panel content、WorkspaceFrame、Workspace stage shell、Workspace stage content、Expression FAB track 和可见 MemoryRail shell 的 viewport 边界与 overflow owner，检查 stage content 与 FAB track 的 1120px 内容轨道、左右 gutter 对称和 Memory Studio 填满轨道，检查 compact viewport 下 MemoryRail 默认 overlay-hidden 且不挤压 Memory Studio，检查单一 Segment strip scroll owner、card/dot/time 中心对齐、timeline marker 为可见圆点、timeline line 穿过圆点中心、timeline time label 可见、独立 timeline 容器消失、selected item 数量、紧凑 card 宽度范围、audio player 时间不换行、页面横向滚动和页面纵向滚动高度；脚本在退出前清理 viewport emulation、scroll position 和 resize state，不把测量状态遗留到可见 Electron runtime；该脚本不属于 `verify:quick`。
+- 当前有 `verify:memory-studio-layout` Electron runtime 布局测量脚本，用于通过 remote debugging 端口执行 Memory Studio Segment item 点击、横向 wheel 滚动、截图和结构测量；该脚本支持 `--viewport <width>x<height>`、`--interaction click-scroll|none`、`--max-items <number>` 和 `--full`；默认对已挂载 Segment item 取最多 24 个的有界样本，并覆盖首项、尾项、选中项和由 strip scroll position 估算的当前 viewport 可见候选，全量测量必须显式使用 `--full`；脚本检查 AppShell root、panel、panel content、WorkspaceFrame、Workspace stage shell、Workspace stage content、Expression FAB track 和可见 MemoryRail shell 的 viewport 边界与 overflow owner，检查 stage content 与 FAB track 的 1120px 内容轨道、左右 gutter 对称和 Memory Studio 填满轨道，检查 compact viewport 下 MemoryRail 默认 overlay-hidden 且不挤压 Memory Studio，检查单一 Segment strip scroll owner、card/dot/time 中心对齐、timeline marker 为可见圆点、timeline line 穿过圆点中心、timeline time label 可见、独立 timeline 容器消失、selected item 数量、紧凑 card 宽度范围、audio player 时间不换行、页面横向滚动和页面纵向滚动高度；脚本在退出前清理 viewport emulation、scroll position 和 resize state，不把测量状态遗留到可见 Electron runtime；该脚本不属于 `verify:quick`。
 - Better Auth 已选型，但当前未安装。
 - Zod 已安装，当前服务 workspace IPC contract、DTO、记忆空间 metadata、segment metadata 和错误信封。
 - 当前错误码真源是 `src/workspace-contract/workspace-contract.ts` 的 `workspaceErrorCodeSchema` 和 `workspaceErrorEnvelopeSchema`；renderer 用户可见文案映射位于 `workspaceErrorMessages.ts`。
@@ -54,7 +54,7 @@
 npm run verify:quick
 ```
 
-`verify:quick` 当前包含 typecheck、`test:main`、`test:renderer`、lint 和 format check。
+`verify:quick` 当前包含 `typecheck:quick`、`test:main`、`test:renderer`、`lint:strict` 和 quick format check。`typecheck:quick` 检查 renderer TypeScript、Electron Vite config 和 Vitest config；main/preload source 由 `test:main` 的 `tsconfig.main.test.json` 编译边界检查，避免 quick gate 对 main source 重复 noEmit 编译。`test:main` 通过 `scripts/run-main-tests.mjs` 编译 main tests 后分批运行 Node test runner；`MAIN_TEST_BATCH_SIZE` 控制批大小，`MAIN_TEST_FILES` 可用逗号分隔的 `test/main/*.test.ts` 或 compiled `.tmp/test-main/**/*.test.js` 路径过滤执行文件，再叠加 Node test runner 参数做 focused 行为过滤；`MAIN_TEST_FILES` 不改变 `tsconfig.main.test.json` 的完整编译边界；任何 `MAIN_TEST_FILES` 条目未匹配 compiled test file 时命令失败，避免 focused verification 静默少跑。Vitest project membership guard 通过 TypeScript AST 读取 `vitest.config.ts` 的 project include pattern，并用实际 include pattern 计算每个 renderer test file 的唯一归属，不用正则匹配配置文本；React component `.test.tsx` 只归入 `src/renderer/src/**/*.test.tsx` 范围。
 
 当前严格检查：
 
@@ -62,17 +62,20 @@ npm run verify:quick
 npm run verify:strict
 ```
 
-`verify:strict` 当前包含 typecheck、`test:main`、`test:renderer`、`lint:strict`、format check 和 build。
+`verify:strict` 当前包含 typecheck、`test:main`、`test:renderer`、`lint:strict`、format check 和 `build:app`；`build:app` 不重复运行 typecheck。
 
 当前命令边界：
 
 - `dev`：运行 `scripts/run-dev.mjs`，加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
+- `build`：先运行 `typecheck`，再运行 `build:app`，保持 standalone build 的类型检查边界。
+- `build:app`：运行 `electron-vite build --ignoreConfigWarning`，供已完成 typecheck 的严格验证复用。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
-- `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试。
-- `test:renderer`：使用 Vitest 运行 `src/renderer/**/*.test.{ts,tsx}`，测试环境为 jsdom，jsdom URL 固定为 `http://127.0.0.1/`，renderer test files 串行执行且最多使用 1 个 worker；setup 文件加载 Testing Library DOM matchers、pointer capture、canvas 2D context 测试替身、`ResizeObserver` 测试替身和 localStorage 测试存储，并在每个测试后执行 DOM cleanup。canvas 2D context 替身保持可配置，允许 focused canvas 行为测试局部替换 context。
-- `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config 和脚本。
+- `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试；默认以 64 个 test files 为批次运行，`MAIN_TEST_BATCH_SIZE=0` 可显式关闭批处理，传给 `npm run test:main -- ...` 的 Node test 参数会转发给每个批次。
+- `test:renderer`：使用 `scripts/run-renderer-tests.mjs` 包裹 Vitest projects 运行 renderer 测试。runner 只过滤 Node 当前 `localStorage` backing file 的已知 `ExperimentalWarning` 和对应 trace 提示；其它 `ExperimentalWarning` 会让命令失败；warning line classifier 有 main test 行为覆盖。纯 projection/query/state-machine `.test.ts` 归入 `renderer-node` project，使用 Node environment 并允许 Vitest 默认文件并行；audio waveform、MediaRecorder adapter、workspace bridge、localStorage 和 recovery 等 browser-facing `.test.ts` 归入 `renderer-jsdom-browser` project，使用 jsdom 且允许文件并行；React component `.test.tsx` 归入 `renderer-jsdom-components` project，jsdom URL 固定为 `http://127.0.0.1/`，component test files 串行执行且最多使用 1 个 worker；setup 文件只加载到 jsdom projects，提供 Testing Library DOM matchers、pointer capture、canvas 2D context 测试替身、`ResizeObserver` 测试替身和 localStorage 测试存储，并在每个测试后执行 DOM cleanup。canvas 2D context 替身保持可配置，允许 focused canvas 行为测试局部替换 context。
+- `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config、Vitest config 和脚本，并跳过非产品输入目录。
 - `lint:strict`：运行 `eslint . --max-warnings=0`，同一 flat config 下把 warning 作为失败。
-- `format:check`：运行 `prettier --check .`。
+- `format:check`：运行 quick active-scope Prettier check，覆盖 `AGENTS.md`、`.claude/CLAUDE.md`、`README.md`、配置文件、scripts、src、test、`docs/README.md`、`docs/current`、`docs/decisions`、`docs/initiatives` 和 active `docs/specs`，不扫描 `docs/archive`；必需路径使用严格 Prettier check，只有 optional active `docs/specs` 路径使用 unmatched pattern 容错，允许没有 active spec 时 `docs/specs` 目录不存在；全量格式检查入口是 `format:check:all`。
+- `complexity:scan`：通过 repo-local `scripts/run-complexity-scan.mjs` 调用 agent-local `$complexity-optimizer` scanner；默认路径是 `~/.codex/skills/complexity-optimizer/scripts/analyze_complexity.py`，也可以用 `COMPLEXITY_OPTIMIZER_SCANNER` 指向其它 scanner。scanner 缺失时命令必须给出可行动错误；scanner 返回非 0 退出码时 wrapper 必须用同一退出码失败。wrapper 默认排除 `.tmp`、`.agents`、`.claude`、`out` 和归档目录，避免 generated output、技能示例、归档证据和构建产物污染当前复杂度审查；wrapper 参数行为和失败传播由 main test 的 fake scanner 覆盖。
 
 当前本地视觉测量：
 
@@ -87,7 +90,7 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 
 `verify:titlebar` 默认读取截图完整宽度的顶部 140px titlebar 区域，将图像像素分组成 traffic-light 色块、左侧 sidebar hide/show icon 色块、workspace 标题文字色块和右侧 MemoryRail 折叠 icon 色块，计算 sidebar hide/show icon 与 traffic-light 行的垂直差值、workspace 标题文字与 sidebar hide/show icon 的水平间距、workspace 标题文字视觉中心与 sidebar hide/show icon 视觉中心的垂直差值，以及右侧 MemoryRail 折叠 icon 视觉中心与 sidebar hide/show icon 视觉中心的垂直差值；默认阈值是 1 个物理像素或 1-2 个 CSS px。截图窗口必须处于 active 状态，确保原生 traffic-light 色块可被识别；截图必须包含完整 Reo 窗口宽度，确保右侧 MemoryRail 折叠 icon 进入测量区域。该命令只作为本地操作验证证据，不替代 `verify:quick`。
 
-`verify:memory-studio-layout` 需要已启动的 Electron runtime 和可见的 Memory Studio。脚本默认通过 CDP 输入事件点击第二个 Segment item、执行横向 wheel 滚动，并保存可选 screenshot/metrics；`--interaction none` 用于采集默认静止态视觉证据。通过标准是：AppShell root、AppShell panel、AppShell panel content、WorkspaceFrame、Workspace stage shell、Workspace stage content、Expression FAB track 和可见的 Workspace MemoryRail shell 都位于 viewport 内，Workspace stage content 的 computed `max-width` 为 `1120px`，stage content 与 FAB track 相对 stage shell 的左右 gutter 必须对称，Memory Studio 和 `memory-studio-layout` 必须填满 stage content 轨道，compact viewport 下 MemoryRail 必须是 overlay-hidden 初始态；AppShell root、panel、panel content 和 WorkspaceFrame 的 overflow owner 都是 `hidden`；Memory Studio 只有一个 `memory-studio-segment-strip-scroll`，每个 `memory-studio-segment-item` 同时包含 `memory-studio-segment-card`、`memory-studio-segment-timeline-dot` 和 `memory-studio-segment-timeline-time`，dot/time 与 card 水平中心偏差不超过阈值，timeline marker 宽高必须保持圆点形态，dot 垂直中心与 timeline line 中心偏差不超过阈值，timeline time label 必须有可见尺寸和非空文本，独立 `Memory 片段时间轴` navigation 不存在，紧凑 Segment card 宽度处于脚本配置范围内，audio player 和等宽时间位于 viewport 内且时间 `white-space` 为 `nowrap`，`windowScrollX` 与 `windowScrollY` 均为 0，document width/height 不超过 viewport width/height。脚本使用 `--viewport` 后必须在 `finally` 中调用 `Emulation.clearDeviceMetricsOverride` 并重置 scroll/resize。
+`verify:memory-studio-layout` 需要已启动的 Electron runtime 和可见的 Memory Studio。脚本默认通过 CDP 输入事件点击第二个 Segment item、执行横向 wheel 滚动，并保存可选 screenshot/metrics；`--interaction none` 用于采集默认静止态视觉证据；默认对已挂载 Segment item 取最多 24 个的首项、尾项、选中项和由 strip scroll position 估算的 viewport 可见候选样本，`--max-items <number>` 可调整采样数量，`--full` 才测量全部已挂载 Segment item，脚本仍记录总 item 数和 selected item 数；如果 mounted Segment item 超过 96 个，脚本直接失败，要求先修正 Segment strip windowing。通过标准是：AppShell root、AppShell panel、AppShell panel content、WorkspaceFrame、Workspace stage shell、Workspace stage content、Expression FAB track 和可见的 Workspace MemoryRail shell 都位于 viewport 内，Workspace stage content 的 computed `max-width` 为 `1120px`，stage content 与 FAB track 相对 stage shell 的左右 gutter 必须对称，Memory Studio 和 `memory-studio-layout` 必须填满 stage content 轨道，compact viewport 下 MemoryRail 必须是 overlay-hidden 初始态；AppShell root、panel、panel content 和 WorkspaceFrame 的 overflow owner 都是 `hidden`；Memory Studio 只有一个 `memory-studio-segment-strip-scroll`，每个被测 `memory-studio-segment-item` 同时包含 `memory-studio-segment-card`、`memory-studio-segment-timeline-dot` 和 `memory-studio-segment-timeline-time`，dot/time 与 card 水平中心偏差不超过阈值，timeline marker 宽高必须保持圆点形态，dot 垂直中心与 timeline line 中心偏差不超过阈值，timeline time label 必须有可见尺寸和非空文本，独立 `Memory 片段时间轴` navigation 不存在，紧凑 Segment card 宽度处于脚本配置范围内，audio player 和等宽时间位于 viewport 内且时间 `white-space` 为 `nowrap`，`windowScrollX` 与 `windowScrollY` 均为 0，document width/height 不超过 viewport width/height。脚本必须在 `finally` 中重置 window 与 Segment strip scroll 并触发 resize；使用 `--viewport` 后还必须调用 `Emulation.clearDeviceMetricsOverride`。
 
 没有新鲜验证证据，不得宣称完成。
 

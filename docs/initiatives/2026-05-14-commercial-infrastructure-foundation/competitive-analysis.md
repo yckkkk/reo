@@ -233,14 +233,14 @@ Reo 的产品本质由四个关键词同时约束，缺一不成立：
 
 在写壁垒位置之前先单独说一层：Reo 引入 **users.md** 作为 Workspace root 的用户个人 context 文件，agent 每次操作前与 AGENTS.md 一起读。这层是 Reo 独家：
 
-| 工具 | 项目 context | 用户个人 context | Agent 输出个性化程度 |
-|---|---|---|---|
-| Obsidian | vault README（非协议）| 无统一层 | 取决于插件，无一致性 |
-| Day One | 无 | 无 | 单条目级别 AI，无 |
-| Flomo | 无 | 无 | tag 偏好作为弱信号 |
-| Notion AI | page tree 上下文 | 无显性 user context | 基于历史使用，云端不透明 |
-| Cursor / Claude Code | AGENTS.md 协议 | 部分（user rules） | agent 行为可个性化但偏开发者 |
-| **Reo** | **AGENTS.md（Workspace + Memory 两层）** | **users.md（Workspace level，未来扩展 Memory level）** | **同一个 skill 在不同用户 Workspace 上输出风格完全不同** |
+| 工具                 | 项目 context                             | 用户个人 context                                       | Agent 输出个性化程度                                     |
+| -------------------- | ---------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
+| Obsidian             | vault README（非协议）                   | 无统一层                                               | 取决于插件，无一致性                                     |
+| Day One              | 无                                       | 无                                                     | 单条目级别 AI，无                                        |
+| Flomo                | 无                                       | 无                                                     | tag 偏好作为弱信号                                       |
+| Notion AI            | page tree 上下文                         | 无显性 user context                                    | 基于历史使用，云端不透明                                 |
+| Cursor / Claude Code | AGENTS.md 协议                           | 部分（user rules）                                     | agent 行为可个性化但偏开发者                             |
+| **Reo**              | **AGENTS.md（Workspace + Memory 两层）** | **users.md（Workspace level，未来扩展 Memory level）** | **同一个 skill 在不同用户 Workspace 上输出风格完全不同** |
 
 users.md 服务"只属于用户的作品"承诺：因为 agent 知道用户是谁、想要什么、偏好什么，输出才真正属于用户而不是模板。这是 Reo 让"用户的材料 + agent = 唯一作品"成立的关键基础设施。
 
@@ -253,13 +253,13 @@ Reo skills 分两层：
 
 关键判断：**skill 组合是 agent 的责任，不是用户的责任**。用户体验是"帮我做学习闭环"，不是"请你按 A → B → C 顺序运行三个 prompt"。
 
-| 工具 | Skill 形态 | 组合方式 |
-|---|---|---|
-| Flomo | 6 张固定付费视角卡片 | 无组合 |
-| Notion AI | 内置 AI 功能集 | 内置流程，用户不可见不可改 |
-| Cursor / Claude Code | skills 协议 | skill 可调 skill，但偏开发者使用 |
-| Mem.ai | 内置 chat | 无显性 skill |
-| **Reo** | **原子 + use-xxx 双层** | **agent 自主编排原子 skill，用户无需理解组合** |
+| 工具                 | Skill 形态              | 组合方式                                       |
+| -------------------- | ----------------------- | ---------------------------------------------- |
+| Flomo                | 6 张固定付费视角卡片    | 无组合                                         |
+| Notion AI            | 内置 AI 功能集          | 内置流程，用户不可见不可改                     |
+| Cursor / Claude Code | skills 协议             | skill 可调 skill，但偏开发者使用               |
+| Mem.ai               | 内置 chat               | 无显性 skill                                   |
+| **Reo**              | **原子 + use-xxx 双层** | **agent 自主编排原子 skill，用户无需理解组合** |
 
 社区可以贡献新的 use-xxx skill 不破坏原子 skill 库。这是 Reo 的扩展性架构。
 
@@ -277,8 +277,8 @@ Reo 的真实壁垒不是"做了某个功能"，而是 **"四件套 + 持续 fou
 | 四件套组合                                           | 极强（无任何竞品同时满足）                             | 难以一句话说清，用户教育成本高               |
 | Founder voice + 产品哲学公开输出                     | Reo 当前未建立                                         | Flomo 已证明在中国 prosumer 市场这是必备条件 |
 | 用户拥有的 lock-in（唯一作品 + 累积材料）            | 极强（越用越深，但不是平台 lock，是用户自身资产 lock） | 需要时间积累才显现，前期用户感知不到         |
-| AGENTS.md + users.md 双层 agent context              | 强（Reo 独家，agent 知道项目也知道用户）               | 需要用户填写 users.md，前期可能空白         |
-| 原子 skill + use-xxx 组合双层                        | 中（Reo 独家概念，对用户透明，组合是 agent 责任）      | 社区扩展依赖文档教育                        |
+| AGENTS.md + users.md 双层 agent context              | 强（Reo 独家，agent 知道项目也知道用户）               | 需要用户填写 users.md，前期可能空白          |
+| 原子 skill + use-xxx 组合双层                        | 中（Reo 独家概念，对用户透明，组合是 agent 责任）      | 社区扩展依赖文档教育                         |
 
 ## 唯一作品作为最深 Moat
 

@@ -23,23 +23,32 @@ import {
   type BackfillQueueTask,
 } from './backfillQueue.js';
 import {
-  collectEligibleBackfillTargets,
+  addEligibleBackfillTargets,
+  createBackfillTargetSelector,
+  type BackfillScannerProjection,
   isBackfillEligibleProjection,
   isManualFillMissingEligibleProjection,
-  limitBackfillTargets,
+  normalizeBackfillTargetLimit,
   type BackfillEligibleTarget,
 } from './backfillScanner.js';
 import { recognizeDoubaoAucTurboAudioData } from './doubaoAucTurboClient.js';
-import { readMemoryDetailFromFileTruth } from './memoryFiles.js';
 import {
-  readFinalizedAudioSegmentContent,
-  readFinalizedAudioSegmentSupplementContent,
+  readFinalizedSegmentAudioProjection,
+  readFinalizedSegmentSupplementProjection,
+  readMemoryDetailFromFileTruth,
+} from './memoryFiles.js';
+import {
+  readFinalizedAudioSegmentBackfillSource,
+  readFinalizedAudioSegmentSupplementBackfillSource,
   saveRecordingMarkdown,
   saveSegmentSupplementMarkdown,
 } from './recordingDrafts.js';
 import { transcriptDigest } from './transcriptDigest.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
-import { readWorkspaceSnapshotFromFileTruth } from './workspaceFiles.js';
+import {
+  readWorkspaceSnapshotFromFileTruth,
+  readWorkspaceSnapshotFromIndex,
+} from './workspaceFiles.js';
 
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
 
@@ -52,6 +61,17 @@ type ReadFinalizedAudioResult =
   | {
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly audioFileDescriptor?: never;
+      readonly dispose?: never;
+      readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+      readonly ok: true;
+      readonly transcript: { readonly exists: boolean; readonly text: string };
+    }
+  | {
+      readonly audio?: never;
+      readonly audioByteLength: number;
+      readonly audioFileDescriptor: number;
+      readonly dispose: () => void;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
       readonly ok: true;
       readonly transcript: { readonly exists: boolean; readonly text: string };
@@ -61,6 +81,61 @@ type ReadFinalizedAudioResult =
 type BackfillSavedResponse =
   | WorkspaceRecordingMarkdownSaveResponse
   | WorkspaceSegmentSupplementMarkdownSaveResponse;
+
+type BackfillTargetProjectionInput =
+  | {
+      readonly assertWorkspaceUsable: AssertWorkspaceUsable;
+      readonly kind: 'segment';
+      readonly memoryId: string;
+      readonly rootPath: string;
+      readonly segmentId: string;
+      readonly workspaceId: string;
+    }
+  | {
+      readonly assertWorkspaceUsable: AssertWorkspaceUsable;
+      readonly kind: 'supplement';
+      readonly memoryId: string;
+      readonly rootPath: string;
+      readonly segmentId: string;
+      readonly supplementId: string;
+      readonly workspaceId: string;
+    };
+
+type ReadBackfillTargetProjection = (input: BackfillTargetProjectionInput) => Promise<
+  | {
+      readonly ok: true;
+      readonly value: BackfillScannerProjection;
+    }
+  | WorkspaceErrorEnvelope
+>;
+
+function* createAutomaticBackfillTasks({
+  assertWorkspaceUsable,
+  rootPath,
+  targets,
+  workspaceHandle,
+  workspaceId,
+}: {
+  readonly assertWorkspaceUsable: AssertWorkspaceUsable;
+  readonly rootPath: string;
+  readonly targets: readonly BackfillEligibleTarget[];
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
+}): Iterable<BackfillRuntimeTask> {
+  for (const target of targets) {
+    if (target.workspaceId !== workspaceId) {
+      continue;
+    }
+    yield {
+      ...target,
+      assertWorkspaceUsable,
+      mode: 'fill-missing',
+      rootPath,
+      source: 'auto',
+      workspaceHandle,
+    };
+  }
+}
 
 export type WorkspaceBackfillRuntime = {
   readonly cancelAll: (reason: 'app-quit' | 'lock-lost' | 'workspace-switch') => void;
@@ -118,12 +193,14 @@ export type CreateWorkspaceBackfillRuntimeInput = {
   }) => Promise<
     { readonly ok: true; readonly value: WorkspaceMemoryDetailProjection } | WorkspaceErrorEnvelope
   >;
+  readonly readBackfillTargetProjection?: ReadBackfillTargetProjection;
   readonly readSegmentAudio?: (input: {
     readonly assertWorkspaceUsable: AssertWorkspaceUsable;
     readonly maxBytes?: number;
     readonly memoryId: string;
     readonly rootPath: string;
     readonly segmentId: string;
+    readonly transcriptReadMode?: 'read' | 'assume-missing';
   }) => Promise<ReadFinalizedAudioResult>;
   readonly readSupplementAudio?: (input: {
     readonly assertWorkspaceUsable: AssertWorkspaceUsable;
@@ -132,10 +209,18 @@ export type CreateWorkspaceBackfillRuntimeInput = {
     readonly rootPath: string;
     readonly segmentId: string;
     readonly supplementId: string;
+    readonly transcriptReadMode?: 'read' | 'assume-missing';
     readonly workspaceId: string;
   }) => Promise<ReadFinalizedAudioResult>;
   readonly recognize?: typeof recognizeDoubaoAucTurboAudioData;
   readonly readWorkspaceSnapshot?: (input: {
+    readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+    readonly rootPath: string;
+    readonly workspaceId: string;
+  }) => Promise<
+    { readonly ok: true; readonly snapshot: WorkspaceSnapshot } | WorkspaceErrorEnvelope
+  >;
+  readonly refreshWorkspaceSnapshot?: (input: {
     readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
     readonly rootPath: string;
     readonly workspaceId: string;
@@ -153,15 +238,23 @@ export function createWorkspaceBackfillRuntime({
   diagnostics = createBackfillDiagnostics(),
   prepareAudioData = prepareBackfillAudioData,
   readMemoryDetail = readMemoryDetailFromFileTruth,
-  readSegmentAudio = readFinalizedAudioSegmentContent,
-  readSupplementAudio = readFinalizedAudioSegmentSupplementContent,
+  readBackfillTargetProjection,
+  readSegmentAudio = readFinalizedAudioSegmentBackfillSource,
+  readSupplementAudio = readFinalizedAudioSegmentSupplementBackfillSource,
   recognize = recognizeDoubaoAucTurboAudioData,
-  readWorkspaceSnapshot = readWorkspaceSnapshotFromFileTruth,
+  readWorkspaceSnapshot = readWorkspaceSnapshotFromIndex,
+  refreshWorkspaceSnapshot = readWorkspaceSnapshotFromFileTruth,
   saveSegmentTranscript = saveRecordingMarkdown,
   saveSupplementTranscript = saveSegmentSupplementMarkdown,
   voiceSettingsStore,
 }: CreateWorkspaceBackfillRuntimeInput): WorkspaceBackfillRuntime {
   let cancellationGeneration = 0;
+  const effectiveReadBackfillTargetProjection =
+    readBackfillTargetProjection ??
+    (readMemoryDetail === readMemoryDetailFromFileTruth
+      ? readBackfillTargetProjectionFromFileTruth
+      : (input: BackfillTargetProjectionInput) =>
+          readBackfillTargetProjectionFromMemoryDetail(input, { readMemoryDetail }));
   const queue = createBackfillQueue<BackfillSavedResponse>({
     automaticBatchLimit,
     automaticBreakerThreshold,
@@ -169,6 +262,7 @@ export function createWorkspaceBackfillRuntime({
     runTask: async ({ signal, task }) => {
       const result = await executeBackfillTask(task as BackfillRuntimeTask, {
         readMemoryDetail,
+        readBackfillTargetProjection: effectiveReadBackfillTargetProjection,
         readSegmentAudio,
         readSupplementAudio,
         recognize,
@@ -230,20 +324,15 @@ export function createWorkspaceBackfillRuntime({
     if (isCurrent?.() === false || generation !== cancellationGeneration) {
       return { accepted: 0, capped: 0, duplicates: 0 };
     }
-    const tasks = targets
-      .filter((target) => target.workspaceId === workspaceId)
-      .map((target) => ({
-        ...target,
+    return queue.enqueueAutomaticBatch(
+      createAutomaticBackfillTasks({
         assertWorkspaceUsable,
-        mode: 'fill-missing' as const,
         rootPath,
-        source: 'auto' as const,
+        targets,
         workspaceHandle,
-      }));
-    if (isCurrent?.() === false || generation !== cancellationGeneration) {
-      return { accepted: 0, capped: 0, duplicates: 0 };
-    }
-    return queue.enqueueAutomaticBatch(tasks);
+        workspaceId,
+      })
+    );
   }
 
   async function enqueueAutomaticWorkspace({
@@ -273,7 +362,7 @@ export function createWorkspaceBackfillRuntime({
           rootPath,
           workspaceId,
         },
-        { readMemoryDetail, readWorkspaceSnapshot }
+        { readMemoryDetail, readWorkspaceSnapshot, refreshWorkspaceSnapshot }
       );
       if (isCurrent?.() === false || generation !== cancellationGeneration) {
         return { accepted: 0, capped: 0, duplicates: 0 };
@@ -332,7 +421,7 @@ export function createWorkspaceBackfillRuntime({
 async function executeBackfillTask(
   task: BackfillRuntimeTask,
   {
-    readMemoryDetail,
+    readBackfillTargetProjection,
     readSegmentAudio,
     readSupplementAudio,
     recognize,
@@ -345,6 +434,7 @@ async function executeBackfillTask(
     Pick<
       CreateWorkspaceBackfillRuntimeInput,
       | 'readMemoryDetail'
+      | 'readBackfillTargetProjection'
       | 'readSegmentAudio'
       | 'readSupplementAudio'
       | 'recognize'
@@ -380,7 +470,9 @@ async function executeBackfillTask(
     return { errorCode: 'auth', ok: false };
   }
   if (task.mode === 'fill-missing') {
-    const eligibility = await readCurrentBackfillEligibility(task, { readMemoryDetail });
+    const eligibility = await readCurrentBackfillEligibility(task, {
+      readBackfillTargetProjection,
+    });
     if (!eligibility.ok) {
       if (task.source === 'auto' && eligibility.errorCode === 'target-not-eligible') {
         return { ok: true, transcriptText: '' };
@@ -416,10 +508,17 @@ async function executeBackfillTask(
 
   let audioData: Awaited<ReturnType<typeof prepareBackfillAudioData>>;
   try {
-    audioData = await prepareAudioData({
-      finalizedWebmBytes: audio.audio,
-      signal,
-    });
+    audioData =
+      audio.audioFileDescriptor === undefined
+        ? await prepareAudioData({
+            finalizedWebmBytes: audio.audio,
+            signal,
+          })
+        : await prepareAudioData({
+            finalizedWebmByteLength: audio.audioByteLength,
+            finalizedWebmFileDescriptor: audio.audioFileDescriptor,
+            signal,
+          });
   } catch (error) {
     return {
       errorCode:
@@ -428,6 +527,8 @@ async function executeBackfillTask(
           : 'transcode-failed',
       ok: false,
     };
+  } finally {
+    audio.dispose?.();
   }
 
   const recognized = await recognize({
@@ -579,7 +680,9 @@ async function executeBackfillTask(
 
 async function readCurrentBackfillEligibility(
   task: BackfillRuntimeTask,
-  { readMemoryDetail }: Required<Pick<CreateWorkspaceBackfillRuntimeInput, 'readMemoryDetail'>>
+  {
+    readBackfillTargetProjection,
+  }: Required<Pick<CreateWorkspaceBackfillRuntimeInput, 'readBackfillTargetProjection'>>
 ): Promise<
   | { readonly ok: true }
   | {
@@ -588,35 +691,119 @@ async function readCurrentBackfillEligibility(
       readonly response?: BackfillSavedResponse;
     }
 > {
-  const detail = await readMemoryDetail({
-    assertWorkspaceUsable: task.assertWorkspaceUsable,
-    memoryId: task.memoryId,
-    rootPath: task.rootPath,
-    workspaceId: task.workspaceId,
-  });
-  if (!detail.ok) {
-    return detail.error.code === 'ERR_WORKSPACE_LOCK_LOST'
-      ? { errorCode: 'lock-lost', ok: false, response: detail }
+  const projection = await readBackfillTargetProjection(
+    task.kind === 'segment'
+      ? {
+          assertWorkspaceUsable: task.assertWorkspaceUsable,
+          kind: 'segment',
+          memoryId: task.memoryId,
+          rootPath: task.rootPath,
+          segmentId: task.segmentId,
+          workspaceId: task.workspaceId,
+        }
+      : {
+          assertWorkspaceUsable: task.assertWorkspaceUsable,
+          kind: 'supplement',
+          memoryId: task.memoryId,
+          rootPath: task.rootPath,
+          segmentId: task.segmentId,
+          supplementId: task.supplementId,
+          workspaceId: task.workspaceId,
+        }
+  );
+  if (!projection.ok) {
+    return projection.error.code === 'ERR_WORKSPACE_LOCK_LOST'
+      ? { errorCode: 'lock-lost', ok: false, response: projection }
       : { errorCode: 'target-not-eligible', ok: false };
   }
 
-  const segment = detail.value.segments.find((candidate) => candidate.segmentId === task.segmentId);
-  if (!segment) {
-    return { errorCode: 'target-not-eligible', ok: false };
-  }
-  const target =
-    task.kind === 'segment'
-      ? segment
-      : segment.supplements.find((candidate) => candidate.supplementId === task.supplementId);
-
-  if (!target) {
-    return { errorCode: 'target-not-eligible', ok: false };
-  }
   const eligible =
     task.source === 'auto'
-      ? isBackfillEligibleProjection(target)
-      : isManualFillMissingEligibleProjection(target);
+      ? isBackfillEligibleProjection(projection.value)
+      : isManualFillMissingEligibleProjection(projection.value);
   return eligible ? { ok: true } : { errorCode: 'target-not-eligible', ok: false };
+}
+
+async function readBackfillTargetProjectionFromFileTruth(
+  input: BackfillTargetProjectionInput
+): Promise<
+  | {
+      readonly ok: true;
+      readonly value: BackfillScannerProjection;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = input.assertWorkspaceUsable();
+  if (!usable.ok) {
+    return usable;
+  }
+  try {
+    const target =
+      input.kind === 'segment'
+        ? await readFinalizedSegmentAudioProjection({
+            memoryId: input.memoryId,
+            rootPath: input.rootPath,
+            segmentId: input.segmentId,
+            workspaceId: input.workspaceId,
+          })
+        : await readFinalizedSegmentSupplementProjection({
+            memoryId: input.memoryId,
+            rootPath: input.rootPath,
+            segmentId: input.segmentId,
+            supplementId: input.supplementId,
+            workspaceId: input.workspaceId,
+          });
+    const stillUsable = input.assertWorkspaceUsable();
+    if (!stillUsable.ok) {
+      return stillUsable;
+    }
+    return {
+      ok: true,
+      value: {
+        audioByteLength: target.audioByteLength,
+        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+        transcript: target.transcript,
+      },
+    };
+  } catch {
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Backfill target was not found');
+  }
+}
+
+async function readBackfillTargetProjectionFromMemoryDetail(
+  input: BackfillTargetProjectionInput,
+  { readMemoryDetail }: Required<Pick<CreateWorkspaceBackfillRuntimeInput, 'readMemoryDetail'>>
+): Promise<
+  { readonly ok: true; readonly value: BackfillScannerProjection } | WorkspaceErrorEnvelope
+> {
+  const detail = await readMemoryDetail({
+    assertWorkspaceUsable: input.assertWorkspaceUsable,
+    memoryId: input.memoryId,
+    rootPath: input.rootPath,
+    workspaceId: input.workspaceId,
+  });
+  if (!detail.ok) {
+    return detail;
+  }
+
+  const segment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === input.segmentId
+  );
+  const target =
+    input.kind === 'segment'
+      ? segment
+      : segment?.supplements.find((candidate) => candidate.supplementId === input.supplementId);
+  if (!target) {
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Backfill target was not found');
+  }
+  return {
+    ok: true,
+    value: {
+      audioByteLength: target.audioByteLength,
+      lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+      transcript: target.transcript,
+    },
+  };
 }
 
 function requireExpectedTranscriptDigest(digest: string | null): string {
@@ -645,6 +832,7 @@ async function readTaskAudio(
     readSupplementAudio,
   }: Required<Pick<CreateWorkspaceBackfillRuntimeInput, 'readSegmentAudio' | 'readSupplementAudio'>>
 ): Promise<ReadFinalizedAudioResult> {
+  const transcriptReadMode = task.mode === 'fill-missing' ? 'assume-missing' : 'read';
   if (task.kind === 'segment') {
     return readSegmentAudio({
       assertWorkspaceUsable: task.assertWorkspaceUsable,
@@ -652,6 +840,7 @@ async function readTaskAudio(
       memoryId: task.memoryId,
       rootPath: task.rootPath,
       segmentId: task.segmentId,
+      transcriptReadMode,
     });
   }
   return readSupplementAudio({
@@ -661,6 +850,7 @@ async function readTaskAudio(
     rootPath: task.rootPath,
     segmentId: task.segmentId,
     supplementId: task.supplementId,
+    transcriptReadMode,
     workspaceId: task.workspaceId,
   });
 }
@@ -745,15 +935,23 @@ type ScanWorkspaceDeps = {
   readonly readWorkspaceSnapshot?: NonNullable<
     CreateWorkspaceBackfillRuntimeInput['readWorkspaceSnapshot']
   >;
+  readonly refreshWorkspaceSnapshot?: NonNullable<
+    CreateWorkspaceBackfillRuntimeInput['refreshWorkspaceSnapshot']
+  >;
 };
 
 export async function scanWorkspaceBackfillTargets(
   input: ScanWorkspaceInput,
   {
     readMemoryDetail = readMemoryDetailFromFileTruth,
-    readWorkspaceSnapshot = readWorkspaceSnapshotFromFileTruth,
+    readWorkspaceSnapshot = readWorkspaceSnapshotFromIndex,
+    refreshWorkspaceSnapshot = readWorkspaceSnapshotFromFileTruth,
   }: ScanWorkspaceDeps = {}
 ): Promise<readonly BackfillEligibleTarget[]> {
+  const targetLimit = normalizeBackfillTargetLimit(input.limit ?? Number.POSITIVE_INFINITY);
+  if (targetLimit === 0) {
+    return [];
+  }
   const snapshot = await readWorkspaceSnapshot({
     rootPath: input.rootPath,
     workspaceId: input.workspaceId,
@@ -766,13 +964,74 @@ export async function scanWorkspaceBackfillTargets(
     return [];
   }
 
-  let targets: BackfillEligibleTarget[] = [];
-  for (const memory of sortedBackfillMemorySummaries(snapshot.snapshot.memories)) {
-    if (input.isCurrent?.() === false) {
+  const firstPassMemoryDetails = new Map<string, CachedBackfillMemoryDetail>();
+  await selectBackfillTargetsFromSnapshot({
+    ...(input.assertWorkspaceUsable ? { assertWorkspaceUsable: input.assertWorkspaceUsable } : {}),
+    ...(input.isCurrent ? { isCurrent: input.isCurrent } : {}),
+    detailCache: firstPassMemoryDetails,
+    readMemoryDetail,
+    rootPath: input.rootPath,
+    snapshot: snapshot.snapshot,
+    targetLimit,
+    workspaceId: input.workspaceId,
+  });
+
+  const refreshedSnapshot = await refreshWorkspaceSnapshot({
+    rootPath: input.rootPath,
+    workspaceId: input.workspaceId,
+    ...(input.assertWorkspaceUsable ? { assertWorkspaceUsable: input.assertWorkspaceUsable } : {}),
+  });
+  if (!refreshedSnapshot.ok) {
+    throw new BackfillScanError(refreshedSnapshot);
+  }
+  if (input.isCurrent?.() === false) {
+    return [];
+  }
+  const targets = await selectBackfillTargetsFromSnapshot({
+    ...(input.assertWorkspaceUsable ? { assertWorkspaceUsable: input.assertWorkspaceUsable } : {}),
+    ...(input.isCurrent ? { isCurrent: input.isCurrent } : {}),
+    detailCache: firstPassMemoryDetails,
+    readMemoryDetail,
+    rootPath: input.rootPath,
+    snapshot: refreshedSnapshot.snapshot,
+    targetLimit,
+    workspaceId: input.workspaceId,
+  });
+  return targets;
+}
+
+async function selectBackfillTargetsFromSnapshot({
+  assertWorkspaceUsable,
+  detailCache,
+  isCurrent,
+  readMemoryDetail,
+  rootPath,
+  snapshot,
+  targetLimit,
+  workspaceId,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly detailCache?: Map<string, CachedBackfillMemoryDetail>;
+  readonly isCurrent?: () => boolean;
+  readonly readMemoryDetail: NonNullable<CreateWorkspaceBackfillRuntimeInput['readMemoryDetail']>;
+  readonly rootPath: string;
+  readonly snapshot: WorkspaceSnapshot;
+  readonly targetLimit: number;
+  readonly workspaceId: string;
+}): Promise<readonly BackfillEligibleTarget[]> {
+  const selector = createBackfillTargetSelector(targetLimit);
+  const canStopEarly = backfillMemorySummariesAreSortedForScan(snapshot.memories);
+  for (const memory of orderedBackfillMemorySummaries(snapshot.memories)) {
+    if (isCurrent?.() === false) {
       return [];
     }
-    const oldestSelected = getOldestSelectedBackfillTarget(targets, input.limit);
-    if (oldestSelected && memory.updatedAt.localeCompare(oldestSelected.updatedAt) <= 0) {
+    const oldestSelected = selector.peekOldestSelected();
+    if (
+      canStopEarly &&
+      selector.isFull() &&
+      oldestSelected &&
+      memory.updatedAt.localeCompare(oldestSelected.updatedAt) <= 0
+    ) {
       break;
     }
     if (
@@ -781,27 +1040,76 @@ export async function scanWorkspaceBackfillTargets(
     ) {
       continue;
     }
-    const detail = await readMemoryDetail({
-      memoryId: memory.memoryId,
-      rootPath: input.rootPath,
-      workspaceId: input.workspaceId,
-      ...(input.assertWorkspaceUsable
-        ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
-        : {}),
-    });
-    if (!detail.ok) {
-      throw new BackfillScanError(detail);
+    const summaryKey = backfillMemorySummaryCacheKey(memory);
+    const cachedDetail = detailCache?.get(memory.memoryId);
+    let detailValue = cachedDetail?.summaryKey === summaryKey ? cachedDetail.value : undefined;
+    if (!detailValue) {
+      const detail = await readMemoryDetail({
+        memoryId: memory.memoryId,
+        rootPath,
+        workspaceId,
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      });
+      if (!detail.ok) {
+        throw new BackfillScanError(detail);
+      }
+      detailValue = detail.value;
+      detailCache?.set(memory.memoryId, { summaryKey, value: detailValue });
     }
-    targets.push(...collectEligibleBackfillTargets({ memories: [detail.value] }));
-    if (input.limit !== undefined && targets.length > input.limit) {
-      targets = [...limitBackfillTargets(targets, input.limit)];
-    }
-    if (input.isCurrent?.() === false) {
+    addEligibleBackfillTargets({ memories: [detailValue] }, selector);
+    if (isCurrent?.() === false) {
       return [];
     }
   }
 
-  return limitBackfillTargets(targets, input.limit);
+  return selector.toArray();
+}
+
+type CachedBackfillMemoryDetail = {
+  readonly summaryKey: string;
+  readonly value: WorkspaceMemoryDetailProjection;
+};
+
+function backfillMemorySummaryCacheKey(memory: WorkspaceMemorySummary): string {
+  return [
+    memory.memoryId,
+    memory.updatedAt,
+    memory.segmentCount,
+    memory.supplementCount,
+    memory.audioByteLength,
+    memory.hasTranscript ? '1' : '0',
+  ].join('\u0000');
+}
+
+function isBackfillMemorySummaryCandidate(memory: WorkspaceMemorySummary): boolean {
+  return memory.audioByteLength > 0 && (memory.segmentCount > 0 || memory.supplementCount > 0);
+}
+
+function backfillMemorySummaryOrder(
+  left: WorkspaceMemorySummary,
+  right: WorkspaceMemorySummary
+): number {
+  const updatedComparison = right.updatedAt.localeCompare(left.updatedAt);
+  if (updatedComparison !== 0) {
+    return updatedComparison;
+  }
+  return right.createdAt.localeCompare(left.createdAt);
+}
+
+function backfillMemorySummariesAreSortedForScan(
+  memories: readonly WorkspaceMemorySummary[]
+): boolean {
+  let previous: WorkspaceMemorySummary | null = null;
+  for (const memory of memories) {
+    if (!isBackfillMemorySummaryCandidate(memory)) {
+      continue;
+    }
+    if (previous && backfillMemorySummaryOrder(previous, memory) > 0) {
+      return false;
+    }
+    previous = memory;
+  }
+  return true;
 }
 
 export class BackfillScanError extends Error {
@@ -814,24 +1122,12 @@ export class BackfillScanError extends Error {
   }
 }
 
-function sortedBackfillMemorySummaries(
+function* orderedBackfillMemorySummaries(
   memories: readonly WorkspaceMemorySummary[]
-): WorkspaceMemorySummary[] {
-  return [...memories].sort((left, right) => {
-    const updatedComparison = right.updatedAt.localeCompare(left.updatedAt);
-    if (updatedComparison !== 0) {
-      return updatedComparison;
+): Generator<WorkspaceMemorySummary> {
+  for (const memory of memories) {
+    if (isBackfillMemorySummaryCandidate(memory)) {
+      yield memory;
     }
-    return right.createdAt.localeCompare(left.createdAt);
-  });
-}
-
-function getOldestSelectedBackfillTarget(
-  targets: readonly BackfillEligibleTarget[],
-  limit: number | undefined
-): BackfillEligibleTarget | null {
-  if (limit === undefined || targets.length < limit || limit <= 0) {
-    return null;
   }
-  return targets[targets.length - 1] ?? null;
 }

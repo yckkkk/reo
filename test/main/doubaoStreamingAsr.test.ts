@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import {
+  DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES,
+  DOUBAO_STREAMING_ASR_MAX_RESPONSE_JSON_BYTES,
   DOUBAO_STREAMING_ASR_RESOURCE_ID,
   buildDoubaoAsrAuthHeaders,
   buildDoubaoAsrAudioRequestFrame,
   buildDoubaoAsrFullRequestFrame,
   createDoubaoStreamingAsrSession,
   mapDoubaoAsrResponseToTranscriptSegments,
+  normalizeDoubaoAsrSocketMessageFrame,
   parseDoubaoAsrResponseFrame,
+  redactSecrets,
 } from '../../src/main/doubaoStreamingAsr.js';
 
 function readJsonPayload(frame: Buffer) {
@@ -121,6 +125,18 @@ async function settleAfterCurrentTurn(promise: Promise<unknown>) {
       setImmediate(() => resolve('pending'));
     }),
   ]);
+}
+
+async function waitForSentFrameCount(socket: MockAsrSocket, count: number): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (socket.sent.length < count) {
+    if (Date.now() > deadline) {
+      throw new Error(`Expected ${count} sent frames, received ${socket.sent.length}.`);
+    }
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
 }
 
 test('builds Doubao ASR auth headers without storing credentials in code', () => {
@@ -267,6 +283,54 @@ test('parses result frames and maps utterances to timestamped transcript segment
   );
 });
 
+test('rejects oversized Doubao ASR response frames before payload parsing', () => {
+  assert.throws(
+    () =>
+      parseDoubaoAsrResponseFrame(Buffer.alloc(DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES + 1)),
+    /too large/
+  );
+});
+
+test('rejects oversized decompressed Doubao ASR JSON payloads', () => {
+  assert.throws(
+    () =>
+      parseDoubaoAsrResponseFrame(
+        buildServerResultFrame({
+          result: { text: 'a'.repeat(DOUBAO_STREAMING_ASR_MAX_RESPONSE_JSON_BYTES + 1) },
+        })
+      ),
+    /too large/
+  );
+});
+
+test('normalizes nested socket message frame arrays iteratively with frame size bounds', () => {
+  const frame = buildAsyncServerResultFrame({
+    audio_info: { duration: 1200 },
+    result: { text: '实时转写' },
+  });
+  const normalized = normalizeDoubaoAsrSocketMessageFrame([
+    frame.subarray(0, 2),
+    [frame.subarray(2, 8), frame.subarray(8)],
+  ]);
+
+  assert.deepEqual(normalized, frame);
+  assert.throws(
+    () =>
+      normalizeDoubaoAsrSocketMessageFrame([
+        Buffer.alloc(DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES),
+        Buffer.alloc(1),
+      ]),
+    /too large/
+  );
+});
+
+test('redacts secrets containing regex characters in one escaped pass', () => {
+  assert.equal(
+    redactSecrets('failed with sk.test+(secret) and sk.test+(secret)', ['sk.test+(secret)']),
+    'failed with [redacted] and [redacted]'
+  );
+});
+
 test('opens a live Doubao ASR session and sends full, audio, and final frames', async () => {
   let socket: MockAsrSocket | null = null;
   const session = createDoubaoStreamingAsrSession({
@@ -318,6 +382,8 @@ test('opens a live Doubao ASR session and sends full, audio, and final frames', 
   session.sendAudioChunk(Buffer.from([1, 2, 3]));
   const finish = session.finish(Buffer.from([4, 5]));
 
+  assert.equal(activeSocket.sent.length, 1);
+  await waitForSentFrameCount(activeSocket, 3);
   assert.equal(activeSocket.sent.length, 3);
   assert.equal(activeSocket.sent[1]!.readInt32BE(4), 2);
   assert.deepEqual(gunzipSync(activeSocket.sent[1]!.subarray(12)), Buffer.from([1, 2, 3]));

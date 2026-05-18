@@ -61,6 +61,7 @@ type BufferedTranscriptionAudio = {
 
 type RecordingTranscriptionSessionEntry = RecordingTranscriptionSessionIdentity & {
   bufferedAudio: BufferedTranscriptionAudio[];
+  bufferedAudioHeadIndex: number;
   closing: boolean;
   readonly credentials: DoubaoCredentials;
   readonly entryRef: { current: RecordingTranscriptionSessionEntry | null };
@@ -177,7 +178,20 @@ function pcmChunkDurationMs(audio: Uint8Array) {
 
 function trimReconnectBuffer(entry: RecordingTranscriptionSessionEntry) {
   const minimumStartMs = Math.max(0, entry.pcmDurationMs - RECONNECT_REPLAY_BUFFER_MS);
-  entry.bufferedAudio = entry.bufferedAudio.filter((chunk) => chunk.endTimeMs > minimumStartMs);
+  while (entry.bufferedAudioHeadIndex < entry.bufferedAudio.length) {
+    const buffered = entry.bufferedAudio[entry.bufferedAudioHeadIndex];
+    if (!buffered || buffered.endTimeMs > minimumStartMs) {
+      break;
+    }
+    entry.bufferedAudioHeadIndex += 1;
+  }
+  if (
+    entry.bufferedAudioHeadIndex > 64 &&
+    entry.bufferedAudioHeadIndex * 2 > entry.bufferedAudio.length
+  ) {
+    entry.bufferedAudio.splice(0, entry.bufferedAudioHeadIndex);
+    entry.bufferedAudioHeadIndex = 0;
+  }
 }
 
 export function createRecordingTranscriptionSessionRegistry({
@@ -236,6 +250,7 @@ export function createRecordingTranscriptionSessionRegistry({
     entry.transcriptSegments = mergeTranscriptSegments(entry.transcriptSegments, currentSegments);
     entry.sendEvent({
       kind: 'segments',
+      recordingFlowSessionId: entry.recordingFlowSessionId,
       recordingSessionId: entry.recordingSessionId,
       revisionId: entry.revisionId,
       segments: currentSegments,
@@ -283,6 +298,7 @@ export function createRecordingTranscriptionSessionRegistry({
         entry.sendEvent({
           kind: 'error',
           message: redactCredentialText(message, entry.credentials),
+          recordingFlowSessionId: entry.recordingFlowSessionId,
           recordingSessionId: entry.recordingSessionId,
           revisionId: entry.revisionId,
         });
@@ -343,7 +359,11 @@ export function createRecordingTranscriptionSessionRegistry({
 
   function replayBufferedAudio(entry: RecordingTranscriptionSessionEntry, replayStartMs: number) {
     trimReconnectBuffer(entry);
-    for (const buffered of entry.bufferedAudio) {
+    for (let index = entry.bufferedAudioHeadIndex; index < entry.bufferedAudio.length; index += 1) {
+      const buffered = entry.bufferedAudio[index];
+      if (!buffered) {
+        continue;
+      }
       if (buffered.endTimeMs <= replayStartMs) {
         continue;
       }
@@ -389,6 +409,7 @@ export function createRecordingTranscriptionSessionRegistry({
         entry.sendEvent({
           kind: 'error',
           message: safeMessage || redactCredentialText(message, entry.credentials),
+          recordingFlowSessionId: entry.recordingFlowSessionId,
           recordingSessionId: entry.recordingSessionId,
           revisionId: entry.revisionId,
         });
@@ -411,14 +432,11 @@ export function createRecordingTranscriptionSessionRegistry({
     const endTimeMs = startTimeMs + durationMs;
     const bufferedAudio = new Uint8Array(audio);
     entry.pcmDurationMs = endTimeMs;
-    entry.bufferedAudio = [
-      ...entry.bufferedAudio,
-      {
-        audio: bufferedAudio,
-        endTimeMs,
-        startTimeMs,
-      },
-    ];
+    entry.bufferedAudio.push({
+      audio: bufferedAudio,
+      endTimeMs,
+      startTimeMs,
+    });
     trimReconnectBuffer(entry);
     return audio;
   }
@@ -471,6 +489,7 @@ export function createRecordingTranscriptionSessionRegistry({
         pendingStarts.delete(key);
         const entry: RecordingTranscriptionSessionEntry = {
           bufferedAudio: [],
+          bufferedAudioHeadIndex: 0,
           closing: false,
           credentials,
           recordingFlowSessionId: input.recordingFlowSessionId,
@@ -546,6 +565,7 @@ export function createRecordingTranscriptionSessionRegistry({
       sessions.delete(entry.key);
       entry.sendEvent({
         kind: 'closed',
+        recordingFlowSessionId: entry.recordingFlowSessionId,
         recordingSessionId: entry.recordingSessionId,
         revisionId: entry.revisionId,
       });
@@ -564,28 +584,29 @@ export function createRecordingTranscriptionSessionRegistry({
       closeEntry(entry);
       entry.sendEvent({
         kind: 'closed',
+        recordingFlowSessionId: entry.recordingFlowSessionId,
         recordingSessionId: entry.recordingSessionId,
         revisionId: entry.revisionId,
       });
       return accepted(true);
     },
     closeForWorkspaceHandle(workspaceHandle: string) {
-      for (const pendingStart of [...pendingStarts.values()]) {
+      for (const pendingStart of pendingStarts.values()) {
         if (pendingStart.workspaceHandle === workspaceHandle) {
           closePendingStart(pendingStart);
         }
       }
-      for (const entry of [...sessions.values()]) {
+      for (const entry of sessions.values()) {
         if (entry.workspaceHandle === workspaceHandle) {
           closeEntry(entry);
         }
       }
     },
     closeAll() {
-      for (const pendingStart of [...pendingStarts.values()]) {
+      for (const pendingStart of pendingStarts.values()) {
         closePendingStart(pendingStart);
       }
-      for (const entry of [...sessions.values()]) {
+      for (const entry of sessions.values()) {
         closeEntry(entry);
       }
     },

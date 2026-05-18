@@ -54,6 +54,19 @@ function run(command, args) {
   return result.stdout;
 }
 
+function runBuffer(command, args) {
+  const result = spawnSync(command, args, { maxBuffer: 64 * 1024 * 1024 });
+  if (result.error) {
+    fail(`${command} failed to start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    fail(
+      `${command} failed:\n${result.stderr?.toString('utf8') || result.stdout?.toString('utf8')}`
+    );
+  }
+  return result.stdout;
+}
+
 function parseArgs(argv) {
   const options = {
     crop: defaultCrop,
@@ -66,9 +79,16 @@ function parseArgs(argv) {
     selfTest: false,
   };
 
+  const readValue = (index, option) => {
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) {
+      fail(`${option} requires a value.`);
+    }
+    return value;
+  };
+
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    const next = argv[index + 1];
 
     switch (arg) {
       case '--help':
@@ -76,39 +96,39 @@ function parseArgs(argv) {
         options.help = true;
         break;
       case '--image':
-        options.image = next;
+        options.image = readValue(index, arg);
         index += 1;
         break;
       case '--capture':
-        options.capture = next;
+        options.capture = readValue(index, arg);
         index += 1;
         break;
       case '--output':
-        options.output = next;
+        options.output = readValue(index, arg);
         index += 1;
         break;
       case '--crop':
-        options.crop = next;
+        options.crop = readValue(index, arg);
         index += 1;
         break;
       case '--max-delta':
-        options.maxDelta = Number(next);
+        options.maxDelta = Number(readValue(index, arg));
         index += 1;
         break;
       case '--title-gap':
-        options.titleGap = Number(next);
+        options.titleGap = Number(readValue(index, arg));
         index += 1;
         break;
       case '--max-title-gap-delta':
-        options.maxTitleGapDelta = Number(next);
+        options.maxTitleGapDelta = Number(readValue(index, arg));
         index += 1;
         break;
       case '--max-title-center-delta':
-        options.maxTitleCenterDelta = Number(next);
+        options.maxTitleCenterDelta = Number(readValue(index, arg));
         index += 1;
         break;
       case '--max-right-icon-center-delta':
-        options.maxRightIconCenterDelta = Number(next);
+        options.maxRightIconCenterDelta = Number(readValue(index, arg));
         index += 1;
         break;
       case '--json':
@@ -141,26 +161,31 @@ function parseArgs(argv) {
   return options;
 }
 
-function parsePixels(text) {
-  const pixels = [];
-  let width = 0;
-  let height = 0;
-
-  for (const line of text.split('\n')) {
-    const match = line.match(/^(\d+),(\d+): \(([^)]+)\)/);
-    if (!match) {
-      continue;
-    }
-
-    const x = Number(match[1]);
-    const y = Number(match[2]);
-    const channels = match[3].split(',').map((value) => Number.parseFloat(value.trim()));
-    const [r = 0, g = 0, b = 0, a = 255] = channels.map((value) =>
-      value > 255 ? value / 257 : value
+function readPixels(image, crop) {
+  const sizeText = run('magick', [image, '-crop', crop, '-format', '%w %h', 'info:']).trim();
+  const sizeMatch = sizeText.match(/^(\d+) (\d+)$/);
+  if (!sizeMatch) {
+    fail(`Could not read cropped image size: ${sizeText}`);
+  }
+  const width = Number(sizeMatch[1]);
+  const height = Number(sizeMatch[2]);
+  const raw = runBuffer('magick', [image, '-crop', crop, '-depth', '8', 'rgba:-']);
+  const expectedBytes = width * height * 4;
+  if (raw.byteLength !== expectedBytes) {
+    fail(
+      `Unexpected raw pixel byte length: expected ${expectedBytes}, received ${raw.byteLength}.`
     );
+  }
 
-    width = Math.max(width, x + 1);
-    height = Math.max(height, y + 1);
+  const pixels = [];
+  for (let offset = 0; offset < raw.byteLength; offset += 4) {
+    const pixelIndex = offset / 4;
+    const x = pixelIndex % width;
+    const y = Math.floor(pixelIndex / width);
+    const r = raw[offset] ?? 0;
+    const g = raw[offset + 1] ?? 0;
+    const b = raw[offset + 2] ?? 0;
+    const a = raw[offset + 3] ?? 255;
     pixels.push({ x, y, r, g, b, a });
   }
 
@@ -171,14 +196,7 @@ function parsePixels(text) {
   return { pixels, width, height };
 }
 
-function findComponents(pixels, width, predicate) {
-  const active = new Map();
-  for (const pixel of pixels) {
-    if (predicate(pixel)) {
-      active.set(pixel.y * width + pixel.x, pixel);
-    }
-  }
-
+function findComponentsFromActive(active, width) {
   const visited = new Set();
   const components = [];
   const neighbors = [
@@ -242,6 +260,17 @@ function findComponents(pixels, width, predicate) {
   return components.sort((a, b) => b.count - a.count);
 }
 
+function findComponents(pixels, width, predicate) {
+  const active = new Map();
+  for (const pixel of pixels) {
+    if (predicate(pixel)) {
+      active.set(pixel.y * width + pixel.x, pixel);
+    }
+  }
+
+  return findComponentsFromActive(active, width);
+}
+
 function largestComponent(components, label) {
   const component = components[0];
   if (!component || component.count < 20) {
@@ -272,14 +301,42 @@ function colorDistance(left, right) {
   return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
 }
 
-function pixelAt(pixels, x, y) {
-  return pixels.find((pixel) => pixel.x === x && pixel.y === y);
+function pixelAt(pixels, width, x, y) {
+  return pixels[y * width + x];
+}
+
+function trafficLightComponents(pixels, width) {
+  const red = new Map();
+  const yellow = new Map();
+  const green = new Map();
+
+  for (const pixel of pixels) {
+    if (pixel.a <= 0) {
+      continue;
+    }
+    const key = pixel.y * width + pixel.x;
+    if (pixel.r > 180 && pixel.g < 150 && pixel.b < 150 && pixel.r - pixel.g > 40) {
+      red.set(key, pixel);
+    }
+    if (pixel.r > 180 && pixel.g > 120 && pixel.b < 120 && pixel.r - pixel.b > 80) {
+      yellow.set(key, pixel);
+    }
+    if (pixel.g > 130 && pixel.r < 140 && pixel.b < 160 && pixel.g - pixel.r > 35) {
+      green.set(key, pixel);
+    }
+  }
+
+  return {
+    green: findComponentsFromActive(green, width),
+    red: findComponentsFromActive(red, width),
+    yellow: findComponentsFromActive(yellow, width),
+  };
 }
 
 function foregroundClusters({ pixels, width, trafficCenterY, trafficRight }) {
   const background =
-    pixelAt(pixels, Math.max(0, width - 24), 10) ??
-    pixelAt(pixels, Math.floor(width / 2), 10) ??
+    pixelAt(pixels, width, Math.max(0, width - 24), 10) ??
+    pixelAt(pixels, width, Math.floor(width / 2), 10) ??
     pixels[0];
   const components = findComponents(
     pixels,
@@ -321,36 +378,12 @@ function measure(
   maxTitleCenterDelta,
   maxRightIconCenterDelta
 ) {
-  const text = run('magick', [image, '-crop', crop, 'txt:-']);
-  const { pixels, width } = parsePixels(text);
+  const { pixels, width } = readPixels(image, crop);
+  const trafficComponents = trafficLightComponents(pixels, width);
 
-  const red = largestComponent(
-    findComponents(
-      pixels,
-      width,
-      (pixel) =>
-        pixel.a > 0 && pixel.r > 180 && pixel.g < 150 && pixel.b < 150 && pixel.r - pixel.g > 40
-    ),
-    'red'
-  );
-  const yellow = largestComponent(
-    findComponents(
-      pixels,
-      width,
-      (pixel) =>
-        pixel.a > 0 && pixel.r > 180 && pixel.g > 120 && pixel.b < 120 && pixel.r - pixel.b > 80
-    ),
-    'yellow'
-  );
-  const green = largestComponent(
-    findComponents(
-      pixels,
-      width,
-      (pixel) =>
-        pixel.a > 0 && pixel.g > 130 && pixel.r < 140 && pixel.b < 160 && pixel.g - pixel.r > 35
-    ),
-    'green'
-  );
+  const red = largestComponent(trafficComponents.red, 'red');
+  const yellow = largestComponent(trafficComponents.yellow, 'yellow');
+  const green = largestComponent(trafficComponents.green, 'green');
 
   const traffic = [red, yellow, green];
   const trafficCenterY =

@@ -18,7 +18,12 @@ import type {
   TranscriptionBackfillController,
 } from './MemoryStudio';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
-import { seedWorkspaceSnapshot, workspaceSnapshotQueryKey } from './workspaceQueries';
+import {
+  seedWorkspaceSnapshot,
+  segmentContentQueryKey,
+  segmentSupplementContentQueryKey,
+  workspaceSnapshotQueryKey,
+} from './workspaceQueries';
 
 function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}): WorkspaceSession {
   return {
@@ -499,7 +504,7 @@ describe('LoadedWorkspaceFrame', () => {
       within(rail)
         .getAllByRole('button', { name: /选择记忆/ })
         .map((button) => button.getAttribute('aria-label'))
-    ).toEqual(['选择记忆 My seventh birthday', '选择记忆 School recital', '选择记忆 Morning note']);
+    ).toEqual(['选择记忆 Morning note', '选择记忆 School recital', '选择记忆 My seventh birthday']);
     const birthdayMemoryButton = within(rail).getByRole('button', {
       name: '选择记忆 My seventh birthday',
     });
@@ -637,7 +642,9 @@ describe('LoadedWorkspaceFrame', () => {
       'flex-[0_0_var(--memory-studio-segment-card-size)]',
       'snap-start',
       'flex-col',
-      'min-w-[var(--memory-studio-segment-card-min-size)]'
+      'min-w-[var(--memory-studio-segment-card-min-size)]',
+      '[content-visibility:auto]',
+      '[contain-intrinsic-size:184px_184px]'
     );
     expect(segmentCards[0]).toHaveClass(
       'aspect-square',
@@ -680,6 +687,46 @@ describe('LoadedWorkspaceFrame', () => {
       'overflow-y-auto',
       'scrollbar-hover'
     );
+  });
+
+  it('keeps large Segment strips from mounting every card interaction tree at once', async () => {
+    const largeDetail: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segmentCount: 40,
+      segments: Array.from({ length: 40 }, (_, index) => ({
+        ...birthdayVoiceSegment,
+        segmentId: `seg_large_${index}`,
+        title: `Long recording ${index + 1}`,
+        createdAt: `2026-05-06T13:${String(index).padStart(2, '0')}:00.000`,
+        updatedAt: `2026-05-06T13:${String(index).padStart(2, '0')}:30.000`,
+      })),
+    };
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, segmentCount: largeDetail.segmentCount }],
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_large_segment_strip',
+      detail: largeDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    expect(
+      studio.querySelectorAll('[data-slot="memory-studio-segment-item"]').length
+    ).toBeLessThanOrEqual(16);
+    expect(
+      studio.querySelectorAll('[data-slot="memory-studio-segment-strip-spacer"]')
+    ).toHaveLength(1);
+    expect(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]').length).toBeLessThan(
+      40
+    );
+    expect(
+      studio.querySelectorAll('[data-slot="memory-studio-segment-card"]').length
+    ).toBeGreaterThan(0);
   });
 
   it('keeps timeline marker and time inside the same horizontal Segment item', async () => {
@@ -1342,7 +1389,7 @@ describe('LoadedWorkspaceFrame', () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:decoded-finalized-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const session = workspaceSession({ memories: [birthdayMemory] });
-    const { queryClient } = renderLoadedWorkspaceFrame({
+    const { queryClient, unmount } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
       readFinalizedAudioSegment: vi.fn(async (request) => ({
         ok: true,
@@ -1375,7 +1422,259 @@ describe('LoadedWorkspaceFrame', () => {
     });
     expect(AudioContextMock).toHaveBeenCalledTimes(1);
     expect(decodeAudioData).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    expect(close).not.toHaveBeenCalled();
+    unmount();
     expect(close).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('serializes playback waveform decodes and ignores stale segment audio results', async () => {
+    const releaseFirstDecodeRef: {
+      current:
+        | ((value: {
+            readonly length: number;
+            readonly numberOfChannels: number;
+            readonly getChannelData: () => Float32Array;
+          }) => void)
+        | null;
+    } = { current: null };
+    const firstSamples = Float32Array.from([0.1, 0.2, 0.3, 0.4]);
+    const secondSamples = Float32Array.from([0.8, 0.6, 0.4, 0.2]);
+    const decodeAudioData = vi.fn((_audioData: ArrayBuffer) => {
+      if (releaseFirstDecodeRef.current === null) {
+        return new Promise<{
+          readonly length: number;
+          readonly numberOfChannels: number;
+          readonly getChannelData: () => Float32Array;
+        }>((resolve) => {
+          releaseFirstDecodeRef.current = resolve;
+        });
+      }
+
+      return Promise.resolve({
+        length: secondSamples.length,
+        numberOfChannels: 1,
+        getChannelData: () => secondSamples,
+      });
+    });
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:serialized-finalized-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment: vi.fn(() => new Promise(() => {})),
+      session,
+    });
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_serialized_decode',
+      detail: birthdayDetail,
+    });
+    const contentQueryKey = segmentContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+    });
+    queryClient.setQueryData(contentQueryKey, {
+      requestId: 'request_segment_first_decode',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      transcript: { exists: true, text: 'First finalized audio.' },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const waveform = await within(studio).findByRole('slider', { name: '片段播放进度' });
+
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    });
+    queryClient.setQueryData(contentQueryKey, {
+      requestId: 'request_segment_second_decode',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      audio: new Uint8Array([4, 5, 6]),
+      audioByteLength: 3,
+      transcript: { exists: true, text: 'Second finalized audio.' },
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(decodeAudioData).toHaveBeenCalledTimes(1);
+
+    const resolveFirstDecode = releaseFirstDecodeRef.current;
+    if (!resolveFirstDecode) {
+      throw new Error('Expected first waveform decode to be pending.');
+    }
+    resolveFirstDecode({
+      length: firstSamples.length,
+      numberOfChannels: 1,
+      getChannelData: () => firstSamples,
+    });
+
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(2);
+      expect(waveform).toHaveAttribute('data-waveform-source', 'decoded-audio');
+    });
+    expect(decodeAudioData.mock.calls[1]?.[0]).toBeInstanceOf(ArrayBuffer);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('serializes supplement waveform decodes and ignores stale supplement audio results', async () => {
+    const releaseFirstDecodeRef: {
+      current:
+        | ((value: {
+            readonly length: number;
+            readonly numberOfChannels: number;
+            readonly getChannelData: () => Float32Array;
+          }) => void)
+        | null;
+    } = { current: null };
+    const firstSamples = Float32Array.from([0.1, 0.2, 0.3, 0.4]);
+    const secondSamples = Float32Array.from([0.9, 0.7, 0.5, 0.3]);
+    const decodeAudioData = vi.fn((_audioData: ArrayBuffer) => {
+      if (releaseFirstDecodeRef.current === null) {
+        return new Promise<{
+          readonly length: number;
+          readonly numberOfChannels: number;
+          readonly getChannelData: () => Float32Array;
+        }>((resolve) => {
+          releaseFirstDecodeRef.current = resolve;
+        });
+      }
+
+      return Promise.resolve({
+        length: secondSamples.length,
+        numberOfChannels: 1,
+        getChannelData: () => secondSamples,
+      });
+    });
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:serialized-supplement-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentSupplement: vi.fn(() => new Promise(() => {})),
+      session,
+    });
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_serialized_supplement_decode',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    const supplementContentQueryKey = segmentSupplementContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+    });
+    queryClient.setQueryData(supplementContentQueryKey, {
+      requestId: 'request_supplement_first_decode',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      transcript: { exists: false, text: '' },
+    });
+    const waveform = await within(content).findByRole('slider', { name: '补充录音播放进度' });
+
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    });
+    queryClient.setQueryData(supplementContentQueryKey, {
+      requestId: 'request_supplement_second_decode',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+      audio: new Uint8Array([4, 5, 6]),
+      audioByteLength: 3,
+      transcript: { exists: false, text: '' },
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(decodeAudioData).toHaveBeenCalledTimes(1);
+
+    const resolveFirstDecode = releaseFirstDecodeRef.current;
+    if (!resolveFirstDecode) {
+      throw new Error('Expected first supplement waveform decode to be pending.');
+    }
+    resolveFirstDecode({
+      length: firstSamples.length,
+      numberOfChannels: 1,
+      getChannelData: () => firstSamples,
+    });
+
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(2);
+      expect(waveform).toHaveAttribute('data-waveform-source', 'decoded-audio');
+    });
+    expect(decodeAudioData.mock.calls[1]?.[0]).toBeInstanceOf(ArrayBuffer);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('does not decode oversized finalized audio for playback waveform peaks', async () => {
+    const decodeAudioData = vi.fn(async () => ({
+      length: 1,
+      numberOfChannels: 1,
+      getChannelData: () => Float32Array.from([1]),
+    }));
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:large-finalized-audio');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment: vi.fn(async (request) => ({
+        ok: true,
+        value: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          audio: new Uint8Array([8, 7, 6, 5]),
+          audioByteLength: 21 * 1024 * 1024,
+          transcript: {
+            exists: true,
+            text: 'A large finalized audio file should remain playable without waveform decode.',
+          },
+        },
+      })),
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_large_waveform',
+      detail: birthdayDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const waveform = await within(studio).findByRole('slider', { name: '片段播放进度' });
+
+    await waitFor(() => {
+      expect(waveform).toHaveAttribute('data-waveform-source', 'unavailable');
+    });
+    expect(AudioContextMock).not.toHaveBeenCalled();
+    expect(decodeAudioData).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });
@@ -1546,6 +1845,46 @@ describe('LoadedWorkspaceFrame', () => {
     expect(play).toHaveBeenCalledOnce();
     expect(
       within(content).getByRole('button', { name: '暂停补充录音 补充录音' })
+    ).toBeInTheDocument();
+  });
+
+  it('shows a retryable status when supplement playback fails', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:supplement-audio-failure');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('blocked'));
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentSupplement,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_supplement_playback_failure',
+      detail: detailWithSupplement,
+    });
+
+    const content = await screen.findByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
+    await userEvent.click(within(content).getByRole('button', { name: '播放补充录音 补充录音' }));
+
+    expect(await within(content).findByText('补充录音无法播放，请稍后重试。')).toBeInTheDocument();
+    expect(
+      within(content).getByRole('button', { name: '播放补充录音 补充录音' })
     ).toBeInTheDocument();
   });
 

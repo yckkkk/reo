@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { gzipSync, gunzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gzip, gzipSync, gunzipSync } from 'node:zlib';
 import WebSocket from 'ws';
 import {
   RECORDING_TRANSCRIPTION_PCM_BITS_PER_SAMPLE,
@@ -21,6 +22,9 @@ const MESSAGE_FLAG_NEG_WITH_SEQUENCE = 0b0011;
 const SERIALIZATION_TYPE_JSON = 0b0001;
 const COMPRESSION_TYPE_GZIP = 0b0001;
 const DEFAULT_FINAL_RESULT_TIMEOUT_MS = 5000;
+export const DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES = 8 * 1024 * 1024;
+export const DOUBAO_STREAMING_ASR_MAX_RESPONSE_JSON_BYTES = 1024 * 1024;
+const gzipAsync = promisify(gzip);
 
 type DoubaoAsrAuthInput = {
   readonly apiKey: string;
@@ -201,6 +205,34 @@ function createDefaultDoubaoStreamingAsrSocket({
 }
 
 export function normalizeDoubaoAsrSocketMessageFrame(message: unknown): Buffer {
+  const parts: Buffer[] = [];
+  const stack: unknown[] = [message];
+  let byteLength = 0;
+
+  while (stack.length > 0) {
+    const next = stack.pop();
+    if (Array.isArray(next)) {
+      for (let index = next.length - 1; index >= 0; index -= 1) {
+        stack.push(next[index]);
+      }
+      continue;
+    }
+
+    const part = normalizeDoubaoAsrSocketMessageFramePart(next);
+    byteLength += part.byteLength;
+    if (byteLength > DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES) {
+      throw new Error('Doubao ASR response frame is too large.');
+    }
+    parts.push(part);
+  }
+
+  if (parts.length === 1) {
+    return parts[0] ?? Buffer.alloc(0);
+  }
+  return Buffer.concat(parts, byteLength);
+}
+
+function normalizeDoubaoAsrSocketMessageFramePart(message: unknown): Buffer {
   if (Buffer.isBuffer(message)) {
     return message;
   }
@@ -210,22 +242,24 @@ export function normalizeDoubaoAsrSocketMessageFrame(message: unknown): Buffer {
   if (ArrayBuffer.isView(message)) {
     return Buffer.from(message.buffer, message.byteOffset, message.byteLength);
   }
-  if (Array.isArray(message)) {
-    return Buffer.concat(message.map((entry) => normalizeDoubaoAsrSocketMessageFrame(entry)));
-  }
   if (typeof message === 'string') {
     return Buffer.from(message, 'utf8');
   }
   throw new Error('Doubao ASR response frame is unsupported.');
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function redactSecrets(message: string, secrets: readonly string[]) {
-  return secrets.reduce((redactedMessage, secret) => {
-    if (!secret) {
-      return redactedMessage;
-    }
-    return redactedMessage.split(secret).join('[redacted]');
-  }, message);
+  const escapedSecrets = [...new Set(secrets.filter((secret) => secret.length > 0))]
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp);
+  if (escapedSecrets.length === 0) {
+    return message;
+  }
+  return message.replace(new RegExp(escapedSecrets.join('|'), 'g'), '[redacted]');
 }
 
 function errorMessageFromUnknown(error: unknown) {
@@ -261,9 +295,10 @@ function parseResponsePayload(payload: unknown): DoubaoAsrResponsePayload | null
 
     const utterancesValue = resultValue['utterances'];
     if (Array.isArray(utterancesValue)) {
-      nextResult.utterances = utterancesValue.flatMap((utterance): DoubaoAsrUtterance[] => {
+      const utterances: DoubaoAsrUtterance[] = [];
+      for (const utterance of utterancesValue) {
         if (!isObject(utterance)) {
-          return [];
+          continue;
         }
         const parsedUtterance: {
           definite?: boolean;
@@ -287,8 +322,9 @@ function parseResponsePayload(payload: unknown): DoubaoAsrResponsePayload | null
         if (utteranceText !== null) {
           parsedUtterance.text = utteranceText;
         }
-        return [parsedUtterance];
-      });
+        utterances.push(parsedUtterance);
+      }
+      nextResult.utterances = utterances;
     }
     result = nextResult;
   }
@@ -300,7 +336,20 @@ function parseResponsePayload(payload: unknown): DoubaoAsrResponsePayload | null
 }
 
 function parseJsonPayload(payload: Buffer, compressed: boolean): unknown {
-  const decodedPayload = compressed ? gunzipSync(payload) : payload;
+  let decodedPayload: Buffer;
+  try {
+    decodedPayload = compressed
+      ? gunzipSync(payload, { maxOutputLength: DOUBAO_STREAMING_ASR_MAX_RESPONSE_JSON_BYTES + 1 })
+      : payload;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new Error('Doubao ASR response JSON payload is too large.', { cause: error });
+    }
+    throw error;
+  }
+  if (decodedPayload.byteLength > DOUBAO_STREAMING_ASR_MAX_RESPONSE_JSON_BYTES) {
+    throw new Error('Doubao ASR response JSON payload is too large.');
+  }
   if (decodedPayload.byteLength === 0) {
     return null;
   }
@@ -339,6 +388,7 @@ export function createDoubaoStreamingAsrSession({
   let socket: DoubaoStreamingAsrSocket | null = null;
   let pendingFinalResult: PendingFinalResult | null = null;
   let startPromise: Promise<void> | null = null;
+  let sendQueue: Promise<void> = Promise.resolve();
   let transportFailureReported = false;
 
   const safeErrorMessage = (message: string) => redactSecrets(message, secrets);
@@ -359,6 +409,29 @@ export function createDoubaoStreamingAsrSession({
       return;
     }
     socket.send(frame);
+  };
+
+  const closeAfterSendFailure = (error: unknown) => {
+    const safeMessage = reportTransportFailure(
+      `豆包流式语音识别发送失败：${errorMessageFromUnknown(error)}`
+    );
+    rejectPendingFinalResult(safeMessage);
+    isClosed = true;
+    closeRequested = true;
+    socket?.close();
+    throw new Error(safeMessage);
+  };
+
+  const enqueueFrame = (buildFrame: () => Promise<Buffer>): Promise<void> => {
+    const nextSend = sendQueue.then(async () => {
+      if (isClosed || socket === null) {
+        return;
+      }
+      const frame = await buildFrame();
+      sendFrame(frame);
+    });
+    sendQueue = nextSend.catch(() => {});
+    return nextSend.catch(closeAfterSendFailure);
   };
 
   const settlePendingFinalResult = (settle: (pending: PendingFinalResult) => void) => {
@@ -390,6 +463,7 @@ export function createDoubaoStreamingAsrSession({
       resolve = innerResolve;
       reject = innerReject;
     });
+    void promise.catch(() => {});
     const timeoutId = setTimeout(() => {
       const safeMessage = reportError('豆包流式语音识别最终结果未返回。');
       rejectPendingFinalResult(safeMessage);
@@ -469,10 +543,19 @@ export function createDoubaoStreamingAsrSession({
           if (isClosed) {
             return;
           }
-          sendFrame(buildDoubaoAsrFullRequestFrame({ sequence: nextSequence, uid }));
+          const sequence = nextSequence;
           nextSequence += 1;
-          isStarted = true;
-          resolveStart();
+          void enqueueFrame(() => buildDoubaoAsrFullRequestFrameAsync({ sequence, uid }))
+            .then(() => {
+              if (isClosed) {
+                return;
+              }
+              isStarted = true;
+              resolveStart();
+            })
+            .catch((error) => {
+              rejectStart(errorMessageFromUnknown(error));
+            });
         })
         .on('message', handleResponse)
         .on('error', (error) => {
@@ -520,59 +603,91 @@ export function createDoubaoStreamingAsrSession({
         return;
       }
       const finalResult = waitForFinalResult();
-      sendFrame(
-        buildDoubaoAsrAudioRequestFrame({
+      const sequence = nextSequence;
+      nextSequence += 1;
+      await enqueueFrame(() =>
+        buildDoubaoAsrAudioRequestFrameAsync({
           audio: finalAudio,
           isLast: true,
-          sequence: nextSequence,
+          sequence,
         })
       );
-      nextSequence += 1;
       await finalResult;
     },
     sendAudioChunk: (audio) => {
       if (!isStarted || audio.byteLength === 0) {
         return;
       }
-      sendFrame(
-        buildDoubaoAsrAudioRequestFrame({
+      const sequence = nextSequence;
+      nextSequence += 1;
+      void enqueueFrame(() =>
+        buildDoubaoAsrAudioRequestFrameAsync({
           audio,
           isLast: false,
-          sequence: nextSequence,
+          sequence,
         })
-      );
-      nextSequence += 1;
+      ).catch(() => {});
     },
     start,
   };
 }
 
-export function buildDoubaoAsrFullRequestFrame({ sequence, uid }: DoubaoFullRequestInput): Buffer {
-  const payload = gzipSync(
-    Buffer.from(
-      JSON.stringify({
-        user: {
-          uid,
-        },
-        audio: {
-          format: 'pcm',
-          codec: 'raw',
-          rate: RECORDING_TRANSCRIPTION_PCM_SAMPLE_RATE_HZ,
-          bits: RECORDING_TRANSCRIPTION_PCM_BITS_PER_SAMPLE,
-          channel: RECORDING_TRANSCRIPTION_PCM_CHANNELS,
-        },
-        request: {
-          model_name: 'bigmodel',
-          enable_itn: true,
-          enable_punc: true,
-          enable_ddc: true,
-          show_utterances: true,
-          enable_nonstream: false,
-        },
-      }),
-      'utf8'
-    )
+async function buildDoubaoAsrFullRequestFrameAsync(input: DoubaoFullRequestInput): Promise<Buffer> {
+  const payload = await gzipAsync(
+    Buffer.from(JSON.stringify(fullRequestPayload(input.uid)), 'utf8')
   );
+  return writeSequenceAndPayload({
+    header: protocolHeader({
+      flags: MESSAGE_FLAG_POS_SEQUENCE,
+      messageType: MESSAGE_TYPE_CLIENT_FULL_REQUEST,
+    }),
+    payload,
+    sequence: input.sequence,
+  });
+}
+
+async function buildDoubaoAsrAudioRequestFrameAsync({
+  audio,
+  isLast,
+  sequence,
+}: DoubaoAudioRequestInput): Promise<Buffer> {
+  const payload = await gzipAsync(Buffer.from(audio));
+  const frameSequence = isLast ? -Math.abs(sequence) : Math.abs(sequence);
+  return writeSequenceAndPayload({
+    header: protocolHeader({
+      flags: isLast ? MESSAGE_FLAG_NEG_WITH_SEQUENCE : MESSAGE_FLAG_POS_SEQUENCE,
+      messageType: MESSAGE_TYPE_CLIENT_AUDIO_ONLY_REQUEST,
+    }),
+    payload,
+    sequence: frameSequence,
+  });
+}
+
+function fullRequestPayload(uid: string) {
+  return {
+    user: {
+      uid,
+    },
+    audio: {
+      format: 'pcm',
+      codec: 'raw',
+      rate: RECORDING_TRANSCRIPTION_PCM_SAMPLE_RATE_HZ,
+      bits: RECORDING_TRANSCRIPTION_PCM_BITS_PER_SAMPLE,
+      channel: RECORDING_TRANSCRIPTION_PCM_CHANNELS,
+    },
+    request: {
+      model_name: 'bigmodel',
+      enable_itn: true,
+      enable_punc: true,
+      enable_ddc: true,
+      show_utterances: true,
+      enable_nonstream: false,
+    },
+  };
+}
+
+export function buildDoubaoAsrFullRequestFrame({ sequence, uid }: DoubaoFullRequestInput): Buffer {
+  const payload = gzipSync(Buffer.from(JSON.stringify(fullRequestPayload(uid)), 'utf8'));
 
   return writeSequenceAndPayload({
     header: protocolHeader({
@@ -605,6 +720,9 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
   if (frame.byteLength < 4) {
     throw new Error('Doubao ASR response frame is too short.');
   }
+  if (frame.byteLength > DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES) {
+    throw new Error('Doubao ASR response frame is too large.');
+  }
 
   const headerSize = (frame[0] ?? 0) & 0x0f;
   let offset = headerSize * 4;
@@ -616,6 +734,7 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
   let isLastPackage = false;
 
   if (flags & 0x01) {
+    assertFrameBytesAvailable(frame, offset, 4);
     sequence = frame.readInt32BE(offset);
     offset += 4;
   }
@@ -623,6 +742,7 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
     isLastPackage = true;
   }
   if (flags & 0x04) {
+    assertFrameBytesAvailable(frame, offset, 4);
     offset += 4;
   }
 
@@ -631,10 +751,12 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
   }
 
   if (messageType === MESSAGE_TYPE_SERVER_ERROR_RESPONSE) {
+    assertFrameBytesAvailable(frame, offset, 8);
     const code = frame.readInt32BE(offset);
     offset += 4;
     const payloadSize = frame.readUInt32BE(offset);
     offset += 4;
+    assertFramePayloadAvailable(frame, offset, payloadSize);
     const payload = parseJsonPayload(
       frame.subarray(offset, offset + payloadSize),
       compressionType === COMPRESSION_TYPE_GZIP
@@ -646,8 +768,10 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
     throw new Error('Doubao ASR response message type is unsupported.');
   }
 
+  assertFrameBytesAvailable(frame, offset, 4);
   const payloadSize = frame.readUInt32BE(offset);
   offset += 4;
+  assertFramePayloadAvailable(frame, offset, payloadSize);
   const payload = parseJsonPayload(
     frame.subarray(offset, offset + payloadSize),
     compressionType === COMPRESSION_TYPE_GZIP
@@ -661,6 +785,19 @@ export function parseDoubaoAsrResponseFrame(frame: Buffer): DoubaoAsrResponse {
   };
 }
 
+function assertFrameBytesAvailable(frame: Buffer, offset: number, byteLength: number) {
+  if (offset < 0 || byteLength < 0 || offset + byteLength > frame.byteLength) {
+    throw new Error('Doubao ASR response frame is truncated.');
+  }
+}
+
+function assertFramePayloadAvailable(frame: Buffer, offset: number, payloadSize: number) {
+  if (payloadSize > DOUBAO_STREAMING_ASR_MAX_RESPONSE_FRAME_BYTES) {
+    throw new Error('Doubao ASR response payload is too large.');
+  }
+  assertFrameBytesAvailable(frame, offset, payloadSize);
+}
+
 export function mapDoubaoAsrResponseToTranscriptSegments(
   response: DoubaoAsrResponse,
   identity: DoubaoAsrSegmentIdentity
@@ -671,24 +808,24 @@ export function mapDoubaoAsrResponseToTranscriptSegments(
 
   const utterances = response.payload?.result?.utterances;
   if (utterances && utterances.length > 0) {
-    return utterances.flatMap((utterance): DoubaoAsrTranscriptSegment[] => {
+    const segments: DoubaoAsrTranscriptSegment[] = [];
+    for (const utterance of utterances) {
       const startTimeMs = asNumber(utterance.start_time);
       const endTimeMs = asNumber(utterance.end_time);
       const text = asString(utterance.text)?.trim();
       if (startTimeMs === null || endTimeMs === null || !text) {
-        return [];
+        continue;
       }
-      return [
-        {
-          endTimeMs,
-          isFinal: Boolean(utterance.definite),
-          recordingSessionId: identity.recordingSessionId,
-          revisionId: identity.revisionId,
-          startTimeMs,
-          text,
-        },
-      ];
-    });
+      segments.push({
+        endTimeMs,
+        isFinal: Boolean(utterance.definite),
+        recordingSessionId: identity.recordingSessionId,
+        revisionId: identity.revisionId,
+        startTimeMs,
+        text,
+      });
+    }
+    return segments;
   }
 
   const text = response.payload?.result?.text?.trim();

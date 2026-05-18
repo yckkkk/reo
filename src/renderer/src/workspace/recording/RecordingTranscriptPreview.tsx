@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { findTranscriptSegmentAtTime, type TranscriptSegment } from './recordingTimeline';
+import { type TranscriptSegment } from './recordingTimeline';
 import { RECORDING_SPEECH_TEXT_CLASS } from './recordingTypography';
 
 type TranscriptAutoScrollMode = 'focus' | 'latest';
@@ -13,6 +13,9 @@ type RecordingTranscriptPreviewProps = {
 };
 
 const TRANSCRIPT_BOTTOM_EPSILON_PX = 8;
+const MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS = 80;
+const FOCUSED_TRANSCRIPT_CONTEXT_BEFORE = 30;
+const FOCUSED_TRANSCRIPT_CONTEXT_AFTER = 49;
 
 function segmentKey(segment: TranscriptSegment) {
   return `${segment.revisionId}:${segment.startTimeMs}:${segment.endTimeMs}`;
@@ -22,18 +25,33 @@ function segmentVersion(segment: TranscriptSegment) {
   return `${segmentKey(segment)}:${segment.isFinal ? 'final' : 'partial'}:${segment.text}`;
 }
 
-function findFocusedSegment(segments: readonly TranscriptSegment[], focusTimeMs: number) {
-  const direct = findTranscriptSegmentAtTime(segments, focusTimeMs);
-  if (direct) {
-    return direct;
+function findFocusedSegmentIndex(segments: readonly TranscriptSegment[], focusTimeMs: number) {
+  if (segments.length === 0) {
+    return -1;
   }
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const segment = segments[index];
-    if (segment && segment.startTimeMs <= focusTimeMs) {
-      return segment;
+  const safeTimeMs = Math.max(0, Math.round(focusTimeMs));
+  let low = 0;
+  let high = segments.length - 1;
+  let candidateIndex = -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const segment = segments[mid];
+    if (!segment) {
+      break;
+    }
+    if (safeTimeMs < segment.startTimeMs) {
+      high = mid - 1;
+    } else {
+      candidateIndex = mid;
+      if (safeTimeMs < segment.endTimeMs) {
+        break;
+      }
+      low = mid + 1;
     }
   }
-  return null;
+
+  return candidateIndex;
 }
 
 function transcriptVersionFor(segments: readonly TranscriptSegment[]) {
@@ -55,6 +73,74 @@ function isScrolledToBottom(element: HTMLElement) {
   return (
     element.scrollHeight - element.scrollTop - element.clientHeight <= TRANSCRIPT_BOTTOM_EPSILON_PX
   );
+}
+
+type TranscriptDisplayItem =
+  | {
+      readonly kind: 'gap';
+      readonly key: string;
+    }
+  | {
+      readonly kind: 'segment';
+      readonly segment: TranscriptSegment;
+    };
+
+function transcriptWindowRange({
+  focusedSegmentIndex,
+  segments,
+}: {
+  readonly focusedSegmentIndex: number;
+  readonly segments: readonly TranscriptSegment[];
+}) {
+  const focusedIndex = Math.max(
+    0,
+    focusedSegmentIndex >= 0 ? focusedSegmentIndex : segments.length - 1
+  );
+  let startIndex = Math.max(0, focusedIndex - FOCUSED_TRANSCRIPT_CONTEXT_BEFORE);
+  let endIndex = Math.min(segments.length, focusedIndex + FOCUSED_TRANSCRIPT_CONTEXT_AFTER + 1);
+
+  if (
+    endIndex - startIndex < MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS &&
+    endIndex === segments.length
+  ) {
+    startIndex = Math.max(0, endIndex - MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS);
+  }
+  if (endIndex - startIndex < MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS && startIndex === 0) {
+    endIndex = Math.min(segments.length, MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS);
+  }
+
+  return { endIndex, startIndex };
+}
+
+function transcriptDisplayItems({
+  focusedSegmentIndex,
+  segments,
+}: {
+  readonly focusedSegmentIndex: number;
+  readonly segments: readonly TranscriptSegment[];
+}): readonly TranscriptDisplayItem[] {
+  if (segments.length <= MAX_RENDERED_TRANSCRIPT_SEGMENT_SPANS) {
+    return segments.map((segment) => ({ kind: 'segment', segment }));
+  }
+
+  const { endIndex, startIndex } = transcriptWindowRange({ focusedSegmentIndex, segments });
+  const items: TranscriptDisplayItem[] = [];
+  if (startIndex > 0) {
+    items.push({
+      kind: 'gap',
+      key: `combined-before:${startIndex}`,
+    });
+  }
+  for (const segment of segments.slice(startIndex, endIndex)) {
+    items.push({ kind: 'segment', segment });
+  }
+  if (endIndex < segments.length) {
+    items.push({
+      kind: 'gap',
+      key: `combined-after:${endIndex}`,
+    });
+  }
+  return items;
 }
 
 function scrollTranscriptToBottom(element: HTMLElement) {
@@ -85,12 +171,17 @@ export function RecordingTranscriptPreview({
   focusTimeMs,
   segments,
 }: RecordingTranscriptPreviewProps) {
-  const focusedSegment = useMemo(
-    () => findFocusedSegment(segments, focusTimeMs),
+  const focusedSegmentIndex = useMemo(
+    () => findFocusedSegmentIndex(segments, focusTimeMs),
     [focusTimeMs, segments]
   );
+  const focusedSegment = focusedSegmentIndex >= 0 ? segments[focusedSegmentIndex] : null;
   const focusedSegmentKey = focusedSegment ? segmentKey(focusedSegment) : null;
   const transcriptVersion = useMemo(() => transcriptVersionFor(segments), [segments]);
+  const displayItems = useMemo(
+    () => transcriptDisplayItems({ focusedSegmentIndex, segments }),
+    [focusedSegmentIndex, segments]
+  );
   const shouldFollowLatestRef = useRef(true);
   const programmaticScrollRef = useRef(false);
   const userScrollIntentRef = useRef(false);
@@ -167,19 +258,30 @@ export function RecordingTranscriptPreview({
           ref={scrollContainerRef}
           tabIndex={0}
         >
-          {segments.map((segment) => {
-            const active = focusedSegmentKey === segmentKey(segment);
+          {displayItems.map((item) => {
+            if (item.kind === 'gap') {
+              return (
+                <span
+                  aria-hidden="true"
+                  className="mx-3 text-muted-foreground transition-colors duration-200 motion-reduce:transition-none"
+                  key={item.key}
+                >
+                  ...
+                </span>
+              );
+            }
+            const active = focusedSegmentKey === segmentKey(item.segment);
             return (
               <span
                 aria-current={active ? 'true' : undefined}
                 className={cn(
                   'mx-3 transition-colors duration-200 motion-reduce:transition-none',
-                  segmentToneClass(segment, active)
+                  segmentToneClass(item.segment, active)
                 )}
-                key={segmentKey(segment)}
+                key={segmentKey(item.segment)}
                 ref={active ? focusedSegmentRef : null}
               >
-                {segment.text}
+                {item.segment.text}
               </span>
             );
           })}

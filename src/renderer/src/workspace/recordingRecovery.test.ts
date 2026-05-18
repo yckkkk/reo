@@ -29,6 +29,32 @@ const workspaceSession: WorkspaceSession = {
   },
 };
 
+function largeRecoveryDraft() {
+  return {
+    audioChunks: Array.from({ length: 1200 }, (_, index) => ({
+      byteLength: 120,
+      endTimeMs: (index + 1) * 250,
+      startTimeMs: index * 250,
+    })),
+    durationMs: 300_000,
+    memoryId: 'mem_1',
+    recordingSessionId: 'recording-long',
+    revisionId: 'recording-long-revision-0',
+    segmentId: 'seg_long',
+    title: 'Long recording',
+    transcriptSegments: Array.from({ length: 2000 }, (_, index) => ({
+      endTimeMs: (index + 1) * 100,
+      isFinal: true,
+      recordingSessionId: 'recording-long',
+      revisionId: 'recording-long-revision-0',
+      startTimeMs: index * 100,
+      text: `很长的恢复转写 ${index} ${'内容'.repeat(200)}`,
+    })),
+    waveformSamples: Array.from({ length: 2400 }, () => 0.4),
+    workspaceId: 'ws_1',
+  };
+}
+
 describe('recordingRecovery', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -85,30 +111,7 @@ describe('recordingRecovery', () => {
   });
 
   it('keeps an oversized recovery marker readable without losing transcript text', () => {
-    writeRecordingRecoveryDraft({
-      audioChunks: Array.from({ length: 1200 }, (_, index) => ({
-        byteLength: 120,
-        endTimeMs: (index + 1) * 250,
-        startTimeMs: index * 250,
-      })),
-      durationMs: 300_000,
-      memoryId: 'mem_1',
-      nextSequence: 1200,
-      recordingSessionId: 'recording-long',
-      revisionId: 'recording-long-revision-0',
-      segmentId: 'seg_long',
-      title: 'Long recording',
-      transcriptSegments: Array.from({ length: 2000 }, (_, index) => ({
-        endTimeMs: (index + 1) * 100,
-        isFinal: true,
-        recordingSessionId: 'recording-long',
-        revisionId: 'recording-long-revision-0',
-        startTimeMs: index * 100,
-        text: `很长的恢复转写 ${index} ${'内容'.repeat(200)}`,
-      })),
-      waveformSamples: Array.from({ length: 2400 }, () => 0.4),
-      workspaceId: 'ws_1',
-    });
+    writeRecordingRecoveryDraft({ ...largeRecoveryDraft(), nextSequence: 1200 });
 
     const raw = window.localStorage.getItem('reo.recordingRecovery.v1.ws_1');
     const sidecar = window.localStorage.getItem('reo.recordingRecoveryTranscript.v1.ws_1');
@@ -132,29 +135,7 @@ describe('recordingRecovery', () => {
   });
 
   it('does not rewrite transcript sidecar during duration-only recovery updates', () => {
-    writeRecordingRecoveryDraft({
-      audioChunks: Array.from({ length: 1200 }, (_, index) => ({
-        byteLength: 120,
-        endTimeMs: (index + 1) * 250,
-        startTimeMs: index * 250,
-      })),
-      durationMs: 300_000,
-      memoryId: 'mem_1',
-      recordingSessionId: 'recording-long',
-      revisionId: 'recording-long-revision-0',
-      segmentId: 'seg_long',
-      title: 'Long recording',
-      transcriptSegments: Array.from({ length: 2000 }, (_, index) => ({
-        endTimeMs: (index + 1) * 100,
-        isFinal: true,
-        recordingSessionId: 'recording-long',
-        revisionId: 'recording-long-revision-0',
-        startTimeMs: index * 100,
-        text: `很长的恢复转写 ${index} ${'内容'.repeat(200)}`,
-      })),
-      waveformSamples: Array.from({ length: 2400 }, () => 0.4),
-      workspaceId: 'ws_1',
-    });
+    writeRecordingRecoveryDraft(largeRecoveryDraft());
 
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     setItem.mockClear();

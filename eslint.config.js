@@ -19,7 +19,14 @@ const preloadRestrictedImportPattern =
   '^(?!electron$|\\.\\/|\\.\\.\\/workspace-contract\\/(?:workspace-channels|reo-workspace-bridge)\\.js$).+';
 
 export default defineConfig([
-  globalIgnores(['node_modules', 'out']),
+  globalIgnores([
+    'node_modules',
+    'out',
+    '.tmp',
+    '.agents/skills',
+    '.claude/skills',
+    '.superpowers',
+  ]),
   {
     files: ['src/renderer/**/*.{ts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
@@ -88,6 +95,7 @@ export default defineConfig([
       'src/workspace-contract/**/*.ts',
       'test/**/*.ts',
       'electron.vite.config.ts',
+      'vitest.config.ts',
     ],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {

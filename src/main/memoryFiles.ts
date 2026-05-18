@@ -14,7 +14,7 @@ import {
   unlinkSync,
   write as writeCallback,
 } from 'node:fs';
-import { lstat, open, readdir, realpath, utimes } from 'node:fs/promises';
+import { lstat, open, opendir, readdir, realpath, utimes } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -227,6 +227,7 @@ export interface FinalizeTransactionHooksForTest {
   readonly beforeFinalRenameCommit?: () => void;
   readonly afterFinalRenameTargetPreflight?: () => void;
   readonly afterFinalRenameLastPreflight?: () => void;
+  readonly afterFinalRename?: () => MaybePromise<void>;
   readonly afterParentFsync?: () => MaybePromise<void>;
   readonly beforeDraftCleanup?: () => MaybePromise<void>;
   readonly beforeDraftDirectoryRemove?: () => MaybePromise<void>;
@@ -295,6 +296,10 @@ export type AppendAudioSegmentToMemoryForTestInput = AppendAudioSegmentToMemoryI
   readonly transactionHooks?: FinalizeTransactionHooksForTest;
 };
 
+export type AppendAudioSupplementToSegmentForTestInput = AppendAudioSupplementToSegmentInput & {
+  readonly transactionHooks?: FinalizeTransactionHooksForTest;
+};
+
 export interface MemoryTargetInput {
   readonly rootPath: string;
   readonly memoryId: string;
@@ -340,6 +345,9 @@ let beforeDuplicateRecordingCheckForTest: (() => MaybePromise<void>) | null = nu
 let beforeMemoryIndexEntryReadForTest: (() => MaybePromise<void>) | null = null;
 let beforeFileSpaceNodeMoveForTest: (() => MaybePromise<void>) | null = null;
 let beforeSegmentFileTruthListForTest: (() => MaybePromise<void>) | null = null;
+let beforeMemoryDirectoryCandidateScanForTest:
+  | ((input: { readonly parentDirectory: string; readonly memoryId: string }) => MaybePromise<void>)
+  | null = null;
 let beforeSegmentDirectoryCandidateScanForTest:
   | ((input: {
       readonly parentDirectory: string;
@@ -837,6 +845,17 @@ export function setBeforeSegmentFileTruthListForTest(
   beforeSegmentFileTruthListForTest = hook;
 }
 
+export function setBeforeMemoryDirectoryCandidateScanForTest(
+  hook:
+    | ((input: {
+        readonly parentDirectory: string;
+        readonly memoryId: string;
+      }) => MaybePromise<void>)
+    | null
+): void {
+  beforeMemoryDirectoryCandidateScanForTest = hook;
+}
+
 export function setBeforeSegmentDirectoryCandidateScanForTest(
   hook:
     | ((input: {
@@ -1323,16 +1342,43 @@ function latestIsoTimestamp(...timestamps: readonly string[]): string {
   );
 }
 
+function compareProjectedUpdatedAt(
+  first: { readonly updatedAt: string; readonly createdAt: string },
+  second: { readonly updatedAt: string; readonly createdAt: string }
+): number {
+  const updatedComparison = second.updatedAt.localeCompare(first.updatedAt);
+  if (updatedComparison !== 0) {
+    return updatedComparison;
+  }
+  return second.createdAt.localeCompare(first.createdAt);
+}
+
 function sortByProjectedUpdatedAt<
   T extends { readonly updatedAt: string; readonly createdAt: string },
 >(items: readonly T[]): T[] {
-  return [...items].sort((first, second) => {
-    const updatedComparison = second.updatedAt.localeCompare(first.updatedAt);
-    if (updatedComparison !== 0) {
-      return updatedComparison;
+  return [...items].sort(compareProjectedUpdatedAt);
+}
+
+function upsertMemorySummaryByProjectedOrder(
+  memories: readonly MemorySummary[],
+  summary: MemorySummary
+): MemorySummary[] {
+  const nextMemories: MemorySummary[] = [];
+  let inserted = false;
+  for (const memory of memories) {
+    if (memory.memoryId === summary.memoryId) {
+      continue;
     }
-    return second.createdAt.localeCompare(first.createdAt);
-  });
+    if (!inserted && compareProjectedUpdatedAt(summary, memory) <= 0) {
+      nextMemories.push(summary);
+      inserted = true;
+    }
+    nextMemories.push(memory);
+  }
+  if (!inserted) {
+    nextMemories.push(summary);
+  }
+  return nextMemories;
 }
 
 async function touchWorkspacePathBestEffort(targetPath: string, timestamp: string): Promise<void> {
@@ -1492,6 +1538,11 @@ async function memoryDirectoryInParent({
     throw new Error('Invalid memory id');
   }
   return findFileSpaceNodeDirectoryInParent({
+    beforeScan: (safeParentDirectory) =>
+      beforeMemoryDirectoryCandidateScanForTest?.({
+        parentDirectory: safeParentDirectory,
+        memoryId,
+      }),
     defaultDirectoryName,
     duplicateMessage: 'Duplicate memory id',
     matchesCandidate: async (candidate) => {
@@ -2006,6 +2057,7 @@ async function findFileSpaceNodeDirectoryInParent({
   nodeId,
   parentDirectory,
   rootPath,
+  scanFallbackCandidates = true,
   unsafeMessage,
 }: {
   readonly beforeScan?: (safeParentDirectory: string) => MaybePromise<void>;
@@ -2022,20 +2074,16 @@ async function findFileSpaceNodeDirectoryInParent({
   readonly nodeId: string;
   readonly parentDirectory: string;
   readonly rootPath: string;
+  readonly scanFallbackCandidates?: boolean;
   readonly unsafeMessage: string;
 }): Promise<string> {
   const safeParentDirectory = await resolveSafeWorkspaceChild(rootPath, parentDirectory);
   await beforeScan?.(safeParentDirectory);
-  const entries = await readExistingDirectoryEntries(safeParentDirectory);
-  const primaryMatches: string[] = [];
-  const fallbackMatches: string[] = [];
+  let primaryMatch: string | null = null;
+  let fallbackMatch: string | null = null;
   const generatedPrefix = `${nodeId}--`;
   const isLikelyCandidate = (entry: Dirent) =>
     entry.name === nodeId || entry.name.startsWith(generatedPrefix);
-  const likelyEntries = entries.filter(isLikelyCandidate);
-  const fallbackEntries = entries.filter(
-    (entry) => entry.isDirectory() && !isLikelyCandidate(entry)
-  );
   const inspectEntry = async (
     entry: Dirent,
     options?: { readonly rejectUnsafeCandidate?: boolean }
@@ -2054,11 +2102,17 @@ async function findFileSpaceNodeDirectoryInParent({
       await assertSafeExistingDirectory(candidate, unsafeMessage);
       const candidateIdentity = await readDirectoryIdentity(candidate);
       if (await matchesCandidate(candidate, candidateIdentity)) {
-        primaryMatches.push(candidate);
+        if (primaryMatch) {
+          throw new Error(duplicateMessage);
+        }
+        primaryMatch = candidate;
         return;
       }
       if (await matchesFallbackCandidate?.(candidate, candidateIdentity)) {
-        fallbackMatches.push(candidate);
+        if (fallbackMatch) {
+          throw new Error(duplicateMessage);
+        }
+        fallbackMatch = candidate;
       }
     } catch (error) {
       if (options?.rejectUnsafeCandidate && isUnsafeWorkspacePathError(error)) {
@@ -2067,20 +2121,41 @@ async function findFileSpaceNodeDirectoryInParent({
     }
   };
 
-  for (const entry of likelyEntries) {
-    await inspectEntry(entry, { rejectUnsafeCandidate: true });
-  }
-  if (primaryMatches.length === 0) {
-    for (const entry of fallbackEntries) {
-      await inspectEntry(entry);
+  let directory: Awaited<ReturnType<typeof opendir>> | null = null;
+  try {
+    directory = await opendir(safeParentDirectory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
     }
   }
-  const matches = primaryMatches.length > 0 ? primaryMatches : fallbackMatches;
-  if (matches.length > 1) {
-    throw new Error(duplicateMessage);
+  if (directory) {
+    for await (const entry of directory) {
+      if (isLikelyCandidate(entry)) {
+        await inspectEntry(entry, { rejectUnsafeCandidate: true });
+      }
+    }
+  }
+  if (!primaryMatch && scanFallbackCandidates) {
+    let fallbackDirectory: Awaited<ReturnType<typeof opendir>> | null = null;
+    try {
+      fallbackDirectory = await opendir(safeParentDirectory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    if (fallbackDirectory) {
+      for await (const entry of fallbackDirectory) {
+        if (!isLikelyCandidate(entry) && entry.isDirectory()) {
+          await inspectEntry(entry);
+        }
+      }
+    }
   }
   return (
-    matches[0] ??
+    primaryMatch ??
+    fallbackMatch ??
     resolveSafeWorkspaceChild(rootPath, path.join(safeParentDirectory, defaultDirectoryName))
   );
 }
@@ -2151,6 +2226,7 @@ async function segmentDirectoryInParent({
     nodeId: segmentId,
     parentDirectory,
     rootPath,
+    scanFallbackCandidates: false,
     unsafeMessage: 'Workspace segment directory is not safe',
   });
 }
@@ -2234,7 +2310,16 @@ async function segmentDirectoryExistsInAnyMemory(
         rootPath,
         path.join(memoriesDirectory, entry.name)
       );
-      if (await exists(await memorySegmentDirectory(rootPath, memory.memoryId, segmentId))) {
+      if (
+        await exists(
+          await resolveSegmentDirectoryInMemoryDirectory({
+            memoryDirectory: path.join(memoriesDirectory, entry.name),
+            memoryId: memory.memoryId,
+            rootPath,
+            segmentId,
+          })
+        )
+      ) {
         return true;
       }
     } catch {
@@ -2275,8 +2360,14 @@ export async function assertNoDuplicateSegmentDirectoryById(
       continue;
     }
     let candidate: string;
+    const memoryDirectoryPath = path.join(memoriesDirectory, entry.name);
     try {
-      candidate = await memorySegmentDirectory(rootPath, memory.memoryId, segmentId);
+      candidate = await resolveSegmentDirectoryInMemoryDirectory({
+        memoryDirectory: memoryDirectoryPath,
+        memoryId: memory.memoryId,
+        rootPath,
+        segmentId,
+      });
     } catch (error) {
       if (error instanceof Error && error.message === 'Duplicate finalized segment id') {
         throw new Error('Duplicate finalized segment id', { cause: error });
@@ -2374,18 +2465,6 @@ async function summarizeRecording(
     audioByteLength: fileTruth.audioByteLength,
     lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
   };
-}
-
-async function summarizeValidFinalizedSegmentDirectory(
-  rootPath: string,
-  memoryId: string,
-  segmentId: string
-): Promise<MemorySegmentSummary | null> {
-  try {
-    return await summarizeRecording(rootPath, memoryId, segmentId);
-  } catch {
-    return null;
-  }
 }
 
 async function readFinalizedSegmentMetadata(
@@ -2653,6 +2732,7 @@ export async function resolveSegmentSupplementDirectoryInSegmentDirectory({
     nodeId: supplementId,
     parentDirectory: supplementsDirectory,
     rootPath,
+    scanFallbackCandidates: false,
     unsafeMessage: 'Workspace segment supplement directory is not safe',
   });
 }
@@ -2684,6 +2764,7 @@ async function trashedSegmentSupplementDirectory(
     nodeId: supplementId,
     parentDirectory: path.join(rootPath, '.reo', 'trash', 'supplements'),
     rootPath,
+    scanFallbackCandidates: false,
     unsafeMessage: 'Workspace segment supplement trash directory is not safe',
   });
 }
@@ -3066,9 +3147,25 @@ async function listValidFinalizedSegmentFileTruths(
 ): Promise<FinalizedSegmentFileTruth[]> {
   await beforeSegmentFileTruthListForTest?.();
   const directory = await memoryDirectory(rootPath, memoryId);
+  return listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+    rootPath,
+    memoryId,
+    memoryDirectoryPath: directory,
+  });
+}
+
+async function listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+  rootPath,
+  memoryId,
+  memoryDirectoryPath,
+}: {
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly memoryDirectoryPath: string;
+}): Promise<FinalizedSegmentFileTruth[]> {
   const segmentsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
-    path.join(directory, 'segments')
+    path.join(memoryDirectoryPath, 'segments')
   );
   const entries = await readExistingDirectoryEntries(segmentsDirectory);
   const fileTruths: FinalizedSegmentFileTruth[] = [];
@@ -3174,6 +3271,27 @@ async function summarizeMemoryFromFileTruths({
 async function summarizeMemory(rootPath: string, memory: MemoryFileTruth): Promise<MemorySummary> {
   return summarizeMemoryFromFileTruths({
     fileTruths: await listValidFinalizedSegmentFileTruths(rootPath, memory.memoryId),
+    memory,
+    rootPath,
+  });
+}
+
+async function summarizeMemoryFromDirectory({
+  memory,
+  memoryDirectoryPath,
+  rootPath,
+}: {
+  readonly memory: MemoryFileTruth;
+  readonly memoryDirectoryPath: string;
+  readonly rootPath: string;
+}): Promise<MemorySummary> {
+  await beforeSegmentFileTruthListForTest?.();
+  return summarizeMemoryFromFileTruths({
+    fileTruths: await listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+      rootPath,
+      memoryId: memory.memoryId,
+      memoryDirectoryPath,
+    }),
     memory,
     rootPath,
   });
@@ -3291,6 +3409,85 @@ export async function readFinalizedSegmentProjection(input: {
   return projection;
 }
 
+export async function readFinalizedSegmentAudioProjection(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+}): Promise<{
+  readonly audioByteLength: number;
+  readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+  readonly transcript: { readonly exists: boolean };
+}> {
+  const fileTruth = await readValidFinalizedSegmentFileTruth(
+    input.rootPath,
+    input.memoryId,
+    input.segmentId
+  );
+  if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+    throw new Error('Finalized segment projection does not match file truth');
+  }
+
+  return {
+    audioByteLength: fileTruth.audioByteLength,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
+    transcript: {
+      exists: extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0,
+    },
+  };
+}
+
+export async function readFinalizedSegmentSupplementProjection(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<WorkspaceSegmentSupplementProjection> {
+  const supplementDirectory = await segmentSupplementDirectory(
+    input.rootPath,
+    input.memoryId,
+    input.segmentId,
+    input.supplementId
+  );
+  const projection = await readValidFinalizedSupplementProjectionFromDirectory({
+    supplementDirectory,
+    rootPath: input.rootPath,
+    workspaceId: input.workspaceId,
+    memoryId: input.memoryId,
+    segmentId: input.segmentId,
+  });
+
+  if (!projection || projection.supplementId !== input.supplementId) {
+    throw new Error('Finalized segment supplement projection does not match file truth');
+  }
+
+  return projection;
+}
+
+export async function readFinalizedSegmentSupplementProjectionFromKnownDirectory(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementDirectory: string;
+  readonly supplementId: string;
+}): Promise<WorkspaceSegmentSupplementProjection> {
+  const projection = await readValidFinalizedSupplementProjectionFromDirectory({
+    supplementDirectory: input.supplementDirectory,
+    rootPath: input.rootPath,
+    workspaceId: input.workspaceId,
+    memoryId: input.memoryId,
+    segmentId: input.segmentId,
+  });
+
+  if (!projection || projection.supplementId !== input.supplementId) {
+    throw new Error('Finalized segment supplement projection does not match file truth');
+  }
+
+  return projection;
+}
+
 export async function readMemoryDetailFromFileTruth(input: {
   readonly rootPath: string;
   readonly workspaceId: string;
@@ -3361,16 +3558,21 @@ export async function rebuildWorkspaceReadModel(
   await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
   const memories: MemorySummary[] = [];
   for (const entry of entries) {
+    assertWorkspaceUsable(assertUsable);
     if (!entry.isDirectory()) {
       continue;
     }
     try {
       await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
-      const memory = await readMemoryFileTruthFromDirectory(
-        rootPath,
-        path.join(memoriesDirectory, entry.name)
+      const memoryDirectoryPath = path.join(memoriesDirectory, entry.name);
+      const memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath);
+      memories.push(
+        await summarizeMemoryFromDirectory({
+          rootPath,
+          memory,
+          memoryDirectoryPath,
+        })
       );
-      memories.push(await summarizeMemory(rootPath, memory));
     } catch {
       continue;
     }
@@ -3434,10 +3636,7 @@ export async function refreshMemoryIndexEntry(
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
     );
-    const memories = sortByProjectedUpdatedAt([
-      summary,
-      ...index.memories.filter((memory) => memory.memoryId !== memoryId),
-    ]);
+    const memories = upsertMemorySummaryByProjectedOrder(index.memories, summary);
     await writeWorkspaceJsonAtomic(
       getWorkspaceIndexPath(rootPath),
       {
@@ -3450,17 +3649,67 @@ export async function refreshMemoryIndexEntry(
   });
 }
 
+export async function refreshMemoryIndexEntryWithDetail(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<{
+  readonly detail: WorkspaceMemoryDetailProjection;
+  readonly memory: MemorySummary;
+}> {
+  await beforeMemoryIndexEntryReadForTest?.();
+  return withWorkspaceIndexWriteLock(input.rootPath, async () => {
+    assertWorkspaceUsable(input.assertUsable);
+    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+    const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId);
+    const segments: WorkspaceSegmentProjection[] = [];
+    for (const fileTruth of fileTruths) {
+      assertWorkspaceUsable(input.assertUsable);
+      const segment = await finalizedSegmentProjectionFromFileTruth({
+        rootPath: input.rootPath,
+        workspaceId: input.workspaceId,
+        fileTruth,
+      });
+      if (segment) {
+        segments.push(segment);
+      }
+    }
+    const sortedSegments = sortByProjectedUpdatedAt(segments);
+    const summary = summarizeMemoryFromSegments(memory, sortedSegments);
+    assertWorkspaceUsable(input.assertUsable);
+    const index = workspaceIndexSchema.parse(
+      JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(input.rootPath)))
+    );
+    const memories = upsertMemorySummaryByProjectedOrder(index.memories, summary);
+    await writeWorkspaceJsonAtomic(
+      getWorkspaceIndexPath(input.rootPath),
+      {
+        schemaVersion: 1,
+        memories,
+      },
+      () => assertWorkspaceUsable(input.assertUsable)
+    );
+    return {
+      detail: {
+        ...summary,
+        workspaceId: input.workspaceId,
+        segments: sortedSegments,
+      },
+      memory: summary,
+    };
+  });
+}
+
 async function refreshMemoryIndexEntryFromKnownFileTruths({
   assertUsable,
   fileTruths,
   memory,
-  memoryId,
   rootPath,
 }: {
   readonly assertUsable?: AssertWorkspaceUsable;
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
-  readonly memoryId: string;
   readonly rootPath: string;
 }): Promise<{ readonly memory: MemorySummary; readonly memoryFileTruth: MemoryFileTruth }> {
   await beforeMemoryIndexEntryReadForTest?.();
@@ -3475,10 +3724,7 @@ async function refreshMemoryIndexEntryFromKnownFileTruths({
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
     );
-    const memories = sortByProjectedUpdatedAt([
-      summary,
-      ...index.memories.filter((indexedMemory) => indexedMemory.memoryId !== memoryId),
-    ]);
+    const memories = upsertMemorySummaryByProjectedOrder(index.memories, summary);
     await writeWorkspaceJsonAtomic(
       getWorkspaceIndexPath(rootPath),
       {
@@ -3532,6 +3778,37 @@ export async function readFinalizedSegmentSummary(
   segmentId: string
 ): Promise<MemorySegmentSummary> {
   return summarizeRecording(rootPath, memoryId, segmentId);
+}
+
+export async function readFinalizedSegmentSummaryFromKnownDirectory({
+  memoryId,
+  recordingDirectory,
+  recordingDirectoryIdentity,
+  rootPath,
+  segmentId,
+}: {
+  readonly memoryId: string;
+  readonly recordingDirectory: string;
+  readonly recordingDirectoryIdentity: DirectoryIdentity;
+  readonly rootPath: string;
+  readonly segmentId: string;
+}): Promise<MemorySegmentSummary> {
+  const fileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+    rootPath,
+    recordingDirectory,
+    memoryId,
+  });
+  if (!fileTruth || fileTruth.segmentId !== segmentId) {
+    throw new Error('Finalized segment metadata does not match file truth');
+  }
+  await assertSameDirectoryPathAsync(recordingDirectory, recordingDirectoryIdentity);
+  return {
+    segmentId,
+    title: fileTruth.metadata.title,
+    durationMs: fileTruth.metadata.durationMs,
+    audioByteLength: fileTruth.audioByteLength,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
+  };
 }
 
 export async function recoverRecordingFinalizeTransactions(
@@ -3998,6 +4275,21 @@ async function removeDraftSegmentDirectorySafely(
   }
 }
 
+async function removeDraftSupplementDirectorySafely(
+  rootPath: string,
+  supplementId: string,
+  hooks?: FinalizeTransactionHooks
+): Promise<void> {
+  const draftDirectory = await draftSupplementDirectory(rootPath, supplementId);
+  await hooks?.beforeDraftDirectoryRemove?.();
+  const removed = await removeSafeWorkspaceDirectory(rootPath, draftDirectory, {
+    allowMissing: true,
+  });
+  if (!removed) {
+    throw new Error('Segment supplement draft cleanup path is not safe');
+  }
+}
+
 async function removeMetadataLessEmptyMemoryDirectory(
   rootPath: string,
   memoryId: string,
@@ -4376,17 +4668,16 @@ async function finishFinalizeTransaction({
   readonly durationMs: number;
   readonly finalizedAt: string;
   readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
-  readonly rebuildIndex: (rootPath: string) => Promise<readonly MemorySummary[]>;
+  readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
   readonly hooks?: FinalizeTransactionHooks;
   readonly assertUsable?: AssertWorkspaceUsable;
 }): Promise<MemorySummary> {
   const targetMemoryDirectory = path.dirname(path.dirname(targetRecordingDirectory));
-  const directory = previousMemory
-    ? await memoryDirectory(rootPath, memoryId)
-    : targetMemoryDirectory;
+  const directory = targetMemoryDirectory;
   let rollbackDurableRecording = true;
   let rollbackMemory = true;
   let segmentManifestWritten = false;
+  let refreshedMemory: MemorySummary;
   try {
     assertWorkspaceUsable(assertUsable);
     const segmentManifest = await writeFinalizedSegmentFiles({
@@ -4439,6 +4730,8 @@ async function finishFinalizeTransaction({
       finalTargetRecordingDirectory,
       'Recording target path is not safe'
     );
+    await hooks?.afterFinalRename?.();
+    assertWorkspaceUsable(assertUsable);
     await writeSegmentObjectManifest({
       rootPath,
       segment: segmentManifest,
@@ -4447,12 +4740,9 @@ async function finishFinalizeTransaction({
     segmentManifestWritten = true;
     await hooks?.afterParentFsync?.();
     assertWorkspaceUsable(assertUsable);
-    const currentMemoryDirectory = previousMemory
-      ? await memoryDirectory(rootPath, memoryId)
-      : targetMemoryDirectory;
     await writeMemoryMarkdownAndManifest({
       rootPath,
-      memoryDirectoryPath: currentMemoryDirectory,
+      memoryDirectoryPath: targetMemoryDirectory,
       memory: {
         schemaVersion: 1,
         objectType: 'memory',
@@ -4464,7 +4754,16 @@ async function finishFinalizeTransaction({
       ...(assertUsable ? { assertUsable } : {}),
     });
     assertWorkspaceUsable(assertUsable);
-    await rebuildIndex(rootPath);
+    if (rebuildIndex) {
+      const memories = await rebuildIndex(rootPath);
+      const rebuiltMemory = memories.find((candidate) => candidate.memoryId === memoryId) ?? null;
+      if (!rebuiltMemory) {
+        throw new Error('Finalized memory summary missing');
+      }
+      refreshedMemory = rebuiltMemory;
+    } else {
+      refreshedMemory = await refreshMemoryIndexEntry(rootPath, memoryId, assertUsable);
+    }
     await hooks?.beforeDraftCleanup?.();
     assertWorkspaceUsable(assertUsable);
     await removeDraftSegmentDirectorySafely(rootPath, segmentId, hooks);
@@ -4475,7 +4774,7 @@ async function finishFinalizeTransaction({
     await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'segments'));
     assertWorkspaceUsable(assertUsable);
     await unlinkFinalizeTransactionMarker(rootPath, memoryId, segmentId);
-    return summarizeMemory(rootPath, nextMemory);
+    return refreshedMemory;
   } catch (error) {
     if (error instanceof WorkspaceHandleLost) {
       throw error;
@@ -4537,7 +4836,222 @@ async function finishFinalizeTransaction({
           }
         }
       }
-      await rebuildIndex(rootPath).catch(() => {});
+      const rebuildAfterRollback = rebuildIndex
+        ? () => rebuildIndex(rootPath)
+        : () =>
+            rebuildMemoryIndex(rootPath, {
+              ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+            });
+      await rebuildAfterRollback().catch(() => {});
+    }
+    throw new FinalizeTransactionFailure(
+      error,
+      rollbackMemory ? 'draft-preserved' : 'durable-marker-recovery-required'
+    );
+  }
+}
+
+async function finishSupplementFinalizeTransaction({
+  rootPath,
+  stagingSupplementDirectory,
+  targetSupplementDirectory,
+  memoryId,
+  segmentId,
+  supplementId,
+  workspaceId,
+  nextMemory,
+  previousMemory,
+  title,
+  durationMs,
+  finalizedAt,
+  lastTranscriptionAttemptOnFinalize,
+  rebuildIndex,
+  hooks,
+  assertUsable,
+}: {
+  readonly rootPath: string;
+  readonly stagingSupplementDirectory: string;
+  readonly targetSupplementDirectory: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly workspaceId: string;
+  readonly nextMemory: MemoryFileTruth;
+  readonly previousMemory: MemoryFileTruth;
+  readonly title: string;
+  readonly durationMs: number;
+  readonly finalizedAt: string;
+  readonly lastTranscriptionAttemptOnFinalize?: FinalizeTranscriptionAttempt;
+  readonly rebuildIndex?: (rootPath: string) => Promise<readonly MemorySummary[]>;
+  readonly hooks?: FinalizeTransactionHooks;
+  readonly assertUsable?: AssertWorkspaceUsable;
+}): Promise<{
+  readonly memory: MemorySummary;
+  readonly segment: WorkspaceSegmentProjection;
+  readonly supplement: WorkspaceSegmentSupplementProjection;
+}> {
+  let rollbackDurableSupplement = true;
+  let rollbackMemory = true;
+  let supplementManifestWritten = false;
+  try {
+    assertWorkspaceUsable(assertUsable);
+    const supplementManifest = await writeFinalizedSupplementFiles({
+      targetSupplementDirectory: stagingSupplementDirectory,
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId,
+      title,
+      durationMs,
+      finalizedAt,
+      ...(lastTranscriptionAttemptOnFinalize ? { lastTranscriptionAttemptOnFinalize } : {}),
+    });
+    await fsyncDirectoryTree(stagingSupplementDirectory);
+    await hooks?.afterStagingTreeFsync?.();
+    assertWorkspaceUsable(assertUsable);
+    await hooks?.beforeExpose?.();
+    const finalTargetSupplementDirectory = targetSupplementDirectory;
+    const finalStagingSupplementDirectory = path.join(
+      path.dirname(finalTargetSupplementDirectory),
+      path.basename(stagingSupplementDirectory)
+    );
+    await assertSafeExistingDirectory(
+      finalStagingSupplementDirectory,
+      'Segment supplement staging path is not safe'
+    );
+    await hooks?.beforeFinalRename?.();
+    assertWorkspaceUsable(assertUsable);
+    renameWorkspaceDirectoryWithinParent({
+      parentDirectory: path.dirname(finalTargetSupplementDirectory),
+      sourceName: path.basename(finalStagingSupplementDirectory),
+      targetName: path.basename(finalTargetSupplementDirectory),
+      ...(hooks?.beforeFinalRenameCommit ? { beforeCommit: hooks.beforeFinalRenameCommit } : {}),
+      ...(hooks?.afterFinalRenameTargetPreflight
+        ? { afterTargetPreflight: hooks.afterFinalRenameTargetPreflight }
+        : {}),
+      ...(hooks?.afterFinalRenameLastPreflight
+        ? { afterLastTargetPreflight: hooks.afterFinalRenameLastPreflight }
+        : {}),
+    });
+    await assertSafeExistingDirectory(
+      finalTargetSupplementDirectory,
+      'Workspace segment supplement directory is not safe'
+    );
+    await hooks?.afterFinalRename?.();
+    assertWorkspaceUsable(assertUsable);
+    await writeSupplementObjectManifest({
+      rootPath,
+      supplement: supplementManifest,
+      ...(assertUsable ? { assertUsable } : {}),
+    });
+    supplementManifestWritten = true;
+    await hooks?.afterParentFsync?.();
+    assertWorkspaceUsable(assertUsable);
+    const currentMemoryDirectory = await memoryDirectory(rootPath, memoryId);
+    await writeMemoryMarkdownAndManifest({
+      rootPath,
+      memoryDirectoryPath: currentMemoryDirectory,
+      memory: {
+        schemaVersion: 1,
+        objectType: 'memory',
+        memoryId: nextMemory.memoryId,
+        title: nextMemory.title,
+        createdAt: nextMemory.createdAt,
+        updatedAt: nextMemory.updatedAt,
+      },
+      ...(assertUsable ? { assertUsable } : {}),
+    });
+    assertWorkspaceUsable(assertUsable);
+    const memory = rebuildIndex
+      ? (await rebuildIndex(rootPath)).find((candidate) => candidate.memoryId === memoryId)
+      : await refreshMemoryIndexEntry(rootPath, memoryId, assertUsable);
+    if (!memory) {
+      throw new Error('Segment supplement memory summary missing');
+    }
+    const segment = await readValidFinalizedSegmentProjection({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+    });
+    const supplement = await readValidFinalizedSupplementProjection({
+      supplementDirectory: finalTargetSupplementDirectory,
+      supplementDirectoryIdentity: await readDirectoryIdentity(finalTargetSupplementDirectory),
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+    });
+    if (!segment || !supplement) {
+      throw new Error('Segment supplement projection missing');
+    }
+    await hooks?.beforeDraftCleanup?.();
+    assertWorkspaceUsable(assertUsable);
+    await removeDraftSupplementDirectorySafely(rootPath, supplementId, hooks);
+    rollbackDurableSupplement = false;
+    rollbackMemory = false;
+    await hooks?.afterDraftCleanup?.();
+    assertWorkspaceUsable(assertUsable);
+    await fsyncWorkspaceDirectory(path.join(rootPath, '.reo', 'drafts', 'supplements'));
+    assertWorkspaceUsable(assertUsable);
+    await unlinkFinalizeTransactionMarkerInDirectory(finalTargetSupplementDirectory);
+    return { memory, segment, supplement };
+  } catch (error) {
+    if (error instanceof WorkspaceHandleLost) {
+      throw error;
+    }
+    await removeSafeWorkspaceDirectory(rootPath, stagingSupplementDirectory, hooks).catch(() => {});
+    const safeTargetSupplementDirectory = await resolveSafeCleanupDirectory(
+      rootPath,
+      targetSupplementDirectory
+    );
+    if (rollbackDurableSupplement && safeTargetSupplementDirectory) {
+      const hasMarker = await hasFinalizeTransactionMarker(safeTargetSupplementDirectory).catch(
+        () => false
+      );
+      if (hasMarker) {
+        await removeSafeWorkspaceDirectory(rootPath, safeTargetSupplementDirectory, hooks).catch(
+          () => {}
+        );
+      }
+    }
+    if (supplementManifestWritten && rollbackDurableSupplement) {
+      const manifestPath = await supplementObjectManifestPath(rootPath, supplementId).catch(
+        () => null
+      );
+      if (manifestPath) {
+        try {
+          unlinkSync(manifestPath);
+        } catch (unlinkError) {
+          if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            // Rollback will report the original finalize failure below.
+          }
+        }
+      }
+    }
+    if (rollbackMemory) {
+      const rollbackMemoryDirectory = await memoryDirectory(rootPath, memoryId).catch(() => null);
+      if (rollbackMemoryDirectory) {
+        await writeMemoryMarkdownAndManifest({
+          rootPath,
+          memoryDirectoryPath: rollbackMemoryDirectory,
+          memory: {
+            schemaVersion: 1,
+            objectType: 'memory',
+            memoryId: previousMemory.memoryId,
+            title: previousMemory.title,
+            createdAt: previousMemory.createdAt,
+            updatedAt: previousMemory.updatedAt,
+          },
+        }).catch(() => {});
+      }
+      const rebuildAfterRollback = rebuildIndex
+        ? () => rebuildIndex(rootPath)
+        : () =>
+            rebuildMemoryIndex(rootPath, {
+              ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+            });
+      await rebuildAfterRollback().catch(() => {});
     }
     throw new FinalizeTransactionFailure(
       error,
@@ -4597,14 +5111,7 @@ async function createMemoryWithRecordingForTestFixture(
         ...(input.lastTranscriptionAttemptOnFinalize
           ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
           : {}),
-        rebuildIndex:
-          input.rebuildIndex ??
-          ((rootPath) =>
-            rebuildMemoryIndex(rootPath, {
-              ...(input.assertWorkspaceUsable
-                ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
-                : {}),
-            })),
+        ...(input.rebuildIndex ? { rebuildIndex: input.rebuildIndex } : {}),
         ...(transactionHooks ? { hooks: transactionHooks } : {}),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
@@ -5017,7 +5524,6 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
       );
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
-        memoryId: input.memoryId,
         memory: previousMemory,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
@@ -5196,7 +5702,6 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
-        memoryId: input.memoryId,
         memory: previousMemory,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
@@ -5357,7 +5862,6 @@ export async function deleteSegmentSupplementFromFileTruth(
       }
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
-        memoryId: input.memoryId,
         memory,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
@@ -5550,7 +6054,6 @@ export async function restoreDeletedSegmentSupplementFromFileTruth(input: {
       }
       const refreshed = await refreshMemoryIndexEntryFromKnownFileTruths({
         rootPath: input.rootPath,
-        memoryId: input.memoryId,
         memory,
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         fileTruths: activeSegmentFileTruths,
@@ -5650,14 +6153,7 @@ async function appendAudioSegmentToMemoryWithHooks(
         ...(input.lastTranscriptionAttemptOnFinalize
           ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
           : {}),
-        rebuildIndex:
-          input.rebuildIndex ??
-          ((rootPath) =>
-            rebuildMemoryIndex(rootPath, {
-              ...(input.assertWorkspaceUsable
-                ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
-                : {}),
-            })),
+        ...(input.rebuildIndex ? { rebuildIndex: input.rebuildIndex } : {}),
         ...(transactionHooks ? { hooks: transactionHooks } : {}),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
@@ -5688,6 +6184,32 @@ export async function appendAudioSegmentToMemoryForTest(
 
 export async function appendAudioSupplementToSegment(
   input: AppendAudioSupplementToSegmentInput
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+    readonly supplement: WorkspaceSegmentSupplementProjection;
+  }>
+> {
+  return appendAudioSupplementToSegmentWithHooks(input);
+}
+
+export async function appendAudioSupplementToSegmentForTest(
+  input: AppendAudioSupplementToSegmentForTestInput
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+    readonly supplement: WorkspaceSegmentSupplementProjection;
+  }>
+> {
+  const { transactionHooks, ...productionInput } = input;
+  return appendAudioSupplementToSegmentWithHooks(productionInput, transactionHooks);
+}
+
+async function appendAudioSupplementToSegmentWithHooks(
+  input: AppendAudioSupplementToSegmentInput,
+  transactionHooks?: FinalizeTransactionHooks
 ): Promise<
   MemoryFilesResult<{
     readonly memory: MemorySummary;
@@ -5754,116 +6276,63 @@ export async function appendAudioSupplementToSegment(
           : {}),
       });
       const stagingSupplementDirectory = path.join(supplementsDirectory, stagingName);
-      await writeWorkspaceJsonAtomic(
-        path.join(stagingSupplementDirectory, FINALIZE_TRANSACTION_MARKER),
-        {
-          schemaVersion: 1,
+      try {
+        await transactionHooks?.afterStagingDirectoryCreate?.();
+        await writeWorkspaceJsonAtomic(
+          path.join(stagingSupplementDirectory, FINALIZE_TRANSACTION_MARKER),
+          {
+            schemaVersion: 1,
+            memoryId: input.memoryId,
+            segmentId: input.segmentId,
+            supplementId: input.supplementId,
+            draftPath: `.reo/drafts/supplements/${input.supplementId}`,
+          }
+        );
+        await transactionHooks?.afterMarkerWrite?.();
+        assertWorkspaceUsable(input.assertWorkspaceUsable);
+        await transactionHooks?.beforeDraftCopy?.();
+        await copyDirectoryContents(
+          await draftSupplementDirectory(input.rootPath, input.supplementId),
+          stagingSupplementDirectory,
+          DRAFT_SUPPLEMENT_FILES
+        );
+        await transactionHooks?.afterCopy?.();
+        assertWorkspaceUsable(input.assertWorkspaceUsable);
+        const finalized = await finishSupplementFinalizeTransaction({
+          rootPath: input.rootPath,
+          stagingSupplementDirectory,
+          targetSupplementDirectory,
           memoryId: input.memoryId,
           segmentId: input.segmentId,
           supplementId: input.supplementId,
-          draftPath: `.reo/drafts/supplements/${input.supplementId}`,
+          workspaceId: input.workspaceId,
+          nextMemory,
+          previousMemory: current,
+          title: input.title,
+          durationMs: input.durationMs,
+          finalizedAt: updatedAt,
+          ...(input.lastTranscriptionAttemptOnFinalize
+            ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
+            : {}),
+          ...(input.rebuildIndex ? { rebuildIndex: input.rebuildIndex } : {}),
+          ...(transactionHooks ? { hooks: transactionHooks } : {}),
+          ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+        });
+        return {
+          ok: true,
+          value: finalized,
+        };
+      } catch (error) {
+        if (error instanceof WorkspaceHandleLost) {
+          throw error;
         }
-      );
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      await copyDirectoryContents(
-        await draftSupplementDirectory(input.rootPath, input.supplementId),
-        stagingSupplementDirectory,
-        DRAFT_SUPPLEMENT_FILES
-      );
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const supplementManifest = await writeFinalizedSupplementFiles({
-        targetSupplementDirectory: stagingSupplementDirectory,
-        workspaceId: input.workspaceId,
-        memoryId: input.memoryId,
-        segmentId: input.segmentId,
-        supplementId: input.supplementId,
-        title: input.title,
-        durationMs: input.durationMs,
-        finalizedAt: updatedAt,
-        ...(input.lastTranscriptionAttemptOnFinalize
-          ? { lastTranscriptionAttemptOnFinalize: input.lastTranscriptionAttemptOnFinalize }
-          : {}),
-      });
-      await fsyncDirectoryTree(stagingSupplementDirectory);
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      renameWorkspaceDirectoryWithinParent({
-        parentDirectory: supplementsDirectory,
-        sourceName: stagingName,
-        targetName: path.basename(targetSupplementDirectory),
-        ...(input.assertWorkspaceUsable
-          ? { beforeCommit: () => assertWorkspaceUsable(input.assertWorkspaceUsable) }
-          : {}),
-      });
-
-      const finalSupplementDirectory = targetSupplementDirectory;
-      await assertSafeExistingDirectory(
-        finalSupplementDirectory,
-        'Workspace segment supplement directory is not safe'
-      );
-      const finalSupplementDirectoryIdentity =
-        await readDirectoryIdentity(finalSupplementDirectory);
-      removeWorkspaceFileInDirectory({
-        directory: finalSupplementDirectory,
-        directoryIdentity: finalSupplementDirectoryIdentity,
-        fileName: FINALIZE_TRANSACTION_MARKER,
-      });
-      await writeSupplementObjectManifest({
-        rootPath: input.rootPath,
-        supplement: supplementManifest,
-        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
-      });
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const currentMemoryDirectory = await memoryDirectory(input.rootPath, input.memoryId);
-      await writeMemoryMarkdownAndManifest({
-        rootPath: input.rootPath,
-        memoryDirectoryPath: currentMemoryDirectory,
-        memory: {
-          schemaVersion: 1,
-          objectType: 'memory',
-          memoryId: nextMemory.memoryId,
-          title: nextMemory.title,
-          createdAt: nextMemory.createdAt,
-          updatedAt: nextMemory.updatedAt,
-        },
-        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
-      });
-      assertWorkspaceUsable(input.assertWorkspaceUsable);
-      const memories = input.rebuildIndex
-        ? await input.rebuildIndex(input.rootPath)
-        : await rebuildMemoryIndex(input.rootPath, {
-            ...(input.assertWorkspaceUsable
-              ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
-              : {}),
-          });
-      const memory = memories.find((candidate) => candidate.memoryId === input.memoryId);
-      if (!memory) {
-        throw new Error('Segment supplement memory summary missing');
+        await removeSafeWorkspaceDirectory(
+          input.rootPath,
+          stagingSupplementDirectory,
+          transactionHooks
+        ).catch(() => {});
+        throw error;
       }
-      const segment = await readValidFinalizedSegmentProjection({
-        rootPath: input.rootPath,
-        workspaceId: input.workspaceId,
-        memoryId: input.memoryId,
-        segmentId: input.segmentId,
-      });
-      const supplement = await readValidFinalizedSupplementProjection({
-        supplementDirectory: finalSupplementDirectory,
-        supplementDirectoryIdentity: await readDirectoryIdentity(finalSupplementDirectory),
-        rootPath: input.rootPath,
-        workspaceId: input.workspaceId,
-        memoryId: input.memoryId,
-        segmentId: input.segmentId,
-      });
-      if (!segment || !supplement) {
-        throw new Error('Segment supplement projection missing');
-      }
-      return {
-        ok: true,
-        value: {
-          memory,
-          segment,
-          supplement,
-        },
-      };
     });
   } catch (error) {
     return memoryFilesError(
@@ -6181,18 +6650,21 @@ export async function lookupSegmentDirectoryById(
     if (!memoryEntry.isDirectory()) {
       continue;
     }
+    const memoryDirectoryPath = path.join(memoriesDirectory, memoryEntry.name);
     let memory: MemoryFileTruth;
     try {
-      memory = await readMemoryFileTruthFromDirectory(
-        rootPath,
-        path.join(memoriesDirectory, memoryEntry.name)
-      );
+      memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath);
     } catch {
       continue;
     }
     let candidate: string;
     try {
-      candidate = await memorySegmentDirectory(rootPath, memory.memoryId, segmentId);
+      candidate = await resolveSegmentDirectoryInMemoryDirectory({
+        rootPath,
+        memoryDirectory: memoryDirectoryPath,
+        memoryId: memory.memoryId,
+        segmentId,
+      });
     } catch (error) {
       if (error instanceof Error && error.message === 'Duplicate finalized segment id') {
         duplicateFound = true;
@@ -6202,9 +6674,23 @@ export async function lookupSegmentDirectoryById(
     }
     try {
       const metadata = await lstat(candidate);
-      const recording = metadata.isDirectory()
-        ? await summarizeValidFinalizedSegmentDirectory(rootPath, memory.memoryId, segmentId)
+      const fileTruth = metadata.isDirectory()
+        ? await readValidFinalizedSegmentFileTruthFromDirectory({
+            rootPath,
+            recordingDirectory: candidate,
+            memoryId: memory.memoryId,
+          })
         : null;
+      const recording =
+        fileTruth?.segmentId === segmentId
+          ? {
+              segmentId,
+              title: fileTruth.metadata.title,
+              durationMs: fileTruth.metadata.durationMs,
+              audioByteLength: fileTruth.audioByteLength,
+              lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
+            }
+          : null;
       if (recording) {
         if (foundDirectory) {
           duplicateFound = true;
