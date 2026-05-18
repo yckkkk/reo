@@ -4,21 +4,35 @@
 
 ## 定位
 
-Reo 是给 prosumer 用户的 agent-native 个人记忆 studio。产品差异化由本地文件真源、Codex-class agent 协作能力、极致交互气质三件套同时约束，缺一不是 Reo。
+**Reo 的产品本质：让用户围绕一件事产生的所有材料，被 agent 转化成只属于用户的作品的私人空间。**
 
-Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，不是聊天助手；录音、笔记、照片、视频、外部导入文件、agent 生成的 widget 和 HTML 产物都进入同一个 Workspace -> Memory -> Segment -> SegmentSupplement 与 Workspace -> Widget 的对象图。
+四个关键词同时成立才是 Reo：围绕一件事（Memory 主题容器）+ 所有材料（多模态）+ agent 转化（不是存储 / 检索）+ 只属于用户的作品（唯一性 moat）。
 
-一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责组织。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文。Widget 是 agent 根据用户需求生成的可交互定制面板，是 Workspace / Memory 的兄弟级实体，不是 Segment 的子类。
+Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，不是聊天助手，不是单一模态工具——录音、视频、照片、笔记、外部导入文件、agent 生成的 widget 和 HTML 产物都平等进入同一个 Workspace → Memory → Segment → SegmentSupplement 与 Workspace → Widget 的对象图。
 
-产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
+一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责按主题聚合跨模态材料。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录（任意模态）。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文（任意模态）。Widget 是 agent 根据用户需求生成的可交互定制面板，是 Workspace / Memory 的兄弟级实体，不是 Segment 的子类。
+
+产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，外向定位叙事与电梯演讲见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`。
+
+## 用户场景
+
+Reo 的价值在跨模态主题容器中长期成立。典型 Memory 形态：
+
+- **一本书的写作**：访谈录音、写作时的思考流录音、用户测试视频、白板照片、章节笔记、参考论文 PDF → agent 生成章节大纲 widget、引言库 HTML、章节草稿
+- **一个孩子的成长**：成长瞬间录音 / 视频、每周照片、教育判断笔记、医生 / 学校文档 → agent 生成成长册 HTML、性格特征 widget、走马灯回顾
+- **一个学习领域**：实时反应录音、关键讲座视频、讲义照片、结构化笔记、论文 → agent 生成概念时间线 widget、学习卡 HTML、按记忆曲线回顾
+- **一段关系**：重要对话录音、共同时刻视频 / 照片、情绪笔记、共享文档截图 → agent 生成关系曲线 widget、共同时刻走马灯
+- **一次旅程**：路上反思录音、关键场景视频、风景 / 食物照片、行前与实时笔记、机票 / 住宿 → agent 生成游记 HTML、时间线 widget
+
+完整场景与电梯演讲见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`。
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充。`note`、`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。
+当前已实现的 Segment 类型是 `audio`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充。`note`、`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio 单模态是 enabling phase，不是 Reo 终局形态。
 
-Reo 的核心目标是让 agent 与用户共同筛选、深化、回顾、生成；用户负责表达、思考、判断，agent 负责筛选、整理、深化、引导用户做更深表达。原始记忆不被假设为资产，价值在 agent 与用户共同筛选、深化、重新表达之后才出现。SegmentSupplement 既是用户主动的补录，也是 agent 引导更深表达的载体。
+Reo 的核心目标是让 agent 与用户共同围绕主题积累跨模态材料，并把材料转化成只属于用户的作品。用户负责表达、思考、判断，agent 负责筛选、整理、深化、生成、引导用户用最合适的模态做下一步补充（补录音 / 拍照 / 写笔记 / 上传文件）。原始材料不被假设为资产，价值在 agent 与用户共同筛选、深化、转化成作品之后才出现。SegmentSupplement 既是用户主动的多模态补充，也是 agent 引导更深表达的载体。
 
-Reo 的目标用户是 Obsidian 类 prosumer，不为零摩擦上手优化。Reo 允许并预期用户理解记忆空间是本地文件夹、自行配置 ASR / agent 凭证、通过 Entity More 菜单复制 prompt 到外部 agent。
+Reo 的目标用户是有持续主题关注的 prosumer 创作者与思考者：Obsidian 用户、专业写作者、研究者、podcasters / video essayists、深度学习者、parent journalers、有强烈记录欲的领域专家。Reo 不为零摩擦上手优化。Reo 允许并预期用户理解记忆空间是本地文件夹、自行配置 ASR / agent 凭证、通过 Entity More 菜单复制 prompt 到外部 agent。
 
 ## 产品气质
 

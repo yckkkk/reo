@@ -4,31 +4,82 @@
 
 本文档评估 Reo 与同类产品的差异，识别可借鉴的设计、必须避开的陷阱和 Reo 真实壁垒位置。Reo 的产品本质判断见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`；本分析为商业化轨道服务，不重复产品本质决策。
 
-## Reo 的差异化三件套
+## Reo 的核心四件套
 
-Reo 的差异化由三件套同时约束，缺一不成立：
+Reo 的产品本质由四个关键词同时约束，缺一不成立：
 
-1. **本地文件真源** — 用户内容是普通文件夹，可被任意 agent / Finder / 备份工具直接读取。
-2. **Codex-class agent 协作能力** — agent 是产品第一公民，用户可让 agent 操作任意内容、生成 widget、生成 HTML 产物。
-3. **极致交互气质（craft）** — 录音场景感、Gallery 走马灯视觉听觉节奏、widget 渲染一致性是产品不变量。
+1. **围绕一件事** — Memory 主题容器，不是时间流、不是文件夹、不是项目管理
+2. **所有材料** — 多模态：录音、视频、照片、笔记、上传文件平等存在
+3. **agent 转化** — Codex-class agent 在用户完整 Memory 上生成、重构、创作
+4. **只属于用户的作品** — 别人无法复制（材料是用户的），用户自己做不到（没 agent 替他做）
 
-本分析按竞品是否同时满足这三件套排序。没有任何一个现有竞品同时满足。
+下面的三件套是上述核心的支撑结构：
+
+1. **本地文件真源** — 服务"只属于用户的作品"中的"属于用户"
+2. **Agent-native 协作能力** — 服务"agent 转化"
+3. **极致交互气质（craft）** — 服务用户愿意持续回到 Memory 并把作品当成自己的
+
+本分析按竞品是否同时满足这四件套排序。没有任何一个现有竞品同时满足。
 
 ## 竞品地图
 
-| 竞品 | 本地真源 | Agent-native | Craft 气质 | Reo 学什么 / 拒绝什么 |
-|---|---|---|---|---|
-| Flomo（浮墨） | ✗ | 内置克制 AI | △ | 学：每日回顾习惯 + founder voice + 微信生态 + 哲学一致性；拒：tag-only 组织、云端 lock-in、桌面 afterthought |
-| Obsidian | ✓ | 部分（插件） | △ | 学：本地真源 + 插件生态；拒：插件市场作为唯一扩展路径 |
-| MindBack | ✗ | 内置 AI | ✗ | 学：低摩擦表达入口；拒：云端、移动优先、AI 回响 |
-| Notion / Notion AI | ✗ | 内置 AI | ✗ | 学：数据库视图心智；拒：云端、标准组件、缺 craft |
-| Mem.ai | ✗ | 内置 AI | ✗ | 学：纯 agent-native 难找 PMF 的教训 |
-| Cursor / Claude Code | ✓ | ✓ | △ | 学：agent-native UX 模式；拒：开发者画像 |
-| Granola / Limitless / Rewind | ✗ | 内置 AI | ✗ | 学：被动捕获减少摩擦；拒：默认监听、隐私模糊 |
-| Tana / Logseq / Capacities | △ | 结构化导出 | △ | 学：结构化语义层；拒：节点炸裂、心智负担 |
-| Apple Notes / Bear | △ | △ | △ | 学：克制美感；拒：缺 agent 协作 |
+| 竞品 | 主题容器 | 多模态 | Agent 转化 | 唯一作品 | Reo 学什么 / 拒绝什么 |
+|---|---|---|---|---|---|
+| Day One | △（chronological + journal） | ✓ | ✗ | ✗ | 学：多模态本地日记 craft + on-this-day；拒：chronological-first、云端默认 |
+| Obsidian | ✓（vault / folder） | △（文字优先） | 部分（插件） | △ | 学：本地真源 + 插件生态；拒：插件市场作为唯一扩展、文字优先 |
+| Flomo（浮墨） | △（tag） | ✗（文字优先） | 内置克制 AI | ✗ | 学：每日回顾习惯 + founder voice + 微信生态 + 哲学一致性；拒：tag-only、云端 lock-in、文字优先 |
+| Notion / Notion AI | ✓（page tree） | △（多媒体嵌入但非主体） | 内置 AI | ✗ | 学：数据库视图心智；拒：云端、标准组件、缺 craft |
+| Mem.ai | △ | ✗ | 内置 AI | ✗ | 学：纯 agent-native 难找 PMF 的教训 |
+| Cursor / Claude Code | △（codebase） | ✗ | ✓ | △ | 学：agent-native UX 模式 + 在用户文件上操作；拒：开发者画像 |
+| MindBack | ✗ | ✓ | 内置 AI | ✗ | 学：低摩擦表达入口；拒：云端、移动优先、AI 回响 |
+| Granola / Limitless / Rewind | ✗ | △ | 内置 AI | ✗ | 学：被动捕获减少摩擦；拒：默认监听、隐私模糊 |
+| Tana / Logseq / Capacities | ✓（node） | △ | 结构化导出 | △ | 学：结构化语义层；拒：节点炸裂、心智负担 |
+| Apple Photos | ✗（chronological） | ✓ | ✗ | ✗ | 不是竞品，是 Reo 替代的现有工具之一（媒体存放） |
+| Voice Memos | ✗ | ✗ | ✗ | ✗ | 不是竞品，是 Reo 替代的现有工具之一（录音存放） |
 
 ## 详细对比
+
+### Day One（多模态本地日记 / 形态最接近 Reo）
+
+**是什么**：Bloom Built 开发的多模态日记应用，已被 Automattic 收购。Mac / iOS / Android / Web 全平台，支持文字、照片、视频、音频、绘图、PDF、位置、天气、心情等多模态条目。组织依靠 journals（多个本地容器 + 标签 + 时间），有 on-this-day 自动推送过去同一天的条目。订阅会员制，强 craft（界面美感、动画、字体、模板都精心打磨）。
+
+**和 Reo 形态重合（高度）**：
+
+- 多模态条目作为一等公民
+- 本地优先（早期纯本地，现在 E2E 加密云同步可选）
+- 多个独立容器（journals）
+- 沉浸式回顾（on-this-day 推送）
+- 强 craft 投入
+- prosumer 用户画像（写作者、学者、家长、长期记录爱好者）
+
+**和 Reo 不重合（关键四点）**：
+
+| 维度 | Day One | Reo |
+|---|---|---|
+| 组织轴 | chronological（按日期）+ journal + tag | topical（按主题 Memory）|
+| Agent | 无 agent，只有 AI 总结 / 标签建议 | Codex-class agent 在完整 Memory 上工作 |
+| 输出 | 仅是日记条目本身，可导出 PDF | agent 生成 widget / HTML 作品 / 跨模态走马灯 |
+| 文件真源 | sqlite + media 文件 + 加密同步 | 普通本地 Markdown + 媒体文件，agent 可直接读 |
+
+**Reo 学**：
+
+1. **多模态 craft 标准**：Day One 在不同模态的呈现（文字阅读体验、照片画廊、视频播放、音频 player）做到了几乎全行业最好。Reo 的多模态 Segment 实现可以直接参考 Day One 的设计标准，不需要重新发明。
+2. **on-this-day 回顾的价值**：Day One 的 on-this-day 推送是用户长期使用的关键粘性。Reo 的 Gallery 走马灯 + 回顾 skills 可以学这个机制，但做成跨模态沉浸 + 主题维度回顾（"我对 X 一年前的思考"），而不是纯时间维度。
+3. **journal 容器心智**：Day One 的 journals 让用户接受"为不同主题开不同容器"的心智，证明 prosumer 用户能理解和欣赏这种结构。
+4. **加密本地优先的可信叙事**：Day One 早期纯本地、后期 E2E 加密同步都积累了"你的数据是你的"的信任。Reo 的纯本地真源可以借鉴这层叙事但走得更彻底（不做云端真源）。
+
+**Reo 拒**：
+
+1. **chronological-first**：日记的时间组织对"积累成可创作素材"不友好。一个孩子的成长 Memory 应该是主题容器，时间维度只是其中一种视图。
+2. **agent 缺位**：Day One 没有 agent 真正在你完整 journal 上工作。它的 AI 是单条目层面的辅助（自动标签、总结某条），不是 agent 在你三年的全部材料上生成成长册 HTML 这种事。这是 Day One 最大的天花板，也是 Reo 最大的差异空间。
+3. **作品形态缺失**：Day One 的输出止步于日记条目本身和 PDF 导出。Reo 的输出是 widget / HTML / 跨模态走马灯，是"用日记当素材做出的作品"。
+4. **云端同步默认**：Day One 后期默认走向云端 E2E，虽然加密但仍是云端 truth。Reo 不让步：本地是 truth，云端只能是同步层。
+
+**真实差距与 Reo 风险**：
+
+- Day One 已经服务 prosumer 多模态记录用户多年，建立了稳定习惯和心智。Reo 切这部分用户需要回答"为什么我要从已经用 5 年的 Day One 换到 Reo"，答案必须落在"主题容器 + agent 转化成作品"上——这是 Day One 没有的，但是用户教育成本高。
+- Day One 的 craft 标准很高。Reo 在多模态实现上必须达到或超过 Day One 的水准，否则会被 Day One 用户感知为"差一截的小弟"。
+- Day One 没做 agent-native 是因为它把自己定位为"日记"——这是它的 telos 限制，也是 Reo 的窗口。如果 Day One 发现自己能转向"agent 在你的日记上工作"，它的形态优势会让它快速威胁 Reo。Reo 必须在 Day One 看到这层之前建立 agent + skills 心智。
 
 ### Flomo（浮墨笔记 / 已发布全平台 / 中国 prosumer 市场标杆）
 
@@ -180,15 +231,37 @@ Reo 的差异化由三件套同时约束，缺一不成立：
 
 ## Reo 真实壁垒位置
 
-Reo 的真实壁垒不是"做了某个功能"，而是"三件套同时存在 + 持续 founder voice + 长期 craft 投入"。
+Reo 的真实壁垒不是"做了某个功能"，而是 **"四件套 + 持续 founder voice + 长期 craft 投入 + 用户拥有的 lock-in"** 同时存在。
 
 | 壁垒来源 | 强度 | 风险 |
 |---|---|---|
-| 本地文件真源 | 强（Obsidian 已证明 prosumer 接受） | 不是独家，需要 craft + agent 加成 |
+| 主题容器（Memory）作为组织轴 | 中（Day One / Tana 部分有但不彻底） | 用户教育成本高，"为什么不是文件夹"需要回答 |
+| 多模态平等存在 | 中（Day One 多模态最近似但 chronological） | 实现量大，craft 标准要超过 Day One |
 | Agent-native 协议层 | 中（依赖外部 Codex-class agent 持续聪明） | OS 内嵌 agent 长期可能侵蚀 prompt-bridge UX |
-| Craft 气质（Gallery 走马灯 / 录音场景感 / 视觉听觉节奏） | 强（需要持续投入，对手难以快速复制） | 投入慢，市场窗口期短 |
-| 三件套组合 | 极强（无任何竞品同时满足） | 难以一句话说清，用户教育成本高 |
+| 本地文件真源 | 强（Obsidian / Day One 已证明 prosumer 接受） | 不是独家，需要其他三件加成 |
+| Craft 气质（多模态 craft + Gallery 走马灯 + 场景感） | 强（需要持续投入，对手难以快速复制） | 投入慢，市场窗口期短 |
+| 四件套组合 | 极强（无任何竞品同时满足） | 难以一句话说清，用户教育成本高 |
 | Founder voice + 产品哲学公开输出 | Reo 当前未建立 | Flomo 已证明在中国 prosumer 市场这是必备条件 |
+| 用户拥有的 lock-in（唯一作品 + 累积材料） | 极强（越用越深，但不是平台 lock，是用户自身资产 lock） | 需要时间积累才显现，前期用户感知不到 |
+
+## 唯一作品作为最深 Moat
+
+Reo 最深的护城河是 **agent 在用户长期累积的多模态主题材料上生成的作品具有不可复制性**：
+
+- **其他工具 + AI** 也能生成内容，但用的是公共数据，输出不是你的，是同质的
+- **同一个 agent + 别人的材料** 输出不一样，因为材料决定了输出
+- **你的材料 + 没有 agent** 永远停在材料阶段，不会变成作品
+- **你的材料 + 你自己** 没有时间做整理和创作
+
+Reo 让 **"你的材料 + agent"** 这个组合成为可能。这个组合的输出是真正属于你的作品。
+
+这层护城河随时间加深：用户在 Reo 累积越多，可生成的作品维度越多。迁移到任何其他工具都无法复制这层价值，因为没有任何其他工具能在用户完整跨模态主题容器上让 agent 工作。这是真正的 lock-in，但是是基于用户拥有的 lock-in，不是基于平台扣留的 lock-in——用户可以随时把全部文件带走，但带走后无法在别处获得同等的 agent + 材料组合。
+
+这个 moat 对外叙事可以是：
+
+> 你在 Reo 累积一年的材料生成的作品，全世界只有你能做出来。换任何其他工具都做不到。但你随时可以把文件带走，Reo 不绑你。
+
+详细论证见 `positioning.md` 的"唯一性 Moat"段。
 
 ## Flomo 教给 Reo 的关键观察
 
@@ -244,14 +317,15 @@ Reo 通过对外明确说"我们不做什么"强化产品信任：
 
 ## 短期决策建议
 
-1. **不要追 MindBack 的功能面**。回响 / 月章 / 热力图 / AI 个性化都是移动消费品打法，Reo 的 craft 投入应给 Gallery 走马灯 / 录音场景感 / widget 渲染。
-2. **不要追 Notion AI 的能力广度**。Notion 已经在那条赛道上，Reo 在那条赛道上没有壁垒。Reo 应在"自由 widget + 本地真源 + 走马灯沉浸"这条独家赛道上跑。
-3. **不要追 Flomo 的高频捕获**。微信生态 + 移动碎片捕获是 Flomo 的护城河。Reo 应该明确选择"低频高价值场景"作为入口：深度访谈、研究、创作、播客、长形思考。这反过来让 Reo 不需要做微信集成，不需要做移动优先，可以集中投入桌面 craft 与 agent 能力。
-4. **把 Obsidian + Flomo 同时当主对照**。Reo 用户最可能从这两个产品来。对比叙事必须诚实回答两个问题：（a）为什么我要从 Obsidian 切到 Reo（答案在 agent-first + craft）；（b）为什么我要在 Flomo 之外再用 Reo（答案在深度场景 + 本地真源 + agent 生成）。
-5. **把回顾 mechanics 提到产品本质长期轨道前排**。Flomo 数据证明这是长期粘性核心，不是 P5 之后的 review 能力。具体形态参考 Flomo 的随机推送 + 多维度统计，但 Reo 应当用 widget runtime（日历 / 时间线 widget）和 Gallery 走马灯把它做成"沉浸式回顾"而不是 Flomo 的"碎片推送回顾"。
-6. **认领 prompt-bridge 的过渡性**。用户已经接受外部 agent 是当前最聪明的工具；把 prompt-bridge 描述为"现在最聪明的协作方式 + 未来无重构演化路径"。
-7. **拒绝被动捕获**。这与 Reo 的"原始记忆不是资产"判断冲突，且会模糊 Reo 的 studio 气质。
-8. **创作者必须开始公开输出产品哲学**。这不是营销动作，是 Flomo 已经证明的中国 prosumer 市场必备条件。建议从产品本质 + 三件套差异化 + 真实创作过程开始输出，节奏可以慢但必须持续。
+1. **多模态实现的 craft 标准对标 Day One**。Day One 是行业内多模态本地体验最高标杆。Reo 的 photo Segment / video Segment / note Segment 实现必须达到或超过 Day One 的水准，否则会被 Day One 用户感知为"差一截的小弟"。但 Reo 在主题容器和 agent 转化上比 Day One 多两个维度——必须用这两个维度回答"为什么我要从 Day One 换到 Reo"。
+2. **不要追 MindBack 的功能面**。回响 / 月章 / 热力图 / AI 个性化都是移动消费品打法，Reo 的 craft 投入应给 Gallery 走马灯 / 多模态 craft / widget 渲染。
+3. **不要追 Notion AI 的能力广度**。Notion 已经在那条赛道上，Reo 在那条赛道上没有壁垒。Reo 应在"主题容器 + 多模态 + agent 转化成唯一作品"这条独家赛道上跑。
+4. **不要追 Flomo 的高频捕获**。微信生态 + 移动碎片捕获是 Flomo 的护城河。Reo 应该明确选择"低频高价值场景"作为入口：写一本书、养一个孩子、做一项研究、维护一段关系、记录一段旅程。这反过来让 Reo 不需要做微信集成，不需要做移动优先，可以集中投入桌面 craft 与 agent 能力。
+5. **把 Obsidian / Flomo / Day One 同时当主对照**。Reo 用户最可能从这三个产品来。对比叙事必须诚实回答三个问题：（a）为什么我要从 Obsidian 切到 Reo（答案在多模态 + agent 转化 + craft）；（b）为什么我要在 Flomo 之外再用 Reo（答案在深度场景 + 多模态 + 本地真源 + agent 生成）；（c）为什么我要从 Day One 换到 Reo（答案在主题容器 + agent 转化成作品）。
+6. **把回顾 mechanics 提到产品本质长期轨道前排**。Flomo + Day One 数据都证明这是长期粘性核心。具体形态参考 Day One 的 on-this-day + Flomo 的随机推送，但 Reo 应当用 widget runtime 和 Gallery 走马灯做成跨模态沉浸式回顾。
+7. **认领 prompt-bridge 的过渡性**。用户已经接受外部 agent 是当前最聪明的工具；把 prompt-bridge 描述为"现在最聪明的协作方式 + 未来无重构演化路径"。
+8. **拒绝被动捕获、声音复刻、移动碎片**。这些与 Reo 的"主题容器 + agent 转化成作品 + 用户拥有"判断冲突，且会模糊产品定位。
+9. **创作者必须开始公开输出产品哲学**。这不是营销动作，是 Flomo 已经证明的中国 prosumer 市场必备条件。建议从"为什么 Reo 的 Memory 不是日记"、"为什么 agent 应该在你完整的材料上工作"、"唯一作品的 moat 是什么"开始输出。
 
 ## 后续
 

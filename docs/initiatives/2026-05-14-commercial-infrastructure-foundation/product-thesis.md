@@ -1,27 +1,29 @@
 # Reo 商业化与求职差异化叙事
 
-本文档只承担商业化基础设施 initiative 的差异化叙事职责。Reo 的产品本质判断（agent-native 个人记忆 studio、三件套差异化、widget / HTML Segment / Gallery / prompt-bridge）见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
+本文档承担商业化基础设施 initiative 的差异化叙事职责。Reo 的产品本质判断见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，外向定位叙事与电梯演讲见 `positioning.md`，竞品分析见 `competitive-analysis.md`。
 
-本文档不再决定产品本质；任何产品本质讨论以 ADR 0006 为准。
+本文档不决定产品本质；任何产品本质讨论以 ADR 0006 为准。
 
 ## 求职叙事主线
 
 Reo 在求职作品集中的定位句：
 
-> Reo 是给 prosumer 用户的 agent-native 个人记忆 studio：本地文件真源 + Codex-class agent 协作能力 + 极致交互气质三件套同时约束。它让普通有思考深度的用户把访谈、会议、研究和生活记录沉淀成 agent 可使用的记忆空间，并通过受控的 Codex-class agent 工作流生成可追溯的产品洞察、PRD、增长实验、设计系统约束的 HTML artifact 和自定义 widget。
+> Reo 是让用户围绕一件事产生的所有材料——录音、视频、照片、笔记、上传文件——被 Codex-class agent 转化成只属于用户的作品（widget / HTML / 走马灯）的私人空间。差异化由四件套同时约束：主题容器 Memory、多模态平等、agent 转化、唯一作品。三件套（本地文件真源 + agent-native 协作 + 极致交互气质）作为支撑结构。目标用户是 Obsidian 类 prosumer 创作者与思考者：写作者、研究者、podcasters、深度学习者、parent journalers 等。
 
 ## 差异化在求职作品集中的呈现
 
-| 差异化判断（源自 ADR 0006） | 放入哪个主交付物 |
+| 差异化判断（源自 ADR 0006 + positioning.md） | 放入哪个主交付物 |
 | --- | --- |
-| Agent-native 个人记忆 studio 定位 | Product case study 主叙事 |
+| 多模态主题容器（Memory）作为组织轴 | Product case study 主叙事 |
+| Agent 在用户完整 Memory 上转化成作品 | Product case study 主叙事、Demo video |
+| 唯一作品 moat（材料是你的 + agent 替你做）| Product case study、Pitch deck |
 | 本地文件真源 + AGENTS.md / skills | Product case study appendix、Beta field loop pack |
-| Widget runtime（日历 / 时间线等可定制 widget） | Demo video |
-| HTML Segment / SegmentSupplement（设计系统约束的 agent 产物） | Demo video 的未来扩展示例或 appendix |
-| Gallery 走马灯（极致交互气质承担页） | Demo video、Product case study |
-| Prompt-bridge 入口 + Day 1 skills（引导 / 回顾 / 整理 / widget 生成） | Product case study、Beta field loop pack |
-| Craft 不变量（录音场景感、Gallery 走马灯、视觉听觉节奏） | Demo video |
-| Record-to-create loop（记录 → 整理 → 创作 → 回到记忆空间） | Product case study 主叙事 |
+| 跨模态 Widget runtime（成长册 / 关系曲线 / 概念时间线等）| Demo video |
+| HTML Segment / SegmentSupplement（agent 生成的作品落到文件合同）| Demo video 的未来扩展示例或 appendix |
+| Gallery 走马灯（跨模态视觉听觉沉浸回顾）| Demo video、Product case study |
+| Prompt-bridge 入口 + Day 1 skills（引导 / 回顾 / 整理 / widget 生成 / 思考视角）| Product case study、Beta field loop pack |
+| Craft 不变量（各模态捕获 / 回放场景感、Gallery 节奏）| Demo video |
+| Record-to-create loop（积累 → agent 转化 → 作品 → 回到 Memory）| Product case study 主叙事 |
 
 ## 与 5 个主交付物的关系
 

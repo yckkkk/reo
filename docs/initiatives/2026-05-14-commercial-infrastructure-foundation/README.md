@@ -43,10 +43,11 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 
 ## 读取入口
 
+- `positioning.md`：Reo 外向定位叙事——核心 thesis（四件套：主题容器 + 多模态 + agent 转化 + 唯一作品）、用户场景、电梯演讲三个长度、Reo 替代什么 / 启用什么、唯一性 moat 论证、founder voice 起点。
 - `career-roadmap.md`：AI 产品经理主线、增长产品经理副线、作品集交付物和阶段路线。
 - `interview-readiness.md`：求职 ROI 准则、最小作品集、内测运营、2/4/8 周路线和风险修正。
-- `product-thesis.md`：商业化与求职差异化叙事。产品本质判断引用 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`。
-- `competitive-analysis.md`：Reo vs Obsidian / MindBack / Notion / Mem / Cursor / Granola / Tana / Apple Notes 的完整竞品地图与短期决策建议。
+- `product-thesis.md`：商业化与求职差异化叙事。产品本质判断引用 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md` 与 `positioning.md`。
+- `competitive-analysis.md`：Reo vs Day One / Obsidian / Flomo / Notion / Mem / Cursor / Granola / Tana / MindBack / Apple Notes 的完整竞品地图、唯一作品 moat 论证与短期决策建议。
 - `role-evolution.md`：AI-native PM、FDE、增长和工程协作能力变化，以及 Reo 的能力映射。
 - `plan.md`：商业化基础设施架构、阶段和数据模型草案。
 - `reuse-evaluation.md`：成熟开源方案复用评估。

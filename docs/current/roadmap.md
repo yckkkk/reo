@@ -4,13 +4,13 @@
 
 ## 路线原则
 
-- Reo 长期 wedge 是 agent-first；当前 P1-P6 是 enabling phase，建立 agent 进入记忆空间工作的前提：录音表达、文件真源、信息架构、Move Memory、Review 基础、AI-ready 验证。
+- Reo 产品本质是多模态主题容器 + agent 转化 + 唯一作品。当前 P1-P6 是 audio 单模态的 enabling phase，建立 agent 进入记忆空间工作的前提。**P1-P6 完成 ≠ Reo 完整形态。** Reo 完整形态需要产品本质长期轨道全部到位。
 - 方案以表达主链为主，吸收组件工艺质量门槛，保留记忆空间信息架构边界。
 - 每个阶段必须让一个真实用户流程更顺。
 - 先证明用户愿意表达，再扩展整理、回顾和产品本质长期轨道。
 - 组件必须过 craft 不变量门槛；未达到门槛的组件不能作为阶段完成依据，必要时先不做或留在 spec 中作为已知 gap。
 - 当前阶段不实现 Reo runtime 内嵌 AI，agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。
-- 录音主链通后，笔记 / 图片 / 视频会更快打通；表达主链稳固后启动产品本质长期轨道独立 initiative。
+- audio 主链是多模态实现路径里复杂度最高的；通它就通其他模态。audio 主链稳固后启动产品本质长期轨道独立 initiative，把多模态 Segment 类型、widget runtime、Gallery 走马灯、prompt-bridge UI、AGENTS.md / skills 全部到位。
 
 ## P0 产品基线与结构
 
@@ -133,27 +133,30 @@
 
 ## 产品本质长期轨道
 
-P0-P6 是 enabling phase。Reo 的产品本质长期轨道在表达主链稳固后启动独立 active initiative，不与当前 active initiative 并行。本节列出该轨道范围，作为对齐入口；不作为当前 session 推进对象。
+P0-P6 是 audio 单模态的 enabling phase。Reo 的产品本质长期轨道在 audio 主链稳固后启动独立 active initiative，不与当前 active initiative 并行。本节列出该轨道范围，作为对齐入口；不作为当前 session 推进对象。
+
+**Reo 的完整产品形态需要本轨道全部条目到位。** 这些不是"长期方向"，是 Reo 真正成为 Reo 的必经路径。
 
 范围条目按优先级排列：
 
-- **回顾 mechanics（最高优先级）**：粘性核心。结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + widget 形态实现，做成沉浸式回顾而非碎片推送。
-- **AGENTS.md 模板与 skills 目录**：记忆空间 root 的 `AGENTS.md` 模板由 Reo 出厂提供。默认 skills 共 8 项：引导 / 回顾 / 整理总结 / widget 生成（基础四类）+ 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考（思考视角 starter）。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
+- **多模态 Segment / SegmentSupplement 类型（核心必经）**：实现 `video`、`photo`、`note`、`imported_file` 与 `html` Segment 类型及对应 SegmentSupplement，并把 Memory Studio、Segment 卡片、播放 / 浏览 / 编辑区扩展到跨模态。这是 Reo "围绕一件事的所有材料"承诺成立的前提；缺这层 Reo 只是录音工具。每个新类型必须先有文件合同、IPC contract、查询更新、恢复路径、craft 门槛验证。
+- **回顾 mechanics（粘性核心）**：结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + widget 形态实现，做成跨模态沉浸式回顾而非碎片推送。
+- **AGENTS.md 模板与 skills 目录**：记忆空间 root 的 `AGENTS.md` 模板由 Reo 出厂提供。默认 skills 共 8 项：引导 / 回顾 / 整理总结 / widget 生成（基础四类）+ 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考（思考视角 starter）。skills 在跨模态 Memory 上工作；引导 skills 提示用户用最合适的模态做下一步补充。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
 - **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、Widget 的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
-- **Widget runtime**：Workspace-level widget（Home 区域、Gallery 走马灯）与 Memory-level widget（Memory rail tab）的对象合同、manifest、渲染沙箱、craft 门槛实现。日历 / 时间线 widget 作为 Day 1 示例。
-- **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 是 craft 不变量的核心承担页之一。
-- **HTML Segment / SegmentSupplement 渲染**：Segment / SegmentSupplement 新类型 `html`，agent 生成的 HTML 报告 / 作品页 / 复盘文档作为该类型落到现有文件合同；渲染必须先实现隔离预览能力。
+- **Widget runtime**：Workspace-level widget（Home 区域、Gallery 走马灯）与 Memory-level widget（Memory rail tab）的对象合同、manifest、渲染沙箱、craft 门槛实现。日历 / 时间线 widget 作为 Day 1 示例；成长册、关系曲线、概念时间线等跨模态 widget 作为完整形态示例。
+- **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 跨模态混合呈现（录音 + 视频 + 照片节奏感切换），是 craft 不变量的核心承担页之一。
+- **HTML Segment / SegmentSupplement 渲染**：agent 生成的 HTML 报告 / 作品页 / 复盘文档作为 `html` 类型落到现有文件合同；渲染必须先实现隔离预览能力。
 
 实施时序与完成门槛由该轨道启动时的 initiative 与 spec 定义。本路线图只确立轨道存在和范围。
 
-产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，竞品对比与差异化叙事见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/competitive-analysis.md`。
+产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，外向定位叙事与用户场景见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`，竞品对比与差异化叙事见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/competitive-analysis.md`。
 
 ## 长期方向
 
-下列方向在产品本质长期轨道之外，进入主线前需要独立判断和 spec：
+下列方向在产品本质长期轨道之外，进入主线前需要独立判断和 spec。注意：多模态 Segment 类型（video / photo / note / imported_file）已提升到产品本质长期轨道，**不在本节**。
 
 - 草稿记忆空间：Home 入口的低摩擦录制设计（draft memory space / inbox 录制入口），让用户在未选定记忆空间时也能先表达、后归入。
-- 视频 Segment、图片 Segment、笔记 Segment 与 editor 深化。
+- 笔记 editor 深化（结构化编辑、双链、嵌入等高级能力）。
 - 单个 Segment 级跨记忆空间移动。
 - 更完整的 SRS。
 - Reo runtime 内嵌 AI agent（取代 prompt-bridge 外部 agent 协作）。
