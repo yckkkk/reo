@@ -1086,7 +1086,6 @@ export function MemoryStudio({
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
   const [confirmingTranscriptionBackfill, setConfirmingTranscriptionBackfill] =
     useState<TranscriptionConfirmIntent | null>(null);
-  const [transcriptionConfirmPending, setTranscriptionConfirmPending] = useState(false);
   const [contentTabOrderBySegmentId, setContentTabOrderBySegmentId] = useState<
     Record<string, readonly ActiveContentTab[]>
   >({});
@@ -1282,7 +1281,6 @@ export function MemoryStudio({
     setDraggedContentTab(null);
     setActiveContentTab('transcript');
     setConfirmingTranscriptionBackfill(null);
-    setTranscriptionConfirmPending(false);
     setPlaybackTimeMs(0);
     setPlayingSegmentId(null);
   }, [selectedSegment?.segmentId]);
@@ -1343,33 +1341,31 @@ export function MemoryStudio({
     workspaceSession.workspaceId,
   ]);
 
-  async function confirmTranscriptionRegenerate() {
+  function confirmTranscriptionRegenerate() {
     if (!confirmingTranscriptionBackfill || !transcriptionBackfill) {
       return;
     }
 
-    setTranscriptionConfirmPending(true);
-    try {
-      if (confirmingTranscriptionBackfill.kind === 'segment') {
-        await transcriptionBackfill.retrySegment?.({
-          workspaceId: workspaceSession.workspaceId,
-          memoryId: confirmingTranscriptionBackfill.memoryId,
-          segmentId: confirmingTranscriptionBackfill.segmentId,
-          mode: 'regenerate',
-        });
-      } else {
-        await transcriptionBackfill.retrySupplement?.({
-          workspaceId: workspaceSession.workspaceId,
-          memoryId: confirmingTranscriptionBackfill.memoryId,
-          segmentId: confirmingTranscriptionBackfill.segmentId,
-          supplementId: confirmingTranscriptionBackfill.supplementId,
-          mode: 'regenerate',
-        });
-      }
-      setConfirmingTranscriptionBackfill(null);
-    } finally {
-      setTranscriptionConfirmPending(false);
+    const intent = confirmingTranscriptionBackfill;
+    setConfirmingTranscriptionBackfill(null);
+
+    if (intent.kind === 'segment') {
+      void transcriptionBackfill.retrySegment?.({
+        workspaceId: workspaceSession.workspaceId,
+        memoryId: intent.memoryId,
+        segmentId: intent.segmentId,
+        mode: 'regenerate',
+      });
+      return;
     }
+
+    void transcriptionBackfill.retrySupplement?.({
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: intent.memoryId,
+      segmentId: intent.segmentId,
+      supplementId: intent.supplementId,
+      mode: 'regenerate',
+    });
   }
 
   function handleContentTabKeyDown(
@@ -2217,16 +2213,16 @@ export function MemoryStudio({
       <WorkspaceDangerConfirmDialog
         open={confirmingTranscriptionBackfill !== null}
         onOpenChange={(open) => {
-          if (!open && !transcriptionConfirmPending) {
+          if (!open) {
             setConfirmingTranscriptionBackfill(null);
           }
         }}
         title="重新生成转录？"
         description={`将覆盖「${confirmingTranscriptionBackfill?.title ?? ''}」当前转录。开始后如果文件内容被外部修改，Reo 会停止覆盖。`}
-        confirmLabel={transcriptionConfirmPending ? '重新生成中' : '重新生成'}
-        disabled={transcriptionConfirmPending}
+        confirmLabel="重新生成"
+        disabled={false}
         onConfirm={() => {
-          void confirmTranscriptionRegenerate();
+          confirmTranscriptionRegenerate();
         }}
       />
     </>

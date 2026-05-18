@@ -1220,6 +1220,9 @@ describe('App', () => {
         mode: 'regenerate',
       })
     );
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
+    );
     expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
     expect(screen.getByText('补充录音转写正文')).toBeInTheDocument();
     backfill.resolve({
@@ -1274,6 +1277,9 @@ describe('App', () => {
         mode: 'regenerate',
       })
     );
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
+    );
     expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
     expect(screen.getByText('已有转录正文')).toBeInTheDocument();
     backfill.resolve({
@@ -1281,9 +1287,6 @@ describe('App', () => {
       value: { memory: { ...memory, hasTranscript: true }, saved: true },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
-    );
   });
 
   it.each([
