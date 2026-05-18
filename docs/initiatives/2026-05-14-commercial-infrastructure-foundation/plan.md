@@ -7,7 +7,7 @@
 - 公开付费能力通过服务端边界提供，客户端只持有受限 session 和短生命周期 capability。
 - 会员判断、额度扣减、provider secret、支付回调、成本对账和风控都在服务端。
 - 先评估成熟开源方案，再决定适配、薄集成、组合或自研。
-- 当前豆包语音 ASR 和未来火山方舟/其他 LLM 能力分开建模，不混用计费单位。
+- 当前豆包语音实时 ASR、文件 ASR 和未来火山方舟/其他 LLM 能力分开建模，不混用计费单位。
 
 ## 目标架构
 
@@ -18,7 +18,7 @@ Electron app
       -> identity service
       -> entitlement service
       -> AI Gateway
-          -> Doubao Speech ASR adapter
+          -> Doubao Speech realtime/file ASR adapter
           -> future LLM provider adapters
       -> usage ledger
       -> credit ledger
@@ -75,7 +75,7 @@ Reo 必须保留自己的用户可理解 credit ledger 和 provider 成本 ledge
 
 ### AI Gateway 与 AI 可观测性
 
-- 当前豆包语音 ASR 使用 WebSocket 协议，不能默认交给 OpenAI-compatible LLM proxy。
+- 当前豆包语音 ASR 同时包含实时 WebSocket 和 finalized audio HTTP file recognition；它们是 speech-specific provider adapter，不默认交给 OpenAI-compatible LLM proxy。
 - LiteLLM 适合未来 LLM Gateway，具备 provider routing、virtual keys、budget、rate limit、spend tracking 和 dashboard。
 - Langfuse 适合 LLM trace、prompt、eval、token/cost observability，不作为会员扣费真源。
 - Apache APISIX、Kong 或 NGINX 只处理 API gateway、TLS、路由、限流和基础访问控制，不承载 AI 业务权益。
@@ -133,7 +133,7 @@ Reo 必须保留自己的用户可理解 credit ledger 和 provider 成本 ledge
 
 输出：
 
-- 豆包语音 ASR server-side adapter。
+- 豆包语音实时 ASR 与文件 ASR server-side adapter。
 - 未来 LLM Gateway 的 provider abstraction 和 LiteLLM 适配判断。
 - 额度预扣、实际结算、失败回滚、provider error mapping、熔断、重试上限。
 - usage events、provider cost events、每日对账和预算告警。

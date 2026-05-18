@@ -33,7 +33,7 @@
 - 录音优先归属当前 Memory context；当前没有 Memory 时先新建 Memory 再进入录音。
 - 录音表达组件完整交互：开始、权限、录音中、暂停、继续、停止、回放、替换、完成、失败、恢复。
 - 录音 finalize 后形成 finalized audio Segment，并进入该 Memory 的 `Memory Studio`。
-- 录音转写通过流式 ASR 写入 finalized audio Segment 的 transcript。
+- 录音转写通过流式 ASR 写入 finalized audio Segment transcript；finalized audio Segment 和 SegmentSupplement 支持使用同一语音设置凭证生成缺失转录或手动重新生成转录。
 
 质量门槛：
 

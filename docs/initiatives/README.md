@@ -8,9 +8,7 @@
 
 - `2026-05-14-commercial-infrastructure-foundation`
 
-当前产品或代码开发 active initiative：
-
-- `2026-05-16-doubao-voice-followups`
+当前产品或代码开发 active initiative：无。
 
 ## 使用规则
 

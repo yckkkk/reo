@@ -22,8 +22,8 @@ Reo 面向公众付费发布时，建立账号、会员、支付、AI Gateway、
 
 ## 当前约束
 
-- 当前 Reo 已有豆包语音 ASR main-process 接入。
-- 当前没有 auth、database、logging、Sentry、packaging、updater、payment 或 public release surface。
+- 当前 Reo 已有豆包语音实时 ASR、finalized audio 文件 ASR 和 main-owned 本地诊断日志。
+- 当前没有 auth、database、Sentry、packaging、updater、payment、public release surface 或远程 telemetry。
 - 公开付费发布前，客户端不得直连付费模型服务或持有生产 provider secret。
 - 火山引擎密钥、短信密钥、支付密钥和后台管理密钥只能存在服务端密钥边界。
 - SEO 只作用于官网、下载页、价格页、帮助中心、文档和更新日志；Electron app 本体不作为 SEO surface。

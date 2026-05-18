@@ -25,7 +25,7 @@ docs/
 - 当前 preload API 是 `window.reoWorkspace`。
 - 当前 IPC surface 是显式 workspace channels。
 - 当前 workspace IPC channel names、request/response Zod schemas、bridge contract types 和 schema-free value helpers 位于 `src/workspace-contract`；renderer/preload 只消费类型、窄 bridge 或 schema-free helpers，main process 拥有 schema 校验。
-- 当前 main process 拥有 workspace 目录选择、初始化、打开、关闭、记忆空间标题更新、Memory 容器创建、Memory 标题更新、recording draft 写入和 audio chunk 读取能力。
+- 当前 main process 拥有 workspace 目录选择、初始化、打开、关闭、记忆空间标题更新、Memory 容器创建、Memory/Segment/SegmentSupplement 标题更新、recording draft 写入和 audio chunk 读取、语音设置、流式语音识别 session 和 finalized audio 文件转录队列能力。
 - 当前 main process 拥有本地诊断日志能力，用于 app lifecycle 和 workspace IPC request completion 的结构化诊断；该能力不暴露 renderer/preload logging bridge、诊断 IPC 或远程 telemetry。
 - 当前没有 database layer。
 - 当前没有 auth layer。

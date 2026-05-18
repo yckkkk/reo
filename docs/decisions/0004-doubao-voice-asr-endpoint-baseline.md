@@ -35,4 +35,4 @@ Reo 直播录音转写使用火山引擎豆包大模型流式语音识别 SeedAS
 
 - `docs/current/electron.md` 关于豆包流式语音识别 endpoint 与鉴权的当前事实段落
 - `docs/archive/specs/2026-05-16-1720-doubao-voice-endpoint-billing-audit/` 调研证据
-- `docs/initiatives/2026-05-16-doubao-voice-followups/plan.md` 后续 B/C/D 工作
+- `docs/archive/initiatives/2026-05-16-doubao-voice-followups/` 豆包语音后续工作记录
