@@ -10,6 +10,7 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/workspace-contract/**/*.ts",
+    "electron.vite.config.ts",
     "test/main/**/*.ts"
   ]
 }
