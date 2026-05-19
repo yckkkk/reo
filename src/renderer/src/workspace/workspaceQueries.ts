@@ -255,6 +255,26 @@ export function workspaceHandleScopedContentQueryBelongsToWorkspace(
   );
 }
 
+export function memoryDetailQueryBelongsToWorkspace(
+  queryKey: readonly unknown[],
+  workspaceId: string
+) {
+  const [scope, kind, queryWorkspaceId] = queryKey;
+  return scope === 'workspace' && kind === 'memory-detail' && queryWorkspaceId === workspaceId;
+}
+
+export function finalizedAudioContentQueryBelongsToWorkspace(
+  queryKey: readonly unknown[],
+  workspaceId: string
+) {
+  const [scope, kind, queryWorkspaceId] = queryKey;
+  return (
+    scope === 'workspace' &&
+    queryWorkspaceId === workspaceId &&
+    (kind === 'segment-content' || kind === 'segment-supplement-content')
+  );
+}
+
 export function memorySpacesQueryKey() {
   return ['workspace', 'memory-spaces'] as const;
 }

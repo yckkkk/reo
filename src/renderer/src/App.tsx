@@ -113,6 +113,8 @@ import {
 import { chooseSafeWorkspaceFolder } from './workspace/workspaceFolderSelection';
 import {
   seedWorkspaceSnapshot,
+  finalizedAudioContentQueryBelongsToWorkspace,
+  memoryDetailQueryBelongsToWorkspace,
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
@@ -957,10 +959,15 @@ export function App() {
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
     queryClient.removeQueries({
       predicate: (query) =>
-        workspaceHandleScopedContentQueryBelongsToWorkspace(
+        finalizedAudioContentQueryBelongsToWorkspace(
           query.queryKey,
           nextWorkspaceSession.workspaceId
         ),
+    });
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        memoryDetailQueryBelongsToWorkspace(query.queryKey, nextWorkspaceSession.workspaceId),
+      refetchType: 'none',
     });
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
@@ -1245,7 +1252,7 @@ export function App() {
       setSelectedMemoryId(null);
       queryClient.removeQueries({
         predicate: (query) =>
-          workspaceHandleScopedContentQueryBelongsToWorkspace(
+          finalizedAudioContentQueryBelongsToWorkspace(
             query.queryKey,
             workspaceSession.workspaceId
           ),

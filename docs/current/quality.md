@@ -105,6 +105,7 @@ npm run verify:memory-studio-layout -- --port 9233 --viewport 900x720 --interact
 - 每个行为代码变更必须有独立 spec、RED/GREEN/REFACTOR 证据、`docs/current/*` 更新和 `npm run verify:quick`。
 - 每个代码变更在完成前必须执行简化审查：复用已有 helper/component，删除重复逻辑、冗余状态、不必要 JSX wrapper、无价值注释，检查热路径额外工作、事件监听器、timer 和 Blob URL 清理。
 - Segment delete projection 这类跨 UI/cache/session 的纯规则必须有独立 renderer 单元测试，覆盖乱序 delayed commit、多个 pending delete、外部 summary 变化、不使用 aggregate count 猜测实体身份、commit/undo phase 互斥，以及 stale refresh detail 不能越过 session revision 写入重开后的 cache。
+- Memory detail cache reopen 行为必须有 renderer 集成测试覆盖：同一 workspace 重新打开时，已有 Memory detail 投影在新 `readMemoryDetail` pending 期间继续渲染，不显示初始载入态，并确认后台请求使用新的 `workspaceHandle`。
 - 只读 runtime validation 不伪装成 RED；只有发现行为缺陷并修改代码时，才先写 failing test 或记录可复现失败，再进入 GREEN。
 - Codex CLI read-only validation 必须在 Reo quiescent 或记忆空间 closed 状态运行，hash 范围排除 `.reo/workspace.lock*` 和 temp files。
 - Renderer source 禁止直接或动态 import Electron 和所有 Node builtin，包括 bare builtin 与 `node:` 前缀；restricted import 规则必须由测试覆盖。

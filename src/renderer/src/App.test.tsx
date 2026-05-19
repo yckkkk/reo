@@ -8558,6 +8558,158 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
   });
 
+  it('reuses cached Memory detail while reopening the same workspace refetches with the new handle', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday_cache',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      hasTranscript: true,
+      supplementCount: 0,
+    };
+    const cachedSegment = {
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+      segmentId: 'seg_cached',
+      type: 'audio' as const,
+      title: 'Cached birthday candles',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 125_000,
+      audioByteLength: 2048,
+      lastTranscriptionAttempt: 'never' as const,
+      transcript: { exists: true },
+      supplementCount: 0,
+      supplements: [],
+    };
+    const freshSegment = {
+      ...cachedSegment,
+      segmentId: 'seg_fresh',
+      title: 'Fresh birthday candles',
+    };
+    const reopenedDetail =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['readMemoryDetail']>>>();
+
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            addedAt: '2026-05-06T13:08:00.000Z',
+            lastOpenedAt: '2026-05-06T13:08:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.openMemorySpace
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-1',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceHandle: 'workspace-handle-2',
+          workspaceId: 'ws_1',
+          snapshot: {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: 'Private notes',
+            memories: [memory],
+          },
+        },
+      });
+    reoWorkspace.readMemoryDetail
+      .mockImplementationOnce(async (payload) => ({
+        ok: true,
+        value: {
+          requestId: payload.requestId,
+          detail: {
+            ...memory,
+            workspaceId: 'ws_1',
+            segments: [cachedSegment],
+          },
+        },
+      }))
+      .mockReturnValueOnce(reopenedDetail.promise);
+    const queryClient = createReoQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    await screen.findByRole('button', { name: '选择片段 Cached birthday candles' });
+
+    await user.click(screen.getByRole('button', { name: '首页' }));
+    await waitFor(() =>
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    expect(
+      queryClient.getQueryData(
+        memoryDetailQueryKey({
+          workspaceId: 'ws_1',
+          memoryId: memory.memoryId,
+        })
+      )
+    ).toBeDefined();
+
+    await user.click(await screen.findByRole('button', { name: 'Daily memory' }));
+    await waitFor(() => expect(reoWorkspace.openMemorySpace).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('正在载入记忆内容。')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: '选择片段 Cached birthday candles' })
+    ).toBeInTheDocument();
+    expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(2);
+    expect(reoWorkspace.readMemoryDetail.mock.calls[1]?.[0]).toMatchObject({
+      workspaceHandle: 'workspace-handle-2',
+      workspaceId: 'ws_1',
+      memoryId: memory.memoryId,
+    });
+
+    await act(async () => {
+      const secondCall = reoWorkspace.readMemoryDetail.mock.calls[1]?.[0];
+      if (!secondCall) {
+        throw new Error('Expected reopened Memory detail request');
+      }
+      reopenedDetail.resolve({
+        ok: true,
+        value: {
+          requestId: secondCall.requestId,
+          detail: {
+            ...memory,
+            workspaceId: 'ws_1',
+            segments: [freshSegment],
+          },
+        },
+      });
+      await reopenedDetail.promise;
+    });
+    expect(
+      await screen.findByRole('button', { name: '选择片段 Fresh birthday candles' })
+    ).toBeInTheDocument();
+  }, 15_000);
+
   it('keeps the current workspace page when opening Library cannot release the handle', async () => {
     const user = userEvent.setup();
     reoWorkspace.chooseDirectory.mockResolvedValue({
