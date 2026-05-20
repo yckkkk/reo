@@ -15,6 +15,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  TITLEBAR_ACTION_RIGHT,
+  TITLEBAR_CONTROL_GAP,
+  TITLEBAR_CONTROL_LEFT,
+  TITLEBAR_CONTROL_SIZE,
+  TITLEBAR_CONTROL_TOP,
+} from '../app-shell/appShellGeometry';
+import {
   createNoteSegmentDraft,
   createSegmentSupplementNoteDraft,
   writeSegmentSupplementContent,
@@ -95,6 +102,9 @@ type NoteEditorOverlayProps = {
   readonly target: NoteEditorTarget | null;
   readonly workspaceSession: WorkspaceSession;
 };
+
+const NOTE_EDITOR_TITLEBAR_TITLE_LEFT =
+  TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP;
 
 export function NoteEditorOverlay({
   onNoteSegmentContentSaved,
@@ -588,39 +598,45 @@ export function NoteEditorOverlay({
     >
       <Button
         aria-label="返回"
-        className="absolute left-24 top-40 z-10 size-40 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100 sm:left-32"
+        className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
         data-vaul-no-drag
         disabled={pending}
         onClick={requestClose}
-        size="iconMedium"
+        size="icon"
+        style={{ left: TITLEBAR_CONTROL_LEFT, top: TITLEBAR_CONTROL_TOP }}
         type="button"
         variant="ghostIcon"
       >
-        <ChevronLeft aria-hidden="true" className="size-20" />
+        <ChevronLeft aria-hidden="true" className="size-16" />
       </Button>
+      <div
+        className="absolute z-10 flex h-32 max-w-[calc(100vw-280px)] items-center text-body font-regular leading-body text-foreground"
+        data-testid="note-editor-titlebar-title"
+        style={{ left: NOTE_EDITOR_TITLEBAR_TITLE_LEFT, top: TITLEBAR_CONTROL_TOP }}
+      >
+        <h1 className="min-w-0 truncate">{displayTitle}</h1>
+      </div>
+      <div
+        className="pointer-events-auto absolute z-10 flex items-center gap-8 [-webkit-app-region:no-drag]"
+        data-testid="note-editor-titlebar-actions"
+        data-vaul-no-drag
+        style={{ right: TITLEBAR_ACTION_RIGHT, top: TITLEBAR_CONTROL_TOP }}
+      >
+        <Button
+          type="button"
+          size="compact"
+          disabled={pending || attachmentPending || !target}
+          onClick={() => void saveNote()}
+        >
+          保存笔记
+        </Button>
+      </div>
 
       <section
         aria-label="笔记编辑器"
-        className="mx-auto grid h-[min(680px,calc(100dvh-104px))] w-full max-w-[960px] grid-rows-[auto_minmax(0,1fr)_auto] gap-16 text-left"
+        className="mx-auto grid h-[min(680px,calc(100dvh-104px))] w-full max-w-[960px] grid-rows-[minmax(0,1fr)_auto] gap-16 text-left"
         data-testid="note-editor-surface-stage"
       >
-        <header className="flex min-w-0 items-center justify-between gap-16">
-          <div className="min-w-0">
-            <h1 className="truncate text-title font-bold leading-title text-foreground">
-              {displayTitle}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-8">
-            <Button
-              type="button"
-              disabled={pending || attachmentPending || !target}
-              onClick={() => void saveNote()}
-            >
-              保存笔记
-            </Button>
-          </div>
-        </header>
-
         <div
           className="min-h-0 overflow-hidden rounded-md bg-card"
           onDragOver={handleEditorDragOver}

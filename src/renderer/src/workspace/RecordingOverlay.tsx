@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { TITLEBAR_CONTROL_LEFT, TITLEBAR_CONTROL_TOP } from '../app-shell/appShellGeometry';
 import {
   MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
   pcmByteLengthToDurationMs,
@@ -3356,7 +3357,7 @@ export function RecordingOverlay({
     >
       <Button
         aria-label="返回"
-        className="absolute left-24 top-40 z-10 size-40 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100 sm:left-32"
+        className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
         data-vaul-no-drag
         disabled={
           exitActionPending ||
@@ -3365,11 +3366,12 @@ export function RecordingOverlay({
           state.status === 'finalizing'
         }
         onClick={handleReturn}
-        size="iconMedium"
+        size="icon"
+        style={{ left: TITLEBAR_CONTROL_LEFT, top: TITLEBAR_CONTROL_TOP }}
         type="button"
         variant="ghostIcon"
       >
-        <ChevronLeft aria-hidden="true" className="size-20" />
+        <ChevronLeft aria-hidden="true" className="size-16" />
       </Button>
       <div
         className="grid h-[min(560px,calc(100dvh-84px))] w-full grid-rows-[112px_132px_72px_88px] content-end justify-items-center gap-y-20 text-center"

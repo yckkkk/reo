@@ -27,6 +27,10 @@ import {
   MIN_SIDEBAR_WIDTH,
   PANEL_RADIUS,
   SIDEBAR_RESIZE_STEP,
+  TITLEBAR_CONTROL_GAP,
+  TITLEBAR_CONTROL_LEFT,
+  TITLEBAR_CONTROL_SIZE,
+  TITLEBAR_CONTROL_TOP,
   TITLEBAR_HEIGHT,
 } from './appShellGeometry';
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
@@ -34,10 +38,6 @@ import { cycleThemePreference, type ThemeMode, type ThemePreference } from './th
 export type AppShellState = 'expanded' | 'covered';
 export type AppShellActiveSection = 'home' | 'library' | 'workspace';
 
-const TITLEBAR_CONTROL_LEFT = 80;
-const TITLEBAR_CONTROL_TOP = 2;
-const TITLEBAR_CONTROL_SIZE = 32;
-const TITLEBAR_CONTROL_GAP = 4;
 const PANEL_TITLEBAR_X = 28;
 const COLLAPSED_PANEL_TITLEBAR_LEFT =
   TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP - PANEL_TITLEBAR_X;

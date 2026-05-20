@@ -629,6 +629,26 @@ describe('RecordingOverlay', () => {
     expect(screen.queryByRole('button', { name: '播放录音' })).not.toBeInTheDocument();
   });
 
+  it('places the return button on the shared titlebar control grid', () => {
+    installWorkspaceBridge();
+    const media = createMediaAdapter();
+
+    render(
+      <RecordingOverlayForTest
+        mediaAdapter={media.adapter}
+        onOpenChange={() => {}}
+        onAudioSegmentFinalized={() => {}}
+        open
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    const returnButton = screen.getByRole('button', { name: '返回' });
+    expect(returnButton).toHaveStyle({ left: '80px', top: '2px' });
+    expect(returnButton).toHaveClass('absolute', 'size-32', 'rounded-sm');
+    expect(returnButton).not.toHaveClass('size-40', 'rounded-md');
+  });
+
   it('returns directly from the pre-recording state because no audio exists yet', () => {
     installWorkspaceBridge();
     const media = createMediaAdapter();
