@@ -1,9 +1,6 @@
-import { Copy, Eraser, ExternalLink, FolderOpen, Maximize2, PencilLine } from 'lucide-react';
+import { Eraser, ExternalLink, Maximize2, PencilLine } from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
-import type {
-  WorkspaceEntityActionResponse,
-  WorkspaceSegmentEntityActionRequest,
-} from '../../../workspace-contract/workspace-contract';
+import type { WorkspaceSegmentEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,15 +10,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { toast } from '@/components/ui/toaster';
 import { bindSegmentEntityActions } from './entityActionBindings';
-import {
-  entityActionMenuSeparatorClassName,
-  toastEntityActionError,
-  toastEntityPathCopied,
-} from './entityActionMenu';
-
-type SegmentContentActionsMenuAction = () => Promise<WorkspaceEntityActionResponse>;
+import { EntityPathActionGroup, entityActionMenuSeparatorClassName } from './EntityPathActionGroup';
 
 export type SegmentContentActionsMenuProps = {
   readonly actionIdentity: WorkspaceSegmentEntityActionRequest;
@@ -45,28 +35,6 @@ function SegmentContentActionIcon({ icon: Icon }: { readonly icon: typeof Extern
   return <Icon className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />;
 }
 
-async function handleEntityAction(action: SegmentContentActionsMenuAction) {
-  try {
-    toastEntityActionError(await action());
-  } catch {
-    toast.error('操作失败，请重试。');
-  }
-}
-
-async function handleEntityPathCopy(action: SegmentContentActionsMenuAction) {
-  let copied: boolean;
-  try {
-    copied = toastEntityActionError(await action());
-  } catch {
-    toast.error('操作失败，请重试。');
-    return;
-  }
-
-  if (copied) {
-    toastEntityPathCopied();
-  }
-}
-
 export function SegmentContentActionsMenu({
   actionIdentity,
   clearDisabled = false,
@@ -82,12 +50,7 @@ export function SegmentContentActionsMenu({
   open,
   trigger,
 }: SegmentContentActionsMenuProps) {
-  const actionBindings = bindSegmentEntityActions(actionIdentity) as {
-    readonly onCopyAbsolutePath: SegmentContentActionsMenuAction;
-    readonly onCopyRelativePath: SegmentContentActionsMenuAction;
-    readonly onOpenDefault: SegmentContentActionsMenuAction;
-    readonly onRevealInFinder: SegmentContentActionsMenuAction;
-  };
+  const actionBindings = bindSegmentEntityActions(actionIdentity);
   const editLabel = contentKind === 'transcript' ? '编辑转录' : '编辑正文';
   const clearLabel = contentKind === 'transcript' ? '清空转录' : '清空正文';
   const defaultTrigger = (
@@ -109,31 +72,12 @@ export function SegmentContentActionsMenu({
         onCloseAutoFocus={onCloseAutoFocus}
         side="bottom"
       >
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={() => handleEntityAction(actionBindings.onOpenDefault)}>
-            <SegmentContentActionIcon icon={ExternalLink} />
-            用默认应用打开
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => handleEntityAction(actionBindings.onRevealInFinder)}>
-            <SegmentContentActionIcon icon={FolderOpen} />
-            在访达中显示
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            onSelect={() => handleEntityPathCopy(actionBindings.onCopyRelativePath)}
-          >
-            <SegmentContentActionIcon icon={Copy} />
-            复制相对路径
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => handleEntityPathCopy(actionBindings.onCopyAbsolutePath)}
-          >
-            <SegmentContentActionIcon icon={Copy} />
-            复制绝对路径
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        <EntityPathActionGroup
+          onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
+          onCopyRelativePath={actionBindings.onCopyRelativePath}
+          onOpenDefault={actionBindings.onOpenDefault}
+          onRevealInFinder={actionBindings.onRevealInFinder}
+        />
         <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
         <DropdownMenuGroup>
           <DropdownMenuItem disabled={editDisabled} onSelect={onEdit}>

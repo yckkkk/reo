@@ -1,14 +1,5 @@
-import {
-  Copy,
-  ExternalLink,
-  FolderOpen,
-  MoreHorizontal,
-  PencilLine,
-  RefreshCw,
-  Trash2,
-} from 'lucide-react';
+import { MoreHorizontal, PencilLine, RefreshCw, Trash2 } from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
-import type { WorkspaceEntityActionResponse } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,12 +10,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { toast } from '@/components/ui/toaster';
-import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
+import {
+  EntityPathActionGroup,
+  entityActionMenuSeparatorClassName,
+  type EntityPathAction,
+} from './EntityPathActionGroup';
 
-export const entityActionMenuSeparatorClassName = 'mx-8 bg-foreground/20';
-
-type EntityActionMenuAction = () => Promise<WorkspaceEntityActionResponse>;
 type EntityActionMenuSyncAction = () => void;
 
 export type EntityActionMenuTranscriptionAction = {
@@ -40,56 +31,21 @@ export type EntityActionMenuProps = {
   readonly onCloseAutoFocus?:
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
-  readonly onCopyAbsolutePath: EntityActionMenuAction;
-  readonly onCopyRelativePath?: EntityActionMenuAction | undefined;
+  readonly onCopyAbsolutePath: EntityPathAction;
+  readonly onCopyRelativePath?: EntityPathAction | undefined;
   readonly onDelete: () => void;
   readonly onOpenChange?: ((open: boolean) => void) | undefined;
-  readonly onOpenDefault: EntityActionMenuAction;
+  readonly onOpenDefault: EntityPathAction;
   readonly onRename: () => void;
-  readonly onRevealInFinder: EntityActionMenuAction;
+  readonly onRevealInFinder: EntityPathAction;
   readonly open?: boolean | undefined;
   readonly transcriptionAction?: EntityActionMenuTranscriptionAction | undefined;
   readonly trigger?: ReactElement | undefined;
   readonly triggerClassName?: string | undefined;
 };
 
-function EntityActionMenuIcon({ icon: Icon }: { readonly icon: typeof ExternalLink }) {
+function EntityActionMenuIcon({ icon: Icon }: { readonly icon: typeof RefreshCw }) {
   return <Icon className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />;
-}
-
-export function toastEntityActionError(response: WorkspaceEntityActionResponse) {
-  if (!response.ok) {
-    toast.error(workspaceErrorDisplayMessage(response.error, '操作失败，请重试。'));
-    return false;
-  }
-
-  return true;
-}
-
-export function toastEntityPathCopied() {
-  toast.success('已复制路径');
-}
-
-async function handleEntityAction(action: EntityActionMenuAction) {
-  try {
-    toastEntityActionError(await action());
-  } catch {
-    toast.error('操作失败，请重试。');
-  }
-}
-
-async function handleEntityPathCopy(action: EntityActionMenuAction) {
-  let copied: boolean;
-  try {
-    copied = toastEntityActionError(await action());
-  } catch {
-    toast.error('操作失败，请重试。');
-    return;
-  }
-
-  if (copied) {
-    toastEntityPathCopied();
-  }
 }
 
 function EntityActionTranscriptionItem({
@@ -171,29 +127,12 @@ export function EntityActionMenu({
         onCloseAutoFocus={onCloseAutoFocus}
         side="bottom"
       >
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={() => handleEntityAction(onOpenDefault)}>
-            <EntityActionMenuIcon icon={ExternalLink} />
-            用默认应用打开
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => handleEntityAction(onRevealInFinder)}>
-            <EntityActionMenuIcon icon={FolderOpen} />
-            在访达中显示
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
-        <DropdownMenuGroup>
-          {onCopyRelativePath ? (
-            <DropdownMenuItem onSelect={() => handleEntityPathCopy(onCopyRelativePath)}>
-              <EntityActionMenuIcon icon={Copy} />
-              复制相对路径
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onSelect={() => handleEntityPathCopy(onCopyAbsolutePath)}>
-            <EntityActionMenuIcon icon={Copy} />
-            复制绝对路径
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        <EntityPathActionGroup
+          onCopyAbsolutePath={onCopyAbsolutePath}
+          onCopyRelativePath={onCopyRelativePath}
+          onOpenDefault={onOpenDefault}
+          onRevealInFinder={onRevealInFinder}
+        />
         {transcriptionAction ? (
           <>
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
