@@ -73,6 +73,7 @@ describe('App', () => {
     readWorkspaceSnapshot: vi.fn(),
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
+    updateSegmentContentTitle: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
@@ -207,6 +208,10 @@ describe('App', () => {
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
     });
     reoWorkspace.updateSegmentTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Segment not found' },
+    });
+    reoWorkspace.updateSegmentContentTitle.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Segment not found' },
     });
@@ -479,7 +484,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
@@ -492,7 +497,7 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文' },
+        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'a'.repeat(64) },
       },
     }));
   }
@@ -518,11 +523,13 @@ describe('App', () => {
     memoryId = 'mem_transcription_menu',
     segmentId = 'seg_transcription_menu',
     segmentTitle = 'Transcription menu segment',
+    contentTitle,
     transcriptExists = false,
   }: {
     readonly memoryId?: string;
     readonly segmentId?: string;
     readonly segmentTitle?: string;
+    readonly contentTitle?: string;
     readonly transcriptExists?: boolean;
   } = {}) {
     const memory = {
@@ -542,6 +549,7 @@ describe('App', () => {
     const segment = {
       ...audioSegmentProjection({
         audioByteLength: 12,
+        ...(contentTitle ? { contentTitle } : {}),
         durationMs: 4200,
         memoryId,
         segmentId,
@@ -595,6 +603,7 @@ describe('App', () => {
         transcript: {
           exists: transcriptExists,
           text: transcriptExists ? '已有转录正文' : '',
+          baselineHash: transcriptExists ? 'f'.repeat(64) : '0'.repeat(64),
         },
       },
     }));
@@ -709,6 +718,7 @@ describe('App', () => {
 
   function audioSegmentProjection({
     audioByteLength,
+    contentTitle,
     createdAt = '2026-05-09T10:00:00.000Z',
     durationMs,
     memoryId,
@@ -719,6 +729,7 @@ describe('App', () => {
     workspaceId = 'ws_1',
   }: {
     readonly audioByteLength: number;
+    readonly contentTitle?: string;
     readonly createdAt?: string;
     readonly durationMs: number;
     readonly memoryId: string;
@@ -738,6 +749,7 @@ describe('App', () => {
       updatedAt,
       durationMs,
       audioByteLength,
+      ...(contentTitle ? { contentTitle } : {}),
       transcript: { exists: transcriptExists },
       supplementCount: 0,
       supplements: [],
@@ -1006,7 +1018,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
 
@@ -1121,7 +1133,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     const backfill =
@@ -1229,7 +1241,7 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
 
@@ -1301,7 +1313,7 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     const backfill =
@@ -1465,6 +1477,7 @@ describe('App', () => {
       memoryId: 'mem_regenerate_segment_transcript',
       segmentId: 'seg_regenerate_transcript',
       segmentTitle: 'Existing transcript segment',
+      contentTitle: '访谈转录',
       transcriptExists: true,
     });
     const backfill =
@@ -1485,6 +1498,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
     await user.click(screen.getByRole('menuitem', { name: '重新生成转录' }));
     expect(screen.getByRole('alertdialog', { name: '重新生成转录？' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/将覆盖当前转录正文，不会更改「访谈转录」这个名称。/)
+    ).toBeInTheDocument();
     expect(reoWorkspace.requestSegmentTranscriptionBackfill).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: '重新生成' }));
@@ -1503,11 +1519,13 @@ describe('App', () => {
     );
     expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
     expect(screen.getByText('已有转录正文')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
     backfill.resolve({
       ok: true,
       value: { memory: { ...memory, hasAudioTranscript: true }, saved: true },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
   });
 
   it.each([
@@ -2190,7 +2208,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.updateSegmentTitle.mockReturnValue(rename.promise);
@@ -2301,6 +2319,370 @@ describe('App', () => {
     });
   }, 10_000);
 
+  it('renames the primary Segment content tab without renaming the Segment object', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 5000,
+      audioByteLength: 2048,
+      hasAudioTranscript: true,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const segment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: '录音1',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 5000,
+      audioByteLength: 2048,
+      lastTranscriptionAttempt: 'never' as const,
+      transcript: { exists: false },
+      supplementCount: 0,
+      supplements: [],
+    };
+    const rename =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateSegmentContentTitle']>>>();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+      },
+    }));
+    reoWorkspace.updateSegmentContentTitle.mockReturnValue(rename.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 录音1' });
+
+    const primaryMore = document.querySelector(
+      '[data-slot="memory-studio-primary-tab-more-anchor"]'
+    );
+    expect(primaryMore).toBeInstanceOf(HTMLButtonElement);
+    await user.click(primaryMore as HTMLButtonElement);
+    const menu = await screen.findByRole('menu', { name: '转录 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '重命名' }));
+
+    const dialog = screen.getByRole('dialog', { name: '重命名转录' });
+    const titleInput = within(dialog).getByLabelText('转录名称');
+    await user.clear(titleInput);
+    await user.type(titleInput, '访谈转录');
+    await user.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.updateSegmentContentTitle).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        contentTitle: '访谈转录',
+      })
+    );
+    expect(screen.getByRole('button', { name: '选择片段 录音1' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '重命名转录' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rename.resolve({
+        ok: true,
+        value: {
+          memory,
+          segment: {
+            ...segment,
+            contentTitle: '访谈转录',
+          },
+        },
+      });
+      await rename.promise;
+    });
+  }, 10_000);
+
+  it('blocks settings navigation while the transcript editor is open', async () => {
+    const user = userEvent.setup();
+    const toastErrorSpy = vi.spyOn(toast, 'error');
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 5000,
+      audioByteLength: 2048,
+      hasAudioTranscript: true,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const segment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: '录音1',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 5000,
+      audioByteLength: 2048,
+      lastTranscriptionAttempt: 'success' as const,
+      transcript: { exists: true },
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: true, text: '旧转录', baselineHash: '0'.repeat(64) },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 录音1' });
+
+    const primaryMore = document.querySelector(
+      '[data-slot="memory-studio-primary-tab-more-anchor"]'
+    );
+    expect(primaryMore).toBeInstanceOf(HTMLButtonElement);
+    await user.click(primaryMore as HTMLButtonElement);
+    const menu = await screen.findByRole('menu', { name: '转录 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '编辑转录' }));
+    await screen.findByRole('region', { name: '转录编辑器' });
+
+    toastErrorSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: '设置', hidden: true }));
+
+    expect(toastErrorSpy).toHaveBeenCalledWith('当前转录尚未完成，请先保存或关闭转录。');
+    expect(screen.queryByRole('region', { name: '语音设置' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '转录编辑器' })).toBeInTheDocument();
+  }, 10_000);
+
+  it('clears primary Segment transcript through the confirm dialog with the transcript baseline', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 5000,
+      audioByteLength: 2048,
+      hasAudioTranscript: true,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const segment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      type: 'audio' as const,
+      title: '录音1',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      durationMs: 5000,
+      audioByteLength: 2048,
+      lastTranscriptionAttempt: 'success' as const,
+      transcript: { exists: true },
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        transcript: { exists: true, text: '旧转录', baselineHash: BASELINE_HASH_A },
+      },
+    }));
+    reoWorkspace.saveTranscript.mockResolvedValue({
+      ok: true,
+      value: {
+        saved: true,
+        memory: {
+          ...memory,
+          hasAudioTranscript: true,
+          updatedAt: '2026-05-06T13:11:00.000Z',
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 录音1' });
+
+    const primaryMore = document.querySelector(
+      '[data-slot="memory-studio-primary-tab-more-anchor"]'
+    );
+    expect(primaryMore).toBeInstanceOf(HTMLButtonElement);
+    await user.click(primaryMore as HTMLButtonElement);
+    const menu = await screen.findByRole('menu', { name: '转录 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '清空转录' }));
+
+    const clearDialog = await screen.findByRole('alertdialog', { name: '清空转录？' });
+    await user.click(within(clearDialog).getByRole('button', { name: '清空转录' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.saveTranscript).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        markdown: '',
+        baselineTranscriptHash: BASELINE_HASH_A,
+      })
+    );
+    expect(screen.queryByRole('alertdialog', { name: '清空转录？' })).not.toBeInTheDocument();
+  }, 10_000);
+
   it('ignores an in-flight Segment rename failure after reopening the same workspace with a new handle', async () => {
     const user = userEvent.setup();
     const memory = {
@@ -2390,7 +2772,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.updateSegmentTitle.mockReturnValue(rename.promise);
@@ -2663,7 +3045,7 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
 
@@ -2702,7 +3084,7 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([1, 2]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
@@ -2739,7 +3121,7 @@ describe('App', () => {
       supplementId: supplement.supplementId,
       audio: new Uint8Array([1, 2]),
       audioByteLength: 2,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     await openSegmentSupplementDeleteDialog(user, supplement.title);
 
@@ -2858,7 +3240,7 @@ describe('App', () => {
       supplementId: supplement.supplementId,
       audio: new Uint8Array([1, 2]),
       audioByteLength: 2,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     await openSegmentSupplementDeleteDialog(user, supplement.title);
 
@@ -4199,7 +4581,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.deleteSegment.mockResolvedValue({
@@ -4769,7 +5151,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.updateMemoryTitle.mockResolvedValue({
@@ -4930,7 +5312,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.deleteSegment.mockResolvedValue({
@@ -4959,7 +5341,7 @@ describe('App', () => {
       memoryId: memory.memoryId,
       requestId: 'segment-content:stale',
       segmentId: deletedSegment.segmentId,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       workspaceId: 'ws_1',
     });
     queryClient.setQueryData(deletedSupplementContentKey, {
@@ -5607,7 +5989,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.deleteSegment.mockResolvedValue({
@@ -6357,7 +6739,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
@@ -7557,7 +7939,7 @@ describe('App', () => {
       supplementId: 'sup_recoverable',
       audio: new Uint8Array([4, 5]),
       audioByteLength: 2,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
 
     render(
@@ -11331,7 +11713,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '' },
+        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
@@ -11800,7 +12182,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: true, text: 'Parent transcript' },
+        transcript: { exists: true, text: 'Parent transcript', baselineHash: 'a'.repeat(64) },
       },
     }));
     reoWorkspace.readSegmentSupplementContent.mockImplementation(async (payload) => ({

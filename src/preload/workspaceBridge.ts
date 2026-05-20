@@ -71,6 +71,7 @@ import {
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
@@ -375,6 +376,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     updateSegmentTitle: (payload) =>
       invoke<WorkspaceBridgeResponse<'updateSegmentTitle'>>(
         WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
+        payload
+      ),
+    updateSegmentContentTitle: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateSegmentContentTitle'>>(
+        WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
         payload
       ),
     updateSegmentSupplementTitle: (payload) =>

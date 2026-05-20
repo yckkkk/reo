@@ -32,6 +32,7 @@ import {
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
@@ -82,6 +83,8 @@ import {
   workspaceUpdateMemoryTitleResponseSchema,
   workspaceUpdateSegmentSupplementTitleRequestSchema,
   workspaceUpdateSegmentSupplementTitleResponseSchema,
+  workspaceUpdateSegmentContentTitleRequestSchema,
+  workspaceUpdateSegmentContentTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
@@ -273,6 +276,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:discardSegmentSupplementRecordingDraft',
     'workspace:updateMemoryTitle',
     'workspace:updateSegmentTitle',
+    'workspace:updateSegmentContentTitle',
     'workspace:updateSegmentSupplementTitle',
     'workspace:updateSegmentContentTabOrder',
     'workspace:saveTranscript',
@@ -340,6 +344,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
   assert.equal(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle');
+  assert.equal(
+    WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
+    'workspace:updateSegmentContentTitle'
+  );
   assert.equal(
     WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
     'workspace:updateSegmentSupplementTitle'
@@ -1412,6 +1420,7 @@ test('segment supplement dangerous operation contract keeps parent identity and 
     segmentId: 'seg_1',
     type: 'audio',
     title: 'Segment',
+    contentTitle: '访谈转录',
     createdAt: '2026-05-10T13:13:00.000Z',
     updatedAt: '2026-05-10T13:14:00.000Z',
     durationMs: 1000,
@@ -1659,7 +1668,7 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文' },
+        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'c'.repeat(64) },
       },
     }),
     {
@@ -1672,8 +1681,28 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文' },
+        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'c'.repeat(64) },
       },
+    }
+  );
+  assert.deepEqual(
+    workspaceSegmentSupplementMarkdownSaveRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      markdown: '补充录音新正文',
+      baselineTranscriptHash: 'd'.repeat(64),
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      markdown: '补充录音新正文',
+      baselineTranscriptHash: 'd'.repeat(64),
     }
   );
 });
@@ -1957,6 +1986,7 @@ test('workspace segment projection contract accepts note kind without audio fiel
       segmentId: 'seg_note_1',
       type: 'note',
       title: '现场想法',
+      contentTitle: '正文标题',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:43:00.000Z',
       bodyByteLength: 128,
@@ -1981,6 +2011,7 @@ test('workspace segment projection contract accepts note kind without audio fiel
       segmentId: 'seg_note_1',
       type: 'note',
       title: '现场想法',
+      contentTitle: '正文标题',
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:43:00.000Z',
       bodyByteLength: 128,
@@ -2350,6 +2381,22 @@ test('segment supplement finalize contract accepts only failed or never transcri
 
 test('finalized audio segment transcript save contract requires memory id plus segment id', () => {
   assert.deepEqual(
+    workspaceRecordingMarkdownSaveRequestSchema.parse({
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      workspaceHandle: 'wh_1',
+      markdown: 'note',
+      baselineTranscriptHash: 'a'.repeat(64),
+    }),
+    {
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      workspaceHandle: 'wh_1',
+      markdown: 'note',
+      baselineTranscriptHash: 'a'.repeat(64),
+    }
+  );
+  assert.deepEqual(
     workspaceRecordingReadRequestSchema.parse({
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
@@ -2402,7 +2449,7 @@ test('finalized audio segment read contract requires memory and segment identity
       segmentId: 'seg_20260506_000001',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: true, text: '正文' },
+      transcript: { exists: true, text: '正文', baselineHash: 'b'.repeat(64) },
     },
   });
   assert.equal(response.ok, true);
@@ -2414,7 +2461,7 @@ test('finalized audio segment read contract requires memory and segment identity
       segmentId: 'seg_20260506_000001',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: true, text: '正文' },
+      transcript: { exists: true, text: '正文', baselineHash: 'b'.repeat(64) },
     });
   }
   assert.throws(() =>
@@ -2538,6 +2585,81 @@ test('segment title update contract returns memory and segment projections witho
           segmentId: 'seg_20260506_000001',
           type: 'audio',
           title: '录音1',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          durationMs: 1000,
+          audioByteLength: 3,
+          lastTranscriptionAttempt: 'never',
+          transcript: { exists: true },
+          supplementCount: 0,
+          supplements: [],
+          rootPath: '/Users/example/Reo',
+        },
+      },
+    })
+  );
+});
+
+test('segment content title update contract returns memory and segment projections without raw paths', () => {
+  assert.deepEqual(
+    workspaceUpdateSegmentContentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      contentTitle: '访谈转录',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      contentTitle: '访谈转录',
+    }
+  );
+  assert.throws(() =>
+    workspaceUpdateSegmentContentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      contentTitle: '访谈转录',
+    })
+  );
+  assert.throws(() =>
+    workspaceUpdateSegmentContentTitleRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      contentTitle: '',
+    })
+  );
+
+  assert.throws(() =>
+    workspaceUpdateSegmentContentTitleResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_20260506_000001',
+          title: '产品灵感与思考',
+          createdAt: '2026-05-06T13:08:00.000Z',
+          updatedAt: '2026-05-08T14:42:00.000Z',
+          segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
+          audioByteLength: 3,
+          hasAudioTranscript: true,
+          hasAnyNote: false,
+          supplementCount: 0,
+        },
+        segment: {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_20260506_000001',
+          segmentId: 'seg_20260506_000001',
+          type: 'audio',
+          title: '录音1',
+          contentTitle: '访谈转录',
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           durationMs: 1000,

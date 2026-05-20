@@ -346,6 +346,12 @@ export function updateSegmentTitle(
   return window.reoWorkspace.updateSegmentTitle(payload);
 }
 
+export function updateSegmentContentTitle(
+  payload: Parameters<Window['reoWorkspace']['updateSegmentContentTitle']>[0]
+) {
+  return window.reoWorkspace.updateSegmentContentTitle(payload);
+}
+
 export function updateSegmentSupplementTitle(
   payload: Parameters<Window['reoWorkspace']['updateSegmentSupplementTitle']>[0]
 ) {
@@ -468,6 +474,10 @@ export type FinalizedSegmentSupplementNote = Extract<
 >['value'];
 export type RenamedSegment = Extract<
   Awaited<ReturnType<typeof updateSegmentTitle>>,
+  { readonly ok: true }
+>['value'];
+export type RenamedSegmentContent = Extract<
+  Awaited<ReturnType<typeof updateSegmentContentTitle>>,
   { readonly ok: true }
 >['value'];
 export type RenamedSegmentSupplement = Extract<

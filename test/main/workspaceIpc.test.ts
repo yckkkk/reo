@@ -70,6 +70,7 @@ import {
   handleRestoreDeletedMemoryForTest,
   handleRestoreDeletedSegmentSupplementForTest,
   handleRestoreDeletedSegmentForTest,
+  handleSaveTranscriptForTest,
   handleSaveSegmentSupplementTranscriptForTest,
   handleSaveVoiceTranscriptionApiKeyForTest,
   handleSetVoiceTranscriptionEnabledForTest,
@@ -77,6 +78,7 @@ import {
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
   handleUpdateMemoryTitleForTest,
+  handleUpdateSegmentContentTitleForTest,
   handleUpdateSegmentSupplementTitleForTest,
   handleUpdateSegmentTitleForTest,
   handleWriteNoteSegmentDraftBodyForTest,
@@ -106,6 +108,7 @@ import {
 } from '../../src/main/security.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 import { findSegmentDirectoryById } from '../../src/main/memoryFiles.js';
+import { transcriptDigest } from '../../src/main/transcriptDigest.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
 import { createWorkspaceMemorySpaceRegistry } from '../../src/main/workspaceMemorySpaceRegistry.js';
 import type {
@@ -2268,6 +2271,7 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     assert.deepEqual(result.value.transcript, {
       exists: true,
       text: '大家一起唱生日快乐。',
+      baselineHash: transcriptDigest('大家一起唱生日快乐。'),
     });
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
@@ -2337,10 +2341,105 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
-    assert.deepEqual(result.value.transcript, { exists: true, text: '补充录音转写正文' });
+    assert.deepEqual(result.value.transcript, {
+      exists: true,
+      text: '补充录音转写正文',
+      baselineHash: transcriptDigest('补充录音转写正文'),
+    });
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
+});
+
+test('transcript save IPC refuses stale transcript baselines without overwriting files', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-stale-transcript-save-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 转录保存',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    title: '生日录音',
+  });
+  const segmentDirectory = path.join(
+    rootPath,
+    'memories',
+    'mem_ipc_audio',
+    'segments',
+    'seg_ipc_audio'
+  );
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '生日录音', kind: 'audio' },
+      content: '# 生日录音\n\n## Transcript\n\n磁盘上的转录',
+    })
+  );
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', 'sup_ipc_followup');
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFinalizedSupplementFiles({
+    root: rootPath,
+    directory: supplementDirectory,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_audio',
+    segmentId: 'seg_ipc_audio',
+    supplementId: 'sup_ipc_followup',
+    title: '补充录音',
+    content: '# 补充录音\n\n## Transcript\n\n磁盘上的补充转录',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const segmentResult = await handleSaveTranscriptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      markdown: '用户编辑后的转录',
+      baselineTranscriptHash: transcriptDigest('进入编辑器时的转录'),
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  const supplementResult = await handleSaveSegmentSupplementTranscriptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+      markdown: '用户编辑后的补充转录',
+      baselineTranscriptHash: transcriptDigest('进入编辑器时的补充转录'),
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(segmentResult.ok, false);
+  if (!segmentResult.ok) {
+    assert.equal(segmentResult.error.code, 'ERR_BACKFILL_TRANSCRIPT_CHANGED');
+  }
+  assert.equal(supplementResult.ok, false);
+  if (!supplementResult.ok) {
+    assert.equal(supplementResult.error.code, 'ERR_BACKFILL_TRANSCRIPT_CHANGED');
+  }
+  assert.match(await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'), /磁盘上的转录/);
+  assert.match(
+    await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    /磁盘上的补充转录/
+  );
 });
 
 test('readFinalizedAudioSegmentSupplement returns empty transcript when supplement has no transcript section', async () => {
@@ -2406,7 +2505,11 @@ test('readFinalizedAudioSegmentSupplement returns empty transcript when suppleme
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
-    assert.deepEqual(result.value.transcript, { exists: false, text: '' });
+    assert.deepEqual(result.value.transcript, {
+      exists: false,
+      text: '',
+      baselineHash: transcriptDigest(''),
+    });
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
@@ -3175,6 +3278,110 @@ test('updateSegmentTitle renames the segment node through file truth', async () 
       )
     ).updatedAt,
     '2026-05-06T13:09:00.000Z'
+  );
+});
+
+test('updateSegmentContentTitle writes segment content title without renaming the segment node', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-segment-content-title-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 内容标题',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_segment_content',
+    segmentId: 'seg_ipc_segment_content',
+    title: '录音片段',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleUpdateSegmentContentTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_segment_content',
+      segmentId: 'seg_ipc_segment_content',
+      contentTitle: '访谈转录',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.segment.segmentId, 'seg_ipc_segment_content');
+    assert.equal(result.value.segment.title, '录音片段');
+    assert.equal(result.value.segment.contentTitle, '访谈转录');
+    assert.equal('rootPath' in result.value.segment, false);
+  }
+
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_segment_content');
+  assert.equal(path.basename(segmentDirectory), 'seg_ipc_segment_content');
+  const segmentMarkdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(segmentMarkdown.data.title, '录音片段');
+  assert.equal(
+    'content_title' in segmentMarkdown.data ? segmentMarkdown.data.content_title : undefined,
+    '访谈转录'
+  );
+});
+
+test('updateSegmentContentTitle rejects workspace mismatches before file writes', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-segment-content-title-mismatch-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 内容标题不匹配',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_segment_content_mismatch',
+    segmentId: 'seg_ipc_segment_content_mismatch',
+    title: '录音片段',
+  });
+
+  const result = await handleUpdateSegmentContentTitleForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_ipc_segment_content_mismatch',
+      segmentId: 'seg_ipc_segment_content_mismatch',
+      contentTitle: '不应写入',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createRegisteredHandleStore(rootPath),
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  const segmentDirectory = await findSegmentDirectoryById(
+    rootPath,
+    'seg_ipc_segment_content_mismatch'
+  );
+  const segmentMarkdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(
+    'content_title' in segmentMarkdown.data ? segmentMarkdown.data.content_title : undefined,
+    undefined
   );
 });
 

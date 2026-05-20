@@ -65,6 +65,7 @@ import {
   setBeforeSegmentDirectoryCandidateScanForTest,
   setBeforeSegmentFileTruthListForTest,
   updateMemoryTitleFromFileTruth,
+  updateSegmentContentTitleFromFileTruth,
   updateSegmentContentTabOrderFromFileTruth,
   updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
@@ -765,6 +766,80 @@ test('renames segment file-space node through file truth and returns refreshed p
     }).data.title,
     '晨间记录'
   );
+});
+
+test('updates primary content title in segment markdown without renaming the segment node', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_content_title_update';
+  const segmentId = 'seg_20260520_content_title_update';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '内容标题更新',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+
+  const updated = await updateSegmentContentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    contentTitle: '访谈转录',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.segment.title, '录音1');
+    assert.equal(updated.value.segment.contentTitle, '访谈转录');
+    assert.equal(updated.value.memory.segmentCount, 1);
+  }
+
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  await stat(segmentDirectory);
+  const parsed = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(parsed.data.title, '录音1');
+  assert.equal('content_title' in parsed.data ? parsed.data.content_title : undefined, '访谈转录');
+});
+
+test('rejects primary content title updates when segment file truth belongs to another workspace', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_content_title_workspace_mismatch';
+  const segmentId = 'seg_20260520_content_title_workspace_mismatch';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '内容标题工作区不匹配',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+
+  const updated = await updateSegmentContentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_other',
+    memoryId,
+    segmentId,
+    contentTitle: '不应写入',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+
+  assert.equal(updated.ok, false);
+  const parsed = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(
+      path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'segment.md'),
+      'utf8'
+    ),
+  });
+  assert.equal('content_title' in parsed.data ? parsed.data.content_title : undefined, undefined);
 });
 
 test('renames a segment when memory directory scan is missing no valid file-space node', async () => {
@@ -2580,6 +2655,66 @@ test('reads segment markdown as the segment title source of truth', async () => 
     assert.equal(detail.value.segments.length, 1);
     assert.equal(detail.value.segments[0]?.segmentId, segmentId);
     assert.equal(detail.value.segments[0]?.title, '录音1');
+  }
+});
+
+test('finalized segment projection exposes optional primary content title from segment markdown', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_content_title';
+  const audioSegmentId = 'seg_20260520_audio_content_title';
+  const noteSegmentId = 'seg_20260520_note_content_title';
+  const noteBody = '# 笔记片段\n\nbody\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '内容标题',
+  });
+  const audioDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: audioSegmentId,
+    title: '录音片段',
+  });
+  await writeFile(
+    path.join(audioDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '录音片段', content_title: '访谈转录', kind: 'audio' },
+      content: '# 录音片段\n\n## Transcript\n\nhello',
+    })
+  );
+  const noteDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: noteSegmentId,
+    title: '笔记片段',
+    body: noteBody,
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+  await writeFile(
+    path.join(noteDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: '笔记片段', content_title: '整理正文', kind: 'note' },
+      content: noteBody,
+    })
+  );
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    const audioSegment = detail.value.segments.find(
+      (segment) => segment.segmentId === audioSegmentId
+    );
+    const noteSegment = detail.value.segments.find(
+      (segment) => segment.segmentId === noteSegmentId
+    );
+    assert.ok(audioSegment);
+    assert.ok(noteSegment);
+    assert.equal(audioSegment?.contentTitle, '访谈转录');
+    assert.equal(noteSegment?.contentTitle, '整理正文');
   }
 });
 

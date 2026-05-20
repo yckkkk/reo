@@ -112,6 +112,8 @@ import type {
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
+  WorkspaceUpdateSegmentContentTitleRequest,
+  WorkspaceUpdateSegmentContentTitleResponse,
   WorkspaceUpdateSegmentContentTabOrderRequest,
   WorkspaceUpdateSegmentContentTabOrderResponse,
   WorkspaceUpdateSegmentSupplementTitleRequest,
@@ -303,6 +305,9 @@ export interface ReoWorkspaceBridge {
   readonly updateSegmentTitle: (
     payload: WorkspaceUpdateSegmentTitleRequest
   ) => Promise<WorkspaceUpdateSegmentTitleResponse>;
+  readonly updateSegmentContentTitle: (
+    payload: WorkspaceUpdateSegmentContentTitleRequest
+  ) => Promise<WorkspaceUpdateSegmentContentTitleResponse>;
   readonly updateSegmentSupplementTitle: (
     payload: WorkspaceUpdateSegmentSupplementTitleRequest
   ) => Promise<WorkspaceUpdateSegmentSupplementTitleResponse>;

@@ -9,10 +9,11 @@ import {
 test('workspace markdown object parses flat frontmatter and body content', () => {
   const object = parseWorkspaceMarkdownObject({
     objectType: 'segment',
-    markdown: `---\ntitle: Main recording\nkind: audio\ntags:\n  - architecture\n---\n# Main recording\n\n## Transcript\n\nhello\n`,
+    markdown: `---\ntitle: Main recording\ncontent_title: Interview transcript\nkind: audio\ntags:\n  - architecture\n---\n# Main recording\n\n## Transcript\n\nhello\n`,
   });
 
   assert.deepEqual(object.data, {
+    content_title: 'Interview transcript',
     kind: 'audio',
     title: 'Main recording',
     tags: ['architecture'],

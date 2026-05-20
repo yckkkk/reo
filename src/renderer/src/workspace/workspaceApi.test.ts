@@ -123,6 +123,8 @@ describe('workspace renderer API wrapper', () => {
     discardSegmentSupplementRecordingDraft: vi.fn(),
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
+    updateSegmentTitle: vi.fn(),
+    updateSegmentContentTitle: vi.fn(),
     updateSegmentContentTabOrder: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
@@ -378,7 +380,7 @@ describe('workspace renderer API wrapper', () => {
         segmentId: 'seg_1',
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: true, text: '正文' },
+        transcript: { exists: true, text: '正文', baselineHash: 'a'.repeat(64) },
       },
     });
     reoWorkspace.readFinalizedAudioSegmentSupplement.mockResolvedValue({

@@ -237,6 +237,71 @@ async function createMemoryForDraftFinalize({
   assert.equal(created.ok, true);
 }
 
+test('finalized audio content reads include transcript baseline hashes', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_transcript_baseline_read';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Segment baseline', kind: 'audio' },
+      content: '# Segment baseline\n\n## Transcript\n\n用户改过的转录',
+    })
+  );
+  const supplementId = 'sup_transcript_baseline_read';
+  await writeFinalizedAudioSupplementForTest({
+    rootPath,
+    segmentId,
+    supplementId,
+  });
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', supplementId);
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: 'Supplement baseline', kind: 'audio' },
+      content: '# Supplement baseline\n\n## Transcript\n\n补充录音转录',
+    })
+  );
+
+  const segment = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  const supplement = await readFinalizedAudioSegmentSupplementContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(segment.ok, true);
+  if (segment.ok) {
+    assert.equal(segment.transcript.exists, true);
+    assert.equal(segment.transcript.text, '用户改过的转录');
+    assert.equal(
+      (segment.transcript as { readonly baselineHash?: string }).baselineHash,
+      transcriptDigest('用户改过的转录')
+    );
+  }
+  assert.equal(supplement.ok, true);
+  if (supplement.ok) {
+    assert.equal(supplement.transcript.exists, true);
+    assert.equal(supplement.transcript.text, '补充录音转录');
+    assert.equal(
+      (supplement.transcript as { readonly baselineHash?: string }).baselineHash,
+      transcriptDigest('补充录音转录')
+    );
+  }
+});
+
 test('finalized audio backfill reads accept the Turbo 100MB limit without using the preview cap', async () => {
   const rootPath = await workspaceRoot();
   const segmentId = 'seg_backfill_large';

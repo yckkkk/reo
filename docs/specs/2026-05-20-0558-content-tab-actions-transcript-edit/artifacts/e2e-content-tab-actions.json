@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "checks": [
+    "Electron preview runtime 从侧边栏打开临时注册的记忆空间，并进入 Memory Studio。",
+    "主转录 tab More 显示文档级操作：打开、显示、复制、编辑、重命名、清空。",
+    "主转录 tab More 不显示生成转录、重新生成转录或删除。",
+    "转录编辑 overlay 通过真实 IPC 保存，并把 E2E 修改后的转录写入 segment.md 文件真源。",
+    "音频 Segment 卡片 More 显示实体级重新生成和删除操作；本次临时运行中重新生成存在但被禁用，因为语音设置处于无效 key 状态。",
+    "音频补充录音 tab More 显示实体级重新生成和删除操作。",
+    "主正文 tab More 显示文档级操作，并且不显示生成转录、重新生成转录或删除。"
+  ],
+  "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-20-0558-content-tab-actions-transcript-edit/artifacts/e2e-content-tab-actions.png",
+  "resultPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-20-0558-content-tab-actions-transcript-edit/artifacts/e2e-content-tab-actions.json",
+  "transcriptPath": "/Users/yck/Downloads/PM/技术线/reo/.tmp/e2e-content-tab-actions/workspace/内容操作空间/memories/mem_e2e_content--内容操作验证/segments/seg_e2e_audio--录音片段/segment.md",
+  "note": "本次 E2E 特意使用本地临时 workspace 和通过 --user-data-dir 指定的临时 Electron userData，没有修改真实用户记忆空间。"
+}

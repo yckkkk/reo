@@ -342,9 +342,12 @@ function renderLoadedWorkspaceFrame({
   onDeleteMemory = vi.fn(),
   onDeleteSegment = vi.fn(),
   onDeleteSegmentSupplement = vi.fn(),
+  onClearSegmentContent = vi.fn(),
+  onEditSegmentTranscript = vi.fn(),
   onEditNoteSegment,
   onEditNoteSegmentSupplement,
   onRenameMemory = vi.fn(),
+  onRenameSegmentContent = vi.fn(),
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
   onRetrySegmentTranscription,
@@ -404,11 +407,20 @@ function renderLoadedWorkspaceFrame({
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onDeleteSegment?: () => void;
   readonly onDeleteSegmentSupplement?: () => void;
+  readonly onClearSegmentContent?: Parameters<
+    typeof LoadedWorkspaceFrame
+  >[0]['onClearSegmentContent'];
+  readonly onEditSegmentTranscript?: Parameters<
+    typeof LoadedWorkspaceFrame
+  >[0]['onEditSegmentTranscript'];
   readonly onEditNoteSegment?: Parameters<typeof LoadedWorkspaceFrame>[0]['onEditNoteSegment'];
   readonly onEditNoteSegmentSupplement?: Parameters<
     typeof LoadedWorkspaceFrame
   >[0]['onEditNoteSegmentSupplement'];
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onRenameSegmentContent?: Parameters<
+    typeof LoadedWorkspaceFrame
+  >[0]['onRenameSegmentContent'];
   readonly onRenameSegment?: () => void;
   readonly onRenameSegmentSupplement?: () => void;
   readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
@@ -493,9 +505,12 @@ function renderLoadedWorkspaceFrame({
         onDeleteMemory={onDeleteMemory}
         onDeleteSegment={onDeleteSegment}
         onDeleteSegmentSupplement={onDeleteSegmentSupplement}
+        onClearSegmentContent={onClearSegmentContent}
+        onEditSegmentTranscript={onEditSegmentTranscript}
         {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
         {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
         onRenameMemory={onRenameMemory}
+        onRenameSegmentContent={onRenameSegmentContent}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
         {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
@@ -758,6 +773,33 @@ describe('LoadedWorkspaceFrame', () => {
     expect(screen.queryByText('workspace-handle-secret')).not.toBeInTheDocument();
   });
 
+  it('uses Segment contentTitle for the primary content tab label and keeps default fallback out of the model', async () => {
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+    const detailWithContentTitle: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segments: [
+        {
+          ...birthdayVoiceSegment,
+          contentTitle: '访谈转录',
+        },
+      ],
+    };
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_content_title',
+      detail: detailWithContentTitle,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    expect(within(content).getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
+    expect(within(content).queryByRole('tab', { name: '转录' })).not.toBeInTheDocument();
+  });
+
   it('renders finalized Note segments as markdown content in Memory Studio', async () => {
     const readSegmentContent = vi.fn(async (request) => ({
       ok: true,
@@ -854,12 +896,25 @@ describe('LoadedWorkspaceFrame', () => {
     expect(bodyMore).not.toHaveClass('max-w-20');
     expect(bodyMore).not.toHaveClass('opacity-100');
     await userEvent.click(bodyMore as HTMLButtonElement);
-    expect(screen.getByRole('menuitem', { name: '用默认应用打开' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '在访达中显示' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '复制相对路径' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '复制绝对路径' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '删除' })).toBeInTheDocument();
+    const bodyMenu = await screen.findByRole('menu', { name: '正文 更多操作' });
+    expect(
+      within(bodyMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '编辑正文',
+      '重命名',
+      '清空正文',
+    ]);
+    expect(within(bodyMenu).queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
+    expect(
+      within(bodyMenu).queryByRole('menuitem', { name: '重新生成转录' })
+    ).not.toBeInTheDocument();
+    expect(within(bodyMenu).queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
     expect(bodyTab).toHaveAttribute('aria-selected', 'true');
 
@@ -1756,7 +1811,7 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_voice',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: true, text: 'First finalized audio.' },
+      transcript: { exists: true, text: 'First finalized audio.', baselineHash: 'a'.repeat(64) },
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
@@ -1772,7 +1827,7 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_voice',
       audio: new Uint8Array([4, 5, 6]),
       audioByteLength: 3,
-      transcript: { exists: true, text: 'Second finalized audio.' },
+      transcript: { exists: true, text: 'Second finalized audio.', baselineHash: 'a'.repeat(64) },
     });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(decodeAudioData).toHaveBeenCalledTimes(1);
@@ -1860,7 +1915,7 @@ describe('LoadedWorkspaceFrame', () => {
       supplementId: 'sup_birthday_followup',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     const waveform = await within(content).findByRole('slider', { name: '补充录音播放进度' });
 
@@ -1875,7 +1930,7 @@ describe('LoadedWorkspaceFrame', () => {
       supplementId: 'sup_birthday_followup',
       audio: new Uint8Array([4, 5, 6]),
       audioByteLength: 3,
-      transcript: { exists: false, text: '' },
+      transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(decodeAudioData).toHaveBeenCalledTimes(1);
@@ -2032,10 +2087,31 @@ describe('LoadedWorkspaceFrame', () => {
         audioByteLength: 3,
       },
     }));
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: true,
+          text: 'Birthday transcript',
+          baselineHash: 'b'.repeat(64),
+        },
+      },
+    }));
+    const onClearSegmentContent = vi.fn();
+    const onEditSegmentTranscript = vi.fn();
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
+      onClearSegmentContent,
+      onEditSegmentTranscript,
+      readFinalizedAudioSegment,
       readFinalizedAudioSegmentSupplement,
       session,
     });
@@ -2084,6 +2160,49 @@ describe('LoadedWorkspaceFrame', () => {
       user,
       transcriptMore as HTMLButtonElement,
       '转录 更多操作'
+    );
+    await user.click(transcriptMore as HTMLButtonElement);
+    const transcriptMenu = await screen.findByRole('menu', { name: '转录 更多操作' });
+    expect(
+      within(transcriptMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '编辑转录',
+      '重命名',
+      '清空转录',
+    ]);
+    expect(
+      within(transcriptMenu).queryByRole('menuitem', { name: '生成转录' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(transcriptMenu).queryByRole('menuitem', { name: '重新生成转录' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(transcriptMenu).queryByRole('menuitem', { name: '删除' })
+    ).not.toBeInTheDocument();
+    await user.click(within(transcriptMenu).getByRole('menuitem', { name: '编辑转录' }));
+    expect(onEditSegmentTranscript).toHaveBeenCalledWith({
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      title: '转录',
+      transcriptText: 'Birthday transcript',
+      baselineTranscriptHash: 'b'.repeat(64),
+    });
+    await user.click(transcriptMore as HTMLButtonElement);
+    const clearTranscriptMenu = await screen.findByRole('menu', { name: '转录 更多操作' });
+    await user.click(within(clearTranscriptMenu).getByRole('menuitem', { name: '清空转录' }));
+    expect(onClearSegmentContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryId: 'mem_birthday',
+        contentKind: 'transcript',
+        currentTitle: '转录',
+        baselineTranscriptHash: 'b'.repeat(64),
+      })
     );
     const tabDragDataTransfer = createDragDataTransfer();
     fireEvent.dragStart(transcriptMore as HTMLButtonElement, { dataTransfer: tabDragDataTransfer });
@@ -2906,6 +3025,7 @@ describe('LoadedWorkspaceFrame', () => {
   it('opens the SegmentSupplement sibling More menu and emits a rename intent', async () => {
     const user = userEvent.setup();
     const onRenameSegmentSupplement = vi.fn();
+    const onRetrySupplementTranscription = vi.fn();
     const openSegmentSupplementDocument = vi.fn().mockResolvedValue({ ok: true });
     const revealSegmentSupplementInFinder = vi.fn().mockResolvedValue({ ok: true });
     const copySegmentSupplementRelativePath = vi.fn().mockResolvedValue({ ok: true });
@@ -2918,6 +3038,7 @@ describe('LoadedWorkspaceFrame', () => {
       copySegmentSupplementAbsolutePath,
       copySegmentSupplementRelativePath,
       onRenameSegmentSupplement,
+      onRetrySupplementTranscription,
       openSegmentSupplementDocument,
       revealSegmentSupplementInFinder,
       session,
@@ -2944,7 +3065,15 @@ describe('LoadedWorkspaceFrame', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+    ).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '生成转录',
+      '重命名',
+      '删除',
+    ]);
     const segment = detailWithSupplement.segments[0];
     if (!segment) {
       throw new Error('birthday detail fixture must include a segment');

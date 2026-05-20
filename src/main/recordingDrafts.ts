@@ -1358,13 +1358,13 @@ async function readOptionalFinalizedTranscriptFile(
     readonly markdownFileName: 'segment.md' | 'supplement.md';
     readonly objectType: 'segment' | 'supplement';
   }
-): Promise<{ readonly exists: boolean; readonly text: string }> {
+): Promise<{ readonly exists: boolean; readonly text: string; readonly baselineHash: string }> {
   let fd: number;
   try {
     fd = openFileForReadInDirectory(directory, directoryIdentity, options.markdownFileName);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { exists: false, text: '' };
+      return { exists: false, text: '', baselineHash: transcriptDigest('') };
     }
     throw error;
   }
@@ -1384,6 +1384,7 @@ async function readOptionalFinalizedTranscriptFile(
     return {
       exists: text.length > 0,
       text,
+      baselineHash: transcriptDigest(text),
     };
   } finally {
     closeSync(fd);
@@ -1408,7 +1409,11 @@ export async function readFinalizedAudioSegmentContent({
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: { readonly exists: boolean; readonly text: string };
+      readonly transcript: {
+        readonly exists: boolean;
+        readonly text: string;
+        readonly baselineHash: string;
+      };
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1508,7 +1513,11 @@ export async function readFinalizedAudioSegmentBackfillSource({
       readonly audioFileDescriptor: number;
       readonly dispose: () => void;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: { readonly exists: boolean; readonly text: string };
+      readonly transcript: {
+        readonly exists: boolean;
+        readonly text: string;
+        readonly baselineHash: string;
+      };
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1537,7 +1546,7 @@ export async function readFinalizedAudioSegmentBackfillSource({
     }
     const transcript =
       transcriptReadMode === 'assume-missing'
-        ? { exists: false, text: '' }
+        ? { exists: false, text: '', baselineHash: transcriptDigest('') }
         : await readOptionalFinalizedTranscriptFile(target.directory, recordingDirectoryIdentity, {
             markdownFileName: 'segment.md',
             objectType: 'segment',
@@ -1612,7 +1621,11 @@ export async function readFinalizedAudioSegmentSupplementContent({
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: { readonly exists: boolean; readonly text: string };
+      readonly transcript: {
+        readonly exists: boolean;
+        readonly text: string;
+        readonly baselineHash: string;
+      };
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1725,7 +1738,11 @@ export async function readFinalizedAudioSegmentSupplementBackfillSource({
       readonly audioFileDescriptor: number;
       readonly dispose: () => void;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: { readonly exists: boolean; readonly text: string };
+      readonly transcript: {
+        readonly exists: boolean;
+        readonly text: string;
+        readonly baselineHash: string;
+      };
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1760,7 +1777,7 @@ export async function readFinalizedAudioSegmentSupplementBackfillSource({
     }
     const transcript =
       transcriptReadMode === 'assume-missing'
-        ? { exists: false, text: '' }
+        ? { exists: false, text: '', baselineHash: transcriptDigest('') }
         : await readOptionalFinalizedTranscriptFile(target.directory, supplementDirectoryIdentity, {
             markdownFileName: 'supplement.md',
             objectType: 'supplement',

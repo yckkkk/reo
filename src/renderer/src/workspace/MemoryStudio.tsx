@@ -33,6 +33,7 @@ import {
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
 import { SegmentActionsMenu } from './SegmentActionsMenu';
+import { SegmentContentActionsMenu } from './SegmentContentActionsMenu';
 import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
@@ -46,8 +47,11 @@ import {
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
+  SegmentContentClearTarget,
+  SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
+  SegmentTranscriptEditTarget,
 } from './segmentActionTargets';
 import type {
   WorkspaceFinalizedAudioSegmentContent,
@@ -74,9 +78,12 @@ type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
+  readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
   readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
   readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
+  readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
@@ -166,7 +173,10 @@ type NoteMemorySegment = Extract<MemorySegment, { readonly type: 'note' }>;
 type AudioMemorySegmentSupplement = Extract<MemorySegmentSupplement, { readonly type: 'audio' }>;
 type NoteMemorySegmentSupplement = Extract<MemorySegmentSupplement, { readonly type: 'note' }>;
 type LastTranscriptionAttempt = AudioMemorySegment['lastTranscriptionAttempt'];
-type TranscriptProjection = { readonly exists: boolean; readonly text: string } | null | undefined;
+type TranscriptProjection =
+  | { readonly exists: boolean; readonly text: string; readonly baselineHash: string }
+  | null
+  | undefined;
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
 type SegmentAudioResource = {
   audioUrl: string;
@@ -374,6 +384,9 @@ function contentTabDomIds(segmentDomId: string, value: ActiveContentTab) {
 }
 
 function transcriptContentTabTitle(segment: MemorySegment | null) {
+  if (segment?.contentTitle) {
+    return segment.contentTitle;
+  }
   return segment && isNoteMemorySegment(segment) ? '正文' : '转录';
 }
 
@@ -2117,9 +2130,12 @@ export function MemoryStudio({
   memory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
+  onClearSegmentContent,
+  onEditSegmentTranscript,
   onEditNoteSegment,
   onEditNoteSegmentSupplement,
   onRenameSegmentSupplement,
+  onRenameSegmentContent,
   onRenameSegment,
   transcriptionBackfill,
   onSegmentFocusConsumed,
@@ -2928,7 +2944,7 @@ export function MemoryStudio({
                                   kind: 'segment',
                                   memoryId: memory.memoryId,
                                   segmentId: segment.segmentId,
-                                  title: segment.title,
+                                  title: transcriptContentTabTitle(segment),
                                 });
                                 return;
                               }
@@ -3147,7 +3163,7 @@ export function MemoryStudio({
                             onSelect={() => setActiveContentTab('transcript')}
                             panelId={contentTab.panelId}
                             renderMoreMenu={(trigger, onCloseAutoFocus) => (
-                              <SegmentActionsMenu
+                              <SegmentContentActionsMenu
                                 actionIdentity={{
                                   memoryId: memory.memoryId,
                                   segmentId: selectedSegment.segmentId,
@@ -3156,58 +3172,93 @@ export function MemoryStudio({
                                 }}
                                 contentAlign="center"
                                 onCloseAutoFocus={onCloseAutoFocus}
-                                onDelete={() => {
+                                clearDisabled={
+                                  isAudioMemorySegment(selectedSegment)
+                                    ? !isAudioSegmentContent(segmentContent)
+                                    : !noteSegmentContent
+                                }
+                                contentKind={
+                                  isAudioMemorySegment(selectedSegment) ? 'transcript' : 'body'
+                                }
+                                editDisabled={
+                                  isAudioMemorySegment(selectedSegment)
+                                    ? !isAudioSegmentContent(segmentContent)
+                                    : !noteSegmentContent
+                                }
+                                menuLabel={`${contentTab.title} 更多操作`}
+                                onClear={() => {
                                   setPrimaryContentMenuOpen(false);
-                                  onDeleteSegment({
-                                    memoryId: memory.memoryId,
-                                    segment: selectedSegment,
-                                  });
+                                  if (
+                                    isAudioMemorySegment(selectedSegment) &&
+                                    isAudioSegmentContent(segmentContent)
+                                  ) {
+                                    onClearSegmentContent({
+                                      memoryId: memory.memoryId,
+                                      segment: selectedSegment,
+                                      contentKind: 'transcript',
+                                      currentTitle: contentTab.title,
+                                      baselineTranscriptHash:
+                                        segmentContent.transcript.baselineHash,
+                                    });
+                                    return;
+                                  }
+                                  if (
+                                    !isAudioMemorySegment(selectedSegment) &&
+                                    noteSegmentContent
+                                  ) {
+                                    onClearSegmentContent({
+                                      memoryId: memory.memoryId,
+                                      segment: selectedSegment,
+                                      contentKind: 'body',
+                                      currentTitle: contentTab.title,
+                                      baselineContentHash: noteSegmentContent.baselineContentHash,
+                                    });
+                                  }
+                                }}
+                                onEdit={() => {
+                                  setPrimaryContentMenuOpen(false);
+                                  if (
+                                    isAudioMemorySegment(selectedSegment) &&
+                                    isAudioSegmentContent(segmentContent)
+                                  ) {
+                                    onEditSegmentTranscript({
+                                      memoryId: selectedSegment.memoryId,
+                                      segmentId: selectedSegment.segmentId,
+                                      title: contentTab.title,
+                                      transcriptText: segmentContent.transcript.text,
+                                      baselineTranscriptHash:
+                                        segmentContent.transcript.baselineHash,
+                                    });
+                                    return;
+                                  }
+                                  if (
+                                    !isAudioMemorySegment(selectedSegment) &&
+                                    noteSegmentContent &&
+                                    onEditNoteSegment
+                                  ) {
+                                    onEditNoteSegment({
+                                      memoryId: selectedSegment.memoryId,
+                                      segmentId: selectedSegment.segmentId,
+                                      title: selectedSegment.title,
+                                      bodyMarkdown: noteSegmentContent.bodyMarkdown,
+                                      baselineContentHash: noteSegmentContent.baselineContentHash,
+                                    });
+                                  }
                                 }}
                                 onOpenChange={setPrimaryContentMenuOpen}
-                                onRequestTranscriptionBackfill={
-                                  isAudioMemorySegment(selectedSegment)
-                                    ? () => {
-                                        setPrimaryContentMenuOpen(false);
-                                        if (!isAudioMemorySegment(selectedSegment)) {
-                                          return;
-                                        }
-                                        if (selectedSegment.transcript.exists) {
-                                          setConfirmingTranscriptionBackfill({
-                                            kind: 'segment',
-                                            memoryId: memory.memoryId,
-                                            segmentId: selectedSegment.segmentId,
-                                            title: selectedSegment.title,
-                                          });
-                                          return;
-                                        }
-                                        retrySelectedSegmentTranscription?.();
-                                      }
-                                    : undefined
-                                }
                                 onRename={() => {
                                   setPrimaryContentMenuOpen(false);
-                                  onRenameSegment({
+                                  onRenameSegmentContent({
                                     memoryId: memory.memoryId,
                                     segment: selectedSegment,
+                                    contentKind: isAudioMemorySegment(selectedSegment)
+                                      ? 'transcript'
+                                      : 'body',
+                                    currentTitle: contentTab.title,
                                   });
                                 }}
                                 open={primaryContentMenuOpen}
-                                segmentTitle={selectedSegment.title}
-                                transcriptExists={
-                                  isAudioMemorySegment(selectedSegment)
-                                    ? selectedSegment.transcript.exists
-                                    : false
-                                }
-                                transcriptionBackfillDisabledReason={
-                                  isAudioMemorySegment(selectedSegment)
-                                    ? transcriptionBackfillDisabledReason({
-                                        baseReason: transcriptionBackfill?.disabledReason,
-                                        running: selectedSegmentTranscriptionRunning === true,
-                                      })
-                                    : null
-                                }
                                 trigger={trigger}
-                                triggerLabel={`${contentTab.title} 更多操作`}
                               />
                             )}
                             tabId={contentTab.tabId}
@@ -3512,7 +3563,7 @@ export function MemoryStudio({
           }
         }}
         title="重新生成转录？"
-        description={`将覆盖「${confirmingTranscriptionBackfill?.title ?? ''}」当前转录。开始后如果文件内容被外部修改，Reo 会停止覆盖。`}
+        description={`将覆盖当前转录正文，不会更改「${confirmingTranscriptionBackfill?.title ?? '转录'}」这个名称。开始后如果文件内容被外部修改，Reo 会停止覆盖。`}
         confirmLabel="重新生成"
         disabled={false}
         onConfirm={() => {

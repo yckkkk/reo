@@ -338,6 +338,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
+    updateSegmentContentTitle: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
     updateSegmentContentTabOrder: vi.fn(),
     saveTranscript: vi.fn(async () => ({

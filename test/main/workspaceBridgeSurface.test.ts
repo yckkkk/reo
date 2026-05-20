@@ -64,6 +64,7 @@ const workspaceBridgeKeys = [
   'discardSegmentSupplementRecordingDraft',
   'updateMemoryTitle',
   'updateSegmentTitle',
+  'updateSegmentContentTitle',
   'updateSegmentSupplementTitle',
   'updateSegmentContentTabOrder',
   'saveTranscript',
@@ -498,6 +499,13 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     segmentId: 'seg_1',
     title: '录音1',
   });
+  await bridge.updateSegmentContentTitle({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    contentTitle: '访谈转录',
+  });
   await bridge.updateSegmentSupplementTitle({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -557,6 +565,16 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         title: '录音1',
+      },
+    },
+    {
+      channel: 'workspace:updateSegmentContentTitle',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        contentTitle: '访谈转录',
       },
     },
     {

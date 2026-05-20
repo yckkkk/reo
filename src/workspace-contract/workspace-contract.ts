@@ -316,6 +316,7 @@ const workspaceAudioSegmentProjectionSchema = z.strictObject({
   segmentId: segmentIdSchema,
   type: z.literal('audio'),
   title: z.string(),
+  contentTitle: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   durationMs: z.number().int().nonnegative(),
@@ -335,6 +336,7 @@ const workspaceNoteSegmentProjectionSchema = z.strictObject({
   segmentId: segmentIdSchema,
   type: z.literal('note'),
   title: z.string(),
+  contentTitle: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   bodyByteLength: z.number().int().nonnegative(),
@@ -628,6 +630,14 @@ export const workspaceUpdateSegmentTitleRequestSchema = workspaceMemoryIdRequest
   })
   .strict();
 
+export const workspaceUpdateSegmentContentTitleRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    contentTitle: workspaceRecordingTitleSchema,
+  })
+  .strict();
+
 export const workspaceUpdateSegmentSupplementTitleRequestSchema = workspaceMemoryIdRequestSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -855,6 +865,9 @@ export const workspaceUpdateSegmentTitleResponseSchema = z.discriminatedUnion('o
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceUpdateSegmentContentTitleResponseSchema =
+  workspaceUpdateSegmentTitleResponseSchema;
+
 export const workspaceUpdateSegmentSupplementTitleResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -996,6 +1009,7 @@ export const workspaceReadFinalizedAudioSegmentResponseSchema = z.discriminatedU
       transcript: z.strictObject({
         exists: z.boolean(),
         text: z.string(),
+        baselineHash: baselineContentHashSchema,
       }),
     }),
   }),
@@ -1018,6 +1032,7 @@ export const workspaceReadFinalizedAudioSegmentSupplementResponseSchema = z.disc
         transcript: z.strictObject({
           exists: z.boolean(),
           text: z.string(),
+          baselineHash: baselineContentHashSchema,
         }),
       }),
     }),
@@ -1366,6 +1381,7 @@ export const workspaceRecordingFinalizeRequestSchema = workspaceSegmentIdRequest
 export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingReadRequestSchema
   .extend({
     markdown: z.string(),
+    baselineTranscriptHash: baselineContentHashSchema.optional(),
   })
   .strict();
 
@@ -1374,6 +1390,7 @@ export const workspaceSegmentSupplementMarkdownSaveRequestSchema =
     .omit({ requestId: true, maxBytes: true })
     .extend({
       markdown: z.string(),
+      baselineTranscriptHash: baselineContentHashSchema.optional(),
     })
     .strict();
 
@@ -1628,6 +1645,9 @@ export type WorkspaceUpdateMemoryTitleRequest = z.infer<
 export type WorkspaceUpdateSegmentTitleRequest = z.infer<
   typeof workspaceUpdateSegmentTitleRequestSchema
 >;
+export type WorkspaceUpdateSegmentContentTitleRequest = z.infer<
+  typeof workspaceUpdateSegmentContentTitleRequestSchema
+>;
 export type WorkspaceUpdateSegmentSupplementTitleRequest = z.infer<
   typeof workspaceUpdateSegmentSupplementTitleRequestSchema
 >;
@@ -1663,6 +1683,9 @@ export type WorkspaceUpdateMemoryTitleResponse = z.infer<
 >;
 export type WorkspaceUpdateSegmentTitleResponse = z.infer<
   typeof workspaceUpdateSegmentTitleResponseSchema
+>;
+export type WorkspaceUpdateSegmentContentTitleResponse = z.infer<
+  typeof workspaceUpdateSegmentContentTitleResponseSchema
 >;
 export type WorkspaceUpdateSegmentSupplementTitleResponse = z.infer<
   typeof workspaceUpdateSegmentSupplementTitleResponseSchema

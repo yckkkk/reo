@@ -12,8 +12,11 @@ import { MemoryRail } from './MemoryRail';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
+  SegmentContentClearTarget,
+  SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
+  SegmentTranscriptEditTarget,
 } from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
@@ -27,9 +30,12 @@ type LoadedWorkspaceFrameProps = {
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
+  readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
   readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
   readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
+  readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
@@ -50,9 +56,12 @@ export function LoadedWorkspaceFrame({
   onDeleteMemory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
+  onClearSegmentContent,
+  onEditSegmentTranscript,
   onEditNoteSegment,
   onEditNoteSegmentSupplement,
   onRenameMemory,
+  onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
   transcriptionBackfill,
@@ -97,9 +106,12 @@ export function LoadedWorkspaceFrame({
           memory={currentMemory}
           onDeleteSegment={onDeleteSegment}
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
+          onClearSegmentContent={onClearSegmentContent}
+          onEditSegmentTranscript={onEditSegmentTranscript}
           {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
           {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
+          onRenameSegmentContent={onRenameSegmentContent}
           onRenameSegment={onRenameSegment}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}

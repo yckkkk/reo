@@ -26,6 +26,7 @@ export const workspaceMemoryMarkdownDataSchema = workspaceMarkdownSharedSemantic
 });
 
 export const workspaceSegmentMarkdownDataSchema = workspaceMarkdownSharedSemanticDataSchema.extend({
+  content_title: z.string().optional(),
   kind: workspaceMarkdownObjectKindSchema.optional(),
   occurred_at: z.string().optional(),
   language: z.string().optional(),

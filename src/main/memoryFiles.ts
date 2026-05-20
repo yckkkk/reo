@@ -191,16 +191,19 @@ type SupplementObjectManifest = AudioSupplementObjectManifest | NoteSupplementOb
 
 type FinalizedSegmentSemanticTruth = SegmentObjectManifest & {
   readonly title: string;
+  readonly contentTitle?: string;
   readonly markdownContent: string;
 };
 
 type FinalizedAudioSegmentSemanticTruth = AudioSegmentObjectManifest & {
   readonly title: string;
+  readonly contentTitle?: string;
   readonly markdownContent: string;
 };
 
 type FinalizedNoteSegmentSemanticTruth = NoteSegmentObjectManifest & {
   readonly title: string;
+  readonly contentTitle?: string;
   readonly markdownContent: string;
 };
 
@@ -377,6 +380,13 @@ export interface UpdateSegmentTitleInput extends MemoryTargetInput {
   readonly workspaceId: string;
   readonly segmentId: string;
   readonly title: string;
+  readonly now: () => string;
+}
+
+export interface UpdateSegmentContentTitleInput extends MemoryTargetInput {
+  readonly workspaceId: string;
+  readonly segmentId: string;
+  readonly contentTitle: string;
   readonly now: () => string;
 }
 
@@ -2636,6 +2646,9 @@ async function readFinalizedSegmentMetadata(
   return {
     ...manifest,
     title: markdown.data.title,
+    ...('content_title' in markdown.data && markdown.data.content_title !== undefined
+      ? { contentTitle: markdown.data.content_title }
+      : {}),
     markdownContent: markdown.content,
   };
 }
@@ -2671,6 +2684,7 @@ async function updateSegmentMarkdownInKnownDirectory({
   readonly directoryIdentity: DirectoryIdentity;
   readonly update: (current: { readonly title: string; readonly content: string }) => {
     readonly title: string;
+    readonly contentTitle?: string;
     readonly content: string;
   };
 }): Promise<void> {
@@ -2690,6 +2704,7 @@ async function updateSegmentMarkdownInKnownDirectory({
       data: {
         ...current.data,
         title: next.title,
+        ...(next.contentTitle !== undefined ? { content_title: next.contentTitle } : {}),
         kind: currentKind ?? 'audio',
       },
       content: nextContent,
@@ -3597,6 +3612,7 @@ async function finalizedSegmentProjectionFromFileTruth({
     memoryId: metadata.memoryId,
     segmentId,
     title: metadata.title,
+    ...(metadata.contentTitle !== undefined ? { contentTitle: metadata.contentTitle } : {}),
     createdAt: metadata.createdAt,
     updatedAt,
     supplementCount: supplements.length,
@@ -6719,11 +6735,12 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
     return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       const currentMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
-      const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId);
-      const sourceFileTruth = fileTruths.find(
-        (fileTruth) => fileTruth.segmentId === input.segmentId
+      const sourceFileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
       );
-      if (!sourceFileTruth) {
+      if (!sourceFileTruth || sourceFileTruth.metadata.workspaceId !== input.workspaceId) {
         throw new Error('Finalized segment projection does not match file truth');
       }
       const renamedAt = input.now();
@@ -6777,6 +6794,76 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
       const refreshedFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
         rootPath: input.rootPath,
         recordingDirectory: finalDirectory,
+        memoryId: input.memoryId,
+      });
+      const refreshedSegment = refreshedFileTruth
+        ? await finalizedSegmentProjectionFromFileTruth({
+            rootPath: input.rootPath,
+            workspaceId: input.workspaceId,
+            fileTruth: refreshedFileTruth,
+          })
+        : null;
+      if (!refreshedSegment || refreshedSegment.segmentId !== input.segmentId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+      return {
+        ok: true,
+        value: {
+          memory,
+          segment: refreshedSegment,
+        },
+      };
+    });
+  } catch (error) {
+    return updateSegmentTitleError(error);
+  }
+}
+
+export async function updateSegmentContentTitleFromFileTruth(
+  input: UpdateSegmentContentTitleInput
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+  }>
+> {
+  try {
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const currentMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+      const sourceFileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
+      );
+      if (!sourceFileTruth || sourceFileTruth.metadata.workspaceId !== input.workspaceId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+
+      const updatedAt = input.now();
+      await updateSegmentMarkdownInKnownDirectory({
+        directory: sourceFileTruth.recordingDirectory,
+        directoryIdentity: sourceFileTruth.recordingDirectoryIdentity,
+        update: ({ title, content }) => ({
+          title,
+          contentTitle: input.contentTitle,
+          content,
+        }),
+      });
+
+      const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
+      await touchWorkspacePathBestEffort(sourceFileTruth.recordingDirectory, updatedAt);
+      await touchWorkspacePathBestEffort(memoryDirectoryPath, updatedAt);
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memory = await refreshMemoryIndexEntry(
+        input.rootPath,
+        input.memoryId,
+        input.assertWorkspaceUsable
+      ).catch(() => summarizeMemory(input.rootPath, currentMemory));
+      const refreshedFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
+        recordingDirectory: sourceFileTruth.recordingDirectory,
         memoryId: input.memoryId,
       });
       const refreshedSegment = refreshedFileTruth

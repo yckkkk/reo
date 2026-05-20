@@ -77,6 +77,7 @@ import {
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
@@ -205,6 +206,8 @@ import {
   workspaceUpdateMemoryTitleResponseSchema,
   workspaceUpdateSegmentContentTabOrderRequestSchema,
   workspaceUpdateSegmentContentTabOrderResponseSchema,
+  workspaceUpdateSegmentContentTitleRequestSchema,
+  workspaceUpdateSegmentContentTitleResponseSchema,
   workspaceUpdateSegmentSupplementTitleRequestSchema,
   workspaceUpdateSegmentSupplementTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
@@ -300,6 +303,7 @@ import {
   restoreDeletedSegmentFromFileTruth,
   updateMemoryTitleFromFileTruth,
   updateSegmentContentTabOrderFromFileTruth,
+  updateSegmentContentTitleFromFileTruth,
   updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from './memoryFiles.js';
@@ -457,6 +461,10 @@ export interface HandleUpdateMemoryTitleOptions extends HandleWorkspaceRequestOp
 }
 
 export interface HandleUpdateSegmentTitleOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => string;
+}
+
+export interface HandleUpdateSegmentContentTitleOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
 
@@ -3589,6 +3597,53 @@ export async function handleUpdateSegmentTitleForTest(
   return handleUpdateSegmentTitleCore(options);
 }
 
+function handleUpdateSegmentContentTitleCore({
+  now = nowIso,
+  ...options
+}: HandleUpdateSegmentContentTitleOptions): Promise<
+  z.infer<typeof workspaceUpdateSegmentContentTitleResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceUpdateSegmentContentTitleRequestSchema,
+    invalidMessage: 'updateSegmentContentTitle request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment content title workspace does not match the active handle'
+          );
+        }
+
+        const result = await updateSegmentContentTitleFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          contentTitle: request.contentTitle,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceUpdateSegmentContentTitleResponseSchema.parse(result);
+      }),
+  });
+}
+
+export async function handleUpdateSegmentContentTitle(
+  options: HandleUpdateSegmentContentTitleOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentContentTitleResponseSchema>> {
+  return handleUpdateSegmentContentTitleCore(options);
+}
+
+export async function handleUpdateSegmentContentTitleForTest(
+  options: HandleUpdateSegmentContentTitleOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentContentTitleResponseSchema>> {
+  return handleUpdateSegmentContentTitleCore(options);
+}
+
 function handleUpdateSegmentContentTabOrderCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceUpdateSegmentContentTabOrderResponseSchema>> {
@@ -5026,6 +5081,19 @@ export async function handleFinalizeSegmentSupplementRecordingDraftForTest(
   return handleFinalizeSegmentSupplementRecordingDraftCore(options);
 }
 
+function handleSaveTranscriptCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRecordingMarkdownSaveResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRecordingMarkdownSaveRequestSchema,
+    invalidMessage: 'save transcript request is invalid',
+    run: (request, handle, assertUsable) => saveTranscriptWithHandle(request, handle, assertUsable),
+  });
+}
+
 function handleSaveSegmentSupplementTranscriptCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceSegmentSupplementMarkdownSaveResponseSchema>> {
@@ -5135,6 +5203,33 @@ export async function handleRequestSegmentSupplementTranscriptionBackfillForTest
   return handleRequestSegmentSupplementTranscriptionBackfillCore(options);
 }
 
+function saveTranscriptWithHandle(
+  request: z.infer<typeof workspaceRecordingMarkdownSaveRequestSchema>,
+  handle: RequiredWorkspaceHandle,
+  assertUsable: AssertWorkspaceHandleUsable
+): Promise<z.infer<typeof workspaceRecordingMarkdownSaveResponseSchema>> {
+  return withUsableWorkspaceHandle(assertUsable, async () => {
+    const result = await saveRecordingMarkdown({
+      rootPath: handle.canonicalRoot,
+      workspaceId: handle.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      fileName: 'transcript.md',
+      markdown: request.markdown,
+      assertWorkspaceUsable: assertUsable,
+      ...(request.baselineTranscriptHash !== undefined
+        ? {
+            allowOverwrite: true,
+            expectedTranscriptDigest: request.baselineTranscriptHash,
+          }
+        : {}),
+    });
+    return workspaceRecordingMarkdownSaveResponseSchema.parse(
+      result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
+    );
+  });
+}
+
 function saveSegmentSupplementTranscriptWithHandle(
   request: z.infer<typeof workspaceSegmentSupplementMarkdownSaveRequestSchema>,
   handle: RequiredWorkspaceHandle,
@@ -5155,6 +5250,12 @@ function saveSegmentSupplementTranscriptWithHandle(
       supplementId: request.supplementId,
       markdown: request.markdown,
       assertWorkspaceUsable: assertUsable,
+      ...(request.baselineTranscriptHash !== undefined
+        ? {
+            allowOverwrite: true,
+            expectedTranscriptDigest: request.baselineTranscriptHash,
+          }
+        : {}),
     });
     return workspaceSegmentSupplementMarkdownSaveResponseSchema.parse(
       result.ok
@@ -5170,6 +5271,12 @@ function saveSegmentSupplementTranscriptWithHandle(
         : result
     );
   });
+}
+
+export async function handleSaveTranscriptForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRecordingMarkdownSaveResponseSchema>> {
+  return handleSaveTranscriptCore(options);
 }
 
 export async function handleSaveSegmentSupplementTranscriptForTest(
@@ -5825,6 +5932,16 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL, (event, input) =>
+    handleUpdateSegmentContentTitle({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, (event, input) =>
     handleUpdateSegmentSupplementTitle({
       event,
@@ -6367,21 +6484,7 @@ export function registerWorkspaceIpc({
     WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
     workspaceRecordingMarkdownSaveRequestSchema,
     'save transcript request is invalid',
-    (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        const result = await saveRecordingMarkdown({
-          rootPath: handle.canonicalRoot,
-          workspaceId: handle.workspaceId,
-          memoryId: request.memoryId,
-          segmentId: request.segmentId,
-          fileName: 'transcript.md',
-          markdown: request.markdown,
-          assertWorkspaceUsable: assertUsable,
-        });
-        return workspaceRecordingMarkdownSaveResponseSchema.parse(
-          result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
-        );
-      })
+    saveTranscriptWithHandle
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,

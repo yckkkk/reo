@@ -34,12 +34,15 @@ import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
 import { SegmentDeleteDialog } from './workspace/SegmentDeleteDialog';
+import { SegmentContentRenameDialog } from './workspace/SegmentContentRenameDialog';
 import { SegmentSupplementDeleteDialog } from './workspace/SegmentSupplementDeleteDialog';
 import { SegmentSupplementRenameDialog } from './workspace/SegmentSupplementRenameDialog';
 import { SegmentRenameDialog } from './workspace/SegmentRenameDialog';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
+  SegmentContentClearTarget,
+  SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './workspace/segmentActionTargets';
@@ -49,9 +52,14 @@ import {
   type SavedRecordingContent,
 } from './workspace/RecordingOverlay';
 import { NoteEditorOverlay } from './workspace/NoteEditorOverlay';
+import {
+  TranscriptEditorOverlay,
+  type TranscriptEditorTarget,
+} from './workspace/TranscriptEditorOverlay';
 import type { NoteEditorTarget } from './workspace/noteEditorModel';
 import { RecordingRecoveryDialog } from './workspace/RecordingRecoveryDialog';
 import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
+import { WorkspaceDangerConfirmDialog } from './workspace/WorkspaceDangerConfirmDialog';
 import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
 import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
@@ -85,8 +93,10 @@ import {
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
   saveTranscript,
+  writeSegmentContent,
   updateMemorySpaceTitle,
   updateMemoryTitle,
+  updateSegmentContentTitle,
   updateSegmentSupplementTitle,
   updateSegmentTitle,
   type FinalizedAudioSegment,
@@ -210,6 +220,7 @@ function canShowInlineMemoryRail(): boolean {
 }
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const NOTE_EDITOR_NAVIGATION_BLOCKED = '当前笔记尚未完成，请先保存或关闭笔记。';
+const TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED = '当前转录尚未完成，请先保存或关闭转录。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
 const TRANSCRIPTION_BACKFILL_ERROR = '无法生成转录。';
@@ -415,6 +426,23 @@ function mergeSegmentIntoMemoryDetailIfCurrentTitle(
   return mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, workspaceId);
 }
 
+function mergeSegmentIntoMemoryDetailIfCurrentContentTitle(
+  currentDetail: MemoryDetailQueryData | undefined,
+  memory: WorkspaceMemorySummary,
+  segment: WorkspaceMemoryDetail['segments'][number],
+  workspaceId: string,
+  expectedTitle: string,
+  fallbackTitle: string
+): MemoryDetailQueryData | undefined {
+  const currentSegment = currentDetail?.detail.segments.find(
+    (candidate) => candidate.segmentId === segment.segmentId
+  );
+  if ((currentSegment?.contentTitle ?? fallbackTitle) !== expectedTitle) {
+    return currentDetail;
+  }
+  return mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, workspaceId);
+}
+
 function mergeSegmentSupplementIntoMemoryDetailIfCurrentTitle(
   currentDetail: MemoryDetailQueryData | undefined,
   memory: WorkspaceMemorySummary,
@@ -605,12 +633,19 @@ export function App() {
   const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [segmentDeleteTarget, setSegmentDeleteTarget] = useState<SegmentDeleteTarget | null>(null);
+  const [segmentContentClearTarget, setSegmentContentClearTarget] =
+    useState<SegmentContentClearTarget | null>(null);
+  const [segmentContentRenameTarget, setSegmentContentRenameTarget] =
+    useState<SegmentContentRenameTarget | null>(null);
+  const [transcriptEditorTarget, setTranscriptEditorTarget] =
+    useState<TranscriptEditorTarget | null>(null);
   const [segmentRenameTarget, setSegmentRenameTarget] = useState<SegmentRenameTarget | null>(null);
   const [segmentSupplementDeleteTarget, setSegmentSupplementDeleteTarget] =
     useState<SegmentSupplementDeleteTarget | null>(null);
   const [segmentSupplementRenameTarget, setSegmentSupplementRenameTarget] =
     useState<SegmentSupplementRenameTarget | null>(null);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
+  const [segmentContentClearPending, setSegmentContentClearPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
   const [noteEditorFlow, setNoteEditorFlow] = useState<NoteEditorFlow>({ status: 'closed' });
@@ -743,22 +778,28 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if ((!recordingTarget || !recordingCloseBlocked) && !noteEditorTarget) {
+    const interruptionMessage =
+      recordingTarget && recordingCloseBlocked
+        ? RECORDING_FLOW_NAVIGATION_BLOCKED
+        : noteEditorTarget
+          ? NOTE_EDITOR_NAVIGATION_BLOCKED
+          : transcriptEditorTarget
+            ? TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED
+            : null;
+    if (!interruptionMessage) {
       return;
     }
 
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
-      event.returnValue = recordingTarget
-        ? RECORDING_FLOW_NAVIGATION_BLOCKED
-        : NOTE_EDITOR_NAVIGATION_BLOCKED;
+      event.returnValue = interruptionMessage;
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [noteEditorTarget, recordingCloseBlocked, recordingTarget]);
+  }, [noteEditorTarget, recordingCloseBlocked, recordingTarget, transcriptEditorTarget]);
 
   useEffect(() => {
     noteEditorTargetRef.current = noteEditorTarget;
@@ -1048,6 +1089,9 @@ export function App() {
     setMemorySpaceRemoveTarget(null);
     setMemorySpaceRenameTarget(null);
     setSegmentDeleteTarget(null);
+    setSegmentContentClearTarget(null);
+    setSegmentContentRenameTarget(null);
+    setTranscriptEditorTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
@@ -1116,6 +1160,10 @@ export function App() {
     }
     if (noteEditorTarget) {
       toast.error(NOTE_EDITOR_NAVIGATION_BLOCKED);
+      return true;
+    }
+    if (transcriptEditorTarget) {
+      toast.error(TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED);
       return true;
     }
 
@@ -2747,6 +2795,126 @@ export function App() {
     return null;
   }
 
+  async function saveRenamedSegmentContent(target: SegmentContentRenameTarget, title: string) {
+    const nextTitle = title.trim();
+    if (nextTitle === target.currentTitle.trim()) {
+      return null;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+    const memory =
+      mutationSession.snapshot.memories.find(
+        (candidate) => candidate.memoryId === target.memoryId
+      ) ?? null;
+    if (!memory) {
+      return '无法确认片段所属记忆。';
+    }
+
+    const optimisticSegment = { ...target.segment, contentTitle: nextTitle };
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: mutationSession.workspaceId,
+      memoryId: target.memoryId,
+    });
+    setSegmentContentRenameTarget(null);
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
+      mergeSegmentIntoMemoryDetailIfCurrentContentTitle(
+        currentDetail,
+        memory,
+        optimisticSegment,
+        mutationSession.workspaceId,
+        target.currentTitle,
+        target.currentTitle
+      )
+    );
+    setSegmentFocusIntent({
+      memoryId: target.memoryId,
+      segmentId: target.segment.segmentId,
+    });
+
+    void (async () => {
+      const rollback = () => {
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          detailQueryKey,
+          (currentDetail) =>
+            mergeSegmentIntoMemoryDetailIfCurrentContentTitle(
+              currentDetail,
+              memory,
+              target.segment,
+              mutationSession.workspaceId,
+              nextTitle,
+              target.currentTitle
+            )
+        );
+      };
+
+      try {
+        const response = await updateSegmentContentTitle({
+          workspaceHandle: mutationSession.workspaceHandle,
+          workspaceId: mutationSession.workspaceId,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+          contentTitle: nextTitle,
+        });
+
+        if (!mutationSessionIsActive()) {
+          return;
+        }
+
+        if (!response.ok) {
+          rollback();
+          toast.error('无法保存内容名称', {
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名内容。'),
+          });
+          return;
+        }
+
+        const snapshotQueryKey = workspaceSnapshotQueryKey(mutationSession);
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) =>
+            mergeMemoryIntoSnapshot(
+              currentSnapshot ?? mutationSession.snapshot,
+              response.value.memory
+            )
+        );
+        queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+          detailQueryKey,
+          (currentDetail) =>
+            mergeSegmentIntoMemoryDetailIfCurrentContentTitle(
+              currentDetail,
+              response.value.memory,
+              response.value.segment,
+              mutationSession.workspaceId,
+              nextTitle,
+              target.currentTitle
+            )
+        );
+        setWorkspaceSession((currentSession) =>
+          currentSession?.workspaceHandle === mutationSession.workspaceHandle &&
+          currentSession.workspaceId === mutationSession.workspaceId
+            ? mergeMemoryIntoSession(currentSession, response.value.memory)
+            : currentSession
+        );
+        setSegmentFocusIntent({
+          memoryId: response.value.segment.memoryId,
+          segmentId: response.value.segment.segmentId,
+        });
+      } catch (error) {
+        if (!mutationSessionIsActive()) {
+          return;
+        }
+
+        rollback();
+        toast.error('无法保存内容名称', {
+          description: unknownErrorDisplayMessage(error, '无法重命名内容。'),
+        });
+      }
+    })();
+
+    return null;
+  }
+
   async function saveRenamedSegmentSupplement(
     target: SegmentSupplementRenameTarget,
     title: string
@@ -3945,6 +4113,92 @@ export function App() {
     );
   }
 
+  function handleTranscriptEditorSaved(saved: {
+    readonly expectedSession: WorkspaceSession;
+    readonly memory: WorkspaceMemorySummary;
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) {
+    handleRecordingContentSaved({
+      expectedSession: saved.expectedSession,
+      memory: saved.memory,
+      memoryId: saved.memoryId,
+      segmentId: saved.segmentId,
+    });
+  }
+
+  async function clearSegmentContent(target: SegmentContentClearTarget) {
+    const session = activeWorkspaceSession;
+    if (!workspaceSessionMatches(session)) {
+      return;
+    }
+    setSegmentContentClearPending(true);
+    try {
+      if (target.contentKind === 'transcript') {
+        const response = await saveTranscript({
+          workspaceHandle: session.workspaceHandle,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+          markdown: '',
+          baselineTranscriptHash: target.baselineTranscriptHash,
+        });
+        if (!workspaceSessionMatches(session)) {
+          return;
+        }
+        if (!response.ok) {
+          toast.error('无法清空转录。', {
+            description: workspaceErrorDisplayMessage(response.error, '无法清空转录。'),
+          });
+          return;
+        }
+        handleRecordingContentSaved({
+          expectedSession: session,
+          memory: response.value.memory,
+          memoryId: target.memoryId,
+          segmentId: target.segment.segmentId,
+        });
+        setSegmentContentClearTarget(null);
+        return;
+      }
+
+      const response = await writeSegmentContent({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId: target.memoryId,
+        segmentId: target.segment.segmentId,
+        bodyMarkdown: '',
+        baselineContentHash: target.baselineContentHash,
+      });
+      if (!workspaceSessionMatches(session)) {
+        return;
+      }
+      if (!response.ok) {
+        toast.error('无法清空正文。', {
+          description: workspaceErrorDisplayMessage(response.error, '无法清空正文。'),
+        });
+        return;
+      }
+      handleNoteSegmentContentSaved({
+        bodyByteLength: response.value.bodyByteLength,
+        bodyMarkdown: '',
+        baselineContentHash: response.value.baselineContentHash,
+        memoryId: target.memoryId,
+        segmentId: target.segment.segmentId,
+        title: target.segment.title,
+      });
+      setSegmentContentClearTarget(null);
+    } catch (error) {
+      toast.error(target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。', {
+        description: unknownErrorDisplayMessage(
+          error,
+          target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。'
+        ),
+      });
+    } finally {
+      setSegmentContentClearPending(false);
+    }
+  }
+
   function selectMemory(memoryId: string) {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -4037,6 +4291,8 @@ export function App() {
             onDeleteMemory={openMemoryDeleteDialog}
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
+            onClearSegmentContent={setSegmentContentClearTarget}
+            onEditSegmentTranscript={setTranscriptEditorTarget}
             onEditNoteSegment={requestEditNoteSegment}
             onEditNoteSegmentSupplement={requestEditNoteSegmentSupplement}
             onSegmentFocusConsumed={(segmentId) => {
@@ -4046,6 +4302,7 @@ export function App() {
             }}
             onSelectMemory={selectMemory}
             onRenameMemory={setMemoryRenameTarget}
+            onRenameSegmentContent={setSegmentContentRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
@@ -4082,6 +4339,19 @@ export function App() {
           workspaceSession={activeWorkspaceSession}
         />
       ) : null}
+      {transcriptEditorTarget ? (
+        <TranscriptEditorOverlay
+          onOpenChange={(open) => {
+            if (!open) {
+              setTranscriptEditorTarget(null);
+            }
+          }}
+          onSaved={handleTranscriptEditorSaved}
+          open={transcriptEditorTarget !== null}
+          target={transcriptEditorTarget}
+          workspaceSession={activeWorkspaceSession}
+        />
+      ) : null}
       <RecordingRecoveryDialog
         canReview={recordingRecoveryDraft?.targetKind !== 'segment-supplement'}
         disabled={recordingRecoveryActionPending}
@@ -4113,6 +4383,37 @@ export function App() {
         }}
         onSave={saveRenamedSegment}
         open={segmentRenameTarget !== null}
+      />
+      <SegmentContentRenameDialog
+        target={segmentContentRenameTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSegmentContentRenameTarget(null);
+          }
+        }}
+        onSave={saveRenamedSegmentContent}
+        open={segmentContentRenameTarget !== null}
+      />
+      <WorkspaceDangerConfirmDialog
+        confirmLabel={segmentContentClearTarget?.contentKind === 'body' ? '清空正文' : '清空转录'}
+        description={
+          segmentContentClearTarget?.contentKind === 'body'
+            ? `将清空「${segmentContentClearTarget.currentTitle}」的正文内容。`
+            : `将清空「${segmentContentClearTarget?.currentTitle ?? '转录'}」的转录正文。`
+        }
+        disabled={segmentContentClearPending}
+        onConfirm={() => {
+          if (segmentContentClearTarget) {
+            void clearSegmentContent(segmentContentClearTarget);
+          }
+        }}
+        onOpenChange={(open) => {
+          if (!open && !segmentContentClearPending) {
+            setSegmentContentClearTarget(null);
+          }
+        }}
+        open={segmentContentClearTarget !== null}
+        title={segmentContentClearTarget?.contentKind === 'body' ? '清空正文？' : '清空转录？'}
       />
       <SegmentSupplementRenameDialog
         target={segmentSupplementRenameTarget}

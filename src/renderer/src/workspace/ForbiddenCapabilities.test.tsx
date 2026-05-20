@@ -38,7 +38,10 @@ describe('forbidden first-slice capabilities', () => {
             onDeleteMemory={() => {}}
             onDeleteSegment={() => {}}
             onDeleteSegmentSupplement={() => {}}
+            onClearSegmentContent={() => {}}
+            onEditSegmentTranscript={() => {}}
             onRenameMemory={() => {}}
+            onRenameSegmentContent={() => {}}
             onRenameSegment={() => {}}
             onRenameSegmentSupplement={() => {}}
             onSelectMemory={() => {}}
