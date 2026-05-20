@@ -1,0 +1,3 @@
+- [x] Preserve checked item state
+- [ ] Preserve unchecked item state
+- [x] Cover BlockNote issue 826

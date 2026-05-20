@@ -714,6 +714,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         transcript: { exists: false },
         supplementCount: 0,
         supplements: [],
+        contentTabOrder: ['segment'],
       },
       memory: {
         memoryId: 'mem_20260506_000001',
@@ -721,9 +722,12 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         segmentCount: 1,
-        durationMs: 0,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     }
@@ -754,9 +758,12 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
       segmentCount: 1,
-      durationMs: 0,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 0,
       audioByteLength: 3,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     },
   ]);
@@ -1585,12 +1592,15 @@ test('recording draft fill-missing rollback refreshes index after manifest succe
   const indexAfterSegmentRollback = JSON.parse(
     await readFile(path.join(rootPath, '.reo', 'index.json'), 'utf8')
   ) as {
-    readonly memories?: readonly { readonly memoryId: string; readonly hasTranscript: boolean }[];
+    readonly memories?: readonly {
+      readonly memoryId: string;
+      readonly hasAudioTranscript: boolean;
+    }[];
   };
   assert.notEqual(
     indexAfterSegmentRollback.memories?.find(
       (candidate) => candidate.memoryId === 'mem_fill_missing_manifest_failure'
-    )?.hasTranscript,
+    )?.hasAudioTranscript,
     true
   );
   await rewriteObjectManifest(
@@ -1687,7 +1697,10 @@ test('recording draft fill-missing rollback refreshes index after manifest succe
       ?.supplements.find(
         (candidate) => candidate.supplementId === 'sup_20260518_fill_missing_manifest_failure'
       );
-    assert.notEqual(rolledBackSupplement?.transcript.exists, true);
+    if (rolledBackSupplement) {
+      assert.equal(rolledBackSupplement.type, 'audio');
+      assert.notEqual(rolledBackSupplement.transcript.exists, true);
+    }
   }
 });
 
@@ -3067,9 +3080,12 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -3800,6 +3816,7 @@ test('recording finalize returns only the appended recording byte length for exi
         transcript: { exists: false },
         supplementCount: 0,
         supplements: [],
+        contentTabOrder: ['segment'],
       },
       memory: {
         memoryId: 'mem_existing_size',
@@ -3807,9 +3824,12 @@ test('recording finalize returns only the appended recording byte length for exi
         createdAt: '2026-05-06T13:09:00.000Z',
         updatedAt: '2026-05-06T13:11:00.000Z',
         segmentCount: 2,
-        durationMs: 3000,
+        audioSegmentCount: 2,
+        noteSegmentCount: 0,
+        audioDurationMs: 3000,
         audioByteLength: 7,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     }

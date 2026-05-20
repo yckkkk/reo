@@ -454,7 +454,7 @@ test('memory studio layout measurement covers a bounded rendered-item sample wit
   assert.match(script, /Too many mounted Segment items/);
   assert.match(script, /maxItems: defaultMaxItems/);
   assert.match(script, /const addIndex = \(index\) =>/);
-  assert.match(script, /item\.getAttribute\('aria-current'\) === 'true'/);
+  assert.match(script, /item\.querySelector\('\[aria-current="true"\]'\)/);
   assert.match(script, /item\.offsetLeft/);
   assert.match(script, /item\.offsetWidth/);
   assert.doesNotMatch(script, /rect\.right >= 0 && rect\.left <= window\.innerWidth/);

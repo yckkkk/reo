@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-05-19T09:11:30.528Z",
+  "answer": {
+    "visibilityRefreshCanSupportDirtyBodyIsolationWithoutFileWatcher": true,
+    "reason": "Existing visibility refresh can invalidate or refetch note content; editor-local dirty state decides whether the incoming body is applied."
+  },
+  "harness": {
+    "model": "Pure reducer for future NoteEditorOverlay content refresh: clean editors adopt new disk body and hash; dirty editors preserve local body and expose conflict banner state.",
+    "inputs": {
+      "refreshedContent": {
+        "workspaceId": "ws_1",
+        "memoryId": "mem_1",
+        "segmentId": "seg_note_1",
+        "type": "note",
+        "body": {
+          "exists": true,
+          "text": "Externally refreshed body from segment.md",
+          "byteLength": 41,
+          "contentHash": "hash-refreshed"
+        }
+      },
+      "cleanBefore": {
+        "body": "Original clean body",
+        "baselineContentHash": "hash-original",
+        "dirty": false,
+        "banner": null
+      },
+      "dirtyBefore": {
+        "body": "Unsaved local body",
+        "baselineContentHash": "hash-original",
+        "dirty": true,
+        "banner": null
+      }
+    },
+    "outcomes": {
+      "clean": {
+        "beforeBody": "Original clean body",
+        "afterBody": "Externally refreshed body from segment.md",
+        "bodyOverwrittenFromRefresh": true,
+        "baselineHashUpdated": true,
+        "banner": null
+      },
+      "dirty": {
+        "beforeBody": "Unsaved local body",
+        "afterBody": "Unsaved local body",
+        "bodyPreserved": true,
+        "baselineHashPreserved": true,
+        "banner": {
+          "kind": "external-edit-conflict",
+          "message": "Disk content changed while the editor has unsaved changes.",
+          "diskContentHash": "hash-refreshed",
+          "editorBaselineContentHash": "hash-original"
+        }
+      }
+    },
+    "minimalReducer": "applyRefreshedNoteBody(editor, refreshedContent)"
+  }
+}

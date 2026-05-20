@@ -1,0 +1,57 @@
+{
+  "algorithm": "sha256",
+  "happy": {
+    "ok": true,
+    "value": {
+      "contentHash": "c636fed52e33d4cc0216ec6cb29e7c22d0348ffd01c51b6ca1dfdf21218d54aa",
+      "hashAlgorithm": "sha256",
+      "byteLength": 32
+    }
+  },
+  "conflict": {
+    "ok": false,
+    "error": {
+      "code": "ERR_SEGMENT_CONTENT_STALE",
+      "message": "Segment content changed on disk before save",
+      "dataRetention": "previous-file-preserved",
+      "currentContentHash": "28b84adc5ef26eba1d82e0f5769ad83fb5777d9369882088c467f5547d961e84",
+      "expectedBaselineContentHash": "46e778b5c2af1be36c84fdcf38aaae88b9acf09daca8af642b53db3117542462",
+      "hashAlgorithm": "sha256"
+    }
+  },
+  "proposedErrorPayloadShape": {
+    "ok": false,
+    "error": {
+      "code": "ERR_SEGMENT_CONTENT_STALE",
+      "message": "Segment content changed on disk before save",
+      "dataRetention": "previous-file-preserved",
+      "currentContentHash": "<full sha256 hex of current disk markdown>",
+      "expectedBaselineContentHash": "<full sha256 hex sent by renderer>",
+      "hashAlgorithm": "sha256"
+    }
+  },
+  "proposedSuccessPayloadShape": {
+    "ok": true,
+    "value": {
+      "contentHash": "<full sha256 hex of saved markdown>",
+      "hashAlgorithm": "sha256",
+      "byteLength": "<utf8 byte length of saved markdown>"
+    }
+  },
+  "lockInternalPseudocode": [
+    "requireHandle(workspaceHandle, workspaceId)",
+    "assertWorkspaceUsable(handle)",
+    "withMemoryWriteLock(memoryId, async () => {",
+    "  locate segment.md by workspaceId + memoryId + segmentId manifest ownership",
+    "  bind segment directory identity and open segment.md no-follow",
+    "  currentMarkdown = read bounded segment.md",
+    "  currentHash = sha256Hex(currentMarkdown)",
+    "  if currentHash !== request.baselineContentHash:",
+    "    return ERR_SEGMENT_CONTENT_STALE with previous-file-preserved and hashes",
+    "  render next markdown from request body/frontmatter",
+    "  atomic replace segment.md in same directory, fsync file and parent",
+    "  refresh owning Memory index entry",
+    "  return new contentHash + refreshed projection",
+    "})"
+  ]
+}

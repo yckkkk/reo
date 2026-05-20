@@ -391,13 +391,20 @@ function isWorkspaceMemorySummary(value: unknown): value is WorkspaceMemorySumma
     typeof memory.segmentCount === 'number' &&
     Number.isInteger(memory.segmentCount) &&
     memory.segmentCount >= 0 &&
-    typeof memory.durationMs === 'number' &&
-    Number.isInteger(memory.durationMs) &&
-    memory.durationMs >= 0 &&
+    typeof memory.audioSegmentCount === 'number' &&
+    Number.isInteger(memory.audioSegmentCount) &&
+    memory.audioSegmentCount >= 0 &&
+    typeof memory.noteSegmentCount === 'number' &&
+    Number.isInteger(memory.noteSegmentCount) &&
+    memory.noteSegmentCount >= 0 &&
+    typeof memory.audioDurationMs === 'number' &&
+    Number.isInteger(memory.audioDurationMs) &&
+    memory.audioDurationMs >= 0 &&
     typeof memory.audioByteLength === 'number' &&
     Number.isInteger(memory.audioByteLength) &&
     memory.audioByteLength >= 0 &&
-    typeof memory.hasTranscript === 'boolean' &&
+    typeof memory.hasAudioTranscript === 'boolean' &&
+    typeof memory.hasAnyNote === 'boolean' &&
     typeof memory.supplementCount === 'number' &&
     Number.isInteger(memory.supplementCount) &&
     memory.supplementCount >= 0

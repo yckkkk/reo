@@ -67,6 +67,12 @@ export interface WorkspaceHandleStore {
     readonly workspaceId: string;
     readonly canonicalRoot: string;
   }): { readonly ok: true } | WorkspaceErrorEnvelope;
+  resolveActiveRoot(options: { readonly workspaceId: string }):
+    | {
+        readonly ok: true;
+        readonly canonicalRoot: string;
+      }
+    | WorkspaceErrorEnvelope;
   closeAllHandles(): Promise<void>;
 }
 
@@ -204,6 +210,20 @@ export function createWorkspaceHandleStore({
         canonicalRoot,
       });
       return { ok: true };
+    },
+
+    resolveActiveRoot({ workspaceId }) {
+      for (const entry of handles.values()) {
+        if (entry.workspaceId !== workspaceId) {
+          continue;
+        }
+        const usable = assertLockUsable(entry.lock);
+        if (!usable.ok) {
+          return usable;
+        }
+        return { ok: true, canonicalRoot: entry.canonicalRoot };
+      }
+      return workspaceError('ERR_WORKSPACE_HANDLE_NOT_FOUND', 'Workspace handle not found');
     },
 
     async closeAllHandles() {

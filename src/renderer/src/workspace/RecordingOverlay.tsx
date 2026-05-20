@@ -54,7 +54,7 @@ import {
   RecordingControls,
   type PausedRecordingPrimaryAction,
 } from './recording/RecordingControls';
-import { RecordingSurface } from './recording/RecordingSurface';
+import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
 import { RecordingTranscriptPreview } from './recording/RecordingTranscriptPreview';
 import { RecordingWaveform } from './recording/RecordingWaveform';
 import { RECORDING_SPEECH_TEXT_CLASS } from './recording/recordingTypography';
@@ -3342,7 +3342,7 @@ export function RecordingOverlay({
     ) : null;
 
   return (
-    <RecordingSurface
+    <ImmersiveWorkspaceSurface
       description={
         transcriptionDisabled
           ? '录制本地音频，语音识别已关闭。'
@@ -3537,6 +3537,6 @@ export function RecordingOverlay({
           </div>
         </DialogContent>
       </Dialog>
-    </RecordingSurface>
+    </ImmersiveWorkspaceSurface>
   );
 }

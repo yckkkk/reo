@@ -82,6 +82,7 @@ import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
+import { withWorkspaceAsyncQueue } from './workspaceAsyncQueue.js';
 
 const MAX_AUDIO_CHUNK_BYTES = 1_048_576;
 const MAX_FINALIZED_TRANSCRIPT_READ_BYTES = 1_048_576;
@@ -272,22 +273,7 @@ export function clearRecordingRuntimeStateForRoot(rootPath: string): void {
 }
 
 async function withMarkdownSaveQueue<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const previous = markdownSaveQueues.get(key) ?? Promise.resolve();
-  let releaseCurrent: () => void = () => {};
-  const current = new Promise<void>((resolve) => {
-    releaseCurrent = resolve;
-  });
-  const tail = previous.then(() => current);
-  markdownSaveQueues.set(key, tail);
-  await previous;
-  try {
-    return await run();
-  } finally {
-    releaseCurrent();
-    if (markdownSaveQueues.get(key) === tail) {
-      markdownSaveQueues.delete(key);
-    }
-  }
+  return withWorkspaceAsyncQueue(markdownSaveQueues, key, run);
 }
 
 function createRecordingDirectoryWithinParent({
@@ -391,6 +377,9 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
   await assertSameDirectory(segmentDirectory, segmentDirectoryIdentity);
   await assertSameDirectory(supplementsDirectory, supplementsDirectoryIdentity);
   await assertSameDirectory(supplementDirectory, supplementDirectoryIdentity);
+  if (supplement.type !== 'audio') {
+    throw new Error('Segment supplement is not audio');
+  }
   return {
     directory: supplementDirectory,
     audioByteLength: supplement.audioByteLength,
@@ -842,7 +831,11 @@ export async function appendRecordingAudioChunk({
   try {
     if (!activeDrafts.has(key)) {
       const existing = await lookupSegmentDirectoryById(rootPath, segmentId);
-      if (existing.status === 'found' || existing.status === 'duplicate') {
+      if (
+        existing.status === 'found' ||
+        existing.status === 'found-non-audio' ||
+        existing.status === 'duplicate'
+      ) {
         return workspaceError('ERR_RECORDING_FINALIZED', 'Recording is already finalized');
       }
       if (existing.status === 'invalid-id') {

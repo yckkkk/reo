@@ -65,6 +65,7 @@ import {
   setBeforeSegmentDirectoryCandidateScanForTest,
   setBeforeSegmentFileTruthListForTest,
   updateMemoryTitleFromFileTruth,
+  updateSegmentContentTabOrderFromFileTruth,
   updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from '../../src/main/memoryFiles.js';
@@ -278,6 +279,7 @@ async function writeFinalizedAudioSegmentForTest(
     readonly finalizedAt?: string;
     readonly audioBytes?: readonly number[];
     readonly lastTranscriptionAttempt?: unknown;
+    readonly contentTabOrder?: readonly string[];
   }
 ): Promise<string> {
   const audioBytes = recording.audioBytes ?? [1, 2, 3];
@@ -317,6 +319,9 @@ async function writeFinalizedAudioSegmentForTest(
         audioByteLength: audioBytes.length,
         ...(recording.lastTranscriptionAttempt !== undefined
           ? { lastTranscriptionAttempt: recording.lastTranscriptionAttempt }
+          : {}),
+        ...(recording.contentTabOrder !== undefined
+          ? { contentTabOrder: recording.contentTabOrder }
           : {}),
       },
       null,
@@ -388,6 +393,107 @@ async function writeFinalizedAudioSupplementForTest(
   );
 }
 
+async function writeFinalizedNoteSegmentForTest(
+  rootPath: string,
+  note: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly title: string;
+    readonly body: string;
+    readonly finalizedAt?: string;
+  }
+): Promise<string> {
+  const segmentDirectory = path.join(
+    rootPath,
+    'memories',
+    note.memoryId,
+    'segments',
+    note.segmentId
+  );
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: note.title, kind: 'note' },
+      content: note.body,
+    })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${note.segmentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId: 'ws_memory',
+        memoryId: note.memoryId,
+        segmentId: note.segmentId,
+        kind: 'note',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        finalizedAt: note.finalizedAt ?? '2026-05-06T13:09:00.000Z',
+        updatedAt: note.finalizedAt ?? '2026-05-06T13:09:00.000Z',
+        bodyByteLength: Buffer.byteLength(note.body, 'utf8'),
+      },
+      null,
+      2
+    )}\n`
+  );
+  return segmentDirectory;
+}
+
+async function writeFinalizedNoteSupplementForTest(
+  rootPath: string,
+  note: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly supplementId: string;
+    readonly title: string;
+    readonly body: string;
+    readonly finalizedAt: string;
+  }
+): Promise<void> {
+  const supplementDirectory = path.join(
+    rootPath,
+    'memories',
+    note.memoryId,
+    'segments',
+    note.segmentId,
+    'supplements',
+    note.supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: note.title, kind: 'note' },
+      content: note.body,
+    })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${note.supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId: 'ws_memory',
+        memoryId: note.memoryId,
+        segmentId: note.segmentId,
+        supplementId: note.supplementId,
+        kind: 'note',
+        createdAt: '2026-05-06T13:08:00.000Z',
+        finalizedAt: note.finalizedAt,
+        updatedAt: note.finalizedAt,
+        bodyByteLength: Buffer.byteLength(note.body, 'utf8'),
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 async function readWorkspaceIndex(rootPath: string): Promise<unknown> {
   return readJson(path.join(rootPath, '.reo', 'index.json'));
 }
@@ -446,6 +552,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       transcript: { exists: false },
       supplementCount: 0,
       supplements: [],
+      contentTabOrder: ['segment'],
     },
     memory: {
       memoryId: 'mem_20260506_000001',
@@ -453,9 +560,12 @@ test('finalizes a draft into a durable memory directory', async () => {
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: '2026-05-06T13:09:00.000Z',
       segmentCount: 1,
-      durationMs: 73_000,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 73_000,
       audioByteLength: 3,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     },
   });
@@ -595,9 +705,12 @@ test('updates titles through file truth before rebuilding the index projection',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -692,6 +805,57 @@ test('renames a segment when memory directory scan is missing no valid file-spac
   );
 });
 
+test('renames finalized note segment file-space node through file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_segment_title_update';
+  const segmentId = 'seg_note_title_update';
+  const body = '# 旧笔记\n\n保留正文。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '笔记命名',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '旧笔记',
+    body,
+  });
+
+  const updated = await updateSegmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    title: '新的笔记',
+    now: () => '2026-05-06T13:12:00.000Z',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.segment.title, '新的笔记');
+    assert.equal(updated.value.segment.type, 'note');
+    assert.equal(updated.value.segment.bodyByteLength, Buffer.byteLength(body, 'utf8'));
+    assert.equal(updated.value.memory.hasAnyNote, true);
+    assert.equal(updated.value.memory.noteSegmentCount, 1);
+  }
+  await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
+  const renamedSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--新的笔记`
+  );
+  await stat(renamedSegmentDirectory);
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(renamedSegmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(markdown.data.title, '新的笔记');
+  assert.equal('kind' in markdown.data ? markdown.data.kind : undefined, 'note');
+  assert.equal(markdown.content, body);
+});
+
 test('renames segment supplement file-space node and refreshes the parent memory index', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_supplement_title_update';
@@ -725,9 +889,12 @@ test('renames segment supplement file-space node and refreshes the parent memory
             createdAt: '2026-05-06T13:08:00.000Z',
             updatedAt: '2026-05-06T13:09:00.000Z',
             segmentCount: 1,
-            durationMs: 1000,
+            audioSegmentCount: 1,
+            noteSegmentCount: 0,
+            audioDurationMs: 1000,
             audioByteLength: 3,
-            hasTranscript: false,
+            hasAudioTranscript: false,
+            hasAnyNote: false,
             supplementCount: 0,
           },
         ],
@@ -793,13 +960,81 @@ test('renames segment supplement file-space node and refreshes the parent memory
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:11:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 1,
       },
     ],
   });
+});
+
+test('renames finalized note segment supplement file-space node through file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_supplement_title_update';
+  const segmentId = 'seg_note_supplement_title_update';
+  const supplementId = 'sup_note_supplement_title_update';
+  const body = '# 旧补充\n\n保留补充正文。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '笔记补充命名',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '录音1',
+  });
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '旧补充',
+    body,
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '新的补充',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.memory.hasAnyNote, true);
+    assert.equal(updated.value.segment.supplementCount, 1);
+    assert.equal(updated.value.supplement.title, '新的补充');
+    assert.equal(updated.value.supplement.type, 'note');
+    assert.equal(updated.value.supplement.bodyByteLength, Buffer.byteLength(body, 'utf8'));
+  }
+  await assert.rejects(
+    stat(
+      path.join(rootPath, 'memories', memoryId, 'segments', segmentId, 'supplements', supplementId)
+    )
+  );
+  const renamedSupplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements',
+    `${supplementId}--新的补充`
+  );
+  await stat(renamedSupplementDirectory);
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: await readFile(path.join(renamedSupplementDirectory, 'supplement.md'), 'utf8'),
+  });
+  assert.equal(markdown.data.title, '新的补充');
+  assert.equal('kind' in markdown.data ? markdown.data.kind : undefined, 'note');
+  assert.equal(markdown.content, body);
 });
 
 test('segment supplement title update rejects workspace mismatch before moving files', async () => {
@@ -1157,9 +1392,12 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -1192,9 +1430,12 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:11:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 1,
       },
     ],
@@ -1384,9 +1625,12 @@ test('delete and restore move Segment supplements with the parent Segment direct
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -2367,6 +2611,7 @@ test('finalized segment projection exposes derived lastTranscriptionAttempt', as
       segmentId,
     });
 
+    assert.equal(projection.type, 'audio');
     assert.equal(projection.lastTranscriptionAttempt, attempt ?? 'never');
   }
 });
@@ -2401,6 +2646,7 @@ test('finalized segment projection treats HTML comment-only transcript as empty 
     segmentId,
   });
 
+  assert.equal(projection.type, 'audio');
   assert.equal(projection.lastTranscriptionAttempt, 'success');
   assert.deepEqual(projection.transcript, { exists: false });
 });
@@ -2435,6 +2681,7 @@ test('finalized segment projection keeps success without transcript heading as e
     segmentId,
   });
 
+  assert.equal(projection.type, 'audio');
   assert.equal(projection.lastTranscriptionAttempt, 'success');
   assert.deepEqual(projection.transcript, { exists: false });
 });
@@ -2486,10 +2733,10 @@ test('finalized supplement projection exposes lastTranscriptionAttempt from mani
     segmentId,
   });
   const attemptsBySupplementId = new Map(
-    projection.supplements.map((supplement) => [
-      supplement.supplementId,
-      supplement.lastTranscriptionAttempt,
-    ])
+    projection.supplements.map((supplement) => {
+      assert.equal(supplement.type, 'audio');
+      return [supplement.supplementId, supplement.lastTranscriptionAttempt];
+    })
   );
 
   assert.equal(attemptsBySupplementId.get(failedSupplementId), 'failed');
@@ -2523,9 +2770,236 @@ test('memory detail projects valid segment file-space nodes missing from the fil
   if (detail.ok) {
     assert.equal(detail.value.segmentCount, 1);
     assert.equal(detail.value.segments.length, 1);
-    assert.equal(detail.value.segments[0]?.segmentId, segmentId);
-    assert.equal(detail.value.segments[0]?.title, '录音25');
-    assert.equal(detail.value.segments[0]?.lastTranscriptionAttempt, 'never');
+    const segment = detail.value.segments[0];
+    assert.ok(segment);
+    assert.equal(segment.type, 'audio');
+    assert.equal(segment.segmentId, segmentId);
+    assert.equal(segment.title, '录音25');
+    assert.equal(segment.lastTranscriptionAttempt, 'never');
+  }
+});
+
+test('memory detail projects finalized note segments and note supplements from file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_file_truth_projection';
+  const segmentId = 'seg_20260519_note_file_truth';
+  const supplementId = 'sup_20260519_note_file_truth';
+  const segmentBody = '# 观察记录\n\n今天整理了 Note Foundation 的字段边界。\n';
+  const supplementBody = '# 补充记录\n\n这条补充只包含 Markdown 正文。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Note 文件真源',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Note Segment',
+    body: segmentBody,
+  });
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: 'Note Supplement',
+    body: supplementBody,
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segmentCount, 1);
+    assert.equal(detail.value.audioSegmentCount, 0);
+    assert.equal(detail.value.noteSegmentCount, 1);
+    assert.equal(detail.value.audioDurationMs, 0);
+    assert.equal(detail.value.audioByteLength, 0);
+    assert.equal(detail.value.hasAudioTranscript, false);
+    assert.equal(detail.value.hasAnyNote, true);
+    assert.equal(detail.value.supplementCount, 1);
+    const segment = detail.value.segments[0];
+    assert.ok(segment);
+    assert.equal(segment.type, 'note');
+    assert.equal(segment.segmentId, segmentId);
+    assert.equal(segment.bodyByteLength, Buffer.byteLength(segmentBody, 'utf8'));
+    assert.equal('durationMs' in segment, false);
+    assert.equal('audioByteLength' in segment, false);
+    assert.equal('transcript' in segment, false);
+    const supplement = segment.supplements[0];
+    assert.ok(supplement);
+    assert.equal(supplement.type, 'note');
+    assert.equal(supplement.supplementId, supplementId);
+    assert.equal(supplement.bodyByteLength, Buffer.byteLength(supplementBody, 'utf8'));
+    assert.equal('durationMs' in supplement, false);
+    assert.equal('audioByteLength' in supplement, false);
+    assert.equal('transcript' in supplement, false);
+  }
+});
+
+test('memory detail projects persisted Segment content tab order from segment manifest', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_content_tab_order';
+  const segmentId = 'seg_content_tab_order_parent';
+  const firstSupplementId = 'sup_content_tab_order_first';
+  const secondSupplementId = 'sup_content_tab_order_second';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Tab order memory',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Ordered segment',
+    contentTabOrder: [
+      `supplement:${secondSupplementId}`,
+      'segment',
+      'supplement:sup_missing_stale',
+      `supplement:${firstSupplementId}`,
+    ],
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: firstSupplementId,
+    title: 'First supplement',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: secondSupplementId,
+    title: 'Second supplement',
+    finalizedAt: '2026-05-06T13:12:00.000Z',
+  });
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  assert.deepEqual(
+    (detail.value.segments[0] as { contentTabOrder?: readonly string[] } | undefined)
+      ?.contentTabOrder,
+    [`supplement:${secondSupplementId}`, 'segment', `supplement:${firstSupplementId}`]
+  );
+});
+
+test('segment content tab order update writes the Segment manifest without changing activity time', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_content_tab_order_update';
+  const segmentId = 'seg_content_tab_order_update_parent';
+  const firstSupplementId = 'sup_content_tab_order_update_first';
+  const secondSupplementId = 'sup_content_tab_order_update_second';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Tab order update memory',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Ordered segment',
+    finalizedAt: '2026-05-06T13:09:00.000Z',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: firstSupplementId,
+    title: 'First supplement',
+    finalizedAt: '2026-05-06T13:11:00.000Z',
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId: secondSupplementId,
+    title: 'Second supplement',
+    finalizedAt: '2026-05-06T13:12:00.000Z',
+  });
+
+  const updated = await updateSegmentContentTabOrderFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    contentTabOrder: [
+      `supplement:${secondSupplementId}`,
+      'segment',
+      `supplement:${firstSupplementId}`,
+    ],
+  });
+
+  assert.equal(updated.ok, true);
+  if (!updated.ok) {
+    return;
+  }
+  assert.deepEqual(updated.value.segment.contentTabOrder, [
+    `supplement:${secondSupplementId}`,
+    'segment',
+    `supplement:${firstSupplementId}`,
+  ]);
+  assert.equal(updated.value.segment.updatedAt, '2026-05-06T13:12:00.000Z');
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as { readonly contentTabOrder?: readonly string[]; readonly updatedAt?: string };
+  assert.deepEqual(manifest.contentTabOrder, [
+    `supplement:${secondSupplementId}`,
+    'segment',
+    `supplement:${firstSupplementId}`,
+  ]);
+  assert.equal(manifest.updatedAt, '2026-05-06T13:09:00.000Z');
+});
+
+test('memory detail marks hasAnyNote for note supplements under audio segments', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_supplement_under_audio';
+  const segmentId = 'seg_note_supplement_under_audio';
+  const supplementId = 'sup_note_supplement_under_audio';
+  const supplementBody = '# 音频补充笔记\n\n这条补充只包含 Markdown 正文。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Audio with note supplement',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Audio Segment',
+  });
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: 'Note Supplement',
+    body: supplementBody,
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segmentCount, 1);
+    assert.equal(detail.value.audioSegmentCount, 1);
+    assert.equal(detail.value.noteSegmentCount, 0);
+    assert.equal(detail.value.hasAnyNote, true);
+    const segment = detail.value.segments[0];
+    assert.ok(segment);
+    assert.equal(segment.type, 'audio');
+    const supplement = segment.supplements[0];
+    assert.ok(supplement);
+    assert.equal(supplement.type, 'note');
+    assert.equal(supplement.bodyByteLength, Buffer.byteLength(supplementBody, 'utf8'));
   }
 });
 
@@ -2688,9 +3162,12 @@ test('supplement finalize checks parent by direct file truth without pre-scannin
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-12T16:29:00.000Z',
           segmentCount: 1,
-          durationMs: 1200,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1200,
           audioByteLength: 3,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 1,
         },
       ],
@@ -2843,9 +3320,12 @@ test('supplement finalize rolls back exposed directory when manifest write canno
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:09:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -2983,9 +3463,12 @@ test('rebuild index uses memory markdown as the title source of truth', async ()
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
       segmentCount: 0,
-      durationMs: 0,
+      audioSegmentCount: 0,
+      noteSegmentCount: 0,
+      audioDurationMs: 0,
       audioByteLength: 0,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     },
   ]);
@@ -3055,9 +3538,12 @@ test('delete and restore keep externally renamed memory directories addressable 
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -3143,9 +3629,12 @@ test('rebuild skips finalized audio segment metadata with invalid projected fiel
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
       segmentCount: 0,
-      durationMs: 0,
+      audioSegmentCount: 0,
+      noteSegmentCount: 0,
+      audioDurationMs: 0,
       audioByteLength: 0,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     },
   ]);
@@ -3977,6 +4466,26 @@ test('recording lookup rejects duplicate finalized id directories as invalid dur
     findSegmentDirectoryById(rootPath, 'seg_20260506_duplicate_lookup'),
     /Invalid durable recording/
   );
+});
+
+test('recording lookup resolves finalized note segment directories', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_lookup';
+  const segmentId = 'seg_note_lookup';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Note lookup memory',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Note lookup segment',
+    body: 'Lookup body\n',
+  });
+
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, segmentId);
+
+  assert.equal(path.basename(segmentDirectory), segmentId);
 });
 
 test('recording lookup resolves segments from the initial memory directory scan', async () => {
@@ -5926,11 +6435,14 @@ test('rebuild skips finalized audio segment metadata missing detail-read require
     {
       audioByteLength: 0,
       createdAt: '2026-05-06T13:08:00.000Z',
-      durationMs: 0,
+      audioDurationMs: 0,
       supplementCount: 0,
-      hasTranscript: false,
+      hasAudioTranscript: false,
       memoryId: 'mem_incomplete_metadata',
       segmentCount: 0,
+      audioSegmentCount: 0,
+      noteSegmentCount: 0,
+      hasAnyNote: false,
       title: 'Incomplete metadata',
       updatedAt: '2026-05-06T13:08:00.000Z',
     },
@@ -6201,9 +6713,12 @@ test('recovery ignores stale memory segment id input when no finalize marker exi
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],
@@ -6391,9 +6906,12 @@ test('rebuilds index only from finalized audio segment metadata that matches aud
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ],

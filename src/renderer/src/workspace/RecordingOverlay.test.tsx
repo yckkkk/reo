@@ -39,11 +39,14 @@ const existingMemoryTarget = {
 const savedMemorySummary = {
   audioByteLength: 3,
   createdAt: '2026-05-06T13:08:00.000Z',
-  durationMs: 0,
+  audioDurationMs: 0,
   supplementCount: 0,
-  hasTranscript: true,
+  hasAudioTranscript: true,
+  hasAnyNote: false,
   memoryId: 'mem_1',
   segmentCount: 1,
+  noteSegmentCount: 0,
+  audioSegmentCount: 1,
   title: 'Daily memory 录音',
   updatedAt: '2026-05-06T13:09:00.000Z',
 };
@@ -168,6 +171,62 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: true as const,
       value: { supplementId: 'sup_1', nextSequence: 0 },
     })),
+    createNoteSegmentDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { segmentId: 'seg_note_1', revision: 0 },
+    })),
+    createSegmentSupplementNoteDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { supplementId: 'sup_note_1', revision: 0 },
+    })),
+    writeNoteSegmentDraftBody: vi.fn(async () => ({
+      ok: true as const,
+      value: { bodyByteLength: 0, revision: 1 },
+    })),
+    writeSegmentSupplementNoteDraftBody: vi.fn(async () => ({
+      ok: true as const,
+      value: { bodyByteLength: 0, revision: 1 },
+    })),
+    finalizeNoteSegmentDraft: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Note unavailable' },
+    })),
+    finalizeSegmentSupplementNoteDraft: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Note unavailable' },
+    })),
+    readSegmentContent: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Note unavailable' },
+    })),
+    readSegmentSupplementContent: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Note unavailable' },
+    })),
+    writeSegmentContent: vi.fn(async () => ({
+      ok: true as const,
+      value: { bodyByteLength: 0, baselineContentHash: 'a'.repeat(64), saved: true as const },
+    })),
+    writeSegmentSupplementContent: vi.fn(async () => ({
+      ok: true as const,
+      value: { bodyByteLength: 0, baselineContentHash: 'a'.repeat(64), saved: true as const },
+    })),
+    saveSegmentAttachment: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_ATTACHMENT_WRITE_FAILED' as const, message: 'Attachment unavailable' },
+    })),
+    listSegmentAttachments: vi.fn(async () => ({
+      ok: true as const,
+      value: { attachments: [] },
+    })),
+    saveSegmentSupplementAttachment: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_ATTACHMENT_WRITE_FAILED' as const, message: 'Attachment unavailable' },
+    })),
+    listSegmentSupplementAttachments: vi.fn(async () => ({
+      ok: true as const,
+      value: { attachments: [] },
+    })),
     readRecordingDraftAudio: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording draft not found' },
@@ -190,11 +249,14 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
         memory: {
           audioByteLength: 3,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音1',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
@@ -277,6 +339,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     updateMemoryTitle: vi.fn(),
     updateSegmentTitle: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
+    updateSegmentContentTabOrder: vi.fn(),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,
       value: { memory: savedMemorySummary, saved: true as const },
@@ -2315,11 +2378,14 @@ describe('RecordingOverlay', () => {
             memory: {
               audioByteLength: 3,
               createdAt: '2026-05-06T13:08:00.000Z',
-              durationMs: 2000,
+              audioDurationMs: 2000,
               supplementCount: 0,
-              hasTranscript: false,
+              hasAudioTranscript: false,
+              hasAnyNote: false,
               memoryId: 'mem_1',
               segmentCount: 1,
+              noteSegmentCount: 0,
+              audioSegmentCount: 1,
               title: 'Daily memory 录音',
               updatedAt: '2026-05-06T13:08:00.000Z',
             },

@@ -5,10 +5,11 @@ import {
 } from '@/components/ui/floating-action-button-speed-dial';
 
 type ExpressionDockProps = {
+  readonly onStartNote?: () => void;
   readonly onStartRecording: () => void;
 };
 
-export function ExpressionDock({ onStartRecording }: ExpressionDockProps) {
+export function ExpressionDock({ onStartNote, onStartRecording }: ExpressionDockProps) {
   const actions: readonly FloatingActionButtonSpeedDialAction[] = [
     {
       disabled: true,
@@ -32,11 +33,17 @@ export function ExpressionDock({ onStartRecording }: ExpressionDockProps) {
       label: '拍照',
     },
     {
-      disabled: true,
-      disabledLabel: '笔记暂不可用',
       id: 'note',
       icon: PencilLine,
       label: '笔记',
+      ...(onStartNote
+        ? {
+            onSelect: onStartNote,
+          }
+        : {
+            disabled: true,
+            disabledLabel: '笔记暂不可用',
+          }),
     },
     {
       id: 'recording',

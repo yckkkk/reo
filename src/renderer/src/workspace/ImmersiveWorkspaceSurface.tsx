@@ -8,7 +8,7 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 
-type RecordingSurfaceProps = {
+type ImmersiveWorkspaceSurfaceProps = {
   readonly children: ReactNode;
   readonly closeBlocked: boolean;
   readonly description: string;
@@ -19,7 +19,7 @@ type RecordingSurfaceProps = {
   readonly title: string;
 };
 
-export function RecordingSurface({
+export function ImmersiveWorkspaceSurface({
   children,
   closeBlocked,
   description,
@@ -28,7 +28,7 @@ export function RecordingSurface({
   onOpenChange,
   open,
   title,
-}: RecordingSurfaceProps) {
+}: ImmersiveWorkspaceSurfaceProps) {
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && closeBlocked) {
       return;
@@ -62,7 +62,7 @@ export function RecordingSurface({
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden" data-vaul-no-drag>
             <div
               className="mx-auto flex min-h-0 w-full max-w-[1360px] flex-1 items-end justify-center px-24 pb-24 pt-72 sm:px-48 sm:pb-28"
-              data-testid="recording-surface-stage"
+              data-testid="immersive-workspace-surface-stage"
             >
               <div className="flex w-full flex-col gap-20">
                 {children}

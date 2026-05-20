@@ -14,6 +14,8 @@ import type {
   WorkspaceCopySegmentSupplementRelativePathRequest,
   WorkspaceCreateMemoryRequest,
   WorkspaceCreateMemoryResponse,
+  WorkspaceCreateNoteSegmentDraftRequest,
+  WorkspaceCreateNoteSegmentDraftResponse,
   WorkspaceDeleteMemoryRequest,
   WorkspaceDeleteMemoryResponse,
   WorkspaceDeleteSegmentSupplementRequest,
@@ -21,9 +23,15 @@ import type {
   WorkspaceDeleteSegmentRequest,
   WorkspaceDeleteSegmentResponse,
   WorkspaceCreateRecordingDraftResponse,
+  WorkspaceCreateSegmentSupplementNoteDraftRequest,
+  WorkspaceCreateSegmentSupplementNoteDraftResponse,
   WorkspaceCreateSegmentSupplementRecordingDraftRequest,
   WorkspaceCreateSegmentSupplementRecordingDraftResponse,
   WorkspaceDiscardRecordingDraftResponse,
+  WorkspaceFinalizeNoteSegmentDraftRequest,
+  WorkspaceFinalizeNoteSegmentDraftResponse,
+  WorkspaceFinalizeSegmentSupplementNoteDraftRequest,
+  WorkspaceFinalizeSegmentSupplementNoteDraftResponse,
   WorkspaceFinalizeSegmentSupplementRecordingDraftRequest,
   WorkspaceFinalizeSegmentSupplementRecordingDraftResponse,
   WorkspaceHandleRequest,
@@ -40,6 +48,16 @@ import type {
   WorkspaceOpenRequest,
   WorkspaceOpenSegmentDocumentRequest,
   WorkspaceOpenSegmentSupplementDocumentRequest,
+  WorkspaceReadSegmentContentRequest,
+  WorkspaceReadSegmentContentResponse,
+  WorkspaceReadSegmentSupplementContentRequest,
+  WorkspaceReadSegmentSupplementContentResponse,
+  WorkspaceSaveSegmentAttachmentRequest,
+  WorkspaceSaveSegmentSupplementAttachmentRequest,
+  WorkspaceListSegmentAttachmentsRequest,
+  WorkspaceListSegmentSupplementAttachmentsRequest,
+  WorkspaceSaveAttachmentResponse,
+  WorkspaceListAttachmentsResponse,
   WorkspaceReadFinalizedAudioSegmentRequest,
   WorkspaceReadFinalizedAudioSegmentResponse,
   WorkspaceReadFinalizedAudioSegmentSupplementRequest,
@@ -94,12 +112,22 @@ import type {
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
   WorkspaceUpdateMemoryTitleResponse,
+  WorkspaceUpdateSegmentContentTabOrderRequest,
+  WorkspaceUpdateSegmentContentTabOrderResponse,
   WorkspaceUpdateSegmentSupplementTitleRequest,
   WorkspaceUpdateSegmentSupplementTitleResponse,
   WorkspaceUpdateSegmentTitleRequest,
   WorkspaceUpdateSegmentTitleResponse,
   WorkspaceValidateVoiceTranscriptionCredentialsRequest,
   WorkspaceValidateVoiceTranscriptionCredentialsResponse,
+  WorkspaceWriteNoteSegmentDraftBodyRequest,
+  WorkspaceWriteNoteSegmentDraftBodyResponse,
+  WorkspaceWriteSegmentContentRequest,
+  WorkspaceWriteSegmentContentResponse,
+  WorkspaceWriteSegmentSupplementContentRequest,
+  WorkspaceWriteSegmentSupplementContentResponse,
+  WorkspaceWriteSegmentSupplementNoteDraftBodyRequest,
+  WorkspaceWriteSegmentSupplementNoteDraftBodyResponse,
 } from './workspace-contract.js';
 
 export interface ReoWorkspaceBridge {
@@ -203,6 +231,48 @@ export interface ReoWorkspaceBridge {
   readonly createSegmentSupplementRecordingDraft: (
     payload: WorkspaceCreateSegmentSupplementRecordingDraftRequest
   ) => Promise<WorkspaceCreateSegmentSupplementRecordingDraftResponse>;
+  readonly createNoteSegmentDraft: (
+    payload: WorkspaceCreateNoteSegmentDraftRequest
+  ) => Promise<WorkspaceCreateNoteSegmentDraftResponse>;
+  readonly createSegmentSupplementNoteDraft: (
+    payload: WorkspaceCreateSegmentSupplementNoteDraftRequest
+  ) => Promise<WorkspaceCreateSegmentSupplementNoteDraftResponse>;
+  readonly writeNoteSegmentDraftBody: (
+    payload: WorkspaceWriteNoteSegmentDraftBodyRequest
+  ) => Promise<WorkspaceWriteNoteSegmentDraftBodyResponse>;
+  readonly writeSegmentSupplementNoteDraftBody: (
+    payload: WorkspaceWriteSegmentSupplementNoteDraftBodyRequest
+  ) => Promise<WorkspaceWriteSegmentSupplementNoteDraftBodyResponse>;
+  readonly finalizeNoteSegmentDraft: (
+    payload: WorkspaceFinalizeNoteSegmentDraftRequest
+  ) => Promise<WorkspaceFinalizeNoteSegmentDraftResponse>;
+  readonly finalizeSegmentSupplementNoteDraft: (
+    payload: WorkspaceFinalizeSegmentSupplementNoteDraftRequest
+  ) => Promise<WorkspaceFinalizeSegmentSupplementNoteDraftResponse>;
+  readonly readSegmentContent: (
+    payload: WorkspaceReadSegmentContentRequest
+  ) => Promise<WorkspaceReadSegmentContentResponse>;
+  readonly readSegmentSupplementContent: (
+    payload: WorkspaceReadSegmentSupplementContentRequest
+  ) => Promise<WorkspaceReadSegmentSupplementContentResponse>;
+  readonly writeSegmentContent: (
+    payload: WorkspaceWriteSegmentContentRequest
+  ) => Promise<WorkspaceWriteSegmentContentResponse>;
+  readonly writeSegmentSupplementContent: (
+    payload: WorkspaceWriteSegmentSupplementContentRequest
+  ) => Promise<WorkspaceWriteSegmentSupplementContentResponse>;
+  readonly saveSegmentAttachment: (
+    payload: WorkspaceSaveSegmentAttachmentRequest
+  ) => Promise<WorkspaceSaveAttachmentResponse>;
+  readonly listSegmentAttachments: (
+    payload: WorkspaceListSegmentAttachmentsRequest
+  ) => Promise<WorkspaceListAttachmentsResponse>;
+  readonly saveSegmentSupplementAttachment: (
+    payload: WorkspaceSaveSegmentSupplementAttachmentRequest
+  ) => Promise<WorkspaceSaveAttachmentResponse>;
+  readonly listSegmentSupplementAttachments: (
+    payload: WorkspaceListSegmentSupplementAttachmentsRequest
+  ) => Promise<WorkspaceListAttachmentsResponse>;
   readonly readRecordingDraftAudio: (
     payload: WorkspaceRecordingDraftAudioRequest
   ) => Promise<WorkspaceRecordingDraftAudioResponse>;
@@ -236,6 +306,9 @@ export interface ReoWorkspaceBridge {
   readonly updateSegmentSupplementTitle: (
     payload: WorkspaceUpdateSegmentSupplementTitleRequest
   ) => Promise<WorkspaceUpdateSegmentSupplementTitleResponse>;
+  readonly updateSegmentContentTabOrder: (
+    payload: WorkspaceUpdateSegmentContentTabOrderRequest
+  ) => Promise<WorkspaceUpdateSegmentContentTabOrderResponse>;
   readonly saveTranscript: (
     payload: WorkspaceRecordingMarkdownSaveRequest
   ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;

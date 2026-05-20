@@ -352,9 +352,12 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
     segmentCount: 1,
-    durationMs: 12_000,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    audioDurationMs: 12_000,
     audioByteLength: 3,
-    hasTranscript: false,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
     supplementCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
@@ -422,9 +425,12 @@ test('open workspace uses a valid index without scanning finalized memory files'
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
     segmentCount: 1,
-    durationMs: 3000,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    audioDurationMs: 3000,
     audioByteLength: 3,
-    hasTranscript: false,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
     supplementCount: 0,
   };
   await writeFile(
@@ -465,9 +471,12 @@ test('workspace index snapshot reads a valid index without rebuilding finalized 
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
     segmentCount: 1,
-    durationMs: 3000,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    audioDurationMs: 3000,
     audioByteLength: 3,
-    hasTranscript: false,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
     supplementCount: 0,
   };
   await writeFile(
@@ -564,9 +573,12 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     createdAt: '2026-05-06T13:08:00.000Z',
     updatedAt: '2026-05-06T13:09:00.000Z',
     segmentCount: 1,
-    durationMs: 34_000,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    audioDurationMs: 34_000,
     audioByteLength: 4,
-    hasTranscript: false,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
     supplementCount: 0,
   };
   assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
@@ -1139,13 +1151,13 @@ test('workspace snapshot refresh computes replacement after a metadata refresh',
     });
     assert.equal(snapshot.ok, true);
     if (snapshot.ok) {
-      assert.equal(snapshot.snapshot.memories[0]?.hasTranscript, true);
+      assert.equal(snapshot.snapshot.memories[0]?.hasAudioTranscript, true);
     }
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
   }
   const index = JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'));
-  assert.equal(index.memories[0].hasTranscript, true);
+  assert.equal(index.memories[0].hasAudioTranscript, true);
 });
 
 test('open workspace recreates missing managed directories before returning ready', async () => {

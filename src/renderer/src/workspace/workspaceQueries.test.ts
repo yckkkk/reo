@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  finalizedAudioContentQueryBelongsToWorkspace,
   memoryDetailQueryBelongsToWorkspace,
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   segmentContentQueryKey,
   workspaceHandleScopedContentQueryBelongsToWorkspace,
+  workspaceContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 
@@ -71,7 +71,7 @@ describe('workspace queries', () => {
     ).toBe(false);
   });
 
-  it('splits reusable Memory detail projection from large finalized audio content caches', () => {
+  it('splits reusable Memory detail projection from large workspace content caches', () => {
     expect(
       memoryDetailQueryBelongsToWorkspace(['workspace', 'memory-detail', 'ws_1', 'mem_1'], 'ws_1')
     ).toBe(true);
@@ -82,19 +82,19 @@ describe('workspace queries', () => {
       )
     ).toBe(false);
     expect(
-      finalizedAudioContentQueryBelongsToWorkspace(
+      workspaceContentQueryBelongsToWorkspace(
         ['workspace', 'segment-content', 'ws_1', 'mem_1', 'seg_1'],
         'ws_1'
       )
     ).toBe(true);
     expect(
-      finalizedAudioContentQueryBelongsToWorkspace(
+      workspaceContentQueryBelongsToWorkspace(
         ['workspace', 'segment-supplement-content', 'ws_1', 'mem_1', 'seg_1', 'sup_1'],
         'ws_1'
       )
     ).toBe(true);
     expect(
-      finalizedAudioContentQueryBelongsToWorkspace(
+      workspaceContentQueryBelongsToWorkspace(
         ['workspace', 'memory-detail', 'ws_1', 'mem_1'],
         'ws_1'
       )

@@ -2,15 +2,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Button } from '@/components/ui/button';
-import { RecordingSurface } from './RecordingSurface';
+import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
 
-describe('RecordingSurface', () => {
-  it('renders a labelled recording surface and prevents accidental close while recording', async () => {
+describe('ImmersiveWorkspaceSurface', () => {
+  it('renders a labelled workspace surface and prevents accidental close while busy', async () => {
     const onOpenChange = vi.fn();
     const user = userEvent.setup();
 
     render(
-      <RecordingSurface
+      <ImmersiveWorkspaceSurface
         closeBlocked
         description="录制本地音频。"
         footer={<Button type="button">关闭录音</Button>}
@@ -19,7 +19,7 @@ describe('RecordingSurface', () => {
         title="记录记忆"
       >
         <p>录音</p>
-      </RecordingSurface>
+      </ImmersiveWorkspaceSurface>
     );
 
     expect(screen.getByRole('dialog', { name: '记录记忆' })).toBeInTheDocument();
@@ -31,7 +31,7 @@ describe('RecordingSurface', () => {
 
   it('renders child controls and a visible close command when idle', () => {
     render(
-      <RecordingSurface
+      <ImmersiveWorkspaceSurface
         closeBlocked={false}
         description="录制本地音频。"
         footer={
@@ -44,16 +44,16 @@ describe('RecordingSurface', () => {
         title="记录记忆"
       >
         <Button type="button">开始录音</Button>
-      </RecordingSurface>
+      </ImmersiveWorkspaceSurface>
     );
 
     expect(screen.getByRole('button', { name: '开始录音' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关闭录音' })).toBeEnabled();
   });
 
-  it('does not reserve inline error space inside the recording surface', () => {
+  it('does not reserve inline error space inside the workspace surface', () => {
     render(
-      <RecordingSurface
+      <ImmersiveWorkspaceSurface
         closeBlocked={false}
         description="录制本地音频。"
         footer={<Button type="button">关闭录音</Button>}
@@ -62,16 +62,16 @@ describe('RecordingSurface', () => {
         title="记录记忆"
       >
         <p>仅使用本地音频</p>
-      </RecordingSurface>
+      </ImmersiveWorkspaceSurface>
     );
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/agent|cloud|api key|model/i)).not.toBeInTheDocument();
   });
 
-  it('uses an opaque semantic background for the immersive recording surface', () => {
+  it('uses an opaque semantic background for the immersive workspace surface', () => {
     render(
-      <RecordingSurface
+      <ImmersiveWorkspaceSurface
         closeBlocked={false}
         description="录制本地音频。"
         immersive
@@ -80,7 +80,7 @@ describe('RecordingSurface', () => {
         title="记录记忆"
       >
         <Button type="button">开始录音</Button>
-      </RecordingSurface>
+      </ImmersiveWorkspaceSurface>
     );
 
     expect(document.querySelector('[data-slot="drawer-overlay"]')).toHaveClass('bg-background');

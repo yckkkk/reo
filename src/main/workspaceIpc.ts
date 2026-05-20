@@ -21,7 +21,9 @@ import {
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
+  WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -29,7 +31,9 @@ import {
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_FINALIZE_NOTE_SEGMENT_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
@@ -46,6 +50,8 @@ import {
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
@@ -59,6 +65,10 @@ import {
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_LIST_SEGMENT_SUPPLEMENT_ATTACHMENTS_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
@@ -66,9 +76,14 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+  WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
@@ -80,11 +95,19 @@ import {
   workspaceDeleteSegmentResponseSchema,
   workspaceCreateMemoryRequestSchema,
   workspaceCreateMemoryResponseSchema,
+  workspaceCreateNoteSegmentDraftRequestSchema,
+  workspaceCreateNoteSegmentDraftResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
+  workspaceCreateSegmentSupplementNoteDraftRequestSchema,
+  workspaceCreateSegmentSupplementNoteDraftResponseSchema,
   workspaceCreateSegmentSupplementRecordingDraftRequestSchema,
   workspaceCreateSegmentSupplementRecordingDraftResponseSchema,
   workspaceDiscardRecordingDraftResponseSchema,
   workspaceError,
+  workspaceFinalizeNoteSegmentDraftRequestSchema,
+  workspaceFinalizeNoteSegmentDraftResponseSchema,
+  workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
+  workspaceFinalizeSegmentSupplementNoteDraftResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
   workspaceListMemorySpacesResponseSchema,
@@ -111,6 +134,16 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadSegmentContentRequestSchema,
+  workspaceReadSegmentContentResponseSchema,
+  workspaceReadSegmentSupplementContentRequestSchema,
+  workspaceReadSegmentSupplementContentResponseSchema,
+  workspaceSaveSegmentAttachmentRequestSchema,
+  workspaceSaveSegmentSupplementAttachmentRequestSchema,
+  workspaceListSegmentAttachmentsRequestSchema,
+  workspaceListSegmentSupplementAttachmentsRequestSchema,
+  workspaceSaveAttachmentResponseSchema,
+  workspaceListAttachmentsResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
@@ -170,11 +203,21 @@ import {
   workspaceUpdateMemorySpaceTitleResponseSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
+  workspaceUpdateSegmentContentTabOrderRequestSchema,
+  workspaceUpdateSegmentContentTabOrderResponseSchema,
   workspaceUpdateSegmentSupplementTitleRequestSchema,
   workspaceUpdateSegmentSupplementTitleResponseSchema,
   workspaceUpdateSegmentTitleRequestSchema,
   workspaceUpdateSegmentTitleResponseSchema,
   workspaceEntityActionResponseSchema,
+  workspaceWriteNoteSegmentDraftBodyRequestSchema,
+  workspaceWriteNoteSegmentDraftBodyResponseSchema,
+  workspaceWriteSegmentContentRequestSchema,
+  workspaceWriteSegmentContentResponseSchema,
+  workspaceWriteSegmentSupplementContentRequestSchema,
+  workspaceWriteSegmentSupplementContentResponseSchema,
+  workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
+  workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema,
   type WorkspaceEntityActionResponse,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
@@ -229,6 +272,24 @@ import {
   saveSegmentSupplementMarkdown,
 } from './recordingDrafts.js';
 import {
+  createNoteSegmentDraft,
+  createSegmentSupplementNoteDraft,
+  finalizeNoteSegmentDraft,
+  finalizeSegmentSupplementNoteDraft,
+  readFinalizedNoteSegmentContent,
+  readFinalizedNoteSegmentSupplementContent,
+  writeFinalizedNoteSegmentContent,
+  writeFinalizedNoteSegmentSupplementContent,
+  writeNoteSegmentDraftBody,
+  writeSegmentSupplementNoteDraftBody,
+} from './noteDrafts.js';
+import {
+  listNoteSegmentAttachments,
+  listNoteSegmentSupplementAttachments,
+  saveNoteSegmentAttachment,
+  saveNoteSegmentSupplementAttachment,
+} from './noteAttachments.js';
+import {
   createMemoryFromFileTruth,
   deleteMemoryFromFileTruth,
   deleteSegmentSupplementFromFileTruth,
@@ -238,6 +299,7 @@ import {
   restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   updateMemoryTitleFromFileTruth,
+  updateSegmentContentTabOrderFromFileTruth,
   updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from './memoryFiles.js';
@@ -415,11 +477,33 @@ export interface HandleCreateSegmentSupplementRecordingDraftOptions extends Hand
   readonly now?: () => string;
 }
 
+export interface HandleCreateNoteSegmentDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly createSegmentId?: () => string;
+  readonly now?: () => string;
+}
+
+export interface HandleCreateSegmentSupplementNoteDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly createSupplementId?: () => string;
+  readonly now?: () => string;
+}
+
 export interface HandleFinalizeRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
 
 export interface HandleFinalizeSegmentSupplementRecordingDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => string;
+}
+
+export interface HandleFinalizeNoteSegmentDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => string;
+}
+
+export interface HandleFinalizeSegmentSupplementNoteDraftOptions extends HandleWorkspaceRequestOptions {
+  readonly now?: () => string;
+}
+
+export interface HandleWriteNoteContentOptions extends HandleWorkspaceRequestOptions {
   readonly now?: () => string;
 }
 
@@ -1648,6 +1732,15 @@ export async function closeAllWorkspaceHandles(): Promise<void> {
   defaultRecordingTranscriptionSessions.closeAll();
   await defaultHandleStore.closeAllHandles();
   clearRecordingRuntimeState();
+}
+
+export function resolveActiveWorkspaceRootForProtocol(workspaceId: string):
+  | {
+      readonly ok: true;
+      readonly canonicalRoot: string;
+    }
+  | WorkspaceErrorEnvelope {
+  return defaultHandleStore.resolveActiveRoot({ workspaceId });
 }
 
 function createWorkspaceId(): string {
@@ -3496,6 +3589,49 @@ export async function handleUpdateSegmentTitleForTest(
   return handleUpdateSegmentTitleCore(options);
 }
 
+function handleUpdateSegmentContentTabOrderCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentContentTabOrderResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceUpdateSegmentContentTabOrderRequestSchema,
+    invalidMessage: 'updateSegmentContentTabOrder request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment content tab order workspace does not match the active handle'
+          );
+        }
+
+        const result = await updateSegmentContentTabOrderFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          contentTabOrder: request.contentTabOrder,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceUpdateSegmentContentTabOrderResponseSchema.parse(result);
+      }),
+  });
+}
+
+export async function handleUpdateSegmentContentTabOrder(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentContentTabOrderResponseSchema>> {
+  return handleUpdateSegmentContentTabOrderCore(options);
+}
+
+export async function handleUpdateSegmentContentTabOrderForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateSegmentContentTabOrderResponseSchema>> {
+  return handleUpdateSegmentContentTabOrderCore(options);
+}
+
 function handleUpdateSegmentSupplementTitleCore(
   options: HandleUpdateSegmentSupplementTitleOptions
 ): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
@@ -3826,6 +3962,148 @@ function handleCreateSegmentSupplementRecordingDraftCore({
   });
 }
 
+function handleCreateNoteSegmentDraftCore({
+  createSegmentId: createSegmentIdOption = createSegmentId,
+  now = nowIso,
+  ...options
+}: HandleCreateNoteSegmentDraftOptions): Promise<
+  z.infer<typeof workspaceCreateNoteSegmentDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCreateNoteSegmentDraftRequestSchema,
+    invalidMessage: 'createNoteSegmentDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Note segment draft workspace does not match the active handle'
+          );
+        }
+        const result = await createNoteSegmentDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          title: request.title,
+          createSegmentId: createSegmentIdOption,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceCreateNoteSegmentDraftResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { segmentId: result.segmentId, revision: result.revision } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleCreateSegmentSupplementNoteDraftCore({
+  createSupplementId: createSupplementIdOption = createSupplementId,
+  now = nowIso,
+  ...options
+}: HandleCreateSegmentSupplementNoteDraftOptions): Promise<
+  z.infer<typeof workspaceCreateSegmentSupplementNoteDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCreateSegmentSupplementNoteDraftRequestSchema,
+    invalidMessage: 'createSegmentSupplementNoteDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Note supplement draft workspace does not match the active handle'
+          );
+        }
+        const result = await createSegmentSupplementNoteDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          title: request.title,
+          createSupplementId: createSupplementIdOption,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceCreateSegmentSupplementNoteDraftResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { supplementId: result.supplementId, revision: result.revision },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleWriteNoteSegmentDraftBodyCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteNoteSegmentDraftBodyResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceWriteNoteSegmentDraftBodyRequestSchema,
+    invalidMessage: 'writeNoteSegmentDraftBody request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await writeNoteSegmentDraftBody({
+          rootPath: handle.canonicalRoot,
+          segmentId: request.segmentId,
+          bodyMarkdown: request.bodyMarkdown,
+          revision: request.revision,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteNoteSegmentDraftBodyResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { bodyByteLength: result.bodyByteLength, revision: result.revision },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleWriteSegmentSupplementNoteDraftBodyCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
+    invalidMessage: 'writeSegmentSupplementNoteDraftBody request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await writeSegmentSupplementNoteDraftBody({
+          rootPath: handle.canonicalRoot,
+          supplementId: request.supplementId,
+          bodyMarkdown: request.bodyMarkdown,
+          revision: request.revision,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { bodyByteLength: result.bodyByteLength, revision: result.revision },
+              }
+            : result
+        );
+      }),
+  });
+}
+
 export async function handleCreateRecordingDraft(
   options: HandleCreateRecordingDraftOptions
 ): Promise<z.infer<typeof workspaceCreateRecordingDraftResponseSchema>> {
@@ -3848,6 +4126,42 @@ export async function handleCreateSegmentSupplementRecordingDraftForTest(
   options: HandleCreateSegmentSupplementRecordingDraftOptions
 ): Promise<z.infer<typeof workspaceCreateSegmentSupplementRecordingDraftResponseSchema>> {
   return handleCreateSegmentSupplementRecordingDraftCore(options);
+}
+
+export async function handleCreateNoteSegmentDraft(
+  options: HandleCreateNoteSegmentDraftOptions
+): Promise<z.infer<typeof workspaceCreateNoteSegmentDraftResponseSchema>> {
+  return handleCreateNoteSegmentDraftCore(options);
+}
+
+export async function handleCreateNoteSegmentDraftForTest(
+  options: HandleCreateNoteSegmentDraftOptions
+): Promise<z.infer<typeof workspaceCreateNoteSegmentDraftResponseSchema>> {
+  return handleCreateNoteSegmentDraftCore(options);
+}
+
+export async function handleCreateSegmentSupplementNoteDraft(
+  options: HandleCreateSegmentSupplementNoteDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentSupplementNoteDraftResponseSchema>> {
+  return handleCreateSegmentSupplementNoteDraftCore(options);
+}
+
+export async function handleCreateSegmentSupplementNoteDraftForTest(
+  options: HandleCreateSegmentSupplementNoteDraftOptions
+): Promise<z.infer<typeof workspaceCreateSegmentSupplementNoteDraftResponseSchema>> {
+  return handleCreateSegmentSupplementNoteDraftCore(options);
+}
+
+export async function handleWriteNoteSegmentDraftBodyForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteNoteSegmentDraftBodyResponseSchema>> {
+  return handleWriteNoteSegmentDraftBodyCore(options);
+}
+
+export async function handleWriteSegmentSupplementNoteDraftBodyForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema>> {
+  return handleWriteSegmentSupplementNoteDraftBodyCore(options);
 }
 
 export async function handleCreateMemory(
@@ -4140,6 +4454,465 @@ export async function handleReadFinalizedAudioSegmentSupplementForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema>> {
   return handleReadFinalizedAudioSegmentSupplementCore(options);
+}
+
+function handleFinalizeNoteSegmentDraftCore({
+  now = nowIso,
+  ...options
+}: HandleFinalizeNoteSegmentDraftOptions): Promise<
+  z.infer<typeof workspaceFinalizeNoteSegmentDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_FINALIZE_NOTE_SEGMENT_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceFinalizeNoteSegmentDraftRequestSchema,
+    invalidMessage: 'finalizeNoteSegmentDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Note segment finalize workspace does not match the active handle'
+          );
+        }
+        const result = await finalizeNoteSegmentDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          title: request.title,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceFinalizeNoteSegmentDraftResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { memory: result.memory, segment: result.segment } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleFinalizeSegmentSupplementNoteDraftCore({
+  now = nowIso,
+  ...options
+}: HandleFinalizeSegmentSupplementNoteDraftOptions): Promise<
+  z.infer<typeof workspaceFinalizeSegmentSupplementNoteDraftResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
+    invalidMessage: 'finalizeSegmentSupplementNoteDraft request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Note supplement finalize workspace does not match the active handle'
+          );
+        }
+        const result = await finalizeSegmentSupplementNoteDraft({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          title: request.title,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceFinalizeSegmentSupplementNoteDraftResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  memory: result.memory,
+                  segment: result.segment,
+                  supplement: result.supplement,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadSegmentContentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentContentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadSegmentContentRequestSchema,
+    invalidMessage: 'readSegmentContent request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment content workspace does not match the active handle'
+          );
+        }
+        const result = await readFinalizedNoteSegmentContent({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadSegmentContentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  type: 'note',
+                  title: result.title,
+                  bodyMarkdown: result.bodyMarkdown,
+                  bodyByteLength: result.bodyByteLength,
+                  baselineContentHash: result.baselineContentHash,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadSegmentSupplementContentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSupplementContentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadSegmentSupplementContentRequestSchema,
+    invalidMessage: 'readSegmentSupplementContent request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment supplement content workspace does not match the active handle'
+          );
+        }
+        const result = await readFinalizedNoteSegmentSupplementContent({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadSegmentSupplementContentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  supplementId: request.supplementId,
+                  type: 'note',
+                  title: result.title,
+                  bodyMarkdown: result.bodyMarkdown,
+                  bodyByteLength: result.bodyByteLength,
+                  baselineContentHash: result.baselineContentHash,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleWriteSegmentContentCore({
+  now = nowIso,
+  ...options
+}: HandleWriteNoteContentOptions): Promise<
+  z.infer<typeof workspaceWriteSegmentContentResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceWriteSegmentContentRequestSchema,
+    invalidMessage: 'writeSegmentContent request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment content write workspace does not match the active handle'
+          );
+        }
+        const result = await writeFinalizedNoteSegmentContent({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          bodyMarkdown: request.bodyMarkdown,
+          baselineContentHash: request.baselineContentHash,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteSegmentContentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  baselineContentHash: result.baselineContentHash,
+                  bodyByteLength: result.bodyByteLength,
+                  saved: true,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleWriteSegmentSupplementContentCore({
+  now = nowIso,
+  ...options
+}: HandleWriteNoteContentOptions): Promise<
+  z.infer<typeof workspaceWriteSegmentSupplementContentResponseSchema>
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceWriteSegmentSupplementContentRequestSchema,
+    invalidMessage: 'writeSegmentSupplementContent request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment supplement content write workspace does not match the active handle'
+          );
+        }
+        const result = await writeFinalizedNoteSegmentSupplementContent({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          bodyMarkdown: request.bodyMarkdown,
+          baselineContentHash: request.baselineContentHash,
+          now,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteSegmentSupplementContentResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  baselineContentHash: result.baselineContentHash,
+                  bodyByteLength: result.bodyByteLength,
+                  saved: true,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleSaveSegmentAttachmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSaveAttachmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSaveSegmentAttachmentRequestSchema,
+    invalidMessage: 'saveSegmentAttachment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment attachment workspace does not match the active handle'
+          );
+        }
+        const result = await saveNoteSegmentAttachment({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          originalFilename: request.originalFilename,
+          mimeType: request.mimeType,
+          payload: request.payload,
+        });
+        return workspaceSaveAttachmentResponseSchema.parse(
+          result.ok ? { ok: true, value: { relativePath: result.relativePath } } : result
+        );
+      }),
+  });
+}
+
+function handleListSegmentAttachmentsCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListAttachmentsResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceListSegmentAttachmentsRequestSchema,
+    invalidMessage: 'listSegmentAttachments request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment attachments workspace does not match the active handle'
+          );
+        }
+        const result = await listNoteSegmentAttachments({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+        });
+        return workspaceListAttachmentsResponseSchema.parse(
+          result.ok ? { ok: true, value: { attachments: result.attachments } } : result
+        );
+      }),
+  });
+}
+
+function handleSaveSegmentSupplementAttachmentCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSaveAttachmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_ATTACHMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSaveSegmentSupplementAttachmentRequestSchema,
+    invalidMessage: 'saveSegmentSupplementAttachment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment supplement attachment workspace does not match the active handle'
+          );
+        }
+        const result = await saveNoteSegmentSupplementAttachment({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          originalFilename: request.originalFilename,
+          mimeType: request.mimeType,
+          payload: request.payload,
+        });
+        return workspaceSaveAttachmentResponseSchema.parse(
+          result.ok ? { ok: true, value: { relativePath: result.relativePath } } : result
+        );
+      }),
+  });
+}
+
+function handleListSegmentSupplementAttachmentsCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListAttachmentsResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_LIST_SEGMENT_SUPPLEMENT_ATTACHMENTS_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceListSegmentSupplementAttachmentsRequestSchema,
+    invalidMessage: 'listSegmentSupplementAttachments request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment supplement attachments workspace does not match the active handle'
+          );
+        }
+        const result = await listNoteSegmentSupplementAttachments({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+        });
+        return workspaceListAttachmentsResponseSchema.parse(
+          result.ok ? { ok: true, value: { attachments: result.attachments } } : result
+        );
+      }),
+  });
+}
+
+export async function handleFinalizeNoteSegmentDraftForTest(
+  options: HandleFinalizeNoteSegmentDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeNoteSegmentDraftResponseSchema>> {
+  return handleFinalizeNoteSegmentDraftCore(options);
+}
+
+export async function handleFinalizeSegmentSupplementNoteDraftForTest(
+  options: HandleFinalizeSegmentSupplementNoteDraftOptions
+): Promise<z.infer<typeof workspaceFinalizeSegmentSupplementNoteDraftResponseSchema>> {
+  return handleFinalizeSegmentSupplementNoteDraftCore(options);
+}
+
+export async function handleReadSegmentContentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentContentResponseSchema>> {
+  return handleReadSegmentContentCore(options);
+}
+
+export async function handleReadSegmentSupplementContentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSupplementContentResponseSchema>> {
+  return handleReadSegmentSupplementContentCore(options);
+}
+
+export async function handleWriteSegmentContentForTest(
+  options: HandleWriteNoteContentOptions
+): Promise<z.infer<typeof workspaceWriteSegmentContentResponseSchema>> {
+  return handleWriteSegmentContentCore(options);
+}
+
+export async function handleWriteSegmentSupplementContentForTest(
+  options: HandleWriteNoteContentOptions
+): Promise<z.infer<typeof workspaceWriteSegmentSupplementContentResponseSchema>> {
+  return handleWriteSegmentSupplementContentCore(options);
+}
+
+export async function handleSaveSegmentAttachmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSaveAttachmentResponseSchema>> {
+  return handleSaveSegmentAttachmentCore(options);
+}
+
+export async function handleListSegmentAttachmentsForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListAttachmentsResponseSchema>> {
+  return handleListSegmentAttachmentsCore(options);
+}
+
+export async function handleSaveSegmentSupplementAttachmentForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSaveAttachmentResponseSchema>> {
+  return handleSaveSegmentSupplementAttachmentCore(options);
+}
+
+export async function handleListSegmentSupplementAttachmentsForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListAttachmentsResponseSchema>> {
+  return handleListSegmentSupplementAttachmentsCore(options);
 }
 
 function handleFinalizeRecordingDraftCore({
@@ -5062,6 +5835,16 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL, (event, input) =>
+    handleUpdateSegmentContentTabOrder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
@@ -5248,6 +6031,184 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
       }).then((response) => afterOk(response, () => backfillRuntime.pause('recording')))
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL, (event, input) =>
+    handleCreateNoteSegmentDraft({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+    (event, input) =>
+      handleCreateSegmentSupplementNoteDraft({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
+    workspaceWriteNoteSegmentDraftBodyRequestSchema,
+    'writeNoteSegmentDraftBody request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await writeNoteSegmentDraftBody({
+          rootPath: handle.canonicalRoot,
+          segmentId: request.segmentId,
+          bodyMarkdown: request.bodyMarkdown,
+          revision: request.revision,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteNoteSegmentDraftBodyResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { bodyByteLength: result.bodyByteLength, revision: result.revision },
+              }
+            : result
+        );
+      })
+  );
+  registerWorkspaceHandleRequest(
+    WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
+    workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
+    'writeSegmentSupplementNoteDraftBody request is invalid',
+    (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await writeSegmentSupplementNoteDraftBody({
+          rootPath: handle.canonicalRoot,
+          supplementId: request.supplementId,
+          bodyMarkdown: request.bodyMarkdown,
+          revision: request.revision,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { bodyByteLength: result.bodyByteLength, revision: result.revision },
+              }
+            : result
+        );
+      })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_FINALIZE_NOTE_SEGMENT_DRAFT_CHANNEL, (event, input) =>
+    handleFinalizeNoteSegmentDraftCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      now: nowIso,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+    (event, input) =>
+      handleFinalizeSegmentSupplementNoteDraftCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        now: nowIso,
+      })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL, (event, input) =>
+    handleReadSegmentContentCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL, (event, input) =>
+    handleReadSegmentSupplementContentCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL, (event, input) =>
+    handleWriteSegmentContentCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      now: nowIso,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL, (event, input) =>
+    handleWriteSegmentSupplementContentCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      now: nowIso,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL, (event, input) =>
+    handleSaveSegmentAttachmentCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL, (event, input) =>
+    handleListSegmentAttachmentsCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_ATTACHMENT_CHANNEL,
+    (event, input) =>
+      handleSaveSegmentSupplementAttachmentCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_LIST_SEGMENT_SUPPLEMENT_ATTACHMENTS_CHANNEL,
+    (event, input) =>
+      handleListSegmentSupplementAttachmentsCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,

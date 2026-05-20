@@ -28,7 +28,7 @@ Reo 的价值在跨模态主题容器中长期成立。典型 Memory 形态：
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充。`note`、`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio 单模态是 enabling phase，不是 Reo 终局形态。
+当前已实现的 Segment 类型是 `audio` 和 `note`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充和 `note` 笔记补充。`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note 是 enabling phase，不是 Reo 终局形态。
 
 Reo 的核心目标是让 agent 与用户共同围绕主题积累跨模态材料，并把材料转化成只属于用户的作品。用户负责表达、思考、判断，agent 负责筛选、整理、深化、生成、引导用户用最合适的模态做下一步补充（补录音 / 拍照 / 写笔记 / 上传文件）。原始材料不被假设为资产，价值在 agent 与用户共同筛选、深化、转化成作品之后才出现。SegmentSupplement 既是用户主动的多模态补充，也是 agent 引导更深表达的载体。
 
@@ -91,14 +91,14 @@ Loaded Workspace 使用三面板结构：
 
 - Workspace 层级：当前本地记忆空间，右侧 Memory rail 展示这个空间里的所有 Memory。
 - Memory 层级：主题容器。选中 Memory 后只切换当前 Workspace Stage 的当前 Memory context；当前 runtime 不进入单独详情 route。
-- Segment 层级：Memory 内的主体记录。当前 runtime 只实现 `audio` Segment；Memory 的 Segment 关系来自该 Memory 目录下合法 finalized Segment 文件空间节点、`segment.md` 和 `.reo/objects/segments/<segmentId>.json` manifest。
-- SegmentSupplement 层级：围绕某个 Segment 的补充内容。当前 Memory Studio 的 selected Segment `+` 菜单只暴露录音补充项；录音补充写入 selected Segment 的 supplement，不进入 Memory 顶层 Segment strip。
+- Segment 层级：Memory 内的主体记录。当前 runtime 实现 `audio` 和 `note` Segment；Memory 的 Segment 关系来自该 Memory 目录下合法 finalized Segment 文件空间节点、`segment.md` 和 `.reo/objects/segments/<segmentId>.json` manifest。
+- SegmentSupplement 层级：围绕某个 Segment 的补充内容。当前 Memory Studio 的 selected Segment `+` 菜单暴露录音补充和笔记补充；补充内容写入 selected Segment 的 supplement，不进入 Memory 顶层 Segment strip。
 
 中间面板的横向片段时间线只属于当前选中的 Memory。它不能表示整个 Workspace 的全部内容，也不能演变成 workspace feed、日志流、文件流或社交动态流。
 
 ## 当前表达入口
 
-底部 Floating Action Button Speed Dial 是 Workspace Stage 的表达入口。当前唯一可执行 action 是录音。note、photo、video 和 imported_file 只保留不可用的 icon-only action 位置，用于表达已接受的信息架构，不触发 runtime surface。
+底部 Floating Action Button Speed Dial 是 Workspace Stage 的表达入口。当前可执行 action 是录音和笔记；photo、video 和 imported_file 只保留不可用的 icon-only action 位置，用于表达已接受的信息架构，不触发 runtime surface。
 
 录音流程使用浏览器 `MediaRecorder` 和 `getUserMedia` 的薄 adapter。Renderer 先通过 IPC 获得一次性 microphone intent，再请求 audio-only media stream。音频 chunk 通过 IPC 串行写入 main process 的 durable draft；stop 必须等待 MediaRecorder 最后的 `dataavailable` chunk 完成后再 finalize。
 
@@ -108,23 +108,23 @@ Loaded Workspace 使用三面板结构：
 
 当前点击右侧 Memory rail 只切换 loaded workspace frame 内的当前 Memory context，不进入独立详情 route。Memory rail 按 Memory 投影更新时间倒序排列，新增 Segment、保存转写或给 Segment 新增补充都会让相关 Memory 更新位置；重命名只改变可见名称，不改变 activity 排序。AppShell panel titlebar 的 Breadcrumb 显示当前记忆空间标题；选中 Memory 后 Breadcrumb 增加当前 Memory 标题。两个标题都提供统一 Entity More 菜单，支持用默认应用打开、在访达中显示、复制路径、重命名和移除或删除；titlebar 不显示额外下拉图标，两层之间只显示圆点 separator。
 
-选中 Memory 后中间区域显示 Memory Studio：空态、该 Memory 内按投影更新时间倒序排列的 finalized audio Segment 横向预览流、横向浏览按钮、时间轴、当前片段内容区、本地音频播放、已保存 transcript、动态内容 tab 和 SegmentSupplement `+` 菜单。Memory Studio 不重复显示 Memory title、片段数量或总时长 meta。
+选中 Memory 后中间区域显示 Memory Studio：空态、该 Memory 内按投影更新时间倒序排列的 finalized Segment 横向预览流、横向浏览按钮、时间轴、当前片段内容区、本地音频播放或笔记播放占位、已保存 transcript 或笔记正文、动态内容 tab 和 SegmentSupplement `+` 菜单。Memory Studio 不重复显示 Memory title、片段数量或总时长 meta。
 
-Segment 选择只在当前 Memory 内同步 card、时间轴点、播放区、内容 tab 和内容区；普通录音完成后新 finalized audio Segment 以 `录音N` 命名，立即进入当前 Memory 的横向预览流并成为 selected Segment。横向浏览按钮只滚动 Segment 预览流，不改变当前 Segment。
+Segment 选择只在当前 Memory 内同步 card、时间轴点、播放区、内容 tab 和内容区；普通录音完成后新 finalized audio Segment 以 `录音N` 命名，笔记完成后新 finalized note Segment 以 `笔记N` 命名，立即进入当前 Memory 的横向预览流并成为 selected Segment。横向浏览按钮只滚动 Segment 预览流，不改变当前 Segment。
 
-Segment card、时间轴圆点和时间标签属于同一个横向 scroll item，圆点和时间固定在对应卡片下方居中，并随 Segment strip 横向滚动；时间标签显示该 Segment 的创建时间，不显示片段时长。播放区 waveform 从 selected finalized audio Segment 的真实音频 bytes 解码峰值生成，音频无法解码时不展示固定占位波形。
+Segment card、时间轴圆点和时间标签属于同一个横向 scroll item，圆点和时间固定在对应卡片下方居中，并随 Segment strip 横向滚动；时间标签显示该 Segment 的创建时间，不显示片段时长。播放区 waveform 从 selected finalized audio Segment 的真实音频 bytes 解码峰值生成，音频无法解码时不展示固定占位波形；selected finalized note Segment 保留同一播放区位置并显示不可播放占位，不新增另一套 note-only content layout。
 
-selected Segment 存在 finalized SegmentSupplement 时，每个 SegmentSupplement 作为独立内容 tab 出现在 `转录` 旁边；tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充录音时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内使用与主播放条一致的播放按钮、真实 waveform slider 和等宽时间，并在播放行下方展示该 supplement 自身 transcript、空态、失败重试态或生成中状态。
+selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内使用与主播放条一致的播放按钮、真实 waveform slider 和等宽时间，并在播放行下方展示该 supplement 自身 transcript、空态、失败重试态或生成中状态；笔记正文和补充笔记都在 Markdown Content Surface 内显示，并通过右上角展开按钮进入沉浸式编辑页面。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示。
 
-Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement audio content，不聚合整个 Workspace。右侧 Memory rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。
+Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement content，不聚合整个 Workspace。右侧 Memory rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。
 
 Memory rail 宽度收敛到 `240px`，列表 surface 使用全高 `bg-background` 并与主内容区保持同一画布填充；rail shell 使用 `border-l border-secondary` 标记主内容和右侧记忆列表的跨区域边界。MemoryRail memory item 使用 `bg-card` 表达常态卡片、`bg-secondary` 表达 hover 和当前状态，当前 Memory 同时保留 `aria-current`；不靠边框或阴影表达层级。
 
 Memory Studio 必须是首屏可理解的 studio surface：Segment card、timeline、playback、tab 和 transcript 不靠页面纵向滚动才能看完整主体验；中间舞台、播放器和内容区在窄视口内保持在 panel 内，Segment strip 只在自身横向滚动，不制造页面级横向滚动。
 
-Audio Segment card 使用紧凑正方形比例、无描边纯填充、`rounded-xl`、标题直入、静态 waveform bars 和 mono duration。卡片用 `bg-card` 或透明表达常态、`bg-secondary` 表达选中；浅色模式下卡片比页面更灰，深色模式下卡片比页面更亮，不用边框或阴影制造层级。卡片不展示 `一个补充`、`已有转录` 或 `本地音频` 这类状态标签。卡片 More 入口只在 hover、focus 或菜单打开时显示，并提供用默认应用打开、在访达中显示、复制路径、生成转录或重新生成转录、片段重命名和片段删除。
+Audio Segment card 使用紧凑正方形比例、无描边纯填充、`rounded-xl`、标题直入、静态 waveform bars 和 mono duration。Note Segment card 使用同一紧凑卡片结构，以标题和正文 byte 投影表达笔记内容，不展示音频 waveform 或 transcript 状态。卡片用 `bg-card` 或透明表达常态、`bg-secondary` 表达选中；浅色模式下卡片比页面更灰，深色模式下卡片比页面更亮，不用边框或阴影制造层级。卡片不展示 `一个补充`、`已有转录` 或 `本地音频` 这类状态标签。卡片 More 入口只在 hover、focus 或菜单打开时显示，并提供用默认应用打开、在访达中显示、复制路径、生成转录或重新生成转录、片段重命名和片段删除；转录动作只对 audio Segment 可用。
 
-当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，笔记、视频和图片不会作为常驻禁用 tab 出现。SegmentSupplement tab 用 active pill 表达当前选择；More 是 tab 的 sibling 操作入口，只在 tab hover 或 More 自身键盘 focus-visible 时展开，鼠标移开后收起视觉状态，不能因为 tab active 或 DropdownMenu open 而常驻展开；active 只让当前 More 可以进入键盘路径。tab pill 和 More reveal 使用 400ms `cubic-bezier(0.2, 0.9, 0.1, 1)`，内容 panel 切换使用 300ms 同曲线，DropdownMenu 使用 150ms 进入动效。当前 More 菜单提供用默认应用打开、在访达中显示、复制路径、生成转录或重新生成转录、重命名和删除。内容 tab rail 支持当前会话内 drag/drop 重排，`转录` 和补充 tab 都可移动；该顺序不持久化，不创建假 schema 或假 IPC。`+` 菜单显示录音补充项并以 `补充录音N` 命名，写入 selected Segment supplement，不新建 Memory，也不创建同级 Segment。
+当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，note Segment 始终有 `正文` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，视频和图片不会作为常驻禁用 tab 出现。所有内容 tab 用 active pill 表达当前选择；More 是 tab 的 sibling 操作入口，只在 tab hover 或 More 自身键盘 focus-visible 时展开，鼠标移开后收起视觉状态，不能因为 tab active 或 DropdownMenu open 而常驻展开；active 只让当前 More 可以进入键盘路径。tab pill 和 More reveal 使用 400ms `cubic-bezier(0.2, 0.9, 0.1, 1)`，内容 panel 切换使用 300ms 同曲线，DropdownMenu 使用 150ms 进入动效。`转录` / `正文` tab 的 More 复用 Segment More 菜单，提供用默认应用打开、在访达中显示、复制路径、重命名和删除；audio `转录` tab 额外提供生成或重新生成转录。SegmentSupplement tab 的 More 复用 SegmentSupplement More 菜单，提供同一套实体操作，audio supplement 额外提供生成或重新生成转录。内容 tab rail 支持当前会话内 drag/drop 重排，`转录` / `正文` 和补充 tab 都可移动；该顺序不持久化，不创建假 schema 或假 IPC。`+` 菜单显示录音补充和笔记补充，分别以 `补充录音N` 和 `补充笔记N` 命名，写入 selected Segment supplement，不新建 Memory，也不创建同级 Segment。
 
 Memory 删除是当前 Memory 容器的危险操作。用户只能从 Memory rail 的 More 菜单进入删除确认；确认后 main process 按 `.reo/objects/memories/<memoryId>.json` 找到当前 Memory 目录并移入 `.reo/trash/memories/`，再刷新 Workspace snapshot。删除成功后 renderer 移除该 Memory 的 detail cache，若当前 Memory 被删除则切换到剩余第一条 Memory 或回到 Workspace Stage，并通过 toast 提供本次恢复动作。恢复只把同一 `restoreToken` 对应的 Memory 从恢复区移回 active memories，不恢复为 Segment 或 SegmentSupplement，也不暴露本地路径。
 

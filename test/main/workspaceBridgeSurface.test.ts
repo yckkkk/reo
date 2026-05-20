@@ -40,6 +40,20 @@ const workspaceBridgeKeys = [
   'readFinalizedAudioSegmentSupplement',
   'createRecordingDraft',
   'createSegmentSupplementRecordingDraft',
+  'createNoteSegmentDraft',
+  'createSegmentSupplementNoteDraft',
+  'writeNoteSegmentDraftBody',
+  'writeSegmentSupplementNoteDraftBody',
+  'finalizeNoteSegmentDraft',
+  'finalizeSegmentSupplementNoteDraft',
+  'readSegmentContent',
+  'readSegmentSupplementContent',
+  'writeSegmentContent',
+  'writeSegmentSupplementContent',
+  'saveSegmentAttachment',
+  'listSegmentAttachments',
+  'saveSegmentSupplementAttachment',
+  'listSegmentSupplementAttachments',
   'readRecordingDraftAudio',
   'appendRecordingAudioChunk',
   'appendSegmentSupplementRecordingAudioChunk',
@@ -51,6 +65,7 @@ const workspaceBridgeKeys = [
   'updateMemoryTitle',
   'updateSegmentTitle',
   'updateSegmentSupplementTitle',
+  'updateSegmentContentTabOrder',
   'saveTranscript',
   'saveSegmentSupplementTranscript',
   'requestSegmentTranscriptionBackfill',
@@ -189,6 +204,110 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
   });
+  await bridge.createNoteSegmentDraft({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    title: 'Note',
+  });
+  await bridge.createSegmentSupplementNoteDraft({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    title: 'Supplement note',
+  });
+  await bridge.writeNoteSegmentDraftBody({
+    workspaceHandle: 'wh_1',
+    segmentId: 'seg_1',
+    bodyMarkdown: 'body',
+    revision: 0,
+  });
+  await bridge.writeSegmentSupplementNoteDraftBody({
+    workspaceHandle: 'wh_1',
+    supplementId: 'sup_1',
+    bodyMarkdown: 'body',
+    revision: 0,
+  });
+  await bridge.finalizeNoteSegmentDraft({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    title: 'Final note',
+  });
+  await bridge.finalizeSegmentSupplementNoteDraft({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    title: 'Final supplement',
+  });
+  await bridge.readSegmentContent({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    requestId: 'request_seg_1',
+  });
+  await bridge.readSegmentSupplementContent({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    requestId: 'request_sup_1',
+  });
+  await bridge.writeSegmentContent({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    bodyMarkdown: 'updated',
+    baselineContentHash: 'a'.repeat(64),
+  });
+  await bridge.writeSegmentSupplementContent({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    bodyMarkdown: 'updated',
+    baselineContentHash: 'a'.repeat(64),
+  });
+  await bridge.saveSegmentAttachment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    originalFilename: 'image.png',
+    mimeType: 'image/png',
+    payload: new Uint8Array([1]),
+  });
+  await bridge.listSegmentAttachments({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
+  await bridge.saveSegmentSupplementAttachment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    originalFilename: 'supplement.png',
+    mimeType: 'image/png',
+    payload: new Uint8Array([2]),
+  });
+  await bridge.listSegmentSupplementAttachments({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+  });
   await bridge.readRecordingDraftAudio({ workspaceHandle: 'wh_1', segmentId: 'seg_1' });
   await bridge.appendSegmentSupplementRecordingAudioChunk({
     workspaceHandle: 'wh_1',
@@ -258,6 +377,20 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentSupplement',
     'workspace:createSegmentSupplementRecordingDraft',
+    'workspace:createNoteSegmentDraft',
+    'workspace:createSegmentSupplementNoteDraft',
+    'workspace:writeNoteSegmentDraftBody',
+    'workspace:writeSegmentSupplementNoteDraftBody',
+    'workspace:finalizeNoteSegmentDraft',
+    'workspace:finalizeSegmentSupplementNoteDraft',
+    'workspace:readSegmentContent',
+    'workspace:readSegmentSupplementContent',
+    'workspace:writeSegmentContent',
+    'workspace:writeSegmentSupplementContent',
+    'workspace:saveSegmentAttachment',
+    'workspace:listSegmentAttachments',
+    'workspace:saveSegmentSupplementAttachment',
+    'workspace:listSegmentSupplementAttachments',
     'workspace:readRecordingDraftAudio',
     'workspace:appendSegmentSupplementRecordingAudioChunk',
     'workspace:cloneRecordingDraftPrefix',
@@ -373,6 +506,13 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     supplementId: 'sup_1',
     title: '现场补充',
   });
+  await bridge.updateSegmentContentTabOrder({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    contentTabOrder: ['supplement:sup_1', 'segment'],
+  });
   await bridge.deleteSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -428,6 +568,16 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
         segmentId: 'seg_1',
         supplementId: 'sup_1',
         title: '现场补充',
+      },
+    },
+    {
+      channel: 'workspace:updateSegmentContentTabOrder',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        contentTabOrder: ['supplement:sup_1', 'segment'],
       },
     },
     {

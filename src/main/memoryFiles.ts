@@ -64,9 +64,11 @@ import {
   type FinalizeTranscriptionAttempt,
   type LastTranscriptionAttempt,
   workspaceMemorySummarySchema,
+  workspaceSegmentContentTabOrderItemSchema,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
   type WorkspaceMemoryDetailProjection,
+  type WorkspaceSegmentContentTabOrderItem,
   type WorkspaceSegmentSupplementProjection,
   type WorkspaceSegmentProjection,
 } from '../workspace-contract/workspace-contract.js';
@@ -121,7 +123,7 @@ interface MemoryObjectManifest {
   readonly updatedAt: string;
 }
 
-interface SegmentObjectManifest {
+interface AudioSegmentObjectManifest {
   readonly schemaVersion: 1;
   readonly objectType: 'segment';
   readonly workspaceId: string;
@@ -135,9 +137,26 @@ interface SegmentObjectManifest {
   readonly nextSequence: number;
   readonly audioByteLength: number;
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
+  readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
 }
 
-interface SupplementObjectManifest {
+interface NoteSegmentObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'segment';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly kind: 'note';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly bodyByteLength: number;
+  readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
+}
+
+type SegmentObjectManifest = AudioSegmentObjectManifest | NoteSegmentObjectManifest;
+
+interface AudioSupplementObjectManifest {
   readonly schemaVersion: 1;
   readonly objectType: 'supplement';
   readonly workspaceId: string;
@@ -154,15 +173,41 @@ interface SupplementObjectManifest {
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
 }
 
-interface FinalizedSegmentSemanticTruth extends SegmentObjectManifest {
-  readonly title: string;
-  readonly markdownContent: string;
+interface NoteSupplementObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'supplement';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly kind: 'note';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly bodyByteLength: number;
 }
 
-interface FinalizedSupplementSemanticTruth extends SupplementObjectManifest {
+type SupplementObjectManifest = AudioSupplementObjectManifest | NoteSupplementObjectManifest;
+
+type FinalizedSegmentSemanticTruth = SegmentObjectManifest & {
   readonly title: string;
   readonly markdownContent: string;
-}
+};
+
+type FinalizedAudioSegmentSemanticTruth = AudioSegmentObjectManifest & {
+  readonly title: string;
+  readonly markdownContent: string;
+};
+
+type FinalizedNoteSegmentSemanticTruth = NoteSegmentObjectManifest & {
+  readonly title: string;
+  readonly markdownContent: string;
+};
+
+type FinalizedSupplementSemanticTruth = SupplementObjectManifest & {
+  readonly title: string;
+  readonly markdownContent: string;
+};
 
 export interface MemorySummary {
   readonly memoryId: string;
@@ -170,9 +215,12 @@ export interface MemorySummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly segmentCount: number;
-  readonly durationMs: number;
+  readonly audioSegmentCount: number;
+  readonly noteSegmentCount: number;
+  readonly audioDurationMs: number;
   readonly audioByteLength: number;
-  readonly hasTranscript: boolean;
+  readonly hasAudioTranscript: boolean;
+  readonly hasAnyNote: boolean;
   readonly supplementCount: number;
 }
 
@@ -184,13 +232,23 @@ export interface MemorySegmentSummary {
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }
 
-interface FinalizedSegmentFileTruth {
+interface FinalizedSegmentFileTruthBase {
   readonly segmentId: string;
   readonly recordingDirectory: string;
   readonly recordingDirectoryIdentity: DirectoryIdentity;
   readonly metadata: FinalizedSegmentSemanticTruth;
+}
+
+interface FinalizedAudioSegmentFileTruth extends FinalizedSegmentFileTruthBase {
+  readonly metadata: FinalizedAudioSegmentSemanticTruth;
   readonly audioByteLength: number;
 }
+
+interface FinalizedNoteSegmentFileTruth extends FinalizedSegmentFileTruthBase {
+  readonly metadata: FinalizedNoteSegmentSemanticTruth;
+}
+
+type FinalizedSegmentFileTruth = FinalizedAudioSegmentFileTruth | FinalizedNoteSegmentFileTruth;
 
 export interface SegmentSupplementSummary {
   readonly supplementId: string;
@@ -204,6 +262,10 @@ export type SegmentDirectoryLookup =
       readonly status: 'found';
       readonly directory: string;
       readonly segment: MemorySegmentSummary;
+    }
+  | {
+      readonly status: 'found-non-audio';
+      readonly directory: string;
     }
   | { readonly status: 'not-found' }
   | { readonly status: 'invalid-id' }
@@ -318,6 +380,12 @@ export interface UpdateSegmentTitleInput extends MemoryTargetInput {
   readonly now: () => string;
 }
 
+export interface UpdateSegmentContentTabOrderInput extends MemoryTargetInput {
+  readonly workspaceId: string;
+  readonly segmentId: string;
+  readonly contentTabOrder: readonly WorkspaceSegmentContentTabOrderItem[];
+}
+
 export interface UpdateSegmentSupplementTitleInput extends MemoryTargetInput {
   readonly workspaceId: string;
   readonly segmentId: string;
@@ -345,6 +413,7 @@ let beforeDuplicateRecordingCheckForTest: (() => MaybePromise<void>) | null = nu
 let beforeMemoryIndexEntryReadForTest: (() => MaybePromise<void>) | null = null;
 let beforeFileSpaceNodeMoveForTest: (() => MaybePromise<void>) | null = null;
 let beforeSegmentFileTruthListForTest: (() => MaybePromise<void>) | null = null;
+let beforeMemoryDetailProjectionForTest: (() => MaybePromise<void>) | null = null;
 let beforeMemoryDirectoryCandidateScanForTest:
   | ((input: { readonly parentDirectory: string; readonly memoryId: string }) => MaybePromise<void>)
   | null = null;
@@ -680,25 +749,39 @@ function initialFinalizeTranscriptionAttempt(
   return value ?? 'never';
 }
 
-const segmentObjectManifestSchema = z
+const segmentObjectManifestBaseSchema = z
   .object({
     schemaVersion: z.literal(1),
     objectType: z.literal('segment'),
     workspaceId: z.string().min(1),
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
     segmentId: z.string().regex(SEGMENT_ID_PATTERN),
-    kind: z.literal('audio'),
     createdAt: z.string(),
     finalizedAt: z.string(),
     updatedAt: z.string(),
-    durationMs: z.number().int().nonnegative(),
-    nextSequence: z.number().int().nonnegative(),
-    audioByteLength: z.number().int().nonnegative(),
-    lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
+    contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
   })
   .strict();
 
-const supplementObjectManifestSchema = z
+const audioSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend({
+  kind: z.literal('audio'),
+  durationMs: z.number().int().nonnegative(),
+  nextSequence: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
+});
+
+const noteSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend({
+  kind: z.literal('note'),
+  bodyByteLength: z.number().int().nonnegative(),
+});
+
+const segmentObjectManifestSchema = z.discriminatedUnion('kind', [
+  audioSegmentObjectManifestSchema,
+  noteSegmentObjectManifestSchema,
+]);
+
+const supplementObjectManifestBaseSchema = z
   .object({
     schemaVersion: z.literal(1),
     objectType: z.literal('supplement'),
@@ -706,16 +789,29 @@ const supplementObjectManifestSchema = z
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
     segmentId: z.string().regex(SEGMENT_ID_PATTERN),
     supplementId: z.string().regex(SUPPLEMENT_ID_PATTERN),
-    kind: z.literal('audio'),
     createdAt: z.string(),
     finalizedAt: z.string(),
     updatedAt: z.string(),
-    durationMs: z.number().int().nonnegative(),
-    nextSequence: z.number().int().nonnegative(),
-    audioByteLength: z.number().int().nonnegative(),
-    lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
   })
   .strict();
+
+const audioSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.extend({
+  kind: z.literal('audio'),
+  durationMs: z.number().int().nonnegative(),
+  nextSequence: z.number().int().nonnegative(),
+  audioByteLength: z.number().int().nonnegative(),
+  lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
+});
+
+const noteSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.extend({
+  kind: z.literal('note'),
+  bodyByteLength: z.number().int().nonnegative(),
+});
+
+const supplementObjectManifestSchema = z.discriminatedUnion('kind', [
+  audioSupplementObjectManifestSchema,
+  noteSupplementObjectManifestSchema,
+]);
 
 const workspaceIndexSchema = z
   .object({
@@ -843,6 +939,12 @@ export function setBeforeSegmentFileTruthListForTest(
   hook: (() => MaybePromise<void>) | null
 ): void {
   beforeSegmentFileTruthListForTest = hook;
+}
+
+export function setBeforeMemoryDetailProjectionForTest(
+  hook: (() => MaybePromise<void>) | null
+): void {
+  beforeMemoryDetailProjectionForTest = hook;
 }
 
 export function setBeforeMemoryDirectoryCandidateScanForTest(
@@ -2245,7 +2347,7 @@ async function trashedSegmentDirectory(
   });
 }
 
-async function memorySegmentDirectoryForNewNode(
+export async function memorySegmentDirectoryForNewNode(
   rootPath: string,
   memoryId: string,
   segmentId: string,
@@ -2356,11 +2458,21 @@ export async function assertNoDuplicateSegmentDirectoryById(
     } catch {
       continue;
     }
-    if (memory.memoryId === ownerMemoryId) {
-      continue;
-    }
     let candidate: string;
     const memoryDirectoryPath = path.join(memoriesDirectory, entry.name);
+    const segmentsDirectory = await resolveSafeWorkspaceChild(
+      rootPath,
+      path.join(memoryDirectoryPath, 'segments')
+    );
+    const segmentEntries = await readExistingDirectoryEntries(segmentsDirectory);
+    const likelyCandidateCount = segmentEntries.filter(
+      (segmentEntry) =>
+        (segmentEntry.isDirectory() || segmentEntry.isSymbolicLink()) &&
+        fileSpaceNodeDirectoryNameMatchesId(segmentEntry.name, segmentId)
+    ).length;
+    if (likelyCandidateCount > 1) {
+      throw new Error('Duplicate finalized segment id');
+    }
     try {
       candidate = await resolveSegmentDirectoryInMemoryDirectory({
         memoryDirectory: memoryDirectoryPath,
@@ -2373,6 +2485,9 @@ export async function assertNoDuplicateSegmentDirectoryById(
         throw new Error('Duplicate finalized segment id', { cause: error });
       }
       throw error;
+    }
+    if (memory.memoryId === ownerMemoryId) {
+      continue;
     }
     let metadata: Awaited<ReturnType<typeof lstat>>;
     try {
@@ -2389,7 +2504,10 @@ export async function assertNoDuplicateSegmentDirectoryById(
   }
 }
 
-async function readMemoryFileTruth(rootPath: string, memoryId: string): Promise<MemoryFileTruth> {
+export async function readMemoryFileTruth(
+  rootPath: string,
+  memoryId: string
+): Promise<MemoryFileTruth> {
   const directory = await memoryDirectory(rootPath, memoryId);
   const memory = await readMemoryFileTruthFromDirectory(rootPath, directory);
   if (memory.memoryId !== memoryId) {
@@ -2419,6 +2537,20 @@ function readFileSizeInKnownDirectory(
   } finally {
     closeSync(fd);
   }
+}
+
+function markdownBodyByteLength(markdownContent: string): number {
+  return Buffer.byteLength(markdownContent, 'utf8');
+}
+
+function isAudioSegmentFileTruth(
+  fileTruth: FinalizedSegmentFileTruth | null
+): fileTruth is FinalizedAudioSegmentFileTruth {
+  return fileTruth?.metadata.kind === 'audio';
+}
+
+function hasNoteSupplement(supplements: readonly WorkspaceSegmentSupplementProjection[]): boolean {
+  return supplements.some((supplement) => supplement.type === 'note');
 }
 
 function unlinkFileInKnownDirectory(
@@ -2454,7 +2586,7 @@ async function summarizeRecording(
   segmentId: string
 ): Promise<MemorySegmentSummary> {
   const fileTruth = await readValidFinalizedSegmentFileTruth(rootPath, memoryId, segmentId);
-  if (!fileTruth) {
+  if (!isAudioSegmentFileTruth(fileTruth)) {
     throw new Error('Finalized segment metadata does not match file truth');
   }
 
@@ -2497,8 +2629,9 @@ async function readFinalizedSegmentMetadata(
       'segment.md'
     ),
   });
-  if ('kind' in markdown.data && markdown.data.kind && markdown.data.kind !== 'audio') {
-    throw new Error('Finalized segment markdown kind is unsupported');
+  const markdownKind = 'kind' in markdown.data ? markdown.data.kind : undefined;
+  if ((markdownKind ?? 'audio') !== manifest.kind) {
+    throw new Error('Finalized segment markdown kind does not match manifest');
   }
   return {
     ...manifest,
@@ -2545,11 +2678,9 @@ async function updateSegmentMarkdownInKnownDirectory({
     objectType: 'segment',
     markdown: readWorkspaceTextFileInKnownDirectory(directory, directoryIdentity, 'segment.md'),
   });
-  if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
-    throw new Error('Finalized segment markdown kind is unsupported');
-  }
   const next = update({ title: current.data.title, content: current.content });
-  const currentData = current.data as { readonly kind?: 'audio' };
+  const currentKind = 'kind' in current.data ? current.data.kind : undefined;
+  const nextContent = currentKind === 'note' ? current.content : next.content;
   await writeWorkspaceFileAtomicInKnownDirectory({
     directory,
     directoryIdentity,
@@ -2559,9 +2690,9 @@ async function updateSegmentMarkdownInKnownDirectory({
       data: {
         ...current.data,
         title: next.title,
-        kind: currentData.kind ?? 'audio',
+        kind: currentKind ?? 'audio',
       },
-      content: next.content,
+      content: nextContent,
     }),
   });
 }
@@ -2604,11 +2735,9 @@ async function updateSupplementMarkdownInKnownDirectory({
     objectType: 'supplement',
     markdown: readWorkspaceTextFileInKnownDirectory(directory, directoryIdentity, 'supplement.md'),
   });
-  if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
-    throw new Error('Finalized supplement markdown kind is unsupported');
-  }
   const next = update({ title: current.data.title, content: current.content });
-  const currentData = current.data as { readonly kind?: 'audio' };
+  const currentKind = 'kind' in current.data ? current.data.kind : undefined;
+  const nextContent = currentKind === 'note' ? current.content : next.content;
   await writeWorkspaceFileAtomicInKnownDirectory({
     directory,
     directoryIdentity,
@@ -2618,9 +2747,9 @@ async function updateSupplementMarkdownInKnownDirectory({
       data: {
         ...current.data,
         title: next.title,
-        kind: currentData.kind ?? 'audio',
+        kind: currentKind ?? 'audio',
       },
-      content: next.content,
+      content: nextContent,
     }),
   });
 }
@@ -2659,8 +2788,9 @@ async function readFinalizedSegmentSupplementMetadata(
       'supplement.md'
     ),
   });
-  if ('kind' in markdown.data && markdown.data.kind && markdown.data.kind !== 'audio') {
-    throw new Error('Finalized supplement markdown kind is unsupported');
+  const markdownKind = 'kind' in markdown.data ? markdown.data.kind : undefined;
+  if ((markdownKind ?? 'audio') !== manifest.kind) {
+    throw new Error('Finalized supplement markdown kind does not match manifest');
   }
   return {
     ...manifest,
@@ -2769,7 +2899,7 @@ async function trashedSegmentSupplementDirectory(
   });
 }
 
-async function segmentSupplementDirectoryForNewNode(
+export async function segmentSupplementDirectoryForNewNode(
   rootPath: string,
   memoryId: string,
   segmentId: string,
@@ -2804,6 +2934,34 @@ async function readValidFinalizedSupplementProjection({
       supplementDirectory,
       supplementDirectoryIdentity
     );
+    const supplementBase = {
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId: supplement.supplementId,
+      title: titleFromFileSpaceDirectoryName({
+        nodeId: supplement.supplementId,
+        directoryName: path.basename(supplementDirectory),
+        metadataTitle: supplement.title,
+      }),
+      createdAt: supplement.createdAt,
+      updatedAt: supplement.updatedAt ?? supplement.finalizedAt,
+    };
+    if (supplement.kind === 'note') {
+      if (
+        supplement.workspaceId !== workspaceId ||
+        supplement.memoryId !== memoryId ||
+        supplement.segmentId !== segmentId ||
+        supplement.bodyByteLength !== markdownBodyByteLength(supplement.markdownContent)
+      ) {
+        return null;
+      }
+      return {
+        ...supplementBase,
+        type: 'note',
+        bodyByteLength: supplement.bodyByteLength,
+      };
+    }
     const audioByteLength = readFileSizeInKnownDirectory(
       supplementDirectory,
       supplementDirectoryIdentity,
@@ -2817,20 +2975,9 @@ async function readValidFinalizedSupplementProjection({
     ) {
       return null;
     }
-    const updatedAt = supplement.updatedAt ?? supplement.finalizedAt;
     return {
-      workspaceId,
-      memoryId,
-      segmentId,
-      supplementId: supplement.supplementId,
+      ...supplementBase,
       type: 'audio',
-      title: titleFromFileSpaceDirectoryName({
-        nodeId: supplement.supplementId,
-        directoryName: path.basename(supplementDirectory),
-        metadataTitle: supplement.title,
-      }),
-      createdAt: supplement.createdAt,
-      updatedAt,
       durationMs: supplement.durationMs,
       audioByteLength,
       lastTranscriptionAttempt: deriveLastTranscriptionAttempt(supplement),
@@ -2930,6 +3077,36 @@ async function listValidSegmentSupplementsFromDirectory({
   return sortByProjectedUpdatedAt(
     supplements.filter((supplement) => !duplicated.has(supplement.supplementId))
   );
+}
+
+function normalizeContentTabOrder(
+  persistedOrder: readonly WorkspaceSegmentContentTabOrderItem[] | undefined,
+  supplements: readonly WorkspaceSegmentSupplementProjection[]
+): WorkspaceSegmentContentTabOrderItem[] {
+  const liveItems = new Set<WorkspaceSegmentContentTabOrderItem>([
+    'segment',
+    ...supplements.map(
+      (supplement): WorkspaceSegmentContentTabOrderItem => `supplement:${supplement.supplementId}`
+    ),
+  ]);
+  const nextOrder: WorkspaceSegmentContentTabOrderItem[] = [];
+  const seen = new Set<WorkspaceSegmentContentTabOrderItem>();
+
+  for (const item of persistedOrder ?? []) {
+    if (!liveItems.has(item) || seen.has(item)) {
+      continue;
+    }
+    seen.add(item);
+    nextOrder.push(item);
+  }
+
+  for (const item of liveItems) {
+    if (!seen.has(item)) {
+      nextOrder.push(item);
+    }
+  }
+
+  return nextOrder;
 }
 
 async function recoverSegmentSupplementFinalizeTransactions({
@@ -3084,6 +3261,20 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
       recordingDirectory,
       recordingDirectoryIdentity
     );
+    if (recording.kind === 'note') {
+      if (
+        recording.memoryId !== memoryId ||
+        recording.bodyByteLength !== markdownBodyByteLength(recording.markdownContent)
+      ) {
+        return null;
+      }
+      return {
+        segmentId: recording.segmentId,
+        recordingDirectory,
+        recordingDirectoryIdentity,
+        metadata: recording,
+      };
+    }
     const audioByteLength = readFileSizeInKnownDirectory(
       recordingDirectory,
       recordingDirectoryIdentity,
@@ -3224,9 +3415,12 @@ async function summarizeMemoryFromFileTruths({
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   let segmentCount = 0;
-  let durationMs = 0;
+  let audioSegmentCount = 0;
+  let noteSegmentCount = 0;
+  let audioDurationMs = 0;
   let audioByteLength = 0;
-  let hasTranscript = false;
+  let hasAudioTranscript = false;
+  let hasAnyNote = false;
   let supplementCount = 0;
   let updatedAt = memory.updatedAt;
 
@@ -3245,10 +3439,18 @@ async function summarizeMemoryFromFileTruths({
         ...supplements.map((supplement) => supplement.updatedAt)
       );
       segmentCount += 1;
-      durationMs += fileTruth.metadata.durationMs;
-      audioByteLength += fileTruth.audioByteLength;
-      hasTranscript =
-        hasTranscript || extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0;
+      if (isAudioSegmentFileTruth(fileTruth)) {
+        audioSegmentCount += 1;
+        audioDurationMs += fileTruth.metadata.durationMs;
+        audioByteLength += fileTruth.audioByteLength;
+        hasAudioTranscript =
+          hasAudioTranscript ||
+          extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0;
+      } else {
+        noteSegmentCount += 1;
+        hasAnyNote = true;
+      }
+      hasAnyNote = hasAnyNote || hasNoteSupplement(supplements);
       supplementCount += supplements.length;
     } catch {
       continue;
@@ -3261,9 +3463,12 @@ async function summarizeMemoryFromFileTruths({
     createdAt: memory.createdAt,
     updatedAt,
     segmentCount,
-    durationMs,
+    audioSegmentCount,
+    noteSegmentCount,
+    audioDurationMs,
     audioByteLength,
-    hasTranscript,
+    hasAudioTranscript,
+    hasAnyNote,
     supplementCount,
   };
 }
@@ -3302,16 +3507,26 @@ function summarizeMemoryFromSegments(
   segments: readonly WorkspaceSegmentProjection[]
 ): MemorySummary {
   let updatedAt = memory.updatedAt;
-  let durationMs = 0;
+  let audioSegmentCount = 0;
+  let noteSegmentCount = 0;
+  let audioDurationMs = 0;
   let audioByteLength = 0;
-  let hasTranscript = false;
+  let hasAudioTranscript = false;
+  let hasAnyNote = false;
   let supplementCount = 0;
 
   for (const segment of segments) {
     updatedAt = latestIsoTimestamp(updatedAt, segment.updatedAt);
-    durationMs += segment.durationMs;
-    audioByteLength += segment.audioByteLength;
-    hasTranscript = hasTranscript || segment.transcript.exists;
+    if (segment.type === 'audio') {
+      audioSegmentCount += 1;
+      audioDurationMs += segment.durationMs;
+      audioByteLength += segment.audioByteLength;
+      hasAudioTranscript = hasAudioTranscript || segment.transcript.exists;
+    } else {
+      noteSegmentCount += 1;
+      hasAnyNote = true;
+    }
+    hasAnyNote = hasAnyNote || hasNoteSupplement(segment.supplements);
     supplementCount += segment.supplementCount;
   }
 
@@ -3321,9 +3536,12 @@ function summarizeMemoryFromSegments(
     createdAt: memory.createdAt,
     updatedAt,
     segmentCount: segments.length,
-    durationMs,
+    audioSegmentCount,
+    noteSegmentCount,
+    audioDurationMs,
     audioByteLength,
-    hasTranscript,
+    hasAudioTranscript,
+    hasAnyNote,
     supplementCount,
   };
 }
@@ -3374,23 +3592,35 @@ async function finalizedSegmentProjectionFromFileTruth({
     metadata.updatedAt ?? metadata.finalizedAt,
     ...supplements.map((supplement) => supplement.updatedAt)
   );
-
-  return {
+  const segmentBase = {
     workspaceId,
     memoryId: metadata.memoryId,
     segmentId,
-    type: 'audio',
     title: metadata.title,
     createdAt: metadata.createdAt,
     updatedAt,
-    durationMs: metadata.durationMs,
-    audioByteLength: fileTruth.audioByteLength,
-    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(metadata),
-    transcript: {
-      exists: extractSegmentTranscript(metadata.markdownContent).length > 0,
-    },
     supplementCount: supplements.length,
     supplements,
+    contentTabOrder: normalizeContentTabOrder(metadata.contentTabOrder, supplements),
+  };
+
+  if (!isAudioSegmentFileTruth(fileTruth)) {
+    return {
+      ...segmentBase,
+      type: 'note',
+      bodyByteLength: fileTruth.metadata.bodyByteLength,
+    };
+  }
+
+  return {
+    ...segmentBase,
+    type: 'audio',
+    durationMs: fileTruth.metadata.durationMs,
+    audioByteLength: fileTruth.audioByteLength,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
+    transcript: {
+      exists: extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0,
+    },
   };
 }
 
@@ -3424,7 +3654,7 @@ export async function readFinalizedSegmentAudioProjection(input: {
     input.memoryId,
     input.segmentId
   );
-  if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+  if (!isAudioSegmentFileTruth(fileTruth) || fileTruth.metadata.workspaceId !== input.workspaceId) {
     throw new Error('Finalized segment projection does not match file truth');
   }
 
@@ -3488,6 +3718,76 @@ export async function readFinalizedSegmentSupplementProjectionFromKnownDirectory
   return projection;
 }
 
+export async function resolveFinalizedNoteSegmentDirectoryFromManifest(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly segmentId: string;
+}): Promise<{ readonly memoryId: string; readonly segmentDirectory: string }> {
+  const manifest = segmentObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(await segmentObjectManifestPath(input.rootPath, input.segmentId))
+    )
+  );
+  if (
+    manifest.kind !== 'note' ||
+    manifest.workspaceId !== input.workspaceId ||
+    manifest.segmentId !== input.segmentId
+  ) {
+    throw new Error('Finalized note segment manifest does not match attachment owner');
+  }
+  return {
+    memoryId: manifest.memoryId,
+    segmentDirectory: await memorySegmentDirectory(
+      input.rootPath,
+      manifest.memoryId,
+      input.segmentId
+    ),
+  };
+}
+
+export async function resolveFinalizedNoteSupplementDirectoryFromManifest(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<{
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementDirectory: string;
+}> {
+  const manifest = supplementObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(
+        await supplementObjectManifestPath(input.rootPath, input.supplementId)
+      )
+    )
+  );
+  if (
+    manifest.kind !== 'note' ||
+    manifest.workspaceId !== input.workspaceId ||
+    manifest.segmentId !== input.segmentId ||
+    manifest.supplementId !== input.supplementId
+  ) {
+    throw new Error('Finalized note supplement manifest does not match attachment owner');
+  }
+  const segmentDirectory = await memorySegmentDirectory(
+    input.rootPath,
+    manifest.memoryId,
+    input.segmentId
+  );
+  return {
+    memoryId: manifest.memoryId,
+    segmentId: manifest.segmentId,
+    supplementDirectory: await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath: input.rootPath,
+      memoryId: manifest.memoryId,
+      segmentDirectory,
+      segmentId: manifest.segmentId,
+      supplementId: input.supplementId,
+    }),
+  };
+}
+
 export async function readMemoryDetailFromFileTruth(input: {
   readonly rootPath: string;
   readonly workspaceId: string;
@@ -3495,6 +3795,7 @@ export async function readMemoryDetailFromFileTruth(input: {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<MemoryFilesResult<WorkspaceMemoryDetailProjection>> {
   try {
+    await beforeMemoryDetailProjectionForTest?.();
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
     const segments: WorkspaceSegmentProjection[] = [];
@@ -3658,6 +3959,7 @@ export async function refreshMemoryIndexEntryWithDetail(input: {
   readonly detail: WorkspaceMemoryDetailProjection;
   readonly memory: MemorySummary;
 }> {
+  await beforeMemoryDetailProjectionForTest?.();
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(input.rootPath, async () => {
     assertWorkspaceUsable(input.assertUsable);
@@ -3798,7 +4100,7 @@ export async function readFinalizedSegmentSummaryFromKnownDirectory({
     recordingDirectory,
     memoryId,
   });
-  if (!fileTruth || fileTruth.segmentId !== segmentId) {
+  if (!isAudioSegmentFileTruth(fileTruth) || fileTruth.segmentId !== segmentId) {
     throw new Error('Finalized segment metadata does not match file truth');
   }
   await assertSameDirectoryPathAsync(recordingDirectory, recordingDirectoryIdentity);
@@ -6500,6 +6802,84 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
   }
 }
 
+export async function updateSegmentContentTabOrderFromFileTruth(
+  input: UpdateSegmentContentTabOrderInput
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+  }>
+> {
+  try {
+    assertWorkspaceUsable(input.assertWorkspaceUsable);
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const currentMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+      const fileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
+      );
+      if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+
+      const supplements = await listValidSegmentSupplementsFromDirectory({
+        rootPath: input.rootPath,
+        workspaceId: input.workspaceId,
+        memoryId: input.memoryId,
+        segmentId: input.segmentId,
+        recordingDirectory: fileTruth.recordingDirectory,
+      });
+      const contentTabOrder = normalizeContentTabOrder(input.contentTabOrder, supplements);
+      const manifestPath = await segmentObjectManifestPath(input.rootPath, input.segmentId);
+      const manifest = segmentObjectManifestSchema.parse(
+        JSON.parse(await readWorkspaceTextFile(manifestPath))
+      );
+      if (
+        manifest.workspaceId !== input.workspaceId ||
+        manifest.memoryId !== input.memoryId ||
+        manifest.segmentId !== input.segmentId
+      ) {
+        throw new Error('Finalized segment manifest does not match file truth');
+      }
+
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      await writeWorkspaceJsonAtomic(manifestPath, {
+        ...manifest,
+        contentTabOrder,
+      });
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+
+      const refreshedFileTruth = await readValidFinalizedSegmentFileTruthFromDirectory({
+        rootPath: input.rootPath,
+        recordingDirectory: fileTruth.recordingDirectory,
+        memoryId: input.memoryId,
+      });
+      const refreshedSegment = refreshedFileTruth
+        ? await finalizedSegmentProjectionFromFileTruth({
+            rootPath: input.rootPath,
+            workspaceId: input.workspaceId,
+            fileTruth: refreshedFileTruth,
+          })
+        : null;
+      if (!refreshedSegment || refreshedSegment.segmentId !== input.segmentId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+
+      return {
+        ok: true,
+        value: {
+          memory: await summarizeMemory(input.rootPath, currentMemory),
+          segment: refreshedSegment,
+        },
+      };
+    });
+  } catch (error) {
+    return updateSegmentTitleError(error);
+  }
+}
+
 export async function updateSegmentSupplementTitleFromFileTruth(
   input: UpdateSegmentSupplementTitleInput
 ): Promise<
@@ -6682,7 +7062,7 @@ export async function lookupSegmentDirectoryById(
           })
         : null;
       const recording =
-        fileTruth?.segmentId === segmentId
+        isAudioSegmentFileTruth(fileTruth) && fileTruth.segmentId === segmentId
           ? {
               segmentId,
               title: fileTruth.metadata.title,
@@ -6691,7 +7071,7 @@ export async function lookupSegmentDirectoryById(
               lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
             }
           : null;
-      if (recording) {
+      if (fileTruth?.segmentId === segmentId) {
         if (foundDirectory) {
           duplicateFound = true;
           continue;
@@ -6714,10 +7094,10 @@ export async function lookupSegmentDirectoryById(
     return { status: 'invalid-durable' };
   }
   if (foundDirectory) {
-    if (!foundRecording) {
-      return { status: 'invalid-durable' };
+    if (foundRecording) {
+      return { status: 'found', directory: foundDirectory, segment: foundRecording };
     }
-    return { status: 'found', directory: foundDirectory, segment: foundRecording };
+    return { status: 'found-non-audio', directory: foundDirectory };
   }
   return { status: 'not-found' };
 }
@@ -6727,7 +7107,7 @@ export async function findSegmentDirectoryById(
   segmentId: string
 ): Promise<string> {
   const lookup = await lookupSegmentDirectoryById(rootPath, segmentId);
-  if (lookup.status === 'found') {
+  if (lookup.status === 'found' || lookup.status === 'found-non-audio') {
     return lookup.directory;
   }
   if (lookup.status === 'duplicate') {
@@ -6752,6 +7132,9 @@ export async function findFinalizedAudioSegmentById(
   const lookup = await lookupSegmentDirectoryById(rootPath, segmentId);
   if (lookup.status === 'found') {
     return { directory: lookup.directory, segment: lookup.segment };
+  }
+  if (lookup.status === 'found-non-audio') {
+    throw new Error('Invalid durable recording');
   }
   if (lookup.status === 'duplicate') {
     throw new Error('Duplicate finalized segment id');

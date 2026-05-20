@@ -1,0 +1,11 @@
+{
+  "registerBeforeReady": true,
+  "imgFetch200": true,
+  "imgElementLoaded": true,
+  "navigationDenied": true,
+  "wrongWorkspace404": true,
+  "traversal404": true,
+  "symlink404": true,
+  "nonGet405or404": true,
+  "pathLeakAbsent": true
+}

@@ -503,9 +503,12 @@ function sameMemorySummaries(
       memory.createdAt === other.createdAt &&
       memory.updatedAt === other.updatedAt &&
       memory.segmentCount === other.segmentCount &&
-      memory.durationMs === other.durationMs &&
+      memory.audioSegmentCount === other.audioSegmentCount &&
+      memory.noteSegmentCount === other.noteSegmentCount &&
+      memory.audioDurationMs === other.audioDurationMs &&
       memory.audioByteLength === other.audioByteLength &&
-      memory.hasTranscript === other.hasTranscript &&
+      memory.hasAudioTranscript === other.hasAudioTranscript &&
+      memory.hasAnyNote === other.hasAnyNote &&
       memory.supplementCount === other.supplementCount
     );
   });

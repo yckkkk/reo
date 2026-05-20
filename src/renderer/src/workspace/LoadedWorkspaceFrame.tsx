@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
+  type NoteSegmentEditTarget,
+  type NoteSegmentSupplementEditTarget,
+  type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type TranscriptionBackfillController,
 } from './MemoryStudio';
@@ -24,6 +27,8 @@ type LoadedWorkspaceFrameProps = {
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
+  readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
@@ -31,6 +36,8 @@ type LoadedWorkspaceFrameProps = {
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
+  readonly onStartNote?: () => void;
+  readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly segmentFocusIntent?: string | null;
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
@@ -43,12 +50,16 @@ export function LoadedWorkspaceFrame({
   onDeleteMemory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
+  onEditNoteSegment,
+  onEditNoteSegmentSupplement,
   onRenameMemory,
   onRenameSegment,
   onRenameSegmentSupplement,
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
+  onStartNote,
+  onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
   onStartRecording,
   segmentFocusIntent = null,
@@ -73,7 +84,12 @@ export function LoadedWorkspaceFrame({
           workspaceId={workspaceSession.workspaceId}
         />
       }
-      dock={<ExpressionDock onStartRecording={onStartRecording} />}
+      dock={
+        <ExpressionDock
+          {...(currentMemory && onStartNote ? { onStartNote } : {})}
+          onStartRecording={onStartRecording}
+        />
+      }
     >
       {currentMemory ? (
         <MemoryStudio
@@ -81,10 +97,13 @@ export function LoadedWorkspaceFrame({
           memory={currentMemory}
           onDeleteSegment={onDeleteSegment}
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
+          {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
+          {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegment={onRenameSegment}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
+          {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}
           workspaceSession={workspaceSession}

@@ -1,0 +1,19 @@
+Electron version: 41.5.0
+Chromium version: 146.0.7680.216
+Node version: 24.15.0
+Renderer results: {"fetchStatus":0,"imageLoaded":true,"imageErrored":false,"windowOpenDenied":true,"fetchError":"Failed to fetch"}
+
+{"at":"2026-05-19T09:01:12.530Z","message":"registerSchemesAsPrivileged called before app ready","appReadyAtRegistration":false,"schemes":["reo-poc","reo-attachment"]}
+{"at":"2026-05-19T09:01:12.836Z","message":"served POC page with CSP header","status":200,"csp":"default-src 'none'; script-src 'unsafe-inline'; img-src 'self' blob: reo-attachment:; connect-src 'self' reo-attachment:; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'"}
+{"at":"2026-05-19T09:01:12.911Z","message":"attachment served image","method":"GET","host":"workspace-alpha","pathname":"/attachments/valid.png","status":200,"cacheControl":"no-store"}
+{"at":"2026-05-19T09:01:12.939Z","message":"window-open denied","url":"reo-attachment://workspace-alpha/attachments/valid.png"}
+{"at":"2026-05-19T09:01:12.944Z","message":"top-level navigation denied","url":"reo-attachment://workspace-alpha/attachments/valid.png"}
+{"at":"2026-05-19T09:01:13.196Z","message":"attachment rejected wrong workspace","method":"GET","host":"wrong-workspace","pathname":"/attachments/valid.png","status":404}
+{"at":"2026-05-19T09:01:13.197Z","message":"probe completed","url":"reo-attachment://wrong-workspace/attachments/<redacted>","method":"GET","status":404,"body":"not found"}
+{"at":"2026-05-19T09:01:13.197Z","message":"attachment rejected strict URL pattern","method":"GET","host":"workspace-alpha","pathname":"/attachments/..%2F..%2Fsecret%2Fsecret.png","status":404}
+{"at":"2026-05-19T09:01:13.198Z","message":"probe completed","url":"reo-attachment://workspace-alpha/attachments/<redacted>","method":"GET","status":404,"body":"not found"}
+{"at":"2026-05-19T09:01:13.199Z","message":"attachment rejected symlink or non-file leaf","method":"GET","host":"workspace-alpha","pathname":"/attachments/link.png","status":404}
+{"at":"2026-05-19T09:01:13.199Z","message":"probe completed","url":"reo-attachment://workspace-alpha/attachments/<redacted>","method":"GET","status":404,"body":"not found"}
+{"at":"2026-05-19T09:01:13.200Z","message":"attachment rejected non-GET","method":"POST","host":"workspace-alpha","pathname":"/attachments/valid.png","status":405}
+{"at":"2026-05-19T09:01:13.200Z","message":"probe completed","url":"reo-attachment://workspace-alpha/attachments/<redacted>","method":"POST","status":405,"body":"method not allowed"}
+{"at":"2026-05-19T09:01:13.235Z","message":"screenshot captured","file":"screenshot.png"}

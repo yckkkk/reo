@@ -21,13 +21,17 @@ import {
   handleClearMicrophoneIntentForTest,
   handleCloseRecordingTranscriptionForTest,
   handleCloseWorkspaceForTest,
+  handleCreateNoteSegmentDraftForTest,
   handleCreateRecordingDraftForTest,
+  handleCreateSegmentSupplementNoteDraftForTest,
   handleCreateSegmentSupplementRecordingDraftForTest,
   handleCreateMemoryForTest,
   handleDeleteMemoryForTest,
   handleDeleteSegmentSupplementForTest,
   handleDeleteSegmentForTest,
   handleFinalizeRecordingDraftForTest,
+  handleFinalizeNoteSegmentDraftForTest,
+  handleFinalizeSegmentSupplementNoteDraftForTest,
   handleFinalizeSegmentSupplementRecordingDraftForTest,
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
@@ -36,6 +40,8 @@ import {
   handleOpenWorkspace,
   handleOpenWorkspaceMemorySpaceForTest,
   handleReadWorkspaceSnapshotForTest,
+  handleReadSegmentContentForTest,
+  handleReadSegmentSupplementContentForTest,
   handleReadFinalizedAudioSegmentForTest,
   handleReadFinalizedAudioSegmentSupplementForTest,
   handleReadMemoryDetailForTest,
@@ -73,6 +79,10 @@ import {
   handleUpdateMemoryTitleForTest,
   handleUpdateSegmentSupplementTitleForTest,
   handleUpdateSegmentTitleForTest,
+  handleWriteNoteSegmentDraftBodyForTest,
+  handleWriteSegmentContentForTest,
+  handleWriteSegmentSupplementContentForTest,
+  handleWriteSegmentSupplementNoteDraftBodyForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
 import {
@@ -1262,10 +1272,13 @@ test('request segment backfill IPC forwards mode through validated handle owners
             memory: {
               audioByteLength: 1,
               createdAt: '2026-05-17T01:00:00.000Z',
-              durationMs: 1000,
-              hasTranscript: true,
+              audioDurationMs: 1000,
+              hasAudioTranscript: true,
               memoryId: 'mem_1',
               segmentCount: 1,
+              audioSegmentCount: 1,
+              noteSegmentCount: 0,
+              hasAnyNote: false,
               supplementCount: 0,
               title: 'Memory',
               updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1317,10 +1330,13 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
           memory: {
             audioByteLength: 1,
             createdAt: '2026-05-17T01:00:00.000Z',
-            durationMs: 1000,
-            hasTranscript: true,
+            audioDurationMs: 1000,
+            hasAudioTranscript: true,
             memoryId: 'mem_1',
             segmentCount: 1,
+            audioSegmentCount: 1,
+            noteSegmentCount: 0,
+            hasAnyNote: false,
             supplementCount: 1,
             title: 'Memory',
             updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1638,9 +1654,12 @@ test('createMemory creates an empty Memory container through file truth', async 
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
       segmentCount: 0,
-      durationMs: 0,
+      audioSegmentCount: 0,
+      noteSegmentCount: 0,
+      audioDurationMs: 0,
       audioByteLength: 0,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     });
   }
@@ -1680,9 +1699,12 @@ test('createMemory creates an empty Memory container through file truth', async 
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ]
@@ -2186,6 +2208,7 @@ test('readMemoryDetail returns current Memory segments without exposing handle o
         transcript: { exists: false },
         supplementCount: 0,
         supplements: [],
+        contentTabOrder: ['segment'],
       },
     ]);
     assert.equal('workspaceHandle' in result.value.detail, false);
@@ -2569,7 +2592,12 @@ test('saveSegmentSupplementTranscript writes the supplement transcript without e
   if (result.ok) {
     assert.equal(result.value.saved, true);
     assert.equal(result.value.memory.supplementCount, 1);
-    assert.equal(result.value.segment.supplements[0]?.transcript.exists, true);
+    assert.equal(result.value.segment.type, 'audio');
+    assert.equal(result.value.supplement.type, 'audio');
+    const savedSupplement = result.value.segment.supplements[0];
+    assert.ok(savedSupplement);
+    assert.equal(savedSupplement.type, 'audio');
+    assert.equal(savedSupplement.transcript.exists, true);
     assert.equal(result.value.supplement.transcript.exists, true);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
@@ -2607,6 +2635,240 @@ test('createRecordingDraft returns a flat IPC response value', async () => {
       nextSequence: 0,
     },
   });
+});
+
+test('note content IPC creates drafts, finalizes, and reads and writes markdown truth', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-note-content-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC note',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-19T13:08:00.000Z',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const memory = await handleCreateMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: 'Note memory',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createMemoryId: () => 'mem_ipc_note',
+    now: () => '2026-05-19T13:09:00.000Z',
+  });
+  assert.equal(memory.ok, true);
+
+  const draft = await handleCreateNoteSegmentDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      title: 'Draft note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createSegmentId: () => 'seg_ipc_note',
+    now: () => '2026-05-19T13:10:00.000Z',
+  });
+  assert.deepEqual(draft, {
+    ok: true,
+    value: { segmentId: 'seg_ipc_note', revision: 0 },
+  });
+
+  const writeDraft = await handleWriteNoteSegmentDraftBodyForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      segmentId: 'seg_ipc_note',
+      bodyMarkdown: 'Initial note body\n',
+      revision: 0,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(writeDraft.ok, true);
+
+  const finalized = await handleFinalizeNoteSegmentDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      title: 'Final note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:11:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+  if (finalized.ok) {
+    assert.equal(finalized.value.segment.type, 'note');
+    assert.equal(finalized.value.memory.noteSegmentCount, 1);
+  }
+
+  const read = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      requestId: 'request_note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(read.ok, true);
+  if (read.ok) {
+    assert.equal(read.value.title, 'Final note');
+    assert.equal(read.value.bodyMarkdown, 'Initial note body\n');
+    assert.equal(
+      read.value.baselineContentHash,
+      'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029'
+    );
+  }
+
+  const saved = await handleWriteSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      bodyMarkdown: 'Updated note body\n',
+      baselineContentHash: read.ok
+        ? read.value.baselineContentHash
+        : 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:12:00.000Z',
+  });
+  assert.equal(saved.ok, true);
+  if (saved.ok) {
+    assert.equal(saved.value.saved, true);
+    assert.equal(saved.value.bodyByteLength, Buffer.byteLength('Updated note body\n'));
+    assert.equal(
+      saved.value.baselineContentHash,
+      '47e6abbb77864874ec6e52fa84dda332fa06bcf2b5e8e2f25961bdcca4bb45fb'
+    );
+  }
+
+  const supplementDraft = await handleCreateSegmentSupplementNoteDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      title: 'Supplement note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createSupplementId: () => 'sup_ipc_note',
+    now: () => '2026-05-19T13:13:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+
+  const writeSupplementDraft = await handleWriteSegmentSupplementNoteDraftBodyForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      supplementId: 'sup_ipc_note',
+      bodyMarkdown: 'Supplement body\n',
+      revision: 0,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(writeSupplementDraft.ok, true);
+
+  const finalizedSupplement = await handleFinalizeSegmentSupplementNoteDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      supplementId: 'sup_ipc_note',
+      title: 'Final supplement note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:14:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true);
+
+  const readSupplement = await handleReadSegmentSupplementContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      supplementId: 'sup_ipc_note',
+      requestId: 'request_sup_note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(readSupplement.ok, true);
+  if (readSupplement.ok) {
+    assert.equal(readSupplement.value.bodyMarkdown, 'Supplement body\n');
+    assert.equal(
+      readSupplement.value.baselineContentHash,
+      'cd83ddfb49f07201f9d8c991fc3e691529c1fc0be063f0394d19d053d05fd5f3'
+    );
+  }
+
+  const savedSupplement = await handleWriteSegmentSupplementContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      supplementId: 'sup_ipc_note',
+      bodyMarkdown: 'Updated supplement body\n',
+      baselineContentHash: readSupplement.ok
+        ? readSupplement.value.baselineContentHash
+        : 'cd83ddfb49f07201f9d8c991fc3e691529c1fc0be063f0394d19d053d05fd5f3',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:15:00.000Z',
+  });
+  assert.equal(savedSupplement.ok, true);
+  if (savedSupplement.ok) {
+    assert.equal(savedSupplement.value.saved, true);
+  }
 });
 
 test('recording finalize IPC forwards transcription attempt to durable manifest', async () => {
@@ -2674,6 +2936,7 @@ test('recording finalize IPC forwards transcription attempt to durable manifest'
 
   assert.equal(finalized.ok, true);
   if (finalized.ok) {
+    assert.equal(finalized.value.segment.type, 'audio');
     assert.equal(finalized.value.segment.lastTranscriptionAttempt, 'failed');
   }
   assert.equal(
@@ -2754,6 +3017,8 @@ test('segment supplement recording IPC keeps the finalized audio under the paren
   if (finalized.ok) {
     assert.equal(finalized.value.memory.segmentCount, 1);
     assert.equal(finalized.value.memory.supplementCount, 1);
+    assert.equal(finalized.value.segment.type, 'audio');
+    assert.equal(finalized.value.supplement.type, 'audio');
     assert.equal(finalized.value.segment.segmentId, 'seg_ipc_supplement_parent');
     assert.equal(finalized.value.segment.supplementCount, 1);
     assert.equal(finalized.value.supplement.supplementId, 'sup_ipc_supplement_child');
@@ -3585,9 +3850,12 @@ test('readWorkspaceSnapshot reflects external workspace and memory Markdown edit
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: true,
+        hasAudioTranscript: true,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     ]);

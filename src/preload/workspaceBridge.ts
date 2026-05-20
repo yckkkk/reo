@@ -16,7 +16,9 @@ import {
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
+  WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL,
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -24,7 +26,9 @@ import {
   WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINISH_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_FINALIZE_NOTE_SEGMENT_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
@@ -39,6 +43,8 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
@@ -52,6 +58,10 @@ import {
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL,
+  WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_ATTACHMENT_CHANNEL,
+  WORKSPACE_LIST_SEGMENT_SUPPLEMENT_ATTACHMENTS_CHANNEL,
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
@@ -60,9 +70,14 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+  WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+  WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
   type WorkspaceIpcChannel,
   type WorkspaceRendererEventChannel,
 } from '../workspace-contract/workspace-channels.js';
@@ -242,6 +257,76 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
         payload
       ),
+    createNoteSegmentDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'createNoteSegmentDraft'>>(
+        WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL,
+        payload
+      ),
+    createSegmentSupplementNoteDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'createSegmentSupplementNoteDraft'>>(
+        WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+        payload
+      ),
+    writeNoteSegmentDraftBody: (payload) =>
+      invoke<WorkspaceBridgeResponse<'writeNoteSegmentDraftBody'>>(
+        WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
+        payload
+      ),
+    writeSegmentSupplementNoteDraftBody: (payload) =>
+      invoke<WorkspaceBridgeResponse<'writeSegmentSupplementNoteDraftBody'>>(
+        WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
+        payload
+      ),
+    finalizeNoteSegmentDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'finalizeNoteSegmentDraft'>>(
+        WORKSPACE_FINALIZE_NOTE_SEGMENT_DRAFT_CHANNEL,
+        payload
+      ),
+    finalizeSegmentSupplementNoteDraft: (payload) =>
+      invoke<WorkspaceBridgeResponse<'finalizeSegmentSupplementNoteDraft'>>(
+        WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
+        payload
+      ),
+    readSegmentContent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readSegmentContent'>>(
+        WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+        payload
+      ),
+    readSegmentSupplementContent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readSegmentSupplementContent'>>(
+        WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+        payload
+      ),
+    writeSegmentContent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'writeSegmentContent'>>(
+        WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL,
+        payload
+      ),
+    writeSegmentSupplementContent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'writeSegmentSupplementContent'>>(
+        WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+        payload
+      ),
+    saveSegmentAttachment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'saveSegmentAttachment'>>(
+        WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
+        payload
+      ),
+    listSegmentAttachments: (payload) =>
+      invoke<WorkspaceBridgeResponse<'listSegmentAttachments'>>(
+        WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL,
+        payload
+      ),
+    saveSegmentSupplementAttachment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'saveSegmentSupplementAttachment'>>(
+        WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_ATTACHMENT_CHANNEL,
+        payload
+      ),
+    listSegmentSupplementAttachments: (payload) =>
+      invoke<WorkspaceBridgeResponse<'listSegmentSupplementAttachments'>>(
+        WORKSPACE_LIST_SEGMENT_SUPPLEMENT_ATTACHMENTS_CHANNEL,
+        payload
+      ),
     readRecordingDraftAudio: (payload) =>
       invoke<WorkspaceBridgeResponse<'readRecordingDraftAudio'>>(
         WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -295,6 +380,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     updateSegmentSupplementTitle: (payload) =>
       invoke<WorkspaceBridgeResponse<'updateSegmentSupplementTitle'>>(
         WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
+        payload
+      ),
+    updateSegmentContentTabOrder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateSegmentContentTabOrder'>>(
+        WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
         payload
       ),
     saveTranscript: (payload) =>

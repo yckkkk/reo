@@ -9,6 +9,7 @@ export type SegmentActionIdentity = WorkspaceSegmentEntityActionRequest;
 export type SegmentActionsMenuProps = {
   readonly actionIdentity: SegmentActionIdentity;
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
+  readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onDelete: () => void;
   readonly onOpenChange?: (open: boolean) => void;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
@@ -24,6 +25,7 @@ export type SegmentActionsMenuProps = {
 export function SegmentActionsMenu({
   actionIdentity,
   contentAlign = 'end',
+  onCloseAutoFocus,
   onDelete,
   onOpenChange,
   onRequestTranscriptionBackfill,
@@ -41,6 +43,7 @@ export function SegmentActionsMenu({
   return (
     <EntityActionMenu
       contentAlign={contentAlign}
+      onCloseAutoFocus={onCloseAutoFocus}
       menuLabel={menuLabel}
       onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
       onCopyRelativePath={actionBindings.onCopyRelativePath}

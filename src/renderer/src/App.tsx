@@ -48,6 +48,8 @@ import {
   type RecordingTarget,
   type SavedRecordingContent,
 } from './workspace/RecordingOverlay';
+import { NoteEditorOverlay } from './workspace/NoteEditorOverlay';
+import type { NoteEditorTarget } from './workspace/noteEditorModel';
 import { RecordingRecoveryDialog } from './workspace/RecordingRecoveryDialog';
 import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
 import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
@@ -88,9 +90,13 @@ import {
   updateSegmentSupplementTitle,
   updateSegmentTitle,
   type FinalizedAudioSegment,
+  type FinalizedNoteSegment,
   type FinalizedSegmentSupplementRecording,
+  type FinalizedSegmentSupplementNote,
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
+  type WorkspaceNoteSegmentContent,
+  type WorkspaceNoteSegmentSupplementContent,
   type WorkspaceError,
   type WorkspaceSession,
   type VoiceTranscriptionSettings,
@@ -112,16 +118,16 @@ import {
 } from './workspace/workspaceErrorMessages';
 import { chooseSafeWorkspaceFolder } from './workspace/workspaceFolderSelection';
 import {
-  seedWorkspaceSnapshot,
-  finalizedAudioContentQueryBelongsToWorkspace,
   memoryDetailQueryBelongsToWorkspace,
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  seedWorkspaceSnapshot,
   segmentSupplementContentQueryKey,
   segmentSupplementContentQueryPrefix,
   segmentContentQueryKey,
   workspaceHandleScopedContentQueryBelongsToWorkspace,
+  workspaceContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
@@ -175,6 +181,13 @@ type RecordingFlow =
       readonly status: 'active';
       readonly target: RecordingTarget;
     };
+type NoteEditorFlow =
+  | { readonly status: 'closed' }
+  | {
+      readonly open: boolean;
+      readonly status: 'active';
+      readonly target: NoteEditorTarget;
+    };
 
 const WORKSPACE_STAGE_VIEW: TopLevelWorkspaceView = { name: 'workspace-stage' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
@@ -196,6 +209,7 @@ function canShowInlineMemoryRail(): boolean {
   return window.matchMedia(WORKSPACE_MEMORY_RAIL_INLINE_QUERY).matches;
 }
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
+const NOTE_EDITOR_NAVIGATION_BLOCKED = '当前笔记尚未完成，请先保存或关闭笔记。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
 const TRANSCRIPTION_BACKFILL_ERROR = '无法生成转录。';
@@ -241,6 +255,33 @@ function createPendingSegmentDeleteQueryGuard(
 
     return false;
   };
+}
+
+function activeNoteEditorContentQueryKey({
+  target,
+  workspaceId,
+}: {
+  readonly target: NoteEditorTarget | null;
+  readonly workspaceId: string;
+}): readonly unknown[] | null {
+  if (target?.kind === 'edit-segment') {
+    return segmentContentQueryKey({
+      workspaceId,
+      memoryId: target.memoryId,
+      segmentId: target.segmentId,
+    });
+  }
+
+  if (target?.kind === 'edit-segment-supplement') {
+    return segmentSupplementContentQueryKey({
+      workspaceId,
+      memoryId: target.memoryId,
+      segmentId: target.segmentId,
+      supplementId: target.supplementId,
+    });
+  }
+
+  return null;
 }
 
 function addRunningKey(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
@@ -301,9 +342,12 @@ function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemor
     first.createdAt === second.createdAt &&
     first.updatedAt === second.updatedAt &&
     first.segmentCount === second.segmentCount &&
-    first.durationMs === second.durationMs &&
+    first.audioSegmentCount === second.audioSegmentCount &&
+    first.noteSegmentCount === second.noteSegmentCount &&
+    first.audioDurationMs === second.audioDurationMs &&
     first.audioByteLength === second.audioByteLength &&
-    first.hasTranscript === second.hasTranscript &&
+    first.hasAudioTranscript === second.hasAudioTranscript &&
+    first.hasAnyNote === second.hasAnyNote &&
     first.supplementCount === second.supplementCount
   );
 }
@@ -487,11 +531,11 @@ function memorySummaryWithDetailTranscriptWhenAdditiveFieldsMatch(
   const detailMatchesProjectedAdditiveFields =
     detailSummary.audioByteLength === memory.audioByteLength &&
     detailSummary.supplementCount === memory.supplementCount &&
-    detailSummary.durationMs === memory.durationMs &&
+    detailSummary.audioDurationMs === memory.audioDurationMs &&
     detailSummary.segmentCount === memory.segmentCount;
 
   return detailMatchesProjectedAdditiveFields
-    ? { ...memory, hasTranscript: detailSummary.hasTranscript }
+    ? { ...memory, hasAudioTranscript: detailSummary.hasAudioTranscript }
     : memory;
 }
 
@@ -528,11 +572,11 @@ function memorySummaryPreservingExternalNonAdditiveChanges({
   const hasExternalNonAdditiveChange = pendingProjections.some(
     (projection) =>
       projection.memoryBeforeDelete.updatedAt !== memory.updatedAt ||
-      projection.memoryBeforeDelete.hasTranscript !== memory.hasTranscript
+      projection.memoryBeforeDelete.hasAudioTranscript !== memory.hasAudioTranscript
   );
 
   return hasExternalNonAdditiveChange
-    ? { ...projectedMemory, hasTranscript: memory.hasTranscript }
+    ? { ...projectedMemory, hasAudioTranscript: memory.hasAudioTranscript }
     : projectedMemory;
 }
 
@@ -569,6 +613,7 @@ export function App() {
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
   const [recordingFlow, setRecordingFlow] = useState<RecordingFlow>({ status: 'closed' });
+  const [noteEditorFlow, setNoteEditorFlow] = useState<NoteEditorFlow>({ status: 'closed' });
   const [recordingRecoveryActionPending, setRecordingRecoveryActionPending] = useState(false);
   const [recordingRecoveryDraft, setRecordingRecoveryDraft] =
     useState<RecordingRecoveryDraft | null>(null);
@@ -599,6 +644,7 @@ export function App() {
     new Map()
   );
   const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
+  const noteEditorTargetRef = useRef<NoteEditorTarget | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
   const recordingRecoveryActionIdRef = useRef(0);
@@ -643,6 +689,9 @@ export function App() {
   const recordingOverlayOpen = activeRecordingFlow?.open ?? false;
   const recordingCloseBlocked = activeRecordingFlow?.closeBlocked ?? false;
   const recordingRecoveryReviewDraft = activeRecordingFlow?.recoveredDraft ?? null;
+  const activeNoteEditorFlow = noteEditorFlow.status === 'active' ? noteEditorFlow : null;
+  const noteEditorTarget = activeNoteEditorFlow?.target ?? null;
+  const noteEditorOpen = activeNoteEditorFlow?.open ?? false;
   const transcriptionBackfillDisabledReason = voiceBackfillDisabledReason({
     recordingActive: recordingTarget !== null,
     settings: voiceSettingsQuery.data,
@@ -694,29 +743,35 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!recordingTarget || !recordingCloseBlocked) {
+    if ((!recordingTarget || !recordingCloseBlocked) && !noteEditorTarget) {
       return;
     }
 
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
-      event.returnValue = RECORDING_FLOW_NAVIGATION_BLOCKED;
+      event.returnValue = recordingTarget
+        ? RECORDING_FLOW_NAVIGATION_BLOCKED
+        : NOTE_EDITOR_NAVIGATION_BLOCKED;
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [recordingCloseBlocked, recordingTarget]);
+  }, [noteEditorTarget, recordingCloseBlocked, recordingTarget]);
 
   useEffect(() => {
-    if (!workspaceSession || recordingTarget) {
+    noteEditorTargetRef.current = noteEditorTarget;
+  }, [noteEditorTarget]);
+
+  useEffect(() => {
+    if (!workspaceSession || recordingTarget || noteEditorTarget) {
       setRecordingRecoveryDraft(null);
       return;
     }
 
     setRecordingRecoveryDraft(readRecordingRecoveryDraft(workspaceSession));
-  }, [recordingTarget, workspaceSession]);
+  }, [noteEditorTarget, recordingTarget, workspaceSession]);
 
   useEffect(() => {
     if (!workspaceSession) {
@@ -886,9 +941,22 @@ export function App() {
       ) {
         return;
       }
+      const queryKeyMatchesProtectedPendingDelete = createPendingSegmentDeleteQueryGuard(
+        pendingSegmentDeleteProjections
+      );
 
       if (sameWorkspaceSnapshot(currentSession.snapshot, projectedSnapshot)) {
         setWorkspaceEntryError(null);
+        const noteEditorQueryKey = activeNoteEditorContentQueryKey({
+          target: noteEditorTargetRef.current,
+          workspaceId: response.value.workspaceId,
+        });
+        if (noteEditorQueryKey && !queryKeyMatchesProtectedPendingDelete(noteEditorQueryKey)) {
+          void queryClient.invalidateQueries({
+            exact: true,
+            queryKey: noteEditorQueryKey,
+          });
+        }
         return;
       }
 
@@ -914,9 +982,6 @@ export function App() {
 
         return projectedSnapshot.memories[0]?.memoryId ?? null;
       });
-      const queryKeyMatchesProtectedPendingDelete = createPendingSegmentDeleteQueryGuard(
-        pendingSegmentDeleteProjections
-      );
       void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
       void queryClient.invalidateQueries({
         predicate: (query) =>
@@ -959,10 +1024,7 @@ export function App() {
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
     queryClient.removeQueries({
       predicate: (query) =>
-        finalizedAudioContentQueryBelongsToWorkspace(
-          query.queryKey,
-          nextWorkspaceSession.workspaceId
-        ),
+        workspaceContentQueryBelongsToWorkspace(query.queryKey, nextWorkspaceSession.workspaceId),
     });
     void queryClient.invalidateQueries({
       predicate: (query) =>
@@ -1047,13 +1109,17 @@ export function App() {
     setWorkspaceActionPending(false);
   }
 
-  function blockRecordingFlowInterruption() {
-    if (!recordingTarget) {
-      return false;
+  function blockWorkspaceFlowInterruption() {
+    if (recordingTarget) {
+      toast.error(RECORDING_FLOW_NAVIGATION_BLOCKED);
+      return true;
+    }
+    if (noteEditorTarget) {
+      toast.error(NOTE_EDITOR_NAVIGATION_BLOCKED);
+      return true;
     }
 
-    toast.error(RECORDING_FLOW_NAVIGATION_BLOCKED);
-    return true;
+    return false;
   }
 
   const runTranscriptionBackfill = useCallback(
@@ -1194,7 +1260,7 @@ export function App() {
   );
 
   function openWorkspaceCreateDialog() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1219,7 +1285,7 @@ export function App() {
   }
 
   async function navigateTopLevel(nextView: TopLevelWorkspaceView, failureFallback: string) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1252,10 +1318,7 @@ export function App() {
       setSelectedMemoryId(null);
       queryClient.removeQueries({
         predicate: (query) =>
-          finalizedAudioContentQueryBelongsToWorkspace(
-            query.queryKey,
-            workspaceSession.workspaceId
-          ),
+          workspaceContentQueryBelongsToWorkspace(query.queryKey, workspaceSession.workspaceId),
       });
       setWorkspaceSession(null);
       setTopLevelWorkspaceView(nextView);
@@ -1275,7 +1338,7 @@ export function App() {
   }
 
   function openMemorySpaceRemoveDialog(memorySpace: WorkspaceMemorySpaceListItem) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1304,7 +1367,7 @@ export function App() {
   }
 
   function openMemorySpaceRenameDialog(memorySpace: WorkspaceMemorySpaceListItem) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1469,7 +1532,7 @@ export function App() {
   }
 
   async function confirmRemoveMemorySpace() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1534,7 +1597,7 @@ export function App() {
   }
 
   async function selectMemorySpaceFromSidebar(workspaceId: string) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1566,7 +1629,7 @@ export function App() {
   }
 
   async function handleOpenLocalWorkspace() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1653,7 +1716,7 @@ export function App() {
     </SettingsShell>
   );
   function openSettingsMode() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -1678,7 +1741,7 @@ export function App() {
     },
     onRenameMemorySpace: openMemorySpaceRenameDialog,
     onRemoveMemorySpace: openMemorySpaceRemoveDialog,
-    onSettingsBlocked: blockRecordingFlowInterruption,
+    onSettingsBlocked: blockWorkspaceFlowInterruption,
     onSelectMemorySpace: (workspaceId: string) => {
       void selectMemorySpaceFromSidebar(workspaceId);
     },
@@ -1868,6 +1931,219 @@ export function App() {
         }),
       });
     }
+  }
+
+  function handleNoteSegmentFinalized(finalized: FinalizedNoteSegment) {
+    if (!workspaceSessionMatches(activeWorkspaceSession)) {
+      return;
+    }
+
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: activeWorkspaceSession.workspaceId,
+      memoryId: finalized.memory.memoryId,
+    });
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeMemoryIntoSession(
+          {
+            ...activeWorkspaceSession,
+            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+          },
+          finalized.memory
+        ).snapshot
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
+      mergeSegmentIntoMemoryDetail(
+        currentDetail,
+        finalized.memory,
+        finalized.segment,
+        activeWorkspaceSession.workspaceId
+      )
+    );
+    setSelectedMemoryId(finalized.segment.memoryId);
+    setSegmentFocusIntent({
+      memoryId: finalized.segment.memoryId,
+      segmentId: finalized.segment.segmentId,
+    });
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === activeWorkspaceSession.workspaceHandle &&
+      currentSession.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeMemoryIntoSession(currentSession, finalized.memory)
+        : currentSession
+    );
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentContentQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId: finalized.segment.memoryId,
+        segmentId: finalized.segment.segmentId,
+      }),
+    });
+  }
+
+  function handleNoteSegmentContentSaved(saved: {
+    readonly bodyByteLength: number;
+    readonly bodyMarkdown: string;
+    readonly baselineContentHash: string;
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly title: string;
+  }) {
+    const session = activeWorkspaceSession;
+    if (!workspaceSessionMatches(session)) {
+      return;
+    }
+
+    queryClient.setQueryData<WorkspaceNoteSegmentContent | undefined>(
+      segmentContentQueryKey({
+        workspaceId: session.workspaceId,
+        memoryId: saved.memoryId,
+        segmentId: saved.segmentId,
+      }),
+      (currentContent) =>
+        currentContent
+          ? {
+              ...currentContent,
+              bodyMarkdown: saved.bodyMarkdown,
+              bodyByteLength: saved.bodyByteLength,
+              baselineContentHash: saved.baselineContentHash,
+            }
+          : currentContent
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+      memoryDetailQueryKey({
+        workspaceId: session.workspaceId,
+        memoryId: saved.memoryId,
+      }),
+      (currentDetail) => {
+        if (!currentDetail || currentDetail.detail.workspaceId !== session.workspaceId) {
+          return currentDetail;
+        }
+        return {
+          ...currentDetail,
+          detail: {
+            ...currentDetail.detail,
+            segments: currentDetail.detail.segments.map((segment) =>
+              segment.segmentId === saved.segmentId && segment.type === 'note'
+                ? { ...segment, bodyByteLength: saved.bodyByteLength }
+                : segment
+            ),
+          },
+        };
+      }
+    );
+  }
+
+  function handleNoteSegmentSupplementContentSaved(saved: {
+    readonly bodyByteLength: number;
+    readonly bodyMarkdown: string;
+    readonly baselineContentHash: string;
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly supplementId: string;
+    readonly title: string;
+  }) {
+    const session = activeWorkspaceSession;
+    if (!workspaceSessionMatches(session)) {
+      return;
+    }
+
+    queryClient.setQueryData<WorkspaceNoteSegmentSupplementContent | undefined>(
+      segmentSupplementContentQueryKey({
+        workspaceId: session.workspaceId,
+        memoryId: saved.memoryId,
+        segmentId: saved.segmentId,
+        supplementId: saved.supplementId,
+      }),
+      (currentContent) =>
+        currentContent
+          ? {
+              ...currentContent,
+              bodyMarkdown: saved.bodyMarkdown,
+              bodyByteLength: saved.bodyByteLength,
+              baselineContentHash: saved.baselineContentHash,
+            }
+          : currentContent
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+      memoryDetailQueryKey({
+        workspaceId: session.workspaceId,
+        memoryId: saved.memoryId,
+      }),
+      (currentDetail) => {
+        if (!currentDetail || currentDetail.detail.workspaceId !== session.workspaceId) {
+          return currentDetail;
+        }
+        return {
+          ...currentDetail,
+          detail: {
+            ...currentDetail.detail,
+            segments: currentDetail.detail.segments.map((segment) =>
+              segment.segmentId === saved.segmentId
+                ? {
+                    ...segment,
+                    supplements: segment.supplements.map((supplement) =>
+                      supplement.supplementId === saved.supplementId && supplement.type === 'note'
+                        ? { ...supplement, bodyByteLength: saved.bodyByteLength }
+                        : supplement
+                    ),
+                  }
+                : segment
+            ),
+          },
+        };
+      }
+    );
+  }
+
+  function handleSegmentSupplementNoteFinalized(finalized: FinalizedSegmentSupplementNote) {
+    if (!workspaceSessionMatches(activeWorkspaceSession)) {
+      return;
+    }
+
+    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) =>
+        mergeMemoryIntoSession(
+          {
+            ...activeWorkspaceSession,
+            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+          },
+          finalized.memory
+        ).snapshot
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+      memoryDetailQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId: finalized.memory.memoryId,
+      }),
+      (currentDetail) =>
+        mergeSegmentIntoMemoryDetail(
+          currentDetail,
+          finalized.memory,
+          finalized.segment,
+          activeWorkspaceSession.workspaceId
+        )
+    );
+    setSelectedMemoryId(finalized.memory.memoryId);
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === activeWorkspaceSession.workspaceHandle &&
+      currentSession.workspaceId === activeWorkspaceSession.workspaceId
+        ? mergeMemoryIntoSession(currentSession, finalized.memory)
+        : currentSession
+    );
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentSupplementContentQueryKey({
+        workspaceId: activeWorkspaceSession.workspaceId,
+        memoryId: finalized.memory.memoryId,
+        segmentId: finalized.segment.segmentId,
+        supplementId: finalized.supplement.supplementId,
+      }),
+    });
   }
 
   async function saveRecoveredRecording() {
@@ -2184,7 +2460,7 @@ export function App() {
   }
 
   function openMemoryCreateDialog(intent: MemoryCreateIntent) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -2620,7 +2896,7 @@ export function App() {
   }
 
   function openMemoryDeleteDialog(memory: WorkspaceMemorySummary) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -2647,7 +2923,7 @@ export function App() {
   }
 
   function openSegmentDeleteDialog(target: SegmentDeleteTarget) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -2674,7 +2950,7 @@ export function App() {
   }
 
   function openSegmentSupplementDeleteDialog(target: SegmentSupplementDeleteTarget) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -2816,7 +3092,7 @@ export function App() {
   }
 
   async function confirmDeleteMemory() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -2962,7 +3238,7 @@ export function App() {
   }
 
   async function confirmDeleteSegmentSupplement() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -3131,7 +3407,7 @@ export function App() {
   }
 
   function confirmDeleteSegment() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -3474,7 +3750,7 @@ export function App() {
   }
 
   function requestStartRecording() {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -3486,12 +3762,82 @@ export function App() {
     openMemoryCreateDialog({ afterCreate: 'record-memory' });
   }
 
+  function requestStartNote() {
+    if (blockWorkspaceFlowInterruption() || !currentMemoryId) {
+      return;
+    }
+
+    setNoteEditorFlow({
+      status: 'active',
+      open: true,
+      target: {
+        kind: 'segment',
+        memoryId: currentMemoryId,
+        title: `笔记${(currentMemory?.noteSegmentCount ?? 0) + 1}`,
+      },
+    });
+  }
+
+  function requestEditNoteSegment(target: {
+    readonly baselineContentHash: string;
+    readonly bodyMarkdown: string;
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly title: string;
+  }) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setSelectedMemoryId(target.memoryId);
+    setNoteEditorFlow({
+      status: 'active',
+      open: true,
+      target: {
+        kind: 'edit-segment',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+        title: target.title,
+        bodyMarkdown: target.bodyMarkdown,
+        baselineContentHash: target.baselineContentHash,
+      },
+    });
+  }
+
+  function requestEditNoteSegmentSupplement(target: {
+    readonly baselineContentHash: string;
+    readonly bodyMarkdown: string;
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly supplementId: string;
+    readonly title: string;
+  }) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setSelectedMemoryId(target.memoryId);
+    setNoteEditorFlow({
+      status: 'active',
+      open: true,
+      target: {
+        kind: 'edit-segment-supplement',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+        supplementId: target.supplementId,
+        title: target.title,
+        bodyMarkdown: target.bodyMarkdown,
+        baselineContentHash: target.baselineContentHash,
+      },
+    });
+  }
+
   function requestStartSegmentSupplementRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
     readonly title: string;
   }) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -3501,6 +3847,28 @@ export function App() {
       memoryId: target.memoryId,
       segmentId: target.segmentId,
       title: target.title,
+    });
+  }
+
+  function requestStartSegmentSupplementNote(target: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly title: string;
+  }) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setSelectedMemoryId(target.memoryId);
+    setNoteEditorFlow({
+      status: 'active',
+      open: true,
+      target: {
+        kind: 'segment-supplement',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+        title: target.title,
+      },
     });
   }
 
@@ -3578,7 +3946,7 @@ export function App() {
   }
 
   function selectMemory(memoryId: string) {
-    if (blockRecordingFlowInterruption()) {
+    if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
@@ -3593,6 +3961,14 @@ export function App() {
   function handleRecordingOpenChange(nextOpen: boolean) {
     setRecordingFlow((currentFlow) =>
       currentFlow.status === 'active' ? { ...currentFlow, open: nextOpen } : currentFlow
+    );
+  }
+
+  function handleNoteEditorOpenChange(nextOpen: boolean) {
+    setNoteEditorFlow((currentFlow) =>
+      currentFlow.status === 'active' && nextOpen
+        ? { ...currentFlow, open: true }
+        : { status: 'closed' }
     );
   }
 
@@ -3661,6 +4037,8 @@ export function App() {
             onDeleteMemory={openMemoryDeleteDialog}
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
+            onEditNoteSegment={requestEditNoteSegment}
+            onEditNoteSegmentSupplement={requestEditNoteSegmentSupplement}
             onSegmentFocusConsumed={(segmentId) => {
               setSegmentFocusIntent((currentIntent) =>
                 currentIntent?.segmentId === segmentId ? null : currentIntent
@@ -3671,6 +4049,8 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
+            onStartNote={requestStartNote}
+            onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
           />
@@ -3687,6 +4067,18 @@ export function App() {
           open={recordingOverlayOpen}
           recoveredDraft={recordingRecoveryReviewDraft}
           recordingTarget={recordingTarget}
+          workspaceSession={activeWorkspaceSession}
+        />
+      ) : null}
+      {noteEditorTarget ? (
+        <NoteEditorOverlay
+          onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
+          onNoteSegmentFinalized={handleNoteSegmentFinalized}
+          onOpenChange={handleNoteEditorOpenChange}
+          onSegmentSupplementNoteFinalized={handleSegmentSupplementNoteFinalized}
+          open={noteEditorOpen}
+          target={noteEditorTarget}
           workspaceSession={activeWorkspaceSession}
         />
       ) : null}

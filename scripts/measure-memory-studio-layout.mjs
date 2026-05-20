@@ -313,8 +313,8 @@ function measurementExpression(maxItems) {
       if (maxMeasuredItems === null || items.length <= maxMeasuredItems) {
         return items.map((item, index) => ({ item, index }));
       }
-      const selectedIndex = items.findIndex(
-        (item) => item.getAttribute('aria-current') === 'true'
+      const selectedIndex = items.findIndex((item) =>
+        Boolean(item.querySelector('[aria-current="true"]'))
       );
       const indexes = new Set();
       const addIndex = (index) => {
@@ -395,7 +395,7 @@ function measurementExpression(maxItems) {
       return {
         index,
         label: item.getAttribute('aria-label'),
-        selected: item.getAttribute('aria-current') === 'true',
+        selected: Boolean(item.querySelector('[aria-current="true"]')),
         itemRect,
         cardRect,
         dotRect,
@@ -474,7 +474,9 @@ function measurementExpression(maxItems) {
       itemCount: items.length,
       measuredItemCount: measuredItems.length,
       itemSampled: measuredItems.length < items.length,
-      selectedItemCount: items.filter((item) => item.getAttribute('aria-current') === 'true').length,
+      selectedItemCount: items.filter((item) =>
+        Boolean(item.querySelector('[aria-current="true"]'))
+      ).length,
       scroll: {
         left: scroll.scrollLeft,
         width: scroll.scrollWidth,

@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-05-19T09:11:50.605Z",
+  "runtime": {
+    "node": "26.0.0",
+    "v8": "14.6.202.33-node.19",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "source": "node:crypto createHash(\"sha256\").update(markdown, \"utf8\").digest(\"hex\")",
+  "samples": [
+    {
+      "label": "typical-5kb-markdown",
+      "byteLength": 5120,
+      "iterations": 10000,
+      "sha256HexLength": 64,
+      "digestPrefix12": "8c7eb59d6ede",
+      "minMs": 0.0029159999999990305,
+      "meanMs": 0.00345120599999988,
+      "p50Ms": 0.0030420000000077607,
+      "p95Ms": 0.0037080000000031532,
+      "p99Ms": 0.007457999999999743,
+      "maxMs": 0.6197080000000028
+    },
+    {
+      "label": "larger-256kb-markdown",
+      "byteLength": 262144,
+      "iterations": 2000,
+      "sha256HexLength": 64,
+      "digestPrefix12": "602f53ac6356",
+      "minMs": 0.11862500000000864,
+      "meanMs": 0.12909258350000044,
+      "p50Ms": 0.12024999999999864,
+      "p95Ms": 0.1661669999999731,
+      "p99Ms": 0.26245899999997846,
+      "maxMs": 1.259666999999979
+    }
+  ]
+}

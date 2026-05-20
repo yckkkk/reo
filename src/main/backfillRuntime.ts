@@ -108,6 +108,36 @@ type ReadBackfillTargetProjection = (input: BackfillTargetProjectionInput) => Pr
     }
   | WorkspaceErrorEnvelope
 >;
+type MemoryDetailSegmentProjection = WorkspaceMemoryDetailProjection['segments'][number];
+type AudioMemoryDetailSupplementProjection = Extract<
+  MemoryDetailSegmentProjection['supplements'][number],
+  { readonly type: 'audio' }
+>;
+
+function isAudioMemoryDetailSupplementProjection(
+  supplement: MemoryDetailSegmentProjection['supplements'][number]
+): supplement is AudioMemoryDetailSupplementProjection {
+  return supplement.type === 'audio';
+}
+
+function toBackfillScannerSegmentProjection(segment: MemoryDetailSegmentProjection) {
+  const base = {
+    memoryId: segment.memoryId,
+    segmentId: segment.segmentId,
+    supplements: segment.supplements.filter(isAudioMemoryDetailSupplementProjection),
+    updatedAt: segment.updatedAt,
+    workspaceId: segment.workspaceId,
+  };
+  if (segment.type !== 'audio') {
+    return base;
+  }
+  return {
+    ...base,
+    audioByteLength: segment.audioByteLength,
+    lastTranscriptionAttempt: segment.lastTranscriptionAttempt,
+    transcript: segment.transcript,
+  };
+}
 
 function* createAutomaticBackfillTasks({
   assertWorkspaceUsable,
@@ -738,24 +768,40 @@ async function readBackfillTargetProjectionFromFileTruth(
     return usable;
   }
   try {
-    const target =
-      input.kind === 'segment'
-        ? await readFinalizedSegmentAudioProjection({
-            memoryId: input.memoryId,
-            rootPath: input.rootPath,
-            segmentId: input.segmentId,
-            workspaceId: input.workspaceId,
-          })
-        : await readFinalizedSegmentSupplementProjection({
-            memoryId: input.memoryId,
-            rootPath: input.rootPath,
-            segmentId: input.segmentId,
-            supplementId: input.supplementId,
-            workspaceId: input.workspaceId,
-          });
+    if (input.kind === 'segment') {
+      const target = await readFinalizedSegmentAudioProjection({
+        memoryId: input.memoryId,
+        rootPath: input.rootPath,
+        segmentId: input.segmentId,
+        workspaceId: input.workspaceId,
+      });
+      const stillUsable = input.assertWorkspaceUsable();
+      if (!stillUsable.ok) {
+        return stillUsable;
+      }
+      return {
+        ok: true,
+        value: {
+          audioByteLength: target.audioByteLength,
+          lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+          transcript: target.transcript,
+        },
+      };
+    }
+
+    const target = await readFinalizedSegmentSupplementProjection({
+      memoryId: input.memoryId,
+      rootPath: input.rootPath,
+      segmentId: input.segmentId,
+      supplementId: input.supplementId,
+      workspaceId: input.workspaceId,
+    });
     const stillUsable = input.assertWorkspaceUsable();
     if (!stillUsable.ok) {
       return stillUsable;
+    }
+    if (target.type !== 'audio') {
+      return workspaceError('ERR_BACKFILL_TARGET_NOT_ELIGIBLE', 'Backfill target is not audio');
     }
     return {
       ok: true,
@@ -795,6 +841,9 @@ async function readBackfillTargetProjectionFromMemoryDetail(
       : segment?.supplements.find((candidate) => candidate.supplementId === input.supplementId);
   if (!target) {
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Backfill target was not found');
+  }
+  if (target.type !== 'audio') {
+    return workspaceError('ERR_BACKFILL_TARGET_NOT_ELIGIBLE', 'Backfill target is not audio');
   }
   return {
     ok: true,
@@ -1034,12 +1083,6 @@ async function selectBackfillTargetsFromSnapshot({
     ) {
       break;
     }
-    if (
-      memory.audioByteLength === 0 ||
-      (memory.segmentCount === 0 && memory.supplementCount === 0)
-    ) {
-      continue;
-    }
     const summaryKey = backfillMemorySummaryCacheKey(memory);
     const cachedDetail = detailCache?.get(memory.memoryId);
     let detailValue = cachedDetail?.summaryKey === summaryKey ? cachedDetail.value : undefined;
@@ -1056,7 +1099,17 @@ async function selectBackfillTargetsFromSnapshot({
       detailValue = detail.value;
       detailCache?.set(memory.memoryId, { summaryKey, value: detailValue });
     }
-    addEligibleBackfillTargets({ memories: [detailValue] }, selector);
+    addEligibleBackfillTargets(
+      {
+        memories: [
+          {
+            memoryId: detailValue.memoryId,
+            segments: detailValue.segments.map(toBackfillScannerSegmentProjection),
+          },
+        ],
+      },
+      selector
+    );
     if (isCurrent?.() === false) {
       return [];
     }
@@ -1077,12 +1130,12 @@ function backfillMemorySummaryCacheKey(memory: WorkspaceMemorySummary): string {
     memory.segmentCount,
     memory.supplementCount,
     memory.audioByteLength,
-    memory.hasTranscript ? '1' : '0',
+    memory.hasAudioTranscript ? '1' : '0',
   ].join('\u0000');
 }
 
 function isBackfillMemorySummaryCandidate(memory: WorkspaceMemorySummary): boolean {
-  return memory.audioByteLength > 0 && (memory.segmentCount > 0 || memory.supplementCount > 0);
+  return memory.audioByteLength > 0 || memory.supplementCount > 0;
 }
 
 function backfillMemorySummaryOrder(

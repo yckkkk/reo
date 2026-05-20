@@ -1,0 +1,4 @@
+- Capture source material
+- Review useful fragments
+  - Keep only the signal
+- Draft the work

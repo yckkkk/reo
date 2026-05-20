@@ -92,15 +92,17 @@ test('workspace markdown object rejects unsafe relative resource paths', () => {
   );
 });
 
-test('workspace markdown object does not accept future object kinds before runtime support', () => {
-  assert.throws(
-    () =>
-      parseWorkspaceMarkdownObject({
-        objectType: 'segment',
-        markdown: `---\ntitle: Unsupported note\nkind: note\n---\nbody\n`,
-      }),
-    /Invalid workspace markdown frontmatter/
-  );
+test('workspace markdown object accepts note kind and rejects unsupported object kinds', () => {
+  const note = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: `---\ntitle: Supported note\nkind: note\n---\nbody\n`,
+  });
+
+  assert.deepEqual(note.data, {
+    kind: 'note',
+    title: 'Supported note',
+  });
+  assert.equal(note.content, 'body\n');
 
   assert.throws(
     () =>

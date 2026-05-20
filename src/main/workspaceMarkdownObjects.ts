@@ -1,8 +1,9 @@
 import path from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
+import { WORKSPACE_CONTENT_KINDS } from '../workspace-contract/workspace-contract.js';
 
-const workspaceMarkdownObjectKindSchema = z.literal('audio');
+const workspaceMarkdownObjectKindSchema = z.enum(WORKSPACE_CONTENT_KINDS);
 
 const stringListSchema = z.array(z.string());
 

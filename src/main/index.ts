@@ -8,7 +8,11 @@ import {
   type WebContentsWillNavigateEventParams,
   type WebContentsWillRedirectEventParams,
 } from 'electron';
-import { getAppShellUrl, registerAppShellProtocol, registerAppShellScheme } from './appProtocol.js';
+import {
+  getAppShellUrl,
+  registerAppShellProtocolWithOptions,
+  registerAppShellScheme,
+} from './appProtocol.js';
 import { diagnosticErrorName, recordDiagnosticEvent } from './diagnostics.js';
 import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
@@ -22,7 +26,11 @@ import {
   setupPermissionRequestHandler,
 } from './security.js';
 import { createVoiceSettingsStore } from './voiceSettingsStore.js';
-import { closeAllWorkspaceHandles, registerWorkspaceIpc } from './workspaceIpc.js';
+import {
+  closeAllWorkspaceHandles,
+  registerWorkspaceIpc,
+  resolveActiveWorkspaceRootForProtocol,
+} from './workspaceIpc.js';
 import { bindWorkspaceHandleLifecycle } from './workspaceHandleLifecycle.js';
 
 app.enableSandbox();
@@ -143,7 +151,9 @@ app
       recordingTranscriptionSessions,
       voiceSettingsStore,
     });
-    registerAppShellProtocol();
+    registerAppShellProtocolWithOptions({
+      resolveAttachmentRoot: resolveActiveWorkspaceRootForProtocol,
+    });
     createWindow();
 
     app.on('activate', () => {

@@ -31,6 +31,7 @@ import {
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+  WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
@@ -118,6 +119,10 @@ import {
   workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
+  workspaceReadSegmentContentResponseSchema,
+  workspaceReadSegmentSupplementContentResponseSchema,
+  workspaceWriteSegmentContentRequestSchema,
+  workspaceWriteSegmentSupplementContentRequestSchema,
   workspaceRecordingReadRequestSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceChooseDirectoryResultSchema,
@@ -127,6 +132,8 @@ import {
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
   workspaceMemorySummarySchema,
+  workspaceSegmentProjectionSchema,
+  workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
@@ -242,6 +249,20 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readFinalizedAudioSegmentSupplement',
     'workspace:createRecordingDraft',
     'workspace:createSegmentSupplementRecordingDraft',
+    'workspace:createNoteSegmentDraft',
+    'workspace:createSegmentSupplementNoteDraft',
+    'workspace:writeNoteSegmentDraftBody',
+    'workspace:writeSegmentSupplementNoteDraftBody',
+    'workspace:finalizeNoteSegmentDraft',
+    'workspace:finalizeSegmentSupplementNoteDraft',
+    'workspace:readSegmentContent',
+    'workspace:writeSegmentContent',
+    'workspace:readSegmentSupplementContent',
+    'workspace:writeSegmentSupplementContent',
+    'workspace:saveSegmentAttachment',
+    'workspace:listSegmentAttachments',
+    'workspace:saveSegmentSupplementAttachment',
+    'workspace:listSegmentSupplementAttachments',
     'workspace:readRecordingDraftAudio',
     'workspace:appendRecordingAudioChunk',
     'workspace:appendSegmentSupplementRecordingAudioChunk',
@@ -253,6 +274,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateMemoryTitle',
     'workspace:updateSegmentTitle',
     'workspace:updateSegmentSupplementTitle',
+    'workspace:updateSegmentContentTabOrder',
     'workspace:saveTranscript',
     'workspace:saveSegmentSupplementTranscript',
     'workspace:requestSegmentTranscriptionBackfill',
@@ -321,6 +343,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.equal(
     WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
     'workspace:updateSegmentSupplementTitle'
+  );
+  assert.equal(
+    WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
+    'workspace:updateSegmentContentTabOrder'
   );
   assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
   assert.equal(
@@ -714,6 +740,133 @@ test('workspace error code schema accepts entity actions menu error codes', () =
   }
 });
 
+test('note content schemas require baseline hash for finalized edit conflict detection', () => {
+  const baselineContentHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const readSegmentResponse = workspaceReadSegmentContentResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'req_note_content',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      type: 'note',
+      title: 'Note',
+      bodyMarkdown: 'Body',
+      bodyByteLength: 4,
+      baselineContentHash,
+    },
+  });
+  assert.equal(readSegmentResponse.ok, true);
+
+  const readSupplementResponse = workspaceReadSegmentSupplementContentResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'req_note_supplement_content',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      type: 'note',
+      title: 'Supplement',
+      bodyMarkdown: 'Supplement body',
+      bodyByteLength: 15,
+      baselineContentHash,
+    },
+  });
+  assert.equal(readSupplementResponse.ok, true);
+
+  assert.throws(() =>
+    workspaceWriteSegmentContentRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      bodyMarkdown: 'Body',
+    })
+  );
+  assert.deepEqual(
+    workspaceWriteSegmentContentRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      bodyMarkdown: 'Body',
+      baselineContentHash,
+    }),
+    {
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      bodyMarkdown: 'Body',
+      baselineContentHash,
+    }
+  );
+  assert.deepEqual(
+    workspaceWriteSegmentSupplementContentRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      bodyMarkdown: 'Supplement body',
+      baselineContentHash,
+    }),
+    {
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      bodyMarkdown: 'Supplement body',
+      baselineContentHash,
+    }
+  );
+
+  assert.equal(workspaceErrorCodeSchema.safeParse('ERR_SEGMENT_CONTENT_STALE').success, true);
+  assert.deepEqual(
+    workspaceErrorEnvelopeSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_CONTENT_STALE',
+        message: 'Note content changed on disk',
+        currentBodyMarkdown: 'Disk body',
+        currentBaselineContentHash: baselineContentHash,
+      },
+    }),
+    {
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_CONTENT_STALE',
+        message: 'Note content changed on disk',
+        currentBodyMarkdown: 'Disk body',
+        currentBaselineContentHash: baselineContentHash,
+      },
+    }
+  );
+  assert.throws(() =>
+    workspaceErrorEnvelopeSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_CONTENT_STALE',
+        message: 'Note content changed on disk',
+        currentBaselineContentHash: baselineContentHash,
+      },
+    })
+  );
+  assert.throws(() =>
+    workspaceErrorEnvelopeSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_UPDATE_FAILED',
+        message: 'Write failed',
+        currentBodyMarkdown: 'Disk body',
+        currentBaselineContentHash: baselineContentHash,
+      },
+    })
+  );
+});
+
 test('workspace IPC channels include entity actions menu shell channels', () => {
   const entityActionChannels = [
     'workspace:revealMemorySpaceInFinder',
@@ -912,9 +1065,12 @@ test('segment supplement title update contract renames the file-space node witho
         createdAt: '2026-05-10T13:00:00.000Z',
         updatedAt: '2026-05-10T13:00:00.000Z',
         segmentCount: 1,
-        durationMs: 1500,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1500,
         audioByteLength: 7,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 1,
       },
       segment: {
@@ -994,9 +1150,12 @@ test('workspace snapshot read contract refreshes file truth without exposing raw
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 1,
-          durationMs: 1000,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
           audioByteLength: 3,
-          hasTranscript: true,
+          hasAudioTranscript: true,
+          hasAnyNote: false,
           supplementCount: 0,
         },
       ],
@@ -1058,9 +1217,12 @@ test('memory dangerous operation contract keeps delete and restore path explicit
         createdAt: '2026-05-10T13:00:00.000Z',
         updatedAt: '2026-05-10T13:00:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
       memories: [
@@ -1070,9 +1232,12 @@ test('memory dangerous operation contract keeps delete and restore path explicit
           createdAt: '2026-05-10T13:00:00.000Z',
           updatedAt: '2026-05-10T13:00:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
       ],
@@ -1106,9 +1271,12 @@ test('segment dangerous operation contract keeps parent identity and restore tok
           createdAt: '2026-05-10T13:00:00.000Z',
           updatedAt: '2026-05-10T13:00:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segmentId: 'seg_1',
@@ -1124,9 +1292,12 @@ test('segment dangerous operation contract keeps parent identity and restore tok
           createdAt: '2026-05-10T13:00:00.000Z',
           updatedAt: '2026-05-10T13:00:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segmentId: 'seg_1',
@@ -1157,9 +1328,12 @@ test('segment dangerous operation contract keeps parent identity and restore tok
         createdAt: '2026-05-10T13:00:00.000Z',
         updatedAt: '2026-05-10T13:00:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
       segment: {
@@ -1210,9 +1384,12 @@ test('segment supplement dangerous operation contract keeps parent identity and 
     createdAt: '2026-05-10T13:00:00.000Z',
     updatedAt: '2026-05-10T13:00:00.000Z',
     segmentCount: 1,
-    durationMs: 1000,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    audioDurationMs: 1000,
     audioByteLength: 3,
-    hasTranscript: false,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
     supplementCount: 0,
   };
   const supplement = {
@@ -1366,9 +1543,12 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         createdAt: '2026-05-10T13:13:00.000Z',
         updatedAt: '2026-05-10T13:14:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 1,
       },
       segment: {
@@ -1525,9 +1705,12 @@ test('workspace memory detail contract keeps handle out of response data', () =>
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 1,
-        durationMs: 1000,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: true,
+        hasAudioTranscript: true,
+        hasAnyNote: false,
         supplementCount: 0,
         segments: [
           {
@@ -1708,9 +1891,12 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
       segmentCount: 1,
-      durationMs: 1000,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 1000,
       audioByteLength: 2048,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     }),
     {
@@ -1719,9 +1905,12 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
       segmentCount: 1,
-      durationMs: 1000,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 1000,
       audioByteLength: 2048,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     }
   );
@@ -1732,9 +1921,12 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
       segmentCount: 1,
-      durationMs: 1000,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 1000,
       audioByteLength: 2048,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
       staleRecordingProjection: ['seg_old'],
     })
@@ -1746,11 +1938,92 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:42:00.000Z',
       segmentCount: 1,
-      durationMs: 1000,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 1000,
       audioByteLength: 2048,
-      hasTranscript: false,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
       supplementCount: 0,
     })
+  );
+});
+
+test('workspace segment projection contract accepts note kind without audio fields', () => {
+  assert.deepEqual(
+    workspaceSegmentProjectionSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_note_1',
+      type: 'note',
+      title: '现场想法',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:43:00.000Z',
+      bodyByteLength: 128,
+      supplementCount: 1,
+      supplements: [
+        {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_note_1',
+          supplementId: 'sup_note_1',
+          type: 'note',
+          title: '补充',
+          createdAt: '2026-05-08T14:44:00.000Z',
+          updatedAt: '2026-05-08T14:45:00.000Z',
+          bodyByteLength: 64,
+        },
+      ],
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_note_1',
+      type: 'note',
+      title: '现场想法',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:43:00.000Z',
+      bodyByteLength: 128,
+      supplementCount: 1,
+      supplements: [
+        {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_note_1',
+          supplementId: 'sup_note_1',
+          type: 'note',
+          title: '补充',
+          createdAt: '2026-05-08T14:44:00.000Z',
+          updatedAt: '2026-05-08T14:45:00.000Z',
+          bodyByteLength: 64,
+        },
+      ],
+    }
+  );
+
+  assert.deepEqual(
+    workspaceSegmentSupplementProjectionSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_audio_1',
+      supplementId: 'sup_note_1',
+      type: 'note',
+      title: '录音补充笔记',
+      createdAt: '2026-05-08T14:44:00.000Z',
+      updatedAt: '2026-05-08T14:45:00.000Z',
+      bodyByteLength: 64,
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_audio_1',
+      supplementId: 'sup_note_1',
+      type: 'note',
+      title: '录音补充笔记',
+      createdAt: '2026-05-08T14:44:00.000Z',
+      updatedAt: '2026-05-08T14:45:00.000Z',
+      bodyByteLength: 64,
+    }
   );
 });
 
@@ -2192,9 +2465,12 @@ test('memory title update contract is scoped to a memory container and strips ra
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 5,
-        durationMs: 1000,
+        audioSegmentCount: 5,
+        noteSegmentCount: 0,
+        audioDurationMs: 1000,
         audioByteLength: 3,
-        hasTranscript: true,
+        hasAudioTranscript: true,
+        hasAnyNote: false,
         supplementCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: ['seg_20260506_000001'],
@@ -2248,9 +2524,12 @@ test('segment title update contract returns memory and segment projections witho
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 1,
-          durationMs: 1000,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
           audioByteLength: 3,
-          hasTranscript: true,
+          hasAudioTranscript: true,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segment: {
@@ -2396,9 +2675,12 @@ test('memory create contract creates a named Memory container without raw path a
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
         rootPath: '/Users/example/Reo',
         segmentIds: [],
@@ -2450,9 +2732,12 @@ test('finalized audio segment supplement transcript save contract requires paren
         createdAt: '2026-05-10T13:00:00.000Z',
         updatedAt: '2026-05-10T13:00:00.000Z',
         segmentCount: 1,
-        durationMs: 1500,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        audioDurationMs: 1500,
         audioByteLength: 7,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 1,
       },
       segment: {

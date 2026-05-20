@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "timestamp": "2026-05-19T19:26:30.716Z",
+  "evidence": [
+    {
+      "step": "dirty-discard-confirm",
+      "title": "放弃未保存的笔记？",
+      "noBodyVisibleBeforeDiscard": true
+    },
+    {
+      "step": "primary-body-more-menu",
+      "items": ["用默认应用打开", "在访达中显示", "复制相对路径", "复制绝对路径", "重命名", "删除"]
+    },
+    {
+      "step": "edit-overlay-shape",
+      "titleText": "正文",
+      "hasModeBadge": false,
+      "hasToolbarPlaceholder": false,
+      "textareaHasPy6": true,
+      "textareaHasPy14": false
+    },
+    {
+      "step": "note-supplement-create",
+      "supplementVisible": true,
+      "selectedTabText": "补充笔记1"
+    },
+    {
+      "step": "layout-sample",
+      "selectedSegment": "选择片段 笔记4",
+      "playbackButton": "笔记 笔记4 暂不支持播放",
+      "primaryTab": {
+        "x": 280,
+        "y": 438,
+        "width": 63,
+        "height": 34
+      },
+      "primaryMore": {
+        "x": 343,
+        "y": 448,
+        "width": 0,
+        "height": 15
+      },
+      "supplementTab": {
+        "x": 361,
+        "y": 438,
+        "width": 96,
+        "height": 34
+      },
+      "markdownSurface": {
+        "x": 280,
+        "y": 476,
+        "width": 880,
+        "height": 260
+      },
+      "expandButtonInsideSurface": true
+    }
+  ],
+  "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n笔记4\n58B\n12:24\n录音6\n00:02\n21:43\n笔记3\n49B\n10:45\n笔记2\n31B\n10:45\n笔记1\n43B\n10:44\n录音3\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:00\n正文\n补充笔记1\nRuntime note supplement validation 2026-05-19 1779218788337\n\n碎片记录\n12:26 · 10 个片段\n生活\n05/17 20:34 · 1 个片段\n\nv3.0.2\n\nOutput Detail\nStandard\nReact Components\nHide Until Restart\nMarker Color\nClear on copy/send\nBlock page interactions\nManage MCP & Webhooks\nManage MCP & Webhooks\nMCP Connection\n\nMCP connection allows agents to receive and act on annotations. Learn more\n\nWebhooks\nAuto-Send\n\nThe webhook URL will receive live annotation changes and annotation data."
+}

@@ -36,13 +36,23 @@ type BackfillScannerSupplementProjection = BackfillScannerProjection & {
   readonly workspaceId: string;
 };
 
-type BackfillScannerSegmentProjection = BackfillScannerProjection & {
+type BackfillScannerSegmentBaseProjection = {
   readonly memoryId: string;
   readonly segmentId: string;
   readonly supplements: readonly BackfillScannerSupplementProjection[];
   readonly updatedAt: string;
   readonly workspaceId: string;
 };
+
+type BackfillScannerSegmentProjection =
+  | BackfillScannerSegmentBaseProjection
+  | (BackfillScannerSegmentBaseProjection & BackfillScannerProjection);
+
+function segmentHasBackfillAudioProjection(
+  segment: BackfillScannerSegmentProjection
+): segment is BackfillScannerSegmentBaseProjection & BackfillScannerProjection {
+  return 'audioByteLength' in segment;
+}
 
 export function isBackfillEligibleProjection(projection: BackfillScannerProjection) {
   return (
@@ -62,7 +72,7 @@ export function addEligibleBackfillTargets(
 ): void {
   for (const memory of input.memories) {
     for (const segment of memory.segments) {
-      if (isBackfillEligibleProjection(segment)) {
+      if (segmentHasBackfillAudioProjection(segment) && isBackfillEligibleProjection(segment)) {
         selector.add({
           kind: 'segment',
           memoryId: segment.memoryId,

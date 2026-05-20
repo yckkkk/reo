@@ -202,6 +202,90 @@ export function createSegmentSupplementRecordingDraft(
   return window.reoWorkspace.createSegmentSupplementRecordingDraft(payload);
 }
 
+export function createNoteSegmentDraft(
+  payload: Parameters<Window['reoWorkspace']['createNoteSegmentDraft']>[0]
+) {
+  return window.reoWorkspace.createNoteSegmentDraft(payload);
+}
+
+export function createSegmentSupplementNoteDraft(
+  payload: Parameters<Window['reoWorkspace']['createSegmentSupplementNoteDraft']>[0]
+) {
+  return window.reoWorkspace.createSegmentSupplementNoteDraft(payload);
+}
+
+export function writeNoteSegmentDraftBody(
+  payload: Parameters<Window['reoWorkspace']['writeNoteSegmentDraftBody']>[0]
+) {
+  return window.reoWorkspace.writeNoteSegmentDraftBody(payload);
+}
+
+export function writeSegmentSupplementNoteDraftBody(
+  payload: Parameters<Window['reoWorkspace']['writeSegmentSupplementNoteDraftBody']>[0]
+) {
+  return window.reoWorkspace.writeSegmentSupplementNoteDraftBody(payload);
+}
+
+export function finalizeNoteSegmentDraft(
+  payload: Parameters<Window['reoWorkspace']['finalizeNoteSegmentDraft']>[0]
+) {
+  return window.reoWorkspace.finalizeNoteSegmentDraft(payload);
+}
+
+export function finalizeSegmentSupplementNoteDraft(
+  payload: Parameters<Window['reoWorkspace']['finalizeSegmentSupplementNoteDraft']>[0]
+) {
+  return window.reoWorkspace.finalizeSegmentSupplementNoteDraft(payload);
+}
+
+export function readSegmentContent(
+  payload: Parameters<Window['reoWorkspace']['readSegmentContent']>[0]
+) {
+  return window.reoWorkspace.readSegmentContent(payload);
+}
+
+export function readSegmentSupplementContent(
+  payload: Parameters<Window['reoWorkspace']['readSegmentSupplementContent']>[0]
+) {
+  return window.reoWorkspace.readSegmentSupplementContent(payload);
+}
+
+export function writeSegmentContent(
+  payload: Parameters<Window['reoWorkspace']['writeSegmentContent']>[0]
+) {
+  return window.reoWorkspace.writeSegmentContent(payload);
+}
+
+export function writeSegmentSupplementContent(
+  payload: Parameters<Window['reoWorkspace']['writeSegmentSupplementContent']>[0]
+) {
+  return window.reoWorkspace.writeSegmentSupplementContent(payload);
+}
+
+export function saveSegmentAttachment(
+  payload: Parameters<Window['reoWorkspace']['saveSegmentAttachment']>[0]
+) {
+  return window.reoWorkspace.saveSegmentAttachment(payload);
+}
+
+export function listSegmentAttachments(
+  payload: Parameters<Window['reoWorkspace']['listSegmentAttachments']>[0]
+) {
+  return window.reoWorkspace.listSegmentAttachments(payload);
+}
+
+export function saveSegmentSupplementAttachment(
+  payload: Parameters<Window['reoWorkspace']['saveSegmentSupplementAttachment']>[0]
+) {
+  return window.reoWorkspace.saveSegmentSupplementAttachment(payload);
+}
+
+export function listSegmentSupplementAttachments(
+  payload: Parameters<Window['reoWorkspace']['listSegmentSupplementAttachments']>[0]
+) {
+  return window.reoWorkspace.listSegmentSupplementAttachments(payload);
+}
+
 export function readRecordingDraftAudio(
   payload: Parameters<Window['reoWorkspace']['readRecordingDraftAudio']>[0]
 ) {
@@ -266,6 +350,12 @@ export function updateSegmentSupplementTitle(
   payload: Parameters<Window['reoWorkspace']['updateSegmentSupplementTitle']>[0]
 ) {
   return window.reoWorkspace.updateSegmentSupplementTitle(payload);
+}
+
+export function updateSegmentContentTabOrder(
+  payload: Parameters<Window['reoWorkspace']['updateSegmentContentTabOrder']>[0]
+) {
+  return window.reoWorkspace.updateSegmentContentTabOrder(payload);
 }
 
 export function saveTranscript(payload: Parameters<Window['reoWorkspace']['saveTranscript']>[0]) {
@@ -368,12 +458,24 @@ export type FinalizedSegmentSupplementRecording = Extract<
   Awaited<ReturnType<typeof finalizeSegmentSupplementRecordingDraft>>,
   { readonly ok: true }
 >['value'];
+export type FinalizedNoteSegment = Extract<
+  Awaited<ReturnType<typeof finalizeNoteSegmentDraft>>,
+  { readonly ok: true }
+>['value'];
+export type FinalizedSegmentSupplementNote = Extract<
+  Awaited<ReturnType<typeof finalizeSegmentSupplementNoteDraft>>,
+  { readonly ok: true }
+>['value'];
 export type RenamedSegment = Extract<
   Awaited<ReturnType<typeof updateSegmentTitle>>,
   { readonly ok: true }
 >['value'];
 export type RenamedSegmentSupplement = Extract<
   Awaited<ReturnType<typeof updateSegmentSupplementTitle>>,
+  { readonly ok: true }
+>['value'];
+export type ReorderedSegmentContentTabs = Extract<
+  Awaited<ReturnType<typeof updateSegmentContentTabOrder>>,
   { readonly ok: true }
 >['value'];
 export type DeletedSegmentSupplement = Extract<
@@ -399,6 +501,14 @@ export type WorkspaceFinalizedAudioSegmentContent = Extract<
 >['value'];
 export type WorkspaceFinalizedAudioSegmentSupplementContent = Extract<
   Awaited<ReturnType<typeof readFinalizedAudioSegmentSupplement>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceNoteSegmentContent = Extract<
+  Awaited<ReturnType<typeof readSegmentContent>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceNoteSegmentSupplementContent = Extract<
+  Awaited<ReturnType<typeof readSegmentSupplementContent>>,
   { readonly ok: true }
 >['value'];
 export type VoiceTranscriptionSettings = Extract<

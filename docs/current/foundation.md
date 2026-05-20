@@ -72,7 +72,7 @@ Reo 的目标用户是有持续主题关注的 prosumer 创作者与思考者：
 
 记忆空间文件夹是真实产物源。DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。每个记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口；Workspace root 使用 `users.md` 作为用户个人 context 层（agent 操作前读取，让所有 skill 输出根据用户个性化）。Reo 自己的 workspace metadata 位于 `.reo/workspace.json`。
 
-当前阶段优先完成 `roadmap.md` P1-P6，把以 audio 单模态实现的表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证落地。**P1-P6 是 enabling phase，不是 Reo 完整形态。** Reo 的完整产品形态需要多模态 Segment 类型（视频 / 图片 / 笔记 / 上传文件）+ widget runtime + HTML Segment 渲染 + Gallery 走马灯 + AGENTS.md / skills 模板 + prompt-bridge UI 全部到位，这些属于产品本质长期轨道，在表达主链稳固后启动独立 initiative。
+当前阶段优先完成 `roadmap.md` P1-P6，把 audio + note 基础表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证落地。**P1-P6 是 enabling phase，不是 Reo 完整形态。** Reo 的完整产品形态需要剩余多模态 Segment 类型（视频 / 图片 / 上传文件）+ widget runtime + HTML Segment 渲染 + Gallery 走马灯 + AGENTS.md / skills 模板 + prompt-bridge UI 全部到位，这些属于产品本质长期轨道，在表达主链稳固后启动独立 initiative。
 
 长期产品本质决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，外向定位叙事与用户场景见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`，文件真源底层决策见 `docs/decisions/0003-local-memory-workspace.md`。
 

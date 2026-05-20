@@ -4,6 +4,10 @@ import {
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentSupplement,
   readMemoryDetail,
+  readSegmentContent,
+  readSegmentSupplementContent,
+  type WorkspaceNoteSegmentContent,
+  type WorkspaceNoteSegmentSupplementContent,
   type WorkspaceFinalizedAudioSegmentSupplementContent,
   type WorkspaceFinalizedAudioSegmentContent,
   type WorkspaceMemorySpace,
@@ -119,7 +123,8 @@ export function segmentContentQueryKey({
 export function segmentContentQueryOptions(
   session: WorkspaceSession,
   memoryId: string,
-  segmentId: string
+  segmentId: string,
+  type: 'audio' | 'note' = 'audio'
 ) {
   return queryOptions({
     queryKey: segmentContentQueryKey({
@@ -127,15 +132,21 @@ export function segmentContentQueryOptions(
       memoryId,
       segmentId,
     }),
-    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentContent> => {
+    queryFn: async (): Promise<
+      WorkspaceFinalizedAudioSegmentContent | WorkspaceNoteSegmentContent
+    > => {
       const requestId = createSegmentContentRequestId(session.workspaceId, memoryId, segmentId);
-      const result = await readFinalizedAudioSegment({
+      const request = {
         workspaceHandle: session.workspaceHandle,
         workspaceId: session.workspaceId,
         memoryId,
         segmentId,
         requestId,
-      });
+      };
+      const result =
+        type === 'note'
+          ? await readSegmentContent(request)
+          : await readFinalizedAudioSegment(request);
 
       if (!result.ok) {
         throw new Error(workspaceErrorDisplayMessage(result.error, '片段内容加载失败。'));
@@ -195,7 +206,8 @@ export function segmentSupplementContentQueryOptions(
   session: WorkspaceSession,
   memoryId: string,
   segmentId: string,
-  supplementId: string
+  supplementId: string,
+  type: 'audio' | 'note' = 'audio'
 ) {
   return queryOptions({
     queryKey: segmentSupplementContentQueryKey({
@@ -204,21 +216,27 @@ export function segmentSupplementContentQueryOptions(
       segmentId,
       supplementId,
     }),
-    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentSupplementContent> => {
+    queryFn: async (): Promise<
+      WorkspaceFinalizedAudioSegmentSupplementContent | WorkspaceNoteSegmentSupplementContent
+    > => {
       const requestId = createSegmentSupplementContentRequestId(
         session.workspaceId,
         memoryId,
         segmentId,
         supplementId
       );
-      const result = await readFinalizedAudioSegmentSupplement({
+      const request = {
         workspaceHandle: session.workspaceHandle,
         workspaceId: session.workspaceId,
         memoryId,
         segmentId,
         supplementId,
         requestId,
-      });
+      };
+      const result =
+        type === 'note'
+          ? await readSegmentSupplementContent(request)
+          : await readFinalizedAudioSegmentSupplement(request);
 
       if (!result.ok) {
         throw new Error(workspaceErrorDisplayMessage(result.error, '补充录音加载失败。'));
@@ -263,7 +281,7 @@ export function memoryDetailQueryBelongsToWorkspace(
   return scope === 'workspace' && kind === 'memory-detail' && queryWorkspaceId === workspaceId;
 }
 
-export function finalizedAudioContentQueryBelongsToWorkspace(
+export function workspaceContentQueryBelongsToWorkspace(
   queryKey: readonly unknown[],
   workspaceId: string
 ) {

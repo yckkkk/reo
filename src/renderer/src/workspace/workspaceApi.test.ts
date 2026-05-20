@@ -14,6 +14,8 @@ import {
   copySegmentSupplementAbsolutePath,
   copySegmentSupplementRelativePath,
   createMemory,
+  createNoteSegmentDraft,
+  createSegmentSupplementNoteDraft,
   deleteMemory,
   deleteSegmentSupplement,
   deleteSegment,
@@ -22,6 +24,8 @@ import {
   discardRecordingDraft,
   discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
+  finalizeNoteSegmentDraft,
+  finalizeSegmentSupplementNoteDraft,
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
   listMemorySpaces,
@@ -35,6 +39,8 @@ import {
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentSupplement,
   readMemoryDetail,
+  readSegmentContent,
+  readSegmentSupplementContent,
   readWorkspaceSnapshot,
   readRecordingDraftAudio,
   removeMemorySpace,
@@ -50,8 +56,13 @@ import {
   saveTranscript,
   updateMemorySpaceTitle,
   updateMemoryTitle,
+  updateSegmentContentTabOrder,
   updateSegmentSupplementTitle,
   appendSegmentSupplementRecordingAudioChunk,
+  writeNoteSegmentDraftBody,
+  writeSegmentContent,
+  writeSegmentSupplementContent,
+  writeSegmentSupplementNoteDraftBody,
 } from './workspaceApi';
 
 describe('workspace renderer API wrapper', () => {
@@ -90,6 +101,16 @@ describe('workspace renderer API wrapper', () => {
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
     readFinalizedAudioSegmentSupplement: vi.fn(),
+    createNoteSegmentDraft: vi.fn(),
+    createSegmentSupplementNoteDraft: vi.fn(),
+    writeNoteSegmentDraftBody: vi.fn(),
+    writeSegmentSupplementNoteDraftBody: vi.fn(),
+    finalizeNoteSegmentDraft: vi.fn(),
+    finalizeSegmentSupplementNoteDraft: vi.fn(),
+    readSegmentContent: vi.fn(),
+    readSegmentSupplementContent: vi.fn(),
+    writeSegmentContent: vi.fn(),
+    writeSegmentSupplementContent: vi.fn(),
     createRecordingDraft: vi.fn(),
     createSegmentSupplementRecordingDraft: vi.fn(),
     readRecordingDraftAudio: vi.fn(),
@@ -102,6 +123,7 @@ describe('workspace renderer API wrapper', () => {
     discardSegmentSupplementRecordingDraft: vi.fn(),
     updateMemorySpaceTitle: vi.fn(),
     updateMemoryTitle: vi.fn(),
+    updateSegmentContentTabOrder: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
     saveTranscript: vi.fn(),
     requestSegmentTranscriptionBackfill: vi.fn(),
@@ -238,9 +260,12 @@ describe('workspace renderer API wrapper', () => {
         createdAt: '2026-05-08T14:42:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 0,
-        durationMs: 0,
+        noteSegmentCount: 0,
+        audioSegmentCount: 0,
+        audioDurationMs: 0,
         audioByteLength: 0,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     });
@@ -257,9 +282,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-08T14:42:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          noteSegmentCount: 0,
+          audioSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         memories: [],
@@ -274,9 +302,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-08T14:42:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          noteSegmentCount: 0,
+          audioSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segmentId: 'seg_1',
@@ -292,9 +323,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-08T14:42:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 1,
-          durationMs: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
+          audioDurationMs: 1,
           audioByteLength: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segment: {
@@ -324,9 +358,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-08T14:42:00.000Z',
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
-          durationMs: 0,
+          noteSegmentCount: 0,
+          audioSegmentCount: 0,
+          audioDurationMs: 0,
           audioByteLength: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
           segments: [],
         },
@@ -386,11 +423,14 @@ describe('workspace renderer API wrapper', () => {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 0,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
@@ -410,11 +450,14 @@ describe('workspace renderer API wrapper', () => {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
         },
@@ -474,9 +517,12 @@ describe('workspace renderer API wrapper', () => {
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 1,
-        durationMs: 0,
+        noteSegmentCount: 0,
+        audioSegmentCount: 1,
+        audioDurationMs: 0,
         audioByteLength: 1,
-        hasTranscript: false,
+        hasAudioTranscript: false,
+        hasAnyNote: false,
         supplementCount: 0,
       },
     });
@@ -489,9 +535,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
-          durationMs: 1000,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
+          audioDurationMs: 1000,
           audioByteLength: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 1,
         },
         segment: {
@@ -546,9 +595,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
-          durationMs: 1000,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
+          audioDurationMs: 1000,
           audioByteLength: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 0,
         },
         segment: {
@@ -578,9 +630,12 @@ describe('workspace renderer API wrapper', () => {
           createdAt: '2026-05-06T13:08:00.000Z',
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
-          durationMs: 1000,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
+          audioDurationMs: 1000,
           audioByteLength: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           supplementCount: 1,
         },
         segment: {
@@ -632,11 +687,14 @@ describe('workspace renderer API wrapper', () => {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 0,
-          hasTranscript: true,
+          hasAudioTranscript: true,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
@@ -649,11 +707,14 @@ describe('workspace renderer API wrapper', () => {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 0,
-          hasTranscript: true,
+          hasAudioTranscript: true,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
@@ -666,11 +727,14 @@ describe('workspace renderer API wrapper', () => {
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-06T13:08:00.000Z',
-          durationMs: 0,
+          audioDurationMs: 0,
           supplementCount: 1,
-          hasTranscript: false,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
           memoryId: 'mem_1',
           segmentCount: 1,
+          noteSegmentCount: 0,
+          audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
@@ -818,6 +882,13 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       title: '现场补充',
+    });
+    await updateSegmentContentTabOrder({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      contentTabOrder: ['supplement:sup_1', 'segment'],
     });
     await deleteSegmentSupplement({
       workspaceHandle: 'wh_1',
@@ -973,6 +1044,13 @@ describe('workspace renderer API wrapper', () => {
       supplementId: 'sup_1',
       title: '现场补充',
     });
+    expect(reoWorkspace.updateSegmentContentTabOrder).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      contentTabOrder: ['supplement:sup_1', 'segment'],
+    });
     expect(reoWorkspace.deleteSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -1010,5 +1088,86 @@ describe('workspace renderer API wrapper', () => {
       workspaceHandle: 'wh_1',
       recordingFlowSessionId: 'recording_flow_1',
     });
+  });
+
+  it('forwards Note draft and finalized content methods to the explicit preload surface', async () => {
+    const okResponse = { ok: true, value: { saved: true } };
+    const baselineContentHash = 'a'.repeat(64);
+    for (const action of [
+      reoWorkspace.createNoteSegmentDraft,
+      reoWorkspace.createSegmentSupplementNoteDraft,
+      reoWorkspace.writeNoteSegmentDraftBody,
+      reoWorkspace.writeSegmentSupplementNoteDraftBody,
+      reoWorkspace.finalizeNoteSegmentDraft,
+      reoWorkspace.finalizeSegmentSupplementNoteDraft,
+      reoWorkspace.readSegmentContent,
+      reoWorkspace.readSegmentSupplementContent,
+      reoWorkspace.writeSegmentContent,
+      reoWorkspace.writeSegmentSupplementContent,
+    ]) {
+      action.mockResolvedValue(okResponse);
+    }
+
+    const basePayload = {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+    };
+    const segmentPayload = { ...basePayload, segmentId: 'seg_1' };
+    const supplementPayload = { ...segmentPayload, supplementId: 'sup_1' };
+    const segmentDraftPayload = { ...basePayload, title: '笔记' };
+    const supplementDraftPayload = { ...segmentPayload, title: '补充笔记' };
+    const segmentBodyPayload = {
+      workspaceHandle: 'wh_1',
+      segmentId: 'seg_1',
+      bodyMarkdown: '# Note',
+      revision: 1,
+    };
+    const supplementBodyPayload = {
+      workspaceHandle: 'wh_1',
+      supplementId: 'sup_1',
+      bodyMarkdown: '# Follow up',
+      revision: 1,
+    };
+    const readPayload = { ...segmentPayload, requestId: 'request_1' };
+    const readSupplementPayload = { ...supplementPayload, requestId: 'request_2' };
+    const writePayload = { ...segmentPayload, bodyMarkdown: '# Saved', baselineContentHash };
+    const writeSupplementPayload = {
+      ...supplementPayload,
+      bodyMarkdown: '# Saved follow up',
+      baselineContentHash,
+    };
+
+    await createNoteSegmentDraft(segmentDraftPayload);
+    await createSegmentSupplementNoteDraft(supplementDraftPayload);
+    await writeNoteSegmentDraftBody(segmentBodyPayload);
+    await writeSegmentSupplementNoteDraftBody(supplementBodyPayload);
+    await finalizeNoteSegmentDraft({ ...segmentPayload, title: '笔记' });
+    await finalizeSegmentSupplementNoteDraft({ ...supplementPayload, title: '补充笔记' });
+    await readSegmentContent(readPayload);
+    await readSegmentSupplementContent(readSupplementPayload);
+    await writeSegmentContent(writePayload);
+    await writeSegmentSupplementContent(writeSupplementPayload);
+
+    expect(reoWorkspace.createNoteSegmentDraft).toHaveBeenCalledWith(segmentDraftPayload);
+    expect(reoWorkspace.createSegmentSupplementNoteDraft).toHaveBeenCalledWith(
+      supplementDraftPayload
+    );
+    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenCalledWith(segmentBodyPayload);
+    expect(reoWorkspace.writeSegmentSupplementNoteDraftBody).toHaveBeenCalledWith(
+      supplementBodyPayload
+    );
+    expect(reoWorkspace.finalizeNoteSegmentDraft).toHaveBeenCalledWith({
+      ...segmentPayload,
+      title: '笔记',
+    });
+    expect(reoWorkspace.finalizeSegmentSupplementNoteDraft).toHaveBeenCalledWith({
+      ...supplementPayload,
+      title: '补充笔记',
+    });
+    expect(reoWorkspace.readSegmentContent).toHaveBeenCalledWith(readPayload);
+    expect(reoWorkspace.readSegmentSupplementContent).toHaveBeenCalledWith(readSupplementPayload);
+    expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledWith(writePayload);
+    expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenCalledWith(writeSupplementPayload);
   });
 });

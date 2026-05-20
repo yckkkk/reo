@@ -12,6 +12,16 @@ import {
 } from '../../src/main/security.js';
 import { createContentSecurityPolicy } from '../../src/main/securityPolicy.js';
 
+function parseCspDirectives(policy: string): Map<string, readonly string[]> {
+  return new Map(
+    policy.split('; ').map((directive) => {
+      const [name, ...sources] = directive.split(' ');
+      assert.ok(name);
+      return [name, sources] as const;
+    })
+  );
+}
+
 beforeEach(() => {
   resetMicrophoneIntentsForTest();
 });
@@ -24,6 +34,29 @@ test('production content security policy allows local blob audio media only', ()
   assert.match(policy, /worker-src 'none'/);
   assert.doesNotMatch(policy, /localhost:4747/);
   assert.doesNotMatch(policy, /media-src \*/);
+});
+
+test('production content security policy allows attachment images without widening fetch or media sources', () => {
+  const policy = createContentSecurityPolicy({ usesDevServer: false });
+  const directives = parseCspDirectives(policy);
+
+  assert.ok(directives.get('img-src')?.includes('blob:'));
+  assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
+  assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
+  assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
+});
+
+test('development content security policy allows attachment images without widening fetch or media sources', () => {
+  const policy = createContentSecurityPolicy({
+    devConnectSources: ['ws://127.0.0.1:5173'],
+    usesDevServer: true,
+  });
+  const directives = parseCspDirectives(policy);
+
+  assert.ok(directives.get('img-src')?.includes('blob:'));
+  assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
+  assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
+  assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
 });
 
 test('development content security policy allows Agentation MCP sync endpoint', () => {

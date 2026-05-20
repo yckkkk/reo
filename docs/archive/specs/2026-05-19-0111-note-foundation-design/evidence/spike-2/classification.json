@@ -1,0 +1,240 @@
+{
+  "summary": {
+    "total": 25,
+    "subsetCount": 13,
+    "rawCount": 12,
+    "failureCount": 2,
+    "subsetPassRate": 0.8461538461538461,
+    "rawTriggerPassRate": 1,
+    "subsetFailureRate": 0.15384615384615385,
+    "milkdownFallbackTriggered": true
+  },
+  "packageVersions": {
+    "@blocknote/core": "0.51.1",
+    "gray-matter": "4.0.3",
+    "js-yaml": "4.1.1",
+    "jsdom": "29.1.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-stringify": "11.0.0",
+    "toml": "4.1.1",
+    "unified": "11.0.5"
+  },
+  "results": [
+    {
+      "fixture": "01-headings__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": [
+        "heading-h1",
+        "heading-h2",
+        "heading-h3",
+        "heading-h4",
+        "heading-h5",
+        "heading-h6"
+      ],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (6 blocks)"
+    },
+    {
+      "fixture": "02-inline-formatting__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["emphasis", "hard-break", "inline-code", "paragraph", "strikethrough", "strong"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "03-links__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["link", "paragraph"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "04-unordered-list__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["paragraph", "unordered-list"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (3 blocks)"
+    },
+    {
+      "fixture": "05-ordered-list__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["ordered-list", "paragraph"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (3 blocks)"
+    },
+    {
+      "fixture": "06-task-list-826__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["paragraph", "task-list", "unordered-list"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (3 blocks)"
+    },
+    {
+      "fixture": "07-blockquote-1762__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "raw",
+      "features": ["blockquote", "paragraph"],
+      "pass": false,
+      "notes": "BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"> A quoted paragraph should stay a quote after import and export.\\\\\\\\n> Cover BlockNote issue 1762.\\\\n\""
+    },
+    {
+      "fixture": "08-code-fence-lang__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["code-fence-lang"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "09-gfm-table__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["gfm-table"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "10-attachment-image__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["attachment-image", "paragraph"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (2 blocks)"
+    },
+    {
+      "fixture": "11-frontmatter-mixed__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["heading-h1", "paragraph"],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (2 blocks)"
+    },
+    {
+      "fixture": "12-mixed-subset__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": [
+        "blockquote",
+        "heading-h2",
+        "link",
+        "ordered-list",
+        "paragraph",
+        "task-list",
+        "unordered-list"
+      ],
+      "pass": true,
+      "notes": "BlockNote round-trip ok (6 blocks)"
+    },
+    {
+      "fixture": "13-html-attachment-image__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "raw",
+      "features": ["attachment-image-html", "paragraph"],
+      "pass": false,
+      "notes": "BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"![photo](attachments/photo.jpg)\\\\n\\\\nAttachment HTML image is the only allowed raw HTML form.\\\\n\""
+    },
+    {
+      "fixture": "14-footnote__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: footnote; BlockNote round-trip ok (2 blocks)"
+    },
+    {
+      "fixture": "15-inline-math__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: math inline/block; BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "16-block-math__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: math inline/block; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"$$\\\\\\\\n E = mc^2\\\\\\\\n $$\\\\n\""
+    },
+    {
+      "fixture": "17-callout-blockquote__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["blockquote", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: callout/admonition; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"> [!NOTE]\\\\\\\\n>  This Obsidian-style callout must stay raw.\\\\n\""
+    },
+    {
+      "fixture": "18-admonition-directive__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: callout/admonition; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \":::warning\\\\\\\\n Directive-style admonition must stay raw.\\\\\\\\n :::\\\\n\""
+    },
+    {
+      "fixture": "19-definition-list__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: definition list; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"Term\\\\\\\\n : Definition text that requires definition-list syntax.\\\\n\""
+    },
+    {
+      "fixture": "20-mdx-import-jsx__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: MDX/import/JSX, unknown inline HTML except attachments img; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"import Widget from \\\"./Widget\\\";\\\\n\""
+    },
+    {
+      "fixture": "21-remote-image__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: non-attachments image/link scheme; BlockNote round-trip ok (1 blocks)"
+    },
+    {
+      "fixture": "22-file-link-scheme__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["link", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: non-attachments image/link scheme; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"Local file\\\\n\""
+    },
+    {
+      "fixture": "23-unknown-html__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: unknown inline HTML except attachments img; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"This has inline HTML that must stay raw.\\\\n\""
+    },
+    {
+      "fixture": "24-extra-yaml-block__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["heading-h2", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: extra YAML/TOML blocks beyond frontmatter; BlockNote round-trip ok (3 blocks)"
+    },
+    {
+      "fixture": "25-extra-toml-block__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: extra YAML/TOML blocks beyond frontmatter; BlockNote lossy markdown round-trip changed normalized AST; BlockNote export: \"+++\\\\\\\\n title = \\\"TOML block\\\"\\\\\\\\n +++\\\\n\\\\nTOML frontmatter is not the supported semantic contract here.\\\\n\""
+    }
+  ]
+}

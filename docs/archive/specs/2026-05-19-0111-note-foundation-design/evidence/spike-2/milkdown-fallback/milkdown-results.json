@@ -1,0 +1,366 @@
+{
+  "summary": {
+    "total": 25,
+    "subsetCount": 13,
+    "rawCount": 12,
+    "failureCount": 2,
+    "subsetPassRate": 0.8461538461538461,
+    "rawTriggerPassRate": 1,
+    "subsetFailureRate": 0.15384615384615385,
+    "recommendation": "pause-for-deeper-editor-spec"
+  },
+  "packageVersions": {
+    "@milkdown/crepe": "7.21.1",
+    "@milkdown/kit": "7.21.1",
+    "@milkdown/preset-gfm": "7.21.1",
+    "@milkdown/react": "7.21.1",
+    "gray-matter": "4.0.3",
+    "jsdom": "29.1.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-stringify": "11.0.0",
+    "unified": "11.0.5"
+  },
+  "results": [
+    {
+      "fixture": "01-headings__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": [
+        "heading-h1",
+        "heading-h2",
+        "heading-h3",
+        "heading-h4",
+        "heading-h5",
+        "heading-h6"
+      ],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "# Heading 1\n\n## Heading 2\n\n### Heading 3\n\n#### Heading 4\n\n##### Heading 5\n\n###### Heading 6\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "02-inline-formatting__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["emphasis", "hard-break", "inline-code", "paragraph", "strikethrough", "strong"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "Paragraph with _emphasis_, **strong text**, ~~struck text~~, and `inline code`.\\\nThis line follows a hard break.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "03-links__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["link", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "A supported link to [Reo](https://example.com/reo) and a relative [local note](../memory.md).\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "04-unordered-list__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "raw",
+      "features": ["paragraph", "unordered-list"],
+      "pass": false,
+      "notes": "Milkdown markdown round-trip changed normalized AST; Milkdown export: \"* Capture source material\\n\\n* Review useful fragments\\n\\n  * Keep only the signal\\n\\n* Draft the work\\n\"",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "* Capture source material\n\n* Review useful fragments\n\n  * Keep only the signal\n\n* Draft the work\n",
+        "failure": "Milkdown markdown round-trip changed normalized AST"
+      }
+    },
+    {
+      "fixture": "05-ordered-list__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["ordered-list", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "1. Open the memory\n2. Add a note segment\n3. Save the markdown body\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "06-task-list-826__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "raw",
+      "features": ["paragraph", "task-list", "unordered-list"],
+      "pass": false,
+      "notes": "Milkdown markdown round-trip changed normalized AST; Milkdown export: \"* [x] Preserve checked item state\\n\\n* [ ] Preserve unchecked item state\\n\\n* [x] Cover BlockNote issue 826\\n\"",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "* [x] Preserve checked item state\n\n* [ ] Preserve unchecked item state\n\n* [x] Cover BlockNote issue 826\n",
+        "failure": "Milkdown markdown round-trip changed normalized AST"
+      }
+    },
+    {
+      "fixture": "07-blockquote-1762__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["blockquote", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "> A quoted paragraph should stay a quote after import and export.\n>\n> Cover BlockNote issue 1762.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "08-code-fence-lang__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["code-fence-lang"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "```ts\nconst kind: 'note' = 'note';\nconsole.log(kind);\n```\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "09-gfm-table__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["gfm-table"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "| Feature  | Expected     |\n| -------- | ------------ |\n| Markdown | truth        |\n| JSON     | adapter-only |\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "10-attachment-image__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["attachment-image", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "![Sketch](attachments/sketch.png)\n\nThe image path is local to this segment.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "11-frontmatter-mixed__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["heading-h1", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "# Body\n\nThis frontmatter is outside the editor body.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "12-mixed-subset__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": [
+        "blockquote",
+        "heading-h2",
+        "link",
+        "ordered-list",
+        "paragraph",
+        "task-list",
+        "unordered-list"
+      ],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "## Session notes\n\n> Start from markdown truth.\n\n1. Parse supported Markdown.\n2. Export back to Markdown.\n\n* [x] Keep checklist state.\n\nSee [attachments](attachments/sketch.png) in prose.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "13-html-attachment-image__subset.md",
+      "expectedKind": "subset",
+      "actualKind": "subset",
+      "features": ["attachment-image-html", "paragraph"],
+      "pass": true,
+      "notes": "Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "<img src=\"attachments/photo.jpg\" alt=\"photo\">\n\nAttachment HTML image is the only allowed raw HTML form.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "14-footnote__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: footnote; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "This sentence has a footnote.[^note]\n\n[^note]: Footnote text must stay raw.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "15-inline-math__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: math inline/block; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "The equation $a^2 + b^2 = c^2$ must stay raw.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "16-block-math__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: math inline/block; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "$$\nE = mc^2\n$$\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "17-callout-blockquote__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["blockquote", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: callout/admonition; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "> \\[!NOTE]\n> This Obsidian-style callout must stay raw.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "18-admonition-directive__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: callout/admonition; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": ":::warning\nDirective-style admonition must stay raw.\n:::\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "19-definition-list__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: definition list; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "Term\n: Definition text that requires definition-list syntax.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "20-mdx-import-jsx__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: MDX/import/JSX, unknown inline HTML except attachments img; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "import Widget from \"./Widget\";\n\n<Widget value=\"note\" />\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "21-remote-image__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: non-attachments image/link scheme; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "![Remote image](https://example.com/photo.png)\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "22-file-link-scheme__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["link", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: non-attachments image/link scheme; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "[Local file](file:///Users/example/private.txt)\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "23-unknown-html__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: unknown inline HTML except attachments img; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "This has <span data-x=\"1\">inline HTML</span> that must stay raw.\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "24-extra-yaml-block__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["heading-h2", "paragraph"],
+      "pass": true,
+      "notes": "raw triggers: extra YAML/TOML blocks beyond frontmatter; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "Body.\n\n***\n\n## extra: block\n",
+        "failure": null
+      }
+    },
+    {
+      "fixture": "25-extra-toml-block__raw.md",
+      "expectedKind": "raw",
+      "actualKind": "raw",
+      "features": ["paragraph"],
+      "pass": true,
+      "notes": "raw triggers: extra YAML/TOML blocks beyond frontmatter; Milkdown round-trip ok",
+      "milkdown": {
+        "executed": true,
+        "serializedMarkdown": "+++\ntitle = \"TOML block\"\n+++\n\nTOML frontmatter is not the supported semantic contract here.\n",
+        "failure": null
+      }
+    }
+  ]
+}

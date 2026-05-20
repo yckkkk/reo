@@ -14,6 +14,8 @@ import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownO
 import type {
   WorkspaceErrorEnvelope,
   WorkspaceMemoryDetailProjection,
+  WorkspaceSegmentProjection,
+  WorkspaceSegmentSupplementProjection,
   WorkspaceSnapshot,
 } from '../../src/workspace-contract/workspace-contract.js';
 
@@ -80,6 +82,18 @@ function segmentTask(): SegmentManualInput {
 type SupplementManualInput = Parameters<
   ReturnType<typeof createWorkspaceBackfillRuntime>['requestSupplementBackfill']
 >[0];
+type AudioWorkspaceSegmentProjection = Extract<
+  WorkspaceSegmentProjection,
+  { readonly type: 'audio' }
+>;
+type AudioWorkspaceSegmentSupplementProjection = Extract<
+  WorkspaceSegmentSupplementProjection,
+  { readonly type: 'audio' }
+>;
+type NoteWorkspaceSegmentProjection = Extract<
+  WorkspaceSegmentProjection,
+  { readonly type: 'note' }
+>;
 
 function supplementTask(): SupplementManualInput {
   return {
@@ -98,10 +112,13 @@ function memoryDetail(): WorkspaceMemoryDetailProjection {
   return {
     audioByteLength: 1,
     createdAt: '2026-05-17T01:00:00.000Z',
-    durationMs: 1000,
-    hasTranscript: false,
+    audioDurationMs: 1000,
+    hasAudioTranscript: false,
     memoryId: 'mem_1',
     segmentCount: 1,
+    audioSegmentCount: 1,
+    noteSegmentCount: 0,
+    hasAnyNote: false,
     segments: [
       {
         audioByteLength: 10,
@@ -142,11 +159,12 @@ function memoryDetail(): WorkspaceMemoryDetailProjection {
 }
 
 function memoryDetailWithSegment(
-  overrides: Partial<WorkspaceMemoryDetailProjection['segments'][number]>
+  overrides: Partial<AudioWorkspaceSegmentProjection>
 ): WorkspaceMemoryDetailProjection {
   const detail = memoryDetail();
   const segment = detail.segments[0];
   assert.ok(segment);
+  assert.equal(segment.type, 'audio');
   return {
     ...detail,
     segments: [
@@ -159,13 +177,15 @@ function memoryDetailWithSegment(
 }
 
 function memoryDetailWithSupplement(
-  overrides: Partial<WorkspaceMemoryDetailProjection['segments'][number]['supplements'][number]>
+  overrides: Partial<AudioWorkspaceSegmentSupplementProjection>
 ): WorkspaceMemoryDetailProjection {
   const detail = memoryDetail();
   const segment = detail.segments[0];
   const supplement = segment?.supplements[0];
   assert.ok(segment);
   assert.ok(supplement);
+  assert.equal(segment.type, 'audio');
+  assert.equal(supplement.type, 'audio');
   return {
     ...detail,
     segments: [
@@ -258,10 +278,13 @@ function savedSegmentResponse() {
     memory: {
       audioByteLength: 1,
       createdAt: '2026-05-17T01:00:00.000Z',
-      durationMs: 1000,
-      hasTranscript: true,
+      audioDurationMs: 1000,
+      hasAudioTranscript: true,
       memoryId: 'mem_1',
       segmentCount: 1,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      hasAnyNote: false,
       supplementCount: 1,
       title: 'Memory',
       updatedAt: '2026-05-17T01:00:00.000Z',
@@ -327,10 +350,13 @@ test('workspace backfill runtime runs manual segment backfill with injected remu
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-17T01:00:00.000Z',
-          durationMs: 1000,
-          hasTranscript: true,
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
           supplementCount: 0,
           title: 'Memory',
           updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1113,10 +1139,13 @@ test('workspace backfill runtime cancels before transcript save can write', asyn
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-17T01:00:00.000Z',
-          durationMs: 1000,
-          hasTranscript: true,
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
           supplementCount: 0,
           title: 'Memory',
           updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1245,10 +1274,13 @@ test('workspace backfill runtime scans and enqueues automatic eligible targets s
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-17T01:00:00.000Z',
-          durationMs: 1000,
-          hasTranscript: true,
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
           supplementCount: 1,
           title: 'Memory',
           updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1268,10 +1300,13 @@ test('workspace backfill runtime scans and enqueues automatic eligible targets s
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-17T01:00:00.000Z',
-          durationMs: 1000,
-          hasTranscript: true,
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
           supplementCount: 1,
           title: 'Memory',
           updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1469,10 +1504,13 @@ test('workspace backfill runtime still reads audio after file-truth target reval
         memory: {
           audioByteLength: 1,
           createdAt: '2026-05-17T01:00:00.000Z',
-          durationMs: 1000,
-          hasTranscript: true,
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
           memoryId: 'mem_1',
           segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
           supplementCount: 0,
           title: 'Memory',
           updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1628,10 +1666,13 @@ test('workspace backfill runtime skips stale automatic workspace scans', async (
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Memory',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1685,10 +1726,13 @@ test('workspace backfill runtime drops an automatic scan that finishes after can
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Memory',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1919,10 +1963,13 @@ test('scanWorkspaceBackfillTargets reads file-truth details before filtering tar
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 1,
         title: 'Memory',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1959,10 +2006,13 @@ test('scanWorkspaceBackfillTargets refreshes file truth when index candidates ar
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_indexed',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Indexed',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -1978,10 +2028,13 @@ test('scanWorkspaceBackfillTargets refreshes file truth when index candidates ar
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T02:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_refreshed',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Refreshed',
         updatedAt: '2026-05-17T02:00:00.000Z',
@@ -2059,10 +2112,13 @@ test('scanWorkspaceBackfillTargets reuses unchanged detail reads after below-cap
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_unchanged_refresh',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Unchanged',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2120,10 +2176,13 @@ test('scanWorkspaceBackfillTargets applies the automatic cap from the newest eli
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T02:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_new',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'New',
         updatedAt: '2026-05-17T02:00:00.000Z',
@@ -2131,10 +2190,13 @@ test('scanWorkspaceBackfillTargets applies the automatic cap from the newest eli
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_old',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Old',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2214,10 +2276,13 @@ test('scanWorkspaceBackfillTargets refreshes file truth even when index candidat
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_index_cap',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Indexed cap',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2232,10 +2297,13 @@ test('scanWorkspaceBackfillTargets refreshes file truth even when index candidat
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T02:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_refreshed_cap',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Refreshed cap',
         updatedAt: '2026-05-17T02:00:00.000Z',
@@ -2314,10 +2382,13 @@ test('scanWorkspaceBackfillTargets does not stop early when snapshot memory summ
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_old_unsorted',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Old',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2325,10 +2396,13 @@ test('scanWorkspaceBackfillTargets does not stop early when snapshot memory summ
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T02:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_new_unsorted',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'New',
         updatedAt: '2026-05-17T02:00:00.000Z',
@@ -2405,10 +2479,13 @@ test('scanWorkspaceBackfillTargets normalizes fractional and invalid limits once
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_limit',
         segmentCount: 2,
+        audioSegmentCount: 2,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Limit',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2484,10 +2561,13 @@ test('scanWorkspaceBackfillTargets skips memory summaries with no audio candidat
       {
         audioByteLength: 0,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 0,
-        hasTranscript: false,
+        audioDurationMs: 0,
+        hasAudioTranscript: false,
         memoryId: 'mem_empty',
         segmentCount: 0,
+        audioSegmentCount: 0,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Empty',
         updatedAt: '2026-05-17T01:00:00.000Z',
@@ -2495,10 +2575,13 @@ test('scanWorkspaceBackfillTargets skips memory summaries with no audio candidat
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T02:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Audio',
         updatedAt: '2026-05-17T02:00:00.000Z',
@@ -2529,6 +2612,95 @@ test('scanWorkspaceBackfillTargets skips memory summaries with no audio candidat
   assert.equal(targets.length, 2);
 });
 
+test('scanWorkspaceBackfillTargets includes audio supplements under note segments', async () => {
+  const snapshot: WorkspaceSnapshot = {
+    description: '',
+    memories: [
+      {
+        audioByteLength: 0,
+        createdAt: '2026-05-17T01:00:00.000Z',
+        audioDurationMs: 0,
+        hasAudioTranscript: false,
+        memoryId: 'mem_note_audio_supplement',
+        segmentCount: 1,
+        audioSegmentCount: 0,
+        noteSegmentCount: 1,
+        hasAnyNote: true,
+        supplementCount: 1,
+        title: 'Note with audio supplement',
+        updatedAt: '2026-05-17T02:00:00.000Z',
+      },
+    ],
+    title: 'Workspace',
+    workspaceId: 'ws_1',
+  };
+  const audioSupplement: AudioWorkspaceSegmentSupplementProjection = {
+    audioByteLength: 10,
+    createdAt: '2026-05-17T01:01:00.000Z',
+    durationMs: 1000,
+    lastTranscriptionAttempt: 'failed',
+    memoryId: 'mem_note_audio_supplement',
+    segmentId: 'seg_note_parent',
+    supplementId: 'sup_audio_child',
+    title: 'Audio supplement',
+    transcript: { exists: false },
+    type: 'audio',
+    updatedAt: '2026-05-17T02:00:00.000Z',
+    workspaceId: 'ws_1',
+  };
+  const noteSegment: NoteWorkspaceSegmentProjection = {
+    bodyByteLength: 120,
+    createdAt: '2026-05-17T01:00:00.000Z',
+    memoryId: 'mem_note_audio_supplement',
+    segmentId: 'seg_note_parent',
+    supplementCount: 1,
+    supplements: [audioSupplement],
+    title: 'Note parent',
+    type: 'note',
+    updatedAt: '2026-05-17T01:00:00.000Z',
+    workspaceId: 'ws_1',
+  };
+  const noteMemory = snapshot.memories[0];
+  assert.ok(noteMemory);
+  let detailReads = 0;
+
+  const targets = await scanWorkspaceBackfillTargets(
+    {
+      limit: 2,
+      rootPath: '/tmp/reo-workspace',
+      workspaceId: 'ws_1',
+    },
+    {
+      readMemoryDetail: async ({ memoryId }) => {
+        detailReads += 1;
+        assert.equal(memoryId, 'mem_note_audio_supplement');
+        return {
+          ok: true,
+          value: {
+            ...noteMemory,
+            segments: [noteSegment],
+            workspaceId: 'ws_1',
+          },
+        };
+      },
+      readWorkspaceSnapshot: async () => ({ ok: true, snapshot }),
+      refreshWorkspaceSnapshot: async () => ({ ok: true, snapshot }),
+    }
+  );
+
+  assert.equal(detailReads, 1);
+  assert.deepEqual(targets, [
+    {
+      kind: 'supplement',
+      memoryId: 'mem_note_audio_supplement',
+      segmentId: 'seg_note_parent',
+      supplementId: 'sup_audio_child',
+      updatedAt: '2026-05-17T02:00:00.000Z',
+      workspaceId: 'ws_1',
+    },
+  ]);
+});
+
 test('scanWorkspaceBackfillTargets returns no targets without reading details when the limit is zero', async () => {
   let detailReads = 0;
   const snapshot: WorkspaceSnapshot = {
@@ -2537,10 +2709,13 @@ test('scanWorkspaceBackfillTargets returns no targets without reading details wh
       {
         audioByteLength: 1,
         createdAt: '2026-05-17T01:00:00.000Z',
-        durationMs: 1000,
-        hasTranscript: false,
+        audioDurationMs: 1000,
+        hasAudioTranscript: false,
         memoryId: 'mem_1',
         segmentCount: 1,
+        audioSegmentCount: 1,
+        noteSegmentCount: 0,
+        hasAnyNote: false,
         supplementCount: 0,
         title: 'Audio',
         updatedAt: '2026-05-17T02:00:00.000Z',

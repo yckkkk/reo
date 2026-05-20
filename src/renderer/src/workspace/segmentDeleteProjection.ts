@@ -26,6 +26,12 @@ function sortMemoriesByUpdatedAt(
   });
 }
 
+function segmentHasAnyNote(segment: WorkspaceMemoryDetail['segments'][number]): boolean {
+  return (
+    segment.type === 'note' || segment.supplements.some((supplement) => supplement.type === 'note')
+  );
+}
+
 export function memorySummaryAfterSegmentRemoval({
   memory,
   removedSegment,
@@ -39,12 +45,22 @@ export function memorySummaryAfterSegmentRemoval({
     return memorySummaryWithVisibleSegments(memory, remainingSegments);
   }
 
+  const isAudioSegment = removedSegment.type === 'audio';
   return {
     ...memory,
-    audioByteLength: Math.max(0, memory.audioByteLength - removedSegment.audioByteLength),
+    audioByteLength: Math.max(
+      0,
+      memory.audioByteLength - (isAudioSegment ? removedSegment.audioByteLength : 0)
+    ),
     supplementCount: Math.max(0, memory.supplementCount - removedSegment.supplementCount),
-    durationMs: Math.max(0, memory.durationMs - removedSegment.durationMs),
+    audioSegmentCount: Math.max(0, memory.audioSegmentCount - (isAudioSegment ? 1 : 0)),
+    noteSegmentCount: Math.max(0, memory.noteSegmentCount - (isAudioSegment ? 0 : 1)),
+    audioDurationMs: Math.max(
+      0,
+      memory.audioDurationMs - (isAudioSegment ? removedSegment.durationMs : 0)
+    ),
     segmentCount: Math.max(0, memory.segmentCount - 1),
+    hasAnyNote: memory.hasAnyNote,
   };
 }
 
@@ -54,22 +70,34 @@ export function memorySummaryWithVisibleSegments(
 ): WorkspaceMemorySummary {
   let audioByteLength = 0;
   let supplementCount = 0;
-  let durationMs = 0;
-  let hasTranscript = false;
+  let audioSegmentCount = 0;
+  let noteSegmentCount = 0;
+  let audioDurationMs = 0;
+  let hasAudioTranscript = false;
+  let hasAnyNote = false;
 
   for (const segment of visibleSegments) {
-    audioByteLength += segment.audioByteLength;
+    if (segment.type === 'audio') {
+      audioSegmentCount += 1;
+      audioByteLength += segment.audioByteLength;
+      audioDurationMs += segment.durationMs;
+      hasAudioTranscript ||= segment.transcript.exists;
+    } else {
+      noteSegmentCount += 1;
+    }
+    hasAnyNote ||= segmentHasAnyNote(segment);
     supplementCount += segment.supplementCount;
-    durationMs += segment.durationMs;
-    hasTranscript ||= segment.transcript.exists;
   }
 
   return {
     ...memory,
     audioByteLength,
     supplementCount,
-    durationMs,
-    hasTranscript,
+    audioSegmentCount,
+    noteSegmentCount,
+    audioDurationMs,
+    hasAudioTranscript,
+    hasAnyNote,
     segmentCount: visibleSegments.length,
   };
 }
@@ -83,10 +111,18 @@ export function memorySummaryAfterSegmentRestore({
 }): WorkspaceMemorySummary {
   return {
     ...memory,
-    audioByteLength: memory.audioByteLength + restoredSegment.audioByteLength,
+    audioByteLength:
+      memory.audioByteLength +
+      (restoredSegment.type === 'audio' ? restoredSegment.audioByteLength : 0),
     supplementCount: memory.supplementCount + restoredSegment.supplementCount,
-    durationMs: memory.durationMs + restoredSegment.durationMs,
-    hasTranscript: memory.hasTranscript || restoredSegment.transcript.exists,
+    audioSegmentCount: memory.audioSegmentCount + (restoredSegment.type === 'audio' ? 1 : 0),
+    noteSegmentCount: memory.noteSegmentCount + (restoredSegment.type === 'note' ? 1 : 0),
+    audioDurationMs:
+      memory.audioDurationMs + (restoredSegment.type === 'audio' ? restoredSegment.durationMs : 0),
+    hasAudioTranscript:
+      memory.hasAudioTranscript ||
+      (restoredSegment.type === 'audio' && restoredSegment.transcript.exists),
+    hasAnyNote: memory.hasAnyNote || segmentHasAnyNote(restoredSegment),
     segmentCount: memory.segmentCount + 1,
     updatedAt:
       memory.updatedAt.localeCompare(restoredSegment.updatedAt) >= 0
@@ -124,17 +160,20 @@ export function memorySummaryWithPendingSegmentDelete(
   const memoryMatchesDeleteBase =
     memory.audioByteLength === projection.memoryBeforeDelete.audioByteLength &&
     memory.supplementCount === projection.memoryBeforeDelete.supplementCount &&
-    memory.durationMs === projection.memoryBeforeDelete.durationMs &&
+    memory.audioSegmentCount === projection.memoryBeforeDelete.audioSegmentCount &&
+    memory.noteSegmentCount === projection.memoryBeforeDelete.noteSegmentCount &&
+    memory.audioDurationMs === projection.memoryBeforeDelete.audioDurationMs &&
     memory.segmentCount === projection.memoryBeforeDelete.segmentCount &&
+    memory.hasAnyNote === projection.memoryBeforeDelete.hasAnyNote &&
     memory.updatedAt === projection.memoryBeforeDelete.updatedAt;
 
   return {
     ...projectedMemory,
-    hasTranscript:
+    hasAudioTranscript:
       memoryMatchesDeleteBase &&
-      memory.hasTranscript === projection.memoryBeforeDelete.hasTranscript
-        ? projection.optimisticMemory.hasTranscript
-        : projectedMemory.hasTranscript,
+      memory.hasAudioTranscript === projection.memoryBeforeDelete.hasAudioTranscript
+        ? projection.optimisticMemory.hasAudioTranscript
+        : projectedMemory.hasAudioTranscript,
     updatedAt: memoryMatchesDeleteBase
       ? projection.optimisticMemory.updatedAt
       : projectedMemory.updatedAt,
