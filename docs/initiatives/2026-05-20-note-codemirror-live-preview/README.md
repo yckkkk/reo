@@ -51,6 +51,7 @@
 - **保存模型 = Obsidian 式全自动保存**：新建即建 `segment.md`、防抖 auto-write、无保存按钮、无 note draft/finalize 两段式。
 - **外部修改 = Obsidian 式自动重载**：去 baseline-hash 冲突弹窗；优先复用现有 **`visibilitychange` re-read**（源码当前**无** window focus listener；如 Stage 1 需要 focus 触发须同批加 listener+测试+文档）；live `fs.watch` 为可选后续（需另行设计 electron/flow/data）。
 - **三编辑入口同一 CM6 实例**（studio 内联 / 沉浸式展开 / 格式工具栏）。
+- **UI 参考原型**：`/Users/yck/Downloads/PM/技术线/reo文件区/reo的Balsamiq 风格的低保真原型图/concept4_codemirror_副本.html`（仓库外低保真稿）**只参考结构与交互意图**（Live Preview active 行 raw / 其它行预览、点击文本区展开格式工具栏的动画走向），**不参考其设计系统**——字体/颜色/圆角/毛玻璃均不符合 Reo Soft Flat，实现一律用 Reo design token。属 Stage 1/2，与 Stage 0 无关。
 
 排序：Stage 0（CSP nonce）不受影响、保持可直接执行；**Stage 1 spec 在 Stage 0 收口后创建**（遵守「同一时间只有一个 active spec」），并据 0007 Stage A 节细化保存模型与编辑面。
 

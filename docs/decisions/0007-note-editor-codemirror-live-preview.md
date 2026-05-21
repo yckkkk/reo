@@ -46,7 +46,7 @@ CM6 用 CSS-in-JS 运行时注入 `<style>`。Reo 生产 CSP 是 `style-src 'sel
 - 点击文本区时从左侧动画展开一个 **Markdown 格式工具栏**（加粗/斜体/标题/列表等）。该工具栏视觉上像从红色 FAB 区域展开，但**与 FAB 功能无关**；红色 FAB 保持现有 录音/笔记 speed dial 不变。
 - 沉浸式展开仍保留（同一编辑器更大尺寸）。
 - **「同一个 CM6 实例」的工程含义**（Stage 1 必须落定，不可停留在口号）：一个 editor owner 持有 `EditorState`、selection、composition 与 pending autosave 状态；studio 内联与沉浸式展开是同一 owner 的两种 **layout slot**。若切换布局需要 remount `EditorView`，必须 preserve doc / selection / undo history，且 composition-safe（IME 输入中不迁移）、focus 还原。Markdown 格式工具栏只向当前 owner `dispatch` transaction，**不自持 markdown 状态**。Stage 1 spec 必须写清：focus 迁移、selection 保留、IME composition 中不迁移、工具栏命令如何访问 view、关闭沉浸式后如何回到 studio。
-- 视觉一律用 Reo Soft Flat design token；原型稿只参考结构与意图。
+- 视觉一律用 Reo Soft Flat design token。低保真原型稿 `reo文件区/reo的Balsamiq 风格的低保真原型图/concept4_codemirror_副本.html`（仓库外，绝对路径 `/Users/yck/Downloads/PM/技术线/reo文件区/reo的Balsamiq 风格的低保真原型图/concept4_codemirror_副本.html`）**只参考结构与交互意图**（active 行 raw、其它行渲染、点击文本区展开格式工具栏的动画走向）；其字体/颜色/圆角/毛玻璃工具栏**不符合 Reo 设计系统，不得照搬**。
 - **Stage 1 落地涉及的 current 文档更新**：`docs/current/electron.md`（note IPC 合同迁移）、`docs/current/flow.md`（auto-save 时序、写入串行化、外部重载）、`docs/current/frontend.md`（编辑面/工具栏/状态）；若改 note 文件生命周期或 manifest/data 合同再加 `docs/current/data.md`。
 
 ## 来源

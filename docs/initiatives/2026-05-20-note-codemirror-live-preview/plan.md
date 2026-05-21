@@ -43,7 +43,7 @@
 - `ViewPlugin` + `syntaxTree`（@codemirror/lang-markdown 的 Lezer 树）+ selection 计算 `DecorationSet`：active block 露 raw，其它 block 用 decoration 渲染标题/列表/引用/代码块/链接预览。
 - 只对 `view.visibleRanges` 计算（大文档性能）。
 - composition（中文 IME）期间暂停 active-block 切换/重算。
-- 视觉一律用 Reo design token；原型稿只参考结构与意图，不参考其设计系统。
+- 视觉一律用 Reo design token。低保真原型稿 `/Users/yck/Downloads/PM/技术线/reo文件区/reo的Balsamiq 风格的低保真原型图/concept4_codemirror_副本.html`（仓库外）**只参考结构与交互意图**（active 行 raw + 其它行预览、点击文本区从左侧展开 Markdown 格式工具栏的动画），**不参考其设计系统**（字体/颜色/圆角/毛玻璃均不符合 Reo）。
 
 ## Stage 3 — 图片 widget + 共享映射
 
