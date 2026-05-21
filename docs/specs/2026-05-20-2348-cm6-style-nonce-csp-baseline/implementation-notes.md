@@ -26,7 +26,7 @@
 
 ## 必须先验证的高优先级假设
 
-- **A2（已重构降风险）**：本设计**不依赖** `onHeadersReceived` 回读协议处理器设置的 CSP 头——它对生产文档直接 passthrough。剩余假设只是「协议处理器在 Response 头设置的 CSP 会被 Electron 应用到文档」（标准行为），已由第 2 步 runtime de-risk 验证。若 runtime 证据显示文档 CSP 未抵达，切 plan §18 备选（onHeadersReceived 为 prod 文档套带 nonce 的 CSP，并由协议处理器把同一 nonce 写入 meta，nonce per-load 共享）。
+- **A2（已重构降风险）**：本设计**不依赖** `onHeadersReceived` 回读协议处理器设置的 CSP 头——它对生产受信文档直接 passthrough。剩余假设只是「协议处理器在 Response 头设置的 CSP 会被 Electron 应用到文档」（标准行为），由第 2 步 runtime de-risk 验证。**若 probe 显示文档 CSP 未抵达：停止实现、记录证据、回本 spec 修订设计——不允许即兴实现共享 per-request nonce map**（理由见 plan §18：需完整设计 key/生命周期/清理/跨窗口防护/host fail-closed/测试，超出 Stage 0）。
 
 ## 与保存模型重设计的关系
 

@@ -11,7 +11,8 @@
 - 问题：生产 CSP `style-src 'self'` 无 `unsafe-inline`，CM6 CSS-in-JS 注入的 `<style>` 在生产会被拦截；dev CSP 含 `unsafe-inline` 会掩盖。
 - 目标：建立 per-load style nonce 链路——main 生成 nonce → 注入 index.html meta + 写入生产 CSP `style-src 'self' 'nonce-…'` → renderer 读 meta 备用（供后续 `EditorView.cspNonce.of(nonce)`）。
 - 不含 CM6 依赖。用合成 runtime 验证：带 nonce 的注入样式生效、不带 nonce 的注入样式被拦截。
-- 触面：`src/main/securityPolicy.ts`、`src/main/security.ts`、`src/main/appProtocol.ts`、`src/renderer/index.html`、renderer 取 nonce helper；更新 `docs/current/electron.md`，必要时 `docs/current/frontend.md`。
+- 目标链路：main 生成 nonce → 协议处理器注入 index.html meta + 文档 CSP → **Stage 0 用 runtime console 读 meta 验证可读**（renderer `readStyleNonce` helper 与其测试推迟到 Stage 1，Stage 0 无消费者）。
+- 触面：`src/main/securityPolicy.ts`、`src/main/security.ts`、`src/main/appProtocol.ts`、`src/renderer/index.html`（meta 占位符）；更新 `docs/current/electron.md`（Stage 0 通常只更新 electron.md）。**Stage 0 不动 renderer 代码、不建 helper。**
 - 当前 spec：`docs/specs/2026-05-20-2348-cm6-style-nonce-csp-baseline/`。
 
 ## Stage 1 — NoteEditorOverlay textarea → CM6 容器替换
@@ -29,7 +30,7 @@
 2. **note IPC 合同迁移清单**：列出 contract / preload / main handler / renderer wrapper / 测试的 exact change——新增或替换「创建 finalized note segment / supplement」；auto-write 是否继续用 `writeSegmentContent`、是否携带 revision；`baselineContentHash` 字段删除/可选/仅作 stale 检测；`ERR_SEGMENT_CONTENT_STALE` 是否从 note body write 移除；旧 draft channel 是否仅保留给 recording。
 3. **auto-save 状态机**：clean / debounce-pending / write-in-flight / write-failed-recoverable / external-reload-pending；定义 debounce 毫秒、flush 触发（关闭/切换/录音 overlay 打开）、写入串行化、旧 session response 丢弃（绑定 workspaceHandle）、失败 toast/inline status、Query cache 更新、attachment 插入后立即 schedule write。
 4. **外部修改重载**：复用 `App.tsx` 现有 `visibilitychange` re-read；clean editor 静默更新、pending/dirty editor 非阻断提示、避免 auto-write 覆盖磁盘新版本；如需 window focus 触发须同批加 listener+测试+文档。
-5. **「同一 CM6 实例」工程形态**：按 0007 定义落到 editor owner / layout slot / reparent / focus / selection / IME composition / 工具栏 dispatch。
+5. **「同一 CM6 实例」工程形态**：按 0007 定义落到 editor owner / layout slot / reparent / focus / selection / **undo history 保留** / IME composition / 工具栏 dispatch。
 6. **Markdown 格式工具栏**：按钮键盘可达、ARIA label、命令如何改 selection、IME composition 中禁用/延迟 transaction、动画上限与 reduced motion、屏幕阅读器状态。
 7. **Memory Studio 复用**：内联编辑如何更新 selected content Query / Memory detail cache / content tab rail / More 菜单 disabled 规则；录音 overlay 与 note editor 互斥规则。
 8. **真实 CM6 nonce 复验是验收门槛**：Stage 0 合成验证只证明 CSP 头机制，不证明 CM6 经 `EditorView.cspNonce` 注入的 `<style>` 带 nonce；Stage 1 必须 `npm run build` + `npm start` 真机确认真实 CM6 样式生效（截图/DevTools 证据）。
@@ -57,7 +58,7 @@
 
 ## 走弯路防护（贯穿所有 stage）
 
-- 不绕开现有 NoteEditorOverlay / 附件 IPC / 冲突模型重写一套。
+- 不绕开现有 NoteEditorOverlay 与附件 IPC、note content Query/cache ownership 另起一套；但 note 旧 baseline-hash 冲突路径（`ERR_SEGMENT_CONTENT_STALE` + AlertDialog）按 Stage A **删除或替换**——它是待迁移的源码现状，不是要保留的不变量。
 - 不引入 editor JSON 或第二真源。
 - 不为预览能力提前引入 KaTeX/Mermaid/折叠。
 - 不放松安全基线换取实现速度。

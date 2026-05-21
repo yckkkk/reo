@@ -15,10 +15,10 @@
    - 正确 nonce：`const s=document.createElement('style'); s.nonce='<X>'; s.textContent='#root{outline:2px solid red}'; document.head.append(s);` → 判定：`#root` 出现 outline（样式生效）。
    - 无 nonce：同上但不设 `s.nonce` → 判定：被拦截，console 出现 CSP 违规，样式不生效。
    - 错误 nonce：`s.nonce='wrong'` → 判定：被拦截。
-5. `wrong-host-csp.txt`：（可选 runtime / 或以 `resolveAppPageCspAction` 单测覆盖）确认非受信 host 的 `reo-app://` 响应带静态 CSP、不 passthrough。
+5. wrong-host fail-closed：**必需**——以 `resolveAppPageCspAction` 单测覆盖（prod wrong-host + `/index.html` → apply-static；wrong-host asset → apply-static）作为强制保证；runtime `wrong-host-csp.txt`（手工访问非受信 host 确认带静态 CSP）为推荐补充。这是安全降级项，单测不可省。
 6. `baseline-unchanged.txt`：window.open 被拒、外部导航被拒、media 权限默认拒；console 检查 `script-src` 仍 `'self'`（无 unsafe-inline/eval）、其它指令与 `PROD_CSP_DIRECTIVES` 一致；子资源正常加载。
 7. `built-index-placeholder.txt`：`npm run build` 后 `grep -c __REO_STYLE_NONCE__ out/renderer/index.html`，判定标准 ≥ 1（占位符未被 Vite 剥除）。
-8. `nonce-log-redaction.txt`：在 Electron logs path 下 `grep -i -e reo-style-nonce -e '<X>' main.log main.old.log`，判定标准**无任何命中**（nonce 不入日志）。
+8. `nonce-log-redaction.txt`：定位 Electron logs path（macOS 默认 `~/Library/Logs/<appName>/`；或临时非提交 instrumentation 打印 `app.getPath('logs')`，记录后还原），在其下 `grep -i -e reo-style-nonce -e '<X>' main.log main.old.log`，判定标准**无任何命中**（nonce 不入日志）。
 
 ## 单元测试
 

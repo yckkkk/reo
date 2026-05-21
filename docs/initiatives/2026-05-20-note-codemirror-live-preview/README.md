@@ -49,7 +49,7 @@
 - **Memory Studio 正文内联编辑**：正文区点击即就地 CM6 编辑，不必先展开沉浸式态。
 - **点击文本区从左侧展开 Markdown 格式工具栏**：动画上像从红色 FAB 展开，但与 FAB 功能无关；红色 FAB 保持现有 录音/笔记 speed dial 不变。
 - **保存模型 = Obsidian 式全自动保存**：新建即建 `segment.md`、防抖 auto-write、无保存按钮、无 note draft/finalize 两段式。
-- **外部修改 = Obsidian 式监听 + 自动重载**：去 baseline-hash 冲突弹窗；优先复用现有 visibility/focus re-read，live `fs.watch` 为可选后续（需另行设计 electron/flow/data）。
+- **外部修改 = Obsidian 式自动重载**：去 baseline-hash 冲突弹窗；优先复用现有 **`visibilitychange` re-read**（源码当前**无** window focus listener；如 Stage 1 需要 focus 触发须同批加 listener+测试+文档）；live `fs.watch` 为可选后续（需另行设计 electron/flow/data）。
 - **三编辑入口同一 CM6 实例**（studio 内联 / 沉浸式展开 / 格式工具栏）。
 
 排序：Stage 0（CSP nonce）不受影响、保持可直接执行；**Stage 1 spec 在 Stage 0 收口后创建**（遵守「同一时间只有一个 active spec」），并据 0007 Stage A 节细化保存模型与编辑面。
