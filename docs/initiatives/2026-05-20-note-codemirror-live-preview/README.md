@@ -15,11 +15,11 @@
 全部满足才视为 initiative 完成：
 
 1. 生产 CSP 下 CM6 运行时样式不被拦截，安全基线不放松（Stage 0）。
-2. `NoteEditorOverlay` 用 CM6 替换 textarea，跑通现有 create / edit / finalize / 冲突 / paste-drop 全流程（Stage 1）。
+2. note 编辑改用 CM6（替换 textarea），实现 Obsidian 式自动保存（新建即建 segment.md、防抖 auto-write、无保存按钮、**删除** note draft/finalize 与冲突弹窗）、studio 内联编辑、点击文本区从左侧展开 Markdown 格式工具栏、三入口同一 CM6 实例、paste/drop 附件、visibilitychange 重载；真机生产 CSP 下真实 CM6 样式生效（Stage 1）。
 3. Live Preview 编辑态生效：active block raw + 其它 block 预览，覆盖标题/列表/引用/代码块/链接，使用 Reo design token（Stage 2）。
 4. 图片 `![alt](attachments/…)` 渲染为 `reo-attachment://` 预览 widget，paste/drop 接入现有附件保存，body markdown 真源不变（Stage 3）。
 5. （可选）`MarkdownContentSurface` 只读态复用同一套 read-only decoration，达成编辑/只读视觉一致（Stage 4）。
-6. 全程不引入第二语义真源，不创建 `note.md` / `notes/`，不新增 standalone 上传按钮或未实现 toolbar，不重做 Memory Studio 页面。
+6. 全程不引入第二语义真源，不创建 `note.md` / `notes/`，不新增 standalone 图片上传按钮，不重做 Memory Studio 页面。（注：Stage A 决定的 Markdown 格式工具栏是**已实现、功能性**的编辑面，不属于被禁止的「未实现占位 toolbar」。）
 
 ## 不在本 initiative 范围
 
@@ -29,7 +29,7 @@
 
 ## 阶段与 spec 映射
 
-每个 stage 是一个独立可验证 spec 工作单元（每 session 只推进一个），按 memory 约定每阶段过 /review + /simplify，行为变更走真实 TDD。
+每个 stage 是一个独立可验证 spec 工作单元（每 session 只推进一个），按 memory 约定每阶段过 subagent `/review` + `/ycksimplify`（`/simplify`），行为变更走真实 TDD。
 
 | Stage | 工作单元 | 当前 spec |
 | --- | --- | --- |
@@ -57,7 +57,7 @@
 ## 收口硬门槛：subagent /review + /ycksimplify
 
 - **每个实现 stage 收口前，必须让执行代码任务的 AI 运行 subagent 进行 `/review` 与 `/ycksimplify`（`/simplify`）并处理其发现**，否则不得标记 stage 完成。这是硬门槛，不是可选项（见 memory `phase-gate-review-simplify`）。
-- 每个 spec 的执行步骤与验收必须显式列出该 review/simplify 步骤。
+- 每个 spec 的执行步骤与验收必须显式列出该 `/review` + `/ycksimplify`（`/simplify`）步骤。
 
 ## 关键约束提醒
 

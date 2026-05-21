@@ -11,10 +11,10 @@
 - [ ] M0 — CM6-ready style-nonce CSP 基线（Stage 0）
   - spec：`docs/specs/2026-05-20-2348-cm6-style-nonce-csp-baseline/`（active）
   - 完成标志：生产 CSP 带 per-load style nonce；合成样式注入验证（带 nonce 生效 / 不带 nonce 被拦截）；`docs/current/electron.md` 更新；`npm run build` + `npm start` runtime 证据归档。
-- [ ] MA — 保存模型 + 编辑面设计决策（Stage A，gated on 待决问题）
-  - 完成标志：Obsidian 式保存模型、studio 内联编辑、stage FAB 展开、共享 CM6 编辑器实例、外部修改/冲突简化方案落为 `docs/decisions/0007-*` 增补；据此重排并细化 Stage 1 spec。
-- [ ] M1 — CM6 底座 + 新保存模型（Stage 1）
-  - 完成标志：`@codemirror/*` 安装；textarea→CM6；现有 create/edit/finalize/冲突/paste-drop 行为测试全绿；生产 CSP 下 CM 样式生效。
+- [x] MA — 保存模型 + 编辑面设计决策（Stage A）
+  - **决策已锁定**于 `docs/decisions/0007` Stage A 节（2026-05-21）：Obsidian 式自动保存、studio 内联编辑、点击文本区展开 Markdown 格式工具栏、三入口同一 CM6 实例、visibilitychange 重载。Stage 1 spec 的细化在 Stage 0 收口后进行（遵守一次一个 active spec）。
+- [ ] M1 — CM6 底座 + Obsidian 式保存（Stage 1）
+  - 完成标志：`@codemirror/*` 安装（仅此阶段）；textarea→CM6；**Obsidian 式自动保存**（新建即建 segment.md、防抖 auto-write、无保存按钮、**删除** note draft/finalize 与冲突弹窗；旧保存/冲突测试删除或重写为新行为）；studio 内联编辑 + Markdown 格式工具栏 + 三入口同一 CM6 实例；paste/drop 附件；visibilitychange 重载；新增 renderer 测试已登记 `vitest.config.ts` `include` 且 `npm run test:renderer` 实际执行；真机生产 CSP 下真实 CM6 样式生效（截图/DevTools 证据）；`electron.md`/`flow.md`/`frontend.md` 更新。详见 initiative plan 的「Stage 1 spec 必须显式落定」清单。
 - [ ] M2 — Live Preview decorations（Stage 2）
   - 完成标志：active block raw + 其它 block 预览（标题/列表/引用/代码块/链接），Reo token，IME 不被打断，大文档可见区渲染，运行时视觉证据。
 - [ ] M3 — 图片 widget + 共享映射（Stage 3）

@@ -15,14 +15,14 @@
 4. 按 plan §14 / §17.18 实现并接线（GREEN）：
    - `src/main/securityPolicy.ts`：`createProductionDocumentCsp(nonce)` + `isAppDocumentPath(pathname)`
    - `src/main/appProtocol.ts`：`generateStyleNonce` + `injectStyleNonce` + 文档分支（**用 `isAppDocumentPath(parsed.pathname)` 判定文档**，读文本→注入→带文档 CSP 头返回；子资源保持 `net.fetch` 流式）
-   - `src/main/security.ts`：`resolveAppPageCspAction({ usesDevServer, isDocument })` + onHeadersReceived 用同一 `isAppDocumentPath` 求 isDocument；prod 文档 → passthrough（不写 CSP），prod 子资源 / dev → apply-static
+   - `src/main/security.ts`：`resolveAppPageCspAction({ usesDevServer, isTrustedAppDocument })`（**host-aware**：`isTrustedAppDocument = hostname === APP_SHELL_HOST && isAppDocumentPath(pathname)`）+ onHeadersReceived；prod 受信 host 根文档 → passthrough（不写 CSP），prod 子资源 / 非受信 host / dev → apply-static。**wrong-host 的 reo-app:// 响应绝不 passthrough**（防 CSP fail-open）
    - `src/renderer/index.html`：`<meta name="reo-style-nonce" content="__REO_STYLE_NONCE__" />`
    - **本 stage 不创建 renderer nonce helper**（`readStyleNonce` 推迟到 Stage 1，理由见 plan §14.5：无消费者死代码）
 5. `npm run verify:quick`。
 6. `npm run build`；**断言 `out/renderer/index.html` 仍含 `__REO_STYLE_NONCE__`**；`npm start`（= `electron-vite preview`，走生产 `reo-app://` 路径），按 plan §19 抓 runtime 证据存入 `evidence/`。
 7. 更新 `docs/current/electron.md`（必更，且**修订现有不变量文本 `:47-49`** 以记录 per-load nonce 与两源 CSP 归属，保留「无 unsafe-inline」不变量）；`docs/current/frontend.md` 按需。
 8. **收口硬门槛**：运行 subagent `/review` 与 `/ycksimplify`（`/simplify`）审查本 stage 改动并处理发现后，才允许收口。
-9. 收口：长期事实压回 `docs/current/electron.md`；本 spec 移 `docs/archive/specs/*`；更新 initiative `tasks.md` 勾 M0、置 MA 进行中。
+9. 收口：长期事实压回 `docs/current/electron.md`；本 spec 移 `docs/archive/specs/*`；更新 initiative `tasks.md` 勾 M0、置 **M1 进行中**（MA 设计决策已在 0007 Stage A 锁定，Stage 1 spec 在 Stage 0 收口后创建）。
 
 ## 必须先验证的高优先级假设
 

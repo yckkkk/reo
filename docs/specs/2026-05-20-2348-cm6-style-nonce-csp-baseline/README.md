@@ -21,10 +21,10 @@
 ### 本 spec 做
 
 - main 进程为每次 app 文档加载生成密码学随机 nonce。
-- 生产 `reo-app://` 文档响应携带 `style-src 'self' 'nonce-<value>'` 的 CSP，并把同一 nonce 注入 `index.html` 的 meta。
-- renderer 提供只读 helper 读取该 nonce（供 Stage 1 的 `EditorView.cspNonce` 使用）。
-- 合成验证：带 nonce 的注入样式生效、不带 nonce 的注入样式被生产 CSP 拦截。
-- 更新 `docs/current/electron.md`（CSP / protocol / nonce 链路），必要时 `docs/current/frontend.md`（renderer 读取 nonce 的约定）。
+- 生产受信 host 根文档响应携带 `style-src 'self' 'nonce-<value>'` 的 CSP，并把同一 nonce 注入 `index.html` 的 meta；非受信 host / 子资源响应仍套静态 CSP（host-aware passthrough）。
+- **Stage 0 只注入 meta 并用 runtime console 验证 DOM 可读**；renderer 的 `readStyleNonce` helper 与其 Vitest 测试**推迟到 Stage 1**（Stage 0 无 `EditorView.cspNonce` 消费者，提前建即无消费者死代码）。
+- 合成验证：带 nonce 的注入样式生效、不带/错 nonce 的注入样式被生产 CSP 拦截。
+- 更新 `docs/current/electron.md`（CSP / protocol / nonce 链路，目标文本见 plan §14a）。Stage 0 通常**只**更新 electron.md。
 
 ### 本 spec 不做
 
@@ -42,7 +42,7 @@
 ## 验收摘要（详见 plan.md 第 19 节）
 
 1. 生产构建下，app 文档响应头 CSP 的 `style-src` 含 `'self' 'nonce-<随机值>'`，每次加载 nonce 不同。
-2. renderer 能读到与 CSP 头一致的 nonce。
+2. renderer 经 console 读到的 index.html meta nonce 与 CSP 头一致（Stage 0 不引入 helper）。
 3. 合成测试：带正确 nonce 的运行时 `<style>` 生效；不带 nonce 或错误 nonce 的运行时 `<style>` 被拦截（控制台 CSP 违规）。
-4. 其余安全基线不变（new-window deny、external nav deny、permission default deny、script-src 仍 `'self'`）。
+4. 非受信 host 的 `reo-app://` 响应不会 passthrough（仍带静态 CSP）；其余安全基线不变（new-window deny、external nav deny、permission default deny、script-src 仍 `'self'`）。
 5. `npm run verify:quick` 通过；`npm run build` + `npm start` 运行时证据归档。
