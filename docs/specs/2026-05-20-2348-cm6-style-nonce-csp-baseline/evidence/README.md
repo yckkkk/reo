@@ -4,7 +4,7 @@
 
 ## 前置：在生产 preview 下打开 DevTools
 
-`npm start`（= `electron-vite preview`）走生产 `reo-app://` 路径，但 `src/main/index.ts` 只在 dev 分支自动开 DevTools。生产 preview 下采集证据需手动开 DevTools：用 macOS 菜单 View ▸ Toggle Developer Tools 或快捷键 `Cmd+Alt+I`。若不可用，可加**临时 instrumentation**（如在 preview 分支临时 `openDevTools`），记录证据后**必须还原、不进入提交**（与 plan §17.18 的 throwaway 纪律一致）。
+`npm start`（= `electron-vite preview`）走生产 `reo-app://` 路径，但 `src/main/index.ts` 只在 dev 分支自动开 DevTools。preview 是 **non-packaged**，`secureWebPreferences` 的 `devTools: !app.isPackaged` 为 true，故 DevTools **可用**：优先用 macOS 菜单 View ▸ Toggle Developer Tools 或快捷键 `Cmd+Alt+I`。仅当 app menu 不可用时再加**临时 instrumentation**（如 preview 分支临时 `openDevTools`），记录证据后**必须还原、不进入提交**（与 plan §17.18 的 throwaway 纪律一致）。
 
 ## 待采集
 
@@ -22,4 +22,4 @@
 
 ## 单元测试
 
-`npm run verify:quick` 输出（main `node:test` 纯函数测试：`createProductionDocumentCsp` / `isAppDocumentPath` / `generateStyleNonce` / `injectStyleNonce` / `resolveAppPageCspAction` host-aware 分支 + setupContentSecurityPolicy 源码级断言）可贴 `verify-quick.txt`。
+`npm run verify:quick` 输出可贴 `verify-quick.txt`，应包含 main `node:test` 行为测试：`createProductionDocumentCsp` / `isAppDocumentPath` / `generateStyleNonce` / `injectStyleNonce`（均 securityPolicy.ts）+ `resolveAppPageCspAction` host-aware 分支 + **`resolveContentSecurityPolicyResponse` callback-output harness**（断言受信文档不写 CSP、子资源/wrong-host/dev 写对应 CSP、非 app page 原样）。**行为断言优先**；TS-AST/源码文本 guard 仅作为无法注入 handler 时的最小兜底，不得以「调用了某函数」作为主断言。
