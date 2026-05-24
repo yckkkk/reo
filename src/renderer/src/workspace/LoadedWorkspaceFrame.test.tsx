@@ -354,6 +354,7 @@ function renderLoadedWorkspaceFrame({
   onRenameSegmentContent = vi.fn(),
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
+  onInlineMarkdownDirtyChange = vi.fn(),
   onRetrySegmentTranscription,
   onRetrySupplementTranscription,
   onSelectMemory = vi.fn(),
@@ -439,6 +440,7 @@ function renderLoadedWorkspaceFrame({
   >[0]['onRenameSegmentContent'];
   readonly onRenameSegment?: () => void;
   readonly onRenameSegmentSupplement?: () => void;
+  readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly onRetrySegmentTranscription?: (target: SegmentTranscriptionRetryTarget) => void;
   readonly onRetrySupplementTranscription?: (
     target: SegmentSupplementTranscriptionRetryTarget
@@ -533,6 +535,7 @@ function renderLoadedWorkspaceFrame({
         onRenameSegmentContent={onRenameSegmentContent}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
+        onInlineMarkdownDirtyChange={onInlineMarkdownDirtyChange}
         {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
         onSelectMemory={onSelectMemory}
         onStartNote={onStartNote}
@@ -626,12 +629,14 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onStartRecording).toHaveBeenCalledOnce();
   });
 
-  it('keeps the global expression entry out of Memory Studio content states', async () => {
+  it('keeps the red expression FAB mounted in Memory Studio without moving it into content controls', async () => {
+    const user = userEvent.setup();
     const onStartNote = vi.fn();
-
+    const onStartRecording = vi.fn();
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
       onStartNote,
+      onStartRecording,
       session: workspaceSession({ memories: [birthdayMemory] }),
     });
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
@@ -639,14 +644,14 @@ describe('LoadedWorkspaceFrame', () => {
       detail: birthdayDetail,
     });
 
-    expect(screen.queryByRole('region', { name: '表达入口' })).not.toBeInTheDocument();
+    const dock = screen.getByRole('region', { name: '表达入口' });
+    const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
+    expect(dialTrigger).toHaveClass('!bg-brand-ember');
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
-    const createButton = await within(strip).findByRole('button', { name: '打开表达入口' });
     const stripActions = strip.querySelector('[data-slot="memory-studio-segment-strip-actions"]');
-    expect(stripActions).toBeInstanceOf(HTMLElement);
-    expect(stripActions).toContainElement(createButton);
-    expect(createButton).toHaveTextContent('新片段');
+    expect(stripActions).not.toBeInTheDocument();
+    expect(within(strip).queryByRole('button', { name: '打开表达入口' })).not.toBeInTheDocument();
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const contentTabActions = content.querySelector(
       '[data-slot="memory-studio-content-tab-actions"]'
@@ -655,7 +660,11 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(contentTabActions as HTMLElement).queryByRole('button', { name: '打开表达入口' })
     ).not.toBeInTheDocument();
-    expect(onStartNote).not.toHaveBeenCalled();
+
+    await user.click(dialTrigger);
+    await user.click(within(dock).getByRole('menuitem', { name: '笔记' }));
+    expect(onStartNote).toHaveBeenCalledOnce();
+    expect(onStartRecording).not.toHaveBeenCalled();
   });
 
   it('renders right-side Memory containers without turning the stage into an segment timeline', () => {
@@ -914,6 +923,14 @@ describe('LoadedWorkspaceFrame', () => {
       within(content).queryByRole('button', { name: '笔记 Cake planning note 暂不支持播放' })
     ).not.toBeInTheDocument();
     expect(content.querySelector('[data-slot="memory-studio-player"]')).not.toBeInTheDocument();
+    const notePlayerPlaceholder = content.querySelector(
+      '[data-slot="memory-studio-player-placeholder"]'
+    );
+    const tabRailRow = content.querySelector('[data-slot="memory-studio-content-tab-rail-row"]');
+    expect(notePlayerPlaceholder).toBeInstanceOf(HTMLElement);
+    expect(notePlayerPlaceholder).toHaveAttribute('aria-hidden', 'true');
+    expect(notePlayerPlaceholder).toHaveClass('h-[42px]');
+    expect(notePlayerPlaceholder?.nextElementSibling).toBe(tabRailRow);
 
     const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
     const bodyTab = within(tabs).getByRole('tab', { name: '正文' });
@@ -1005,12 +1022,9 @@ describe('LoadedWorkspaceFrame', () => {
       bodyByteLength: 12,
     });
 
-    const contentTabRailRow = content.querySelector(
-      '[data-slot="memory-studio-content-tab-rail-row"]'
-    );
-    expect(contentTabRailRow).toBeInstanceOf(HTMLElement);
-    expect(contentTabRailRow).toHaveClass('justify-start');
-    expect(contentTabRailRow).not.toHaveClass('justify-between');
+    expect(tabRailRow).toBeInstanceOf(HTMLElement);
+    expect(tabRailRow).toHaveClass('justify-start');
+    expect(tabRailRow).not.toHaveClass('justify-between');
     const contentTabActions = content.querySelector(
       '[data-slot="memory-studio-content-tab-actions"]'
     );
@@ -1102,9 +1116,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
   });
 
-  it('keeps a dirty inline Note edit mounted when create actions or new supplements appear', async () => {
+  it('keeps a dirty inline Note edit mounted when new supplements appear', async () => {
     const user = userEvent.setup();
-    const onStartNote = vi.fn();
     const onStartSegmentSupplementNote = vi.fn();
     const session = workspaceSession({
       memories: [
@@ -1133,7 +1146,6 @@ describe('LoadedWorkspaceFrame', () => {
     }));
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      onStartNote,
       onStartSegmentSupplementNote,
       readSegmentContent,
       session,
@@ -1149,21 +1161,10 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
-    const strip = within(studio).getByRole('region', { name: '片段预览流' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     await user.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
     fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
-
-    await user.click(within(strip).getByRole('button', { name: '打开表达入口' }));
-    await user.click(
-      within(await screen.findByRole('menu', { name: '表达方式' })).getByRole('menuitem', {
-        name: '笔记',
-      })
-    );
-
-    expect(onStartNote).not.toHaveBeenCalled();
-    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
 
     await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));
     await user.click(
@@ -1282,7 +1283,6 @@ describe('LoadedWorkspaceFrame', () => {
           onRenameSegmentContent={vi.fn()}
           onRenameSegmentSupplement={vi.fn()}
           onSelectMemory={vi.fn()}
-          onStartNote={vi.fn()}
           onStartRecording={vi.fn()}
           onStartSegmentSupplementNote={vi.fn()}
           onStartSegmentSupplementRecording={vi.fn()}

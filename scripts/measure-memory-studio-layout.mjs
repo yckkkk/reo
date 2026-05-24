@@ -353,8 +353,19 @@ function measurementExpression(maxItems) {
     const measuredItems = selectMeasuredItems();
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
     const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const playerPlaceholder = studio.querySelector(
+      '[data-slot="memory-studio-player-placeholder"]'
+    );
     const playerTime = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
+    const selectedItem = items.find((item) => Boolean(item.querySelector('[aria-current="true"]')));
+    const selectedSegmentKind = selectedItem
+      ? selectedItem.querySelector('[data-slot="memory-studio-segment-card-duration"]')
+        ? 'audio'
+        : selectedItem.querySelector('[data-slot="memory-studio-segment-card-note-size"]')
+          ? 'note'
+          : 'unknown'
+      : null;
     if (!scroll || items.length === 0) {
       return { ok: false, reason: 'Segment strip scroll owner or Segment items are missing.' };
     }
@@ -477,6 +488,7 @@ function measurementExpression(maxItems) {
       selectedItemCount: items.filter((item) =>
         Boolean(item.querySelector('[aria-current="true"]'))
       ).length,
+      selectedSegmentKind,
       scroll: {
         left: scroll.scrollLeft,
         width: scroll.scrollWidth,
@@ -485,6 +497,7 @@ function measurementExpression(maxItems) {
       },
       player: {
         rowRect: player ? rectOf(player) : null,
+        placeholderRect: playerPlaceholder ? rectOf(playerPlaceholder) : null,
         timeRect: playerTime ? rectOf(playerTime) : null,
         timeWhiteSpace: playerTimeStyle ? playerTimeStyle.whiteSpace : null,
         timeText: playerTime ? playerTime.textContent : null,
@@ -544,6 +557,11 @@ function assertMetrics(metrics, options) {
   }
   if (metrics.selectedItemCount !== 1) {
     failures.push(`Expected 1 selected Segment item, received ${metrics.selectedItemCount}.`);
+  }
+  if (!['audio', 'note'].includes(metrics.selectedSegmentKind)) {
+    failures.push(
+      `Expected selected Segment kind audio or note; received ${metrics.selectedSegmentKind}.`
+    );
   }
   if (metrics.windowScrollY !== 0) {
     failures.push(`Expected windowScrollY 0, received ${metrics.windowScrollY}.`);
@@ -709,26 +727,38 @@ function assertMetrics(metrics, options) {
     metrics.viewport,
     tolerance
   );
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio audio player',
-    metrics.player.rowRect,
-    metrics.viewport,
-    tolerance
-  );
-
-  if (metrics.player.timeWhiteSpace !== 'nowrap') {
-    failures.push(
-      `Expected audio player time to stay on one line; white-space=${metrics.player.timeWhiteSpace}.`
+  if (metrics.selectedSegmentKind === 'audio') {
+    assertRectInsideViewport(
+      failures,
+      'Memory Studio audio player',
+      metrics.player.rowRect,
+      metrics.viewport,
+      tolerance
+    );
+    if (metrics.player.timeWhiteSpace !== 'nowrap') {
+      failures.push(
+        `Expected audio player time to stay on one line; white-space=${metrics.player.timeWhiteSpace}.`
+      );
+    }
+    assertRectInsideViewport(
+      failures,
+      'Memory Studio audio player time',
+      metrics.player.timeRect,
+      metrics.viewport,
+      tolerance
+    );
+  } else if (metrics.selectedSegmentKind === 'note') {
+    if (metrics.player.rowRect !== null) {
+      failures.push('Expected Note Segment not to render an actionable audio player.');
+    }
+    assertRectInsideViewport(
+      failures,
+      'Memory Studio note player placeholder',
+      metrics.player.placeholderRect,
+      metrics.viewport,
+      tolerance
     );
   }
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio audio player time',
-    metrics.player.timeRect,
-    metrics.viewport,
-    tolerance
-  );
 
   for (const item of metrics.items) {
     if (!item.cardRect || !item.dotRect || !item.timeRect || !item.anchorRect) {

@@ -114,9 +114,8 @@ type MemoryStudioProps = {
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
+  readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
-  readonly onStartNote?: () => void;
-  readonly onStartRecording?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -1462,46 +1461,13 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
   );
 });
 
-function MemoryStudioExpressionMenu({
-  onStartNote,
-  onStartRecording,
-}: {
-  readonly onStartNote?: () => void;
-  readonly onStartRecording?: () => void;
-}) {
-  if (!onStartRecording && !onStartNote) {
-    return null;
-  }
-
+function MemoryStudioPlayerPlaceholder() {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghostIcon"
-          size="compact"
-          type="button"
-          aria-label="打开表达入口"
-          className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
-        >
-          <Plus aria-hidden="true" className="size-16" />
-          <span>新片段</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent aria-label="表达方式" aria-labelledby={undefined} align="end">
-        {onStartRecording ? (
-          <DropdownMenuItem onSelect={onStartRecording}>
-            <Mic aria-hidden="true" className="size-16" />
-            录音
-          </DropdownMenuItem>
-        ) : null}
-        {onStartNote ? (
-          <DropdownMenuItem onSelect={onStartNote}>
-            <PencilLine aria-hidden="true" className="size-16" />
-            笔记
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div
+      aria-hidden="true"
+      data-slot="memory-studio-player-placeholder"
+      className="h-[42px] w-full min-w-0 shrink-0"
+    />
   );
 }
 
@@ -2493,9 +2459,8 @@ export function MemoryStudio({
   onRenameSegmentContent,
   onRenameSegment,
   transcriptionBackfill,
+  onInlineMarkdownDirtyChange,
   onSegmentFocusConsumed,
-  onStartNote,
-  onStartRecording,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -2649,6 +2614,11 @@ export function MemoryStudio({
       ? activeNoteSupplementContentQuery.data
       : undefined;
 
+  useEffect(() => {
+    onInlineMarkdownDirtyChange?.(inlineMarkdownDirty);
+    return () => onInlineMarkdownDirtyChange?.(false);
+  }, [inlineMarkdownDirty, onInlineMarkdownDirtyChange]);
+
   function blockDirtyInlineMarkdownNavigation() {
     if (!inlineMarkdownDirty) {
       return false;
@@ -2677,20 +2647,6 @@ export function MemoryStudio({
     }
     setActiveContentTab(nextTab);
     return true;
-  }
-
-  function requestStartNoteSegment() {
-    if (blockDirtyInlineMarkdownNavigation()) {
-      return;
-    }
-    onStartNote?.();
-  }
-
-  function requestStartRecordingSegment() {
-    if (blockDirtyInlineMarkdownNavigation()) {
-      return;
-    }
-    onStartRecording?.();
   }
 
   function requestStartSupplementRecording() {
@@ -3392,12 +3348,6 @@ export function MemoryStudio({
               <p className="mt-8 text-body leading-body text-muted-foreground">
                 继续在这条记忆里记录。
               </p>
-              <div className="mt-16">
-                <MemoryStudioExpressionMenu
-                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
-                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
-                />
-              </div>
             </div>
           ) : detail && visibleSegments.length > 0 && selectedSegment ? (
             <>
@@ -3413,17 +3363,6 @@ export function MemoryStudio({
                   } as CSSProperties
                 }
               >
-                <div
-                  data-slot="memory-studio-segment-strip-actions"
-                  className="mb-8 flex items-center justify-end"
-                >
-                  <MemoryStudioExpressionMenu
-                    {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
-                    {...(onStartRecording
-                      ? { onStartRecording: requestStartRecordingSegment }
-                      : {})}
-                  />
-                </div>
                 {stripScrollState.canScrollLeft ? (
                   <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
                     <div className="pointer-events-auto">
@@ -3640,7 +3579,9 @@ export function MemoryStudio({
                     segment={selectedSegment}
                     workspaceSession={workspaceSession}
                   />
-                ) : null}
+                ) : (
+                  <MemoryStudioPlayerPlaceholder />
+                )}
 
                 <div
                   data-slot="memory-studio-content-tab-rail-row"
@@ -4186,22 +4127,10 @@ export function MemoryStudio({
               <p className="text-body leading-body text-muted-foreground">
                 记忆内容加载失败，请重试。
               </p>
-              <div className="mt-16">
-                <MemoryStudioExpressionMenu
-                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
-                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
-                />
-              </div>
             </div>
           ) : (
             <div className="mt-32 max-w-[420px]">
               <p className="text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
-              <div className="mt-16">
-                <MemoryStudioExpressionMenu
-                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
-                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
-                />
-              </div>
             </div>
           )}
         </div>

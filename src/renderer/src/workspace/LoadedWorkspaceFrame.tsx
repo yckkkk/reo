@@ -41,6 +41,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
+  readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
@@ -68,6 +69,7 @@ export function LoadedWorkspaceFrame({
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
+  onInlineMarkdownDirtyChange,
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
@@ -98,8 +100,11 @@ export function LoadedWorkspaceFrame({
         />
       }
       dock={
-        expressionDockVisible && !currentMemory ? (
-          <ExpressionDock onStartRecording={onStartRecording} />
+        expressionDockVisible ? (
+          <ExpressionDock
+            {...(currentMemory && onStartNote ? { onStartNote } : {})}
+            onStartRecording={onStartRecording}
+          />
         ) : null
       }
     >
@@ -116,10 +121,9 @@ export function LoadedWorkspaceFrame({
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegmentContent={onRenameSegmentContent}
           onRenameSegment={onRenameSegment}
+          {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
-          {...(onStartNote ? { onStartNote } : {})}
-          onStartRecording={onStartRecording}
           {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}

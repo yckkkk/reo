@@ -632,6 +632,7 @@ export function App() {
   const [runningTranscriptionBackfills, setRunningTranscriptionBackfills] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [memoryStudioInlineMarkdownDirty, setMemoryStudioInlineMarkdownDirty] = useState(false);
   const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
@@ -1137,6 +1138,10 @@ export function App() {
     }
     if (transcriptEditorTarget) {
       toast.error(TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED);
+      return true;
+    }
+    if (memoryStudioInlineMarkdownDirty) {
+      toast.error('请先保存或取消当前笔记编辑。');
       return true;
     }
 
@@ -4165,6 +4170,8 @@ export function App() {
                   title: activeWorkspaceSession.snapshot.title,
                 })
               }
+              onStartNote={requestStartNote}
+              onStartRecording={requestStartRecording}
               onToggleMemoryRail={toggleMemoryRail}
               title={activeWorkspaceSession.snapshot.title}
               workspaceHandle={activeWorkspaceSession.workspaceHandle}
@@ -4191,6 +4198,7 @@ export function App() {
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
             onClearSegmentContent={setSegmentContentClearTarget}
             onEditSegmentTranscript={setTranscriptEditorTarget}
+            onInlineMarkdownDirtyChange={setMemoryStudioInlineMarkdownDirty}
             onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
             onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
             onSegmentFocusConsumed={(segmentId) => {

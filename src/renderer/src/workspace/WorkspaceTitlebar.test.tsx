@@ -19,7 +19,15 @@ const currentMemory: WorkspaceMemorySummary = {
   updatedAt: '2026-05-23T10:00:00.000Z',
 };
 
-function renderWorkspaceTitlebar(memory: WorkspaceMemorySummary | null) {
+function renderWorkspaceTitlebar({
+  memory,
+  onStartNote = vi.fn(),
+  onStartRecording = vi.fn(),
+}: {
+  readonly memory: WorkspaceMemorySummary | null;
+  readonly onStartNote?: () => void;
+  readonly onStartRecording?: () => void;
+}) {
   return render(
     <TooltipProvider>
       <WorkspaceTitlebar
@@ -30,6 +38,8 @@ function renderWorkspaceTitlebar(memory: WorkspaceMemorySummary | null) {
         onRenameMemory={vi.fn()}
         onRenameMemorySpace={vi.fn()}
         onRemoveMemorySpace={vi.fn()}
+        onStartNote={onStartNote}
+        onStartRecording={onStartRecording}
         onToggleMemoryRail={vi.fn()}
         title="测试"
         workspaceHandle="workspace-handle-secret"
@@ -40,8 +50,14 @@ function renderWorkspaceTitlebar(memory: WorkspaceMemorySummary | null) {
 }
 
 describe('WorkspaceTitlebar', () => {
-  it('shows the global new-memory action only at the memory-space level', () => {
-    const { rerender } = renderWorkspaceTitlebar(null);
+  it('shows the global new-memory action at the memory-space level and the new-segment action beside the MemoryRail toggle inside a memory', () => {
+    const onStartNote = vi.fn();
+    const onStartRecording = vi.fn();
+    const { rerender } = renderWorkspaceTitlebar({
+      memory: null,
+      onStartNote,
+      onStartRecording,
+    });
 
     const memorySpaceActions = document.querySelector('[data-slot="workspace-titlebar-actions"]');
     expect(memorySpaceActions).toBeInstanceOf(HTMLElement);
@@ -59,6 +75,8 @@ describe('WorkspaceTitlebar', () => {
           onRenameMemory={vi.fn()}
           onRenameMemorySpace={vi.fn()}
           onRemoveMemorySpace={vi.fn()}
+          onStartNote={onStartNote}
+          onStartRecording={onStartRecording}
           onToggleMemoryRail={vi.fn()}
           title="测试"
           workspaceHandle="workspace-handle-secret"
@@ -72,9 +90,14 @@ describe('WorkspaceTitlebar', () => {
     expect(
       within(currentMemoryActions as HTMLElement).queryByRole('button', { name: '新建记忆' })
     ).not.toBeInTheDocument();
-    expect(
-      within(currentMemoryActions as HTMLElement).getByRole('button', { name: '折叠记忆列表' })
-    ).toBeInTheDocument();
+    const segmentButton = within(currentMemoryActions as HTMLElement).getByRole('button', {
+      name: '打开新片段菜单',
+    });
+    const railButton = within(currentMemoryActions as HTMLElement).getByRole('button', {
+      name: '折叠记忆列表',
+    });
+    expect(segmentButton).toHaveTextContent('新片段');
+    expect(segmentButton.nextElementSibling).toBe(railButton);
     expect(screen.getByRole('button', { name: '碎片记录 记忆操作' })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, Plus } from 'lucide-react';
+import { Mic, PanelRightClose, PanelRightOpen, PencilLine, Plus } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -7,6 +7,12 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MemoryActionsMenu } from './MemoryActionsMenu';
 import { MemorySpaceActionsMenu } from './MemorySpaceActionsMenu';
@@ -23,6 +29,8 @@ type WorkspaceTitlebarProps = {
   readonly onRenameMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onRenameMemorySpace: () => void;
   readonly onRemoveMemorySpace: () => void;
+  readonly onStartNote?: () => void;
+  readonly onStartRecording?: () => void;
   readonly onToggleMemoryRail: () => void;
   readonly title: string;
   readonly workspaceHandle: string;
@@ -37,6 +45,8 @@ export function WorkspaceTitlebar({
   onRenameMemory,
   onRenameMemorySpace,
   onRemoveMemorySpace,
+  onStartNote,
+  onStartRecording,
   onToggleMemoryRail,
   title,
   workspaceHandle,
@@ -110,7 +120,36 @@ export function WorkspaceTitlebar({
         data-slot="workspace-titlebar-actions"
         className="pointer-events-auto flex items-center gap-8 [-webkit-app-region:no-drag]"
       >
-        {currentMemory ? null : (
+        {currentMemory ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghostIcon"
+                size="compact"
+                type="button"
+                aria-label="打开新片段菜单"
+                className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+              >
+                <Plus aria-hidden="true" className="size-16" />
+                <span>新片段</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent aria-label="表达方式" aria-labelledby={undefined} align="end">
+              {onStartRecording ? (
+                <DropdownMenuItem onSelect={onStartRecording}>
+                  <Mic aria-hidden="true" className="size-16" />
+                  录音
+                </DropdownMenuItem>
+              ) : null}
+              {onStartNote ? (
+                <DropdownMenuItem onSelect={onStartNote}>
+                  <PencilLine aria-hidden="true" className="size-16" />
+                  笔记
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
           <Tooltip>
             <Button asChild variant="ghostIcon" size="icon">
               <TooltipTrigger
