@@ -4,11 +4,11 @@
 
 ## Objective
 
-回退 Note 编辑器的重型 CM6 路线，恢复为轻量 Markdown textarea-first 编辑器，并保留 `memory.md`、`segment.md`、`supplement.md` 文件合同。
+回退 Note 编辑器的重型编辑器路线，恢复为轻量 Markdown textarea-first 编辑器，并保留 `memory.md`、`segment.md`、`supplement.md` 文件合同。
 
 ## 成功标准
 
-- 主线代码、依赖、current 文档和 active docs 中不再把 CodeMirror 6 作为 Note 编辑器方向。
+- 主线代码、依赖、current 文档和 active docs 中不再把重型编辑器作为 Note 编辑器方向。
 - Note 编辑器使用单一 textarea 编辑 Markdown 字符串。
 - Memory Studio 中的已保存 Note Segment 和 Note SegmentSupplement 可从当前正文区域进入同一个轻量 textarea 编辑器。
 - 工具栏只提供轻量 Markdown 文本插入：图片、分割线、标题、项目列表、编号列表、引用、粗体和强调。

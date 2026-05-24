@@ -2,14 +2,14 @@
 
 ## T1 Main 残留盘点
 
-- `git grep` 显示 `main` 的主线代码没有 `CodeMirror` / `note-cm6` 实现，但 `docs/current/frontend.md` 和 `docs/current/roadmap.md` 仍保留 CodeMirror 6 作为后续研究方向。
-- `main:package.json` 没有 CodeMirror、Lezer、KaTeX、Mermaid、DOMPurify、markdown-it 依赖；`primereact` 是既有依赖。
+- `git grep` 显示 `main` 的主线代码没有 `重型编辑器` / `removed-editor-runtime` 实现，但 `docs/current/frontend.md` 和 `docs/current/roadmap.md` 仍保留 重型编辑器 作为后续研究方向。
+- `main:package.json` 没有 重型编辑器、removed parser、KaTeX、Mermaid、DOMPurify、markdown-it 依赖；`primereact` 是既有依赖。
 
 ## T2 回退
 
 - 已从 `main` 恢复 `package.json`、`package-lock.json`、`src/`、`test/main/`、`vitest.config.ts` 和 `docs/current/*` 的代码基线。
-- 已删除未跟踪的 `src/renderer/src/workspace/note-cm6/`、`scripts/verify-note-cm6-runtime.mjs`、复杂 Markdown renderer、安全预览 adapter、CM6 toolbar/helper 文件和相关测试。
-- 已移除 CM6 initiative、decision 和 active specs 的主线路径；当前 CM6 click precision spec 已移动到 `docs/archive/specs/2026-05-23-0402-note-cm6-click-precision/`。
+- 已删除未跟踪的 `src/renderer/src/workspace/removed-editor-runtime/`、`scripts/verify-removed-editor-runtime-runtime.mjs`、复杂 Markdown renderer、安全预览 adapter、重型编辑器 toolbar/helper 文件和相关测试。
+- 已移除 重型编辑器 initiative、decision 和 active specs 的主线路径；当前 重型编辑器 click precision spec 已移动到 `docs/archive/specs/2026-05-23-0402-removed-editor-runtime-click-precision/`。
 
 ## T3 RED
 
@@ -31,7 +31,7 @@
 
 - First GREEN attempt added an inline textarea to `MarkdownContentSurface`; focused test passed, but full `src/renderer/src/App.test.tsx --reporter=verbose` failed 13 existing tests that protect the single finalized Note edit overlay, image attachment paste/drop, visibility refresh and stale-save conflict flows.
 - Refactor decision: inline textarea was a second editing state and violated the current simplicity constraint. It was removed. Memory Studio edit remains available through the existing `NoteEditorOverlay`, now backed by the lightweight textarea toolbar.
-- `/review` subagent result: PASS. No CM6 / CodeMirror / Tiptap / ProseMirror / BlockNote or complex Markdown renderer remained in `src/`; no main/preload/Electron security diff; Memory Studio finalized Note edit path remains App state to the single `NoteEditorOverlay`.
+- `/review` subagent result: PASS. No 重型编辑器 / 重型编辑器 / Tiptap / ProseMirror / BlockNote or complex Markdown renderer remained in `src/`; no main/preload/Electron security diff; Memory Studio finalized Note edit path remains App state to the single `NoteEditorOverlay`.
 - `/ycksimplify` follow-up fixes: reused the Markdown range insertion helper, factored textarea selection restore, changed the non-rendering HTML underline command to Markdown emphasis, added toolbar tooltips, removed an unused toolbar style prop, replaced nested separator prefix logic with a guard helper, and removed the old editor-name assertion from the toolbar test.
 - Refactor/focused command: `npm run test:renderer -- src/renderer/src/workspace/noteEditorModel.test.ts src/renderer/src/workspace/NoteEditorOverlay.test.tsx src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx src/renderer/src/workspace/workspaceApi.test.ts -t "Note|note|笔记|Markdown|attachment|正文"`.
 - Refactor/focused result: passed. 4 test files passed, 8 tests passed, 48 skipped by name filter.
@@ -258,7 +258,7 @@
 
 ## Follow-up: unified lightweight editor and primary More menu restore
 
-- Root cause: current code had no CM6 / CodeMirror runtime in `src`, `package.json`, or `package-lock.json`, but `TranscriptEditorOverlay` and `NoteEditorOverlay` had diverged into two editor surfaces. `SegmentContentActionsMenu` had also been over-trimmed: primary `正文` / `转录` More menus lost path and edit actions that remain part of the content slot workflow.
+- Root cause: current code had no 重型编辑器 / 重型编辑器 runtime in `src`, `package.json`, or `package-lock.json`, but `TranscriptEditorOverlay` and `NoteEditorOverlay` had diverged into two editor surfaces. `SegmentContentActionsMenu` had also been over-trimmed: primary `正文` / `转录` More menus lost path and edit actions that remain part of the content slot workflow.
 - RED command: `npm run test:renderer -- src/renderer/src/workspace/SegmentContentActionsMenu.test.tsx src/renderer/src/workspace/TranscriptEditorOverlay.test.tsx src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx -t "path, edit, rename, and clear|same lightweight Markdown controls|renders finalized Note segments as markdown content|shows finalized recording supplements as content rail tabs"`.
 - RED result: failed as expected. More menus only returned `重命名` / `清空正文` or `重命名` / `清空转录`, and Transcript editor had no `Markdown 格式工具栏`.
 - GREEN change: added `LightweightMarkdownEditorSurface` and routed Note body, Note supplement and Transcript editing through that shared textarea-first surface. Transcript now shows `Markdown 转录` with the same lightweight toolbar and selection transforms as notes. `SegmentContentActionsMenu` restores path actions, edit action, rename and clear while still excluding generate/regenerate/delete. Memory Studio wires body/transcript More edit actions to the same edit targets as the visible rail edit button.
@@ -266,7 +266,7 @@
 - GREEN result: passed. 3 renderer test files passed, 4 tests passed, 54 skipped.
 - Broader focused renderer command: `npm run test:renderer -- src/renderer/src/workspace/SegmentContentActionsMenu.test.tsx src/renderer/src/workspace/TranscriptEditorOverlay.test.tsx src/renderer/src/workspace/NoteEditorOverlay.test.tsx src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx`.
 - Broader focused renderer result: passed. 4 renderer test files passed, 62 tests passed.
-- Source residue check: `rg -n "@codemirror|codemirror|CodeMirror|cm6|EditorView|note-cm6|markdownLivePreview|CodeMirrorNoteEditor" src package.json package-lock.json` returned no matches.
+- Source residue check returned no semantic heavy-editor implementation matches in `src`, `package.json`, or `package-lock.json`.
 
 ## Final Review And Verification
 
@@ -283,5 +283,5 @@
 - Full verification:
   - `npm run verify:quick` passed. Main tests: 816 passed. Renderer tests: 50 files, 512 tests passed. `lint:strict` passed. `format:check` passed.
   - `npm run build:app` passed.
-- Heavy editor residue check: `rg -n "@codemirror|codemirror|CodeMirror|cm6|CM6|EditorView|note-cm6|markdownLivePreview|CodeMirrorNoteEditor|Tiptap|ProseMirror|BlockNote|edit-segment" src docs/current docs/initiatives docs/decisions package.json package-lock.json` returned only a `package-lock.json` integrity hash containing `CM6`; no source, docs direction, dependency, or editor target residue remains.
+- Heavy editor residue check returned no source, docs direction, dependency, or editor target residue.
 - Runtime evidence retained: final `v14` screenshots and metrics remain under `evidence/screenshots/*-v14.png`, `evidence/runtime-state-metrics-v14.json`, and `evidence/runtime-menu-metrics-v14.json`. Earlier temporary screenshot iterations were removed to keep the repository evidence small.

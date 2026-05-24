@@ -1,7 +1,7 @@
 # Tasks
 
-- [x] T1：盘点 `main` 与当前工作区中的 CM6 / 重型编辑器残留。
-- [x] T2：回退 CM6 代码、依赖、runtime 脚本和主线方向文档。
+- [x] T1：盘点 `main` 与当前工作区中的重型编辑器残留。
+- [x] T2：回退重型编辑器代码、依赖、runtime 脚本和主线方向文档。
 - [x] T3：为轻量 Markdown 工具栏写 RED 行为测试。
 - [x] T4：实现 textarea 工具栏的最小 GREEN。
 - [x] T5：验证 Memory Studio 已保存 Note 仍通过同一个轻量 textarea overlay 编辑。

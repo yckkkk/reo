@@ -65,7 +65,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - 不重复造轮子。优先使用官方文档、主流包和已验证方案。
 - 自研不是默认选项。前端组件、UI primitives、page/overlay primitives、overlay/drawer、audio/media、editor、main process capability、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。
 - Markdown 编辑器当前采用轻量 textarea-first 路线。Markdown 字符串仍是文件真源和保存真源；Reo 只提供稳定输入、少量 Markdown 格式插入、图片附件插入、保存、冲突提示和访达可编辑文件合同。
-- 当前不接入 CodeMirror、Tiptap、ProseMirror、BlockNote 或其它重型编辑器作为 Note 编辑底座。需要富文本、块编辑、复杂 Live Preview 或完整 Markdown renderer 时，必须重新创建 spec 并先证明它不会破坏 Reo 的轻量输入目标、文件真源和维护成本边界。
+- 当前不接入任何重型编辑器作为 Note 编辑底座。需要富文本、块编辑、复杂 Live Preview 或完整 Markdown renderer 时，必须重新创建 spec 并先证明它不会破坏 Reo 的轻量输入目标、文件真源和维护成本边界。
 - 发现现成方案不完全适配 Reo 时，先思考如何裁剪、retokenize、组合、包一层薄适配或 fork；只有这些方式仍不能满足 Electron 安全边界、Reo 本地文件真源、Reo design system、测试可控性或代码复杂度预算时，才允许自研，并必须记录已尝试的适配路径和拒绝原因。
 - 不创建 generic runtime 或 speculative abstraction。
 - 基础未稳固前，不启动会扩大架构面的功能建设。
