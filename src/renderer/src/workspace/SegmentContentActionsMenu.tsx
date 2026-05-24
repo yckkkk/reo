@@ -88,7 +88,11 @@ export function SegmentContentActionsMenu({
             <SegmentContentActionIcon icon={PencilLine} />
             重命名
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={clearDisabled} onSelect={onClear}>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive data-[disabled]:text-destructive/50 data-[highlighted]:text-destructive"
+            disabled={clearDisabled}
+            onSelect={onClear}
+          >
             <SegmentContentActionIcon icon={Eraser} />
             {clearLabel}
           </DropdownMenuItem>

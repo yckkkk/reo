@@ -364,6 +364,19 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
+  async function openInlineNoteEditor(user: ReturnType<typeof userEvent.setup>, title = '笔记1') {
+    await user.click(screen.getByRole('button', { name: `编辑笔记 ${title}` }));
+    return screen.findByTestId('memory-studio-inline-note-editor');
+  }
+
+  async function openInlineSupplementNoteEditor(
+    user: ReturnType<typeof userEvent.setup>,
+    title = '补充笔记1'
+  ) {
+    await user.click(screen.getByRole('button', { name: `编辑补充笔记 ${title}` }));
+    return screen.findByTestId('memory-studio-inline-supplement-note-editor');
+  }
+
   function mockVoiceTranscriptionSettings(enabled: boolean) {
     reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
       ok: true,
@@ -2543,14 +2556,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByRole('button', { name: '选择片段 录音1' });
 
-    const primaryMore = document.querySelector(
-      '[data-slot="memory-studio-primary-tab-more-anchor"]'
-    );
-    expect(primaryMore).toBeInstanceOf(HTMLButtonElement);
-    await user.click(primaryMore as HTMLButtonElement);
-    const menu = await screen.findByRole('menu', { name: '转录 更多操作' });
-    await user.click(within(menu).getByRole('menuitem', { name: '编辑转录' }));
+    await user.click(screen.getByRole('button', { name: '编辑转录' }));
     await screen.findByRole('region', { name: '转录编辑器' });
+
+    expect(screen.queryByRole('button', { name: '打开表达入口' })).not.toBeInTheDocument();
 
     toastErrorSpy.mockClear();
     fireEvent.click(screen.getByRole('button', { name: '设置', hidden: true }));
@@ -2669,6 +2678,11 @@ describe('App', () => {
     await user.click(within(menu).getByRole('menuitem', { name: '清空转录' }));
 
     const clearDialog = await screen.findByRole('alertdialog', { name: '清空转录？' });
+    expect(
+      within(clearDialog).getByText(
+        '清空后会把转录保存为空，不会删除录音文件。确认后需要手动重新输入或重新生成转录。'
+      )
+    ).toBeInTheDocument();
     await user.click(within(clearDialog).getByRole('button', { name: '清空转录' }));
 
     await waitFor(() =>
@@ -3934,9 +3948,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My dirty editor body');
     currentNoteContent = {
@@ -3950,7 +3963,7 @@ describe('App', () => {
     });
 
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
-    expect(within(dialog).getByText('磁盘内容已变化。保存时将进行冲突检查。')).toBeInTheDocument();
+    expect(within(editor).getByText('磁盘内容已变化。保存时将进行冲突检查。')).toBeInTheDocument();
     expect(body).toHaveValue('My dirty editor body');
     expect(
       queryClient.getQueryData(workspaceSnapshotQueryKey({ workspaceId: 'ws_1' }))
@@ -4073,9 +4086,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     expect(body).toHaveValue('Disk before edit');
     currentNoteContent = {
       bodyByteLength: 21,
@@ -4089,7 +4101,7 @@ describe('App', () => {
 
     await waitFor(() => expect(body).toHaveValue('Disk changed by agent'));
     expect(
-      within(dialog).queryByText('磁盘内容已变化。保存时将进行冲突检查。')
+      within(editor).queryByText('磁盘内容已变化。保存时将进行冲突检查。')
     ).not.toBeInTheDocument();
   });
 
@@ -4196,9 +4208,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'Local body');
     currentNoteContent = {
@@ -4212,18 +4223,22 @@ describe('App', () => {
     });
 
     await waitFor(() =>
-      expect(within(dialog).getByText('磁盘内容已变化。保存时将进行冲突检查。')).toBeInTheDocument()
+      expect(within(editor).getByText('磁盘内容已变化。保存时将进行冲突检查。')).toBeInTheDocument()
     );
     expect(body).toHaveValue('Local body');
-    const exactContentInvalidations = invalidateSpy.mock.calls.filter(
-      ([options]) =>
-        options?.exact === true &&
-        Array.isArray(options.queryKey) &&
-        options.queryKey[0] === 'workspace' &&
-        (options.queryKey[1] === 'segment-content' ||
-          options.queryKey[1] === 'segment-supplement-content')
-    );
-    expect(exactContentInvalidations).toEqual([[{ exact: true, queryKey: noteContentKey }]]);
+    const contentInvalidation = invalidateSpy.mock.calls
+      .map(([options]) => options)
+      .find(
+        (options) =>
+          typeof options?.predicate === 'function' &&
+          options.predicate({ queryKey: noteContentKey } as never)
+      );
+    expect(contentInvalidation).toBeDefined();
+    expect(
+      contentInvalidation?.predicate?.({
+        queryKey: ['workspace', 'segment-content', 'other_workspace', 'mem_birthday', 'seg_note_1'],
+      } as never)
+    ).toBe(false);
   });
 
   it('coalesces overlapping external file refreshes and compares the queued result with current session truth', async () => {
@@ -10214,7 +10229,7 @@ describe('App', () => {
     expect(within(dialog).getByTestId('note-editor-surface-stage')).toBeInTheDocument();
     expect(within(dialog).getByRole('heading', { name: '正文' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('heading', { name: '笔记1' })).toBeNull();
-    expect(noteBody).toHaveClass('py-4');
+    expect(noteBody).toHaveClass('py-16');
     expect(within(dialog).queryByRole('button', { name: '插入图片' })).toBeNull();
     expect(dialog.querySelector('[data-slot="note-editor-toolbar-placeholder"]')).toBeNull();
     expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
@@ -10243,7 +10258,9 @@ describe('App', () => {
       'aria-current',
       'true'
     );
-    expect(await screen.findByText((text) => text.includes('## Cake plan'))).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cake plan' })).toBeInTheDocument();
+    expect(screen.getByText('Buy candles')).toBeInTheDocument();
+    expect(screen.queryByText((text) => text.includes('## Cake plan'))).toBeNull();
     expect(reoWorkspace.createMemory).not.toHaveBeenCalled();
     expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
@@ -10649,16 +10666,14 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Old note');
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    expect(within(dialog).getByRole('heading', { name: '正文' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('heading', { name: '笔记1' })).toBeNull();
-    const body = within(dialog).getByLabelText('笔记正文');
-    expect(body).toHaveClass('py-4');
+    const editor = await openInlineNoteEditor(user);
+    expect(within(editor).getByText('Markdown 正文')).toBeInTheDocument();
+    expect(within(editor).queryByText('笔记1')).toBeNull();
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, '---\ntitle: Updated\n---\n\nUpdated note');
-    expect(within(dialog).queryByText('Raw Markdown')).toBeNull();
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    expect(within(editor).queryByText('Raw Markdown')).toBeNull();
+    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledWith({
@@ -10762,16 +10777,15 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Old note');
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'Unsaved note');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
 
-    expect(await within(dialog).findByText('无法保存笔记正文。')).toBeInTheDocument();
+    expect(await screen.findByText('无法保存笔记正文。')).toBeInTheDocument();
     expect(body).toBeEnabled();
-    expect(within(dialog).getByRole('button', { name: '保存笔记' })).toBeEnabled();
+    expect(within(editor).getByRole('button', { name: '保存正文' })).toBeEnabled();
     expect(body).toHaveValue('Unsaved note');
   });
 
@@ -10871,12 +10885,11 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expect(body).toHaveValue('My unsaved body');
@@ -11006,12 +11019,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
     await user.click(
       within(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).getByRole(
         'button',
@@ -11031,7 +11043,7 @@ describe('App', () => {
 
     await waitFor(() => expect(body).toHaveValue('Disk reverted after conflict'));
     expect(
-      within(dialog).queryByText('磁盘内容已变化。保存时将进行冲突检查。')
+      within(editor).queryByText('磁盘内容已变化。保存时将进行冲突检查。')
     ).not.toBeInTheDocument();
   });
 
@@ -11136,12 +11148,11 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Disk before edit');
-    await user.click(screen.getByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
 
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expect(body).toHaveValue('My unsaved body');
@@ -11250,14 +11261,13 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText((text) => text.includes('Alpha bravo'));
-    await user.click(await screen.findByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文') as HTMLTextAreaElement;
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文') as HTMLTextAreaElement;
     const insertionOffset = initialBodyMarkdown.indexOf('Alpha ') + 'Alpha '.length;
     body.setSelectionRange(insertionOffset, insertionOffset);
 
-    expect(within(dialog).queryByRole('button', { name: '插入图片' })).toBeNull();
-    expect(within(dialog).queryByLabelText('图片附件')).toBeNull();
+    expect(within(editor).queryByRole('button', { name: '插入图片' })).toBeNull();
+    expect(within(editor).queryByLabelText('图片附件')).toBeNull();
 
     fireEvent.drop(body, {
       dataTransfer: {
@@ -11290,7 +11300,7 @@ describe('App', () => {
     await waitFor(() =>
       expect(body.selectionStart).toBe(insertionOffset + insertedAttachmentMarkdown.length)
     );
-    expect(dialog.querySelector('[data-slot="note-editor-toolbar-placeholder"]')).toBeNull();
+    expect(editor.querySelector('[data-slot="note-editor-toolbar-placeholder"]')).toBeNull();
   });
 
   it('inserts a pasted image attachment reference at the finalized Note cursor', async () => {
@@ -11384,9 +11394,8 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Alpha bravo');
-    await user.click(await screen.findByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文') as HTMLTextAreaElement;
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文') as HTMLTextAreaElement;
     const insertionOffset = 'Alpha '.length;
     body.setSelectionRange(insertionOffset, insertionOffset);
 
@@ -11500,9 +11509,8 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Alpha bravo');
-    await user.click(await screen.findByRole('button', { name: '编辑笔记 笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文') as HTMLTextAreaElement;
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文') as HTMLTextAreaElement;
     body.setSelectionRange('Alpha '.length, 'Alpha '.length);
 
     fireEvent.paste(body, {
@@ -11514,7 +11522,7 @@ describe('App', () => {
     await waitFor(() => expect(reoWorkspace.saveSegmentAttachment).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(body).not.toBeDisabled());
     expect(body).toHaveValue('Alpha bravo');
-    expect(within(dialog).getByRole('status')).toHaveTextContent('无法插入图片附件。');
+    expect(screen.getByRole('status')).toHaveTextContent('无法插入图片附件。');
   });
 
   it('maps Note Segment attachment image references to reo-attachment URLs only for attachments paths', async () => {
@@ -12066,7 +12074,7 @@ describe('App', () => {
     await findTitlebarMemoryControl('My seventh birthday');
     await user.click(await screen.findByRole('button', { name: '添加片段补充内容' }));
     await user.click(await screen.findByRole('menuitem', { name: '笔记补充' }));
-    let dialog = await screen.findByRole('dialog', { name: '笔记' });
+    const dialog = await screen.findByRole('dialog', { name: '笔记' });
     expect(within(dialog).getByRole('heading', { name: '补充笔记1' })).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText('笔记正文'), 'Supplement note');
     await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
@@ -12075,14 +12083,12 @@ describe('App', () => {
     expect(noteSupplementTab).toHaveAttribute('data-supplement-type', 'note');
     await user.click(noteSupplementTab);
     expect(await screen.findByText('Supplement note')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '编辑补充笔记 补充笔记1' }));
-    dialog = await screen.findByRole('dialog', { name: '笔记' });
-    expect(within(dialog).getByRole('heading', { name: '补充笔记1' })).toBeInTheDocument();
-    const body = within(dialog).getByLabelText('笔记正文');
-    expect(body).toHaveClass('py-4');
+    const editor = await openInlineSupplementNoteEditor(user);
+    expect(within(editor).getByText('Markdown 补充笔记')).toBeInTheDocument();
+    const body = within(editor).getByLabelText('补充笔记正文');
     await user.clear(body);
     await user.type(body, 'Edited supplement note');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenCalledWith({
@@ -12237,12 +12243,11 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await user.click(await screen.findByRole('tab', { name: '补充笔记1' }));
     await screen.findByText('Supplement note');
-    await user.click(screen.getByRole('button', { name: '编辑补充笔记 补充笔记1' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    const body = within(dialog).getByLabelText('笔记正文');
+    const editor = await openInlineSupplementNoteEditor(user);
+    const body = within(editor).getByLabelText('补充笔记正文');
     await user.clear(body);
     await user.type(body, 'My local supplement body');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expect(body).toHaveValue('My local supplement body');
@@ -12264,7 +12269,7 @@ describe('App', () => {
 
     await user.clear(body);
     await user.type(body, 'Second local body');
-    await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenLastCalledWith({
       workspaceHandle: 'workspace-handle-1',

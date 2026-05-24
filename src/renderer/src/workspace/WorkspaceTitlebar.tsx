@@ -110,19 +110,21 @@ export function WorkspaceTitlebar({
         data-slot="workspace-titlebar-actions"
         className="pointer-events-auto flex items-center gap-8 [-webkit-app-region:no-drag]"
       >
-        <Tooltip>
-          <Button asChild variant="ghostIcon" size="icon">
-            <TooltipTrigger
-              type="button"
-              aria-label="新建记忆"
-              className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
-              onClick={onCreateMemory}
-            >
-              <Plus className="size-16" aria-hidden="true" />
-            </TooltipTrigger>
-          </Button>
-          <TooltipContent side="bottom">新建记忆</TooltipContent>
-        </Tooltip>
+        {currentMemory ? null : (
+          <Tooltip>
+            <Button asChild variant="ghostIcon" size="icon">
+              <TooltipTrigger
+                type="button"
+                aria-label="新建记忆"
+                className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+                onClick={onCreateMemory}
+              >
+                <Plus className="size-16" aria-hidden="true" />
+              </TooltipTrigger>
+            </Button>
+            <TooltipContent side="bottom">新建记忆</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <Button asChild variant="ghostIcon" size="icon">
             <TooltipTrigger

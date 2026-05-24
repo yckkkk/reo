@@ -11,6 +11,10 @@ import {
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
+import type {
+  SavedNoteSegmentContent,
+  SavedNoteSegmentSupplementContent,
+} from './finalizedNoteContentSave';
 import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
 import type {
   SegmentSupplementTranscriptionRetryTarget,
@@ -344,8 +348,8 @@ function renderLoadedWorkspaceFrame({
   onDeleteSegmentSupplement = vi.fn(),
   onClearSegmentContent = vi.fn(),
   onEditSegmentTranscript = vi.fn(),
-  onEditNoteSegment,
-  onEditNoteSegmentSupplement,
+  onNoteSegmentContentSaved = vi.fn(),
+  onNoteSegmentSupplementContentSaved = vi.fn(),
   onRenameMemory = vi.fn(),
   onRenameSegmentContent = vi.fn(),
   onRenameSegment = vi.fn(),
@@ -400,6 +404,20 @@ function renderLoadedWorkspaceFrame({
       message: 'Segment not found',
     },
   }),
+  writeSegmentContent = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+      message: 'Segment not found',
+    },
+  }),
+  writeSegmentSupplementContent = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+      message: 'Note supplement not found',
+    },
+  }),
   session = workspaceSession(),
 }: {
   readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
@@ -413,10 +431,8 @@ function renderLoadedWorkspaceFrame({
   readonly onEditSegmentTranscript?: Parameters<
     typeof LoadedWorkspaceFrame
   >[0]['onEditSegmentTranscript'];
-  readonly onEditNoteSegment?: Parameters<typeof LoadedWorkspaceFrame>[0]['onEditNoteSegment'];
-  readonly onEditNoteSegmentSupplement?: Parameters<
-    typeof LoadedWorkspaceFrame
-  >[0]['onEditNoteSegmentSupplement'];
+  readonly onNoteSegmentContentSaved?: (saved: SavedNoteSegmentContent) => void;
+  readonly onNoteSegmentSupplementContentSaved?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegmentContent?: Parameters<
     typeof LoadedWorkspaceFrame
@@ -453,6 +469,8 @@ function renderLoadedWorkspaceFrame({
   readonly readSegmentContent?: ReturnType<typeof vi.fn>;
   readonly readSegmentSupplementContent?: ReturnType<typeof vi.fn>;
   readonly updateSegmentContentTabOrder?: ReturnType<typeof vi.fn>;
+  readonly writeSegmentContent?: ReturnType<typeof vi.fn>;
+  readonly writeSegmentSupplementContent?: ReturnType<typeof vi.fn>;
   readonly session?: WorkspaceSession;
 } = {}) {
   Object.defineProperty(window, 'reoWorkspace', {
@@ -469,6 +487,8 @@ function renderLoadedWorkspaceFrame({
       readSegmentContent,
       readSegmentSupplementContent,
       updateSegmentContentTabOrder,
+      writeSegmentContent,
+      writeSegmentSupplementContent,
       readMemoryDetail: vi.fn().mockResolvedValue({
         ok: false,
         error: {
@@ -507,8 +527,8 @@ function renderLoadedWorkspaceFrame({
         onDeleteSegmentSupplement={onDeleteSegmentSupplement}
         onClearSegmentContent={onClearSegmentContent}
         onEditSegmentTranscript={onEditSegmentTranscript}
-        {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
-        {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
+        onNoteSegmentContentSaved={onNoteSegmentContentSaved}
+        onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
         onRenameMemory={onRenameMemory}
         onRenameSegmentContent={onRenameSegmentContent}
         onRenameSegment={onRenameSegment}
@@ -606,25 +626,36 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onStartRecording).toHaveBeenCalledOnce();
   });
 
-  it('enables the Note expression action for the selected Memory', async () => {
-    const user = userEvent.setup();
+  it('keeps the global expression entry out of Memory Studio content states', async () => {
     const onStartNote = vi.fn();
 
-    renderLoadedWorkspaceFrame({
+    const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: birthdayMemory,
       onStartNote,
       session: workspaceSession({ memories: [birthdayMemory] }),
     });
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday',
+      detail: birthdayDetail,
+    });
 
-    const dock = screen.getByRole('region', { name: '表达入口' });
-    await user.click(within(dock).getByRole('button', { name: '打开表达入口' }));
-    const noteAction = within(dock).getByRole('menuitem', { name: '笔记' });
-
-    expect(noteAction).not.toHaveAttribute('aria-disabled', 'true');
-
-    await user.click(noteAction);
-
-    expect(onStartNote).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('region', { name: '表达入口' })).not.toBeInTheDocument();
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const createButton = await within(strip).findByRole('button', { name: '打开表达入口' });
+    const stripActions = strip.querySelector('[data-slot="memory-studio-segment-strip-actions"]');
+    expect(stripActions).toBeInstanceOf(HTMLElement);
+    expect(stripActions).toContainElement(createButton);
+    expect(createButton).toHaveTextContent('新片段');
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const contentTabActions = content.querySelector(
+      '[data-slot="memory-studio-content-tab-actions"]'
+    );
+    expect(contentTabActions).toBeInstanceOf(HTMLElement);
+    expect(
+      within(contentTabActions as HTMLElement).queryByRole('button', { name: '打开表达入口' })
+    ).not.toBeInTheDocument();
+    expect(onStartNote).not.toHaveBeenCalled();
   });
 
   it('renders right-side Memory containers without turning the stage into an segment timeline', () => {
@@ -839,11 +870,27 @@ describe('LoadedWorkspaceFrame', () => {
         },
       ],
     });
+    const onNoteSegmentContentSaved = vi.fn();
+    const writeSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId ?? 'write_segment_note',
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: request.bodyMarkdown,
+        bodyByteLength: 12,
+        baselineContentHash: 'b'.repeat(64),
+      },
+    }));
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
-      onEditNoteSegment: vi.fn(),
+      onNoteSegmentContentSaved,
       readSegmentContent,
       session,
+      writeSegmentContent,
     });
 
     queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
@@ -858,14 +905,15 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       await within(strip).findByRole('button', { name: '选择片段 Cake planning note' })
     ).toHaveAttribute('aria-current', 'true');
+    expect(within(strip).getByText('32 字节')).toBeInTheDocument();
+    expect(within(strip).queryByText('32B')).not.toBeInTheDocument();
+    expect(await within(content).findByRole('heading', { name: 'Cake plan' })).toBeInTheDocument();
+    expect(within(content).getByText('Buy candles')).toBeInTheDocument();
+    expect(within(content).queryByText((text) => text.includes('- Buy candles'))).toBeNull();
     expect(
-      await within(content).findByText((text) => text.includes('## Cake plan'))
-    ).toBeInTheDocument();
-    expect(within(content).getByText((text) => text.includes('- Buy candles'))).toBeInTheDocument();
-    expect(
-      within(content).getByRole('button', { name: '笔记 Cake planning note 暂不支持播放' })
-    ).toBeDisabled();
-    expect(within(content).queryByText('笔记播放暂未启用。')).toBeNull();
+      within(content).queryByRole('button', { name: '笔记 Cake planning note 暂不支持播放' })
+    ).not.toBeInTheDocument();
+    expect(content.querySelector('[data-slot="memory-studio-player"]')).not.toBeInTheDocument();
 
     const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
     const bodyTab = within(tabs).getByRole('tab', { name: '正文' });
@@ -915,17 +963,342 @@ describe('LoadedWorkspaceFrame', () => {
       within(bodyMenu).queryByRole('menuitem', { name: '重新生成转录' })
     ).not.toBeInTheDocument();
     expect(within(bodyMenu).queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
-    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(bodyMenu).getByRole('menuitem', { name: '编辑正文' }));
+    const menuInlineEditor = await within(content).findByLabelText('笔记正文');
+    expect(menuInlineEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    await userEvent.click(within(content).getByRole('button', { name: '取消' }));
     expect(bodyTab).toHaveAttribute('aria-selected', 'true');
 
     const bodyPanel = within(content).getByRole('tabpanel', { name: '正文' });
     expect(bodyPanel).toHaveAttribute('data-slot', 'markdown-content-surface');
+    expect(bodyPanel).toHaveClass('mt-14');
+    expect(bodyPanel).not.toHaveClass('mt-4');
     expect(bodyTab).toHaveAttribute('aria-controls', bodyPanel.id);
     expect(bodyPanel).toHaveAttribute('aria-labelledby', bodyTab.id);
     expect(within(bodyPanel).queryByRole('heading', { name: 'Cake planning note' })).toBeNull();
     expect(
-      within(bodyPanel).getByRole('button', { name: '编辑笔记 Cake planning note' })
-    ).toBeInTheDocument();
+      within(bodyPanel).queryByRole('button', { name: '编辑笔记 Cake planning note' })
+    ).toBeNull();
+    await userEvent.click(within(bodyPanel).getByRole('heading', { name: 'Cake plan' }));
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    expect(within(content).getByRole('button', { name: '保存正文' })).toBeInTheDocument();
+    fireEvent.change(inlineBodyEditor, { target: { value: 'Updated body' } });
+    await userEvent.click(within(content).getByRole('button', { name: '保存正文' }));
+    await waitFor(() =>
+      expect(writeSegmentContent).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_note',
+        bodyMarkdown: 'Updated body',
+        baselineContentHash: 'a'.repeat(64),
+      })
+    );
+    expect(onNoteSegmentContentSaved).toHaveBeenCalledWith({
+      expectedSession: session,
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_note',
+      title: 'Cake planning note',
+      bodyMarkdown: 'Updated body',
+      baselineContentHash: 'b'.repeat(64),
+      bodyByteLength: 12,
+    });
+
+    const contentTabRailRow = content.querySelector(
+      '[data-slot="memory-studio-content-tab-rail-row"]'
+    );
+    expect(contentTabRailRow).toBeInstanceOf(HTMLElement);
+    expect(contentTabRailRow).toHaveClass('justify-start');
+    expect(contentTabRailRow).not.toHaveClass('justify-between');
+    const contentTabActions = content.querySelector(
+      '[data-slot="memory-studio-content-tab-actions"]'
+    );
+    expect(contentTabActions).toBeInstanceOf(HTMLElement);
+    expect(tabs.nextElementSibling).toBe(contentTabActions);
+    const railEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '编辑笔记 Cake planning note',
+    });
+    const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '添加片段补充内容',
+    });
+    expect(railAddButton).toHaveTextContent('补充');
+    expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
+    expect(railAddButton).not.toHaveClass('gap-6', 'px-10');
+    expect(railEditButton).toHaveTextContent('编辑');
+    expect(railEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
+    expect(railEditButton.parentElement).toBe(contentTabActions);
+    expect(railAddButton.parentElement).toBe(contentTabActions);
+    expect(
+      railEditButton.compareDocumentPosition(railAddButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '编辑笔记 Cake planning note' })).toHaveLength(1);
+
+    await userEvent.click(railEditButton);
+    expect(await within(content).findByLabelText('笔记正文')).toHaveValue(
+      '## Cake plan\n\n- Buy candles\n- Call aunt Mei'
+    );
+  });
+
+  it('keeps a dirty inline Note edit mounted when another segment is selected', async () => {
+    const session = workspaceSession({
+      memories: [
+        {
+          ...birthdayMemory,
+          segmentCount: 2,
+          noteSegmentCount: 1,
+          audioSegmentCount: 1,
+          hasAnyNote: true,
+        },
+      ],
+    });
+    const note = noteSegment();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: '## Cake plan\n\n- Buy candles',
+        bodyByteLength: 28,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_dirty_inline_note_guard',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [note, birthdayVoiceSegment],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const noteButton = await within(strip).findByRole('button', {
+      name: '选择片段 Cake planning note',
+    });
+    const voiceButton = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
+
+    expect(noteButton).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+
+    await userEvent.click(voiceButton);
+
+    expect(noteButton).toHaveAttribute('aria-current', 'true');
+    expect(voiceButton).not.toHaveAttribute('aria-current', 'true');
+    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
+  });
+
+  it('keeps a dirty inline Note edit mounted when create actions or new supplements appear', async () => {
+    const user = userEvent.setup();
+    const onStartNote = vi.fn();
+    const onStartSegmentSupplementNote = vi.fn();
+    const session = workspaceSession({
+      memories: [
+        {
+          ...birthdayMemory,
+          segmentCount: 1,
+          noteSegmentCount: 1,
+          hasAnyNote: true,
+        },
+      ],
+    });
+    const note = noteSegment();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: '## Cake plan',
+        bodyByteLength: 11,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onStartNote,
+      onStartSegmentSupplementNote,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_dirty_inline_note_create_guard',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [note],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+
+    await user.click(within(strip).getByRole('button', { name: '打开表达入口' }));
+    await user.click(
+      within(await screen.findByRole('menu', { name: '表达方式' })).getByRole('menuitem', {
+        name: '笔记',
+      })
+    );
+
+    expect(onStartNote).not.toHaveBeenCalled();
+    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
+
+    await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));
+    await user.click(
+      within(await screen.findByRole('menu', { name: '片段补充内容' })).getByRole('menuitem', {
+        name: '笔记补充',
+      })
+    );
+
+    expect(onStartSegmentSupplementNote).not.toHaveBeenCalled();
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_dirty_inline_note_added_supplement',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        supplementCount: 1,
+        segments: [
+          {
+            ...note,
+            supplementCount: 1,
+            supplements: [
+              noteSupplement({
+                segmentId: note.segmentId,
+                supplementId: 'sup_note_followup',
+              }),
+            ],
+          },
+        ],
+      },
+    });
+
+    const transcriptTab = within(content).getByRole('tab', { name: '正文' });
+    expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
+    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
+  });
+
+  it('ignores an old-handle inline Note save result without closing the current editor', async () => {
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, segmentCount: 1, noteSegmentCount: 1, hasAnyNote: true }],
+    });
+    const reopenedSession = { ...session, workspaceHandle: 'workspace-handle-reopened' };
+    const onNoteSegmentContentSaved = vi.fn();
+    let resolveWrite!: (value: {
+      readonly ok: true;
+      readonly value: {
+        readonly bodyByteLength: number;
+        readonly saved: true;
+        readonly baselineContentHash: string;
+      };
+    }) => void;
+    const writeSegmentContent = vi.fn(
+      () =>
+        new Promise<{
+          readonly ok: true;
+          readonly value: {
+            readonly bodyByteLength: number;
+            readonly saved: true;
+            readonly baselineContentHash: string;
+          };
+        }>((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: '## Cake plan',
+        bodyByteLength: 11,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const { queryClient, rerender } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onNoteSegmentContentSaved,
+      readSegmentContent,
+      session,
+      writeSegmentContent,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_old_handle_inline_save',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [noteSegment()],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+    await userEvent.click(within(content).getByRole('button', { name: '保存正文' }));
+    expect(inlineBodyEditor).toBeDisabled();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <LoadedWorkspaceFrame
+          currentMemory={reopenedSession.snapshot.memories[0] ?? null}
+          onClearSegmentContent={vi.fn()}
+          onDeleteMemory={vi.fn()}
+          onDeleteSegment={vi.fn()}
+          onDeleteSegmentSupplement={vi.fn()}
+          onEditSegmentTranscript={vi.fn()}
+          onNoteSegmentContentSaved={onNoteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={vi.fn()}
+          onRenameMemory={vi.fn()}
+          onRenameSegment={vi.fn()}
+          onRenameSegmentContent={vi.fn()}
+          onRenameSegmentSupplement={vi.fn()}
+          onSelectMemory={vi.fn()}
+          onStartNote={vi.fn()}
+          onStartRecording={vi.fn()}
+          onStartSegmentSupplementNote={vi.fn()}
+          onStartSegmentSupplementRecording={vi.fn()}
+          workspaceSession={reopenedSession}
+        />
+      </QueryClientProvider>
+    );
+
+    resolveWrite({
+      ok: true,
+      value: { bodyByteLength: 12, saved: true, baselineContentHash: 'b'.repeat(64) },
+    });
+
+    await waitFor(() => expect(inlineBodyEditor).toBeEnabled());
+    expect(inlineBodyEditor).toHaveValue('Unsaved body');
+    expect(onNoteSegmentContentSaved).not.toHaveBeenCalled();
   });
 
   it('keeps Memory Studio as a first-viewport studio surface instead of a centered card list', async () => {
@@ -2134,6 +2507,37 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(tabRailRow).toBeInstanceOf(HTMLElement);
     expect(tabRailRow).toContainElement(tabs);
+    expect(await within(content).findByText('Birthday transcript')).toBeInTheDocument();
+    const transcriptSurfacePanel = within(content).getByRole('tabpanel', { name: '转录' });
+    expect(transcriptSurfacePanel).toHaveClass('mt-14');
+    expect(transcriptSurfacePanel).not.toHaveClass('mt-4');
+    const contentTabActions = content.querySelector(
+      '[data-slot="memory-studio-content-tab-actions"]'
+    );
+    expect(contentTabActions).toBeInstanceOf(HTMLElement);
+    const railTranscriptEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '编辑转录',
+    });
+    const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '添加片段补充内容',
+    });
+    expect(railTranscriptEditButton.parentElement).toBe(contentTabActions);
+    expect(railTranscriptEditButton).toHaveTextContent('编辑');
+    expect(railTranscriptEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
+    expect(railAddButton.parentElement).toBe(contentTabActions);
+    expect(
+      railTranscriptEditButton.compareDocumentPosition(railAddButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    await user.click(railTranscriptEditButton);
+    expect(onEditSegmentTranscript).toHaveBeenCalledWith({
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      title: '转录',
+      transcriptText: 'Birthday transcript',
+      baselineTranscriptHash: 'b'.repeat(64),
+    });
+    onEditSegmentTranscript.mockClear();
     expect(primaryPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
     expect(transcriptTabItem).toBeInstanceOf(HTMLElement);
@@ -2193,6 +2597,7 @@ describe('LoadedWorkspaceFrame', () => {
       transcriptText: 'Birthday transcript',
       baselineTranscriptHash: 'b'.repeat(64),
     });
+    onEditSegmentTranscript.mockClear();
     await user.click(transcriptMore as HTMLButtonElement);
     const clearTranscriptMenu = await screen.findByRole('menu', { name: '转录 更多操作' });
     await user.click(within(clearTranscriptMenu).getByRole('menuitem', { name: '清空转录' }));
@@ -2321,7 +2726,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(supplementPanel).toHaveAttribute('data-slot', 'markdown-content-surface');
     expect(supplementItem).toHaveAttribute('aria-controls', supplementPanel.id);
     expect(supplementPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
-    expect(await within(supplementPanel).findByText(/## Follow-up/)).toBeInTheDocument();
+    expect(
+      await within(supplementPanel).findByRole('heading', { name: 'Follow-up' })
+    ).toBeInTheDocument();
     expect(within(supplementPanel).queryByRole('button', { name: /编辑/ })).toBeNull();
     expect(within(content).queryByRole('button', { name: /播放补充录音/ })).toBeNull();
     expect(readSegmentSupplementContent).toHaveBeenCalledWith(
@@ -2333,6 +2740,167 @@ describe('LoadedWorkspaceFrame', () => {
         supplementId: 'sup_birthday_note',
       })
     );
+  });
+
+  it('places the active note supplement edit action in the content tab rail before the add button', async () => {
+    const onNoteSegmentSupplementContentSaved = vi.fn();
+    const writeSegmentSupplementContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId ?? 'write_segment_supplement_note',
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        type: 'note',
+        title: '补充笔记',
+        bodyMarkdown: request.bodyMarkdown,
+        bodyByteLength: 21,
+        baselineContentHash: 'b'.repeat(64),
+      },
+    }));
+    const readSegmentSupplementContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        type: 'note',
+        title: '补充笔记',
+        bodyMarkdown: '## Follow-up\n\n- Capture the cake idea',
+        bodyByteLength: 36,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([noteSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onNoteSegmentSupplementContentSaved,
+      readSegmentSupplementContent,
+      session,
+      writeSegmentSupplementContent,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_supplement_tab_edit_action',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const supplementItem = await within(tabs).findByRole('tab', { name: '补充笔记' });
+    await userEvent.click(supplementItem);
+
+    const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
+    expect(
+      await within(supplementPanel).findByRole('heading', { name: 'Follow-up' })
+    ).toBeInTheDocument();
+    expect(
+      within(supplementPanel).queryByRole('button', { name: '编辑补充笔记 补充笔记' })
+    ).toBeNull();
+    await userEvent.click(within(supplementPanel).getByRole('heading', { name: 'Follow-up' }));
+    const inlineSupplementEditor = await within(content).findByLabelText('补充笔记正文');
+    expect(inlineSupplementEditor).toHaveValue('## Follow-up\n\n- Capture the cake idea');
+    expect(within(content).getByRole('button', { name: '保存补充笔记' })).toBeInTheDocument();
+    fireEvent.change(inlineSupplementEditor, { target: { value: 'Updated supplement' } });
+    await userEvent.click(within(content).getByRole('button', { name: '保存补充笔记' }));
+    await waitFor(() =>
+      expect(writeSegmentSupplementContent).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        supplementId: 'sup_birthday_note',
+        bodyMarkdown: 'Updated supplement',
+        baselineContentHash: 'a'.repeat(64),
+      })
+    );
+    expect(onNoteSegmentSupplementContentSaved).toHaveBeenCalledWith({
+      expectedSession: session,
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_note',
+      title: '补充笔记',
+      bodyMarkdown: 'Updated supplement',
+      baselineContentHash: 'b'.repeat(64),
+      bodyByteLength: 21,
+    });
+
+    const contentTabRailRow = content.querySelector(
+      '[data-slot="memory-studio-content-tab-rail-row"]'
+    );
+    expect(contentTabRailRow).toBeInstanceOf(HTMLElement);
+    const contentTabActions = content.querySelector(
+      '[data-slot="memory-studio-content-tab-actions"]'
+    );
+    expect(contentTabActions).toBeInstanceOf(HTMLElement);
+    const railEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '编辑补充笔记 补充笔记',
+    });
+    const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
+      name: '添加片段补充内容',
+    });
+    expect(railEditButton.parentElement).toBe(contentTabActions);
+    expect(railEditButton).toHaveTextContent('编辑');
+    expect(railEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
+    expect(railAddButton.parentElement).toBe(contentTabActions);
+    expect(
+      railEditButton.compareDocumentPosition(railAddButton) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '编辑补充笔记 补充笔记' })).toHaveLength(1);
+
+    await userEvent.click(railEditButton);
+    expect(await within(content).findByLabelText('补充笔记正文')).toHaveValue(
+      '## Follow-up\n\n- Capture the cake idea'
+    );
+  });
+
+  it('uses supplement-specific empty copy for an empty note supplement', async () => {
+    const readSegmentSupplementContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        type: 'note',
+        title: '补充笔记',
+        bodyMarkdown: '',
+        bodyByteLength: 0,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([noteSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readSegmentSupplementContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_empty_note_supplement',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await userEvent.click(within(content).getByRole('tab', { name: '补充笔记' }));
+
+    const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
+    expect(
+      await within(supplementPanel).findByText('这条补充笔记还没有正文。')
+    ).toBeInTheDocument();
+    const emptyEditButton = within(supplementPanel).getByRole('button', { name: '写补充笔记' });
+    expect(emptyEditButton).toHaveClass('min-h-32', 'rounded-md');
+    await userEvent.click(emptyEditButton);
+    expect(await within(content).findByLabelText('补充笔记正文')).toHaveValue('');
+    expect(within(supplementPanel).queryByText('这条笔记还没有正文。')).toBeNull();
   });
 
   it('shows a retryable status when supplement playback fails', async () => {
@@ -2463,6 +3031,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(supplementTabItem).toBeInstanceOf(HTMLElement);
     expect(transcriptTabItem).toHaveClass('max-w-[170px]');
     expect(supplementTabItem).toHaveClass('max-w-[170px]');
+    expect(transcriptTabItem).toHaveClass('ring-1', 'ring-border');
+    expect(supplementTabItem).not.toHaveClass('hover:bg-secondary/50');
+    expect(supplementTabItem).toHaveClass('hover:bg-transparent');
     expect(within(tabs).getByRole('tab', { name: '转录' })).toHaveClass('max-w-[130px]');
     expect(supplementTabButton).toHaveClass('max-w-[130px]');
     expect(moreAnchor).toHaveClass('group-hover/supplement-tab:max-w-20');

@@ -53,6 +53,11 @@ import {
 } from './workspace/RecordingOverlay';
 import { NoteEditorOverlay } from './workspace/NoteEditorOverlay';
 import {
+  saveFinalizedNoteSegmentContent,
+  type SavedNoteSegmentContent,
+  type SavedNoteSegmentSupplementContent,
+} from './workspace/finalizedNoteContentSave';
+import {
   TranscriptEditorOverlay,
   type TranscriptEditorTarget,
 } from './workspace/TranscriptEditorOverlay';
@@ -93,7 +98,6 @@ import {
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
   saveTranscript,
-  writeSegmentContent,
   updateMemorySpaceTitle,
   updateMemoryTitle,
   updateSegmentContentTitle,
@@ -266,33 +270,6 @@ function createPendingSegmentDeleteQueryGuard(
 
     return false;
   };
-}
-
-function activeNoteEditorContentQueryKey({
-  target,
-  workspaceId,
-}: {
-  readonly target: NoteEditorTarget | null;
-  readonly workspaceId: string;
-}): readonly unknown[] | null {
-  if (target?.kind === 'edit-segment') {
-    return segmentContentQueryKey({
-      workspaceId,
-      memoryId: target.memoryId,
-      segmentId: target.segmentId,
-    });
-  }
-
-  if (target?.kind === 'edit-segment-supplement') {
-    return segmentSupplementContentQueryKey({
-      workspaceId,
-      memoryId: target.memoryId,
-      segmentId: target.segmentId,
-      supplementId: target.supplementId,
-    });
-  }
-
-  return null;
 }
 
 function addRunningKey(current: ReadonlySet<string>, key: string): ReadonlySet<string> {
@@ -679,7 +656,6 @@ export function App() {
     new Map()
   );
   const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
-  const noteEditorTargetRef = useRef<NoteEditorTarget | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
   const recordingRecoveryActionIdRef = useRef(0);
@@ -800,10 +776,6 @@ export function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [noteEditorTarget, recordingCloseBlocked, recordingTarget, transcriptEditorTarget]);
-
-  useEffect(() => {
-    noteEditorTargetRef.current = noteEditorTarget;
-  }, [noteEditorTarget]);
 
   useEffect(() => {
     if (!workspaceSession || recordingTarget || noteEditorTarget) {
@@ -988,16 +960,17 @@ export function App() {
 
       if (sameWorkspaceSnapshot(currentSession.snapshot, projectedSnapshot)) {
         setWorkspaceEntryError(null);
-        const noteEditorQueryKey = activeNoteEditorContentQueryKey({
-          target: noteEditorTargetRef.current,
-          workspaceId: response.value.workspaceId,
+        void queryClient.invalidateQueries({
+          predicate: (query) => {
+            const observerCount =
+              typeof query.getObserversCount === 'function' ? query.getObserversCount() : 1;
+            return (
+              observerCount > 0 &&
+              workspaceContentQueryBelongsToWorkspace(query.queryKey, response.value.workspaceId) &&
+              !queryKeyMatchesProtectedPendingDelete(query.queryKey)
+            );
+          },
         });
-        if (noteEditorQueryKey && !queryKeyMatchesProtectedPendingDelete(noteEditorQueryKey)) {
-          void queryClient.invalidateQueries({
-            exact: true,
-            queryKey: noteEditorQueryKey,
-          });
-        }
         return;
       }
 
@@ -2031,15 +2004,8 @@ export function App() {
     });
   }
 
-  function handleNoteSegmentContentSaved(saved: {
-    readonly bodyByteLength: number;
-    readonly bodyMarkdown: string;
-    readonly baselineContentHash: string;
-    readonly memoryId: string;
-    readonly segmentId: string;
-    readonly title: string;
-  }) {
-    const session = activeWorkspaceSession;
+  function handleNoteSegmentContentSaved(saved: SavedNoteSegmentContent) {
+    const session = saved.expectedSession;
     if (!workspaceSessionMatches(session)) {
       return;
     }
@@ -2084,16 +2050,8 @@ export function App() {
     );
   }
 
-  function handleNoteSegmentSupplementContentSaved(saved: {
-    readonly bodyByteLength: number;
-    readonly bodyMarkdown: string;
-    readonly baselineContentHash: string;
-    readonly memoryId: string;
-    readonly segmentId: string;
-    readonly supplementId: string;
-    readonly title: string;
-  }) {
-    const session = activeWorkspaceSession;
+  function handleNoteSegmentSupplementContentSaved(saved: SavedNoteSegmentSupplementContent) {
+    const session = saved.expectedSession;
     if (!workspaceSessionMatches(session)) {
       return;
     }
@@ -3946,60 +3904,6 @@ export function App() {
     });
   }
 
-  function requestEditNoteSegment(target: {
-    readonly baselineContentHash: string;
-    readonly bodyMarkdown: string;
-    readonly memoryId: string;
-    readonly segmentId: string;
-    readonly title: string;
-  }) {
-    if (blockWorkspaceFlowInterruption()) {
-      return;
-    }
-
-    setSelectedMemoryId(target.memoryId);
-    setNoteEditorFlow({
-      status: 'active',
-      open: true,
-      target: {
-        kind: 'edit-segment',
-        memoryId: target.memoryId,
-        segmentId: target.segmentId,
-        title: target.title,
-        bodyMarkdown: target.bodyMarkdown,
-        baselineContentHash: target.baselineContentHash,
-      },
-    });
-  }
-
-  function requestEditNoteSegmentSupplement(target: {
-    readonly baselineContentHash: string;
-    readonly bodyMarkdown: string;
-    readonly memoryId: string;
-    readonly segmentId: string;
-    readonly supplementId: string;
-    readonly title: string;
-  }) {
-    if (blockWorkspaceFlowInterruption()) {
-      return;
-    }
-
-    setSelectedMemoryId(target.memoryId);
-    setNoteEditorFlow({
-      status: 'active',
-      open: true,
-      target: {
-        kind: 'edit-segment-supplement',
-        memoryId: target.memoryId,
-        segmentId: target.segmentId,
-        supplementId: target.supplementId,
-        title: target.title,
-        bodyMarkdown: target.bodyMarkdown,
-        baselineContentHash: target.baselineContentHash,
-      },
-    });
-  }
-
   function requestStartSegmentSupplementRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
@@ -4161,31 +4065,25 @@ export function App() {
         return;
       }
 
-      const response = await writeSegmentContent({
-        workspaceHandle: session.workspaceHandle,
-        workspaceId: session.workspaceId,
+      const result = await saveFinalizedNoteSegmentContent({
+        workspaceSession: session,
         memoryId: target.memoryId,
         segmentId: target.segment.segmentId,
+        title: target.segment.title,
         bodyMarkdown: '',
         baselineContentHash: target.baselineContentHash,
       });
       if (!workspaceSessionMatches(session)) {
         return;
       }
-      if (!response.ok) {
+      if (!result.ok) {
         toast.error('无法清空正文。', {
-          description: workspaceErrorDisplayMessage(response.error, '无法清空正文。'),
+          description:
+            result.kind === 'conflict' ? '磁盘内容已变化，请重新打开后再清空。' : result.message,
         });
         return;
       }
-      handleNoteSegmentContentSaved({
-        bodyByteLength: response.value.bodyByteLength,
-        bodyMarkdown: '',
-        baselineContentHash: response.value.baselineContentHash,
-        memoryId: target.memoryId,
-        segmentId: target.segment.segmentId,
-        title: target.segment.title,
-      });
+      handleNoteSegmentContentSaved(result.saved);
       setSegmentContentClearTarget(null);
     } catch (error) {
       toast.error(target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。', {
@@ -4293,8 +4191,8 @@ export function App() {
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
             onClearSegmentContent={setSegmentContentClearTarget}
             onEditSegmentTranscript={setTranscriptEditorTarget}
-            onEditNoteSegment={requestEditNoteSegment}
-            onEditNoteSegmentSupplement={requestEditNoteSegmentSupplement}
+            onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
+            onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
             onSegmentFocusConsumed={(segmentId) => {
               setSegmentFocusIntent((currentIntent) =>
                 currentIntent?.segmentId === segmentId ? null : currentIntent
@@ -4306,6 +4204,11 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
+            expressionDockVisible={
+              recordingTarget === null &&
+              noteEditorTarget === null &&
+              transcriptEditorTarget === null
+            }
             onStartNote={requestStartNote}
             onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
@@ -4329,8 +4232,6 @@ export function App() {
       ) : null}
       {noteEditorTarget ? (
         <NoteEditorOverlay
-          onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
-          onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
           onNoteSegmentFinalized={handleNoteSegmentFinalized}
           onOpenChange={handleNoteEditorOpenChange}
           onSegmentSupplementNoteFinalized={handleSegmentSupplementNoteFinalized}
@@ -4398,8 +4299,8 @@ export function App() {
         confirmLabel={segmentContentClearTarget?.contentKind === 'body' ? '清空正文' : '清空转录'}
         description={
           segmentContentClearTarget?.contentKind === 'body'
-            ? `将清空「${segmentContentClearTarget.currentTitle}」的正文内容。`
-            : `将清空「${segmentContentClearTarget?.currentTitle ?? '转录'}」的转录正文。`
+            ? `清空后会把「${segmentContentClearTarget.currentTitle}」保存为空，不会删除文件或附件。确认后需要手动重新输入内容。`
+            : '清空后会把转录保存为空，不会删除录音文件。确认后需要手动重新输入或重新生成转录。'
         }
         disabled={segmentContentClearPending}
         onConfirm={() => {

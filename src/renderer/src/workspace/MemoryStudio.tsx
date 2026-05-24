@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Ellipsis, FileText, Mic, Pause, Play, Plus } from 'lucide-react';
+import { Ellipsis, FileText, Mic, Pause, PencilLine, Play, Plus } from 'lucide-react';
 import {
   useEffect,
   forwardRef,
@@ -16,6 +16,16 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import {
@@ -24,6 +34,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Waveform } from '@/components/ui/waveform';
 import {
   canDecodeAudioBytesToWaveformData,
@@ -38,7 +49,19 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
+import { LightweightMarkdownEditorSurface } from './LightweightMarkdownEditorSurface';
 import { MarkdownContentSurface } from './MarkdownContentSurface';
+import { byteLengthLabel } from './memoryLabels';
+import type { NoteContentConflict } from './noteEditorModel';
+import {
+  type FinalizedNoteContentSaveResult,
+  saveFinalizedNoteSegmentContent,
+  saveFinalizedNoteSegmentSupplementContent,
+  savedNoteSegmentContentFromConflict,
+  savedNoteSegmentSupplementContentFromConflict,
+  type SavedNoteSegmentContent,
+  type SavedNoteSegmentSupplementContent,
+} from './finalizedNoteContentSave';
 import {
   SegmentTranscriptView,
   type SegmentTranscriptOutcome,
@@ -71,6 +94,11 @@ import {
   segmentContentQueryOptions,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
+import { useLightweightMarkdownFormatting } from './useLightweightMarkdownFormatting';
+import {
+  useMarkdownImageAttachment,
+  type MarkdownImageAttachmentTarget,
+} from './useMarkdownImageAttachment';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
@@ -80,13 +108,15 @@ type MemoryStudioProps = {
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
   readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
-  readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
-  readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
+  readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
+  readonly onStartNote?: () => void;
+  readonly onStartRecording?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly segmentFocusIntent?: string | null;
@@ -134,23 +164,6 @@ export type SegmentSupplementNoteTarget = {
   readonly title: string;
 };
 
-export type NoteSegmentEditTarget = {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly title: string;
-};
-
-export type NoteSegmentSupplementEditTarget = {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly supplementId: string;
-  readonly title: string;
-};
-
 const CAROUSEL_SCROLL_RATIO = 0.8;
 const SCROLL_EDGE_EPSILON_PX = 24;
 
@@ -165,6 +178,7 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 };
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
 const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
+const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存或取消当前笔记编辑。';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
@@ -172,6 +186,13 @@ type AudioMemorySegment = Extract<MemorySegment, { readonly type: 'audio' }>;
 type NoteMemorySegment = Extract<MemorySegment, { readonly type: 'note' }>;
 type AudioMemorySegmentSupplement = Extract<MemorySegmentSupplement, { readonly type: 'audio' }>;
 type NoteMemorySegmentSupplement = Extract<MemorySegmentSupplement, { readonly type: 'note' }>;
+type InlineMarkdownEditTarget =
+  | { readonly kind: 'segment'; readonly segmentId: string }
+  | {
+      readonly kind: 'segment-supplement';
+      readonly segmentId: string;
+      readonly supplementId: string;
+    };
 type LastTranscriptionAttempt = AudioMemorySegment['lastTranscriptionAttempt'];
 type TranscriptProjection =
   | { readonly exists: boolean; readonly text: string; readonly baselineHash: string }
@@ -664,8 +685,8 @@ function contentTabPillClassName(active: boolean, hasActions = false) {
     hasActions ? CONTENT_TAB_PILL_WITH_ACTIONS_MAX_WIDTH_CLASS : CONTENT_TAB_PILL_MAX_WIDTH_CLASS,
     CONTENT_TAB_MOTION_CLASS,
     active
-      ? 'bg-secondary text-foreground'
-      : 'bg-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
+      ? 'bg-secondary text-foreground ring-1 ring-border'
+      : 'bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground',
   ].join(' ');
 }
 
@@ -1027,6 +1048,35 @@ function PrimaryContentTab({
         }
       })}
     </div>
+  );
+}
+
+function ContentTabRailEditButton({
+  label,
+  onClick,
+}: {
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghostIcon"
+            size="compact"
+            type="button"
+            aria-label={label}
+            className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            onClick={onClick}
+          >
+            <PencilLine aria-hidden="true" className="size-16" />
+            <span>编辑</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">展开编辑</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -1412,46 +1462,46 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
   );
 });
 
-function noopPlaybackPointerHandler() {
-  return undefined;
-}
-
-async function noopPlaybackToggle() {
-  return undefined;
-}
-
-function noopPlaybackKeyHandler(_event: KeyboardEvent<HTMLDivElement>) {
-  return undefined;
-}
-
-function NoteSegmentPlaybackPlaceholder({
-  loading,
-  segment,
+function MemoryStudioExpressionMenu({
+  onStartNote,
+  onStartRecording,
 }: {
-  readonly loading: boolean;
-  readonly segment: NoteMemorySegment;
+  readonly onStartNote?: () => void;
+  readonly onStartRecording?: () => void;
 }) {
+  if (!onStartRecording && !onStartNote) {
+    return null;
+  }
+
   return (
-    <MemoryStudioAudioPlaybackRow
-      audioAvailable={false}
-      durationMs={0}
-      loading={loading}
-      onKeyDown={noopPlaybackKeyHandler}
-      onPointerCancel={noopPlaybackPointerHandler}
-      onPointerDown={noopPlaybackPointerHandler}
-      onPointerMove={noopPlaybackPointerHandler}
-      onPointerUp={noopPlaybackPointerHandler}
-      onTogglePlayback={noopPlaybackToggle}
-      playButtonLabel={`笔记 ${segment.title} 暂不支持播放`}
-      playbackTimeMs={0}
-      playbackProgress={0}
-      playing={false}
-      rowSlot="memory-studio-player"
-      waveformData={SEGMENT_PREVIEW_WAVEFORM_DATA}
-      waveformLabel="笔记播放占位"
-      waveformSlot="memory-studio-playback-waveform"
-      waveformSource="unavailable"
-    />
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghostIcon"
+          size="compact"
+          type="button"
+          aria-label="打开表达入口"
+          className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+        >
+          <Plus aria-hidden="true" className="size-16" />
+          <span>新片段</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent aria-label="表达方式" aria-labelledby={undefined} align="end">
+        {onStartRecording ? (
+          <DropdownMenuItem onSelect={onStartRecording}>
+            <Mic aria-hidden="true" className="size-16" />
+            录音
+          </DropdownMenuItem>
+        ) : null}
+        {onStartNote ? (
+          <DropdownMenuItem onSelect={onStartNote}>
+            <PencilLine aria-hidden="true" className="size-16" />
+            笔记
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1510,7 +1560,7 @@ function SegmentTranscriptMarkdownPanel({
     <MarkdownContentSurface
       ariaLabelledBy={ariaLabelledBy}
       bodyMarkdown={bodyMarkdown}
-      className="mt-4"
+      className="mt-14"
       dataSlot="memory-studio-transcript-scroll"
       emptyCopy={emptyCopy}
       errorCopy={copy.error}
@@ -2057,31 +2107,340 @@ function readSegmentStripItemStep(element: HTMLElement): number {
     : SEGMENT_STRIP_CARD_ESTIMATE_PX;
 }
 
+type InlineMarkdownContentEditorProps<TSaved> = {
+  readonly attachmentTarget: MarkdownImageAttachmentTarget;
+  readonly baselineContentHash: string;
+  readonly failureCopy: string;
+  readonly headerLabel: string;
+  readonly initialMarkdown: string;
+  readonly onCancel: () => void;
+  readonly onDiskVersionAccepted: (markdown: string, baselineContentHash: string) => void;
+  readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onSave: (
+    markdown: string,
+    baselineContentHash: string
+  ) => Promise<FinalizedNoteContentSaveResult<TSaved>>;
+  readonly onSavedContent: (saved: TSaved) => void;
+  readonly onSaved: () => void;
+  readonly placeholder: string;
+  readonly saveLabel: string;
+  readonly surfaceTestId: string;
+  readonly targetKey: string;
+  readonly textareaId: string;
+  readonly textareaLabel: string;
+  readonly workspaceSession: WorkspaceSession;
+};
+
+function InlineMarkdownContentEditor<TSaved>({
+  attachmentTarget,
+  baselineContentHash,
+  failureCopy,
+  headerLabel,
+  initialMarkdown,
+  onCancel,
+  onDiskVersionAccepted,
+  onDirtyChange,
+  onSave,
+  onSavedContent,
+  onSaved,
+  placeholder,
+  saveLabel,
+  surfaceTestId,
+  targetKey,
+  textareaId,
+  textareaLabel,
+  workspaceSession,
+}: InlineMarkdownContentEditorProps<TSaved>) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const loadedTargetKeyRef = useRef(targetKey);
+  const workspaceSessionKey = `${workspaceSession.workspaceHandle}\0${workspaceSession.workspaceId}`;
+  const latestWorkspaceSessionKeyRef = useRef(workspaceSessionKey);
+  const [markdown, setMarkdown] = useState(initialMarkdown);
+  const [cleanMarkdown, setCleanMarkdown] = useState(initialMarkdown);
+  const [activeBaselineContentHash, setActiveBaselineContentHash] = useState(baselineContentHash);
+  const [pending, setPending] = useState(false);
+  const [conflict, setConflict] = useState<NoteContentConflict | null>(null);
+  const [diskChangeNoticeVisible, setDiskChangeNoticeVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const dirty = markdown !== cleanMarkdown;
+  const imageAttachment = useMarkdownImageAttachment({
+    disabled: pending,
+    onChange: setMarkdown,
+    onError: setErrorMessage,
+    target: attachmentTarget,
+    textareaRef,
+    value: markdown,
+    workspaceSession,
+  });
+  const disabled = pending || imageAttachment.pending;
+  const applyMarkdownFormat = useLightweightMarkdownFormatting({
+    disabled,
+    onChange: setMarkdown,
+    textareaRef,
+    value: markdown,
+  });
+
+  useEffect(() => {
+    if (loadedTargetKeyRef.current !== targetKey) {
+      loadedTargetKeyRef.current = targetKey;
+      setMarkdown(initialMarkdown);
+      setCleanMarkdown(initialMarkdown);
+      setActiveBaselineContentHash(baselineContentHash);
+      setPending(false);
+      setConflict(null);
+      setDiskChangeNoticeVisible(false);
+      setErrorMessage(null);
+      return;
+    }
+
+    if (baselineContentHash === activeBaselineContentHash) {
+      setDiskChangeNoticeVisible(false);
+      return;
+    }
+
+    if (dirty) {
+      setDiskChangeNoticeVisible(true);
+      return;
+    }
+
+    setMarkdown(initialMarkdown);
+    setCleanMarkdown(initialMarkdown);
+    setActiveBaselineContentHash(baselineContentHash);
+    setDiskChangeNoticeVisible(false);
+    setErrorMessage(null);
+  }, [activeBaselineContentHash, baselineContentHash, dirty, initialMarkdown, targetKey]);
+
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [targetKey]);
+
+  useEffect(() => {
+    latestWorkspaceSessionKeyRef.current = workspaceSessionKey;
+    setPending(false);
+    setConflict(null);
+  }, [workspaceSessionKey]);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
+
+  async function saveMarkdown(nextBaselineContentHash = activeBaselineContentHash) {
+    if (imageAttachment.pending) {
+      return;
+    }
+    setPending(true);
+    setErrorMessage(null);
+    const saveWorkspaceSessionKey = workspaceSessionKey;
+    try {
+      const result = await onSave(markdown, nextBaselineContentHash);
+      if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
+        setPending(false);
+        return;
+      }
+      if (result.ok) {
+        onSavedContent(result.saved);
+        setCleanMarkdown(markdown);
+        setPending(false);
+        onSaved();
+        return;
+      }
+      if (result.kind === 'conflict') {
+        setConflict(result.conflict);
+        setPending(false);
+        return;
+      }
+      setErrorMessage(result.message);
+      setPending(false);
+    } catch (error) {
+      if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
+        setPending(false);
+        return;
+      }
+      setErrorMessage(unknownErrorDisplayMessage(error, failureCopy));
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="mt-14 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-10"
+        data-slot="memory-studio-inline-markdown-editor"
+      >
+        <LightweightMarkdownEditorSurface
+          disabled={disabled}
+          headerLabel={headerLabel}
+          notice={diskChangeNoticeVisible ? '磁盘内容已变化。保存时将进行冲突检查。' : null}
+          onChange={setMarkdown}
+          onDragOver={imageAttachment.handleDragOver}
+          onDrop={imageAttachment.handleDrop}
+          onFormat={applyMarkdownFormat}
+          onPaste={imageAttachment.handlePaste}
+          onSave={() => void saveMarkdown()}
+          placeholder={placeholder}
+          saveDisabled={disabled}
+          saveLabel={saveLabel}
+          surfaceTestId={surfaceTestId}
+          textareaId={textareaId}
+          textareaLabel={textareaLabel}
+          textareaRef={textareaRef}
+          toolbarDisabled={disabled}
+          value={markdown}
+        />
+        <div className="flex min-h-32 items-center justify-between gap-12">
+          {errorMessage ? (
+            <p role="status" className="text-ui-sm leading-ui-sm text-muted-foreground">
+              {errorMessage}
+            </p>
+          ) : (
+            <span aria-hidden="true" />
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="compact"
+            disabled={disabled}
+            onClick={onCancel}
+          >
+            取消
+          </Button>
+        </div>
+      </div>
+      <AlertDialog
+        open={conflict !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setConflict(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>外部修改已检测</AlertDialogTitle>
+            <AlertDialogDescription>
+              磁盘内容已变化。请选择保留当前编辑，或使用磁盘版本。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending || !conflict}
+              onClick={() => {
+                if (!conflict) {
+                  return;
+                }
+                setMarkdown(conflict.currentBodyMarkdown);
+                setCleanMarkdown(conflict.currentBodyMarkdown);
+                setActiveBaselineContentHash(conflict.currentBaselineContentHash);
+                setDiskChangeNoticeVisible(false);
+                setErrorMessage(null);
+                onDiskVersionAccepted(
+                  conflict.currentBodyMarkdown,
+                  conflict.currentBaselineContentHash
+                );
+                setConflict(null);
+              }}
+            >
+              使用磁盘版本
+            </AlertDialogAction>
+            <AlertDialogAction
+              disabled={pending || !conflict}
+              onClick={() => {
+                if (!conflict) {
+                  return;
+                }
+                const nextBaselineContentHash = conflict.currentBaselineContentHash;
+                setActiveBaselineContentHash(nextBaselineContentHash);
+                setConflict(null);
+                void saveMarkdown(nextBaselineContentHash);
+              }}
+            >
+              保留我的修改
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function SegmentSupplementNotePanel({
   ariaLabelledBy,
+  editing,
+  onCancelEdit,
+  onDiskVersionAccepted,
+  onDirtyChange = () => undefined,
   onEdit,
+  onSaveEdit,
+  onSavedContent = () => undefined,
   panelId,
   supplement,
+  supplementContent,
+  supplementContentError,
+  supplementContentLoading,
   workspaceSession,
 }: {
   readonly ariaLabelledBy: string;
-  readonly onEdit?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly editing: boolean;
+  readonly onCancelEdit?: () => void;
+  readonly onDiskVersionAccepted?: (markdown: string, baselineContentHash: string) => void;
+  readonly onDirtyChange?: (dirty: boolean) => void;
+  readonly onEdit?: () => void;
+  readonly onSaveEdit?: (
+    markdown: string,
+    baselineContentHash: string
+  ) => Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>>;
+  readonly onSavedContent?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly panelId: string;
   readonly supplement: NoteMemorySegmentSupplement;
+  readonly supplementContent?: WorkspaceNoteSegmentSupplementContent | undefined;
+  readonly supplementContentError: boolean;
+  readonly supplementContentLoading: boolean;
   readonly workspaceSession: WorkspaceSession;
 }) {
-  const supplementContentQuery = useQuery(
-    segmentSupplementContentQueryOptions(
-      workspaceSession,
-      supplement.memoryId,
-      supplement.segmentId,
-      supplement.supplementId,
-      'note'
-    )
+  const supplementBodyEmpty = useMemo(
+    () => (supplementContent ? !/\S/.test(supplementContent.bodyMarkdown) : false),
+    [supplementContent]
   );
-  const supplementContent = isNoteSegmentSupplementContent(supplementContentQuery.data)
-    ? supplementContentQuery.data
-    : undefined;
+
+  if (editing && supplementContent && onCancelEdit && onSaveEdit) {
+    return (
+      <InlineMarkdownContentEditor<SavedNoteSegmentSupplementContent>
+        attachmentTarget={{
+          kind: 'segment-supplement',
+          memoryId: supplement.memoryId,
+          segmentId: supplement.segmentId,
+          supplementId: supplement.supplementId,
+        }}
+        baselineContentHash={supplementContent.baselineContentHash}
+        failureCopy="无法保存补充笔记正文。"
+        headerLabel="Markdown 补充笔记"
+        initialMarkdown={supplementContent.bodyMarkdown}
+        onCancel={onCancelEdit}
+        onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
+        onDirtyChange={onDirtyChange}
+        onSave={onSaveEdit}
+        onSavedContent={onSavedContent}
+        onSaved={onCancelEdit}
+        placeholder="写下补充笔记..."
+        saveLabel="保存补充笔记"
+        surfaceTestId="memory-studio-inline-supplement-note-editor"
+        targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
+        textareaId={`${panelId}-inline-editor`}
+        textareaLabel="补充笔记正文"
+        workspaceSession={workspaceSession}
+      />
+    );
+  }
+
+  const canEditEmpty =
+    Boolean(onEdit) &&
+    !supplementContentError &&
+    !supplementContentLoading &&
+    supplementContent !== undefined &&
+    supplementBodyEmpty;
 
   return (
     <MarkdownContentSurface
@@ -2092,26 +2451,22 @@ function SegmentSupplementNotePanel({
         segmentId: supplement.segmentId,
         supplementId: supplement.supplementId,
       }}
-      bodyMarkdown={supplementContentQuery.isError ? undefined : supplementContent?.bodyMarkdown}
-      className="mt-4"
-      editLabel={`编辑补充笔记 ${supplement.title}`}
+      bodyMarkdown={supplementContentError ? undefined : supplementContent?.bodyMarkdown}
+      className="mt-14"
       id={panelId}
-      loading={supplementContentQuery.isLoading}
+      loading={supplementContentLoading}
+      {...(onEdit && supplementContent ? { onEdit } : {})}
       role="tabpanel"
       showTitle={false}
-      {...(supplementContent && onEdit
-        ? {
-            onEdit: () =>
-              onEdit({
-                memoryId: supplement.memoryId,
-                segmentId: supplement.segmentId,
-                supplementId: supplement.supplementId,
-                title: supplement.title,
-                bodyMarkdown: supplementContent.bodyMarkdown,
-                baselineContentHash: supplementContent.baselineContentHash,
-              }),
-          }
-        : {})}
+      emptyCopy="这条补充笔记还没有正文。"
+      footer={
+        canEditEmpty ? (
+          <Button type="button" variant="secondary" size="compact" onClick={onEdit}>
+            <PencilLine aria-hidden="true" className="size-16" />
+            写补充笔记
+          </Button>
+        ) : null
+      }
       title={supplement.title}
     />
   );
@@ -2132,13 +2487,15 @@ export function MemoryStudio({
   onDeleteSegmentSupplement,
   onClearSegmentContent,
   onEditSegmentTranscript,
-  onEditNoteSegment,
-  onEditNoteSegmentSupplement,
+  onNoteSegmentContentSaved,
+  onNoteSegmentSupplementContentSaved,
   onRenameSegmentSupplement,
   onRenameSegmentContent,
   onRenameSegment,
   transcriptionBackfill,
   onSegmentFocusConsumed,
+  onStartNote,
+  onStartRecording,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
   segmentFocusIntent = null,
@@ -2156,6 +2513,9 @@ export function MemoryStudio({
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const segmentStripItemStepRef = useRef(SEGMENT_STRIP_CARD_ESTIMATE_PX);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
+  const [inlineMarkdownEditTarget, setInlineMarkdownEditTarget] =
+    useState<InlineMarkdownEditTarget | null>(null);
+  const [inlineMarkdownDirty, setInlineMarkdownDirty] = useState(false);
   const [confirmingTranscriptionBackfill, setConfirmingTranscriptionBackfill] =
     useState<TranscriptionConfirmIntent | null>(null);
   const [contentTabOrderBySegmentId, setContentTabOrderBySegmentId] = useState<
@@ -2262,6 +2622,142 @@ export function MemoryStudio({
       : (selectedSegmentSupplementById.get(activeSupplementId) ?? null);
   const resolvedActiveContentTab =
     activeSupplementId === null || activeSegmentSupplement ? activeContentTab : 'transcript';
+  const inlineSegmentEditing =
+    inlineMarkdownEditTarget?.kind === 'segment' &&
+    selectedSegment?.segmentId === inlineMarkdownEditTarget.segmentId &&
+    resolvedActiveContentTab === 'transcript';
+  const inlineSupplementEditing =
+    inlineMarkdownEditTarget?.kind === 'segment-supplement' &&
+    activeSegmentSupplement?.segmentId === inlineMarkdownEditTarget.segmentId &&
+    activeSegmentSupplement?.supplementId === inlineMarkdownEditTarget.supplementId &&
+    resolvedActiveContentTab === supplementContentTabValue(inlineMarkdownEditTarget.supplementId);
+  const activeNoteSupplementContentQuery = useQuery({
+    ...segmentSupplementContentQueryOptions(
+      workspaceSession,
+      activeSegmentSupplement?.memoryId ?? memory.memoryId,
+      activeSegmentSupplement?.segmentId ?? selectedSegment?.segmentId ?? 'seg_pending',
+      activeSegmentSupplement?.supplementId ?? 'sup_pending',
+      'note'
+    ),
+    enabled:
+      activeSegmentSupplement !== null && isNoteMemorySegmentSupplement(activeSegmentSupplement),
+  });
+  const activeNoteSupplementContent =
+    activeSegmentSupplement &&
+    isNoteMemorySegmentSupplement(activeSegmentSupplement) &&
+    isNoteSegmentSupplementContent(activeNoteSupplementContentQuery.data)
+      ? activeNoteSupplementContentQuery.data
+      : undefined;
+
+  function blockDirtyInlineMarkdownNavigation() {
+    if (!inlineMarkdownDirty) {
+      return false;
+    }
+    toast.error(INLINE_MARKDOWN_UNSAVED_MESSAGE);
+    return true;
+  }
+
+  function requestSelectedSegment(segmentId: string) {
+    if (selectedSegment?.segmentId === segmentId) {
+      return true;
+    }
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return false;
+    }
+    setSelectedSegmentId(segmentId);
+    return true;
+  }
+
+  function requestActiveContentTab(nextTab: ActiveContentTab) {
+    if (resolvedActiveContentTab === nextTab) {
+      return true;
+    }
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return false;
+    }
+    setActiveContentTab(nextTab);
+    return true;
+  }
+
+  function requestStartNoteSegment() {
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    onStartNote?.();
+  }
+
+  function requestStartRecordingSegment() {
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    onStartRecording?.();
+  }
+
+  function requestStartSupplementRecording() {
+    if (!selectedSegment || blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    setSupplementMenuOpen(false);
+    onStartSegmentSupplementRecording({
+      memoryId: memory.memoryId,
+      segmentId: selectedSegment.segmentId,
+      title: `补充录音${selectedSegment.supplementCount + 1}`,
+    });
+  }
+
+  function requestStartSupplementNote() {
+    if (!selectedSegment || blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    setSupplementMenuOpen(false);
+    onStartSegmentSupplementNote?.({
+      memoryId: memory.memoryId,
+      segmentId: selectedSegment.segmentId,
+      title: `补充笔记${selectedSegment.supplementCount + 1}`,
+    });
+  }
+
+  async function saveInlineNoteSegmentMarkdown({
+    baselineContentHash,
+    markdown,
+    segment,
+  }: {
+    readonly baselineContentHash: string;
+    readonly markdown: string;
+    readonly segment: NoteMemorySegment;
+  }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentContent>> {
+    const result = await saveFinalizedNoteSegmentContent({
+      workspaceSession,
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      title: segment.title,
+      bodyMarkdown: markdown,
+      baselineContentHash,
+    });
+    return result;
+  }
+
+  async function saveInlineNoteSupplementMarkdown({
+    baselineContentHash,
+    markdown,
+    supplement,
+  }: {
+    readonly baselineContentHash: string;
+    readonly markdown: string;
+    readonly supplement: NoteMemorySegmentSupplement;
+  }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>> {
+    const result = await saveFinalizedNoteSegmentSupplementContent({
+      workspaceSession,
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      supplementId: supplement.supplementId,
+      title: supplement.title,
+      bodyMarkdown: markdown,
+      baselineContentHash,
+    });
+    return result;
+  }
+
   const {
     activeContentTabModel,
     baseContentTabs,
@@ -2415,9 +2911,18 @@ export function MemoryStudio({
       return;
     }
 
+    if (selectedSegment?.segmentId !== segmentFocusIntent && blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
     setSelectedSegmentId(segmentFocusIntent);
     onSegmentFocusConsumed?.(segmentFocusIntent);
-  }, [visibleSegments, onSegmentFocusConsumed, segmentFocusIntent]);
+  }, [
+    inlineMarkdownDirty,
+    onSegmentFocusConsumed,
+    segmentFocusIntent,
+    selectedSegment?.segmentId,
+    visibleSegments,
+  ]);
 
   useEffect(() => {
     const segmentId = selectedSegment?.segmentId ?? null;
@@ -2435,7 +2940,7 @@ export function MemoryStudio({
     const addedSupplementId = selectedSegmentSupplementIds.find(
       (supplementId) => !previousSupplementIds.has(supplementId)
     );
-    if (addedSupplementId) {
+    if (addedSupplementId && !inlineMarkdownDirty) {
       setActiveContentTab(supplementContentTabValue(addedSupplementId));
     }
 
@@ -2448,7 +2953,7 @@ export function MemoryStudio({
         supplementIds: selectedSegmentSupplementIds,
       };
     }
-  }, [selectedSegment?.segmentId, selectedSegmentSupplementIdsKey]);
+  }, [inlineMarkdownDirty, selectedSegment?.segmentId, selectedSegmentSupplementIdsKey]);
 
   useEffect(() => {
     setSupplementMenuOpen(false);
@@ -2459,8 +2964,15 @@ export function MemoryStudio({
     draggedContentTabRef.current = null;
     setDraggedContentTab(null);
     setActiveContentTab('transcript');
+    setInlineMarkdownEditTarget(null);
+    setInlineMarkdownDirty(false);
     setConfirmingTranscriptionBackfill(null);
   }, [selectedSegment?.segmentId]);
+
+  useEffect(() => {
+    setInlineMarkdownEditTarget(null);
+    setInlineMarkdownDirty(false);
+  }, [resolvedActiveContentTab]);
 
   useEffect(() => {
     if (activeSupplementId !== null && !selectedSegmentSupplementIdSet.has(activeSupplementId)) {
@@ -2591,8 +3103,9 @@ export function MemoryStudio({
       return;
     }
 
-    setActiveContentTab(nextTab.value);
-    window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+    if (requestActiveContentTab(nextTab.value)) {
+      window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+    }
   }
 
   function readDraggedContentTab(event: DragEvent<HTMLElement>) {
@@ -2879,6 +3392,12 @@ export function MemoryStudio({
               <p className="mt-8 text-body leading-body text-muted-foreground">
                 继续在这条记忆里记录。
               </p>
+              <div className="mt-16">
+                <MemoryStudioExpressionMenu
+                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
+                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
+                />
+              </div>
             </div>
           ) : detail && visibleSegments.length > 0 && selectedSegment ? (
             <>
@@ -2894,6 +3413,17 @@ export function MemoryStudio({
                   } as CSSProperties
                 }
               >
+                <div
+                  data-slot="memory-studio-segment-strip-actions"
+                  className="mb-8 flex items-center justify-end"
+                >
+                  <MemoryStudioExpressionMenu
+                    {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
+                    {...(onStartRecording
+                      ? { onStartRecording: requestStartRecordingSegment }
+                      : {})}
+                  />
+                </div>
                 {stripScrollState.canScrollLeft ? (
                   <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
                     <div className="pointer-events-auto">
@@ -2969,7 +3499,7 @@ export function MemoryStudio({
                             aria-current={isSelected ? 'true' : undefined}
                             aria-label={`选择片段 ${segment.title}`}
                             className="group/segment-card flex w-full flex-col rounded-xl text-left outline-none"
-                            onClick={() => setSelectedSegmentId(segment.segmentId)}
+                            onClick={() => requestSelectedSegment(segment.segmentId)}
                           >
                             <span className="block min-w-0">
                               <span
@@ -3006,7 +3536,7 @@ export function MemoryStudio({
                                         data-slot="memory-studio-segment-card-note-size"
                                         className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
                                       >
-                                        {segment.bodyByteLength}B
+                                        {byteLengthLabel(segment.bodyByteLength)}
                                       </span>
                                     </>
                                   )}
@@ -3110,16 +3640,11 @@ export function MemoryStudio({
                     segment={selectedSegment}
                     workspaceSession={workspaceSession}
                   />
-                ) : (
-                  <NoteSegmentPlaybackPlaceholder
-                    loading={segmentContentQuery.isLoading}
-                    segment={selectedSegment}
-                  />
-                )}
+                ) : null}
 
                 <div
                   data-slot="memory-studio-content-tab-rail-row"
-                  className="mt-32 flex shrink-0 items-center justify-between gap-8"
+                  className="mt-32 flex shrink-0 items-center justify-start gap-8"
                 >
                   <div
                     role="tablist"
@@ -3160,7 +3685,7 @@ export function MemoryStudio({
                               handleContentTabDragStart(event, contentTab.value)
                             }
                             onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
-                            onSelect={() => setActiveContentTab('transcript')}
+                            onSelect={() => requestActiveContentTab('transcript')}
                             panelId={contentTab.panelId}
                             renderMoreMenu={(trigger, onCloseAutoFocus) => (
                               <SegmentContentActionsMenu
@@ -3215,36 +3740,6 @@ export function MemoryStudio({
                                     });
                                   }
                                 }}
-                                onEdit={() => {
-                                  setPrimaryContentMenuOpen(false);
-                                  if (
-                                    isAudioMemorySegment(selectedSegment) &&
-                                    isAudioSegmentContent(segmentContent)
-                                  ) {
-                                    onEditSegmentTranscript({
-                                      memoryId: selectedSegment.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      title: contentTab.title,
-                                      transcriptText: segmentContent.transcript.text,
-                                      baselineTranscriptHash:
-                                        segmentContent.transcript.baselineHash,
-                                    });
-                                    return;
-                                  }
-                                  if (
-                                    !isAudioMemorySegment(selectedSegment) &&
-                                    noteSegmentContent &&
-                                    onEditNoteSegment
-                                  ) {
-                                    onEditNoteSegment({
-                                      memoryId: selectedSegment.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      title: selectedSegment.title,
-                                      bodyMarkdown: noteSegmentContent.bodyMarkdown,
-                                      baselineContentHash: noteSegmentContent.baselineContentHash,
-                                    });
-                                  }
-                                }}
                                 onOpenChange={setPrimaryContentMenuOpen}
                                 onRename={() => {
                                   setPrimaryContentMenuOpen(false);
@@ -3256,6 +3751,32 @@ export function MemoryStudio({
                                       : 'body',
                                     currentTitle: contentTab.title,
                                   });
+                                }}
+                                onEdit={() => {
+                                  setPrimaryContentMenuOpen(false);
+                                  if (
+                                    isAudioMemorySegment(selectedSegment) &&
+                                    isAudioSegmentContent(segmentContent)
+                                  ) {
+                                    onEditSegmentTranscript({
+                                      memoryId: selectedSegment.memoryId,
+                                      segmentId: selectedSegment.segmentId,
+                                      title: transcriptContentTab.title,
+                                      transcriptText: segmentContent.transcript.text,
+                                      baselineTranscriptHash:
+                                        segmentContent.transcript.baselineHash,
+                                    });
+                                    return;
+                                  }
+                                  if (
+                                    !isAudioMemorySegment(selectedSegment) &&
+                                    noteSegmentContent
+                                  ) {
+                                    setInlineMarkdownEditTarget({
+                                      kind: 'segment',
+                                      segmentId: selectedSegment.segmentId,
+                                    });
+                                  }
                                 }}
                                 open={primaryContentMenuOpen}
                                 trigger={trigger}
@@ -3374,7 +3895,7 @@ export function MemoryStudio({
                               supplement,
                             })
                           }
-                          onSelect={() => setActiveContentTab(contentTab.value)}
+                          onSelect={() => requestActiveContentTab(contentTab.value)}
                           transcriptExists={
                             supplementIsAudio ? supplement.transcript.exists : false
                           }
@@ -3396,53 +3917,84 @@ export function MemoryStudio({
                       );
                     })}
                   </div>
-                  <DropdownMenu open={supplementMenuOpen} onOpenChange={setSupplementMenuOpen}>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghostIcon"
-                        size="icon"
-                        type="button"
-                        aria-label="添加片段补充内容"
-                        className="text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
-                      >
-                        <Plus aria-hidden="true" className="size-16" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      aria-label="片段补充内容"
-                      aria-labelledby={undefined}
-                      align="end"
-                    >
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setSupplementMenuOpen(false);
-                          onStartSegmentSupplementRecording({
-                            memoryId: memory.memoryId,
+                  <div
+                    data-slot="memory-studio-content-tab-actions"
+                    className="flex shrink-0 items-center gap-4"
+                  >
+                    {resolvedActiveContentTab === 'transcript' &&
+                    isAudioMemorySegment(selectedSegment) &&
+                    isAudioSegmentContent(segmentContent) ? (
+                      <ContentTabRailEditButton
+                        label="编辑转录"
+                        onClick={() =>
+                          onEditSegmentTranscript({
+                            memoryId: selectedSegment.memoryId,
                             segmentId: selectedSegment.segmentId,
-                            title: `补充录音${selectedSegment.supplementCount + 1}`,
-                          });
-                        }}
-                      >
-                        <Mic aria-hidden="true" className="size-16" />
-                        录音补充
-                      </DropdownMenuItem>
-                      {onStartSegmentSupplementNote ? (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSupplementMenuOpen(false);
-                            onStartSegmentSupplementNote({
-                              memoryId: memory.memoryId,
-                              segmentId: selectedSegment.segmentId,
-                              title: `补充笔记${selectedSegment.supplementCount + 1}`,
-                            });
-                          }}
+                            title: transcriptContentTab.title,
+                            transcriptText: segmentContent.transcript.text,
+                            baselineTranscriptHash: segmentContent.transcript.baselineHash,
+                          })
+                        }
+                      />
+                    ) : null}
+                    {resolvedActiveContentTab === 'transcript' &&
+                    !isAudioMemorySegment(selectedSegment) &&
+                    noteSegmentContent ? (
+                      <ContentTabRailEditButton
+                        label={`编辑笔记 ${selectedSegment.title}`}
+                        onClick={() =>
+                          setInlineMarkdownEditTarget({
+                            kind: 'segment',
+                            segmentId: selectedSegment.segmentId,
+                          })
+                        }
+                      />
+                    ) : null}
+                    {activeSegmentSupplement &&
+                    isNoteMemorySegmentSupplement(activeSegmentSupplement) &&
+                    activeNoteSupplementContent ? (
+                      <ContentTabRailEditButton
+                        label={`编辑补充笔记 ${activeSegmentSupplement.title}`}
+                        onClick={() =>
+                          setInlineMarkdownEditTarget({
+                            kind: 'segment-supplement',
+                            segmentId: activeSegmentSupplement.segmentId,
+                            supplementId: activeSegmentSupplement.supplementId,
+                          })
+                        }
+                      />
+                    ) : null}
+                    <DropdownMenu open={supplementMenuOpen} onOpenChange={setSupplementMenuOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghostIcon"
+                          size="compact"
+                          type="button"
+                          aria-label="添加片段补充内容"
+                          className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                         >
-                          <FileText aria-hidden="true" className="size-16" />
-                          笔记补充
+                          <Plus aria-hidden="true" className="size-16" />
+                          <span>补充</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        aria-label="片段补充内容"
+                        aria-labelledby={undefined}
+                        align="end"
+                      >
+                        <DropdownMenuItem onSelect={requestStartSupplementRecording}>
+                          <Mic aria-hidden="true" className="size-16" />
+                          录音补充
                         </DropdownMenuItem>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        {onStartSegmentSupplementNote ? (
+                          <DropdownMenuItem onSelect={requestStartSupplementNote}>
+                            <FileText aria-hidden="true" className="size-16" />
+                            笔记补充
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 {resolvedActiveContentTab === 'transcript' ? (
                   isAudioMemorySegment(selectedSegment) ? (
@@ -3481,6 +4033,50 @@ export function MemoryStudio({
                       }
                       title={transcriptContentTab.title}
                     />
+                  ) : inlineSegmentEditing && noteSegmentContent ? (
+                    <InlineMarkdownContentEditor<SavedNoteSegmentContent>
+                      attachmentTarget={{
+                        kind: 'segment',
+                        memoryId: selectedSegment.memoryId,
+                        segmentId: selectedSegment.segmentId,
+                      }}
+                      baselineContentHash={noteSegmentContent.baselineContentHash}
+                      failureCopy="无法保存笔记正文。"
+                      headerLabel="Markdown 正文"
+                      initialMarkdown={noteSegmentContent.bodyMarkdown}
+                      onCancel={() => setInlineMarkdownEditTarget(null)}
+                      onDiskVersionAccepted={(markdown, baselineContentHash) =>
+                        onNoteSegmentContentSaved(
+                          savedNoteSegmentContentFromConflict({
+                            conflict: {
+                              currentBodyMarkdown: markdown,
+                              currentBaselineContentHash: baselineContentHash,
+                            },
+                            memoryId: selectedSegment.memoryId,
+                            segmentId: selectedSegment.segmentId,
+                            title: selectedSegment.title,
+                            workspaceSession,
+                          })
+                        )
+                      }
+                      onDirtyChange={setInlineMarkdownDirty}
+                      onSave={(markdown, baselineContentHash) =>
+                        saveInlineNoteSegmentMarkdown({
+                          baselineContentHash,
+                          markdown,
+                          segment: selectedSegment,
+                        })
+                      }
+                      onSavedContent={onNoteSegmentContentSaved}
+                      onSaved={() => setInlineMarkdownEditTarget(null)}
+                      placeholder="写下正文..."
+                      saveLabel="保存正文"
+                      surfaceTestId="memory-studio-inline-note-editor"
+                      targetKey={`segment:${selectedSegment.segmentId}`}
+                      textareaId={`${transcriptContentTab.panelId}-inline-editor`}
+                      textareaLabel="笔记正文"
+                      workspaceSession={workspaceSession}
+                    />
                   ) : (
                     <MarkdownContentSurface
                       ariaLabelledBy={transcriptContentTab.tabId}
@@ -3492,24 +4088,20 @@ export function MemoryStudio({
                       bodyMarkdown={
                         segmentContentQuery.isError ? undefined : noteSegmentContent?.bodyMarkdown
                       }
-                      className="mt-4"
-                      editLabel={`编辑笔记 ${selectedSegment.title}`}
+                      className="mt-14"
                       id={transcriptContentTab.panelId}
                       loading={segmentContentQuery.isLoading}
-                      role="tabpanel"
-                      showTitle={false}
-                      {...(noteSegmentContent && onEditNoteSegment
+                      {...(noteSegmentContent
                         ? {
                             onEdit: () =>
-                              onEditNoteSegment({
-                                memoryId: selectedSegment.memoryId,
+                              setInlineMarkdownEditTarget({
+                                kind: 'segment',
                                 segmentId: selectedSegment.segmentId,
-                                title: selectedSegment.title,
-                                bodyMarkdown: noteSegmentContent.bodyMarkdown,
-                                baselineContentHash: noteSegmentContent.baselineContentHash,
                               }),
                           }
                         : {})}
+                      role="tabpanel"
+                      showTitle={false}
                       title={selectedSegment.title}
                     />
                   )
@@ -3535,11 +4127,54 @@ export function MemoryStudio({
                     <SegmentSupplementNotePanel
                       key={activeSegmentSupplement.supplementId}
                       ariaLabelledBy={activeContentTabModel.tabId}
-                      {...(onEditNoteSegmentSupplement
-                        ? { onEdit: onEditNoteSegmentSupplement }
-                        : {})}
+                      editing={inlineSupplementEditing}
+                      onCancelEdit={() => setInlineMarkdownEditTarget(null)}
+                      onDiskVersionAccepted={(markdown, baselineContentHash) => {
+                        if (!activeNoteSupplementContent) {
+                          return;
+                        }
+                        onNoteSegmentSupplementContentSaved(
+                          savedNoteSegmentSupplementContentFromConflict({
+                            conflict: {
+                              currentBodyMarkdown: markdown,
+                              currentBaselineContentHash: baselineContentHash,
+                            },
+                            memoryId: activeSegmentSupplement.memoryId,
+                            segmentId: activeSegmentSupplement.segmentId,
+                            supplementId: activeSegmentSupplement.supplementId,
+                            title: activeSegmentSupplement.title,
+                            workspaceSession,
+                          })
+                        );
+                      }}
+                      onDirtyChange={setInlineMarkdownDirty}
+                      onEdit={() =>
+                        setInlineMarkdownEditTarget({
+                          kind: 'segment-supplement',
+                          segmentId: activeSegmentSupplement.segmentId,
+                          supplementId: activeSegmentSupplement.supplementId,
+                        })
+                      }
+                      onSaveEdit={(markdown, baselineContentHash) => {
+                        if (!activeNoteSupplementContent) {
+                          return Promise.resolve({
+                            ok: false,
+                            kind: 'error',
+                            message: '无法保存补充笔记正文。',
+                          });
+                        }
+                        return saveInlineNoteSupplementMarkdown({
+                          baselineContentHash,
+                          markdown,
+                          supplement: activeSegmentSupplement,
+                        });
+                      }}
+                      onSavedContent={onNoteSegmentSupplementContentSaved}
                       panelId={activeContentTabModel.panelId}
                       supplement={activeSegmentSupplement}
+                      supplementContent={activeNoteSupplementContent}
+                      supplementContentError={activeNoteSupplementContentQuery.isError}
+                      supplementContentLoading={activeNoteSupplementContentQuery.isLoading}
                       workspaceSession={workspaceSession}
                     />
                   ) : null
@@ -3547,11 +4182,27 @@ export function MemoryStudio({
               </section>
             </>
           ) : detailQuery.isError ? (
-            <p className="mt-32 text-body leading-body text-muted-foreground">
-              记忆内容加载失败，请重试。
-            </p>
+            <div className="mt-32 max-w-[420px]">
+              <p className="text-body leading-body text-muted-foreground">
+                记忆内容加载失败，请重试。
+              </p>
+              <div className="mt-16">
+                <MemoryStudioExpressionMenu
+                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
+                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
+                />
+              </div>
+            </div>
           ) : (
-            <p className="mt-32 text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
+            <div className="mt-32 max-w-[420px]">
+              <p className="text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
+              <div className="mt-16">
+                <MemoryStudioExpressionMenu
+                  {...(onStartNote ? { onStartNote: requestStartNoteSegment } : {})}
+                  {...(onStartRecording ? { onStartRecording: requestStartRecordingSegment } : {})}
+                />
+              </div>
+            </div>
           )}
         </div>
       </section>

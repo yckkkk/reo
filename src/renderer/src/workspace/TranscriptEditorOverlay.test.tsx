@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { saveTranscript } from './workspaceApi';
@@ -84,6 +84,50 @@ describe('TranscriptEditorOverlay', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
     });
+  });
+
+  it('edits transcript text with the same lightweight Markdown controls as notes', async () => {
+    const user = userEvent.setup();
+    render(
+      <TranscriptEditorOverlay
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+        open
+        target={target}
+        workspaceSession={workspaceSession}
+      />
+    );
+
+    const textarea = screen.getByLabelText('转录正文') as HTMLTextAreaElement;
+    expect(screen.getByRole('toolbar', { name: 'Markdown 格式工具栏' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '图片' })).toBeInTheDocument();
+    expect(screen.queryByTestId('transcript-editor-titlebar-actions')).not.toBeInTheDocument();
+    expect(screen.getByTestId('transcript-editor-surface-stage')).toHaveClass('max-w-[760px]');
+    const header = screen.getByText('Markdown 转录').parentElement?.parentElement;
+    expect(header).toHaveClass('min-h-[44px]');
+    expect(header).not.toHaveClass('min-h-44');
+    expect(
+      within(screen.getByTestId('transcript-editor-textarea-surface')).getByRole('button', {
+        name: '保存转录',
+      })
+    ).toHaveClass('min-h-32', 'rounded-md', 'px-12');
+    expect(screen.getByText('Markdown 转录')).toBeInTheDocument();
+    expect(textarea).toHaveAttribute('placeholder', '整理或修正转录文本...');
+    expect(textarea).toHaveClass('py-16', 'placeholder:text-muted-foreground');
+    expect(textarea).not.toHaveClass('focus-visible:ring-2');
+    expect(screen.getByTestId('transcript-editor-textarea-surface')).toHaveClass(
+      'focus-within:ring-1',
+      'focus-within:ring-border'
+    );
+    expect(textarea).toHaveFocus();
+
+    await user.clear(textarea);
+    await user.type(textarea, '片段转录');
+    textarea.setSelectionRange(0, 2);
+
+    await user.click(screen.getByRole('button', { name: '粗体' }));
+
+    expect(textarea.value).toBe('**片段**转录');
   });
 
   it('asks before closing dirty transcript edits', async () => {

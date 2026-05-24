@@ -1,0 +1,70 @@
+import {
+  Bold,
+  Heading2,
+  Image,
+  Italic,
+  List,
+  ListOrdered,
+  Minus,
+  Quote,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import type { LightweightMarkdownFormatAction } from './noteEditorModel';
+
+const NOTE_MARKDOWN_FORMAT_CONTROLS = [
+  { action: 'bold', icon: Bold, label: '粗体' },
+  { action: 'emphasis', icon: Italic, label: '强调' },
+  { action: 'image', icon: Image, label: '图片' },
+  { action: 'separator', icon: Minus, label: '分割线' },
+  { action: 'heading', icon: Heading2, label: '标题' },
+  { action: 'bullet-list', icon: List, label: '项目列表' },
+  { action: 'numbered-list', icon: ListOrdered, label: '编号列表' },
+  { action: 'quote', icon: Quote, label: '引用' },
+] satisfies readonly {
+  readonly action: LightweightMarkdownFormatAction;
+  readonly icon: LucideIcon;
+  readonly label: string;
+}[];
+
+export function LightweightMarkdownToolbar({
+  className,
+  disabled = false,
+  onAction,
+}: {
+  readonly className?: string;
+  readonly disabled?: boolean;
+  readonly onAction: (action: LightweightMarkdownFormatAction) => void;
+}) {
+  return (
+    <TooltipProvider>
+      <div aria-label="Markdown 格式工具栏" className={className} role="toolbar">
+        {NOTE_MARKDOWN_FORMAT_CONTROLS.map((control) => {
+          const Icon = control.icon;
+          return (
+            <Tooltip key={control.action}>
+              <Button
+                asChild
+                className="text-muted-foreground hover:bg-secondary hover:text-foreground"
+                disabled={disabled}
+                size="icon"
+                variant="ghostIcon"
+              >
+                <TooltipTrigger
+                  aria-label={control.label}
+                  onClick={() => onAction(control.action)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  type="button"
+                >
+                  <Icon aria-hidden="true" className="size-16" />
+                </TooltipTrigger>
+              </Button>
+              <TooltipContent side="bottom">{control.label}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}

@@ -1,0 +1,20 @@
+{
+  "anchorLineNumber": 115,
+  "anchorOffset": 20,
+  "afterScrollTop": 4129,
+  "beforeScrollTop": 4129,
+  "click": {
+    "x": 376,
+    "y": 354
+  },
+  "expectedLineNumber": 115,
+  "expectedLineText": "Runtime line 113: click geometry must map to this CM6 source line without scrolling back to top.",
+  "expectedPositionFrom": 10896,
+  "expectedPositionTo": 10992,
+  "failures": [],
+  "ok": true,
+  "scrollDelta": 0,
+  "selectionAnchor": 10916,
+  "transactionCount": 0,
+  "screenshot": "docs/specs/2026-05-23-0402-note-cm6-click-precision/evidence/diagnostic-long-doc-click-geometry-current.png"
+}

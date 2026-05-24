@@ -1,17 +1,16 @@
 import { ChevronLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
-  TITLEBAR_ACTION_RIGHT,
   TITLEBAR_CONTROL_GAP,
   TITLEBAR_CONTROL_LEFT,
   TITLEBAR_CONTROL_SIZE,
   TITLEBAR_CONTROL_TOP,
 } from '../app-shell/appShellGeometry';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
+import { LightweightMarkdownEditorSurface } from './LightweightMarkdownEditorSurface';
 import type { SegmentTranscriptEditTarget } from './segmentActionTargets';
+import { useLightweightMarkdownFormatting } from './useLightweightMarkdownFormatting';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 import { saveTranscript, type WorkspaceMemorySummary, type WorkspaceSession } from './workspaceApi';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
@@ -47,8 +46,15 @@ export function TranscriptEditorOverlay({
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const dirty = transcriptText !== initialTranscriptText;
   const displayTitle = target?.title ?? '转录';
+  const applyMarkdownFormat = useLightweightMarkdownFormatting({
+    disabled: pending,
+    onChange: setTranscriptText,
+    textareaRef,
+    value: transcriptText,
+  });
 
   useEffect(() => {
     setTranscriptText(target?.transcriptText ?? '');
@@ -58,6 +64,15 @@ export function TranscriptEditorOverlay({
     setErrorMessage(null);
     setPending(false);
   }, [target]);
+
+  useEffect(() => {
+    if (!open || pending) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [open, pending, target]);
 
   function requestClose() {
     if (pending) {
@@ -141,39 +156,28 @@ export function TranscriptEditorOverlay({
       >
         <h1 className="min-w-0 truncate">{displayTitle}</h1>
       </div>
-      <div
-        className="pointer-events-auto absolute z-10 flex items-center gap-8 [-webkit-app-region:no-drag]"
-        data-testid="transcript-editor-titlebar-actions"
-        data-vaul-no-drag
-        style={{ right: TITLEBAR_ACTION_RIGHT, top: TITLEBAR_CONTROL_TOP }}
-      >
-        <Button
-          type="button"
-          size="compact"
-          disabled={pending || !target}
-          onClick={saveTranscriptEdit}
-        >
-          保存转录
-        </Button>
-      </div>
 
       <section
         aria-label="转录编辑器"
-        className="mx-auto grid h-[min(680px,calc(100dvh-104px))] w-full max-w-[960px] grid-rows-[minmax(0,1fr)_auto] gap-16 text-left"
+        className="mx-auto grid h-[min(680px,calc(100dvh-104px))] w-full max-w-[760px] grid-rows-[minmax(0,1fr)_auto] gap-16 text-left"
         data-testid="transcript-editor-surface-stage"
       >
-        <div className="min-h-0 overflow-hidden rounded-md bg-card">
-          <Label htmlFor="transcript-editor-body" className="sr-only">
-            转录正文
-          </Label>
-          <Textarea
-            id="transcript-editor-body"
-            className="h-full min-h-0 resize-none rounded-none border-0 bg-transparent px-20 py-4 font-mono text-body leading-[1.65] text-foreground shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            disabled={pending}
-            value={transcriptText}
-            onChange={(event) => setTranscriptText(event.currentTarget.value)}
-          />
-        </div>
+        <LightweightMarkdownEditorSurface
+          disabled={pending}
+          headerLabel="Markdown 转录"
+          onChange={setTranscriptText}
+          onFormat={applyMarkdownFormat}
+          onSave={saveTranscriptEdit}
+          placeholder="整理或修正转录文本..."
+          saveDisabled={pending || !target}
+          saveLabel="保存转录"
+          surfaceTestId="transcript-editor-textarea-surface"
+          textareaId="transcript-editor-body"
+          textareaLabel="转录正文"
+          textareaRef={textareaRef}
+          toolbarDisabled={pending}
+          value={transcriptText}
+        />
         <footer className="min-h-24">
           {errorMessage ? (
             <p role="status" className="text-ui-sm leading-ui-sm text-destructive">

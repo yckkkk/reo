@@ -1,0 +1,15 @@
+{
+  "blockingEvents": [],
+  "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n笔记1\n16008B\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:00\n正文\n补充笔记2\n补充笔记1\ntitle: arkdown 全格式测试文uthor: \"Markdown Editor QA\"\ndate: \"2026-05-22\"\ntags:\n  •markdown\n  •editor\n  •rich-text\ndescription: \"用于测试 Markdown 编辑器富文本预览能力的综合样例\"\nMarkdown 全格式测试文档\n\n\n[TOC]\n\n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n\n\n\n1. 标题测试\n\n\n一级标题 H1\n\n\n二级标题 H2\n\n\n三级标题 H3\n\n\n四级标题 H4\n\n\n五级标题 H5\n\n\n六级标题 H6\n\n\n带尾部井号的标题\n\n\nSetext 一级标题\n碎片记录\n05:26 · 7 个片段\n生活\n05/17 20:34 · 1 个片段\n3\n3\n\nv3.0.2\n\nOutput Detail\nDetailed\nReact Components\nHide Until Restart\nMarker Color\nClear on copy/send\nBlock page interactions\nManage MCP & Webhooks\nManage MCP & Webhooks\nMCP Connection\n\nMCP connection allows agents to receive and act on annotations. Learn more\n\nWebhooks\nAuto-Send\n\nThe webhook URL will receive live annotation changes and annotation data.",
+  "clickedMemorySpaceText": "测试",
+  "clickReason": "clicked",
+  "cspViolationEvents": [],
+  "editorTextSample": "title: arkdown 全格式测试文uthor: \"Markdown Editor QA\"date: \"2026-05-22\"tags:  •markdown  •editor  •rich-textdescription: \"用于测试 Markdown 编辑器富文本预览能力的综合样例\"Markdown 全格式测试文档[TOC]本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。1. 标题测试一级标题 H1二级标题 H2三级标题 H3四级标题 H4五级标题 H5六级标题 H6带尾部井号的标题Setext 一级标题",
+  "eventCount": 0,
+  "failures": [],
+  "hasCmEditor": true,
+  "hasMemoryStudio": true,
+  "hasWorkspaceFrame": true,
+  "ok": true,
+  "route": "http://localhost:5183/"
+}

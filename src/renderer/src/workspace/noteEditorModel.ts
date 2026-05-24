@@ -1,8 +1,4 @@
-import {
-  type WorkspaceError,
-  type WorkspaceNoteSegmentContent,
-  type WorkspaceNoteSegmentSupplementContent,
-} from './workspaceApi';
+import { type WorkspaceError } from './workspaceApi';
 
 export const NOTE_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
 export const NOTE_ATTACHMENT_MIME_TYPES = new Set([
@@ -18,7 +14,6 @@ const NOTE_ATTACHMENT_EXTENSION_BY_MIME = new Map([
   ['image/png', '.png'],
   ['image/webp', '.webp'],
 ]);
-const utf8Encoder = new TextEncoder();
 
 export type NoteEditorTarget =
   | {
@@ -31,23 +26,6 @@ export type NoteEditorTarget =
       readonly memoryId: string;
       readonly segmentId: string;
       readonly title: string;
-    }
-  | {
-      readonly baselineContentHash: string;
-      readonly bodyMarkdown: string;
-      readonly kind: 'edit-segment';
-      readonly memoryId: string;
-      readonly segmentId: string;
-      readonly title: string;
-    }
-  | {
-      readonly baselineContentHash: string;
-      readonly bodyMarkdown: string;
-      readonly kind: 'edit-segment-supplement';
-      readonly memoryId: string;
-      readonly segmentId: string;
-      readonly supplementId: string;
-      readonly title: string;
     };
 
 export type NoteContentConflict = {
@@ -55,20 +33,23 @@ export type NoteContentConflict = {
   readonly currentBodyMarkdown: string;
 };
 
-export type LatestNoteEditorContent = {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
+export type LightweightMarkdownFormatAction =
+  | 'bold'
+  | 'bullet-list'
+  | 'emphasis'
+  | 'heading'
+  | 'image'
+  | 'numbered-list'
+  | 'quote'
+  | 'separator';
+
+type MarkdownSelectionResult = {
+  readonly markdown: string;
+  readonly selectionEnd: number;
+  readonly selectionStart: number;
 };
 
-export type NoteContentCachePatch = {
-  readonly baselineContentHash: string;
-  readonly bodyByteLength: number;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly title: string;
-  readonly workspaceId: string;
-};
+export type LightweightMarkdownFormatResult = MarkdownSelectionResult;
 
 export function targetIdentity(target: NoteEditorTarget | null) {
   if (!target) {
@@ -77,20 +58,14 @@ export function targetIdentity(target: NoteEditorTarget | null) {
   if (target.kind === 'segment') {
     return `segment:${target.memoryId}:${target.title}`;
   }
-  if (target.kind === 'edit-segment') {
-    return `${target.kind}:${target.memoryId}:${target.segmentId}:${target.title}`;
-  }
-  if (target.kind === 'edit-segment-supplement') {
-    return `${target.kind}:${target.memoryId}:${target.segmentId}:${target.supplementId}:${target.title}`;
-  }
-  return `${target.kind}:${target.memoryId}:${target.segmentId}:${target.title}`;
+  return `segment-supplement:${target.memoryId}:${target.segmentId}:${target.title}`;
 }
 
 export function noteEditorDisplayTitle(target: NoteEditorTarget | null) {
   if (!target) {
     return '正文';
   }
-  if (target.kind === 'segment' || target.kind === 'edit-segment') {
+  if (target.kind === 'segment') {
     return '正文';
   }
   return target.title;
@@ -138,15 +113,129 @@ export function insertMarkdownAtSelection(
   insertText: string,
   textarea: HTMLTextAreaElement | null
 ) {
-  if (!textarea) {
-    const markdown = `${currentMarkdown}${insertText}`;
-    return { cursor: markdown.length, markdown };
+  const start = textarea?.selectionStart ?? currentMarkdown.length;
+  const end = textarea?.selectionEnd ?? currentMarkdown.length;
+  const insertion = insertMarkdownIntoRange(currentMarkdown, start, end, insertText, 0);
+  return { cursor: insertion.selectionEnd, markdown: insertion.markdown };
+}
+
+export function applyLightweightMarkdownFormat({
+  action,
+  markdown,
+  selectionEnd,
+  selectionStart,
+}: {
+  readonly action: LightweightMarkdownFormatAction;
+  readonly markdown: string;
+  readonly selectionEnd: number;
+  readonly selectionStart: number;
+}): LightweightMarkdownFormatResult {
+  const start = Math.max(0, Math.min(selectionStart, markdown.length));
+  const end = Math.max(start, Math.min(selectionEnd, markdown.length));
+
+  if (action === 'bold') {
+    return wrapSelection(markdown, start, end, '**', '**', '粗体');
   }
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
+  if (action === 'emphasis') {
+    return wrapSelection(markdown, start, end, '*', '*', '强调');
+  }
+  if (action === 'image') {
+    return insertMarkdownIntoRange(markdown, start, end, '![图片]()', -1);
+  }
+  if (action === 'separator') {
+    const prefix = readSeparatorPrefix(markdown, start);
+    const snippet = `${prefix}---\n\n`;
+    return insertMarkdownIntoRange(markdown, start, end, snippet, 0);
+  }
+
+  const prefixByAction: Record<
+    Exclude<LightweightMarkdownFormatAction, 'bold' | 'emphasis' | 'image' | 'separator'>,
+    string
+  > = {
+    'bullet-list': '- ',
+    heading: '## ',
+    'numbered-list': '1. ',
+    quote: '> ',
+  };
+  return prefixSelectedLines(markdown, start, end, prefixByAction[action]);
+}
+
+function insertMarkdownIntoRange(
+  markdown: string,
+  start: number,
+  end: number,
+  insertText: string,
+  cursorOffset: number
+): MarkdownSelectionResult {
+  const nextMarkdown = `${markdown.slice(0, start)}${insertText}${markdown.slice(end)}`;
+  const cursor = start + insertText.length + cursorOffset;
   return {
-    cursor: start + insertText.length,
-    markdown: `${currentMarkdown.slice(0, start)}${insertText}${currentMarkdown.slice(end)}`,
+    markdown: nextMarkdown,
+    selectionEnd: cursor,
+    selectionStart: cursor,
+  };
+}
+
+function readSeparatorPrefix(markdown: string, start: number) {
+  if (start === 0) {
+    return '';
+  }
+  if (markdown[start - 1] === '\n') {
+    return '\n';
+  }
+  return '\n\n';
+}
+
+function wrapSelection(
+  markdown: string,
+  start: number,
+  end: number,
+  before: string,
+  after: string,
+  placeholder: string
+): LightweightMarkdownFormatResult {
+  const selected = markdown.slice(start, end);
+  const content = selected.length > 0 ? selected : placeholder;
+  const nextMarkdown = `${markdown.slice(0, start)}${before}${content}${after}${markdown.slice(end)}`;
+  return {
+    markdown: nextMarkdown,
+    selectionEnd: start + before.length + content.length,
+    selectionStart: start + before.length,
+  };
+}
+
+function prefixSelectedLines(
+  markdown: string,
+  start: number,
+  end: number,
+  prefix: string
+): LightweightMarkdownFormatResult {
+  const lineStart = markdown.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const lineEndIndex = markdown.indexOf('\n', end);
+  const lineEnd = lineEndIndex === -1 ? markdown.length : lineEndIndex;
+  const selectedLines = markdown.slice(lineStart, lineEnd).split('\n');
+  let originalOffset = 0;
+  let startOffset = 0;
+  let endOffset = 0;
+  const prefixed = selectedLines
+    .map((line) => {
+      const currentLineStart = lineStart + originalOffset;
+      const addedOffset = line.startsWith(prefix) ? 0 : prefix.length;
+      if (currentLineStart <= start) {
+        startOffset += addedOffset;
+      }
+      if (currentLineStart <= end) {
+        endOffset += addedOffset;
+      }
+      originalOffset += line.length + 1;
+      return addedOffset === 0 ? line : `${prefix}${line}`;
+    })
+    .join('\n');
+  const nextMarkdown = `${markdown.slice(0, lineStart)}${prefixed}${markdown.slice(lineEnd)}`;
+  return {
+    markdown: nextMarkdown,
+    selectionEnd: end + endOffset,
+    selectionStart: start + startOffset,
   };
 }
 
@@ -162,84 +251,5 @@ export function readStaleNoteContentConflict(error: WorkspaceError): NoteContent
   return {
     currentBaselineContentHash: error.currentBaselineContentHash,
     currentBodyMarkdown: error.currentBodyMarkdown,
-  };
-}
-
-export function readLatestNoteEditorContent(content: unknown): LatestNoteEditorContent | null {
-  if (
-    content &&
-    typeof content === 'object' &&
-    'bodyMarkdown' in content &&
-    'baselineContentHash' in content &&
-    typeof content.bodyMarkdown === 'string' &&
-    typeof content.baselineContentHash === 'string'
-  ) {
-    return {
-      baselineContentHash: content.baselineContentHash,
-      bodyMarkdown: content.bodyMarkdown,
-    };
-  }
-
-  return null;
-}
-
-export function createNoteContentCachePatch({
-  baselineContentHash,
-  bodyMarkdown,
-  memoryId,
-  segmentId,
-  title,
-  workspaceId,
-}: {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly title: string;
-  readonly workspaceId: string;
-}): NoteContentCachePatch {
-  return {
-    baselineContentHash,
-    bodyByteLength: utf8Encoder.encode(bodyMarkdown).byteLength,
-    bodyMarkdown,
-    memoryId,
-    segmentId,
-    title,
-    workspaceId,
-  };
-}
-
-export function patchSegmentNoteContentCache({
-  cachePatch,
-  current,
-  segmentId,
-}: {
-  readonly cachePatch: NoteContentCachePatch;
-  readonly current: WorkspaceNoteSegmentContent | undefined;
-  readonly segmentId: string;
-}): WorkspaceNoteSegmentContent {
-  return {
-    requestId: current?.requestId ?? `segment-content-conflict:${segmentId}`,
-    type: 'note',
-    ...cachePatch,
-    title: current?.title ?? cachePatch.title,
-  };
-}
-
-export function patchSegmentSupplementNoteContentCache({
-  cachePatch,
-  current,
-  supplementId,
-}: {
-  readonly cachePatch: NoteContentCachePatch;
-  readonly current: WorkspaceNoteSegmentSupplementContent | undefined;
-  readonly supplementId: string;
-}): WorkspaceNoteSegmentSupplementContent {
-  return {
-    requestId: current?.requestId ?? `segment-supplement-content-conflict:${supplementId}`,
-    supplementId,
-    type: 'note',
-    ...cachePatch,
-    title: current?.title ?? cachePatch.title,
   };
 }

@@ -1,0 +1,141 @@
+{
+  "runtime-body-editor-overlay-v14": {
+    "menuItems": [],
+    "dialogText": ["笔记\n\n正文\n\n正文\nMarkdown 笔记\n保存笔记\n笔记正文"],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑笔记 笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-body-more-menu-v14": {
+    "menuItems": ["重命名", "清空正文"],
+    "dialogText": [],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑笔记 笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-body-clear-confirm-v14": {
+    "menuItems": [],
+    "dialogText": [
+      "清空正文？\n\n清空后会把「正文」保存为空，不会删除文件或附件。确认后需要手动重新输入内容。\n\n取消\n清空正文"
+    ],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑笔记 笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-new-segment-menu-v14": {
+    "menuItems": ["录音", "笔记"],
+    "dialogText": [],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑笔记 笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-add-supplement-menu-v14": {
+    "menuItems": ["录音补充", "笔记补充"],
+    "dialogText": [],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑笔记 笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-note-supplement-editor-focused-v14": {
+    "menuItems": [],
+    "dialogText": ["笔记\n\n补充笔记1\n\n补充笔记1\nMarkdown 笔记\n保存笔记\n笔记正文"],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑补充笔记 补充笔记1"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-transcript-more-menu-v14": {
+    "menuItems": ["重命名", "清空转录"],
+    "dialogText": [],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑转录"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-transcript-clear-confirm-v14": {
+    "menuItems": [],
+    "dialogText": [
+      "清空转录？\n\n清空后会把转录保存为空，不会删除录音文件。确认后需要手动重新输入或重新生成转录。\n\n取消\n清空转录"
+    ],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑转录"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  },
+  "runtime-transcript-editor-overlay-v14": {
+    "menuItems": [],
+    "dialogText": ["转录\n\n转录ya\n\n转录ya\n转录文本\n保存转录\n转录正文"],
+    "actionLabels": [
+      {
+        "text": "编辑",
+        "aria": "编辑转录"
+      },
+      {
+        "text": "补充",
+        "aria": "添加片段补充内容"
+      }
+    ],
+    "agentationNodeCount": 0
+  }
+}

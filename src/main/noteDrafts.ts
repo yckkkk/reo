@@ -35,6 +35,7 @@ import {
   resolveWorkspaceDraftSupplementDirectory,
 } from './workspacePaths.js';
 import {
+  workspaceSegmentContentTabOrderItemSchema,
   workspaceError,
   type WorkspaceErrorEnvelope,
   type WorkspaceSegmentProjection,
@@ -108,6 +109,7 @@ const finalizedNoteSegmentManifestSchema = z
     finalizedAt: z.string().min(1),
     updatedAt: z.string().min(1),
     bodyByteLength: z.number().int().nonnegative(),
+    contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
   })
   .strict();
 

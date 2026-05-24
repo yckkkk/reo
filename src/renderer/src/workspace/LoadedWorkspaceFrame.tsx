@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
-  type NoteSegmentEditTarget,
-  type NoteSegmentSupplementEditTarget,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type TranscriptionBackfillController,
@@ -21,10 +19,15 @@ import type {
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
 import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
+import type {
+  SavedNoteSegmentContent,
+  SavedNoteSegmentSupplementContent,
+} from './finalizedNoteContentSave';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
+  readonly expressionDockVisible?: boolean;
   readonly memoryRailOpen?: boolean;
   readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
@@ -32,8 +35,8 @@ type LoadedWorkspaceFrameProps = {
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
   readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
-  readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
-  readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
+  readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
@@ -51,6 +54,7 @@ type LoadedWorkspaceFrameProps = {
 
 export function LoadedWorkspaceFrame({
   currentMemory = null,
+  expressionDockVisible = true,
   memoryRailOpen = true,
   memoryRailMode = 'inline',
   onDeleteMemory,
@@ -58,8 +62,8 @@ export function LoadedWorkspaceFrame({
   onDeleteSegmentSupplement,
   onClearSegmentContent,
   onEditSegmentTranscript,
-  onEditNoteSegment,
-  onEditNoteSegmentSupplement,
+  onNoteSegmentContentSaved,
+  onNoteSegmentSupplementContentSaved,
   onRenameMemory,
   onRenameSegmentContent,
   onRenameSegment,
@@ -94,10 +98,9 @@ export function LoadedWorkspaceFrame({
         />
       }
       dock={
-        <ExpressionDock
-          {...(currentMemory && onStartNote ? { onStartNote } : {})}
-          onStartRecording={onStartRecording}
-        />
+        expressionDockVisible && !currentMemory ? (
+          <ExpressionDock onStartRecording={onStartRecording} />
+        ) : null
       }
     >
       {currentMemory ? (
@@ -108,13 +111,15 @@ export function LoadedWorkspaceFrame({
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
           onClearSegmentContent={onClearSegmentContent}
           onEditSegmentTranscript={onEditSegmentTranscript}
-          {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
-          {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
+          onNoteSegmentContentSaved={onNoteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegmentContent={onRenameSegmentContent}
           onRenameSegment={onRenameSegment}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
+          {...(onStartNote ? { onStartNote } : {})}
+          onStartRecording={onStartRecording}
           {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}
           onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}

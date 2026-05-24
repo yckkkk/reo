@@ -31,7 +31,7 @@ export function WorkspaceDangerConfirmDialog({
 }: DeleteConfirmationDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="flex flex-col gap-24 bg-popover shadow-modal">
+      <AlertDialogContent className="flex flex-col gap-16 bg-popover shadow-modal sm:w-[min(420px,calc(100vw-40px))] sm:px-24 sm:py-24">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

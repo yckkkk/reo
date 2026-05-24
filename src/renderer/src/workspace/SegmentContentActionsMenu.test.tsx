@@ -54,7 +54,7 @@ describe('SegmentContentActionsMenu', () => {
     reoWorkspace.revealSegmentInFinder.mockResolvedValue({ ok: true });
   });
 
-  it('shows only transcript slot actions for a primary transcript tab', async () => {
+  it('shows path, edit, rename, and clear actions for a primary transcript tab', async () => {
     const onClear = vi.fn();
     const onEdit = vi.fn();
     const onRename = vi.fn();
@@ -111,6 +111,7 @@ describe('SegmentContentActionsMenu', () => {
     const clearItem = screen.getByRole('menuitem', { name: '清空转录' });
     expect(editItem).toHaveAttribute('data-disabled');
     expect(clearItem).toHaveAttribute('data-disabled');
+    expect(clearItem).toHaveClass('text-destructive');
 
     await user.click(editItem);
     await user.click(clearItem);

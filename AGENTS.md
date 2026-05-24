@@ -64,6 +64,8 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - 不保留无当前用途的实现、文档、目录或接口。
 - 不重复造轮子。优先使用官方文档、主流包和已验证方案。
 - 自研不是默认选项。前端组件、UI primitives、page/overlay primitives、overlay/drawer、audio/media、editor、main process capability、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。
+- Markdown 编辑器当前采用轻量 textarea-first 路线。Markdown 字符串仍是文件真源和保存真源；Reo 只提供稳定输入、少量 Markdown 格式插入、图片附件插入、保存、冲突提示和访达可编辑文件合同。
+- 当前不接入 CodeMirror、Tiptap、ProseMirror、BlockNote 或其它重型编辑器作为 Note 编辑底座。需要富文本、块编辑、复杂 Live Preview 或完整 Markdown renderer 时，必须重新创建 spec 并先证明它不会破坏 Reo 的轻量输入目标、文件真源和维护成本边界。
 - 发现现成方案不完全适配 Reo 时，先思考如何裁剪、retokenize、组合、包一层薄适配或 fork；只有这些方式仍不能满足 Electron 安全边界、Reo 本地文件真源、Reo design system、测试可控性或代码复杂度预算时，才允许自研，并必须记录已尝试的适配路径和拒绝原因。
 - 不创建 generic runtime 或 speculative abstraction。
 - 基础未稳固前，不启动会扩大架构面的功能建设。
@@ -74,7 +76,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - `.reo/workspace.json`、`.reo/index.json`、`.reo/objects/*/*.json`、draft、trash、lock、recovery marker 和技术 manifest 由 Reo 管理；agent 不得把 `.reo` 当作用户语义第二真源。
 - Memory、Segment 和 SegmentSupplement 的稳定 id、归属、音频字节数、时长、事务和恢复字段属于 `.reo/objects/*/*.json`；语义标题、摘要、标签、人物、地点、主题和正文属于 Markdown/frontmatter。
 - 用户目录中的普通 `.json`、`.md`、`.html` 或其它文件可以存在，但不自动成为 Reo 对象；只有当前文件合同识别的 `memory.md`、`segment.md` 和 `supplement.md` 进入对象图。
-- HTML 和其它可执行或可嵌入内容默认是不可信资源；没有隔离预览能力前，renderer 不执行、不注入、不渲染用户 HTML。
+- HTML 和其它可执行或可嵌入内容默认是不可信资源；renderer 只能通过成熟 sanitizer 渲染 inert allowlist HTML，不允许脚本、事件属性、style、form、iframe、object、embed、外部资源或导航能力。需要执行、嵌入或更完整 HTML 语义时，必须使用安全 sandbox/iframe 并同步更新 Electron CSP、文档和运行时证据。
 - 为某个片段补充新内容时，优先使用该 Segment 下的一层 SegmentSupplement；不创建 supplement 下的 supplement，也不提前创建 ContentNode、Block runtime、插件 runtime 或任意文件 registry。
 
 ## 代码组织与命名

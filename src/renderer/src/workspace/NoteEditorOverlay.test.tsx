@@ -1,10 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
 import { NoteEditorOverlay } from './NoteEditorOverlay';
+import type { NoteEditorTarget } from './noteEditorModel';
 import type { WorkspaceSession } from './workspaceApi';
 
 const workspaceSession: WorkspaceSession = {
@@ -18,7 +19,13 @@ const workspaceSession: WorkspaceSession = {
   },
 };
 
-function renderNoteEditorOverlay(onOpenChange = vi.fn()) {
+function renderNoteEditorOverlay({
+  onOpenChange = vi.fn() as (open: boolean) => void,
+  target = null,
+}: {
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly target?: NoteEditorTarget | null;
+} = {}) {
   const queryClient = createReoQueryClient();
 
   function Wrapper({ children }: { readonly children: ReactNode }) {
@@ -29,13 +36,11 @@ function renderNoteEditorOverlay(onOpenChange = vi.fn()) {
     onOpenChange,
     ...render(
       <NoteEditorOverlay
-        onNoteSegmentContentSaved={() => {}}
         onNoteSegmentFinalized={() => {}}
-        onNoteSegmentSupplementContentSaved={() => {}}
         onOpenChange={onOpenChange}
         onSegmentSupplementNoteFinalized={() => {}}
         open
-        target={null}
+        target={target}
         workspaceSession={workspaceSession}
       />,
       { wrapper: Wrapper }
@@ -46,9 +51,9 @@ function renderNoteEditorOverlay(onOpenChange = vi.fn()) {
 describe('NoteEditorOverlay', () => {
   it('places the return button on the shared titlebar control grid', async () => {
     const user = userEvent.setup();
-    const onOpenChange = vi.fn();
+    const onOpenChange = vi.fn<(open: boolean) => void>();
 
-    renderNoteEditorOverlay(onOpenChange);
+    renderNoteEditorOverlay({ onOpenChange });
 
     const returnButton = screen.getByRole('button', { name: '返回' });
     expect(returnButton).toHaveStyle({ left: '80px', top: '2px' });
@@ -59,25 +64,72 @@ describe('NoteEditorOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('places the title and save action in the window titlebar', () => {
+  it('keeps the window titlebar for navigation and saves from the editor header', async () => {
     renderNoteEditorOverlay();
 
     const titlebarTitle = screen.getByTestId('note-editor-titlebar-title');
     expect(titlebarTitle).toHaveStyle({ left: '116px', top: '2px' });
     expect(titlebarTitle).toHaveClass('h-32', 'text-body', 'font-regular', 'leading-body');
     expect(within(titlebarTitle).getByRole('heading', { name: '正文' })).toBeInTheDocument();
+    expect(screen.queryByTestId('note-editor-titlebar-actions')).not.toBeInTheDocument();
 
-    const titlebarActions = screen.getByTestId('note-editor-titlebar-actions');
-    expect(titlebarActions).toHaveStyle({ right: '12px', top: '2px' });
-    expect(titlebarActions).toHaveClass('pointer-events-auto', 'items-center', 'gap-8');
-    expect(within(titlebarActions).getByRole('button', { name: '保存笔记' })).toHaveClass(
+    const editorStage = screen.getByTestId('note-editor-surface-stage');
+    expect(editorStage).toHaveClass('max-w-[760px]');
+    expect(within(editorStage).queryByRole('heading', { name: '正文' })).toBeNull();
+    const editorSurface = screen.getByTestId('note-editor-textarea-surface');
+    expect(editorSurface.firstElementChild).toHaveClass('min-h-[44px]');
+    expect(editorSurface.firstElementChild).not.toHaveClass('min-h-44');
+    expect(within(editorSurface).getByText('Markdown 笔记')).toBeInTheDocument();
+    expect(within(editorStage).getByRole('button', { name: '保存笔记' })).toHaveClass(
       'min-h-32',
       'rounded-md',
       'px-12'
     );
+    await waitFor(() => expect(screen.getByLabelText('笔记正文')).toHaveFocus());
+  });
 
-    const editorStage = screen.getByTestId('note-editor-surface-stage');
-    expect(within(editorStage).queryByRole('heading', { name: '正文' })).toBeNull();
-    expect(within(editorStage).queryByRole('button', { name: '保存笔记' })).toBeNull();
+  it('labels an empty supplement editor as a supplement writing surface', () => {
+    renderNoteEditorOverlay({
+      target: {
+        kind: 'segment-supplement',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        title: '补充笔记1',
+      },
+    });
+
+    const textarea = screen.getByLabelText('笔记正文');
+    expect(textarea).toHaveValue('');
+    expect(textarea).toHaveAttribute('placeholder', '写下补充笔记...');
+    expect(textarea).toHaveClass('py-16', 'placeholder:text-muted-foreground');
+    expect(textarea).not.toHaveClass('focus-visible:ring-2');
+    expect(screen.getByTestId('note-editor-textarea-surface')).toHaveClass(
+      'focus-within:ring-1',
+      'focus-within:ring-border'
+    );
+    expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记1');
+  });
+
+  it('applies lightweight Markdown toolbar commands to the textarea selection', async () => {
+    const user = userEvent.setup();
+
+    renderNoteEditorOverlay({
+      target: {
+        kind: 'segment',
+        memoryId: 'memory_1',
+        title: '新笔记',
+      },
+    });
+
+    const textarea = screen.getByLabelText('笔记正文') as HTMLTextAreaElement;
+    await user.type(textarea, 'hello');
+    textarea.setSelectionRange(0, 5);
+
+    await user.click(screen.getByRole('button', { name: '粗体' }));
+
+    expect(textarea.value).toBe('**hello**');
+    await waitFor(() => expect(textarea.selectionStart).toBe(2));
+    expect(textarea.selectionEnd).toBe(7);
+    expect(screen.getByRole('toolbar', { name: 'Markdown 格式工具栏' })).toBeVisible();
   });
 });
