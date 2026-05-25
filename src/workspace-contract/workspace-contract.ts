@@ -1205,6 +1205,7 @@ export const workspaceRecordingMarkdownSaveResponseSchema = z.discriminatedUnion
     value: z.strictObject({
       memory: workspaceMemorySummarySchema,
       saved: z.literal(true),
+      baselineTranscriptHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1218,6 +1219,7 @@ export const workspaceSegmentSupplementMarkdownSaveResponseSchema = z.discrimina
       segment: workspaceSegmentProjectionSchema,
       supplement: workspaceSegmentSupplementProjectionSchema,
       saved: z.literal(true),
+      baselineTranscriptHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,

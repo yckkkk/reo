@@ -26,14 +26,6 @@ export type SegmentContentClearTarget =
       readonly currentTitle: string;
     });
 
-export type SegmentTranscriptEditTarget = {
-  readonly baselineTranscriptHash: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly title: string;
-  readonly transcriptText: string;
-};
-
 export type SegmentSupplementActionTarget = SegmentActionTarget & {
   readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
 };

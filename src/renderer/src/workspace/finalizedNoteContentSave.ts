@@ -20,7 +20,7 @@ export type SavedNoteSegmentSupplementContent = SavedNoteSegmentContent & {
 };
 
 export type FinalizedNoteContentSaveResult<TSaved> =
-  | { readonly ok: true; readonly saved: TSaved }
+  | { readonly ok: true; readonly saved: TSaved; readonly nextBaselineContentHash?: string }
   | { readonly ok: false; readonly kind: 'conflict'; readonly conflict: NoteContentConflict }
   | { readonly ok: false; readonly kind: 'error'; readonly message: string };
 
@@ -60,6 +60,7 @@ export async function saveFinalizedNoteSegmentContent({
 
   return {
     ok: true,
+    nextBaselineContentHash: response.value.baselineContentHash,
     saved: {
       expectedSession: workspaceSession,
       memoryId,
@@ -111,6 +112,7 @@ export async function saveFinalizedNoteSegmentSupplementContent({
 
   return {
     ok: true,
+    nextBaselineContentHash: response.value.baselineContentHash,
     saved: {
       expectedSession: workspaceSession,
       memoryId,

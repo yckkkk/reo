@@ -2906,6 +2906,7 @@ test('finalized audio segment supplement transcript save contract requires paren
         lastTranscriptionAttempt: 'never',
         transcript: { exists: true },
       },
+      baselineTranscriptHash: 'b'.repeat(64),
     },
   });
   assert.equal(response.ok, true);

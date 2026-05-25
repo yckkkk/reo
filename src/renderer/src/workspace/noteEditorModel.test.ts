@@ -31,28 +31,15 @@ describe('noteEditorModel lightweight Markdown formatting', () => {
 
     expect(
       applyLightweightMarkdownFormat({
-        action: 'heading',
-        markdown: 'alpha\nbeta',
-        selectionEnd: 8,
-        selectionStart: 8,
-      })
-    ).toEqual({
-      markdown: 'alpha\n## beta',
-      selectionEnd: 11,
-      selectionStart: 11,
-    });
-
-    expect(
-      applyLightweightMarkdownFormat({
-        action: 'separator',
+        action: 'image',
         markdown: 'alpha',
         selectionEnd: 5,
         selectionStart: 5,
       })
     ).toEqual({
-      markdown: 'alpha\n\n---\n\n',
-      selectionEnd: 12,
-      selectionStart: 12,
+      markdown: 'alpha![图片]()',
+      selectionEnd: 11,
+      selectionStart: 11,
     });
   });
 
@@ -68,6 +55,19 @@ describe('noteEditorModel lightweight Markdown formatting', () => {
       markdown: '- alpha\n- beta\ngamma',
       selectionEnd: 14,
       selectionStart: 2,
+    });
+
+    expect(
+      applyLightweightMarkdownFormat({
+        action: 'numbered-list',
+        markdown: 'alpha\nbeta\ngamma',
+        selectionEnd: 10,
+        selectionStart: 0,
+      })
+    ).toEqual({
+      markdown: '1. alpha\n1. beta\ngamma',
+      selectionEnd: 16,
+      selectionStart: 3,
     });
   });
 });

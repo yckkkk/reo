@@ -364,8 +364,8 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
-  async function openInlineNoteEditor(user: ReturnType<typeof userEvent.setup>, title = '笔记1') {
-    await user.click(screen.getByRole('button', { name: `编辑笔记 ${title}` }));
+  async function openInlineNoteEditor(user: ReturnType<typeof userEvent.setup>, _title = '笔记1') {
+    await user.click(await screen.findByRole('tabpanel', { name: '正文' }));
     return screen.findByTestId('memory-studio-inline-note-editor');
   }
 
@@ -373,7 +373,7 @@ describe('App', () => {
     user: ReturnType<typeof userEvent.setup>,
     title = '补充笔记1'
   ) {
-    await user.click(screen.getByRole('button', { name: `编辑补充笔记 ${title}` }));
+    await user.click(await screen.findByRole('tabpanel', { name: title }));
     return screen.findByTestId('memory-studio-inline-supplement-note-editor');
   }
 
@@ -964,8 +964,9 @@ describe('App', () => {
     expect(reoWorkspace.closeWorkspace).not.toHaveBeenCalled();
   });
 
-  it('requests segment transcription backfill when retrying a failed segment transcription from the loaded workspace', async () => {
+  it('requests segment transcription backfill from the Segment menu while the inline editor stays visible', async () => {
     const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
     const memory = {
       memoryId: 'mem_retry_transcription',
       title: 'Retry transcription memory',
@@ -1049,7 +1050,7 @@ describe('App', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    expect(await within(content).findByText('上次生成转录失败。')).toBeInTheDocument();
+    expect(await within(content).findByLabelText('转录正文')).toHaveValue('');
 
     const backfill =
       createDeferred<
@@ -1057,11 +1058,9 @@ describe('App', () => {
       >();
     reoWorkspace.requestSegmentTranscriptionBackfill.mockReturnValue(backfill.promise);
 
-    const retryButton = within(content).getByRole('button', { name: '重试' });
-    fireEvent.click(retryButton);
-    fireEvent.click(retryButton);
+    await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
 
-    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
     await waitFor(() =>
       expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
@@ -1074,13 +1073,18 @@ describe('App', () => {
     expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledTimes(1);
     backfill.resolve({
       ok: true,
-      value: { memory: { ...memory, hasAudioTranscript: true }, saved: true },
+      value: {
+        memory: { ...memory, hasAudioTranscript: true },
+        saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
+      },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
   });
 
   it('ignores an in-flight segment transcription backfill response after reopening the same workspace with a new handle', async () => {
     const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
     const memory = {
       memoryId: 'mem_retry_reopen_transcription',
       title: 'Retry reopen transcription memory',
@@ -1173,8 +1177,9 @@ describe('App', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    await user.click(within(content).getByRole('button', { name: '重试' }));
-    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
+    expect(await within(content).findByLabelText('转录正文')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
 
     fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
     await waitFor(() =>
@@ -1206,18 +1211,28 @@ describe('App', () => {
     reoWorkspace.requestSegmentTranscriptionBackfill.mockReturnValueOnce(reopenedBackfill.promise);
     const reopenedStudio = await screen.findByRole('region', { name: 'Memory Studio' });
     const reopenedContent = within(reopenedStudio).getByRole('region', { name: '片段内容' });
-    await user.click(within(reopenedContent).getByRole('button', { name: '重试' }));
+    expect(await within(reopenedContent).findByLabelText('转录正文')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
     expect(reoWorkspace.requestSegmentTranscriptionBackfill).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       backfill.resolve({
         ok: true,
-        value: { memory: { ...memory, hasAudioTranscript: true }, saved: true },
+        value: {
+          memory: { ...memory, hasAudioTranscript: true },
+          saved: true,
+          baselineTranscriptHash: BASELINE_HASH_B,
+        },
       });
       await backfill.promise;
       reopenedBackfill.resolve({
         ok: true,
-        value: { memory: { ...memory, hasAudioTranscript: true }, saved: true },
+        value: {
+          memory: { ...memory, hasAudioTranscript: true },
+          saved: true,
+          baselineTranscriptHash: BASELINE_HASH_C,
+        },
       });
       await reopenedBackfill.promise;
     });
@@ -1225,8 +1240,9 @@ describe('App', () => {
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
   }, 20_000);
 
-  it('requests supplement transcription backfill when retrying a failed supplement transcription from the loaded workspace', async () => {
+  it('requests supplement transcription backfill from the Supplement menu while the inline editor stays visible', async () => {
     const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
     const fixture = createSegmentSupplementFixture();
     mockSegmentSupplementWorkspace({
       ...fixture,
@@ -1265,8 +1281,9 @@ describe('App', () => {
     );
 
     await createWorkspaceWithSegmentSupplement(user);
-    await user.click(screen.getByRole('tab', { name: '补充录音1' }));
-    expect(await screen.findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
+    const supplementTab = screen.getByRole('tab', { name: '补充录音1' });
+    await user.click(supplementTab);
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('');
 
     const backfill =
       createDeferred<
@@ -1276,9 +1293,14 @@ describe('App', () => {
       backfill.promise
     );
 
-    await user.click(screen.getByRole('button', { name: '重试' }));
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    );
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(supplementTabItem as HTMLElement);
+    await user.click(screen.getByRole('button', { name: '补充录音1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
 
-    expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
     await waitFor(() =>
       expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
@@ -1296,6 +1318,7 @@ describe('App', () => {
         segment: fixture.segment,
         supplement: fixture.supplement,
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -1303,6 +1326,7 @@ describe('App', () => {
 
   it('ignores an in-flight supplement transcription backfill response after reopening the same workspace with a new handle', async () => {
     const user = userEvent.setup();
+    mockVoiceTranscriptionSettings(true);
     const fixture = createSegmentSupplementFixture();
     const failedSupplement = {
       ...fixture.supplement,
@@ -1348,9 +1372,16 @@ describe('App', () => {
     );
 
     await createWorkspaceWithSegmentSupplement(user);
-    await user.click(screen.getByRole('tab', { name: '补充录音1' }));
-    await user.click(await screen.findByRole('button', { name: '重试' }));
-    expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
+    const supplementTab = screen.getByRole('tab', { name: '补充录音1' });
+    await user.click(supplementTab);
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('');
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    );
+    expect(supplementTabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(supplementTabItem as HTMLElement);
+    await user.click(screen.getByRole('button', { name: '补充录音1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
 
     fireEvent.click(screen.getByRole('button', { hidden: true, name: '首页' }));
     await waitFor(() =>
@@ -1380,8 +1411,16 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '浏览' }));
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
-    await user.click(await screen.findByRole('tab', { name: '补充录音1' }));
-    await user.click(await screen.findByRole('button', { name: '重试' }));
+    const reopenedSupplementTab = await screen.findByRole('tab', { name: '补充录音1' });
+    await user.click(reopenedSupplementTab);
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('');
+    const reopenedSupplementTabItem = reopenedSupplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    );
+    expect(reopenedSupplementTabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(reopenedSupplementTabItem as HTMLElement);
+    await user.click(screen.getByRole('button', { name: '补充录音1 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
 
     expect(reoWorkspace.requestSegmentSupplementTranscriptionBackfill).toHaveBeenCalledTimes(2);
 
@@ -1393,6 +1432,7 @@ describe('App', () => {
           segment: fixture.segment,
           supplement: fixture.supplement,
           saved: true,
+          baselineTranscriptHash: BASELINE_HASH_B,
         },
       });
       await backfill.promise;
@@ -1403,6 +1443,7 @@ describe('App', () => {
           segment: fixture.segment,
           supplement: fixture.supplement,
           saved: true,
+          baselineTranscriptHash: BASELINE_HASH_C,
         },
       });
       await reopenedBackfill.promise;
@@ -1445,7 +1486,7 @@ describe('App', () => {
 
     await createWorkspaceWithSegmentSupplement(user);
     await user.click(screen.getByRole('tab', { name: transcriptSupplement.title }));
-    expect(await screen.findByText('补充录音转写正文')).toBeInTheDocument();
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('补充录音转写正文');
 
     await user.click(
       screen.getByRole('button', { name: `${transcriptSupplement.title} 更多操作` })
@@ -1469,8 +1510,7 @@ describe('App', () => {
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
     );
-    expect(await screen.findByText('正在生成补充录音转录。')).toBeInTheDocument();
-    expect(screen.getByText('补充录音转写正文')).toBeInTheDocument();
+    expect(screen.getByLabelText('补充录音转录正文')).toHaveValue('补充录音转写正文');
     backfill.resolve({
       ok: true,
       value: {
@@ -1478,6 +1518,7 @@ describe('App', () => {
         segment: transcriptSegment,
         supplement: transcriptSupplement,
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -1506,7 +1547,7 @@ describe('App', () => {
     );
 
     await createWorkspaceWithSingleSegment(user);
-    expect(await screen.findByText('已有转录正文')).toBeInTheDocument();
+    expect(await screen.findByLabelText('转录正文')).toHaveValue('已有转录正文');
 
     await user.click(screen.getByRole('button', { name: `片段 ${segment.title} 更多操作` }));
     await user.click(screen.getByRole('menuitem', { name: '重新生成转录' }));
@@ -1530,12 +1571,15 @@ describe('App', () => {
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog', { name: '重新生成转录？' })).not.toBeInTheDocument()
     );
-    expect(await screen.findByText('正在生成转录。')).toBeInTheDocument();
-    expect(screen.getByText('已有转录正文')).toBeInTheDocument();
+    expect(screen.getByLabelText('转录正文')).toHaveValue('已有转录正文');
     expect(screen.getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
     backfill.resolve({
       ok: true,
-      value: { memory: { ...memory, hasAudioTranscript: true }, saved: true },
+      value: {
+        memory: { ...memory, hasAudioTranscript: true },
+        saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
+      },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '访谈转录' })).toBeInTheDocument();
@@ -1625,7 +1669,7 @@ describe('App', () => {
     });
     reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
       ok: true,
-      value: { memory, saved: true },
+      value: { memory, saved: true, baselineTranscriptHash: BASELINE_HASH_B },
     });
 
     render(
@@ -2466,7 +2510,7 @@ describe('App', () => {
     });
   }, 10_000);
 
-  it('blocks settings navigation while the transcript editor is open', async () => {
+  it('blocks settings navigation and window unload while inline transcript edits are dirty', async () => {
     const user = userEvent.setup();
     const toastErrorSpy = vi.spyOn(toast, 'error');
     const memory = {
@@ -2556,17 +2600,21 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByRole('button', { name: '选择片段 录音1' });
 
-    await user.click(screen.getByRole('button', { name: '编辑转录' }));
-    await screen.findByRole('region', { name: '转录编辑器' });
+    await user.click(await screen.findByText('旧转录'));
+    const inlineTranscriptEditor = await screen.findByLabelText('转录正文');
+    await user.clear(inlineTranscriptEditor);
+    await user.type(inlineTranscriptEditor, '修正后的转录');
 
-    expect(screen.queryByRole('button', { name: '打开表达入口' })).not.toBeInTheDocument();
+    const inlineUnload = new Event('beforeunload', { cancelable: true });
+    expect(window.dispatchEvent(inlineUnload)).toBe(false);
+    expect(inlineUnload.defaultPrevented).toBe(true);
 
     toastErrorSpy.mockClear();
     fireEvent.click(screen.getByRole('button', { name: '设置', hidden: true }));
 
-    expect(toastErrorSpy).toHaveBeenCalledWith('当前转录尚未完成，请先保存或关闭转录。');
+    expect(toastErrorSpy).toHaveBeenCalledWith('请先保存当前文本编辑。');
     expect(screen.queryByRole('region', { name: '语音设置' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '转录编辑器' })).toBeInTheDocument();
+    expect(screen.getByLabelText('转录正文')).toHaveValue('修正后的转录');
   }, 10_000);
 
   it('clears primary Segment transcript through the confirm dialog with the transcript baseline', async () => {
@@ -2648,6 +2696,7 @@ describe('App', () => {
       ok: true,
       value: {
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
         memory: {
           ...memory,
           hasAudioTranscript: true,
@@ -3045,7 +3094,7 @@ describe('App', () => {
     expect(await screen.findByText('补充录音转写正文')).toBeInTheDocument();
   }, 10_000);
 
-  it('renders the supplement empty transcript copy when the supplement has no transcript', async () => {
+  it('renders the supplement inline transcript editor when the supplement has no transcript', async () => {
     const user = userEvent.setup();
     const fixture = createSegmentSupplementFixture();
     mockSegmentSupplementWorkspace(fixture);
@@ -3072,7 +3121,7 @@ describe('App', () => {
     await createWorkspaceWithSegmentSupplement(user);
     await user.click(screen.getByRole('tab', { name: '补充录音1' }));
 
-    expect(await screen.findByText('这段补充录音还没有转录。')).toBeInTheDocument();
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('');
   }, 10_000);
 
   it('deletes a SegmentSupplement through confirmation and restores it from the toast action', async () => {
@@ -7187,6 +7236,7 @@ describe('App', () => {
           updatedAt: '2026-05-09T10:00:05.000Z',
         },
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
       },
     });
     reoWorkspace.finalizeRecordingDraft.mockResolvedValue({
@@ -7936,6 +7986,7 @@ describe('App', () => {
           transcript: { exists: true },
         },
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
       },
     });
     const queryClient = createReoQueryClient();
@@ -8340,6 +8391,7 @@ describe('App', () => {
           updatedAt: '2026-05-09T10:00:05.000Z',
         },
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_C,
       },
     });
 
@@ -8553,6 +8605,7 @@ describe('App', () => {
           updatedAt: '2026-05-09T10:00:05.000Z',
         },
         saved: true,
+        baselineTranscriptHash: BASELINE_HASH_B,
       },
     });
 
@@ -10229,7 +10282,7 @@ describe('App', () => {
     expect(within(dialog).getByTestId('note-editor-surface-stage')).toBeInTheDocument();
     expect(within(dialog).getByRole('heading', { name: '正文' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('heading', { name: '笔记1' })).toBeNull();
-    expect(noteBody).toHaveClass('py-16');
+    expect(noteBody).toHaveClass('p-0', 'placeholder:text-muted-foreground');
     expect(within(dialog).queryByRole('button', { name: '插入图片' })).toBeNull();
     expect(dialog.querySelector('[data-slot="note-editor-toolbar-placeholder"]')).toBeNull();
     expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
@@ -10258,9 +10311,9 @@ describe('App', () => {
       'aria-current',
       'true'
     );
-    expect(await screen.findByRole('heading', { name: 'Cake plan' })).toBeInTheDocument();
-    expect(screen.getByText('Buy candles')).toBeInTheDocument();
-    expect(screen.queryByText((text) => text.includes('## Cake plan'))).toBeNull();
+    expect(await screen.findByLabelText('笔记正文')).toHaveValue('## Cake plan\n\n- Buy candles');
+    expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     expect(reoWorkspace.createMemory).not.toHaveBeenCalled();
     expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.finalizeRecordingDraft).not.toHaveBeenCalled();
@@ -10667,13 +10720,12 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Old note');
     const editor = await openInlineNoteEditor(user);
-    expect(within(editor).getByText('Markdown 正文')).toBeInTheDocument();
     expect(within(editor).queryByText('笔记1')).toBeNull();
     const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, '---\ntitle: Updated\n---\n\nUpdated note');
     expect(within(editor).queryByText('Raw Markdown')).toBeNull();
-    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledWith({
@@ -10763,7 +10815,8 @@ describe('App', () => {
         baselineContentHash: BASELINE_HASH_A,
       },
     }));
-    reoWorkspace.writeSegmentContent.mockRejectedValue(new Error('bridge failed'));
+    const pendingSave = createDeferred<never>();
+    reoWorkspace.writeSegmentContent.mockReturnValue(pendingSave.promise);
 
     render(
       <ReoQueryProvider>
@@ -10779,13 +10832,22 @@ describe('App', () => {
     await screen.findByText('Old note');
     const editor = await openInlineNoteEditor(user);
     const body = within(editor).getByLabelText('笔记正文');
+    const editorSurface = editor;
     await user.clear(body);
     await user.type(body, 'Unsaved note');
-    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
+    expect(editorSurface).toHaveClass('border-ring');
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(within(editor).queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+    );
+    pendingSave.reject(new Error('bridge failed'));
 
     expect(await screen.findByText('无法保存笔记正文。')).toBeInTheDocument();
     expect(body).toBeEnabled();
-    expect(within(editor).getByRole('button', { name: '保存正文' })).toBeEnabled();
+    expect(within(editor).getByRole('button', { name: '保存' })).toBeEnabled();
+    expect(within(editor).getByRole('button', { name: '取消' })).toBeEnabled();
+    expect(editorSurface).toHaveClass('border-secondary');
+    expect(editorSurface).not.toHaveClass('border-ring');
     expect(body).toHaveValue('Unsaved note');
   });
 
@@ -10889,7 +10951,7 @@ describe('App', () => {
     const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expect(body).toHaveValue('My unsaved body');
@@ -11023,7 +11085,7 @@ describe('App', () => {
     const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
     await user.click(
       within(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).getByRole(
         'button',
@@ -11152,7 +11214,7 @@ describe('App', () => {
     const body = within(editor).getByLabelText('笔记正文');
     await user.clear(body);
     await user.type(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存正文' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expect(body).toHaveValue('My unsaved body');
@@ -11525,7 +11587,7 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('无法插入图片附件。');
   });
 
-  it('maps Note Segment attachment image references to reo-attachment URLs only for attachments paths', async () => {
+  it('shows Note Segment attachment image references as editable Markdown text', async () => {
     const user = userEvent.setup();
     const birthdayMemory = {
       memoryId: 'mem_birthday',
@@ -11616,22 +11678,15 @@ describe('App', () => {
     await screen.findByText('Memory');
     await user.click(screen.getByRole('button', { name: '创建' }));
 
-    expect(await screen.findByRole('img', { name: 'Local cake' })).toHaveAttribute(
-      'src',
-      'reo-attachment://ws_1/segments/seg_note_1/cake.png'
+    expect(await screen.findByLabelText('笔记正文')).toHaveValue(
+      [
+        '![Local cake](attachments/cake.png)',
+        '![Remote cake](https://example.test/cake.png)',
+        '![File cake](file:///tmp/cake.png)',
+        '![Absolute cake](/tmp/cake.png)',
+      ].join('\n\n')
     );
-    expect(screen.getByRole('img', { name: 'Remote cake' })).toHaveAttribute(
-      'src',
-      'https://example.test/cake.png'
-    );
-    expect(screen.getByRole('img', { name: 'File cake' })).toHaveAttribute(
-      'src',
-      'file:///tmp/cake.png'
-    );
-    expect(screen.getByRole('img', { name: 'Absolute cake' })).toHaveAttribute(
-      'src',
-      '/tmp/cake.png'
-    );
+    expect(screen.queryByRole('img', { name: 'Local cake' })).not.toBeInTheDocument();
   });
 
   it('projects a finalized FAB recording into the active Memory detail and focuses the new Segment', async () => {
@@ -12084,11 +12139,10 @@ describe('App', () => {
     await user.click(noteSupplementTab);
     expect(await screen.findByText('Supplement note')).toBeInTheDocument();
     const editor = await openInlineSupplementNoteEditor(user);
-    expect(within(editor).getByText('Markdown 补充笔记')).toBeInTheDocument();
     const body = within(editor).getByLabelText('补充笔记正文');
     await user.clear(body);
     await user.type(body, 'Edited supplement note');
-    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenCalledWith({
@@ -12247,7 +12301,7 @@ describe('App', () => {
     const body = within(editor).getByLabelText('补充笔记正文');
     await user.clear(body);
     await user.type(body, 'My local supplement body');
-    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expect(body).toHaveValue('My local supplement body');
@@ -12269,7 +12323,7 @@ describe('App', () => {
 
     await user.clear(body);
     await user.type(body, 'Second local body');
-    await user.click(within(editor).getByRole('button', { name: '保存补充笔记' }));
+    await user.click(within(editor).getByRole('button', { name: '保存' }));
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenLastCalledWith({
       workspaceHandle: 'workspace-handle-1',
@@ -12296,7 +12350,7 @@ describe('App', () => {
     });
   });
 
-  it('maps Note SegmentSupplement attachment image references to supplement reo-attachment URLs', async () => {
+  it('shows Note SegmentSupplement attachment image references as editable Markdown text', async () => {
     const user = userEvent.setup();
     const birthdayMemory = {
       memoryId: 'mem_birthday',
@@ -12411,14 +12465,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await user.click(await screen.findByRole('tab', { name: '补充笔记1' }));
 
-    expect(await screen.findByRole('img', { name: 'Supplement local' })).toHaveAttribute(
-      'src',
-      'reo-attachment://ws_1/segments/seg_note_1/supplements/sup_note_1/supplement-photo.png'
+    expect(await screen.findByLabelText('补充笔记正文')).toHaveValue(
+      [
+        '![Supplement local](attachments/supplement-photo.png)',
+        '![Supplement remote](https://example.test/supplement-photo.png)',
+      ].join('\n\n')
     );
-    expect(screen.getByRole('img', { name: 'Supplement remote' })).toHaveAttribute(
-      'src',
-      'https://example.test/supplement-photo.png'
-    );
+    expect(screen.queryByRole('img', { name: 'Supplement local' })).not.toBeInTheDocument();
   });
 
   it('refreshes an active SegmentSupplement panel after its transcript is saved', async () => {
@@ -12538,8 +12591,8 @@ describe('App', () => {
         audio: new Uint8Array([1]),
         audioByteLength: 1,
         transcript: transcriptReadReady
-          ? { exists: true, text: '现场补充转写' }
-          : { exists: false, text: '' },
+          ? { exists: true, text: '现场补充转写', baselineHash: 'b'.repeat(64) }
+          : { exists: false, text: '', baselineHash: '0'.repeat(64) },
       },
     }));
     reoWorkspace.onRecordingTranscriptionEvent.mockImplementation((listener) => {
@@ -12608,7 +12661,7 @@ describe('App', () => {
     await screen.findByText(/录音时间较短/);
     await user.click(screen.getByRole('button', { name: '停止录音' }));
 
-    expect(await screen.findByText('这段补充录音还没有转录。')).toBeInTheDocument();
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('');
     await waitFor(() =>
       expect(reoWorkspace.saveSegmentSupplementTranscript).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-1',
@@ -12638,7 +12691,7 @@ describe('App', () => {
       await saveDeferred.promise;
     });
 
-    expect(await screen.findByText('现场补充转写')).toBeInTheDocument();
+    expect(await screen.findByLabelText('补充录音转录正文')).toHaveValue('现场补充转写');
   }, 10_000);
 
   it('opens the recording overlay from the current memory stage FAB', async () => {

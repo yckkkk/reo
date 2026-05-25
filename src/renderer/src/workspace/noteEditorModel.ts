@@ -37,11 +37,8 @@ export type LightweightMarkdownFormatAction =
   | 'bold'
   | 'bullet-list'
   | 'emphasis'
-  | 'heading'
   | 'image'
-  | 'numbered-list'
-  | 'quote'
-  | 'separator';
+  | 'numbered-list';
 
 type MarkdownSelectionResult = {
   readonly markdown: string;
@@ -142,20 +139,13 @@ export function applyLightweightMarkdownFormat({
   if (action === 'image') {
     return insertMarkdownIntoRange(markdown, start, end, '![图片]()', -1);
   }
-  if (action === 'separator') {
-    const prefix = readSeparatorPrefix(markdown, start);
-    const snippet = `${prefix}---\n\n`;
-    return insertMarkdownIntoRange(markdown, start, end, snippet, 0);
-  }
 
   const prefixByAction: Record<
-    Exclude<LightweightMarkdownFormatAction, 'bold' | 'emphasis' | 'image' | 'separator'>,
+    Exclude<LightweightMarkdownFormatAction, 'bold' | 'emphasis' | 'image'>,
     string
   > = {
     'bullet-list': '- ',
-    heading: '## ',
     'numbered-list': '1. ',
-    quote: '> ',
   };
   return prefixSelectedLines(markdown, start, end, prefixByAction[action]);
 }
@@ -174,16 +164,6 @@ function insertMarkdownIntoRange(
     selectionEnd: cursor,
     selectionStart: cursor,
   };
-}
-
-function readSeparatorPrefix(markdown: string, start: number) {
-  if (start === 0) {
-    return '';
-  }
-  if (markdown[start - 1] === '\n') {
-    return '\n';
-  }
-  return '\n\n';
 }
 
 function wrapSelection(

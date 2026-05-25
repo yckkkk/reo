@@ -199,6 +199,17 @@ function createDragDataTransfer() {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 function mockContentTabRect(element: HTMLElement) {
   Object.defineProperty(element, 'getBoundingClientRect', {
     configurable: true,
@@ -347,7 +358,8 @@ function renderLoadedWorkspaceFrame({
   onDeleteSegment = vi.fn(),
   onDeleteSegmentSupplement = vi.fn(),
   onClearSegmentContent = vi.fn(),
-  onEditSegmentTranscript = vi.fn(),
+  onSegmentTranscriptSaved = vi.fn(),
+  onSegmentSupplementTranscriptSaved = vi.fn(),
   onNoteSegmentContentSaved = vi.fn(),
   onNoteSegmentSupplementContentSaved = vi.fn(),
   onRenameMemory = vi.fn(),
@@ -405,6 +417,20 @@ function renderLoadedWorkspaceFrame({
       message: 'Segment not found',
     },
   }),
+  saveTranscript = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+      message: 'Segment not found',
+    },
+  }),
+  saveSegmentSupplementTranscript = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+      message: 'Segment supplement not found',
+    },
+  }),
   writeSegmentContent = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -429,9 +455,15 @@ function renderLoadedWorkspaceFrame({
   readonly onClearSegmentContent?: Parameters<
     typeof LoadedWorkspaceFrame
   >[0]['onClearSegmentContent'];
-  readonly onEditSegmentTranscript?: Parameters<
+  readonly onSegmentTranscriptSaved?: (saved: {
+    readonly expectedSession: WorkspaceSession;
+    readonly memory: WorkspaceSession['snapshot']['memories'][number];
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) => void;
+  readonly onSegmentSupplementTranscriptSaved?: Parameters<
     typeof LoadedWorkspaceFrame
-  >[0]['onEditSegmentTranscript'];
+  >[0]['onSegmentSupplementTranscriptSaved'];
   readonly onNoteSegmentContentSaved?: (saved: SavedNoteSegmentContent) => void;
   readonly onNoteSegmentSupplementContentSaved?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
@@ -471,6 +503,8 @@ function renderLoadedWorkspaceFrame({
   readonly readSegmentContent?: ReturnType<typeof vi.fn>;
   readonly readSegmentSupplementContent?: ReturnType<typeof vi.fn>;
   readonly updateSegmentContentTabOrder?: ReturnType<typeof vi.fn>;
+  readonly saveTranscript?: ReturnType<typeof vi.fn>;
+  readonly saveSegmentSupplementTranscript?: ReturnType<typeof vi.fn>;
   readonly writeSegmentContent?: ReturnType<typeof vi.fn>;
   readonly writeSegmentSupplementContent?: ReturnType<typeof vi.fn>;
   readonly session?: WorkspaceSession;
@@ -488,6 +522,8 @@ function renderLoadedWorkspaceFrame({
       readFinalizedAudioSegment,
       readSegmentContent,
       readSegmentSupplementContent,
+      saveSegmentSupplementTranscript,
+      saveTranscript,
       updateSegmentContentTabOrder,
       writeSegmentContent,
       writeSegmentSupplementContent,
@@ -528,7 +564,8 @@ function renderLoadedWorkspaceFrame({
         onDeleteSegment={onDeleteSegment}
         onDeleteSegmentSupplement={onDeleteSegmentSupplement}
         onClearSegmentContent={onClearSegmentContent}
-        onEditSegmentTranscript={onEditSegmentTranscript}
+        onSegmentTranscriptSaved={onSegmentTranscriptSaved}
+        onSegmentSupplementTranscriptSaved={onSegmentSupplementTranscriptSaved}
         onNoteSegmentContentSaved={onNoteSegmentContentSaved}
         onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
         onRenameMemory={onRenameMemory}
@@ -577,17 +614,12 @@ describe('LoadedWorkspaceFrame', () => {
       'right-24',
       'sm:right-40'
     );
-    expect(dock.closest('[data-slot="workspace-expression-fab-track"]')).toHaveClass(
-      'mx-auto',
-      'w-full',
-      'max-w-[var(--workspace-stage-max-width)]'
-    );
+    expect(dock.closest('[data-slot="workspace-expression-fab-track"]')).toHaveClass('w-full');
     const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
     expect(workspaceFrame).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
     expect(workspaceFrame).not.toHaveClass('min-h-full');
     expect(workspaceFrame).toHaveStyle({
       '--workspace-memory-rail-width': '240px',
-      '--workspace-stage-max-width': '1120px',
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
@@ -693,11 +725,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(stageShell).not.toHaveClass('min-h-[640px]');
     expect(railShell).toHaveClass('translate-x-0', 'opacity-100');
     expect(stageShell).toHaveClass('px-24', 'sm:px-40');
-    expect(stageContent).toHaveClass(
-      'mx-auto',
-      'w-full',
-      'max-w-[var(--workspace-stage-max-width)]'
-    );
+    expect(stageContent).toHaveClass('w-full');
+    expect(stageContent).not.toHaveClass('max-w-[var(--workspace-stage-max-width)]', 'pb-32');
     expect(rail).toHaveAttribute('id', 'workspace-memory-rail');
     expect(railShell).toHaveClass('border-l', 'border-secondary');
     expect(railShell).not.toHaveClass('border-border', 'shadow-float');
@@ -880,20 +909,24 @@ describe('LoadedWorkspaceFrame', () => {
       ],
     });
     const onNoteSegmentContentSaved = vi.fn();
-    const writeSegmentContent = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId ?? 'write_segment_note',
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        type: 'note',
-        title: 'Cake planning note',
-        bodyMarkdown: request.bodyMarkdown,
-        bodyByteLength: 12,
-        baselineContentHash: 'b'.repeat(64),
-      },
-    }));
+    const pendingSave = createDeferred<void>();
+    const writeSegmentContent = vi.fn(async (request) => {
+      await pendingSave.promise;
+      return {
+        ok: true,
+        value: {
+          requestId: request.requestId ?? 'write_segment_note',
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          type: 'note',
+          title: 'Cake planning note',
+          bodyMarkdown: request.bodyMarkdown,
+          bodyByteLength: 12,
+          baselineContentHash: 'b'.repeat(64),
+        },
+      } as const;
+    });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       onNoteSegmentContentSaved,
@@ -916,9 +949,14 @@ describe('LoadedWorkspaceFrame', () => {
     ).toHaveAttribute('aria-current', 'true');
     expect(within(strip).getByText('32 字节')).toBeInTheDocument();
     expect(within(strip).queryByText('32B')).not.toBeInTheDocument();
-    expect(await within(content).findByRole('heading', { name: 'Cake plan' })).toBeInTheDocument();
-    expect(within(content).getByText('Buy candles')).toBeInTheDocument();
-    expect(within(content).queryByText((text) => text.includes('- Buy candles'))).toBeNull();
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    expect(inlineBodyEditor).not.toHaveFocus();
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '引用' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '标题' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '分割线' })).not.toBeInTheDocument();
     expect(
       within(content).queryByRole('button', { name: '笔记 Cake planning note 暂不支持播放' })
     ).not.toBeInTheDocument();
@@ -971,37 +1009,112 @@ describe('LoadedWorkspaceFrame', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
-      '编辑正文',
       '重命名',
       '清空正文',
     ]);
+    expect(within(bodyMenu).queryByRole('menuitem', { name: '编辑正文' })).not.toBeInTheDocument();
     expect(within(bodyMenu).queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
     expect(
       within(bodyMenu).queryByRole('menuitem', { name: '重新生成转录' })
     ).not.toBeInTheDocument();
     expect(within(bodyMenu).queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
-    await userEvent.click(within(bodyMenu).getByRole('menuitem', { name: '编辑正文' }));
-    const menuInlineEditor = await within(content).findByLabelText('笔记正文');
-    expect(menuInlineEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
-    await userEvent.click(within(content).getByRole('button', { name: '取消' }));
     expect(bodyTab).toHaveAttribute('aria-selected', 'true');
 
     const bodyPanel = within(content).getByRole('tabpanel', { name: '正文' });
-    expect(bodyPanel).toHaveAttribute('data-slot', 'markdown-content-surface');
-    expect(bodyPanel).toHaveClass('mt-14');
-    expect(bodyPanel).not.toHaveClass('mt-4');
+    expect(bodyPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
+    expect(bodyPanel).toHaveClass('mt-[14px]');
+    expect(bodyPanel).toHaveClass('flex-1');
+    expect(bodyPanel).toHaveClass('min-h-0');
+    expect(bodyPanel).not.toHaveClass('max-w-[880px]');
+    expect(bodyPanel).not.toHaveClass('mt-14');
+    expect(bodyPanel).not.toHaveClass('h-[470px]');
     expect(bodyTab).toHaveAttribute('aria-controls', bodyPanel.id);
     expect(bodyPanel).toHaveAttribute('aria-labelledby', bodyTab.id);
     expect(within(bodyPanel).queryByRole('heading', { name: 'Cake planning note' })).toBeNull();
     expect(
       within(bodyPanel).queryByRole('button', { name: '编辑笔记 Cake planning note' })
     ).toBeNull();
-    await userEvent.click(within(bodyPanel).getByRole('heading', { name: 'Cake plan' }));
-    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
-    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
-    expect(within(content).getByRole('button', { name: '保存正文' })).toBeInTheDocument();
+    const editorSurface = within(bodyPanel).getByTestId('memory-studio-inline-note-editor');
+    expect(editorSurface).toHaveClass('h-full', 'w-full');
+    expect(editorSurface).toHaveClass('grid-rows-[44px_minmax(0,1fr)]');
+    expect(editorSurface).toHaveClass('rounded-md', 'border', 'border-secondary');
+    expect(editorSurface).toHaveClass('transition-[border-color]');
+    expect(editorSurface).not.toHaveClass('transition-colors');
+    expect(editorSurface).not.toHaveClass('border-ring');
+    const editorToolbar = editorSurface.querySelector(
+      '[data-slot="lightweight-markdown-editor-toolbar"]'
+    );
+    expect(editorToolbar).toBeInstanceOf(HTMLElement);
+    expect(editorToolbar).toHaveClass('h-[44px]', 'px-12');
+    expect(editorToolbar).toHaveClass('!bg-transparent', 'transition-none');
+    const editorToolbarButtons = within(editorToolbar as HTMLElement).getAllByRole('button');
+    expect(editorToolbarButtons.length).toBeGreaterThan(0);
+    for (const toolbarButton of editorToolbarButtons) {
+      expect(toolbarButton).toHaveClass('!bg-transparent', 'disabled:!bg-transparent');
+      expect(toolbarButton).not.toHaveClass('hover:bg-secondary');
+    }
+    const editorBody = editorSurface.querySelector(
+      '[data-slot="lightweight-markdown-editor-body"]'
+    );
+    expect(editorBody).toBeInstanceOf(HTMLElement);
+    expect(editorBody).toHaveClass('px-20', 'py-16');
+    expect(editorBody).toHaveClass('!bg-transparent', 'transition-none');
+    expect(inlineBodyEditor).toHaveClass('font-mono', 'text-body', 'leading-[1.65]');
+    expect(inlineBodyEditor).toHaveClass(
+      '!bg-transparent',
+      'transition-none',
+      'focus-visible:!ring-0'
+    );
+    expect(inlineBodyEditor).not.toHaveClass('bg-input', 'transition-colors');
+    await userEvent.click(inlineBodyEditor);
+    expect(inlineBodyEditor).toHaveFocus();
+    expect(editorSurface).toHaveClass('border-ring');
+    expect(editorSurface).not.toHaveClass('border-secondary');
+    const boldToolbarButton = within(editorToolbar as HTMLElement).getByRole('button', {
+      name: '粗体',
+    });
+    boldToolbarButton.focus();
+    fireEvent.blur(inlineBodyEditor, { relatedTarget: boldToolbarButton });
+    expect(boldToolbarButton).toHaveFocus();
+    await waitFor(() => expect(editorSurface).toHaveClass('border-secondary'));
+    expect(editorSurface).not.toHaveClass('border-ring');
+    await userEvent.click(inlineBodyEditor);
+    expect(editorSurface).toHaveClass('border-ring');
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     fireEvent.change(inlineBodyEditor, { target: { value: 'Updated body' } });
-    await userEvent.click(within(content).getByRole('button', { name: '保存正文' }));
+    expect(editorSurface).toHaveClass('border-ring');
+    expect(editorSurface).not.toHaveClass('border-secondary');
+    const cancelButton = within(content).getByRole('button', { name: '取消' });
+    const saveButton = within(content).getByRole('button', { name: '保存' });
+    expect(cancelButton).toBeInTheDocument();
+    expect(cancelButton).toHaveClass(
+      '!transition-none',
+      'hover:!bg-secondary',
+      'active:!bg-secondary'
+    );
+    expect(saveButton).toBeInTheDocument();
+    expect(saveButton).toHaveClass(
+      '!transition-none',
+      'hover:!bg-foreground',
+      'active:!bg-foreground'
+    );
+    await userEvent.click(within(content).getByRole('button', { name: '取消' }));
+    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    expect(editorSurface).toHaveClass('border-secondary');
+    expect(editorSurface).not.toHaveClass('border-ring');
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    fireEvent.change(inlineBodyEditor, { target: { value: 'Updated body' } });
+    await userEvent.click(inlineBodyEditor);
+    expect(editorSurface).toHaveClass('border-ring');
+    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(writeSegmentContent).toHaveBeenCalledTimes(1));
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(editorSurface).toHaveClass('border-secondary');
+    expect(editorSurface).not.toHaveClass('border-ring');
+    pendingSave.resolve();
     await waitFor(() =>
       expect(writeSegmentContent).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-secret',
@@ -1021,6 +1134,11 @@ describe('LoadedWorkspaceFrame', () => {
       baselineContentHash: 'b'.repeat(64),
       bodyByteLength: 12,
     });
+    await waitFor(() => expect(editorSurface).not.toHaveClass('border-ring'));
+    expect(editorSurface).toHaveClass('border-secondary');
+    expect(inlineBodyEditor).not.toHaveFocus();
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
 
     expect(tabRailRow).toBeInstanceOf(HTMLElement);
     expect(tabRailRow).toHaveClass('justify-start');
@@ -1030,28 +1148,18 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(contentTabActions).toBeInstanceOf(HTMLElement);
     expect(tabs.nextElementSibling).toBe(contentTabActions);
-    const railEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
-      name: '编辑笔记 Cake planning note',
-    });
+    expect(
+      within(contentTabActions as HTMLElement).queryByRole('button', {
+        name: '编辑笔记 Cake planning note',
+      })
+    ).toBeNull();
     const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
       name: '添加片段补充内容',
     });
     expect(railAddButton).toHaveTextContent('补充');
     expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
     expect(railAddButton).not.toHaveClass('gap-6', 'px-10');
-    expect(railEditButton).toHaveTextContent('编辑');
-    expect(railEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
-    expect(railEditButton.parentElement).toBe(contentTabActions);
     expect(railAddButton.parentElement).toBe(contentTabActions);
-    expect(
-      railEditButton.compareDocumentPosition(railAddButton) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '编辑笔记 Cake planning note' })).toHaveLength(1);
-
-    await userEvent.click(railEditButton);
-    expect(await within(content).findByLabelText('笔记正文')).toHaveValue(
-      '## Cake plan\n\n- Buy candles\n- Call aunt Mei'
-    );
   });
 
   it('keeps a dirty inline Note edit mounted when another segment is selected', async () => {
@@ -1105,7 +1213,6 @@ describe('LoadedWorkspaceFrame', () => {
     const voiceButton = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
 
     expect(noteButton).toHaveAttribute('aria-current', 'true');
-    await userEvent.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
     fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
 
@@ -1162,7 +1269,6 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    await user.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
     fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
 
@@ -1261,10 +1367,9 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    await userEvent.click(await within(content).findByRole('heading', { name: 'Cake plan' }));
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
     fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
-    await userEvent.click(within(content).getByRole('button', { name: '保存正文' }));
+    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
     expect(inlineBodyEditor).toBeDisabled();
 
     rerender(
@@ -1275,7 +1380,8 @@ describe('LoadedWorkspaceFrame', () => {
           onDeleteMemory={vi.fn()}
           onDeleteSegment={vi.fn()}
           onDeleteSegmentSupplement={vi.fn()}
-          onEditSegmentTranscript={vi.fn()}
+          onSegmentTranscriptSaved={vi.fn()}
+          onSegmentSupplementTranscriptSaved={vi.fn()}
           onNoteSegmentContentSaved={onNoteSegmentContentSaved}
           onNoteSegmentSupplementContentSaved={vi.fn()}
           onRenameMemory={vi.fn()}
@@ -1323,13 +1429,8 @@ describe('LoadedWorkspaceFrame', () => {
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
     const transcriptScroll = studio.querySelector('[data-slot="memory-studio-transcript-scroll"]');
 
-    expect(stageContent).toHaveClass(
-      'mx-auto',
-      'w-full',
-      'max-w-[var(--workspace-stage-max-width)]',
-      'items-stretch',
-      'justify-center'
-    );
+    expect(stageContent).toHaveClass('w-full', 'items-stretch', 'justify-center');
+    expect(stageContent).not.toHaveClass('mx-auto', 'max-w-[var(--workspace-stage-max-width)]');
     expect(studio).toHaveClass('overflow-hidden');
     expect(studioLayout).toHaveClass('w-full');
     expect(studioLayout).not.toHaveClass('max-w-[1120px]');
@@ -1846,7 +1947,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('calls segment transcription retry only for failed transcript attempts', async () => {
+  it('keeps failed segment transcripts editable in the always-visible editor', async () => {
     const user = userEvent.setup();
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:retryable-segment-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -1863,6 +1964,7 @@ describe('LoadedWorkspaceFrame', () => {
         transcript: {
           exists: false,
           text: '',
+          baselineHash: '0'.repeat(64),
         },
       },
     }));
@@ -1897,22 +1999,17 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
-    expect(await within(content).findByText('上次生成转录失败。')).toBeInTheDocument();
-
-    await user.click(within(content).getByRole('button', { name: '重试' }));
-
-    expect(onRetrySegmentTranscription).toHaveBeenCalledWith({
-      workspaceId: 'ws_1',
-      memoryId: 'mem_birthday',
-      segmentId: 'seg_birthday_voice',
-      mode: 'fill-missing',
-    });
+    const failedTranscriptEditor = await within(content).findByLabelText('转录正文');
+    expect(failedTranscriptEditor).toHaveValue('');
+    expect(within(content).queryByText('上次生成转录失败。')).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
 
     await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday song' }));
 
-    expect(await within(content).findByText('这段录音还没有转录。')).toBeInTheDocument();
+    expect(await within(content).findByLabelText('转录正文')).toBeInTheDocument();
+    expect(within(content).queryByText('这段录音还没有转录。')).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
-    expect(onRetrySegmentTranscription).toHaveBeenCalledOnce();
+    expect(onRetrySegmentTranscription).not.toHaveBeenCalled();
   });
 
   it('announces playback slider value text and supports keyboard seek', async () => {
@@ -2477,15 +2574,35 @@ describe('LoadedWorkspaceFrame', () => {
       },
     }));
     const onClearSegmentContent = vi.fn();
-    const onEditSegmentTranscript = vi.fn();
+    const savedTranscriptMemory = { ...birthdayMemory, hasAudioTranscript: true };
+    const onSegmentTranscriptSaved = vi.fn();
+    const saveTranscript = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          memory: savedTranscriptMemory,
+          saved: true,
+          baselineTranscriptHash: 'c'.repeat(64),
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          memory: savedTranscriptMemory,
+          saved: true,
+          baselineTranscriptHash: 'd'.repeat(64),
+        },
+      });
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       onClearSegmentContent,
-      onEditSegmentTranscript,
+      onSegmentTranscriptSaved,
       readFinalizedAudioSegment,
       readFinalizedAudioSegmentSupplement,
+      saveTranscript,
       session,
     });
 
@@ -2507,37 +2624,65 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(tabRailRow).toBeInstanceOf(HTMLElement);
     expect(tabRailRow).toContainElement(tabs);
-    expect(await within(content).findByText('Birthday transcript')).toBeInTheDocument();
+    const inlineTranscriptEditor = await within(content).findByLabelText('转录正文');
     const transcriptSurfacePanel = within(content).getByRole('tabpanel', { name: '转录' });
-    expect(transcriptSurfacePanel).toHaveClass('mt-14');
-    expect(transcriptSurfacePanel).not.toHaveClass('mt-4');
+    expect(transcriptSurfacePanel).toHaveAttribute(
+      'data-slot',
+      'memory-studio-inline-markdown-editor'
+    );
+    expect(transcriptSurfacePanel).toHaveClass('mt-[14px]');
+    expect(transcriptSurfacePanel).toHaveClass('flex-1', 'min-h-0');
+    expect(transcriptSurfacePanel).not.toHaveClass('max-w-[880px]');
+    expect(transcriptSurfacePanel).not.toHaveClass('mt-14');
+    expect(transcriptSurfacePanel).not.toHaveClass('h-[470px]');
     const contentTabActions = content.querySelector(
       '[data-slot="memory-studio-content-tab-actions"]'
     );
     expect(contentTabActions).toBeInstanceOf(HTMLElement);
-    const railTranscriptEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
-      name: '编辑转录',
-    });
+    expect(
+      within(contentTabActions as HTMLElement).queryByRole('button', {
+        name: '编辑转录',
+      })
+    ).toBeNull();
     const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
       name: '添加片段补充内容',
     });
-    expect(railTranscriptEditButton.parentElement).toBe(contentTabActions);
-    expect(railTranscriptEditButton).toHaveTextContent('编辑');
-    expect(railTranscriptEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
     expect(railAddButton.parentElement).toBe(contentTabActions);
-    expect(
-      railTranscriptEditButton.compareDocumentPosition(railAddButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    await user.click(railTranscriptEditButton);
-    expect(onEditSegmentTranscript).toHaveBeenCalledWith({
+    expect(railAddButton).toHaveTextContent('补充');
+    expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
+    expect(inlineTranscriptEditor).toHaveValue('Birthday transcript');
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    fireEvent.change(inlineTranscriptEditor, { target: { value: 'Updated transcript' } });
+    expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
+    await user.click(within(content).getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(saveTranscript).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        markdown: 'Updated transcript',
+        baselineTranscriptHash: 'b'.repeat(64),
+      })
+    );
+    expect(onSegmentTranscriptSaved).toHaveBeenCalledWith({
+      expectedSession: session,
+      memory: savedTranscriptMemory,
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
-      title: '转录',
-      transcriptText: 'Birthday transcript',
-      baselineTranscriptHash: 'b'.repeat(64),
+      baselineTranscriptHash: 'c'.repeat(64),
     });
-    onEditSegmentTranscript.mockClear();
+    fireEvent.change(inlineTranscriptEditor, { target: { value: 'Second transcript' } });
+    await user.click(within(content).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(saveTranscript).toHaveBeenCalledTimes(2));
+    expect(saveTranscript).toHaveBeenNthCalledWith(2, {
+      workspaceHandle: 'workspace-handle-secret',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      markdown: 'Second transcript',
+      baselineTranscriptHash: 'c'.repeat(64),
+    });
     expect(primaryPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
     expect(transcriptTabItem).toBeInstanceOf(HTMLElement);
@@ -2576,10 +2721,12 @@ describe('LoadedWorkspaceFrame', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
-      '编辑转录',
       '重命名',
       '清空转录',
     ]);
+    expect(
+      within(transcriptMenu).queryByRole('menuitem', { name: '编辑转录' })
+    ).not.toBeInTheDocument();
     expect(
       within(transcriptMenu).queryByRole('menuitem', { name: '生成转录' })
     ).not.toBeInTheDocument();
@@ -2589,18 +2736,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(transcriptMenu).queryByRole('menuitem', { name: '删除' })
     ).not.toBeInTheDocument();
-    await user.click(within(transcriptMenu).getByRole('menuitem', { name: '编辑转录' }));
-    expect(onEditSegmentTranscript).toHaveBeenCalledWith({
-      memoryId: 'mem_birthday',
-      segmentId: 'seg_birthday_voice',
-      title: '转录',
-      transcriptText: 'Birthday transcript',
-      baselineTranscriptHash: 'b'.repeat(64),
-    });
-    onEditSegmentTranscript.mockClear();
-    await user.click(transcriptMore as HTMLButtonElement);
-    const clearTranscriptMenu = await screen.findByRole('menu', { name: '转录 更多操作' });
-    await user.click(within(clearTranscriptMenu).getByRole('menuitem', { name: '清空转录' }));
+    await user.click(within(transcriptMenu).getByRole('menuitem', { name: '清空转录' }));
     expect(onClearSegmentContent).toHaveBeenCalledWith(
       expect.objectContaining({
         memoryId: 'mem_birthday',
@@ -2685,6 +2821,122 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
+  it('edits active audio supplement transcript below its playback row through the always-visible editor', async () => {
+    const savedSupplementTranscriptValue = {
+      memory: { ...birthdayMemory, supplementCount: 1, hasAudioTranscript: true },
+      segment: {
+        ...birthdayVoiceSegment,
+        supplementCount: 1,
+        supplements: [
+          {
+            ...audioSupplement(),
+            transcript: { exists: true },
+          },
+        ],
+      },
+      supplement: {
+        ...audioSupplement(),
+        transcript: { exists: true },
+      },
+      saved: true,
+    };
+    const saveSegmentSupplementTranscript = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          ...savedSupplementTranscriptValue,
+          baselineTranscriptHash: 'd'.repeat(64),
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          ...savedSupplementTranscriptValue,
+          baselineTranscriptHash: 'e'.repeat(64),
+        },
+      });
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        audio: new Uint8Array([7, 8, 9]),
+        audioByteLength: 3,
+        transcript: {
+          exists: true,
+          text: '这是一个补充的录音。',
+          baselineHash: 'c'.repeat(64),
+        },
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([
+      audioSupplement({ transcript: { exists: true } }),
+    ]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentSupplement,
+      saveSegmentSupplementTranscript,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_audio_supplement_inline_transcript',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const supplementItem = await within(content).findByRole('tab', { name: '补充录音' });
+    await userEvent.click(supplementItem);
+
+    expect(
+      within(content).getByRole('button', { name: '播放补充录音 补充录音' })
+    ).toBeInTheDocument();
+    const transcriptEditor = await within(content).findByLabelText('补充录音转录正文');
+    const supplementPanel = within(content).getByRole('tabpanel', { name: '补充录音' });
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-supplement-panel');
+    expect(transcriptEditor).toHaveValue('这是一个补充的录音。');
+    expect(
+      transcriptEditor.closest('[data-slot="memory-studio-inline-markdown-editor"]')
+    ).toHaveClass('mt-[14px]', 'flex-1', 'min-h-0');
+    expect(
+      transcriptEditor.closest('[data-slot="memory-studio-inline-markdown-editor"]')
+    ).not.toHaveClass('max-w-[880px]');
+    expect(content.querySelector('[data-slot="memory-studio-supplement-transcript"]')).toBeNull();
+
+    fireEvent.change(transcriptEditor, { target: { value: '更新后的补充录音转录' } });
+    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(saveSegmentSupplementTranscript).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+        supplementId: 'sup_birthday_followup',
+        markdown: '更新后的补充录音转录',
+        baselineTranscriptHash: 'c'.repeat(64),
+      })
+    );
+    fireEvent.change(transcriptEditor, { target: { value: '再次更新补充录音转录' } });
+    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(saveSegmentSupplementTranscript).toHaveBeenCalledTimes(2));
+    expect(saveSegmentSupplementTranscript).toHaveBeenNthCalledWith(2, {
+      workspaceHandle: 'workspace-handle-secret',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_followup',
+      markdown: '再次更新补充录音转录',
+      baselineTranscriptHash: 'd'.repeat(64),
+    });
+  });
+
   it('shows finalized note supplements as content rail tabs without audio playback controls', async () => {
     const readSegmentSupplementContent = vi.fn(async (request) => ({
       ok: true,
@@ -2723,12 +2975,12 @@ describe('LoadedWorkspaceFrame', () => {
     await userEvent.click(supplementItem);
 
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
-    expect(supplementPanel).toHaveAttribute('data-slot', 'markdown-content-surface');
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
     expect(supplementItem).toHaveAttribute('aria-controls', supplementPanel.id);
     expect(supplementPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
-    expect(
-      await within(supplementPanel).findByRole('heading', { name: 'Follow-up' })
-    ).toBeInTheDocument();
+    expect(await within(supplementPanel).findByLabelText('补充笔记正文')).toHaveValue(
+      '## Follow-up\n\n- Capture the cake idea'
+    );
     expect(within(supplementPanel).queryByRole('button', { name: /编辑/ })).toBeNull();
     expect(within(content).queryByRole('button', { name: /播放补充录音/ })).toBeNull();
     expect(readSegmentSupplementContent).toHaveBeenCalledWith(
@@ -2742,7 +2994,7 @@ describe('LoadedWorkspaceFrame', () => {
     );
   });
 
-  it('places the active note supplement edit action in the content tab rail before the add button', async () => {
+  it('edits active note supplement content through the always-visible Memory Studio editor', async () => {
     const onNoteSegmentSupplementContentSaved = vi.fn();
     const writeSegmentSupplementContent = vi.fn(async (request) => ({
       ok: true,
@@ -2796,18 +3048,23 @@ describe('LoadedWorkspaceFrame', () => {
     await userEvent.click(supplementItem);
 
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
-    expect(
-      await within(supplementPanel).findByRole('heading', { name: 'Follow-up' })
-    ).toBeInTheDocument();
+    const inlineSupplementEditor = await within(content).findByLabelText('补充笔记正文');
+    expect(inlineSupplementEditor).toHaveValue('## Follow-up\n\n- Capture the cake idea');
+    expect(inlineSupplementEditor).not.toHaveFocus();
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
+    expect(supplementPanel).toHaveClass('mt-[14px]', 'flex-1', 'min-h-0');
+    expect(supplementPanel).not.toHaveClass('max-w-[880px]');
+    expect(supplementPanel).not.toHaveClass('mt-14');
+    expect(supplementPanel).not.toHaveClass('h-[470px]');
     expect(
       within(supplementPanel).queryByRole('button', { name: '编辑补充笔记 补充笔记' })
     ).toBeNull();
-    await userEvent.click(within(supplementPanel).getByRole('heading', { name: 'Follow-up' }));
-    const inlineSupplementEditor = await within(content).findByLabelText('补充笔记正文');
-    expect(inlineSupplementEditor).toHaveValue('## Follow-up\n\n- Capture the cake idea');
-    expect(within(content).getByRole('button', { name: '保存补充笔记' })).toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     fireEvent.change(inlineSupplementEditor, { target: { value: 'Updated supplement' } });
-    await userEvent.click(within(content).getByRole('button', { name: '保存补充笔记' }));
+    expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
+    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() =>
       expect(writeSegmentSupplementContent).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-secret',
@@ -2838,28 +3095,19 @@ describe('LoadedWorkspaceFrame', () => {
       '[data-slot="memory-studio-content-tab-actions"]'
     );
     expect(contentTabActions).toBeInstanceOf(HTMLElement);
-    const railEditButton = within(contentTabActions as HTMLElement).getByRole('button', {
-      name: '编辑补充笔记 补充笔记',
-    });
+    expect(
+      within(contentTabActions as HTMLElement).queryByRole('button', {
+        name: '编辑补充笔记 补充笔记',
+      })
+    ).toBeNull();
     const railAddButton = within(contentTabActions as HTMLElement).getByRole('button', {
       name: '添加片段补充内容',
     });
-    expect(railEditButton.parentElement).toBe(contentTabActions);
-    expect(railEditButton).toHaveTextContent('编辑');
-    expect(railEditButton).toHaveClass('gap-[6px]', 'px-[10px]');
     expect(railAddButton.parentElement).toBe(contentTabActions);
-    expect(
-      railEditButton.compareDocumentPosition(railAddButton) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '编辑补充笔记 补充笔记' })).toHaveLength(1);
-
-    await userEvent.click(railEditButton);
-    expect(await within(content).findByLabelText('补充笔记正文')).toHaveValue(
-      '## Follow-up\n\n- Capture the cake idea'
-    );
+    expect(railAddButton).toHaveTextContent('补充');
   });
 
-  it('uses supplement-specific empty copy for an empty note supplement', async () => {
+  it('uses the always-visible editor for an empty note supplement', async () => {
     const readSegmentSupplementContent = vi.fn(async (request) => ({
       ok: true,
       value: {
@@ -2893,13 +3141,12 @@ describe('LoadedWorkspaceFrame', () => {
     await userEvent.click(within(content).getByRole('tab', { name: '补充笔记' }));
 
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
-    expect(
-      await within(supplementPanel).findByText('这条补充笔记还没有正文。')
-    ).toBeInTheDocument();
-    const emptyEditButton = within(supplementPanel).getByRole('button', { name: '写补充笔记' });
-    expect(emptyEditButton).toHaveClass('min-h-32', 'rounded-md');
-    await userEvent.click(emptyEditButton);
-    expect(await within(content).findByLabelText('补充笔记正文')).toHaveValue('');
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
+    const emptySupplementEditor = await within(content).findByLabelText('补充笔记正文');
+    expect(emptySupplementEditor).toHaveValue('');
+    expect(emptySupplementEditor).toHaveAttribute('placeholder', '写下补充笔记...');
+    expect(within(supplementPanel).queryByText('这条补充笔记还没有正文。')).toBeNull();
+    expect(within(supplementPanel).queryByRole('button', { name: '写补充笔记' })).toBeNull();
     expect(within(supplementPanel).queryByText('这条笔记还没有正文。')).toBeNull();
   });
 
@@ -2943,7 +3190,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeInTheDocument();
   });
 
-  it('calls supplement transcription retry for failed supplement transcript attempts', async () => {
+  it('keeps failed supplement transcripts editable below the supplement playback row', async () => {
     const user = userEvent.setup();
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:retryable-supplement-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -2963,6 +3210,7 @@ describe('LoadedWorkspaceFrame', () => {
         transcript: {
           exists: false,
           text: '',
+          baselineHash: '0'.repeat(64),
         },
       },
     }));
@@ -2983,18 +3231,10 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     await user.click(within(content).getByRole('tab', { name: '补充录音' }));
 
-    expect(await within(content).findByText('上次生成补充录音转录失败。')).toBeInTheDocument();
-
-    await user.click(within(content).getByRole('button', { name: '重试' }));
-
-    expect(onRetrySupplementTranscription).toHaveBeenCalledWith({
-      workspaceId: 'ws_1',
-      memoryId: 'mem_birthday',
-      segmentId: 'seg_birthday_voice',
-      supplementId: 'sup_birthday_followup',
-      mode: 'fill-missing',
-    });
-    expect(onRetrySupplementTranscription).toHaveBeenCalledOnce();
+    expect(await within(content).findByLabelText('补充录音转录正文')).toHaveValue('');
+    expect(within(content).queryByText('上次生成补充录音转录失败。')).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
+    expect(onRetrySupplementTranscription).not.toHaveBeenCalled();
   });
 
   it('caps content tab pills to the compact rail width', async () => {
@@ -4081,8 +4321,7 @@ describe('LoadedWorkspaceFrame', () => {
       'sm:right-40'
     );
     expect(document.querySelector('[data-slot="workspace-expression-fab-track"]')).toHaveClass(
-      'mx-auto',
-      'max-w-[var(--workspace-stage-max-width)]'
+      'w-full'
     );
     expect(screen.getByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();

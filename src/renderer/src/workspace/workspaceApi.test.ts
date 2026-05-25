@@ -701,6 +701,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
         saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
@@ -721,6 +722,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
         saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockResolvedValue({
@@ -767,6 +769,8 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 2,
           transcript: { exists: true },
         },
+        saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({

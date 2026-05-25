@@ -88,7 +88,7 @@ describe('NoteEditorOverlay', () => {
     await waitFor(() => expect(screen.getByLabelText('笔记正文')).toHaveFocus());
   });
 
-  it('labels an empty supplement editor as a supplement writing surface', () => {
+  it('labels an empty supplement editor as a supplement writing surface', async () => {
     renderNoteEditorOverlay({
       target: {
         kind: 'segment-supplement',
@@ -101,12 +101,10 @@ describe('NoteEditorOverlay', () => {
     const textarea = screen.getByLabelText('笔记正文');
     expect(textarea).toHaveValue('');
     expect(textarea).toHaveAttribute('placeholder', '写下补充笔记...');
-    expect(textarea).toHaveClass('py-16', 'placeholder:text-muted-foreground');
-    expect(textarea).not.toHaveClass('focus-visible:ring-2');
-    expect(screen.getByTestId('note-editor-textarea-surface')).toHaveClass(
-      'focus-within:ring-1',
-      'focus-within:ring-border'
-    );
+    expect(textarea).toHaveClass('p-0', 'placeholder:text-muted-foreground');
+    expect(textarea).toHaveClass('focus-visible:!ring-0', 'transition-none', '!bg-transparent');
+    await waitFor(() => expect(textarea).toHaveFocus());
+    expect(screen.getByTestId('note-editor-textarea-surface')).toHaveClass('border-ring');
     expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记1');
   });
 

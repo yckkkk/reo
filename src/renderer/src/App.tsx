@@ -25,6 +25,7 @@ import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import type {
+  SavedSegmentSupplementTranscriptContent,
   SegmentSupplementTranscriptionRetryTarget,
   SegmentTranscriptionRetryTarget,
   TranscriptionBackfillMode,
@@ -57,10 +58,6 @@ import {
   type SavedNoteSegmentContent,
   type SavedNoteSegmentSupplementContent,
 } from './workspace/finalizedNoteContentSave';
-import {
-  TranscriptEditorOverlay,
-  type TranscriptEditorTarget,
-} from './workspace/TranscriptEditorOverlay';
 import type { NoteEditorTarget } from './workspace/noteEditorModel';
 import { RecordingRecoveryDialog } from './workspace/RecordingRecoveryDialog';
 import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
@@ -224,7 +221,7 @@ function canShowInlineMemoryRail(): boolean {
 }
 const RECORDING_FLOW_NAVIGATION_BLOCKED = '当前录音尚未完成，请先完成或关闭录音。';
 const NOTE_EDITOR_NAVIGATION_BLOCKED = '当前笔记尚未完成，请先保存或关闭笔记。';
-const TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED = '当前转录尚未完成，请先保存或关闭转录。';
+const INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED = '请先保存当前文本编辑。';
 const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
 const TRANSCRIPTION_BACKFILL_ERROR = '无法生成转录。';
@@ -614,8 +611,6 @@ export function App() {
     useState<SegmentContentClearTarget | null>(null);
   const [segmentContentRenameTarget, setSegmentContentRenameTarget] =
     useState<SegmentContentRenameTarget | null>(null);
-  const [transcriptEditorTarget, setTranscriptEditorTarget] =
-    useState<TranscriptEditorTarget | null>(null);
   const [segmentRenameTarget, setSegmentRenameTarget] = useState<SegmentRenameTarget | null>(null);
   const [segmentSupplementDeleteTarget, setSegmentSupplementDeleteTarget] =
     useState<SegmentSupplementDeleteTarget | null>(null);
@@ -760,8 +755,8 @@ export function App() {
         ? RECORDING_FLOW_NAVIGATION_BLOCKED
         : noteEditorTarget
           ? NOTE_EDITOR_NAVIGATION_BLOCKED
-          : transcriptEditorTarget
-            ? TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED
+          : memoryStudioInlineMarkdownDirty
+            ? INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED
             : null;
     if (!interruptionMessage) {
       return;
@@ -776,7 +771,7 @@ export function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [noteEditorTarget, recordingCloseBlocked, recordingTarget, transcriptEditorTarget]);
+  }, [memoryStudioInlineMarkdownDirty, noteEditorTarget, recordingCloseBlocked, recordingTarget]);
 
   useEffect(() => {
     if (!workspaceSession || recordingTarget || noteEditorTarget) {
@@ -1065,7 +1060,6 @@ export function App() {
     setSegmentDeleteTarget(null);
     setSegmentContentClearTarget(null);
     setSegmentContentRenameTarget(null);
-    setTranscriptEditorTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
@@ -1136,12 +1130,8 @@ export function App() {
       toast.error(NOTE_EDITOR_NAVIGATION_BLOCKED);
       return true;
     }
-    if (transcriptEditorTarget) {
-      toast.error(TRANSCRIPT_EDITOR_NAVIGATION_BLOCKED);
-      return true;
-    }
     if (memoryStudioInlineMarkdownDirty) {
-      toast.error('请先保存或取消当前笔记编辑。');
+      toast.error(INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED);
       return true;
     }
 
@@ -1957,6 +1947,17 @@ export function App() {
         }),
       });
     }
+  }
+
+  function handleSegmentSupplementTranscriptSaved(saved: SavedSegmentSupplementTranscriptContent) {
+    handleSegmentSupplementFinalized(
+      {
+        memory: saved.memory,
+        segment: saved.segment,
+        supplement: saved.supplement,
+      },
+      { expectedSession: saved.expectedSession, refreshContent: true }
+    );
   }
 
   function handleNoteSegmentFinalized(finalized: FinalizedNoteSegment) {
@@ -4022,20 +4023,6 @@ export function App() {
     );
   }
 
-  function handleTranscriptEditorSaved(saved: {
-    readonly expectedSession: WorkspaceSession;
-    readonly memory: WorkspaceMemorySummary;
-    readonly memoryId: string;
-    readonly segmentId: string;
-  }) {
-    handleRecordingContentSaved({
-      expectedSession: saved.expectedSession,
-      memory: saved.memory,
-      memoryId: saved.memoryId,
-      segmentId: saved.segmentId,
-    });
-  }
-
   async function clearSegmentContent(target: SegmentContentClearTarget) {
     const session = activeWorkspaceSession;
     if (!workspaceSessionMatches(session)) {
@@ -4197,7 +4184,8 @@ export function App() {
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
             onClearSegmentContent={setSegmentContentClearTarget}
-            onEditSegmentTranscript={setTranscriptEditorTarget}
+            onSegmentTranscriptSaved={handleRecordingContentSaved}
+            onSegmentSupplementTranscriptSaved={handleSegmentSupplementTranscriptSaved}
             onInlineMarkdownDirtyChange={setMemoryStudioInlineMarkdownDirty}
             onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
             onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
@@ -4212,11 +4200,7 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
-            expressionDockVisible={
-              recordingTarget === null &&
-              noteEditorTarget === null &&
-              transcriptEditorTarget === null
-            }
+            expressionDockVisible={recordingTarget === null && noteEditorTarget === null}
             onStartNote={requestStartNote}
             onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
@@ -4245,19 +4229,6 @@ export function App() {
           onSegmentSupplementNoteFinalized={handleSegmentSupplementNoteFinalized}
           open={noteEditorOpen}
           target={noteEditorTarget}
-          workspaceSession={activeWorkspaceSession}
-        />
-      ) : null}
-      {transcriptEditorTarget ? (
-        <TranscriptEditorOverlay
-          onOpenChange={(open) => {
-            if (!open) {
-              setTranscriptEditorTarget(null);
-            }
-          }}
-          onSaved={handleTranscriptEditorSaved}
-          open={transcriptEditorTarget !== null}
-          target={transcriptEditorTarget}
           workspaceSession={activeWorkspaceSession}
         />
       ) : null}

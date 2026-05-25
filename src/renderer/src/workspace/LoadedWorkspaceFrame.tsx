@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
+  type SavedSegmentSupplementTranscriptContent,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type TranscriptionBackfillController,
@@ -14,7 +15,6 @@ import type {
   SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
-  SegmentTranscriptEditTarget,
 } from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
@@ -34,7 +34,16 @@ type LoadedWorkspaceFrameProps = {
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
-  readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
+  readonly onSegmentTranscriptSaved: (saved: {
+    readonly expectedSession: WorkspaceSession;
+    readonly baselineTranscriptHash: string;
+    readonly memory: WorkspaceMemorySummary;
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) => void;
+  readonly onSegmentSupplementTranscriptSaved: (
+    saved: SavedSegmentSupplementTranscriptContent
+  ) => void;
   readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
   readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
@@ -62,7 +71,8 @@ export function LoadedWorkspaceFrame({
   onDeleteSegment,
   onDeleteSegmentSupplement,
   onClearSegmentContent,
-  onEditSegmentTranscript,
+  onSegmentTranscriptSaved,
+  onSegmentSupplementTranscriptSaved,
   onNoteSegmentContentSaved,
   onNoteSegmentSupplementContentSaved,
   onRenameMemory,
@@ -115,7 +125,8 @@ export function LoadedWorkspaceFrame({
           onDeleteSegment={onDeleteSegment}
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
           onClearSegmentContent={onClearSegmentContent}
-          onEditSegmentTranscript={onEditSegmentTranscript}
+          onSegmentTranscriptSaved={onSegmentTranscriptSaved}
+          onSegmentSupplementTranscriptSaved={onSegmentSupplementTranscriptSaved}
           onNoteSegmentContentSaved={onNoteSegmentContentSaved}
           onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
           onRenameSegmentSupplement={onRenameSegmentSupplement}

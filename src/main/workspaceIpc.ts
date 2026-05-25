@@ -340,6 +340,7 @@ import {
   createWorkspaceBackfillRuntime,
   type WorkspaceBackfillRuntime,
 } from './backfillRuntime.js';
+import { transcriptDigest } from './transcriptDigest.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
@@ -5225,7 +5226,16 @@ function saveTranscriptWithHandle(
         : {}),
     });
     return workspaceRecordingMarkdownSaveResponseSchema.parse(
-      result.ok ? { ok: true, value: { memory: result.memory, saved: true } } : result
+      result.ok
+        ? {
+            ok: true,
+            value: {
+              memory: result.memory,
+              saved: true,
+              baselineTranscriptHash: transcriptDigest(request.markdown),
+            },
+          }
+        : result
     );
   });
 }
@@ -5266,6 +5276,7 @@ function saveSegmentSupplementTranscriptWithHandle(
               segment: result.segment,
               supplement: result.supplement,
               saved: true,
+              baselineTranscriptHash: transcriptDigest(request.markdown),
             },
           }
         : result

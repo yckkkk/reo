@@ -282,7 +282,7 @@ async function evaluate(client, expression) {
 
 function measurementExpression(maxItems) {
   const maxMeasuredItems = maxItems === undefined ? 'null' : JSON.stringify(maxItems);
-  return `(() => {
+  return `(async () => {
     const studio = document.querySelector('[aria-label="Memory Studio"]');
     if (!studio) {
       return { ok: false, reason: 'Memory Studio region is not visible.' };
@@ -353,11 +353,47 @@ function measurementExpression(maxItems) {
     const measuredItems = selectMeasuredItems();
     const nav = studio.querySelector('[aria-label="Memory 片段时间轴"]');
     const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const supplementPlayer = studio.querySelector('[data-slot="memory-studio-supplement-player"]');
     const playerPlaceholder = studio.querySelector(
       '[data-slot="memory-studio-player-placeholder"]'
     );
     const playerTime = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
+    const contentTabRailRow = studio.querySelector(
+      '[data-slot="memory-studio-content-tab-rail-row"]'
+    );
+    const inlineEditor = studio.querySelector(
+      '[data-slot="memory-studio-inline-markdown-editor"]'
+    );
+    const editorSurface = inlineEditor
+      ? inlineEditor.querySelector('[data-slot="lightweight-markdown-editor-surface"]')
+      : null;
+    const editorToolbar = inlineEditor
+      ? inlineEditor.querySelector('[data-slot="lightweight-markdown-editor-toolbar"]')
+      : null;
+    const editorBody = inlineEditor
+      ? inlineEditor.querySelector('[data-slot="lightweight-markdown-editor-body"]')
+      : null;
+    const editorTextarea = inlineEditor ? inlineEditor.querySelector('textarea') : null;
+    const editorActionButtonLabels = editorToolbar
+      ? Array.from(editorToolbar.querySelectorAll('button')).map((button) =>
+          (button.textContent || button.getAttribute('aria-label') || '').trim()
+        )
+      : [];
+    const editorToolbarButtonStyles = editorToolbar
+      ? Array.from(editorToolbar.querySelectorAll('button')).map((button) => {
+          const style = getComputedStyle(button);
+          return {
+            label: (button.textContent || button.getAttribute('aria-label') || '').trim(),
+            backgroundColor: style.getPropertyValue('background-color'),
+            transitionProperty: style.getPropertyValue('transition-property'),
+          };
+        })
+      : [];
+    const activeContentTab = studio.querySelector('[role="tab"][aria-selected="true"]');
+    const activeContentTabSupplementType = activeContentTab
+      ? activeContentTab.getAttribute('data-supplement-type')
+      : null;
     const selectedItem = items.find((item) => Boolean(item.querySelector('[aria-current="true"]')));
     const selectedSegmentKind = selectedItem
       ? selectedItem.querySelector('[data-slot="memory-studio-segment-card-duration"]')
@@ -429,9 +465,33 @@ function measurementExpression(maxItems) {
     const fabTrackRect = workspaceFabTrack ? rectOf(workspaceFabTrack) : null;
     const studioRect = rectOf(studio);
     const studioLayoutRect = studioLayout ? rectOf(studioLayout) : null;
+    const contentPanelRect = contentPanel ? rectOf(contentPanel) : null;
+    const contentTabRailRowRect = contentTabRailRow ? rectOf(contentTabRailRow) : null;
+    const inlineEditorRect = inlineEditor ? rectOf(inlineEditor) : null;
+    const editorSurfaceRect = editorSurface ? rectOf(editorSurface) : null;
+    const editorToolbarRect = editorToolbar ? rectOf(editorToolbar) : null;
+    const editorBodyRect = editorBody ? rectOf(editorBody) : null;
+    const editorTextareaRect = editorTextarea ? rectOf(editorTextarea) : null;
+    const supplementPlayerRect = supplementPlayer ? rectOf(supplementPlayer) : null;
     const stageContentStyle = workspaceStageContent
       ? getComputedStyle(workspaceStageContent)
       : null;
+    const editorSurfaceStyle = editorSurface ? getComputedStyle(editorSurface) : null;
+    const editorToolbarStyle = editorToolbar ? getComputedStyle(editorToolbar) : null;
+    const editorBodyStyle = editorBody ? getComputedStyle(editorBody) : null;
+    const editorTextareaStyle = editorTextarea ? getComputedStyle(editorTextarea) : null;
+    const editorDefaultBorderColor = editorSurfaceStyle
+      ? editorSurfaceStyle.getPropertyValue('border-top-color')
+      : null;
+    const editorSurfaceTransitionProperty = editorSurfaceStyle
+      ? editorSurfaceStyle.getPropertyValue('transition-property')
+      : null;
+    const editorInitiallyFocused = document.activeElement === editorTextarea;
+    const styleNumber = (style, property) => {
+      if (!style) return null;
+      const value = Number.parseFloat(style.getPropertyValue(property));
+      return Number.isFinite(value) ? value : null;
+    };
 
     return {
       ok: true,
@@ -479,7 +539,74 @@ function measurementExpression(maxItems) {
       },
       studioRect,
       studioLayoutRect,
-      contentPanelRect: contentPanel ? rectOf(contentPanel) : null,
+      contentPanelRect,
+      editor: {
+        activeContentTabSupplementType,
+        contentTabRailRowRect,
+        supplementPlayerRect,
+        inlineRect: inlineEditorRect,
+        surfaceRect: editorSurfaceRect,
+        toolbarRect: editorToolbarRect,
+        bodyRect: editorBodyRect,
+        textareaRect: editorTextareaRect,
+        actionButtonLabels: editorActionButtonLabels,
+        initiallyFocused: editorInitiallyFocused,
+        defaultBorderColor: editorDefaultBorderColor,
+        surfaceTransitionProperty: editorSurfaceTransitionProperty,
+        focusProbe: null,
+        tabToEditorGap:
+          contentTabRailRowRect && inlineEditorRect
+            ? inlineEditorRect.top - contentTabRailRowRect.bottom
+            : null,
+        supplementPlayerToEditorGap:
+          supplementPlayerRect && inlineEditorRect
+            ? inlineEditorRect.top - supplementPlayerRect.bottom
+            : null,
+        bottomToContentPanelBottom:
+          contentPanelRect && inlineEditorRect
+            ? contentPanelRect.bottom - inlineEditorRect.bottom
+            : null,
+        expectedWidth: stageShellRect ? Math.max(0, stageShellRect.width - 80) : null,
+        leftToStageShellLeft:
+          stageShellRect && inlineEditorRect ? inlineEditorRect.left - stageShellRect.left : null,
+        rightToStageShellRight:
+          stageShellRect && inlineEditorRect ? stageShellRect.right - inlineEditorRect.right : null,
+        bottomToViewportBottom: inlineEditorRect ? window.innerHeight - inlineEditorRect.bottom : null,
+        surfaceBorderTopWidth: styleNumber(editorSurfaceStyle, 'border-top-width'),
+        surfaceBorderRightWidth: styleNumber(editorSurfaceStyle, 'border-right-width'),
+        surfaceBorderBottomWidth: styleNumber(editorSurfaceStyle, 'border-bottom-width'),
+        surfaceBorderLeftWidth: styleNumber(editorSurfaceStyle, 'border-left-width'),
+        surfaceBorderRadius: styleNumber(editorSurfaceStyle, 'border-top-left-radius'),
+        toolbarPaddingLeft: styleNumber(editorToolbarStyle, 'padding-left'),
+        toolbarPaddingRight: styleNumber(editorToolbarStyle, 'padding-right'),
+        toolbarHeight: editorToolbarRect ? editorToolbarRect.height : null,
+        toolbarBackgroundColor: editorToolbarStyle
+          ? editorToolbarStyle.getPropertyValue('background-color')
+          : null,
+        toolbarTransitionProperty: editorToolbarStyle
+          ? editorToolbarStyle.getPropertyValue('transition-property')
+          : null,
+        toolbarButtonStyles: editorToolbarButtonStyles,
+        bodyPaddingLeft: styleNumber(editorBodyStyle, 'padding-left'),
+        bodyPaddingRight: styleNumber(editorBodyStyle, 'padding-right'),
+        bodyPaddingTop: styleNumber(editorBodyStyle, 'padding-top'),
+        bodyPaddingBottom: styleNumber(editorBodyStyle, 'padding-bottom'),
+        bodyBackgroundColor: editorBodyStyle
+          ? editorBodyStyle.getPropertyValue('background-color')
+          : null,
+        bodyTransitionProperty: editorBodyStyle
+          ? editorBodyStyle.getPropertyValue('transition-property')
+          : null,
+        textareaBackgroundColor: editorTextareaStyle
+          ? editorTextareaStyle.getPropertyValue('background-color')
+          : null,
+        textareaTransitionProperty: editorTextareaStyle
+          ? editorTextareaStyle.getPropertyValue('transition-property')
+          : null,
+        textareaFontSize: styleNumber(editorTextareaStyle, 'font-size'),
+        textareaLineHeight: styleNumber(editorTextareaStyle, 'line-height'),
+        textareaFontFamily: editorTextareaStyle ? editorTextareaStyle.fontFamily : null,
+      },
       standaloneTimelineExists: Boolean(nav),
       stripScrollOwnerCount: studio.querySelectorAll('[data-slot="memory-studio-segment-strip-scroll"]').length,
       itemCount: items.length,
@@ -517,6 +644,72 @@ function centerPointExpression(selector, index = 0) {
   })()`;
 }
 
+async function probeEditorTextareaFocus(client) {
+  const before = await evaluate(
+    client,
+    `(() => {
+      const surface = document.querySelector('[data-slot="lightweight-markdown-editor-surface"]');
+      const textarea = surface ? surface.querySelector('textarea') : null;
+      const toolbar = surface ? surface.querySelector('[data-slot="lightweight-markdown-editor-toolbar"]') : null;
+      if (!surface || !textarea) {
+        return { ok: false, reason: 'Inline editor textarea is missing.' };
+      }
+      const rect = textarea.getBoundingClientRect();
+      return {
+        ok: true,
+        x: rect.left + Math.min(24, Math.max(1, rect.width / 2)),
+        y: rect.top + Math.min(24, Math.max(1, rect.height / 2)),
+        borderColor: getComputedStyle(surface).getPropertyValue('border-top-color'),
+        actionButtonLabels: toolbar
+          ? Array.from(toolbar.querySelectorAll('button')).map((button) =>
+              (button.textContent || button.getAttribute('aria-label') || '').trim()
+            )
+          : [],
+      };
+    })()`
+  );
+  if (!before.ok) {
+    return { focused: false, borderColor: null, actionButtonLabels: [], reason: before.reason };
+  }
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: before.x,
+    y: before.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: before.x,
+    y: before.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await evaluate(client, `new Promise((resolve) => setTimeout(resolve, 220))`);
+
+  return await evaluate(
+    client,
+    `(() => {
+      const surface = document.querySelector('[data-slot="lightweight-markdown-editor-surface"]');
+      const textarea = surface ? surface.querySelector('textarea') : null;
+      const toolbar = surface ? surface.querySelector('[data-slot="lightweight-markdown-editor-toolbar"]') : null;
+      if (!surface || !textarea) {
+        return { focused: false, borderColor: null, actionButtonLabels: [] };
+      }
+      return {
+        focused: document.activeElement === textarea,
+        borderColor: getComputedStyle(surface).getPropertyValue('border-top-color'),
+        actionButtonLabels: toolbar
+          ? Array.from(toolbar.querySelectorAll('button')).map((button) =>
+              (button.textContent || button.getAttribute('aria-label') || '').trim()
+            )
+          : [],
+      };
+    })()`
+  );
+}
+
 function waitExpression() {
   return `new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
@@ -537,6 +730,16 @@ function assertRectInsideViewport(failures, label, rect, viewport, tolerance) {
     failures.push(
       `${label} overflows viewport vertically: top=${rect.top.toFixed(2)}, bottom=${rect.bottom.toFixed(2)}, viewport=${viewport.height}.`
     );
+  }
+}
+
+function assertApprox(failures, label, actual, expected, tolerance) {
+  if (actual === null || actual === undefined || !Number.isFinite(actual)) {
+    failures.push(`${label} is missing.`);
+    return;
+  }
+  if (Math.abs(actual - expected) > tolerance) {
+    failures.push(`${label} expected ${expected}px; received ${actual.toFixed(2)}px.`);
   }
 }
 
@@ -660,11 +863,6 @@ function assertMetrics(metrics, options) {
     metrics.viewport,
     tolerance
   );
-  if (metrics.workspace.stageContentMaxWidth !== '1120px') {
-    failures.push(
-      `Expected Workspace stage content max-width 1120px; received ${metrics.workspace.stageContentMaxWidth}.`
-    );
-  }
   if (
     metrics.workspace.stageContentLeftGutter === null ||
     metrics.workspace.stageContentRightGutter === null ||
@@ -727,6 +925,235 @@ function assertMetrics(metrics, options) {
     metrics.viewport,
     tolerance
   );
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio content tab rail row',
+    metrics.editor.contentTabRailRowRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Memory Studio inline markdown editor',
+    metrics.editor.inlineRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Lightweight markdown editor toolbar',
+    metrics.editor.toolbarRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Lightweight markdown editor body',
+    metrics.editor.bodyRect,
+    metrics.viewport,
+    tolerance
+  );
+  assertRectInsideViewport(
+    failures,
+    'Lightweight markdown editor textarea',
+    metrics.editor.textareaRect,
+    metrics.viewport,
+    tolerance
+  );
+  if (metrics.editor.activeContentTabSupplementType === 'audio') {
+    assertRectInsideViewport(
+      failures,
+      'Memory Studio supplement audio player',
+      metrics.editor.supplementPlayerRect,
+      metrics.viewport,
+      tolerance
+    );
+    assertApprox(
+      failures,
+      'Supplement audio player to editor gap',
+      metrics.editor.supplementPlayerToEditorGap,
+      14,
+      tolerance
+    );
+  } else {
+    assertApprox(
+      failures,
+      'Content tab rail to editor gap',
+      metrics.editor.tabToEditorGap,
+      14,
+      tolerance
+    );
+  }
+  if (
+    metrics.editor.expectedWidth !== null &&
+    metrics.editor.inlineRect &&
+    Math.abs(metrics.editor.inlineRect.width - metrics.editor.expectedWidth) > tolerance
+  ) {
+    failures.push(
+      `Expected inline editor width ${metrics.editor.expectedWidth.toFixed(2)}px; received ${metrics.editor.inlineRect.width.toFixed(2)}px.`
+    );
+  }
+  assertApprox(
+    failures,
+    'Inline editor bottom to content panel bottom',
+    metrics.editor.bottomToContentPanelBottom,
+    0,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Inline editor left gutter',
+    metrics.editor.leftToStageShellLeft,
+    40,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Inline editor right gutter',
+    metrics.editor.rightToStageShellRight,
+    40,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Inline editor bottom to viewport bottom',
+    metrics.editor.bottomToViewportBottom,
+    32,
+    tolerance
+  );
+  if (
+    metrics.editor.surfaceRect &&
+    metrics.editor.inlineRect &&
+    (Math.abs(metrics.editor.surfaceRect.width - metrics.editor.inlineRect.width) > tolerance ||
+      Math.abs(metrics.editor.surfaceRect.height - metrics.editor.inlineRect.height) > tolerance)
+  ) {
+    failures.push(
+      `Expected editor surface to fill inline editor; inline=${metrics.editor.inlineRect.width.toFixed(2)}x${metrics.editor.inlineRect.height.toFixed(2)}, surface=${metrics.editor.surfaceRect.width.toFixed(2)}x${metrics.editor.surfaceRect.height.toFixed(2)}.`
+    );
+  }
+  for (const [label, width] of [
+    ['top', metrics.editor.surfaceBorderTopWidth],
+    ['right', metrics.editor.surfaceBorderRightWidth],
+    ['bottom', metrics.editor.surfaceBorderBottomWidth],
+    ['left', metrics.editor.surfaceBorderLeftWidth],
+  ]) {
+    assertApprox(failures, `Editor ${label} border width`, width, 1, tolerance);
+  }
+  assertApprox(failures, 'Editor border radius', metrics.editor.surfaceBorderRadius, 12, tolerance);
+  assertApprox(failures, 'Editor toolbar height', metrics.editor.toolbarHeight, 44, tolerance);
+  assertApprox(
+    failures,
+    'Editor toolbar left padding',
+    metrics.editor.toolbarPaddingLeft,
+    12,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Editor toolbar right padding',
+    metrics.editor.toolbarPaddingRight,
+    12,
+    tolerance
+  );
+  assertApprox(failures, 'Editor body left padding', metrics.editor.bodyPaddingLeft, 20, tolerance);
+  assertApprox(
+    failures,
+    'Editor body right padding',
+    metrics.editor.bodyPaddingRight,
+    20,
+    tolerance
+  );
+  assertApprox(failures, 'Editor body top padding', metrics.editor.bodyPaddingTop, 16, tolerance);
+  assertApprox(
+    failures,
+    'Editor body bottom padding',
+    metrics.editor.bodyPaddingBottom,
+    16,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Editor textarea font size',
+    metrics.editor.textareaFontSize,
+    14,
+    tolerance
+  );
+  assertApprox(
+    failures,
+    'Editor textarea line height',
+    metrics.editor.textareaLineHeight,
+    23.1,
+    tolerance
+  );
+  if (!metrics.editor.textareaFontFamily?.toLowerCase().includes('mono')) {
+    failures.push(
+      `Expected editor textarea to use mono font family; received ${metrics.editor.textareaFontFamily ?? 'missing'}.`
+    );
+  }
+  if (
+    metrics.editor.toolbarRect &&
+    metrics.editor.bodyRect &&
+    Math.abs(metrics.editor.bodyRect.top - metrics.editor.toolbarRect.bottom) > tolerance
+  ) {
+    failures.push(
+      `Expected editor body to start directly below toolbar; toolbarBottom=${metrics.editor.toolbarRect.bottom.toFixed(2)}, bodyTop=${metrics.editor.bodyRect.top.toFixed(2)}.`
+    );
+  }
+  if (
+    metrics.editor.toolbarBackgroundColor &&
+    metrics.editor.toolbarBackgroundColor !== 'rgba(0, 0, 0, 0)'
+  ) {
+    failures.push(
+      `Expected editor toolbar background to stay transparent; received ${metrics.editor.toolbarBackgroundColor}.`
+    );
+  }
+  if (
+    metrics.editor.toolbarTransitionProperty &&
+    metrics.editor.toolbarTransitionProperty !== 'none'
+  ) {
+    failures.push(
+      `Expected editor toolbar to avoid color transitions; transition-property=${metrics.editor.toolbarTransitionProperty}.`
+    );
+  }
+  for (const buttonStyle of metrics.editor.toolbarButtonStyles ?? []) {
+    if (buttonStyle.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+      failures.push(
+        `Expected toolbar button ${buttonStyle.label || '(unlabelled)'} background to stay transparent; received ${buttonStyle.backgroundColor}.`
+      );
+    }
+    if (buttonStyle.transitionProperty !== 'none') {
+      failures.push(
+        `Expected toolbar button ${buttonStyle.label || '(unlabelled)'} to avoid color transitions; transition-property=${buttonStyle.transitionProperty}.`
+      );
+    }
+  }
+  if (metrics.editor.initiallyFocused) {
+    failures.push('Expected inline editor textarea not to be focused after Memory/tab selection.');
+  }
+  if (metrics.editor.actionButtonLabels?.includes('取消')) {
+    failures.push('Expected inline editor cancel button to stay hidden before dirty editing.');
+  }
+  if (metrics.editor.actionButtonLabels?.includes('保存')) {
+    failures.push('Expected inline editor save button to stay hidden before dirty editing.');
+  }
+  if (!metrics.editor.focusProbe?.focused) {
+    failures.push('Expected clicking/focusing the inline editor textarea to focus it.');
+  }
+  if (
+    metrics.editor.focusProbe?.borderColor &&
+    metrics.editor.defaultBorderColor &&
+    metrics.editor.focusProbe.borderColor === metrics.editor.defaultBorderColor
+  ) {
+    failures.push(
+      `Expected inline editor border color to change on textarea focus; default=${metrics.editor.defaultBorderColor}, focused=${metrics.editor.focusProbe.borderColor}.`
+    );
+  }
+  if (metrics.editor.focusProbe?.actionButtonLabels?.includes('取消')) {
+    failures.push('Expected inline editor cancel button to stay hidden when focused but clean.');
+  }
+  if (metrics.editor.focusProbe?.actionButtonLabels?.includes('保存')) {
+    failures.push('Expected inline editor save button to stay hidden when focused but clean.');
+  }
   if (metrics.selectedSegmentKind === 'audio') {
     assertRectInsideViewport(
       failures,
@@ -841,6 +1268,9 @@ async function main() {
     await evaluate(
       client,
       `(() => {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
         const scroll = document.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
         if (scroll) {
@@ -922,6 +1352,15 @@ async function main() {
         scrollMethod = 'dom-scroll-fallback';
       }
     }
+
+    const editorFocusProbe = await probeEditorTextareaFocus(client);
+    after = {
+      ...after,
+      editor: {
+        ...after.editor,
+        focusProbe: editorFocusProbe,
+      },
+    };
 
     const failures = assertMetrics(after, options);
     const metrics = {

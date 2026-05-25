@@ -343,7 +343,11 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     updateSegmentContentTabOrder: vi.fn(),
     saveTranscript: vi.fn(async () => ({
       ok: true as const,
-      value: { memory: savedMemorySummary, saved: true as const },
+      value: {
+        memory: savedMemorySummary,
+        saved: true as const,
+        baselineTranscriptHash: 'b'.repeat(64),
+      },
     })),
     saveSegmentSupplementTranscript: vi.fn(async () => ({
       ok: true as const,
@@ -394,6 +398,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
           transcript: { exists: true },
         },
         saved: true as const,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     })),
     requestSegmentTranscriptionBackfill: vi.fn(async () => ({
@@ -1042,6 +1047,7 @@ describe('RecordingOverlay', () => {
             transcript: { exists: true },
           },
           saved: true,
+          baselineTranscriptHash: 'b'.repeat(64),
         },
       });
       await transcriptSave.promise;

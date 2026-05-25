@@ -1287,6 +1287,7 @@ test('request segment backfill IPC forwards mode through validated handle owners
               updatedAt: '2026-05-17T01:00:00.000Z',
             },
             saved: true as const,
+            baselineTranscriptHash: 'b'.repeat(64),
           },
         };
       },
@@ -1345,6 +1346,7 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
             updatedAt: '2026-05-17T01:00:00.000Z',
           },
           saved: true as const,
+          baselineTranscriptHash: 'b'.repeat(64),
           segment: {
             audioByteLength: 10,
             createdAt: '2026-05-17T01:00:00.000Z',
