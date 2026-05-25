@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { THEME_PREFERENCE_STORAGE_KEY } from './app-shell/themePreference';
@@ -357,6 +358,7 @@ describe('App', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    window.history.replaceState({}, '', '/');
   });
 
   async function openCreateWorkspaceDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -772,9 +774,11 @@ describe('App', () => {
   it('renders starter home without a page plus and opens creation from the sidebar entry', async () => {
     const user = userEvent.setup();
     render(
-      <ReoQueryProvider>
-        <App />
-      </ReoQueryProvider>
+      <StrictMode>
+        <ReoQueryProvider>
+          <App />
+        </ReoQueryProvider>
+      </StrictMode>
     );
 
     expect(screen.getByRole('navigation', { name: '记忆空间' })).toBeInTheDocument();
@@ -810,6 +814,94 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: '资料库' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
+  });
+
+  it('opens the rich dev workspace scenario from the URL parameter', async () => {
+    window.history.replaceState({}, '', '/?reoScenario=memory-studio-rich');
+    const memory = {
+      memoryId: 'mem_dev_ui_review',
+      title: '浏览器调试记忆',
+      createdAt: '2026-05-24T09:00:00.000Z',
+      updatedAt: '2026-05-24T09:18:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 82_000,
+      audioByteLength: 4096,
+      hasAudioTranscript: true,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const snapshot = {
+      workspaceId: 'ws_dev_memory_studio_rich',
+      title: 'Reo UI 调试空间',
+      description: '用于浏览器调试的开发场景',
+      memories: [memory],
+    };
+    const segment = {
+      workspaceId: snapshot.workspaceId,
+      memoryId: memory.memoryId,
+      segmentId: 'seg_dev_interview',
+      type: 'audio' as const,
+      title: '访谈录音',
+      createdAt: '2026-05-24T09:04:00.000Z',
+      updatedAt: '2026-05-24T09:18:00.000Z',
+      durationMs: 82_000,
+      audioByteLength: 4096,
+      lastTranscriptionAttempt: 'success' as const,
+      transcript: { exists: true },
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.openMemorySpace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'dev-scenario-workspace-handle',
+        workspaceId: snapshot.workspaceId,
+        snapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({ ok: true, value: snapshot });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: snapshot.workspaceId,
+          segments: [segment],
+        },
+      },
+    }));
+    reoWorkspace.readFinalizedAudioSegment.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: snapshot.workspaceId,
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        transcript: {
+          exists: true,
+          text: '真实 UI 调试转录正文',
+          baselineHash: BASELINE_HASH_A,
+        },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByRole('region', { name: 'Memory Studio' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '选择片段 访谈录音' })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('真实 UI 调试转录正文')).toBeInTheDocument();
+    expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({
+      workspaceId: 'dev-memory-studio-rich',
+    });
   });
 
   it('opens voice settings in the same app window and returns to the app', async () => {

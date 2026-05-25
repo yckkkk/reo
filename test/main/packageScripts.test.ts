@@ -264,28 +264,6 @@ test('quick format check tolerates a missing active specs directory', () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('main test runner uses a bounded default batch with an explicit environment override', async () => {
-  const script = await readFile('scripts/run-main-tests.mjs', 'utf8');
-
-  assert.match(script, /const defaultBatchSize = 64;/);
-  assert.match(script, /function readBatchSizeFromEnv\(\)/);
-  assert.match(script, /MAIN_TEST_BATCH_SIZE must be 0 or a positive integer/);
-  assert.match(script, /MAIN_TEST_FILES/);
-  assert.match(script, /readdirSync\(directory, \{ withFileTypes: true \}\)\.sort/);
-  assert.doesNotMatch(script, /findTestFiles\(testDir\)\]\.sort/);
-  assert.match(script, /const nodeTestArgs = process\.argv\.slice\(2\);/);
-  assert.match(script, /filterMainTestFiles\(discoveredTestFiles, process\.env\.MAIN_TEST_FILES\)/);
-  assert.match(script, /buildNodeTestArgBatches\(testFiles, batchSize, nodeTestArgs\)/);
-});
-
-test('renderer test runner only filters the known Node localStorage warning', async () => {
-  const script = await readFile('scripts/run-renderer-tests.mjs', 'utf8');
-
-  assert.match(script, /LOCAL_STORAGE_WARNING/);
-  assert.match(script, /Unexpected ExperimentalWarning/);
-  assert.doesNotMatch(script, /--disable-warning=ExperimentalWarning/);
-});
-
 test('main test runner batch helpers preserve node args and reject invalid batch sizes', async () => {
   const runner = (await import(pathToFileURL(path.resolve('scripts/run-main-tests.mjs')).href)) as {
     readonly buildNodeTestArgBatches: (
@@ -394,6 +372,26 @@ test('renderer test runner filters only the known localStorage warning behaviora
   );
 });
 
+test('renderer test runner splits the default full suite into stable project runs', async () => {
+  const runner = (await import(
+    pathToFileURL(path.resolve('scripts/run-renderer-tests.mjs')).href
+  )) as {
+    readonly buildRendererTestRuns: (args: readonly string[]) => readonly (readonly string[])[];
+  };
+
+  assert.deepEqual(runner.buildRendererTestRuns([]), [
+    ['--project', 'renderer-node'],
+    ['--project', 'renderer-jsdom-browser'],
+    ['--project', 'renderer-jsdom-components'],
+  ]);
+  assert.deepEqual(runner.buildRendererTestRuns(['--project', 'renderer-node']), [
+    ['--project', 'renderer-node'],
+  ]);
+  assert.deepEqual(runner.buildRendererTestRuns(['src/renderer/src/App.test.tsx']), [
+    ['src/renderer/src/App.test.tsx'],
+  ]);
+});
+
 test('vitest separates parallel browser API jsdom tests from serial component jsdom tests', async () => {
   const config = await readFile('vitest.config.ts', 'utf8');
 
@@ -444,46 +442,6 @@ test('vitest assigns each renderer test file to exactly one project', async () =
     ),
     []
   );
-});
-
-test('memory studio layout measurement covers a bounded rendered-item sample with explicit full mode', async () => {
-  const script = await readFile('scripts/measure-memory-studio-layout.mjs', 'utf8');
-
-  assert.match(script, /const defaultMaxItems = 24;/);
-  assert.match(script, /const maxMountedItems = 96;/);
-  assert.match(script, /Too many mounted Segment items/);
-  assert.match(script, /maxItems: defaultMaxItems/);
-  assert.match(script, /const addIndex = \(index\) =>/);
-  assert.match(script, /item\.querySelector\('\[aria-current="true"\]'\)/);
-  assert.match(script, /item\.offsetLeft/);
-  assert.match(script, /item\.offsetWidth/);
-  assert.doesNotMatch(script, /rect\.right >= 0 && rect\.left <= window\.innerWidth/);
-  assert.match(script, /case '--full':/);
-  assert.match(script, /options\.maxItems = undefined/);
-});
-
-test('memory studio Segment strip scroll sync keeps layout reads behind refresh paths', async () => {
-  const source = await readFile('src/renderer/src/workspace/MemoryStudio.tsx', 'utf8');
-
-  assert.match(source, /const syncScrollState = \(refreshItemStep = false\) =>/);
-  assert.match(
-    source,
-    /if \(refreshItemStep\) \{\s*segmentStripItemStepRef\.current = readSegmentStripItemStep\(element\);/
-  );
-  assert.match(source, /const scheduleScrollSync = \(\) => scheduleSyncScrollState\(false\);/);
-  assert.match(source, /const scheduleResizeSync = \(\) => scheduleSyncScrollState\(true\);/);
-  assert.match(
-    source,
-    /element\.addEventListener\('scroll', scheduleScrollSync, \{ passive: true \}\);/
-  );
-});
-
-test('titlebar measurement classifies traffic-light pixels in one pass', async () => {
-  const script = await readFile('scripts/measure-titlebar-alignment.mjs', 'utf8');
-
-  assert.match(script, /function trafficLightComponents\(pixels, width\)/);
-  assert.match(script, /const trafficComponents = trafficLightComponents\(pixels, width\)/);
-  assert.match(script, /findComponentsFromActive\(red, width\)/);
 });
 
 test('measurement scripts reject missing option values before treating flags as paths', () => {

@@ -20,6 +20,10 @@ import {
   upsertByProjectedUpdatedAt,
 } from './appProjection';
 import { ReoToaster, showReoUndoToast, toast } from './components/ui/toaster';
+import {
+  devWorkspaceScenarioMemorySpaceId,
+  readAutoOpenDevWorkspaceScenarioName,
+} from './devWorkspaceScenario';
 import { SettingsShell } from './settings/SettingsShell';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
@@ -691,6 +695,8 @@ export function App() {
   );
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
   const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
+  const devWorkspaceScenarioNameRef = useRef(readAutoOpenDevWorkspaceScenarioName());
+  const devWorkspaceScenarioOpeningRef = useRef(false);
   const activeRecordingFlow = recordingFlow.status === 'active' ? recordingFlow : null;
   const recordingTarget = activeRecordingFlow?.target ?? null;
   const recordingOverlayOpen = activeRecordingFlow?.open ?? false;
@@ -1107,6 +1113,48 @@ export function App() {
     setReadyWorkspaceSession(nextWorkspaceSession);
     return true;
   }
+
+  useEffect(() => {
+    const scenarioName = devWorkspaceScenarioNameRef.current;
+    if (!scenarioName || devWorkspaceScenarioOpeningRef.current || workspaceSessionRef.current) {
+      return;
+    }
+
+    let disposed = false;
+    const scenarioMemorySpaceId = devWorkspaceScenarioMemorySpaceId(scenarioName);
+    devWorkspaceScenarioOpeningRef.current = true;
+
+    async function openDevWorkspaceScenario() {
+      const response = await openMemorySpace({
+        workspaceId: scenarioMemorySpaceId,
+      }).catch((error: unknown) => {
+        if (!disposed) {
+          setWorkspaceEntryError(unknownErrorDisplayMessage(error, OPEN_MEMORY_SPACE_ERROR));
+        }
+        return null;
+      });
+
+      if (!response || disposed || workspaceSessionRef.current) {
+        return;
+      }
+
+      if (!response.ok) {
+        setWorkspaceEntryError(
+          workspaceErrorDisplayMessage(response.error, OPEN_MEMORY_SPACE_ERROR)
+        );
+        return;
+      }
+
+      await acceptWorkspaceSession(response.value);
+    }
+
+    void openDevWorkspaceScenario();
+
+    return () => {
+      disposed = true;
+      devWorkspaceScenarioOpeningRef.current = false;
+    };
+  }, []);
 
   function beginWorkspaceAction() {
     if (workspaceActionPending) {
