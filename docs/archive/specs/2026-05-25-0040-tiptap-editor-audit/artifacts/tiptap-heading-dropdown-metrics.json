@@ -1,0 +1,69 @@
+{
+  "dropdown": {
+    "left": 370,
+    "top": 443,
+    "right": 530,
+    "bottom": 703,
+    "width": 160,
+    "height": 260
+  },
+  "itemRects": [
+    {
+      "left": 374,
+      "top": 447,
+      "right": 526,
+      "bottom": 483,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 483,
+      "right": 526,
+      "bottom": 519,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 519,
+      "right": 526,
+      "bottom": 555,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 555,
+      "right": 526,
+      "bottom": 591,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 591,
+      "right": 526,
+      "bottom": 627,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 627,
+      "right": 526,
+      "bottom": 663,
+      "width": 152,
+      "height": 36
+    },
+    {
+      "left": 374,
+      "top": 663,
+      "right": 526,
+      "bottom": 699,
+      "width": 152,
+      "height": 36
+    }
+  ],
+  "itemText": ["正文", "标题 1", "标题 2", "标题 3", "标题 4", "标题 5", "标题 6"]
+}

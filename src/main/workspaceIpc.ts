@@ -39,6 +39,7 @@ import {
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
@@ -190,6 +191,8 @@ import {
   workspaceClearVoiceTranscriptionApiKeyResponseSchema,
   workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
+  workspaceOpenMarkdownExternalLinkRequestSchema,
+  workspaceOpenMarkdownExternalLinkResponseSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceRecordingMarkdownSaveRequestSchema,
@@ -358,7 +361,8 @@ interface ShowOpenDirectoryDialogResult {
 type ShowOpenDirectoryDialog = () => Promise<ShowOpenDirectoryDialogResult>;
 type ShowItemInFolder = (filePath: string) => void;
 type OpenPath = (filePath: string) => Promise<string>;
-type OpenVoiceTranscriptionProviderConsole = (url: string) => Promise<void>;
+type OpenExternalUrl = (url: string) => Promise<void>;
+type OpenVoiceTranscriptionProviderConsole = OpenExternalUrl;
 type WriteClipboardText = (text: string) => void;
 type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
 type ResolveMemorySpacePaths = (
@@ -536,6 +540,12 @@ type HandleOpenVoiceTranscriptionProviderConsoleOptions = WorkspaceIpcBaseOption
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
   readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
+};
+
+type HandleOpenMarkdownExternalLinkOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly openExternal?: OpenExternalUrl;
 };
 
 type HandleInitializeWorkspaceForTestOptions = HandleInitializeWorkspaceOptions & {
@@ -2242,6 +2252,26 @@ function isAllowedVolcengineExternalUrl(
   return { ok: true, url };
 }
 
+function isAllowedMarkdownExternalLinkUrl(
+  rawUrl: string
+): { readonly ok: true; readonly url: URL } | { readonly ok: false } {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return { ok: false };
+  }
+
+  if (
+    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+    url.username !== '' ||
+    url.password !== ''
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, url };
+}
+
 function runDefaultVoiceTranscriptionProbe(apiKey: string): Promise<VoiceTranscriptionProbeResult> {
   return runVoiceTranscriptionProbe({ apiKey });
 }
@@ -2556,6 +2586,60 @@ async function handleOpenVoiceTranscriptionProviderConsoleCore({
   }
 }
 
+async function handleOpenMarkdownExternalLinkCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  openExternal = openSystemExternalUrl,
+}: HandleOpenMarkdownExternalLinkOptions): Promise<
+  z.infer<typeof workspaceOpenMarkdownExternalLinkResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceOpenMarkdownExternalLinkRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'openMarkdownExternalLink request is invalid',
+      'none-written'
+    );
+  }
+
+  const allowed = isAllowedMarkdownExternalLinkUrl(request.data.url);
+  if (!allowed.ok) {
+    return workspaceError(
+      'ERR_MARKDOWN_EXTERNAL_LINK_REJECTED',
+      '不允许打开该外部链接。',
+      'none-written'
+    );
+  }
+
+  try {
+    await openExternal(allowed.url.toString());
+    return workspaceOpenMarkdownExternalLinkResponseSchema.parse({
+      ok: true,
+      value: {},
+    });
+  } catch {
+    return workspaceError(
+      'ERR_MARKDOWN_EXTERNAL_LINK_REJECTED',
+      '外部链接无法打开。',
+      'none-written'
+    );
+  }
+}
+
 export async function handleReadVoiceTranscriptionSettingsForTest(
   options: HandleVoiceSettingsRequestOptions
 ): Promise<z.infer<typeof workspaceReadVoiceTranscriptionSettingsResponseSchema>> {
@@ -2590,6 +2674,12 @@ export async function handleOpenVoiceTranscriptionProviderConsoleForTest(
   options: HandleOpenVoiceTranscriptionProviderConsoleOptions
 ): Promise<z.infer<typeof workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema>> {
   return handleOpenVoiceTranscriptionProviderConsoleCore(options);
+}
+
+export async function handleOpenMarkdownExternalLinkForTest(
+  options: HandleOpenMarkdownExternalLinkOptions
+): Promise<z.infer<typeof workspaceOpenMarkdownExternalLinkResponseSchema>> {
+  return handleOpenMarkdownExternalLinkCore(options);
 }
 
 type WorkspaceHandleRequestData = {
@@ -5922,6 +6012,16 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         openExternal,
       })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL, (event, input) =>
+    handleOpenMarkdownExternalLinkCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      openExternal,
+    })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemoryTitle({

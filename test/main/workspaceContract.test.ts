@@ -14,6 +14,7 @@ import {
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
@@ -139,6 +140,8 @@ import {
   workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
+  workspaceOpenMarkdownExternalLinkRequestSchema,
+  workspaceOpenMarkdownExternalLinkResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
@@ -154,6 +157,8 @@ import {
   type WorkspaceClearVoiceTranscriptionApiKeyResponse,
   type WorkspaceOpenVoiceTranscriptionProviderConsoleRequest,
   type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
+  type WorkspaceOpenMarkdownExternalLinkRequest,
+  type WorkspaceOpenMarkdownExternalLinkResponse,
   type WorkspaceReadVoiceTranscriptionSettingsRequest,
   type WorkspaceReadVoiceTranscriptionSettingsResponse,
   type WorkspaceSaveVoiceTranscriptionApiKeyRequest,
@@ -228,6 +233,14 @@ function assertVoiceSettingsContracts(
   void _contracts;
 }
 
+function assertMarkdownExternalLinkContract(
+  _request: WorkspaceOpenMarkdownExternalLinkRequest,
+  _response: WorkspaceOpenMarkdownExternalLinkResponse
+): void {
+  void _request;
+  void _response;
+}
+
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
@@ -294,6 +307,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
     'workspace:openVoiceTranscriptionProviderConsole',
+    'workspace:openMarkdownExternalLink',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
@@ -387,6 +401,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
       'workspace:openVoiceTranscriptionProviderConsole',
     ],
+    [WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL, 'workspace:openMarkdownExternalLink'],
   ];
 
   for (const [actual, expected] of namedChannelContracts) {
@@ -531,6 +546,32 @@ test('workspace error code schema accepts voice settings and provider console er
   for (const code of voiceSettingsErrorCodes) {
     assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
   }
+});
+
+test('workspace contract exposes a bounded Markdown external link open request', () => {
+  const request = workspaceOpenMarkdownExternalLinkRequestSchema.parse({
+    url: 'https://tiptap.dev/docs',
+  });
+  const response = workspaceOpenMarkdownExternalLinkResponseSchema.parse({
+    ok: true,
+    value: {},
+  });
+
+  assertMarkdownExternalLinkContract(request, response);
+  assert.equal(
+    workspaceErrorCodeSchema.safeParse('ERR_MARKDOWN_EXTERNAL_LINK_REJECTED').success,
+    true
+  );
+  assert.throws(() => workspaceOpenMarkdownExternalLinkRequestSchema.parse(undefined));
+  assert.throws(() =>
+    workspaceOpenMarkdownExternalLinkRequestSchema.parse({ url: 'x'.repeat(2049) })
+  );
+  assert.throws(() =>
+    workspaceOpenMarkdownExternalLinkResponseSchema.parse({
+      ok: true,
+      value: { url: 'https://tiptap.dev/docs' },
+    })
+  );
 });
 
 test('voice transcription settings contract exposes redacted snapshot and strict schemas', () => {

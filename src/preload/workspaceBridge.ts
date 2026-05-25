@@ -33,6 +33,7 @@ import {
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
@@ -468,6 +469,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     openVoiceTranscriptionProviderConsole: () =>
       invoke<WorkspaceBridgeResponse<'openVoiceTranscriptionProviderConsole'>>(
         WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL
+      ),
+    openMarkdownExternalLink: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openMarkdownExternalLink'>>(
+        WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
+        payload
       ),
     onRecordingTranscriptionEvent: (callback) =>
       invoker.on?.(WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, (payload) =>

@@ -50,7 +50,10 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
-import { LightweightMarkdownEditorSurface } from './LightweightMarkdownEditorSurface';
+import {
+  LightweightMarkdownEditorSurface,
+  type LightweightMarkdownEditorHandle,
+} from './LightweightMarkdownEditorSurface';
 import {
   createInlineMarkdownEditorState,
   inlineMarkdownEditorIsDirty,
@@ -102,11 +105,11 @@ import {
   segmentContentQueryOptions,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
-import { useLightweightMarkdownFormatting } from './useLightweightMarkdownFormatting';
 import {
   useMarkdownImageAttachment,
   type MarkdownImageAttachmentTarget,
 } from './useMarkdownImageAttachment';
+import { createMarkdownAttachmentContext } from './markdownAttachmentSource';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
@@ -2004,8 +2007,8 @@ function SegmentSupplementAudioPlayer({
           saveLabel="保存"
           surfaceTestId="memory-studio-inline-supplement-transcript-editor"
           targetKey={`segment-supplement-transcript:${supplement.segmentId}:${supplement.supplementId}`}
-          textareaId={`${panelId}-transcript-inline-editor`}
-          textareaLabel="补充录音转录正文"
+          editorId={`${panelId}-transcript-inline-editor`}
+          editorLabel="补充录音转录正文"
           workspaceSession={workspaceSession}
         />
       ) : (
@@ -2157,8 +2160,8 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly saveLabel: string;
   readonly surfaceTestId: string;
   readonly targetKey: string;
-  readonly textareaId: string;
-  readonly textareaLabel: string;
+  readonly editorId: string;
+  readonly editorLabel: string;
   readonly workspaceSession: WorkspaceSession;
 };
 
@@ -2179,12 +2182,12 @@ function InlineMarkdownContentEditor<TSaved>({
   saveLabel,
   surfaceTestId,
   targetKey,
-  textareaId,
-  textareaLabel,
+  editorId,
+  editorLabel,
   workspaceSession,
 }: InlineMarkdownContentEditorProps<TSaved>) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorHandleRef = useRef<LightweightMarkdownEditorHandle | null>(null);
   const loadedTargetKeyRef = useRef(targetKey);
   const workspaceSessionKey = `${workspaceSession.workspaceHandle}\0${workspaceSession.workspaceId}`;
   const latestWorkspaceSessionKeyRef = useRef(workspaceSessionKey);
@@ -2196,22 +2199,37 @@ function InlineMarkdownContentEditor<TSaved>({
   const dirty = inlineMarkdownEditorIsDirty(editorState);
   const imageAttachment = useMarkdownImageAttachment({
     disabled: editorState.pending,
-    onChange: (nextMarkdown) =>
-      dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown }),
+    editorHandleRef,
     onError: (message) => dispatchEditorState({ type: 'error-set', message }),
     target: attachmentTarget,
-    textareaRef,
-    value: editorState.markdown,
     workspaceSession,
   });
+  const attachmentContext = useMemo(
+    () =>
+      createMarkdownAttachmentContext(
+        attachmentTarget?.kind === 'segment'
+          ? {
+              kind: 'segment',
+              workspaceId: workspaceSession.workspaceId,
+              segmentId: attachmentTarget.segmentId,
+            }
+          : attachmentTarget?.kind === 'segment-supplement'
+            ? {
+                kind: 'segment-supplement',
+                workspaceId: workspaceSession.workspaceId,
+                segmentId: attachmentTarget.segmentId,
+                supplementId: attachmentTarget.supplementId,
+              }
+            : undefined
+      ),
+    [
+      attachmentTarget?.kind,
+      attachmentTarget?.segmentId,
+      attachmentTarget?.kind === 'segment-supplement' ? attachmentTarget.supplementId : '',
+      workspaceSession.workspaceId,
+    ]
+  );
   const disabled = editorState.pending || imageAttachment.pending;
-  const applyMarkdownFormat = useLightweightMarkdownFormatting({
-    disabled,
-    onChange: (nextMarkdown) =>
-      dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown }),
-    textareaRef,
-    value: editorState.markdown,
-  });
 
   useEffect(() => {
     if (loadedTargetKeyRef.current !== targetKey) {
@@ -2247,7 +2265,7 @@ function InlineMarkdownContentEditor<TSaved>({
       activeElement.blur();
       return;
     }
-    textareaRef.current?.blur();
+    editorHandleRef.current?.blur();
   }
 
   async function saveMarkdown(
@@ -2325,8 +2343,10 @@ function InlineMarkdownContentEditor<TSaved>({
         data-slot="memory-studio-inline-markdown-editor"
       >
         <LightweightMarkdownEditorSurface
+          attachmentContext={attachmentContext}
           cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
           disabled={disabled}
+          editorHandleRef={editorHandleRef}
           headerLabel={headerLabel}
           notice={
             editorState.errorMessage ??
@@ -2337,7 +2357,7 @@ function InlineMarkdownContentEditor<TSaved>({
           }
           onDragOver={imageAttachment.handleDragOver}
           onDrop={imageAttachment.handleDrop}
-          onFormat={applyMarkdownFormat}
+          onAttachmentUpload={imageAttachment.uploadFile}
           onPaste={imageAttachment.handlePaste}
           onCancel={cancelMarkdownEdit}
           onSave={() => void saveMarkdown()}
@@ -2349,13 +2369,12 @@ function InlineMarkdownContentEditor<TSaved>({
           showHeaderLabel={false}
           surfaceRef={surfaceRef}
           surfaceTestId={surfaceTestId}
-          textareaFocused={editorState.textareaFocused}
-          textareaId={textareaId}
-          textareaLabel={textareaLabel}
-          onTextareaFocusChange={(textareaFocused) =>
-            dispatchEditorState({ type: 'textarea-focus-changed', textareaFocused })
+          editorFocused={editorState.editorFocused}
+          editorId={editorId}
+          editorLabel={editorLabel}
+          onEditorFocusChange={(editorFocused) =>
+            dispatchEditorState({ type: 'editor-focus-changed', editorFocused })
           }
-          textareaRef={textareaRef}
           toolbarDisabled={disabled}
           value={editorState.markdown}
         />
@@ -2467,8 +2486,8 @@ function SegmentSupplementNotePanel({
         saveLabel="保存"
         surfaceTestId="memory-studio-inline-supplement-note-editor"
         targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
-        textareaId={`${panelId}-inline-editor`}
-        textareaLabel="补充笔记正文"
+        editorId={`${panelId}-inline-editor`}
+        editorLabel="补充笔记正文"
         workspaceSession={workspaceSession}
       />
     );
@@ -3958,8 +3977,8 @@ export function MemoryStudio({
                     saveLabel="保存"
                     surfaceTestId="memory-studio-inline-transcript-editor"
                     targetKey={`segment-transcript:${selectedSegment.segmentId}`}
-                    textareaId={`${transcriptContentTab.panelId}-inline-editor`}
-                    textareaLabel="转录正文"
+                    editorId={`${transcriptContentTab.panelId}-inline-editor`}
+                    editorLabel="转录正文"
                     workspaceSession={workspaceSession}
                   />
                 ) : isAudioMemorySegment(selectedSegment) ? (
@@ -4038,8 +4057,8 @@ export function MemoryStudio({
                     saveLabel="保存"
                     surfaceTestId="memory-studio-inline-note-editor"
                     targetKey={`segment:${selectedSegment.segmentId}`}
-                    textareaId={`${transcriptContentTab.panelId}-inline-editor`}
-                    textareaLabel="笔记正文"
+                    editorId={`${transcriptContentTab.panelId}-inline-editor`}
+                    editorLabel="笔记正文"
                     workspaceSession={workspaceSession}
                   />
                 ) : (

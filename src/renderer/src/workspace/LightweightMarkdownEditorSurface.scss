@@ -1,0 +1,86 @@
+@use '../styles/tiptap-template-variables';
+@use '../styles/tiptap-template-keyframes';
+
+.reo-lightweight-markdown-editor-surface {
+  --reo-editor-content-padding-x: 1.25rem;
+  --reo-editor-content-padding-y: 1rem;
+  --tt-theme-text: var(--tt-gray-light-900);
+  color: var(--foreground);
+
+  .dark & {
+    --tt-theme-text: var(--tt-gray-dark-900);
+  }
+
+  .tiptap-toolbar[data-variant='fixed'] {
+    position: static;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .tiptap-toolbar-group {
+    flex: 0 0 auto;
+  }
+
+  .tiptap-button:focus,
+  .tiptap-button:focus-visible,
+  .tiptap-button[data-focus-visible='true'] {
+    outline: none;
+  }
+}
+
+.reo-lightweight-markdown-editor-surface-disabled {
+  .tiptap-toolbar {
+    pointer-events: none;
+    opacity: 0.55;
+  }
+}
+
+.reo-lightweight-markdown-editor-scrollport {
+  width: 100%;
+}
+
+.reo-lightweight-markdown-editor-content {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: var(--reo-editor-content-padding-y) var(--reo-editor-content-padding-x);
+  color: var(--foreground);
+}
+
+.reo-lightweight-markdown-editor-placeholder {
+  pointer-events: none;
+  position: absolute;
+  top: var(--reo-editor-content-padding-y);
+  left: var(--reo-editor-content-padding-x);
+  color: var(--muted-foreground);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.tiptap.ProseMirror.reo-lightweight-markdown-editor.simple-editor {
+  min-height: calc(100% - var(--reo-editor-content-padding-y) * 2);
+  padding: 0;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.tiptap.ProseMirror.reo-lightweight-markdown-editor {
+  mark {
+    border-radius: var(--radius-sm);
+    padding-inline: 0.125rem;
+  }
+
+  .reo-tiptap-image {
+    display: block;
+    max-width: 100%;
+    max-height: 22.5rem;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+  }
+}

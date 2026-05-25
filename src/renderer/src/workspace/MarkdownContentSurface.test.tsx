@@ -65,6 +65,32 @@ describe('MarkdownContentSurface', () => {
     expect(screen.queryByText('> 引用内容')).not.toBeInTheDocument();
   });
 
+  it('renders Markdown attachment images without loading unsupported image sources', () => {
+    render(
+      <MarkdownContentSurface
+        attachmentContext={{
+          kind: 'segment',
+          workspaceId: 'ws_1',
+          segmentId: 'seg_1',
+        }}
+        bodyMarkdown={
+          '![Local cake](attachments/cake.png)\n\n![Remote cake](https://example.test/cake.png)'
+        }
+        loading={false}
+        title="正文"
+      />
+    );
+
+    expect(screen.queryByText('![Local cake](attachments/cake.png)')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Local cake' })).toHaveAttribute(
+      'src',
+      'reo-attachment://ws_1/segments/seg_1/cake.png'
+    );
+    const unsupportedImage = screen.getByRole('img', { name: 'Remote cake' });
+    expect(unsupportedImage).not.toHaveAttribute('src');
+    expect(unsupportedImage).toHaveAttribute('data-reo-image-source', 'unsupported');
+  });
+
   it('does not render a table-of-contents control marker as note body text', () => {
     render(
       <MarkdownContentSurface

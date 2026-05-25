@@ -13,14 +13,14 @@ describe('inlineMarkdownEditorState', () => {
     });
 
     state = inlineMarkdownEditorReducer(state, {
-      type: 'textarea-focus-changed',
-      textareaFocused: true,
+      type: 'editor-focus-changed',
+      editorFocused: true,
     });
-    expect(state.textareaFocused).toBe(true);
+    expect(state.editorFocused).toBe(true);
     expect(inlineMarkdownEditorIsDirty(state)).toBe(false);
 
     state = inlineMarkdownEditorReducer(state, { type: 'markdown-changed', markdown: 'Updated' });
-    expect(state.textareaFocused).toBe(true);
+    expect(state.editorFocused).toBe(true);
     expect(inlineMarkdownEditorIsDirty(state)).toBe(true);
 
     state = inlineMarkdownEditorReducer(state, { type: 'save-started' });
@@ -29,7 +29,7 @@ describe('inlineMarkdownEditorState', () => {
       nextBaselineContentHash: 'b'.repeat(64),
     });
 
-    expect(state.textareaFocused).toBe(false);
+    expect(state.editorFocused).toBe(false);
     expect(state.markdown).toBe('Updated');
     expect(state.cleanMarkdown).toBe('Updated');
     expect(state.activeBaselineContentHash).toBe('b'.repeat(64));
@@ -43,8 +43,8 @@ describe('inlineMarkdownEditorState', () => {
     });
 
     state = inlineMarkdownEditorReducer(state, {
-      type: 'textarea-focus-changed',
-      textareaFocused: true,
+      type: 'editor-focus-changed',
+      editorFocused: true,
     });
     state = inlineMarkdownEditorReducer(state, { type: 'markdown-changed', markdown: 'Draft' });
     state = inlineMarkdownEditorReducer(state, {
@@ -53,7 +53,7 @@ describe('inlineMarkdownEditorState', () => {
       markdown: 'Next body',
     });
 
-    expect(state.textareaFocused).toBe(false);
+    expect(state.editorFocused).toBe(false);
     expect(state.markdown).toBe('Next body');
     expect(state.cleanMarkdown).toBe('Next body');
     expect(state.activeBaselineContentHash).toBe('c'.repeat(64));

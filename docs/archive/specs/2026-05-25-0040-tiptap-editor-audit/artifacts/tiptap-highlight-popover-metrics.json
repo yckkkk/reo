@@ -1,0 +1,89 @@
+{
+  "dropdown": {
+    "left": 731,
+    "top": 443,
+    "right": 948,
+    "bottom": 479,
+    "width": 217,
+    "height": 36
+  },
+  "colorButtons": [
+    {
+      "label": "高亮",
+      "rect": {
+        "left": 731,
+        "top": 403,
+        "right": 763,
+        "bottom": 435,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "label": "绿色高亮",
+      "rect": {
+        "left": 735,
+        "top": 447,
+        "right": 763,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "label": "蓝色高亮",
+      "rect": {
+        "left": 767,
+        "top": 447,
+        "right": 795,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "label": "红色高亮",
+      "rect": {
+        "left": 799,
+        "top": 447,
+        "right": 827,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "label": "紫色高亮",
+      "rect": {
+        "left": 831,
+        "top": 447,
+        "right": 859,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "label": "黄色高亮",
+      "rect": {
+        "left": 863,
+        "top": 447,
+        "right": 891,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "label": "清除高亮",
+      "rect": {
+        "left": 916,
+        "top": 447,
+        "right": 944,
+        "bottom": 475,
+        "width": 28,
+        "height": 28
+      }
+    }
+  ]
+}

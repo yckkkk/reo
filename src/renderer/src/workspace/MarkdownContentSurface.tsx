@@ -1,19 +1,14 @@
 import { useMemo, useRef, type MouseEvent, type ReactNode } from 'react';
+import {
+  createMarkdownAttachmentContext,
+  markdownAttachmentContextKey,
+  resolveMarkdownImageSource,
+  type MarkdownAttachmentContext,
+} from './markdownAttachmentSource';
 
 type MarkdownContentSurfaceProps = {
   readonly ariaLabelledBy?: string;
-  readonly attachmentContext?:
-    | {
-        readonly kind: 'segment';
-        readonly workspaceId: string;
-        readonly segmentId: string;
-      }
-    | {
-        readonly kind: 'segment-supplement';
-        readonly workspaceId: string;
-        readonly segmentId: string;
-        readonly supplementId: string;
-      };
+  readonly attachmentContext?: MarkdownAttachmentContext;
   readonly bodyMarkdown?: string | undefined;
   readonly className?: string;
   readonly dataSlot?: string;
@@ -31,30 +26,8 @@ type MarkdownContentSurfaceProps = {
 
 type MarkdownImageToken = {
   readonly alt: string;
-  readonly src: string;
+  readonly src: string | null;
 };
-
-function parseAttachmentImageSource(
-  src: string,
-  attachmentContext: MarkdownContentSurfaceProps['attachmentContext']
-) {
-  if (!attachmentContext || !src.startsWith('attachments/')) {
-    return src;
-  }
-  const filename = src.slice('attachments/'.length);
-  if (
-    filename.length === 0 ||
-    filename.includes('/') ||
-    filename.includes('\\') ||
-    filename.includes('..')
-  ) {
-    return src;
-  }
-  if (attachmentContext.kind === 'segment') {
-    return `reo-attachment://${attachmentContext.workspaceId}/segments/${attachmentContext.segmentId}/${filename}`;
-  }
-  return `reo-attachment://${attachmentContext.workspaceId}/segments/${attachmentContext.segmentId}/supplements/${attachmentContext.supplementId}/${filename}`;
-}
 
 function renderMarkdownLine(
   line: string,
@@ -75,13 +48,14 @@ function renderMarkdownLine(
     }
     const image: MarkdownImageToken = {
       alt,
-      src: parseAttachmentImageSource(src, attachmentContext),
+      src: resolveMarkdownImageSource(src, attachmentContext),
     };
     nodes.push(
       <img
         key={`${lineIndex}:${match.index}:image`}
         alt={image.alt}
-        src={image.src}
+        data-reo-image-source={image.src ? undefined : 'unsupported'}
+        src={image.src ?? undefined}
         className="my-8 max-h-[360px] max-w-full rounded-sm object-contain"
       />
     );
@@ -472,28 +446,12 @@ export function MarkdownContentSurface({
   const contentSpacingClassName = hasTitle ? 'mt-12' : 'mt-0';
   const editable = Boolean(onEdit) && !loading && bodyMarkdown !== undefined;
   const skipNextEditClickRef = useRef(false);
-  const attachmentKind = attachmentContext?.kind ?? 'none';
-  const attachmentWorkspaceId = attachmentContext?.workspaceId ?? '';
-  const attachmentSegmentId = attachmentContext?.segmentId ?? '';
-  const attachmentSupplementId =
-    attachmentContext?.kind === 'segment-supplement' ? attachmentContext.supplementId : '';
+  const attachmentContextKey = markdownAttachmentContextKey(attachmentContext);
+  const renderAttachmentContext = useMemo(
+    () => createMarkdownAttachmentContext(attachmentContext),
+    [attachmentContextKey]
+  );
   const renderedMarkdownBody = useMemo(() => {
-    const renderAttachmentContext =
-      attachmentKind === 'segment'
-        ? {
-            kind: 'segment' as const,
-            workspaceId: attachmentWorkspaceId,
-            segmentId: attachmentSegmentId,
-          }
-        : attachmentKind === 'segment-supplement'
-          ? {
-              kind: 'segment-supplement' as const,
-              workspaceId: attachmentWorkspaceId,
-              segmentId: attachmentSegmentId,
-              supplementId: attachmentSupplementId,
-            }
-          : undefined;
-
     return !displayContentHasBody ? null : (
       <MarkdownBody
         attachmentContext={renderAttachmentContext}
@@ -504,15 +462,7 @@ export function MarkdownContentSurface({
         ].join(' ')}
       />
     );
-  }, [
-    attachmentKind,
-    attachmentSegmentId,
-    attachmentSupplementId,
-    attachmentWorkspaceId,
-    contentSpacingClassName,
-    displayContent,
-    displayContentHasBody,
-  ]);
+  }, [contentSpacingClassName, displayContent, displayContentHasBody, renderAttachmentContext]);
 
   function handleSurfaceMouseDown() {
     skipNextEditClickRef.current = Boolean(window.getSelection()?.toString());

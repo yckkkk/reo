@@ -19,9 +19,11 @@ import {
   type WorkspaceSession,
 } from './workspaceApi';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
-import { LightweightMarkdownEditorSurface } from './LightweightMarkdownEditorSurface';
+import {
+  LightweightMarkdownEditorSurface,
+  type LightweightMarkdownEditorHandle,
+} from './LightweightMarkdownEditorSurface';
 import { noteEditorDisplayTitle, targetIdentity, type NoteEditorTarget } from './noteEditorModel';
-import { useLightweightMarkdownFormatting } from './useLightweightMarkdownFormatting';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
@@ -63,17 +65,11 @@ export function NoteEditorOverlay({
   const [initialBodyMarkdown, setInitialBodyMarkdown] = useState('');
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorHandleRef = useRef<LightweightMarkdownEditorHandle | null>(null);
   const activeTargetIdentity = useMemo(() => targetIdentity(target), [target]);
   const displayTitle = noteEditorDisplayTitle(target);
   const bodyPlaceholder = target?.kind === 'segment-supplement' ? '写下补充笔记...' : '写下正文...';
   const dirty = bodyMarkdown !== initialBodyMarkdown;
-  const applyMarkdownFormat = useLightweightMarkdownFormatting({
-    disabled: pending,
-    onChange: setBodyMarkdown,
-    textareaRef,
-    value: bodyMarkdown,
-  });
 
   useEffect(() => {
     setBodyMarkdown('');
@@ -88,7 +84,7 @@ export function NoteEditorOverlay({
       return;
     }
 
-    const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => editorHandleRef.current?.focus(), 0);
     return () => window.clearTimeout(focusTimer);
   }, [activeTargetIdentity, open, pending]);
 
@@ -287,17 +283,16 @@ export function NoteEditorOverlay({
       >
         <LightweightMarkdownEditorSurface
           disabled={pending}
+          editorId="note-editor-body"
+          editorLabel="笔记正文"
+          editorHandleRef={editorHandleRef}
           headerLabel="Markdown 笔记"
           onChange={setBodyMarkdown}
-          onFormat={applyMarkdownFormat}
           onSave={() => void saveNote()}
           placeholder={bodyPlaceholder}
           saveDisabled={pending || !target}
           saveLabel="保存笔记"
-          surfaceTestId="note-editor-textarea-surface"
-          textareaId="note-editor-body"
-          textareaLabel="笔记正文"
-          textareaRef={textareaRef}
+          surfaceTestId="note-editor-text-surface"
           toolbarDisabled={pending}
           value={bodyMarkdown}
         />

@@ -737,11 +737,13 @@ export function App() {
   useEffect(() => {
     return () => {
       document.documentElement.removeAttribute('data-theme');
+      document.documentElement.classList.remove('dark');
     };
   }, []);
 
   useEffect(() => {
     document.documentElement.dataset['theme'] = effectiveTheme;
+    document.documentElement.classList.toggle('dark', effectiveTheme === 'dark');
   }, [effectiveTheme]);
 
   useEffect(() => {

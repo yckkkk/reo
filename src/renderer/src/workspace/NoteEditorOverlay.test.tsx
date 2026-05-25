@@ -76,7 +76,7 @@ describe('NoteEditorOverlay', () => {
     const editorStage = screen.getByTestId('note-editor-surface-stage');
     expect(editorStage).toHaveClass('max-w-[760px]');
     expect(within(editorStage).queryByRole('heading', { name: '正文' })).toBeNull();
-    const editorSurface = screen.getByTestId('note-editor-textarea-surface');
+    const editorSurface = screen.getByTestId('note-editor-text-surface');
     expect(editorSurface.firstElementChild).toHaveClass('min-h-[44px]');
     expect(editorSurface.firstElementChild).not.toHaveClass('min-h-44');
     expect(within(editorSurface).getByText('Markdown 笔记')).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('NoteEditorOverlay', () => {
       'rounded-md',
       'px-12'
     );
-    await waitFor(() => expect(screen.getByLabelText('笔记正文')).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '笔记正文' })).toHaveFocus());
   });
 
   it('labels an empty supplement editor as a supplement writing surface', async () => {
@@ -98,17 +98,17 @@ describe('NoteEditorOverlay', () => {
       },
     });
 
-    const textarea = screen.getByLabelText('笔记正文');
-    expect(textarea).toHaveValue('');
-    expect(textarea).toHaveAttribute('placeholder', '写下补充笔记...');
-    expect(textarea).toHaveClass('p-0', 'placeholder:text-muted-foreground');
-    expect(textarea).toHaveClass('focus-visible:!ring-0', 'transition-none', '!bg-transparent');
-    await waitFor(() => expect(textarea).toHaveFocus());
-    expect(screen.getByTestId('note-editor-textarea-surface')).toHaveClass('border-ring');
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    expect(editor).toHaveAttribute('contenteditable', 'true');
+    expect(editor).toHaveTextContent('');
+    expect(screen.getByText('写下补充笔记...')).toBeInTheDocument();
+    expect(editor).toHaveClass('simple-editor', 'reo-lightweight-markdown-editor', 'ProseMirror');
+    await waitFor(() => expect(editor).toHaveFocus());
+    expect(screen.getByTestId('note-editor-text-surface')).toHaveClass('border-ring');
     expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记1');
   });
 
-  it('applies lightweight Markdown toolbar commands to the textarea selection', async () => {
+  it('exposes the Simple Editor toolbar without draft-only attachment upload', async () => {
     const user = userEvent.setup();
 
     renderNoteEditorOverlay({
@@ -119,15 +119,25 @@ describe('NoteEditorOverlay', () => {
       },
     });
 
-    const textarea = screen.getByLabelText('笔记正文') as HTMLTextAreaElement;
-    await user.type(textarea, 'hello');
-    textarea.setSelectionRange(0, 5);
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(editor);
 
-    await user.click(screen.getByRole('button', { name: '粗体' }));
-
-    expect(textarea.value).toBe('**hello**');
-    await waitFor(() => expect(textarea.selectionStart).toBe(2));
-    expect(textarea.selectionEnd).toBe(7);
-    expect(screen.getByRole('toolbar', { name: 'Markdown 格式工具栏' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '粗体' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '斜体' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '标题' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '列表' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '链接' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '左对齐' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '列表' }));
+    expect(await screen.findByRole('menuitem', { name: /项目符号列表/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /编号列表/ })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: /待办列表/ })).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: '格式' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '添加图片' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('图片附件')).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: '格式' })).not.toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: '文本编辑工具栏' })).toBeVisible();
+    expect(screen.queryByRole('toolbar', { name: 'Markdown 格式工具栏' })).not.toBeInTheDocument();
   });
 });

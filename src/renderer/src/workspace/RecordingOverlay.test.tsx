@@ -486,6 +486,10 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: true as const,
       value: {},
     })),
+    openMarkdownExternalLink: vi.fn(async () => ({
+      ok: true as const,
+      value: {},
+    })),
     onRecordingTranscriptionEvent: vi.fn(() => () => {}),
   };
 }

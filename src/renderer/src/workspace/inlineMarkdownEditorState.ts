@@ -10,7 +10,7 @@ export type InlineMarkdownEditorState = {
   readonly lastInputMarkdown: string;
   readonly markdown: string;
   readonly pending: boolean;
-  readonly textareaFocused: boolean;
+  readonly editorFocused: boolean;
 };
 
 type InlineMarkdownEditorStateInput = {
@@ -31,7 +31,7 @@ export type InlineMarkdownEditorAction =
     }
   | { readonly type: 'workspace-session-changed' }
   | { readonly type: 'markdown-changed'; readonly markdown: string }
-  | { readonly type: 'textarea-focus-changed'; readonly textareaFocused: boolean }
+  | { readonly type: 'editor-focus-changed'; readonly editorFocused: boolean }
   | { readonly type: 'save-started' }
   | { readonly type: 'save-stale-session' }
   | { readonly type: 'save-succeeded'; readonly nextBaselineContentHash?: string }
@@ -60,7 +60,7 @@ export function createInlineMarkdownEditorState({
     lastInputMarkdown: markdown,
     markdown,
     pending: false,
-    textareaFocused: false,
+    editorFocused: false,
   };
 }
 
@@ -118,7 +118,7 @@ export function inlineMarkdownEditorReducer(
         ...state,
         conflict: null,
         pending: false,
-        textareaFocused: false,
+        editorFocused: false,
       };
 
     case 'markdown-changed':
@@ -128,10 +128,10 @@ export function inlineMarkdownEditorReducer(
         markdown: action.markdown,
       };
 
-    case 'textarea-focus-changed':
+    case 'editor-focus-changed':
       return {
         ...state,
-        textareaFocused: action.textareaFocused,
+        editorFocused: action.editorFocused,
       };
 
     case 'save-started':
@@ -160,7 +160,7 @@ export function inlineMarkdownEditorReducer(
         lastInputBaselineContentHash: nextBaselineContentHash,
         lastInputMarkdown: state.markdown,
         pending: false,
-        textareaFocused: false,
+        editorFocused: false,
       };
     }
 
@@ -189,7 +189,7 @@ export function inlineMarkdownEditorReducer(
         lastInputBaselineContentHash: action.baselineContentHash,
         lastInputMarkdown: action.markdown,
         markdown: action.markdown,
-        textareaFocused: false,
+        editorFocused: false,
       };
 
     case 'cancel-clean':
@@ -199,7 +199,7 @@ export function inlineMarkdownEditorReducer(
         diskChangeNoticeVisible: false,
         errorMessage: null,
         markdown: state.cleanMarkdown,
-        textareaFocused: false,
+        editorFocused: false,
       };
 
     case 'conflict-dismissed':

@@ -109,6 +109,30 @@ if (!birthdayVoiceSegment) {
   throw new Error('birthdayDetail fixture must include a segment');
 }
 
+function expectRichEditorContent(editor: HTMLElement, expectedText: string | readonly string[]) {
+  const expectedParts = typeof expectedText === 'string' ? [expectedText] : expectedText;
+  expect(editor).toHaveAttribute('contenteditable');
+  for (const expectedPart of expectedParts) {
+    expect(editor).toHaveTextContent(expectedPart);
+  }
+}
+
+async function replaceRichEditorMarkdown(editor: HTMLElement, markdown: string) {
+  const user = userEvent.setup();
+  await user.click(editor);
+  fireEvent.keyDown(editor, { code: 'KeyA', key: 'a', metaKey: true });
+  fireEvent.keyDown(editor, { code: 'KeyA', key: 'a', ctrlKey: true });
+  fireEvent.paste(editor, {
+    clipboardData: {
+      files: [],
+      getData: (type: string) => (type === 'text/plain' ? markdown : ''),
+      items: [],
+      setData: () => undefined,
+      types: ['text/plain'],
+    },
+  });
+}
+
 const birthdayDetailWithTwoSegments: WorkspaceMemoryDetail = {
   ...birthdayDetail,
   segmentCount: 2,
@@ -950,12 +974,15 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(strip).getByText('32 字节')).toBeInTheDocument();
     expect(within(strip).queryByText('32B')).not.toBeInTheDocument();
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
-    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    expectRichEditorContent(inlineBodyEditor, ['Cake plan', 'Buy candles', 'Call aunt Mei']);
+    expect(inlineBodyEditor).not.toHaveTextContent('## Cake plan');
+    expect(inlineBodyEditor).not.toHaveTextContent('- Buy candles');
     expect(inlineBodyEditor).not.toHaveFocus();
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    expect(within(content).queryByRole('button', { name: '引用' })).not.toBeInTheDocument();
-    expect(within(content).queryByRole('button', { name: '标题' })).not.toBeInTheDocument();
+    expect(within(content).getByRole('button', { name: '引用' })).toBeInTheDocument();
+    expect(within(content).getByRole('button', { name: '标题' })).toBeInTheDocument();
+    expect(within(content).getByRole('button', { name: '列表' })).toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '分割线' })).not.toBeInTheDocument();
     expect(
       within(content).queryByRole('button', { name: '笔记 Cake planning note 暂不支持播放' })
@@ -1045,46 +1072,78 @@ describe('LoadedWorkspaceFrame', () => {
       '[data-slot="lightweight-markdown-editor-toolbar"]'
     );
     expect(editorToolbar).toBeInstanceOf(HTMLElement);
-    expect(editorToolbar).toHaveClass('h-[44px]', 'px-12');
-    expect(editorToolbar).toHaveClass('!bg-transparent', 'transition-none');
-    const editorToolbarButtons = within(editorToolbar as HTMLElement).getAllByRole('button');
-    expect(editorToolbarButtons.length).toBeGreaterThan(0);
-    for (const toolbarButton of editorToolbarButtons) {
-      expect(toolbarButton).toHaveClass('!bg-transparent', 'disabled:!bg-transparent');
-      expect(toolbarButton).not.toHaveClass('hover:bg-secondary');
-    }
+    expect(editorToolbar).toHaveClass('flex', 'h-[44px]', 'min-h-[44px]', 'min-w-0');
+    expect(editorToolbar).not.toHaveClass('grid-cols-[minmax(0,1fr)_auto]');
+    const editorToolbarControls = within(editorToolbar as HTMLElement).getByRole('toolbar', {
+      name: '文本编辑工具栏',
+    });
+    expect(editorToolbarControls).toHaveClass('tiptap-toolbar');
+    expect(editorToolbarControls).toHaveAttribute('data-variant', 'fixed');
+    expect(
+      within(editorToolbarControls)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent)
+    ).toEqual([
+      '撤销',
+      '重做',
+      '标题',
+      '列表',
+      '引用',
+      '代码块',
+      '粗体',
+      '斜体',
+      '删除线',
+      '行内代码',
+      '下划线',
+      '高亮',
+      '链接',
+      '上标',
+      '下标',
+      '左对齐',
+      '居中对齐',
+      '右对齐',
+      '两端对齐',
+      '添加图片',
+    ]);
+    expect(
+      editorSurface.querySelector('[data-slot="lightweight-markdown-editor-actions"]')
+    ).not.toBeInTheDocument();
     const editorBody = editorSurface.querySelector(
       '[data-slot="lightweight-markdown-editor-body"]'
     );
     expect(editorBody).toBeInstanceOf(HTMLElement);
-    expect(editorBody).toHaveClass('px-20', 'py-16');
-    expect(editorBody).toHaveClass('!bg-transparent', 'transition-none');
-    expect(inlineBodyEditor).toHaveClass('font-mono', 'text-body', 'leading-[1.65]');
-    expect(inlineBodyEditor).toHaveClass(
-      '!bg-transparent',
-      'transition-none',
-      'focus-visible:!ring-0'
+    expect(editorBody).toHaveClass('flex', 'min-h-0', 'flex-col', 'bg-background');
+    const editorScrollport = editorSurface.querySelector(
+      '.reo-lightweight-markdown-editor-scrollport'
     );
+    expect(editorScrollport).toBeInstanceOf(HTMLElement);
+    expect(editorScrollport).toHaveClass('relative', 'min-h-0', 'flex-1', 'overflow-y-auto');
+    const editorContent = editorSurface.querySelector('.reo-lightweight-markdown-editor-content');
+    expect(editorContent).toBeInstanceOf(HTMLElement);
+    expect(inlineBodyEditor).toHaveClass('reo-lightweight-markdown-editor', 'simple-editor');
     expect(inlineBodyEditor).not.toHaveClass('bg-input', 'transition-colors');
     await userEvent.click(inlineBodyEditor);
     expect(inlineBodyEditor).toHaveFocus();
     expect(editorSurface).toHaveClass('border-ring');
     expect(editorSurface).not.toHaveClass('border-secondary');
-    const boldToolbarButton = within(editorToolbar as HTMLElement).getByRole('button', {
+    const formatToolbarButton = within(editorToolbar as HTMLElement).getByRole('button', {
       name: '粗体',
     });
-    boldToolbarButton.focus();
-    fireEvent.blur(inlineBodyEditor, { relatedTarget: boldToolbarButton });
-    expect(boldToolbarButton).toHaveFocus();
+    formatToolbarButton.focus();
+    fireEvent.blur(inlineBodyEditor, { relatedTarget: formatToolbarButton });
+    expect(formatToolbarButton).toHaveFocus();
     await waitFor(() => expect(editorSurface).toHaveClass('border-secondary'));
     expect(editorSurface).not.toHaveClass('border-ring');
     await userEvent.click(inlineBodyEditor);
     expect(editorSurface).toHaveClass('border-ring');
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    fireEvent.change(inlineBodyEditor, { target: { value: 'Updated body' } });
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Updated body');
     expect(editorSurface).toHaveClass('border-ring');
     expect(editorSurface).not.toHaveClass('border-secondary');
+    expect(
+      editorSurface.querySelector('[data-slot="lightweight-markdown-editor-actions"]')
+    ).toBeInTheDocument();
     const cancelButton = within(content).getByRole('button', { name: '取消' });
     const saveButton = within(content).getByRole('button', { name: '保存' });
     expect(cancelButton).toBeInTheDocument();
@@ -1100,12 +1159,12 @@ describe('LoadedWorkspaceFrame', () => {
       'active:!bg-foreground'
     );
     await userEvent.click(within(content).getByRole('button', { name: '取消' }));
-    expect(inlineBodyEditor).toHaveValue('## Cake plan\n\n- Buy candles\n- Call aunt Mei');
+    expectRichEditorContent(inlineBodyEditor, ['Cake plan', 'Buy candles', 'Call aunt Mei']);
     expect(editorSurface).toHaveClass('border-secondary');
     expect(editorSurface).not.toHaveClass('border-ring');
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    fireEvent.change(inlineBodyEditor, { target: { value: 'Updated body' } });
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Updated body');
     await userEvent.click(inlineBodyEditor);
     expect(editorSurface).toHaveClass('border-ring');
     await userEvent.click(within(content).getByRole('button', { name: '保存' }));
@@ -1214,13 +1273,13 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(noteButton).toHaveAttribute('aria-current', 'true');
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
-    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Unsaved body');
 
     await userEvent.click(voiceButton);
 
     expect(noteButton).toHaveAttribute('aria-current', 'true');
     expect(voiceButton).not.toHaveAttribute('aria-current', 'true');
-    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
+    expectRichEditorContent(await within(content).findByLabelText('笔记正文'), 'Unsaved body');
   });
 
   it('keeps a dirty inline Note edit mounted when new supplements appear', async () => {
@@ -1270,7 +1329,7 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
-    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Unsaved body');
 
     await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));
     await user.click(
@@ -1304,7 +1363,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     const transcriptTab = within(content).getByRole('tab', { name: '正文' });
     expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
-    expect(await within(content).findByLabelText('笔记正文')).toHaveValue('Unsaved body');
+    expectRichEditorContent(await within(content).findByLabelText('笔记正文'), 'Unsaved body');
   });
 
   it('ignores an old-handle inline Note save result without closing the current editor', async () => {
@@ -1368,9 +1427,9 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
-    fireEvent.change(inlineBodyEditor, { target: { value: 'Unsaved body' } });
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Unsaved body');
     await userEvent.click(within(content).getByRole('button', { name: '保存' }));
-    expect(inlineBodyEditor).toBeDisabled();
+    expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'false');
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -1402,8 +1461,8 @@ describe('LoadedWorkspaceFrame', () => {
       value: { bodyByteLength: 12, saved: true, baselineContentHash: 'b'.repeat(64) },
     });
 
-    await waitFor(() => expect(inlineBodyEditor).toBeEnabled());
-    expect(inlineBodyEditor).toHaveValue('Unsaved body');
+    await waitFor(() => expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'true'));
+    expectRichEditorContent(inlineBodyEditor, 'Unsaved body');
     expect(onNoteSegmentContentSaved).not.toHaveBeenCalled();
   });
 
@@ -2010,7 +2069,7 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const failedTranscriptEditor = await within(content).findByLabelText('转录正文');
-    expect(failedTranscriptEditor).toHaveValue('');
+    expectRichEditorContent(failedTranscriptEditor, '');
     expect(within(content).queryByText('上次生成转录失败。')).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
 
@@ -2660,10 +2719,10 @@ describe('LoadedWorkspaceFrame', () => {
     expect(railAddButton.parentElement).toBe(contentTabActions);
     expect(railAddButton).toHaveTextContent('补充');
     expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
-    expect(inlineTranscriptEditor).toHaveValue('Birthday transcript');
+    expectRichEditorContent(inlineTranscriptEditor, 'Birthday transcript');
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    fireEvent.change(inlineTranscriptEditor, { target: { value: 'Updated transcript' } });
+    await replaceRichEditorMarkdown(inlineTranscriptEditor, 'Updated transcript');
     expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
     expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
     await user.click(within(content).getByRole('button', { name: '保存' }));
@@ -2683,7 +2742,7 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_voice',
       baselineTranscriptHash: 'c'.repeat(64),
     });
-    fireEvent.change(inlineTranscriptEditor, { target: { value: 'Second transcript' } });
+    await replaceRichEditorMarkdown(inlineTranscriptEditor, 'Second transcript');
     await user.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() => expect(saveTranscript).toHaveBeenCalledTimes(2));
     expect(saveTranscript).toHaveBeenNthCalledWith(2, {
@@ -2910,7 +2969,7 @@ describe('LoadedWorkspaceFrame', () => {
     const transcriptEditor = await within(content).findByLabelText('补充录音转录正文');
     const supplementPanel = within(content).getByRole('tabpanel', { name: '补充录音' });
     expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-supplement-panel');
-    expect(transcriptEditor).toHaveValue('这是一个补充的录音。');
+    expectRichEditorContent(transcriptEditor, '这是一个补充的录音。');
     expect(
       transcriptEditor.closest('[data-slot="memory-studio-inline-markdown-editor"]')
     ).toHaveClass('mt-12', 'flex-1', 'min-h-0');
@@ -2919,7 +2978,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).not.toHaveClass('max-w-[880px]');
     expect(content.querySelector('[data-slot="memory-studio-supplement-transcript"]')).toBeNull();
 
-    fireEvent.change(transcriptEditor, { target: { value: '更新后的补充录音转录' } });
+    await replaceRichEditorMarkdown(transcriptEditor, '更新后的补充录音转录');
     await userEvent.click(within(content).getByRole('button', { name: '保存' }));
 
     await waitFor(() =>
@@ -2933,7 +2992,7 @@ describe('LoadedWorkspaceFrame', () => {
         baselineTranscriptHash: 'c'.repeat(64),
       })
     );
-    fireEvent.change(transcriptEditor, { target: { value: '再次更新补充录音转录' } });
+    await replaceRichEditorMarkdown(transcriptEditor, '再次更新补充录音转录');
     await userEvent.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() => expect(saveSegmentSupplementTranscript).toHaveBeenCalledTimes(2));
     expect(saveSegmentSupplementTranscript).toHaveBeenNthCalledWith(2, {
@@ -2988,9 +3047,10 @@ describe('LoadedWorkspaceFrame', () => {
     expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
     expect(supplementItem).toHaveAttribute('aria-controls', supplementPanel.id);
     expect(supplementPanel).toHaveAttribute('aria-labelledby', supplementItem.id);
-    expect(await within(supplementPanel).findByLabelText('补充笔记正文')).toHaveValue(
-      '## Follow-up\n\n- Capture the cake idea'
-    );
+    expectRichEditorContent(await within(supplementPanel).findByLabelText('补充笔记正文'), [
+      'Follow-up',
+      'Capture the cake idea',
+    ]);
     expect(within(supplementPanel).queryByRole('button', { name: /编辑/ })).toBeNull();
     expect(within(content).queryByRole('button', { name: /播放补充录音/ })).toBeNull();
     expect(readSegmentSupplementContent).toHaveBeenCalledWith(
@@ -3059,7 +3119,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
     const inlineSupplementEditor = await within(content).findByLabelText('补充笔记正文');
-    expect(inlineSupplementEditor).toHaveValue('## Follow-up\n\n- Capture the cake idea');
+    expectRichEditorContent(inlineSupplementEditor, ['Follow-up', 'Capture the cake idea']);
     expect(inlineSupplementEditor).not.toHaveFocus();
     expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
     expect(supplementPanel).toHaveClass('mt-12', 'flex-1', 'min-h-0');
@@ -3071,7 +3131,7 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeNull();
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    fireEvent.change(inlineSupplementEditor, { target: { value: 'Updated supplement' } });
+    await replaceRichEditorMarkdown(inlineSupplementEditor, 'Updated supplement');
     expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
     expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
     await userEvent.click(within(content).getByRole('button', { name: '保存' }));
@@ -3153,8 +3213,8 @@ describe('LoadedWorkspaceFrame', () => {
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '补充笔记' });
     expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
     const emptySupplementEditor = await within(content).findByLabelText('补充笔记正文');
-    expect(emptySupplementEditor).toHaveValue('');
-    expect(emptySupplementEditor).toHaveAttribute('placeholder', '写下补充笔记...');
+    expectRichEditorContent(emptySupplementEditor, '');
+    expect(within(supplementPanel).getByText('写下补充笔记...')).toBeInTheDocument();
     expect(within(supplementPanel).queryByText('这条补充笔记还没有正文。')).toBeNull();
     expect(within(supplementPanel).queryByRole('button', { name: '写补充笔记' })).toBeNull();
     expect(within(supplementPanel).queryByText('这条笔记还没有正文。')).toBeNull();
@@ -3241,7 +3301,7 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     await user.click(within(content).getByRole('tab', { name: '补充录音' }));
 
-    expect(await within(content).findByLabelText('补充录音转录正文')).toHaveValue('');
+    expectRichEditorContent(await within(content).findByLabelText('补充录音转录正文'), '');
     expect(within(content).queryByText('上次生成补充录音转录失败。')).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '重试' })).not.toBeInTheDocument();
     expect(onRetrySupplementTranscription).not.toHaveBeenCalled();

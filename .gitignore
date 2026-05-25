@@ -17,6 +17,7 @@ out/
 .claude/settings.local.json
 
 .tmp/
+.reference/
 .DS_Store
 .idea/
 .vscode/*

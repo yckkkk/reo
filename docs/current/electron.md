@@ -21,7 +21,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前豆包语音能力凭证使用 Electron `safeStorage` 加密存放在 `userData/voice-transcription-settings.json`，由 main process `voiceSettingsStore` 持有。Renderer/preload 通过 application-scoped voice settings IPC 读取不含密文的 snapshot：`enabled`、`apiKeyConfigured`、`apiKeyLastFour`、`lastValidatedAt`、`lastValidationOk` 和 `lastValidationCode`。同一 X-Api-Key 服务录音中流式识别、finalized audio 自动补转录和手动重新生成转录；X-Api-Key 只在用户保存设置的 request 和 main process 解密后的运行时输入中出现；settings response、录音 IPC response、补转录 IPC response、日志、错误信封和记忆空间内容文件不返回明文或密文。
 - 当前 Agentation 只作为 development renderer toolbar 连接本机 `http://localhost:4747`；development CSP 的 `connect-src` 允许该 loopback endpoint 用于 MCP sync、annotation update 和 event stream。Agentation 不新增 preload、IPC、permission、protocol、navigation 或 product runtime surface。
 - 当前生产加载模型是自定义 `reo-app://renderer/index.html`。
-- 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL；`img-src` 允许 `'self'`、`data:`、`blob:` 和 `reo-attachment:`，只用于 Markdown Content Surface 中 note 图片附件预览。生产 CSP 不把 `reo-attachment:` 加入 `connect-src`。
+- 当前生产 CSP 包含 `media-src 'self' blob:`，只用于本地 audio playback Blob URL；`img-src` 允许 `'self'`、`data:`、`blob:` 和 `reo-attachment:`，用于 Markdown reading surface 和 Tiptap editing surface 中 note 图片附件预览。生产 CSP 不把 `reo-attachment:` 加入 `connect-src`。
 - `package.json` 的 Electron entry 指向 `./out/main/index.js`。
 - `out/` 是 `electron-vite` build output，不进入 git。
 - 当前主 BrowserWindow 使用 `titleBarStyle: 'hiddenInset'`；Reo renderer 负责 app shell 内容区域，macOS 红黄绿按钮保持原生控件，不在 renderer 中伪造。
@@ -86,6 +86,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - `workspace:clearVoiceTranscriptionApiKey` request 不接受 payload；response 与 read 同；ciphertext、`apiKeyLastFour` 和 validation 字段一并清空。
 - `workspace:validateVoiceTranscriptionCredentials` request 不接受 payload；main 解密当前 X-Api-Key 后执行 probe，response 返回 `{ code: 'ok' | 'auth' | 'network', message? }`，并同步更新 store 的 last validation 字段。
 - `workspace:openVoiceTranscriptionProviderConsole` request 不接受 payload；main 固定打开 `https://console.volcengine.com/`，并在调用 `shell.openExternal` 前校验该 URL 使用 `https:`、无 username/password、无显式 port，且 hostname 属于 `volcengine.com`。
+- `workspace:openMarkdownExternalLink` request 接受 `{ url }`；main 在调用 `shell.openExternal` 前校验 trusted sender、schema、`http:` 或 `https:` scheme，且 URL 不含 username/password。该 channel 只服务 Tiptap Markdown 编辑器链接浮层的用户触发外链打开，不允许 `file:`、`javascript:`、`data:` 或 custom scheme，也不是通用外链代理。
 - 上述 6 个 settings 相关 channel 是 application-scoped channel，不接收 `workspaceHandle`，也不绑定单个记忆空间 session。
 - 实体 More 菜单 shell 动作 IPC channels 覆盖 reveal、open 和 copy 三类只读 OS 调用。Response 是 `{ ok: true }` 或 typed error envelope，不返回 raw path 字符串。Memory Space channels 只接受 `workspaceId`；其它 entity channels 接受当前 workspace handle 与实体 identity。Main process 经 main-only `EntityPathResolver` 解析目录或语义文件路径，调用系统 API 前再次校验目标目录或语义文件 leaf，不把路径写入 renderer、preload DTO、Query cache、DOM 或日志。这些 channel 对 Reo 文件真源是只读 OS 调用，没有 `dataRetention` 半成功状态。
 - `workspace:listMemorySpaces` request 不接受 payload；response 只返回 `workspaceId`、title、description、addedAt 和 lastOpenedAt，不返回 raw path。Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空列表处理；不可读 IO 错误返回 `ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_READ_FAILED`。List 只读取 main-owned registry file，不扫描每个记忆空间 root，不读取 `.reo/workspace.json`，不做同父目录 rename scan。
@@ -133,7 +134,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - 当前 permission policy 使用 one-shot microphone intent：renderer 必须先 await `workspace:beginMicrophoneIntent` 成功，再调用 `navigator.mediaDevices.getUserMedia`；main 的 `media` permission check 永远不授予也不消费 intent；permission request handler 先按 sender id 消费一个未过期 intent，再要求 trusted main-frame renderer 和 audio-only request。
 - `workspace:beginMicrophoneIntent` 只接受 `workspaceHandle` 与 `recordingFlowSessionId`，handler 使用 `event.sender.id` 作为 sender identity，不信任 renderer sender id；同一 sender 已有未过期 intent 时返回 `ERR_MIC_INTENT_ALREADY_ACTIVE`。
 - `workspace:clearMicrophoneIntent` 要求 sender、记忆空间 handle 和 recording flow session owner 匹配；owner 匹配后即使记忆空间 lock 已 lost 也允许清理 pending intent。Memory space close 在 owner 匹配后先清理该 handle 的 pending microphone intents，再释放 lock；即使 release 失败也不得保留 pending microphone authorization。Window teardown 清理全部 pending microphone intents。Video、camera、geolocation、notifications、navigation/window-open 默认拒绝。
-- 当前 `shell.openExternal` 只在 settings 场景下用于打开 main-owned 火山引擎控制台链接，由 `workspace:openVoiceTranscriptionProviderConsole` 校验固定 URL 后转发；renderer 不传入 URL，当前不暴露通用外链能力、generic command bus、generic IPC bridge、renderer/preload logging bridge、Sentry bridge、Forge 或 updater。
+- 当前 `shell.openExternal` 只用于两类受限外链：settings 场景的 main-owned 火山引擎控制台链接，以及 Tiptap Markdown 编辑器链接浮层的用户触发 `http/https` 链接。两者都必须经显式 IPC、trusted sender 校验、schema 校验和 main process URL allowlist 后转发；当前不暴露通用外链能力、generic command bus、generic IPC bridge、renderer/preload logging bridge、Sentry bridge、Forge 或 updater。
 
 ## Forge 与 electron-vite 边界
 

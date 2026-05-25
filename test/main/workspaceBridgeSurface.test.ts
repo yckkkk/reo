@@ -83,6 +83,7 @@ const workspaceBridgeKeys = [
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
   'openVoiceTranscriptionProviderConsole',
+  'openMarkdownExternalLink',
   'onRecordingTranscriptionEvent',
 ] as const;
 
@@ -104,18 +105,19 @@ const workspaceEntityActionBridgeKeys = [
   'copySegmentSupplementRelativePath',
 ] as const;
 
-const voiceSettingsBridgeContractKeys = [
+const applicationScopedBridgeContractKeys = [
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
   'saveVoiceTranscriptionApiKey',
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
   'openVoiceTranscriptionProviderConsole',
+  'openMarkdownExternalLink',
 ] as const satisfies readonly (keyof ReoWorkspaceBridge)[];
 
-test('workspace bridge contract declares voice settings methods before preload exposure', () => {
+test('workspace bridge contract declares application-scoped methods before preload exposure', () => {
   assert.deepEqual(
-    [...voiceSettingsBridgeContractKeys],
+    [...applicationScopedBridgeContractKeys],
     [
       'readVoiceTranscriptionSettings',
       'setVoiceTranscriptionEnabled',
@@ -123,6 +125,7 @@ test('workspace bridge contract declares voice settings methods before preload e
       'clearVoiceTranscriptionApiKey',
       'validateVoiceTranscriptionCredentials',
       'openVoiceTranscriptionProviderConsole',
+      'openMarkdownExternalLink',
     ]
   );
 });
@@ -729,7 +732,7 @@ test('workspace preload bridge maps recording transcription methods and strips i
   assert.equal(removed, true);
 });
 
-test('workspace preload bridge maps voice settings methods to explicit channels', async () => {
+test('workspace preload bridge maps application-scoped methods to explicit channels', async () => {
   const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
   const bridge = createWorkspaceBridge({
     invoke: async (channel, payload) => {
@@ -744,6 +747,7 @@ test('workspace preload bridge maps voice settings methods to explicit channels'
   await bridge.clearVoiceTranscriptionApiKey(undefined);
   await bridge.validateVoiceTranscriptionCredentials(undefined);
   await bridge.openVoiceTranscriptionProviderConsole();
+  await bridge.openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
 
   assert.deepEqual(calls, [
     { channel: 'workspace:readVoiceTranscriptionSettings', payload: undefined },
@@ -752,6 +756,7 @@ test('workspace preload bridge maps voice settings methods to explicit channels'
     { channel: 'workspace:clearVoiceTranscriptionApiKey', payload: undefined },
     { channel: 'workspace:validateVoiceTranscriptionCredentials', payload: undefined },
     { channel: 'workspace:openVoiceTranscriptionProviderConsole', payload: undefined },
+    { channel: 'workspace:openMarkdownExternalLink', payload: { url: 'https://tiptap.dev/docs' } },
   ]);
 });
 
