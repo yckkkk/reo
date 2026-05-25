@@ -5,7 +5,7 @@ import type { Editor } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Icons ---
 import { BlockquoteIcon } from '@/components/tiptap-icons/blockquote-icon';
@@ -216,7 +216,7 @@ export function useBlockquote(config?: UseBlockquoteConfig) {
   const { editor } = useTiptapEditor(providedEditor);
   const [isVisible, setIsVisible] = useState<boolean>(true);
   const canToggle = canToggleBlockquote(editor);
-  const isActive = editor?.isActive('blockquote') || false;
+  const isActive = hasInteractiveTiptapSelection(editor) && editor.isActive('blockquote');
 
   useEffect(() => {
     if (!editor) return;

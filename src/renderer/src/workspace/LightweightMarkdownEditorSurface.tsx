@@ -40,6 +40,7 @@ import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { setTiptapInteractiveSelectionReady } from '@/hooks/use-tiptap-editor';
 import { cn } from '@/lib/utils';
 import {
   markdownAttachmentContextKey,
@@ -88,6 +89,7 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly editorHandleRef?: Ref<LightweightMarkdownEditorHandle>;
   readonly editorId: string;
   readonly editorLabel: string;
+  readonly editorTargetKey?: string;
   readonly headerLabel: string;
   readonly notice?: string | null;
   readonly onAttachmentUpload?: AttachmentUploadHandler;
@@ -109,6 +111,10 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly onEditorFocusChange?: (editorFocused: boolean) => void;
   readonly toolbarDisabled?: boolean;
   readonly value: string;
+};
+
+type LightweightMarkdownEditorSurfaceContentProps = LightweightMarkdownEditorSurfaceProps & {
+  readonly resolvedAttachmentContextKey: string;
 };
 
 const IMAGE_ATTACHMENT_ACCEPT = 'image/gif,image/jpeg,image/png,image/webp';
@@ -150,7 +156,20 @@ function captureEditorSelection(editor: Editor): LightweightMarkdownEditorSelect
   };
 }
 
-export function LightweightMarkdownEditorSurface({
+export function LightweightMarkdownEditorSurface(props: LightweightMarkdownEditorSurfaceProps) {
+  const attachmentContextKey = markdownAttachmentContextKey(props.attachmentContext);
+  const editorLifecycleKey = props.editorTargetKey ?? attachmentContextKey;
+
+  return (
+    <LightweightMarkdownEditorSurfaceContent
+      key={editorLifecycleKey}
+      {...props}
+      resolvedAttachmentContextKey={attachmentContextKey}
+    />
+  );
+}
+
+function LightweightMarkdownEditorSurfaceContent({
   attachmentContext,
   bordered = true,
   cancelButtonClassName,
@@ -181,13 +200,14 @@ export function LightweightMarkdownEditorSurface({
   onEditorFocusChange,
   toolbarDisabled = false,
   value,
-}: LightweightMarkdownEditorSurfaceProps) {
+  resolvedAttachmentContextKey,
+}: LightweightMarkdownEditorSurfaceContentProps) {
   const [uncontrolledEditorFocused, setUncontrolledEditorFocused] = useState(false);
   const onAttachmentUploadRef = useRef(onAttachmentUpload);
   const onChangeRef = useRef(onChange);
   const lastSyncedEditorMarkdownRef = useRef(value);
   const resolvedEditorFocused = editorFocused ?? uncontrolledEditorFocused;
-  const attachmentContextKey = markdownAttachmentContextKey(attachmentContext);
+  const attachmentContextKey = resolvedAttachmentContextKey;
 
   useEffect(() => {
     onAttachmentUploadRef.current = onAttachmentUpload;
@@ -280,8 +300,17 @@ export function LightweightMarkdownEditorSurface({
       },
       extensions,
       immediatelyRender: false,
-      onBlur: () => setResolvedEditorFocused(false),
-      onFocus: () => setResolvedEditorFocused(true),
+      onBlur: ({ editor: blurredEditor }) => {
+        setTiptapInteractiveSelectionReady(blurredEditor, false);
+        setResolvedEditorFocused(false);
+      },
+      onFocus: ({ editor: focusedEditor }) => {
+        setTiptapInteractiveSelectionReady(focusedEditor, false);
+        setResolvedEditorFocused(true);
+      },
+      onSelectionUpdate: ({ editor: selectionEditor }) => {
+        setTiptapInteractiveSelectionReady(selectionEditor, selectionEditor.isFocused);
+      },
       onUpdate: ({ editor: updatedEditor, transaction }) => {
         if (!transaction.docChanged) {
           return;

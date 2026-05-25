@@ -5,7 +5,7 @@ import { type Editor } from '@tiptap/react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 
 // --- Lib ---
@@ -146,7 +146,7 @@ export function isColorHighlightActive(
   editor: Editor | null,
   highlightColor?: string | undefined
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
 
   return highlightColor
     ? editor.isActive('highlight', { color: highlightColor })

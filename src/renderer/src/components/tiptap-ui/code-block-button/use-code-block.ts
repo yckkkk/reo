@@ -5,7 +5,7 @@ import { type Editor } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Lib ---
 import {
@@ -223,7 +223,7 @@ export function useCodeBlock(config?: UseCodeBlockConfig) {
   const { editor } = useTiptapEditor(providedEditor);
   const [isVisible, setIsVisible] = useState<boolean>(true);
   const canToggleState = canToggle(editor);
-  const isActive = editor?.isActive('codeBlock') || false;
+  const isActive = hasInteractiveTiptapSelection(editor) && editor.isActive('codeBlock');
 
   useEffect(() => {
     if (!editor) return;

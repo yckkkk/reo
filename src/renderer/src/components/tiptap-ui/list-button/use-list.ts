@@ -5,7 +5,7 @@ import { type Editor } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Icons ---
 import { ListIcon } from '@/components/tiptap-icons/list-icon';
@@ -121,7 +121,7 @@ export function canToggleList(
  * Checks if list is currently active
  */
 export function isListActive(editor: Editor | null, type: ListType): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
 
   switch (type) {
     case 'bulletList':

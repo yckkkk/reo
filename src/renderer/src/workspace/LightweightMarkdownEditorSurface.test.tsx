@@ -119,6 +119,57 @@ describe('LightweightMarkdownEditorSurface', () => {
     });
   });
 
+  it('does not carry undo history across content target changes', async () => {
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <LightweightMarkdownEditorSurface
+        editorId="targeted-editor-body"
+        editorLabel="笔记正文"
+        editorHandleRef={editorHandleRef}
+        editorTargetKey="target-one"
+        headerLabel="格式笔记"
+        onChange={onChange}
+        onSave={() => undefined}
+        placeholder="写下正文..."
+        saveLabel="保存"
+        surfaceTestId="targeted-editor"
+        value="Old target"
+      />
+    );
+
+    editorHandleRef.current?.insertMarkdown('Edited ');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '撤销' })).toHaveAttribute(
+        'data-disabled',
+        'false'
+      );
+    });
+
+    rerender(
+      <LightweightMarkdownEditorSurface
+        editorId="targeted-editor-body"
+        editorLabel="笔记正文"
+        editorHandleRef={editorHandleRef}
+        editorTargetKey="target-two"
+        headerLabel="格式笔记"
+        onChange={onChange}
+        onSave={() => undefined}
+        placeholder="写下正文..."
+        saveLabel="保存"
+        surfaceTestId="targeted-editor"
+        value="New target"
+      />
+    );
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toContain('New target');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '撤销' })).toHaveAttribute('data-disabled', 'true');
+    });
+  });
+
   it('exposes the official Simple Editor toolbar shape with real command controls', async () => {
     const user = userEvent.setup();
     const onAttachmentUpload = vi.fn<(file: File) => string>(() => 'attachments/cake.png');
@@ -195,6 +246,47 @@ describe('LightweightMarkdownEditorSurface', () => {
     expect(promptSpy).not.toHaveBeenCalled();
     expect(await screen.findByPlaceholderText('粘贴链接...')).toBeInTheDocument();
     promptSpy.mockRestore();
+  });
+
+  it('does not open link editing controls from the initial content selection', async () => {
+    renderEditor(
+      '[Simple Editor template](https://tiptap.dev/docs/ui-components/templates/simple-editor)'
+    );
+
+    expect(screen.getByRole('button', { name: '链接' })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('粘贴链接...')).not.toBeInTheDocument();
+  });
+
+  it('does not present list toolbar active state from the initial content selection', () => {
+    renderEditor('- [ ] Task item');
+
+    expect(screen.getByRole('button', { name: '列表' })).toHaveAttribute(
+      'data-active-state',
+      'off'
+    );
+  });
+
+  it('does not open link editing controls from the stale initial selection on first editor focus', async () => {
+    const user = userEvent.setup();
+    renderEditor(
+      '[Simple Editor template](https://tiptap.dev/docs/ui-components/templates/simple-editor)'
+    );
+
+    await user.click(screen.getByRole('textbox', { name: '笔记正文' }));
+
+    expect(screen.queryByPlaceholderText('粘贴链接...')).not.toBeInTheDocument();
+  });
+
+  it('does not activate list toolbar state from the stale initial selection on first editor focus', async () => {
+    const user = userEvent.setup();
+    renderEditor('- [ ] Task item');
+
+    await user.click(screen.getByRole('textbox', { name: '笔记正文' }));
+
+    expect(screen.getByRole('button', { name: '列表' })).toHaveAttribute(
+      'data-active-state',
+      'off'
+    );
   });
 
   it('opens link popover URLs through the Reo external link bridge', async () => {

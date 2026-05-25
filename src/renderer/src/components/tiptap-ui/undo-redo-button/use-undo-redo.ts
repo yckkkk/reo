@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { type Editor } from '@tiptap/react';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { isUsableTiptapEditor, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Lib ---
 import { isNodeTypeSelected } from '@/lib/tiptap-utils';
@@ -55,7 +55,7 @@ export const historyIcons = {
  * Checks if a history action can be executed
  */
 export function canExecuteUndoRedoAction(editor: Editor | null, action: UndoRedoAction): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!isUsableTiptapEditor(editor) || !editor.isEditable) return false;
   if (isNodeTypeSelected(editor, ['image'])) return false;
 
   return action === 'undo' ? editor.can().undo() : editor.can().redo();
@@ -65,7 +65,7 @@ export function canExecuteUndoRedoAction(editor: Editor | null, action: UndoRedo
  * Executes a history action on the editor
  */
 export function executeUndoRedoAction(editor: Editor | null, action: UndoRedoAction): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!isUsableTiptapEditor(editor) || !editor.isEditable) return false;
   if (!canExecuteUndoRedoAction(editor, action)) return false;
 
   const chain = editor.chain().focus();
@@ -82,7 +82,7 @@ export function shouldShowButton(props: {
 }): boolean {
   const { editor, hideWhenUnavailable, action } = props;
 
-  if (!editor) return false;
+  if (!isUsableTiptapEditor(editor)) return false;
 
   if (!hideWhenUnavailable) {
     return true;

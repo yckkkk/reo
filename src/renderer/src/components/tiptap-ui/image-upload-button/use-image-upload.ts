@@ -5,7 +5,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { type Editor } from '@tiptap/react';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 
 // --- Lib ---
@@ -49,7 +49,7 @@ export function canInsertImage(editor: Editor | null): boolean {
  * Checks if image is currently active
  */
 export function isImageActive(editor: Editor | null): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
   return editor.isActive('imageUpload');
 }
 

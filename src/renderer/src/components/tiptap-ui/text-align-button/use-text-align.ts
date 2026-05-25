@@ -3,7 +3,7 @@ import type { ChainedCommands } from '@tiptap/react';
 import { type Editor } from '@tiptap/react';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Lib ---
 import { isExtensionAvailable, isNodeTypeSelected } from '@/lib/tiptap-utils';
@@ -84,7 +84,7 @@ export function hasSetTextAlign(commands: ChainedCommands): commands is ChainedC
  * Checks if the text alignment is currently active
  */
 export function isTextAlignActive(editor: Editor | null, align: TextAlign): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
   return editor.isActive({ textAlign: align });
 }
 

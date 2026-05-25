@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Icons ---
 import { LinkIcon } from '@/components/tiptap-icons/link-icon';
@@ -64,7 +64,7 @@ export function canSetLink(editor: Editor | null): boolean {
  * Checks if a link is currently active in the editor
  */
 export function isLinkActive(editor: Editor | null): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
   return editor.isActive('link');
 }
 

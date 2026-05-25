@@ -5,7 +5,7 @@ import { type Editor } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 
 // --- Hooks ---
-import { useTiptapEditor } from '@/hooks/use-tiptap-editor';
+import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tiptap-editor';
 
 // --- Lib ---
 import {
@@ -104,7 +104,7 @@ export function canToggle(editor: Editor | null, level?: Level, turnInto: boolea
  * Checks if heading is currently active
  */
 export function isHeadingActive(editor: Editor | null, level?: Level | Level[]): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!hasInteractiveTiptapSelection(editor)) return false;
 
   if (Array.isArray(level)) {
     return level.some((l) => editor.isActive('heading', { level: l }));

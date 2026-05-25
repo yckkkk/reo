@@ -2373,6 +2373,7 @@ function InlineMarkdownContentEditor<TSaved>({
           editorFocused={editorState.editorFocused}
           editorId={editorId}
           editorLabel={editorLabel}
+          editorTargetKey={targetKey}
           onEditorFocusChange={(editorFocused) =>
             dispatchEditorState({ type: 'editor-focus-changed', editorFocused })
           }
