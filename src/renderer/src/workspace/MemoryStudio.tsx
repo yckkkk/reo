@@ -50,6 +50,7 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
+import { EditorExpandShell } from './EditorExpandShell';
 import {
   LightweightMarkdownEditorSurface,
   type LightweightMarkdownEditorHandle,
@@ -2007,6 +2008,7 @@ function SegmentSupplementAudioPlayer({
           saveLabel="保存"
           surfaceTestId="memory-studio-inline-supplement-transcript-editor"
           targetKey={`segment-supplement-transcript:${supplement.segmentId}:${supplement.supplementId}`}
+          title={supplement.title}
           editorId={`${panelId}-transcript-inline-editor`}
           editorLabel="补充录音转录正文"
           workspaceSession={workspaceSession}
@@ -2160,6 +2162,7 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly saveLabel: string;
   readonly surfaceTestId: string;
   readonly targetKey: string;
+  readonly title: string;
   readonly editorId: string;
   readonly editorLabel: string;
   readonly workspaceSession: WorkspaceSession;
@@ -2182,6 +2185,7 @@ function InlineMarkdownContentEditor<TSaved>({
   saveLabel,
   surfaceTestId,
   targetKey,
+  title,
   editorId,
   editorLabel,
   workspaceSession,
@@ -2197,6 +2201,7 @@ function InlineMarkdownContentEditor<TSaved>({
     createInlineMarkdownEditorState
   );
   const dirty = inlineMarkdownEditorIsDirty(editorState);
+  const [expanded, setExpanded] = useState(false);
   const imageAttachment = useMarkdownImageAttachment({
     disabled: editorState.pending,
     editorHandleRef,
@@ -2335,15 +2340,25 @@ function InlineMarkdownContentEditor<TSaved>({
 
   return (
     <>
-      <div
-        id={panelId}
-        role={renderAsPanel ? 'tabpanel' : undefined}
-        aria-labelledby={renderAsPanel ? ariaLabelledBy : undefined}
-        className="mt-12 flex min-h-0 w-full flex-1"
-        data-slot="memory-studio-inline-markdown-editor"
+      <EditorExpandShell
+        ariaLabelledBy={ariaLabelledBy}
+        cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
+        dirty={dirty}
+        expanded={expanded}
+        onCancel={cancelMarkdownEdit}
+        onExpandedChange={setExpanded}
+        onSave={() => void saveMarkdown()}
+        panelId={panelId}
+        pending={editorState.pending}
+        renderAsPanel={renderAsPanel}
+        saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
+        saveDisabled={disabled}
+        saveLabel={saveLabel}
+        title={title}
       >
         <LightweightMarkdownEditorSurface
           attachmentContext={attachmentContext}
+          bordered={!expanded}
           cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
           disabled={disabled}
           editorHandleRef={editorHandleRef}
@@ -2366,7 +2381,7 @@ function InlineMarkdownContentEditor<TSaved>({
           saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
           saveDisabled={disabled}
           saveLabel={saveLabel}
-          showActions={dirty && !editorState.pending}
+          showActions={!expanded && dirty && !editorState.pending}
           showHeaderLabel={false}
           surfaceRef={surfaceRef}
           surfaceTestId={surfaceTestId}
@@ -2380,7 +2395,7 @@ function InlineMarkdownContentEditor<TSaved>({
           toolbarDisabled={disabled}
           value={editorState.markdown}
         />
-      </div>
+      </EditorExpandShell>
       <AlertDialog
         open={editorState.conflict !== null}
         onOpenChange={(nextOpen) => {
@@ -2488,6 +2503,7 @@ function SegmentSupplementNotePanel({
         saveLabel="保存"
         surfaceTestId="memory-studio-inline-supplement-note-editor"
         targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
+        title={supplement.title}
         editorId={`${panelId}-inline-editor`}
         editorLabel="补充笔记正文"
         workspaceSession={workspaceSession}
@@ -3979,6 +3995,7 @@ export function MemoryStudio({
                     saveLabel="保存"
                     surfaceTestId="memory-studio-inline-transcript-editor"
                     targetKey={`segment-transcript:${selectedSegment.segmentId}`}
+                    title={transcriptContentTab.title}
                     editorId={`${transcriptContentTab.panelId}-inline-editor`}
                     editorLabel="转录正文"
                     workspaceSession={workspaceSession}
@@ -4059,6 +4076,7 @@ export function MemoryStudio({
                     saveLabel="保存"
                     surfaceTestId="memory-studio-inline-note-editor"
                     targetKey={`segment:${selectedSegment.segmentId}`}
+                    title={transcriptContentTab.title}
                     editorId={`${transcriptContentTab.panelId}-inline-editor`}
                     editorLabel="笔记正文"
                     workspaceSession={workspaceSession}
