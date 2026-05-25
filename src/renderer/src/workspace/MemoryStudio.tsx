@@ -22,7 +22,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -112,6 +111,11 @@ import {
 } from './useMarkdownImageAttachment';
 import { createMarkdownAttachmentContext } from './markdownAttachmentSource';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
+import {
+  WorkspaceAlertDialogContent,
+  WorkspaceCompactAlertDialogContent,
+  type WorkspaceModalLayer,
+} from './WorkspaceAlertDialogContent';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
 type MemoryStudioProps = {
@@ -193,6 +197,10 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
 const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
 const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
+const INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME =
+  'min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground';
+const INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME =
+  'min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
@@ -2202,6 +2210,7 @@ function InlineMarkdownContentEditor<TSaved>({
   );
   const dirty = inlineMarkdownEditorIsDirty(editorState);
   const [expanded, setExpanded] = useState(false);
+  const [returnConfirmOpen, setReturnConfirmOpen] = useState(false);
   const imageAttachment = useMarkdownImageAttachment({
     disabled: editorState.pending,
     editorHandleRef,
@@ -2239,6 +2248,7 @@ function InlineMarkdownContentEditor<TSaved>({
   useEffect(() => {
     if (loadedTargetKeyRef.current !== targetKey) {
       loadedTargetKeyRef.current = targetKey;
+      setReturnConfirmOpen(false);
       dispatchEditorState({
         type: 'target-changed',
         baselineContentHash,
@@ -2256,6 +2266,7 @@ function InlineMarkdownContentEditor<TSaved>({
 
   useEffect(() => {
     latestWorkspaceSessionKeyRef.current = workspaceSessionKey;
+    setReturnConfirmOpen(false);
     dispatchEditorState({ type: 'workspace-session-changed' });
   }, [workspaceSessionKey]);
 
@@ -2276,9 +2287,9 @@ function InlineMarkdownContentEditor<TSaved>({
   async function saveMarkdown(
     nextBaselineContentHash = editorState.activeBaselineContentHash,
     nextMarkdown = editorState.markdown
-  ) {
+  ): Promise<boolean> {
     if (imageAttachment.pending) {
-      return;
+      return false;
     }
     flushSync(() => {
       dispatchEditorState({ type: 'save-started' });
@@ -2288,7 +2299,7 @@ function InlineMarkdownContentEditor<TSaved>({
       const result = await onSave(nextMarkdown, nextBaselineContentHash);
       if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
         dispatchEditorState({ type: 'save-stale-session' });
-        return;
+        return false;
       }
       if (result.ok) {
         onSavedContent(result.saved);
@@ -2299,22 +2310,24 @@ function InlineMarkdownContentEditor<TSaved>({
             ? { nextBaselineContentHash: result.nextBaselineContentHash }
             : {}),
         });
-        return;
+        return true;
       }
       if (result.kind === 'conflict') {
         dispatchEditorState({ type: 'save-conflicted', conflict: result.conflict });
-        return;
+        return false;
       }
       dispatchEditorState({ type: 'save-failed', message: result.message });
+      return false;
     } catch (error) {
       if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
         dispatchEditorState({ type: 'save-stale-session' });
-        return;
+        return false;
       }
       dispatchEditorState({
         type: 'save-failed',
         message: unknownErrorDisplayMessage(error, failureCopy),
       });
+      return false;
     }
   }
 
@@ -2338,20 +2351,48 @@ function InlineMarkdownContentEditor<TSaved>({
     dispatchEditorState({ type: 'cancel-clean' });
   }
 
+  function requestReturnFromExpandedEditor() {
+    if (disabled) {
+      return;
+    }
+    if (dirty) {
+      setReturnConfirmOpen(true);
+      return;
+    }
+    setExpanded(false);
+  }
+
+  function discardMarkdownAndReturn() {
+    cancelMarkdownEdit();
+    setReturnConfirmOpen(false);
+    setExpanded(false);
+  }
+
+  async function saveMarkdownAndReturn() {
+    const saved = await saveMarkdown();
+    setReturnConfirmOpen(false);
+    if (saved) {
+      setExpanded(false);
+    }
+  }
+
+  const expandedDialogLayer: WorkspaceModalLayer = expanded ? 'immersive' : 'default';
+
   return (
     <>
       <EditorExpandShell
         ariaLabelledBy={ariaLabelledBy}
-        cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
+        cancelButtonClassName={INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME}
         dirty={dirty}
         expanded={expanded}
         onCancel={cancelMarkdownEdit}
         onExpandedChange={setExpanded}
+        onReturn={requestReturnFromExpandedEditor}
         onSave={() => void saveMarkdown()}
         panelId={panelId}
-        pending={editorState.pending}
+        pending={disabled}
         renderAsPanel={renderAsPanel}
-        saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
+        saveButtonClassName={INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME}
         saveDisabled={disabled}
         saveLabel={saveLabel}
         title={title}
@@ -2359,7 +2400,7 @@ function InlineMarkdownContentEditor<TSaved>({
         <LightweightMarkdownEditorSurface
           attachmentContext={attachmentContext}
           bordered={!expanded}
-          cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
+          cancelButtonClassName={INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME}
           disabled={disabled}
           editorHandleRef={editorHandleRef}
           headerLabel={headerLabel}
@@ -2378,7 +2419,7 @@ function InlineMarkdownContentEditor<TSaved>({
           onSave={() => void saveMarkdown()}
           placeholder={placeholder}
           readableWidth
-          saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
+          saveButtonClassName={INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME}
           saveDisabled={disabled}
           saveLabel={saveLabel}
           showActions={!expanded && dirty && !editorState.pending}
@@ -2397,6 +2438,56 @@ function InlineMarkdownContentEditor<TSaved>({
         />
       </EditorExpandShell>
       <AlertDialog
+        open={returnConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && disabled) {
+            return;
+          }
+          setReturnConfirmOpen(nextOpen);
+        }}
+      >
+        <WorkspaceCompactAlertDialogContent modalLayer={expandedDialogLayer}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>保存未完成的修改？</AlertDialogTitle>
+            <AlertDialogDescription>
+              返回前可以保存当前修改，或放弃未保存内容。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button type="button" variant="secondary" disabled={disabled}>
+                继续编辑
+              </Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={disabled}
+                onClick={(event) => {
+                  event.preventDefault();
+                  discardMarkdownAndReturn();
+                }}
+              >
+                放弃修改
+              </Button>
+            </AlertDialogAction>
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                disabled={disabled}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void saveMarkdownAndReturn();
+                }}
+              >
+                保存并返回
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </WorkspaceCompactAlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={editorState.conflict !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
@@ -2404,7 +2495,7 @@ function InlineMarkdownContentEditor<TSaved>({
           }
         }}
       >
-        <AlertDialogContent>
+        <WorkspaceAlertDialogContent modalLayer={expandedDialogLayer}>
           <AlertDialogHeader>
             <AlertDialogTitle>外部修改已检测</AlertDialogTitle>
             <AlertDialogDescription>
@@ -2446,7 +2537,7 @@ function InlineMarkdownContentEditor<TSaved>({
               保留我的修改
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </WorkspaceAlertDialogContent>
       </AlertDialog>
     </>
   );

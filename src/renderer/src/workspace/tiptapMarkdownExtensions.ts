@@ -14,7 +14,7 @@ export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] satisfies readonly HeadingLevel[];
 
-const HIGHLIGHT_TEXT_COLOR = '#111827';
+const HIGHLIGHT_TEXT_COLOR = 'inherit';
 
 function textAlignAttr(node: { readonly attrs?: Record<string, unknown> | undefined }) {
   const textAlign = node.attrs?.['textAlign'];

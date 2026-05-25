@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { TITLEBAR_CONTROL_LEFT, TITLEBAR_CONTROL_TOP } from '../app-shell/appShellGeometry';
 import {
   MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
   pcmByteLengthToDurationMs,
@@ -55,6 +53,7 @@ import {
   RecordingControls,
   type PausedRecordingPrimaryAction,
 } from './recording/RecordingControls';
+import { ImmersiveWorkspaceReturnButton } from './ImmersiveWorkspaceReturnButton';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
 import { RecordingTranscriptPreview } from './recording/RecordingTranscriptPreview';
 import { RecordingWaveform } from './recording/RecordingWaveform';
@@ -3355,24 +3354,15 @@ export function RecordingOverlay({
       open={open}
       title="录音"
     >
-      <Button
-        aria-label="返回"
-        className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
-        data-vaul-no-drag
+      <ImmersiveWorkspaceReturnButton
         disabled={
           exitActionPending ||
           state.status === 'acquiring-permission' ||
           state.status === 'replacing' ||
           state.status === 'finalizing'
         }
-        onClick={handleReturn}
-        size="icon"
-        style={{ left: TITLEBAR_CONTROL_LEFT, top: TITLEBAR_CONTROL_TOP }}
-        type="button"
-        variant="ghostIcon"
-      >
-        <ChevronLeft aria-hidden="true" className="size-16" />
-      </Button>
+        onReturn={handleReturn}
+      />
       <div
         className="grid h-[min(560px,calc(100dvh-84px))] w-full grid-rows-[112px_132px_72px_88px] content-end justify-items-center gap-y-20 text-center"
         data-testid="recording-composer-layout"

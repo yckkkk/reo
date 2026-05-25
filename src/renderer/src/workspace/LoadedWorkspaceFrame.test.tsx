@@ -1221,6 +1221,185 @@ describe('LoadedWorkspaceFrame', () => {
     expect(railAddButton.parentElement).toBe(contentTabActions);
   });
 
+  it('routes dirty expanded Note return through continue and discard decisions', async () => {
+    const user = userEvent.setup();
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, segmentCount: 1, noteSegmentCount: 1, hasAnyNote: true }],
+    });
+    const note = noteSegment();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: '## Cake plan',
+        bodyByteLength: 11,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_expanded_dirty_return_discard',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [note],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(await within(content).findByRole('button', { name: '展开编辑器' }));
+    const expandedDialog = await screen.findByRole('dialog', { name: '正文' });
+    const expandedEditor = within(expandedDialog).getByLabelText('笔记正文');
+    await replaceRichEditorMarkdown(expandedEditor, 'Expanded dirty body');
+
+    await user.click(within(expandedDialog).getByRole('button', { name: '返回' }));
+    const returnConfirm = await screen.findByRole('alertdialog', { name: '保存未完成的修改？' });
+    await user.click(within(returnConfirm).getByRole('button', { name: '继续编辑' }));
+
+    expect(screen.getByRole('dialog', { name: '正文' })).toBeInTheDocument();
+    expectRichEditorContent(screen.getByLabelText('笔记正文'), 'Expanded dirty body');
+
+    await user.click(
+      within(screen.getByRole('dialog', { name: '正文' })).getByRole('button', {
+        name: '返回',
+      })
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog', { name: '保存未完成的修改？' })).getByRole(
+        'button',
+        { name: '放弃修改' }
+      )
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '正文' })).toHaveAttribute('data-state', 'closed');
+    });
+    expectRichEditorContent(await within(content).findByLabelText('笔记正文'), 'Cake plan');
+  });
+
+  it('only collapses dirty expanded Note return after the existing save path succeeds', async () => {
+    const user = userEvent.setup();
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, segmentCount: 1, noteSegmentCount: 1, hasAnyNote: true }],
+    });
+    const note = noteSegment();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: '## Cake plan',
+        bodyByteLength: 11,
+        baselineContentHash: 'a'.repeat(64),
+      },
+    }));
+    const writeSegmentContent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
+          message: 'Segment not found',
+        },
+      })
+      .mockImplementation(async (request) => ({
+        ok: true,
+        value: {
+          requestId: request.requestId ?? 'write_segment_note',
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          type: 'note',
+          title: 'Cake planning note',
+          bodyMarkdown: request.bodyMarkdown,
+          bodyByteLength: 19,
+          baselineContentHash: 'b'.repeat(64),
+        },
+      }));
+    const onNoteSegmentContentSaved = vi.fn();
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onNoteSegmentContentSaved,
+      readSegmentContent,
+      session,
+      writeSegmentContent,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_expanded_dirty_return_save',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [note],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(await within(content).findByRole('button', { name: '展开编辑器' }));
+    const expandedEditor = within(
+      await screen.findByRole('dialog', { name: '正文' })
+    ).getByLabelText('笔记正文');
+    await replaceRichEditorMarkdown(expandedEditor, 'Expanded saved body');
+
+    await user.click(
+      within(screen.getByRole('dialog', { name: '正文' })).getByRole('button', {
+        name: '返回',
+      })
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog', { name: '保存未完成的修改？' })).getByRole(
+        'button',
+        { name: '保存并返回' }
+      )
+    );
+
+    await waitFor(() => expect(writeSegmentContent).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('dialog', { name: '正文' })).toBeInTheDocument();
+    expect(await screen.findByText('找不到这个片段。')).toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('dialog', { name: '正文' })).getByRole('button', {
+        name: '返回',
+      })
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog', { name: '保存未完成的修改？' })).getByRole(
+        'button',
+        { name: '保存并返回' }
+      )
+    );
+
+    await waitFor(() => expect(writeSegmentContent).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '正文' })).toHaveAttribute('data-state', 'closed');
+    });
+    expect(onNoteSegmentContentSaved).toHaveBeenCalledWith({
+      expectedSession: session,
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_note',
+      title: 'Cake planning note',
+      bodyMarkdown: 'Expanded saved body',
+      baselineContentHash: 'b'.repeat(64),
+      bodyByteLength: 19,
+    });
+  });
+
   it('keeps a dirty inline Note edit mounted when another segment is selected', async () => {
     const session = workspaceSession({
       memories: [
@@ -3051,7 +3230,9 @@ describe('LoadedWorkspaceFrame', () => {
       'Follow-up',
       'Capture the cake idea',
     ]);
-    expect(within(supplementPanel).queryByRole('button', { name: /编辑/ })).toBeNull();
+    expect(
+      within(supplementPanel).queryByRole('button', { name: '编辑补充笔记 补充笔记' })
+    ).toBeNull();
     expect(within(content).queryByRole('button', { name: /播放补充录音/ })).toBeNull();
     expect(readSegmentSupplementContent).toHaveBeenCalledWith(
       expect.objectContaining({

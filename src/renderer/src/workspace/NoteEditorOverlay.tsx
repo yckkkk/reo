@@ -1,13 +1,5 @@
-import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  TITLEBAR_ACTION_RIGHT,
-  TITLEBAR_CONTROL_GAP,
-  TITLEBAR_CONTROL_LEFT,
-  TITLEBAR_CONTROL_SIZE,
-  TITLEBAR_CONTROL_TOP,
-} from '../app-shell/appShellGeometry';
 import {
   createNoteSegmentDraft,
   createSegmentSupplementNoteDraft,
@@ -20,6 +12,7 @@ import {
   type WorkspaceSession,
 } from './workspaceApi';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
+import { ImmersiveWorkspaceTitlebar } from './ImmersiveWorkspaceTitlebar';
 import {
   LightweightMarkdownEditorSurface,
   type LightweightMarkdownEditorHandle,
@@ -48,9 +41,6 @@ type NoteEditorOverlayProps = {
   readonly target: NoteEditorTarget | null;
   readonly workspaceSession: WorkspaceSession;
 };
-
-const NOTE_EDITOR_TITLEBAR_TITLE_LEFT =
-  TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP;
 
 export function NoteEditorOverlay({
   onNoteSegmentFinalized,
@@ -257,40 +247,24 @@ export function NoteEditorOverlay({
       open={open}
       title="笔记"
     >
-      <Button
-        aria-label="返回"
-        className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
-        data-vaul-no-drag
-        disabled={pending}
-        onClick={requestClose}
-        size="icon"
-        style={{ left: TITLEBAR_CONTROL_LEFT, top: TITLEBAR_CONTROL_TOP }}
-        type="button"
-        variant="ghostIcon"
-      >
-        <ChevronLeft aria-hidden="true" className="size-16" />
-      </Button>
-      <div
-        className="absolute z-10 flex h-32 max-w-[calc(100vw-280px)] items-center text-body font-regular leading-body text-foreground"
-        data-testid="note-editor-titlebar-title"
-        style={{ left: NOTE_EDITOR_TITLEBAR_TITLE_LEFT, top: TITLEBAR_CONTROL_TOP }}
-      >
-        <h1 className="min-w-0 truncate">{displayTitle}</h1>
-      </div>
-      <div
-        className="absolute z-10 flex h-48 items-center"
-        data-testid="note-editor-titlebar-actions"
-        style={{ right: TITLEBAR_ACTION_RIGHT, top: 0 }}
-      >
-        <Button
-          type="button"
-          size="compact"
-          disabled={pending || !target}
-          onClick={() => void saveNote()}
-        >
-          保存笔记
-        </Button>
-      </div>
+      <ImmersiveWorkspaceTitlebar
+        actions={
+          <Button
+            type="button"
+            size="compact"
+            disabled={pending || !target}
+            onClick={() => void saveNote()}
+          >
+            保存笔记
+          </Button>
+        }
+        actionsTestId="note-editor-titlebar-actions"
+        onReturn={requestClose}
+        returnDisabled={pending}
+        title={displayTitle}
+        titleAs="h1"
+        titleTestId="note-editor-titlebar-title"
+      />
 
       <section
         aria-label="笔记编辑器"
@@ -325,6 +299,7 @@ export function NoteEditorOverlay({
         confirmLabel="放弃"
         description="未保存的笔记正文会被丢弃。"
         disabled={pending}
+        modalLayer="immersive"
         onConfirm={() => {
           setDiscardConfirmOpen(false);
           onOpenChange(false);

@@ -422,7 +422,7 @@ describe('LightweightMarkdownEditorSurface', () => {
 
     await waitFor(() => {
       expect(editorHandleRef.current?.getMarkdown()).toContain(
-        '<mark data-color="#dcfce7" style="background-color: #dcfce7; color: #111827">Color</mark>'
+        '<mark data-color="var(--tt-color-highlight-green)" style="background-color: var(--tt-color-highlight-green); color: inherit">Color</mark>'
       );
     });
   });
@@ -455,6 +455,22 @@ describe('LightweightMarkdownEditorSurface', () => {
       expect(markdown).toContain('<p style="text-align: center">居中</p>');
       expect(markdown).toContain('<sup>上标</sup>');
       expect(markdown).toContain('<sub>下标</sub>');
+    });
+  });
+
+  it('round-trips tokenized highlight colors through Markdown without freezing light colors', async () => {
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    renderEditor(
+      '<mark data-color="var(--tt-color-highlight-green)" style="background-color: var(--tt-color-highlight-green); color: inherit">Token highlight</mark>',
+      editorHandleRef
+    );
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    expect(within(editor).getByText('Token highlight').tagName.toLowerCase()).toBe('mark');
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toContain(
+        '<mark data-color="var(--tt-color-highlight-green)" style="background-color: var(--tt-color-highlight-green); color: inherit">Token highlight</mark>'
+      );
     });
   });
 

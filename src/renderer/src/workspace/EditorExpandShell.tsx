@@ -1,17 +1,8 @@
 import { Maximize, Minimize } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  TITLEBAR_ACTION_RIGHT,
-  TITLEBAR_CONTROL_GAP,
-  TITLEBAR_CONTROL_LEFT,
-  TITLEBAR_CONTROL_SIZE,
-  TITLEBAR_CONTROL_TOP,
-} from '../app-shell/appShellGeometry';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
-
-const EXPANDED_TITLEBAR_TITLE_LEFT =
-  TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP;
+import { ImmersiveWorkspaceTitlebar } from './ImmersiveWorkspaceTitlebar';
 
 type EditorExpandShellProps = {
   readonly ariaLabelledBy: string;
@@ -22,6 +13,7 @@ type EditorExpandShellProps = {
   readonly expanded: boolean;
   readonly onCancel: () => void;
   readonly onExpandedChange: (expanded: boolean) => void;
+  readonly onReturn: () => void;
   readonly onSave: () => void;
   readonly panelId: string;
   readonly pending: boolean;
@@ -41,6 +33,7 @@ export function EditorExpandShell({
   expanded,
   onCancel,
   onExpandedChange,
+  onReturn,
   onSave,
   panelId,
   pending,
@@ -63,28 +56,12 @@ export function EditorExpandShell({
           role={renderAsPanel ? 'tabpanel' : undefined}
         >
           {children}
-          <button
-            aria-label="展开为全屏"
-            className="group absolute bottom-0 right-0 z-10 flex size-24 items-center justify-center rounded-tl-md text-muted-foreground transition-colors hover:text-foreground"
-            data-testid="editor-expand-grip"
+          <EditorCornerGrip
+            disabled={pending}
+            icon="maximize"
+            label="展开编辑器"
             onClick={() => onExpandedChange(true)}
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              className="block size-14 group-hover:hidden"
-              fill="none"
-              viewBox="0 0 14 14"
-            >
-              <path
-                d="M2 12 A 10 10 0 0 0 12 2"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="1.5"
-              />
-            </svg>
-            <Maximize aria-hidden="true" className="hidden size-14 group-hover:block" />
-          </button>
+          />
         </div>
       )}
 
@@ -95,61 +72,46 @@ export function EditorExpandShell({
         immersive
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
-            onExpandedChange(false);
+            onReturn();
           }
         }}
         open={expanded}
         title={title}
       >
-        <Button
-          aria-label="退出全屏"
-          className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
-          data-vaul-no-drag
-          disabled={pending}
-          onClick={() => onExpandedChange(false)}
-          size="icon"
-          style={{ left: TITLEBAR_CONTROL_LEFT, top: TITLEBAR_CONTROL_TOP }}
-          type="button"
-          variant="ghostIcon"
-        >
-          <Minimize aria-hidden="true" className="size-16" />
-        </Button>
-        <span
-          className="absolute z-10 flex h-32 max-w-[calc(100vw-280px)] items-center truncate text-body font-regular leading-body text-foreground"
-          data-testid="editor-expand-titlebar-title"
-          style={{ left: EXPANDED_TITLEBAR_TITLE_LEFT, top: TITLEBAR_CONTROL_TOP }}
-        >
-          {title}
-        </span>
-        {showActions ? (
-          <div
-            className="absolute z-10 flex h-48 items-center gap-8"
-            data-testid="editor-expand-titlebar-actions"
-            style={{ right: TITLEBAR_ACTION_RIGHT, top: 0 }}
-          >
-            <Button
-              className={cancelButtonClassName}
-              disabled={saveDisabled}
-              onClick={onCancel}
-              size="compact"
-              type="button"
-            >
-              {cancelLabel}
-            </Button>
-            <Button
-              className={saveButtonClassName}
-              disabled={saveDisabled}
-              onClick={onSave}
-              size="compact"
-              type="button"
-            >
-              {saveLabel}
-            </Button>
-          </div>
-        ) : null}
+        <ImmersiveWorkspaceTitlebar
+          actions={
+            showActions ? (
+              <>
+                <Button
+                  className={cancelButtonClassName}
+                  disabled={saveDisabled}
+                  onClick={onCancel}
+                  size="compact"
+                  type="button"
+                >
+                  {cancelLabel}
+                </Button>
+                <Button
+                  className={saveButtonClassName}
+                  disabled={saveDisabled}
+                  onClick={onSave}
+                  size="compact"
+                  type="button"
+                >
+                  {saveLabel}
+                </Button>
+              </>
+            ) : null
+          }
+          actionsTestId="editor-expand-titlebar-actions"
+          onReturn={onReturn}
+          returnDisabled={pending}
+          title={title}
+          titleTestId="editor-expand-titlebar-title"
+        />
 
         <section
-          className="grid min-h-0 w-full flex-1 grid-rows-[minmax(0,1fr)] text-left"
+          className="relative grid min-h-0 w-full flex-1 grid-rows-[minmax(0,1fr)] text-left"
           data-testid="editor-expand-stage"
           id={panelId}
           {...(renderAsPanel
@@ -157,8 +119,54 @@ export function EditorExpandShell({
             : { 'aria-label': '笔记编辑器' })}
         >
           {children}
+          <EditorCornerGrip
+            disabled={pending}
+            icon="minimize"
+            label="缩小编辑器"
+            onClick={() => onExpandedChange(false)}
+          />
         </section>
       </ImmersiveWorkspaceSurface>
     </>
+  );
+}
+
+type EditorCornerGripProps = {
+  readonly disabled: boolean;
+  readonly icon: 'maximize' | 'minimize';
+  readonly label: string;
+  readonly onClick: () => void;
+};
+
+function EditorCornerGrip({ disabled, icon, label, onClick }: EditorCornerGripProps) {
+  const Icon = icon === 'maximize' ? Maximize : Minimize;
+
+  return (
+    <button
+      aria-label={label}
+      className="group absolute bottom-0 right-0 z-10 flex size-24 items-center justify-center rounded-tl-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-50"
+      data-testid={`editor-${icon}-grip`}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        className="block size-14 group-hover:hidden group-focus-visible:hidden"
+        fill="none"
+        viewBox="0 0 14 14"
+      >
+        <path
+          d="M2 12 A 10 10 0 0 0 12 2"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.5"
+        />
+      </svg>
+      <Icon
+        aria-hidden="true"
+        className="hidden size-14 group-hover:block group-focus-visible:block"
+      />
+    </button>
   );
 }

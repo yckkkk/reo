@@ -473,7 +473,6 @@ function LightweightMarkdownEditorSurfaceContent({
               <ColorHighlightPopover
                 editor={editor}
                 colors={HIGHLIGHT_COLORS}
-                useColorValue
                 disabled={toolbarLocked}
               />
               <LinkPopover editor={editor} disabled={toolbarLocked} />

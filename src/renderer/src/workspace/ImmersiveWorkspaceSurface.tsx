@@ -7,6 +7,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import {
+  IMMERSIVE_WORKSPACE_SURFACE_CONTENT_Z_CLASS,
+  IMMERSIVE_WORKSPACE_SURFACE_OVERLAY_Z_CLASS,
+} from './immersiveWorkspaceLayers';
 
 type ImmersiveWorkspaceSurfaceProps = {
   readonly children: ReactNode;
@@ -49,9 +53,8 @@ export function ImmersiveWorkspaceSurface({
         showHandle={!immersive}
         {...(immersive
           ? {
-              className:
-                'fixed inset-0 z-[100010] flex h-dvh max-h-none w-screen translate-x-0 flex-col overflow-hidden rounded-none border-0 bg-transparent px-0 pb-0 pt-0 shadow-none sm:left-0 sm:right-0 sm:w-screen sm:translate-x-0 sm:px-0 sm:pb-0',
-              overlayClassName: 'z-[100005] bg-background',
+              className: `fixed inset-0 ${IMMERSIVE_WORKSPACE_SURFACE_CONTENT_Z_CLASS} flex h-dvh max-h-none w-screen translate-x-0 flex-col overflow-hidden rounded-none border-0 bg-transparent px-0 pb-0 pt-0 shadow-none sm:left-0 sm:right-0 sm:w-screen sm:translate-x-0 sm:px-0 sm:pb-0`,
+              overlayClassName: `${IMMERSIVE_WORKSPACE_SURFACE_OVERLAY_Z_CLASS} bg-background`,
             }
           : {})}
       >

@@ -21,14 +21,19 @@ export function AlertDialogOverlay({
   );
 }
 
+type AlertDialogContentProps = React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
+  readonly overlayClassName?: string;
+};
+
 export function AlertDialogContent({
   children,
   className,
+  overlayClassName,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+}: AlertDialogContentProps) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
+      <AlertDialogOverlay className={overlayClassName} />
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(

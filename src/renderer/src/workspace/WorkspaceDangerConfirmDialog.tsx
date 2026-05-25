@@ -2,18 +2,22 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+  WorkspaceCompactAlertDialogContent,
+  type WorkspaceModalLayer,
+} from './WorkspaceAlertDialogContent';
 
-type DeleteConfirmationDialogProps = {
+type WorkspaceDangerConfirmDialogProps = {
   readonly confirmLabel?: string;
   readonly description: string;
   readonly disabled?: boolean;
+  readonly modalLayer?: WorkspaceModalLayer;
   readonly onConfirm: () => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly open: boolean;
@@ -24,14 +28,15 @@ export function WorkspaceDangerConfirmDialog({
   confirmLabel = '删除',
   description,
   disabled = false,
+  modalLayer = 'default',
   onConfirm,
   onOpenChange,
   open,
   title,
-}: DeleteConfirmationDialogProps) {
+}: WorkspaceDangerConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="flex flex-col gap-16 bg-popover shadow-modal sm:w-[min(420px,calc(100vw-40px))] sm:px-24 sm:py-24">
+      <WorkspaceCompactAlertDialogContent modalLayer={modalLayer}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
@@ -57,7 +62,7 @@ export function WorkspaceDangerConfirmDialog({
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>
-      </AlertDialogContent>
+      </WorkspaceCompactAlertDialogContent>
     </AlertDialog>
   );
 }
