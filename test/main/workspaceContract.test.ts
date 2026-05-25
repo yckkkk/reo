@@ -14,6 +14,7 @@ import {
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
@@ -139,6 +140,8 @@ import {
   workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
+  workspaceOpenMarkdownExternalLinkRequestSchema,
+  workspaceOpenMarkdownExternalLinkResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
@@ -154,6 +157,8 @@ import {
   type WorkspaceClearVoiceTranscriptionApiKeyResponse,
   type WorkspaceOpenVoiceTranscriptionProviderConsoleRequest,
   type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
+  type WorkspaceOpenMarkdownExternalLinkRequest,
+  type WorkspaceOpenMarkdownExternalLinkResponse,
   type WorkspaceReadVoiceTranscriptionSettingsRequest,
   type WorkspaceReadVoiceTranscriptionSettingsResponse,
   type WorkspaceSaveVoiceTranscriptionApiKeyRequest,
@@ -228,8 +233,15 @@ function assertVoiceSettingsContracts(
   void _contracts;
 }
 
+function assertMarkdownExternalLinkContract(
+  _request: WorkspaceOpenMarkdownExternalLinkRequest,
+  _response: WorkspaceOpenMarkdownExternalLinkResponse
+): void {
+  void _request;
+  void _response;
+}
+
 test('workspace contract exposes only the explicit chooseDirectory channel', () => {
-  assert.equal(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory');
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
@@ -295,6 +307,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
     'workspace:openVoiceTranscriptionProviderConsole',
+    'workspace:openMarkdownExternalLink',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
@@ -313,102 +326,87 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
   assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, ['workspace:recordingTranscriptionEvent']);
-  assert.equal(
-    WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
-    'workspace:recordingTranscriptionEvent'
-  );
-  assert.equal(WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory');
-  assert.equal(WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory');
-  assert.equal(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory');
-  assert.equal(WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment');
-  assert.equal(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment');
-  assert.equal(WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement');
-  assert.equal(
-    WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
-    'workspace:restoreDeletedSegmentSupplement'
-  );
-  assert.equal(WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot');
-  assert.equal(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail');
-  assert.equal(
-    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
-    'workspace:readFinalizedAudioSegment'
-  );
-  assert.equal(
-    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
-    'workspace:readFinalizedAudioSegmentSupplement'
-  );
-  assert.equal(WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio');
-  assert.equal(
-    WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
-    'workspace:cloneRecordingDraftPrefix'
-  );
-  assert.equal(WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle');
-  assert.equal(WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle');
-  assert.equal(
-    WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
-    'workspace:updateSegmentContentTitle'
-  );
-  assert.equal(
-    WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
-    'workspace:updateSegmentSupplementTitle'
-  );
-  assert.equal(
-    WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
-    'workspace:updateSegmentContentTabOrder'
-  );
-  assert.equal(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle');
-  assert.equal(
-    WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:createSegmentSupplementRecordingDraft'
-  );
-  assert.equal(
-    WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
-    'workspace:appendSegmentSupplementRecordingAudioChunk'
-  );
-  assert.equal(
-    WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:finalizeSegmentSupplementRecordingDraft'
-  );
-  assert.equal(
-    WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
-    'workspace:discardSegmentSupplementRecordingDraft'
-  );
-  assert.equal(
-    WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
-    'workspace:saveSegmentSupplementTranscript'
-  );
-  assert.equal(
-    WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    'workspace:requestSegmentTranscriptionBackfill'
-  );
-  assert.equal(
-    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
-    'workspace:requestSegmentSupplementTranscriptionBackfill'
-  );
-  assert.equal(
-    WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
-    'workspace:readVoiceTranscriptionSettings'
-  );
-  assert.equal(
-    WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
-    'workspace:setVoiceTranscriptionEnabled'
-  );
-  assert.equal(
-    WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
-    'workspace:saveVoiceTranscriptionApiKey'
-  );
-  assert.equal(
-    WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
-    'workspace:clearVoiceTranscriptionApiKey'
-  );
-  assert.equal(
-    WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
-    'workspace:validateVoiceTranscriptionCredentials'
-  );
-  assert.equal(
-    WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
-    'workspace:openVoiceTranscriptionProviderConsole'
-  );
+
+  const namedChannelContracts: readonly (readonly [string, string])[] = [
+    [WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory'],
+    [WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, 'workspace:recordingTranscriptionEvent'],
+    [WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory'],
+    [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
+    [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
+    [WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment'],
+    [WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment'],
+    [WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement'],
+    [
+      WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
+      'workspace:restoreDeletedSegmentSupplement',
+    ],
+    [WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot'],
+    [WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail'],
+    [WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, 'workspace:readFinalizedAudioSegment'],
+    [
+      WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
+      'workspace:readFinalizedAudioSegmentSupplement',
+    ],
+    [WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio'],
+    [WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL, 'workspace:cloneRecordingDraftPrefix'],
+    [WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle'],
+    [WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL, 'workspace:updateSegmentTitle'],
+    [WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL, 'workspace:updateSegmentContentTitle'],
+    [WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, 'workspace:updateSegmentSupplementTitle'],
+    [WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL, 'workspace:updateSegmentContentTabOrder'],
+    [WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle'],
+    [
+      WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+      'workspace:createSegmentSupplementRecordingDraft',
+    ],
+    [
+      WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
+      'workspace:appendSegmentSupplementRecordingAudioChunk',
+    ],
+    [
+      WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+      'workspace:finalizeSegmentSupplementRecordingDraft',
+    ],
+    [
+      WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+      'workspace:discardSegmentSupplementRecordingDraft',
+    ],
+    [
+      WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
+      'workspace:saveSegmentSupplementTranscript',
+    ],
+    [
+      WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+      'workspace:requestSegmentTranscriptionBackfill',
+    ],
+    [
+      WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+      'workspace:requestSegmentSupplementTranscriptionBackfill',
+    ],
+    [
+      WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
+      'workspace:readVoiceTranscriptionSettings',
+    ],
+    [WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, 'workspace:setVoiceTranscriptionEnabled'],
+    [WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, 'workspace:saveVoiceTranscriptionApiKey'],
+    [
+      WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+      'workspace:clearVoiceTranscriptionApiKey',
+    ],
+    [
+      WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+      'workspace:validateVoiceTranscriptionCredentials',
+    ],
+    [
+      WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+      'workspace:openVoiceTranscriptionProviderConsole',
+    ],
+    [WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL, 'workspace:openMarkdownExternalLink'],
+  ];
+
+  for (const [actual, expected] of namedChannelContracts) {
+    assert.equal(actual, expected);
+  }
 });
 
 test('workspace backfill request schemas use explicit entity identity and save response shapes', () => {
@@ -548,6 +546,32 @@ test('workspace error code schema accepts voice settings and provider console er
   for (const code of voiceSettingsErrorCodes) {
     assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
   }
+});
+
+test('workspace contract exposes a bounded Markdown external link open request', () => {
+  const request = workspaceOpenMarkdownExternalLinkRequestSchema.parse({
+    url: 'https://tiptap.dev/docs',
+  });
+  const response = workspaceOpenMarkdownExternalLinkResponseSchema.parse({
+    ok: true,
+    value: {},
+  });
+
+  assertMarkdownExternalLinkContract(request, response);
+  assert.equal(
+    workspaceErrorCodeSchema.safeParse('ERR_MARKDOWN_EXTERNAL_LINK_REJECTED').success,
+    true
+  );
+  assert.throws(() => workspaceOpenMarkdownExternalLinkRequestSchema.parse(undefined));
+  assert.throws(() =>
+    workspaceOpenMarkdownExternalLinkRequestSchema.parse({ url: 'x'.repeat(2049) })
+  );
+  assert.throws(() =>
+    workspaceOpenMarkdownExternalLinkResponseSchema.parse({
+      ok: true,
+      value: { url: 'https://tiptap.dev/docs' },
+    })
+  );
 });
 
 test('voice transcription settings contract exposes redacted snapshot and strict schemas', () => {
@@ -2906,6 +2930,7 @@ test('finalized audio segment supplement transcript save contract requires paren
         lastTranscriptionAttempt: 'never',
         transcript: { exists: true },
       },
+      baselineTranscriptHash: 'b'.repeat(64),
     },
   });
   assert.equal(response.ok, true);

@@ -109,6 +109,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_VOICE_SETTINGS_WRITE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
+  'ERR_MARKDOWN_EXTERNAL_LINK_REJECTED',
   'ERR_WORKSPACE_INDEX_WRITE_FAILED',
   'ERR_MEMORY_NOT_FOUND',
   'ERR_MEMORY_CREATE_FAILED',
@@ -252,6 +253,18 @@ export const workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema = z.di
     workspaceErrorEnvelopeSchema,
   ]
 );
+
+export const workspaceOpenMarkdownExternalLinkRequestSchema = z.strictObject({
+  url: z.string().min(1).max(2048),
+});
+
+export const workspaceOpenMarkdownExternalLinkResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({}),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
 
 export const workspaceChooseDirectoryResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -1205,6 +1218,7 @@ export const workspaceRecordingMarkdownSaveResponseSchema = z.discriminatedUnion
     value: z.strictObject({
       memory: workspaceMemorySummarySchema,
       saved: z.literal(true),
+      baselineTranscriptHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1218,6 +1232,7 @@ export const workspaceSegmentSupplementMarkdownSaveResponseSchema = z.discrimina
       segment: workspaceSegmentProjectionSchema,
       supplement: workspaceSegmentSupplementProjectionSchema,
       saved: z.literal(true),
+      baselineTranscriptHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1458,6 +1473,12 @@ export type WorkspaceOpenVoiceTranscriptionProviderConsoleRequest = z.infer<
 >;
 export type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse = z.infer<
   typeof workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema
+>;
+export type WorkspaceOpenMarkdownExternalLinkRequest = z.infer<
+  typeof workspaceOpenMarkdownExternalLinkRequestSchema
+>;
+export type WorkspaceOpenMarkdownExternalLinkResponse = z.infer<
+  typeof workspaceOpenMarkdownExternalLinkResponseSchema
 >;
 export type WorkspaceChooseDirectoryResult = z.infer<typeof workspaceChooseDirectoryResultSchema>;
 export type WorkspaceChooseDirectoryResponse = z.infer<

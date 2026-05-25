@@ -214,6 +214,63 @@ test('note segment draft writes markdown body and finalizes as durable note file
   assert.equal(segmentMarkdown.content, '# Draft note\n\nA note body.\n');
 });
 
+test('finalized note segment content remains readable after content tab order is persisted', async () => {
+  const rootPath = await workspaceRoot();
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_note',
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    title: 'Draft note',
+    createSegmentId: () => 'seg_note_order',
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId: 'seg_note_order',
+    bodyMarkdown: 'Readable body after tab order.\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_note_order',
+    title: 'Ordered note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+
+  const manifestPath = path.join(rootPath, '.reo', 'objects', 'segments', 'seg_note_order.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ ...manifest, contentTabOrder: ['segment'] }, null, 2)
+  );
+
+  const content = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_note_order',
+  });
+
+  assert.equal(content.ok, true, JSON.stringify(content));
+  if (content.ok) {
+    assert.equal(content.bodyMarkdown, 'Readable body after tab order.\n');
+  }
+});
+
 test('note supplement draft finalizes under an existing segment with note body byte truth', async () => {
   const rootPath = await workspaceRoot();
   const createdMemory = await createMemoryFromFileTruth({

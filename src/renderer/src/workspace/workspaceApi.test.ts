@@ -29,6 +29,7 @@ import {
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
   listMemorySpaces,
+  openMarkdownExternalLink,
   openMemoryDocument,
   openMemorySpaceAgentsFile,
   openVoiceTranscriptionProviderConsole,
@@ -82,6 +83,7 @@ describe('workspace renderer API wrapper', () => {
     openSegmentDocument: vi.fn(),
     openSegmentSupplementDocument: vi.fn(),
     openVoiceTranscriptionProviderConsole: vi.fn(),
+    openMarkdownExternalLink: vi.fn(),
     copyMemorySpaceAbsolutePath: vi.fn(),
     copyMemoryAbsolutePath: vi.fn(),
     copySegmentAbsolutePath: vi.fn(),
@@ -164,6 +166,7 @@ describe('workspace renderer API wrapper', () => {
       action.mockResolvedValue(okResponse);
     }
     reoWorkspace.openVoiceTranscriptionProviderConsole.mockResolvedValue(okResponse);
+    reoWorkspace.openMarkdownExternalLink.mockResolvedValue(okResponse);
 
     const memorySpacePayload = { workspaceId: 'ws_1' };
     const memoryPayload = {
@@ -196,6 +199,7 @@ describe('workspace renderer API wrapper', () => {
     await copySegmentSupplementAbsolutePath(supplementPayload);
     await copySegmentSupplementRelativePath(supplementPayload);
     await openVoiceTranscriptionProviderConsole();
+    await openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
 
     expect(reoWorkspace.revealMemorySpaceInFinder).toHaveBeenCalledWith(memorySpacePayload);
     expect(reoWorkspace.openMemorySpaceAgentsFile).toHaveBeenCalledWith(memorySpacePayload);
@@ -213,6 +217,9 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.copySegmentSupplementAbsolutePath).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.copySegmentSupplementRelativePath).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
+    expect(reoWorkspace.openMarkdownExternalLink).toHaveBeenCalledWith({
+      url: 'https://tiptap.dev/docs',
+    });
   });
 
   it('forwards workspace file methods to the explicit preload surface', async () => {
@@ -701,6 +708,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
         saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.requestSegmentTranscriptionBackfill.mockResolvedValue({
@@ -721,6 +729,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
         },
         saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.requestSegmentSupplementTranscriptionBackfill.mockResolvedValue({
@@ -767,6 +776,8 @@ describe('workspace renderer API wrapper', () => {
           audioByteLength: 2,
           transcript: { exists: true },
         },
+        saved: true,
+        baselineTranscriptHash: 'b'.repeat(64),
       },
     });
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({

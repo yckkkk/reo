@@ -1,0 +1,197 @@
+{
+  "url": "http://localhost:5183/",
+  "toolbar": {
+    "rect": {
+      "left": 293,
+      "top": 403,
+      "right": 1143,
+      "bottom": 435,
+      "width": 850,
+      "height": 32
+    },
+    "scrollWidth": 850,
+    "clientWidth": 850
+  },
+  "actions": {
+    "left": 1151,
+    "top": 403,
+    "right": 1312,
+    "bottom": 435,
+    "width": 161,
+    "height": 32
+  },
+  "surface": {
+    "left": 280,
+    "top": 396,
+    "right": 1325,
+    "bottom": 867,
+    "width": 1045,
+    "height": 471
+  },
+  "dropdown": {
+    "rect": null,
+    "itemRects": []
+  },
+  "buttons": {
+    "撤销": {
+      "left": 293,
+      "top": 403,
+      "right": 325,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "重做": {
+      "left": 329,
+      "top": 403,
+      "right": 361,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "标题": {
+      "left": 370,
+      "top": 403,
+      "right": 418,
+      "bottom": 435,
+      "width": 48,
+      "height": 32
+    },
+    "列表": {
+      "left": 422,
+      "top": 403,
+      "right": 470,
+      "bottom": 435,
+      "width": 48,
+      "height": 32
+    },
+    "引用": {
+      "left": 474,
+      "top": 403,
+      "right": 506,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "代码块": {
+      "left": 510,
+      "top": 403,
+      "right": 542,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "粗体": {
+      "left": 551,
+      "top": 403,
+      "right": 583,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "斜体": {
+      "left": 587,
+      "top": 403,
+      "right": 619,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "删除线": {
+      "left": 623,
+      "top": 403,
+      "right": 655,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "行内代码": {
+      "left": 659,
+      "top": 403,
+      "right": 691,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "下划线": {
+      "left": 695,
+      "top": 403,
+      "right": 727,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "高亮": {
+      "left": 731,
+      "top": 403,
+      "right": 763,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "链接": {
+      "left": 767,
+      "top": 403,
+      "right": 799,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "上标": {
+      "left": 808,
+      "top": 403,
+      "right": 840,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "下标": {
+      "left": 844,
+      "top": 403,
+      "right": 876,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "左对齐": {
+      "left": 885,
+      "top": 403,
+      "right": 917,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "居中对齐": {
+      "left": 921,
+      "top": 403,
+      "right": 953,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "右对齐": {
+      "left": 957,
+      "top": 403,
+      "right": 989,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "两端对齐": {
+      "left": 993,
+      "top": 403,
+      "right": 1025,
+      "bottom": 435,
+      "width": 32,
+      "height": 32
+    },
+    "添加图片": {
+      "left": 1034,
+      "top": 403,
+      "right": 1113,
+      "bottom": 435,
+      "width": 79,
+      "height": 32
+    }
+  }
+}

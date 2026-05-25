@@ -6,6 +6,7 @@ import {
   forwardRef,
   memo,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -16,6 +17,17 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { flushSync } from 'react-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import {
@@ -38,7 +50,26 @@ import {
   SegmentSupplementActionsMenu,
   type SegmentSupplementActionIdentity,
 } from './SegmentSupplementActionsMenu';
+import {
+  LightweightMarkdownEditorSurface,
+  type LightweightMarkdownEditorHandle,
+} from './LightweightMarkdownEditorSurface';
+import {
+  createInlineMarkdownEditorState,
+  inlineMarkdownEditorIsDirty,
+  inlineMarkdownEditorReducer,
+} from './inlineMarkdownEditorState';
 import { MarkdownContentSurface } from './MarkdownContentSurface';
+import { byteLengthLabel } from './memoryLabels';
+import {
+  type FinalizedNoteContentSaveResult,
+  saveFinalizedNoteSegmentContent,
+  saveFinalizedNoteSegmentSupplementContent,
+  savedNoteSegmentContentFromConflict,
+  savedNoteSegmentSupplementContentFromConflict,
+  type SavedNoteSegmentContent,
+  type SavedNoteSegmentSupplementContent,
+} from './finalizedNoteContentSave';
 import {
   SegmentTranscriptView,
   type SegmentTranscriptOutcome,
@@ -51,7 +82,6 @@ import type {
   SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
-  SegmentTranscriptEditTarget,
 } from './segmentActionTargets';
 import type {
   WorkspaceFinalizedAudioSegmentContent,
@@ -63,7 +93,11 @@ import type {
   WorkspaceSession,
   WorkspaceSnapshot,
 } from './workspaceApi';
-import { updateSegmentContentTabOrder } from './workspaceApi';
+import {
+  saveSegmentSupplementTranscript,
+  saveTranscript,
+  updateSegmentContentTabOrder,
+} from './workspaceApi';
 import {
   memoryDetailQueryOptions,
   memoryDetailQueryKey,
@@ -71,6 +105,11 @@ import {
   segmentContentQueryOptions,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
+import {
+  useMarkdownImageAttachment,
+  type MarkdownImageAttachmentTarget,
+} from './useMarkdownImageAttachment';
+import { createMarkdownAttachmentContext } from './markdownAttachmentSource';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
@@ -79,13 +118,17 @@ type MemoryStudioProps = {
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
-  readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
-  readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
-  readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly onSegmentTranscriptSaved: (saved: SavedSegmentTranscriptContent) => void;
+  readonly onSegmentSupplementTranscriptSaved: (
+    saved: SavedSegmentSupplementTranscriptContent
+  ) => void;
+  readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
+  readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
+  readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
@@ -134,23 +177,6 @@ export type SegmentSupplementNoteTarget = {
   readonly title: string;
 };
 
-export type NoteSegmentEditTarget = {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly title: string;
-};
-
-export type NoteSegmentSupplementEditTarget = {
-  readonly baselineContentHash: string;
-  readonly bodyMarkdown: string;
-  readonly memoryId: string;
-  readonly segmentId: string;
-  readonly supplementId: string;
-  readonly title: string;
-};
-
 const CAROUSEL_SCROLL_RATIO = 0.8;
 const SCROLL_EDGE_EPSILON_PX = 24;
 
@@ -165,6 +191,7 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 };
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
 const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
+const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
@@ -202,6 +229,20 @@ type SegmentSupplementAudioResource = {
   waveformSource: PlaybackWaveformSource;
   workspaceHandle: string;
   workspaceId: string;
+};
+type SavedSegmentTranscriptContent = {
+  readonly expectedSession: WorkspaceSession;
+  readonly baselineTranscriptHash: string;
+  readonly memory: WorkspaceMemorySummary;
+  readonly memoryId: string;
+  readonly segmentId: string;
+};
+export type SavedSegmentSupplementTranscriptContent = {
+  readonly expectedSession: WorkspaceSession;
+  readonly baselineTranscriptHash: string;
+  readonly memory: WorkspaceMemorySummary;
+  readonly segment: MemorySegment;
+  readonly supplement: AudioMemorySegmentSupplement;
 };
 
 function isAudioMemorySegment(segment: MemorySegment): segment is AudioMemorySegment {
@@ -665,7 +706,7 @@ function contentTabPillClassName(active: boolean, hasActions = false) {
     CONTENT_TAB_MOTION_CLASS,
     active
       ? 'bg-secondary text-foreground'
-      : 'bg-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
+      : 'bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground',
   ].join(' ');
 }
 
@@ -846,7 +887,7 @@ function SegmentSupplementTab({
       className={[
         contentTabPillClassName(active, true),
         'group/supplement-tab cursor-grab pr-[14px] active:cursor-grabbing',
-        dragging ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border' : '',
+        dragging ? 'scale-[1.02] opacity-40' : '',
       ].join(' ')}
       onDragEnd={onDragEnd}
       onDragEnter={onDragEnter}
@@ -989,7 +1030,7 @@ function PrimaryContentTab({
       className={[
         contentTabPillClassName(active, true),
         'group/supplement-tab cursor-grab pr-[14px] active:cursor-grabbing',
-        dragging ? 'scale-[1.02] opacity-30 shadow-xl ring-1 ring-border' : '',
+        dragging ? 'scale-[1.02] opacity-40' : '',
       ].join(' ')}
       onDragEnd={onDragEnd}
       onDragEnter={onDragEnter}
@@ -1412,45 +1453,12 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
   );
 });
 
-function noopPlaybackPointerHandler() {
-  return undefined;
-}
-
-async function noopPlaybackToggle() {
-  return undefined;
-}
-
-function noopPlaybackKeyHandler(_event: KeyboardEvent<HTMLDivElement>) {
-  return undefined;
-}
-
-function NoteSegmentPlaybackPlaceholder({
-  loading,
-  segment,
-}: {
-  readonly loading: boolean;
-  readonly segment: NoteMemorySegment;
-}) {
+function MemoryStudioPlayerPlaceholder() {
   return (
-    <MemoryStudioAudioPlaybackRow
-      audioAvailable={false}
-      durationMs={0}
-      loading={loading}
-      onKeyDown={noopPlaybackKeyHandler}
-      onPointerCancel={noopPlaybackPointerHandler}
-      onPointerDown={noopPlaybackPointerHandler}
-      onPointerMove={noopPlaybackPointerHandler}
-      onPointerUp={noopPlaybackPointerHandler}
-      onTogglePlayback={noopPlaybackToggle}
-      playButtonLabel={`笔记 ${segment.title} 暂不支持播放`}
-      playbackTimeMs={0}
-      playbackProgress={0}
-      playing={false}
-      rowSlot="memory-studio-player"
-      waveformData={SEGMENT_PREVIEW_WAVEFORM_DATA}
-      waveformLabel="笔记播放占位"
-      waveformSlot="memory-studio-playback-waveform"
-      waveformSource="unavailable"
+    <div
+      aria-hidden="true"
+      data-slot="memory-studio-player-placeholder"
+      className="h-[42px] w-full min-w-0 shrink-0"
     />
   );
 }
@@ -1510,7 +1518,7 @@ function SegmentTranscriptMarkdownPanel({
     <MarkdownContentSurface
       ariaLabelledBy={ariaLabelledBy}
       bodyMarkdown={bodyMarkdown}
-      className="mt-4"
+      className="mt-12"
       dataSlot="memory-studio-transcript-scroll"
       emptyCopy={emptyCopy}
       errorCopy={copy.error}
@@ -1526,13 +1534,21 @@ function SegmentTranscriptMarkdownPanel({
 }
 
 function SegmentSupplementAudioPlayer({
+  ariaLabelledBy,
   supplement,
   audioResourceCache,
+  onDirtyChange,
+  onTranscriptSaved,
+  panelId,
   transcriptionBackfill,
   workspaceSession,
 }: {
+  readonly ariaLabelledBy: string;
   readonly supplement: AudioMemorySegmentSupplement;
   readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
+  readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onTranscriptSaved: (saved: SavedSegmentSupplementTranscriptContent) => void;
+  readonly panelId: string;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly workspaceSession: WorkspaceSession;
 }) {
@@ -1562,6 +1578,7 @@ function SegmentSupplementAudioPlayer({
   const audioSupplementContent = isAudioSegmentSupplementContent(supplementContent)
     ? supplementContent
     : undefined;
+  const audioSupplementTranscript = audioSupplementContent?.transcript;
   const supplementId = supplement.supplementId;
   const supplementMemoryId = supplement.memoryId;
   const supplementSegmentId = supplement.segmentId;
@@ -1898,8 +1915,50 @@ function SegmentSupplementAudioPlayer({
     }
   }
 
+  async function saveInlineSegmentSupplementTranscriptMarkdown(
+    markdown: string,
+    baselineTranscriptHash: string
+  ): Promise<FinalizedNoteContentSaveResult<SavedSegmentSupplementTranscriptContent>> {
+    const response = await saveSegmentSupplementTranscript({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      supplementId: supplement.supplementId,
+      markdown,
+      baselineTranscriptHash,
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        kind: 'error',
+        message: workspaceErrorDisplayMessage(response.error, '无法保存补充录音转录。'),
+      };
+    }
+
+    if (!isAudioMemorySegmentSupplement(response.value.supplement)) {
+      return {
+        ok: false,
+        kind: 'error',
+        message: '无法保存补充录音转录。',
+      };
+    }
+
+    return {
+      ok: true,
+      nextBaselineContentHash: response.value.baselineTranscriptHash,
+      saved: {
+        expectedSession: workspaceSession,
+        baselineTranscriptHash: response.value.baselineTranscriptHash,
+        memory: response.value.memory,
+        segment: response.value.segment,
+        supplement: response.value.supplement,
+      },
+    };
+  }
+
   return (
-    <article aria-label={supplement.title} className="py-12">
+    <article aria-label={supplement.title} className="flex min-h-0 flex-1 flex-col pt-12">
       <MemoryStudioAudioPlaybackRow
         audioAvailable={audioUrl !== null}
         durationMs={supplement.durationMs}
@@ -1930,39 +1989,63 @@ function SegmentSupplementAudioPlayer({
           {playbackError}
         </p>
       ) : null}
-      <div data-slot="memory-studio-supplement-transcript" className="mt-12">
-        <SegmentTranscriptView
-          status={
-            supplementContentQuery.isLoading
-              ? 'loading'
-              : supplementContentQuery.isError
-                ? 'error'
-                : 'ready'
-          }
-          outcome={
-            supplementTranscriptionRunning
-              ? runningTranscriptOutcome(
-                  deriveTranscriptOutcome({
-                    lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
-                    transcript: audioSupplementContent?.transcript,
-                  })
-                )
-              : deriveTranscriptOutcome({
-                  lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
-                  transcript: audioSupplementContent?.transcript,
-                })
-          }
-          {...(retrySupplementTranscription ? { onRetry: retrySupplementTranscription } : {})}
-          copy={{
-            loading: '正在载入补充录音内容。',
-            error: '补充录音转录加载失败，请重试。',
-            empty: '这段补充录音还没有转录。',
-            failedRetryable: '上次生成补充录音转录失败。',
-            running: '正在生成补充录音转录。',
-            retry: '重试',
-          }}
+      {audioSupplementTranscript ? (
+        <InlineMarkdownContentEditor<SavedSegmentSupplementTranscriptContent>
+          ariaLabelledBy={ariaLabelledBy}
+          attachmentTarget={null}
+          baselineContentHash={audioSupplementTranscript.baselineHash}
+          failureCopy="无法保存补充录音转录。"
+          headerLabel="Markdown 补充录音转录"
+          initialMarkdown={audioSupplementTranscript.text}
+          onDiskVersionAccepted={() => undefined}
+          onDirtyChange={onDirtyChange}
+          onSave={saveInlineSegmentSupplementTranscriptMarkdown}
+          onSavedContent={onTranscriptSaved}
+          panelId={`${panelId}-transcript-editor`}
+          placeholder="整理或修正补充录音转录..."
+          renderAsPanel={false}
+          saveLabel="保存"
+          surfaceTestId="memory-studio-inline-supplement-transcript-editor"
+          targetKey={`segment-supplement-transcript:${supplement.segmentId}:${supplement.supplementId}`}
+          editorId={`${panelId}-transcript-inline-editor`}
+          editorLabel="补充录音转录正文"
+          workspaceSession={workspaceSession}
         />
-      </div>
+      ) : (
+        <div data-slot="memory-studio-supplement-transcript" className="mt-12">
+          <SegmentTranscriptView
+            status={
+              supplementContentQuery.isLoading
+                ? 'loading'
+                : supplementContentQuery.isError
+                  ? 'error'
+                  : 'ready'
+            }
+            outcome={
+              supplementTranscriptionRunning
+                ? runningTranscriptOutcome(
+                    deriveTranscriptOutcome({
+                      lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
+                      transcript: undefined,
+                    })
+                  )
+                : deriveTranscriptOutcome({
+                    lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
+                    transcript: undefined,
+                  })
+            }
+            {...(retrySupplementTranscription ? { onRetry: retrySupplementTranscription } : {})}
+            copy={{
+              loading: '正在载入补充录音内容。',
+              error: '补充录音转录加载失败，请重试。',
+              empty: '这段补充录音还没有转录。',
+              failedRetryable: '上次生成补充录音转录失败。',
+              running: '正在生成补充录音转录。',
+              retry: '重试',
+            }}
+          />
+        </div>
+      )}
       <audio
         ref={audioRef}
         src={audioUrl ?? undefined}
@@ -2057,31 +2140,358 @@ function readSegmentStripItemStep(element: HTMLElement): number {
     : SEGMENT_STRIP_CARD_ESTIMATE_PX;
 }
 
+type InlineMarkdownContentEditorProps<TSaved> = {
+  readonly ariaLabelledBy: string;
+  readonly attachmentTarget: MarkdownImageAttachmentTarget | null;
+  readonly baselineContentHash: string;
+  readonly failureCopy: string;
+  readonly headerLabel: string;
+  readonly initialMarkdown: string;
+  readonly onDiskVersionAccepted: (markdown: string, baselineContentHash: string) => void;
+  readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onSave: (
+    markdown: string,
+    baselineContentHash: string
+  ) => Promise<FinalizedNoteContentSaveResult<TSaved>>;
+  readonly onSavedContent: (saved: TSaved) => void;
+  readonly panelId: string;
+  readonly renderAsPanel?: boolean;
+  readonly placeholder: string;
+  readonly saveLabel: string;
+  readonly surfaceTestId: string;
+  readonly targetKey: string;
+  readonly editorId: string;
+  readonly editorLabel: string;
+  readonly workspaceSession: WorkspaceSession;
+};
+
+function InlineMarkdownContentEditor<TSaved>({
+  ariaLabelledBy,
+  attachmentTarget,
+  baselineContentHash,
+  failureCopy,
+  headerLabel,
+  initialMarkdown,
+  onDiskVersionAccepted,
+  onDirtyChange,
+  onSave,
+  onSavedContent,
+  panelId,
+  renderAsPanel = true,
+  placeholder,
+  saveLabel,
+  surfaceTestId,
+  targetKey,
+  editorId,
+  editorLabel,
+  workspaceSession,
+}: InlineMarkdownContentEditorProps<TSaved>) {
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const editorHandleRef = useRef<LightweightMarkdownEditorHandle | null>(null);
+  const loadedTargetKeyRef = useRef(targetKey);
+  const workspaceSessionKey = `${workspaceSession.workspaceHandle}\0${workspaceSession.workspaceId}`;
+  const latestWorkspaceSessionKeyRef = useRef(workspaceSessionKey);
+  const [editorState, dispatchEditorState] = useReducer(
+    inlineMarkdownEditorReducer,
+    { baselineContentHash, markdown: initialMarkdown },
+    createInlineMarkdownEditorState
+  );
+  const dirty = inlineMarkdownEditorIsDirty(editorState);
+  const imageAttachment = useMarkdownImageAttachment({
+    disabled: editorState.pending,
+    editorHandleRef,
+    onError: (message) => dispatchEditorState({ type: 'error-set', message }),
+    target: attachmentTarget,
+    workspaceSession,
+  });
+  const attachmentContext = useMemo(
+    () =>
+      createMarkdownAttachmentContext(
+        attachmentTarget?.kind === 'segment'
+          ? {
+              kind: 'segment',
+              workspaceId: workspaceSession.workspaceId,
+              segmentId: attachmentTarget.segmentId,
+            }
+          : attachmentTarget?.kind === 'segment-supplement'
+            ? {
+                kind: 'segment-supplement',
+                workspaceId: workspaceSession.workspaceId,
+                segmentId: attachmentTarget.segmentId,
+                supplementId: attachmentTarget.supplementId,
+              }
+            : undefined
+      ),
+    [
+      attachmentTarget?.kind,
+      attachmentTarget?.segmentId,
+      attachmentTarget?.kind === 'segment-supplement' ? attachmentTarget.supplementId : '',
+      workspaceSession.workspaceId,
+    ]
+  );
+  const disabled = editorState.pending || imageAttachment.pending;
+
+  useEffect(() => {
+    if (loadedTargetKeyRef.current !== targetKey) {
+      loadedTargetKeyRef.current = targetKey;
+      dispatchEditorState({
+        type: 'target-changed',
+        baselineContentHash,
+        markdown: initialMarkdown,
+      });
+      return;
+    }
+
+    dispatchEditorState({
+      type: 'input-received',
+      baselineContentHash,
+      markdown: initialMarkdown,
+    });
+  }, [baselineContentHash, initialMarkdown, targetKey]);
+
+  useEffect(() => {
+    latestWorkspaceSessionKeyRef.current = workspaceSessionKey;
+    dispatchEditorState({ type: 'workspace-session-changed' });
+  }, [workspaceSessionKey]);
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
+
+  function blurEditorSurface() {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && surfaceRef.current?.contains(activeElement)) {
+      activeElement.blur();
+      return;
+    }
+    editorHandleRef.current?.blur();
+  }
+
+  async function saveMarkdown(
+    nextBaselineContentHash = editorState.activeBaselineContentHash,
+    nextMarkdown = editorState.markdown
+  ) {
+    if (imageAttachment.pending) {
+      return;
+    }
+    flushSync(() => {
+      dispatchEditorState({ type: 'save-started' });
+    });
+    const saveWorkspaceSessionKey = workspaceSessionKey;
+    try {
+      const result = await onSave(nextMarkdown, nextBaselineContentHash);
+      if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
+        dispatchEditorState({ type: 'save-stale-session' });
+        return;
+      }
+      if (result.ok) {
+        onSavedContent(result.saved);
+        blurEditorSurface();
+        dispatchEditorState({
+          type: 'save-succeeded',
+          ...(result.nextBaselineContentHash
+            ? { nextBaselineContentHash: result.nextBaselineContentHash }
+            : {}),
+        });
+        return;
+      }
+      if (result.kind === 'conflict') {
+        dispatchEditorState({ type: 'save-conflicted', conflict: result.conflict });
+        return;
+      }
+      dispatchEditorState({ type: 'save-failed', message: result.message });
+    } catch (error) {
+      if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
+        dispatchEditorState({ type: 'save-stale-session' });
+        return;
+      }
+      dispatchEditorState({
+        type: 'save-failed',
+        message: unknownErrorDisplayMessage(error, failureCopy),
+      });
+    }
+  }
+
+  function cancelMarkdownEdit() {
+    if (editorState.diskChangeNoticeVisible) {
+      const latestBaselineContentHash = editorState.lastInputBaselineContentHash;
+      if (latestBaselineContentHash !== editorState.activeBaselineContentHash) {
+        const latestMarkdown = editorState.lastInputMarkdown;
+        blurEditorSurface();
+        dispatchEditorState({
+          type: 'disk-version-accepted',
+          baselineContentHash: latestBaselineContentHash,
+          markdown: latestMarkdown,
+        });
+        onDiskVersionAccepted(latestMarkdown, latestBaselineContentHash);
+        return;
+      }
+    }
+
+    blurEditorSurface();
+    dispatchEditorState({ type: 'cancel-clean' });
+  }
+
+  return (
+    <>
+      <div
+        id={panelId}
+        role={renderAsPanel ? 'tabpanel' : undefined}
+        aria-labelledby={renderAsPanel ? ariaLabelledBy : undefined}
+        className="mt-12 flex min-h-0 w-full flex-1"
+        data-slot="memory-studio-inline-markdown-editor"
+      >
+        <LightweightMarkdownEditorSurface
+          attachmentContext={attachmentContext}
+          cancelButtonClassName="min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground"
+          disabled={disabled}
+          editorHandleRef={editorHandleRef}
+          headerLabel={headerLabel}
+          notice={
+            editorState.errorMessage ??
+            (editorState.diskChangeNoticeVisible ? '磁盘内容已变化。保存时将进行冲突检查。' : null)
+          }
+          onChange={(nextMarkdown) =>
+            dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown })
+          }
+          onDragOver={imageAttachment.handleDragOver}
+          onDrop={imageAttachment.handleDrop}
+          onAttachmentUpload={imageAttachment.uploadFile}
+          onPaste={imageAttachment.handlePaste}
+          onCancel={cancelMarkdownEdit}
+          onSave={() => void saveMarkdown()}
+          placeholder={placeholder}
+          saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
+          saveDisabled={disabled}
+          saveLabel={saveLabel}
+          showActions={dirty && !editorState.pending}
+          showHeaderLabel={false}
+          surfaceRef={surfaceRef}
+          surfaceTestId={surfaceTestId}
+          editorFocused={editorState.editorFocused}
+          editorId={editorId}
+          editorLabel={editorLabel}
+          onEditorFocusChange={(editorFocused) =>
+            dispatchEditorState({ type: 'editor-focus-changed', editorFocused })
+          }
+          toolbarDisabled={disabled}
+          value={editorState.markdown}
+        />
+      </div>
+      <AlertDialog
+        open={editorState.conflict !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            dispatchEditorState({ type: 'conflict-dismissed' });
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>外部修改已检测</AlertDialogTitle>
+            <AlertDialogDescription>
+              磁盘内容已变化。请选择保留当前编辑，或使用磁盘版本。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={editorState.pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={editorState.pending || !editorState.conflict}
+              onClick={() => {
+                if (!editorState.conflict) {
+                  return;
+                }
+                dispatchEditorState({
+                  type: 'disk-version-accepted',
+                  baselineContentHash: editorState.conflict.currentBaselineContentHash,
+                  markdown: editorState.conflict.currentBodyMarkdown,
+                });
+                onDiskVersionAccepted(
+                  editorState.conflict.currentBodyMarkdown,
+                  editorState.conflict.currentBaselineContentHash
+                );
+              }}
+            >
+              使用磁盘版本
+            </AlertDialogAction>
+            <AlertDialogAction
+              disabled={editorState.pending || !editorState.conflict}
+              onClick={() => {
+                if (!editorState.conflict) {
+                  return;
+                }
+                const nextBaselineContentHash = editorState.conflict.currentBaselineContentHash;
+                dispatchEditorState({ type: 'conflict-dismissed' });
+                void saveMarkdown(nextBaselineContentHash, editorState.markdown);
+              }}
+            >
+              保留我的修改
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function SegmentSupplementNotePanel({
   ariaLabelledBy,
-  onEdit,
+  onDiskVersionAccepted,
+  onDirtyChange = () => undefined,
+  onSaveEdit,
+  onSavedContent = () => undefined,
   panelId,
   supplement,
+  supplementContent,
+  supplementContentError,
+  supplementContentLoading,
   workspaceSession,
 }: {
   readonly ariaLabelledBy: string;
-  readonly onEdit?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly onDiskVersionAccepted?: (markdown: string, baselineContentHash: string) => void;
+  readonly onDirtyChange?: (dirty: boolean) => void;
+  readonly onSaveEdit?: (
+    markdown: string,
+    baselineContentHash: string
+  ) => Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>>;
+  readonly onSavedContent?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly panelId: string;
   readonly supplement: NoteMemorySegmentSupplement;
+  readonly supplementContent?: WorkspaceNoteSegmentSupplementContent | undefined;
+  readonly supplementContentError: boolean;
+  readonly supplementContentLoading: boolean;
   readonly workspaceSession: WorkspaceSession;
 }) {
-  const supplementContentQuery = useQuery(
-    segmentSupplementContentQueryOptions(
-      workspaceSession,
-      supplement.memoryId,
-      supplement.segmentId,
-      supplement.supplementId,
-      'note'
-    )
-  );
-  const supplementContent = isNoteSegmentSupplementContent(supplementContentQuery.data)
-    ? supplementContentQuery.data
-    : undefined;
+  if (supplementContent && onSaveEdit) {
+    return (
+      <InlineMarkdownContentEditor<SavedNoteSegmentSupplementContent>
+        ariaLabelledBy={ariaLabelledBy}
+        attachmentTarget={{
+          kind: 'segment-supplement',
+          memoryId: supplement.memoryId,
+          segmentId: supplement.segmentId,
+          supplementId: supplement.supplementId,
+        }}
+        baselineContentHash={supplementContent.baselineContentHash}
+        failureCopy="无法保存补充笔记正文。"
+        headerLabel="Markdown 补充笔记"
+        initialMarkdown={supplementContent.bodyMarkdown}
+        onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
+        onDirtyChange={onDirtyChange}
+        onSave={onSaveEdit}
+        onSavedContent={onSavedContent}
+        panelId={panelId}
+        placeholder="写下补充笔记..."
+        saveLabel="保存"
+        surfaceTestId="memory-studio-inline-supplement-note-editor"
+        targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
+        editorId={`${panelId}-inline-editor`}
+        editorLabel="补充笔记正文"
+        workspaceSession={workspaceSession}
+      />
+    );
+  }
 
   return (
     <MarkdownContentSurface
@@ -2092,26 +2502,13 @@ function SegmentSupplementNotePanel({
         segmentId: supplement.segmentId,
         supplementId: supplement.supplementId,
       }}
-      bodyMarkdown={supplementContentQuery.isError ? undefined : supplementContent?.bodyMarkdown}
-      className="mt-4"
-      editLabel={`编辑补充笔记 ${supplement.title}`}
+      bodyMarkdown={supplementContentError ? undefined : supplementContent?.bodyMarkdown}
+      className="mt-12"
       id={panelId}
-      loading={supplementContentQuery.isLoading}
+      loading={supplementContentLoading}
       role="tabpanel"
       showTitle={false}
-      {...(supplementContent && onEdit
-        ? {
-            onEdit: () =>
-              onEdit({
-                memoryId: supplement.memoryId,
-                segmentId: supplement.segmentId,
-                supplementId: supplement.supplementId,
-                title: supplement.title,
-                bodyMarkdown: supplementContent.bodyMarkdown,
-                baselineContentHash: supplementContent.baselineContentHash,
-              }),
-          }
-        : {})}
+      emptyCopy="这条补充笔记还没有正文。"
       title={supplement.title}
     />
   );
@@ -2131,13 +2528,15 @@ export function MemoryStudio({
   onDeleteSegment,
   onDeleteSegmentSupplement,
   onClearSegmentContent,
-  onEditSegmentTranscript,
-  onEditNoteSegment,
-  onEditNoteSegmentSupplement,
+  onSegmentTranscriptSaved,
+  onSegmentSupplementTranscriptSaved,
+  onNoteSegmentContentSaved,
+  onNoteSegmentSupplementContentSaved,
   onRenameSegmentSupplement,
   onRenameSegmentContent,
   onRenameSegment,
   transcriptionBackfill,
+  onInlineMarkdownDirtyChange,
   onSegmentFocusConsumed,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
@@ -2156,6 +2555,7 @@ export function MemoryStudio({
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const segmentStripItemStepRef = useRef(SEGMENT_STRIP_CARD_ESTIMATE_PX);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
+  const [inlineMarkdownDirty, setInlineMarkdownDirty] = useState(false);
   const [confirmingTranscriptionBackfill, setConfirmingTranscriptionBackfill] =
     useState<TranscriptionConfirmIntent | null>(null);
   const [contentTabOrderBySegmentId, setContentTabOrderBySegmentId] = useState<
@@ -2262,6 +2662,161 @@ export function MemoryStudio({
       : (selectedSegmentSupplementById.get(activeSupplementId) ?? null);
   const resolvedActiveContentTab =
     activeSupplementId === null || activeSegmentSupplement ? activeContentTab : 'transcript';
+  const activeNoteSupplementContentQuery = useQuery({
+    ...segmentSupplementContentQueryOptions(
+      workspaceSession,
+      activeSegmentSupplement?.memoryId ?? memory.memoryId,
+      activeSegmentSupplement?.segmentId ?? selectedSegment?.segmentId ?? 'seg_pending',
+      activeSegmentSupplement?.supplementId ?? 'sup_pending',
+      'note'
+    ),
+    enabled:
+      activeSegmentSupplement !== null && isNoteMemorySegmentSupplement(activeSegmentSupplement),
+  });
+  const activeNoteSupplementContent =
+    activeSegmentSupplement &&
+    isNoteMemorySegmentSupplement(activeSegmentSupplement) &&
+    isNoteSegmentSupplementContent(activeNoteSupplementContentQuery.data)
+      ? activeNoteSupplementContentQuery.data
+      : undefined;
+
+  useEffect(() => {
+    onInlineMarkdownDirtyChange?.(inlineMarkdownDirty);
+    return () => onInlineMarkdownDirtyChange?.(false);
+  }, [inlineMarkdownDirty, onInlineMarkdownDirtyChange]);
+
+  function blockDirtyInlineMarkdownNavigation() {
+    if (!inlineMarkdownDirty) {
+      return false;
+    }
+    toast.error(INLINE_MARKDOWN_UNSAVED_MESSAGE);
+    return true;
+  }
+
+  function requestSelectedSegment(segmentId: string) {
+    if (selectedSegment?.segmentId === segmentId) {
+      return true;
+    }
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return false;
+    }
+    setSelectedSegmentId(segmentId);
+    return true;
+  }
+
+  function requestActiveContentTab(nextTab: ActiveContentTab) {
+    if (resolvedActiveContentTab === nextTab) {
+      return true;
+    }
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return false;
+    }
+    setActiveContentTab(nextTab);
+    return true;
+  }
+
+  function requestStartSupplementRecording() {
+    if (!selectedSegment || blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    setSupplementMenuOpen(false);
+    onStartSegmentSupplementRecording({
+      memoryId: memory.memoryId,
+      segmentId: selectedSegment.segmentId,
+      title: `补充录音${selectedSegment.supplementCount + 1}`,
+    });
+  }
+
+  function requestStartSupplementNote() {
+    if (!selectedSegment || blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    setSupplementMenuOpen(false);
+    onStartSegmentSupplementNote?.({
+      memoryId: memory.memoryId,
+      segmentId: selectedSegment.segmentId,
+      title: `补充笔记${selectedSegment.supplementCount + 1}`,
+    });
+  }
+
+  async function saveInlineNoteSegmentMarkdown({
+    baselineContentHash,
+    markdown,
+    segment,
+  }: {
+    readonly baselineContentHash: string;
+    readonly markdown: string;
+    readonly segment: NoteMemorySegment;
+  }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentContent>> {
+    const result = await saveFinalizedNoteSegmentContent({
+      workspaceSession,
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      title: segment.title,
+      bodyMarkdown: markdown,
+      baselineContentHash,
+    });
+    return result;
+  }
+
+  async function saveInlineSegmentTranscriptMarkdown({
+    baselineTranscriptHash,
+    markdown,
+    segment,
+  }: {
+    readonly baselineTranscriptHash: string;
+    readonly markdown: string;
+    readonly segment: AudioMemorySegment;
+  }): Promise<FinalizedNoteContentSaveResult<SavedSegmentTranscriptContent>> {
+    const response = await saveTranscript({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      markdown,
+      baselineTranscriptHash,
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        kind: 'error',
+        message: workspaceErrorDisplayMessage(response.error, '无法保存转录。'),
+      };
+    }
+
+    return {
+      ok: true,
+      nextBaselineContentHash: response.value.baselineTranscriptHash,
+      saved: {
+        expectedSession: workspaceSession,
+        baselineTranscriptHash: response.value.baselineTranscriptHash,
+        memory: response.value.memory,
+        memoryId: segment.memoryId,
+        segmentId: segment.segmentId,
+      },
+    };
+  }
+
+  async function saveInlineNoteSupplementMarkdown({
+    baselineContentHash,
+    markdown,
+    supplement,
+  }: {
+    readonly baselineContentHash: string;
+    readonly markdown: string;
+    readonly supplement: NoteMemorySegmentSupplement;
+  }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>> {
+    const result = await saveFinalizedNoteSegmentSupplementContent({
+      workspaceSession,
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      supplementId: supplement.supplementId,
+      title: supplement.title,
+      bodyMarkdown: markdown,
+      baselineContentHash,
+    });
+    return result;
+  }
+
   const {
     activeContentTabModel,
     baseContentTabs,
@@ -2415,9 +2970,18 @@ export function MemoryStudio({
       return;
     }
 
+    if (selectedSegment?.segmentId !== segmentFocusIntent && blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
     setSelectedSegmentId(segmentFocusIntent);
     onSegmentFocusConsumed?.(segmentFocusIntent);
-  }, [visibleSegments, onSegmentFocusConsumed, segmentFocusIntent]);
+  }, [
+    inlineMarkdownDirty,
+    onSegmentFocusConsumed,
+    segmentFocusIntent,
+    selectedSegment?.segmentId,
+    visibleSegments,
+  ]);
 
   useEffect(() => {
     const segmentId = selectedSegment?.segmentId ?? null;
@@ -2435,7 +2999,7 @@ export function MemoryStudio({
     const addedSupplementId = selectedSegmentSupplementIds.find(
       (supplementId) => !previousSupplementIds.has(supplementId)
     );
-    if (addedSupplementId) {
+    if (addedSupplementId && !inlineMarkdownDirty) {
       setActiveContentTab(supplementContentTabValue(addedSupplementId));
     }
 
@@ -2448,7 +3012,7 @@ export function MemoryStudio({
         supplementIds: selectedSegmentSupplementIds,
       };
     }
-  }, [selectedSegment?.segmentId, selectedSegmentSupplementIdsKey]);
+  }, [inlineMarkdownDirty, selectedSegment?.segmentId, selectedSegmentSupplementIdsKey]);
 
   useEffect(() => {
     setSupplementMenuOpen(false);
@@ -2459,8 +3023,13 @@ export function MemoryStudio({
     draggedContentTabRef.current = null;
     setDraggedContentTab(null);
     setActiveContentTab('transcript');
+    setInlineMarkdownDirty(false);
     setConfirmingTranscriptionBackfill(null);
   }, [selectedSegment?.segmentId]);
+
+  useEffect(() => {
+    setInlineMarkdownDirty(false);
+  }, [resolvedActiveContentTab]);
 
   useEffect(() => {
     if (activeSupplementId !== null && !selectedSegmentSupplementIdSet.has(activeSupplementId)) {
@@ -2591,8 +3160,9 @@ export function MemoryStudio({
       return;
     }
 
-    setActiveContentTab(nextTab.value);
-    window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+    if (requestActiveContentTab(nextTab.value)) {
+      window.requestAnimationFrame(() => document.getElementById(nextTab.tabId)?.focus());
+    }
   }
 
   function readDraggedContentTab(event: DragEvent<HTMLElement>) {
@@ -2868,463 +3438,283 @@ export function MemoryStudio({
     <>
       <section
         aria-label="Memory Studio"
+        data-slot="memory-studio-layout"
         className="flex h-full min-h-0 w-full flex-col overflow-hidden text-left"
       >
-        <div data-slot="memory-studio-layout" className="flex h-full min-h-0 w-full flex-col">
-          {detail && visibleSegments.length === 0 ? (
-            <div className="mt-32 max-w-[420px]">
-              <p className="text-body-lg font-medium leading-body-lg text-foreground">
-                这条记忆还没有片段
-              </p>
-              <p className="mt-8 text-body leading-body text-muted-foreground">
-                继续在这条记忆里记录。
-              </p>
-            </div>
-          ) : detail && visibleSegments.length > 0 && selectedSegment ? (
-            <>
-              <section
-                aria-label="片段预览流"
-                className="relative min-w-0 shrink-0 pt-4"
-                style={
-                  {
-                    '--memory-studio-segment-card-min-size': '136px',
-                    '--memory-studio-segment-card-size':
-                      'clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)',
-                    '--memory-studio-segment-gap': '12px',
-                  } as CSSProperties
-                }
-              >
-                {stripScrollState.canScrollLeft ? (
-                  <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
-                    <div className="pointer-events-auto">
-                      <CarouselArrowButton
-                        direction="left"
-                        ariaLabel="向左浏览片段卡片"
-                        onClick={() => scrollSegmentStrip('left')}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                <div
-                  ref={stripScrollRef}
-                  data-slot="memory-studio-segment-strip-scroll"
-                  className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                >
-                  {segmentStripWindowRange.start > 0 ? (
-                    <div
-                      aria-hidden="true"
-                      data-slot="memory-studio-segment-strip-spacer"
-                      className="min-w-0 shrink-0"
-                      style={segmentStripSpacerStyle(segmentStripWindowRange.start)}
+        {detail && visibleSegments.length === 0 ? (
+          <div className="mt-32 max-w-[420px]">
+            <p className="text-body-lg font-medium leading-body-lg text-foreground">
+              这条记忆还没有片段
+            </p>
+            <p className="mt-8 text-body leading-body text-muted-foreground">
+              继续在这条记忆里记录。
+            </p>
+          </div>
+        ) : detail && visibleSegments.length > 0 && selectedSegment ? (
+          <>
+            <section
+              aria-label="片段预览流"
+              className="relative min-w-0 shrink-0 pt-4"
+              style={
+                {
+                  '--memory-studio-segment-card-min-size': '136px',
+                  '--memory-studio-segment-card-size':
+                    'clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)',
+                  '--memory-studio-segment-gap': '12px',
+                } as CSSProperties
+              }
+            >
+              {stripScrollState.canScrollLeft ? (
+                <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
+                  <div className="pointer-events-auto">
+                    <CarouselArrowButton
+                      direction="left"
+                      ariaLabel="向左浏览片段卡片"
+                      onClick={() => scrollSegmentStrip('left')}
                     />
-                  ) : null}
-                  {visibleSegments
-                    .slice(segmentStripWindowRange.start, segmentStripWindowRange.end)
-                    .map((segment) => {
-                      const segmentIsAudio = isAudioMemorySegment(segment);
-                      const isSelected = segment.segmentId === selectedSegment.segmentId;
-                      const segmentTranscriptionRunning =
-                        segmentIsAudio &&
-                        transcriptionBackfill?.isSegmentRunning?.({
-                          workspaceId: workspaceSession.workspaceId,
-                          memoryId: memory.memoryId,
-                          segmentId: segment.segmentId,
-                        }) === true;
-                      const segmentTranscriptionDisabledReason =
-                        transcriptionBackfillDisabledReason({
-                          baseReason: transcriptionBackfill?.disabledReason,
-                          running: segmentTranscriptionRunning,
-                        });
-                      const requestSegmentTranscriptionBackfill =
-                        segmentIsAudio && transcriptionBackfill?.retrySegment
-                          ? () => {
-                              setOpenSegmentMenuId(null);
-                              if (segment.transcript.exists) {
-                                setConfirmingTranscriptionBackfill({
-                                  kind: 'segment',
-                                  memoryId: memory.memoryId,
-                                  segmentId: segment.segmentId,
-                                  title: transcriptContentTabTitle(segment),
-                                });
-                                return;
-                              }
-                              void transcriptionBackfill.retrySegment?.({
-                                workspaceId: workspaceSession.workspaceId,
+                  </div>
+                </div>
+              ) : null}
+              <div
+                ref={stripScrollRef}
+                data-slot="memory-studio-segment-strip-scroll"
+                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {segmentStripWindowRange.start > 0 ? (
+                  <div
+                    aria-hidden="true"
+                    data-slot="memory-studio-segment-strip-spacer"
+                    className="min-w-0 shrink-0"
+                    style={segmentStripSpacerStyle(segmentStripWindowRange.start)}
+                  />
+                ) : null}
+                {visibleSegments
+                  .slice(segmentStripWindowRange.start, segmentStripWindowRange.end)
+                  .map((segment) => {
+                    const segmentIsAudio = isAudioMemorySegment(segment);
+                    const isSelected = segment.segmentId === selectedSegment.segmentId;
+                    const segmentTranscriptionRunning =
+                      segmentIsAudio &&
+                      transcriptionBackfill?.isSegmentRunning?.({
+                        workspaceId: workspaceSession.workspaceId,
+                        memoryId: memory.memoryId,
+                        segmentId: segment.segmentId,
+                      }) === true;
+                    const segmentTranscriptionDisabledReason = transcriptionBackfillDisabledReason({
+                      baseReason: transcriptionBackfill?.disabledReason,
+                      running: segmentTranscriptionRunning,
+                    });
+                    const requestSegmentTranscriptionBackfill =
+                      segmentIsAudio && transcriptionBackfill?.retrySegment
+                        ? () => {
+                            setOpenSegmentMenuId(null);
+                            if (segment.transcript.exists) {
+                              setConfirmingTranscriptionBackfill({
+                                kind: 'segment',
                                 memoryId: memory.memoryId,
                                 segmentId: segment.segmentId,
-                                mode: 'fill-missing',
+                                title: transcriptContentTabTitle(segment),
                               });
+                              return;
                             }
-                          : undefined;
-                      return (
-                        <div
-                          key={segment.segmentId}
-                          data-slot="memory-studio-segment-item"
-                          className={[
-                            'group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none [contain-intrinsic-size:184px_184px] [content-visibility:auto]',
-                          ].join(' ')}
-                        >
-                          <button
-                            type="button"
-                            aria-current={isSelected ? 'true' : undefined}
-                            aria-label={`选择片段 ${segment.title}`}
-                            className="group/segment-card flex w-full flex-col rounded-xl text-left outline-none"
-                            onClick={() => setSelectedSegmentId(segment.segmentId)}
-                          >
-                            <span className="block min-w-0">
-                              <span
-                                data-slot="memory-studio-segment-card"
-                                className={[
-                                  'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background',
-                                  isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
-                                ].join(' ')}
-                              >
-                                <span className="block min-w-0 pr-24">
-                                  <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
-                                    {segment.title}
-                                  </span>
-                                </span>
-                                <span className="flex min-w-0 items-center justify-between gap-6">
-                                  {segmentIsAudio ? (
-                                    <>
-                                      <SegmentPreviewSpectrum active={isSelected} />
-                                      <span
-                                        data-slot="memory-studio-segment-card-duration"
-                                        className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
-                                      >
-                                        {durationLabel(segment.durationMs)}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <FileText
-                                        aria-hidden="true"
-                                        className="size-28 text-muted-foreground"
-                                        strokeWidth={1.8}
-                                      />
-                                      <span
-                                        data-slot="memory-studio-segment-card-note-size"
-                                        className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
-                                      >
-                                        {segment.bodyByteLength}B
-                                      </span>
-                                    </>
-                                  )}
-                                </span>
-                              </span>
-                            </span>
-                            <span
-                              aria-hidden="true"
-                              data-slot="memory-studio-segment-timeline-anchor"
-                              className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
-                            >
-                              <span
-                                data-slot="memory-studio-segment-timeline-dot"
-                                className={[
-                                  'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
-                                  isSelected ? 'bg-primary' : 'bg-muted-foreground',
-                                ].join(' ')}
-                              />
-                              <span
-                                data-slot="memory-studio-segment-timeline-time"
-                                className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
-                              >
-                                {createdTimeLabel(segment.createdAt)}
-                              </span>
-                            </span>
-                          </button>
-                          <SegmentActionsMenu
-                            actionIdentity={{
+                            void transcriptionBackfill.retrySegment?.({
+                              workspaceId: workspaceSession.workspaceId,
                               memoryId: memory.memoryId,
                               segmentId: segment.segmentId,
-                              workspaceHandle: workspaceSession.workspaceHandle,
-                              workspaceId: workspaceSession.workspaceId,
-                            }}
-                            contentAlign="end"
-                            onDelete={() => {
-                              setOpenSegmentMenuId(null);
-                              onDeleteSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                            onOpenChange={(open) =>
-                              setOpenSegmentMenuId(open ? segment.segmentId : null)
-                            }
-                            onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
-                            onRename={() => {
-                              setOpenSegmentMenuId(null);
-                              onRenameSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                            open={openSegmentMenuId === segment.segmentId}
-                            segmentTitle={segment.title}
-                            transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
-                            transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
-                            trigger={
-                              <button
-                                type="button"
-                                aria-label={`片段 ${segment.title} 更多操作`}
-                                className={[
-                                  'absolute right-8 top-8 z-[1] inline-flex size-28 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:bg-secondary data-[state=open]:text-foreground data-[state=open]:opacity-100',
-                                ].join(' ')}
-                              >
-                                <Ellipsis aria-hidden="true" className="size-16" />
-                              </button>
-                            }
-                            triggerLabel={`片段 ${segment.title} 更多操作`}
-                          />
-                        </div>
-                      );
-                    })}
-                  {segmentStripWindowRange.end < visibleSegments.length ? (
-                    <div
-                      aria-hidden="true"
-                      data-slot="memory-studio-segment-strip-spacer"
-                      className="min-w-0 shrink-0"
-                      style={segmentStripSpacerStyle(
-                        visibleSegments.length - segmentStripWindowRange.end
-                      )}
-                    />
-                  ) : null}
-                </div>
-                {stripScrollState.canScrollRight ? (
-                  <div className="pointer-events-none absolute right-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
-                    <div className="pointer-events-auto">
-                      <CarouselArrowButton
-                        direction="right"
-                        ariaLabel="向右浏览片段卡片"
-                        onClick={() => scrollSegmentStrip('right')}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-
-              <section
-                aria-label="片段内容"
-                data-slot="memory-studio-content-panel"
-                className="mt-16 flex min-h-0 flex-1 flex-col pt-12"
-              >
-                {isAudioMemorySegment(selectedSegment) ? (
-                  <SegmentAudioPlayer
-                    audioResourceCache={segmentAudioResourceCacheRef.current}
-                    content={isAudioSegmentContent(segmentContent) ? segmentContent : undefined}
-                    loading={segmentContentQuery.isLoading}
-                    segment={selectedSegment}
-                    workspaceSession={workspaceSession}
-                  />
-                ) : (
-                  <NoteSegmentPlaybackPlaceholder
-                    loading={segmentContentQuery.isLoading}
-                    segment={selectedSegment}
-                  />
-                )}
-
-                <div
-                  data-slot="memory-studio-content-tab-rail-row"
-                  className="mt-32 flex shrink-0 items-center justify-between gap-8"
-                >
-                  <div
-                    role="tablist"
-                    aria-label="片段内容类型"
-                    data-slot="memory-studio-content-tab-rail"
-                    className="edge-fade-x flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  >
-                    {contentTabs.map((contentTab) => {
-                      if (contentTab.kind === 'transcript') {
-                        return (
-                          <PrimaryContentTab
-                            key={contentTab.value}
-                            active={resolvedActiveContentTab === 'transcript'}
-                            actionsVisible={
-                              draggedContentTab === null && primaryContentActionsVisible
-                            }
-                            dragging={
-                              draggedContentTab?.segmentId === selectedSegment.segmentId &&
-                              draggedContentTab.value === contentTab.value
-                            }
-                            menuOpen={primaryContentMenuOpen}
-                            onActionsVisible={() =>
-                              draggedContentTab === null
-                                ? setPrimaryContentActionsVisible(true)
-                                : undefined
-                            }
-                            onActionsHidden={() =>
-                              draggedContentTab === null
-                                ? setPrimaryContentActionsVisible(false)
-                                : undefined
-                            }
-                            onDragEnd={handleContentTabDragEnd}
-                            onDragEnter={handleContentTabDragEnter}
-                            onDragOver={(event) =>
-                              handleContentTabDragOver(event, contentTab.value)
-                            }
-                            onDragStart={(event) =>
-                              handleContentTabDragStart(event, contentTab.value)
-                            }
-                            onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
-                            onSelect={() => setActiveContentTab('transcript')}
-                            panelId={contentTab.panelId}
-                            renderMoreMenu={(trigger, onCloseAutoFocus) => (
-                              <SegmentContentActionsMenu
-                                actionIdentity={{
-                                  memoryId: memory.memoryId,
-                                  segmentId: selectedSegment.segmentId,
-                                  workspaceHandle: workspaceSession.workspaceHandle,
-                                  workspaceId: workspaceSession.workspaceId,
-                                }}
-                                contentAlign="center"
-                                onCloseAutoFocus={onCloseAutoFocus}
-                                clearDisabled={
-                                  isAudioMemorySegment(selectedSegment)
-                                    ? !isAudioSegmentContent(segmentContent)
-                                    : !noteSegmentContent
-                                }
-                                contentKind={
-                                  isAudioMemorySegment(selectedSegment) ? 'transcript' : 'body'
-                                }
-                                editDisabled={
-                                  isAudioMemorySegment(selectedSegment)
-                                    ? !isAudioSegmentContent(segmentContent)
-                                    : !noteSegmentContent
-                                }
-                                menuLabel={`${contentTab.title} 更多操作`}
-                                onClear={() => {
-                                  setPrimaryContentMenuOpen(false);
-                                  if (
-                                    isAudioMemorySegment(selectedSegment) &&
-                                    isAudioSegmentContent(segmentContent)
-                                  ) {
-                                    onClearSegmentContent({
-                                      memoryId: memory.memoryId,
-                                      segment: selectedSegment,
-                                      contentKind: 'transcript',
-                                      currentTitle: contentTab.title,
-                                      baselineTranscriptHash:
-                                        segmentContent.transcript.baselineHash,
-                                    });
-                                    return;
-                                  }
-                                  if (
-                                    !isAudioMemorySegment(selectedSegment) &&
-                                    noteSegmentContent
-                                  ) {
-                                    onClearSegmentContent({
-                                      memoryId: memory.memoryId,
-                                      segment: selectedSegment,
-                                      contentKind: 'body',
-                                      currentTitle: contentTab.title,
-                                      baselineContentHash: noteSegmentContent.baselineContentHash,
-                                    });
-                                  }
-                                }}
-                                onEdit={() => {
-                                  setPrimaryContentMenuOpen(false);
-                                  if (
-                                    isAudioMemorySegment(selectedSegment) &&
-                                    isAudioSegmentContent(segmentContent)
-                                  ) {
-                                    onEditSegmentTranscript({
-                                      memoryId: selectedSegment.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      title: contentTab.title,
-                                      transcriptText: segmentContent.transcript.text,
-                                      baselineTranscriptHash:
-                                        segmentContent.transcript.baselineHash,
-                                    });
-                                    return;
-                                  }
-                                  if (
-                                    !isAudioMemorySegment(selectedSegment) &&
-                                    noteSegmentContent &&
-                                    onEditNoteSegment
-                                  ) {
-                                    onEditNoteSegment({
-                                      memoryId: selectedSegment.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      title: selectedSegment.title,
-                                      bodyMarkdown: noteSegmentContent.bodyMarkdown,
-                                      baselineContentHash: noteSegmentContent.baselineContentHash,
-                                    });
-                                  }
-                                }}
-                                onOpenChange={setPrimaryContentMenuOpen}
-                                onRename={() => {
-                                  setPrimaryContentMenuOpen(false);
-                                  onRenameSegmentContent({
-                                    memoryId: memory.memoryId,
-                                    segment: selectedSegment,
-                                    contentKind: isAudioMemorySegment(selectedSegment)
-                                      ? 'transcript'
-                                      : 'body',
-                                    currentTitle: contentTab.title,
-                                  });
-                                }}
-                                open={primaryContentMenuOpen}
-                                trigger={trigger}
-                              />
-                            )}
-                            tabId={contentTab.tabId}
-                            tabIndex={resolvedActiveContentTab === 'transcript' ? 0 : -1}
-                            title={contentTab.title}
+                              mode: 'fill-missing',
+                            });
+                          }
+                        : undefined;
+                    return (
+                      <div
+                        key={segment.segmentId}
+                        data-slot="memory-studio-segment-item"
+                        className={[
+                          'group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none [contain-intrinsic-size:184px_184px] [content-visibility:auto]',
+                        ].join(' ')}
+                      >
+                        <button
+                          type="button"
+                          aria-current={isSelected ? 'true' : undefined}
+                          aria-label={`选择片段 ${segment.title}`}
+                          className="group/segment-card flex w-full flex-col rounded-xl text-left outline-none"
+                          onClick={() => requestSelectedSegment(segment.segmentId)}
+                        >
+                          <span className="block min-w-0">
+                            <span
+                              data-slot="memory-studio-segment-card"
+                              className={[
+                                'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background',
+                                isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
+                              ].join(' ')}
+                            >
+                              <span className="block min-w-0 pr-24">
+                                <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
+                                  {segment.title}
+                                </span>
+                              </span>
+                              <span className="flex min-w-0 items-center justify-between gap-6">
+                                {segmentIsAudio ? (
+                                  <>
+                                    <SegmentPreviewSpectrum active={isSelected} />
+                                    <span
+                                      data-slot="memory-studio-segment-card-duration"
+                                      className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
+                                    >
+                                      {durationLabel(segment.durationMs)}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FileText
+                                      aria-hidden="true"
+                                      className="size-28 text-muted-foreground"
+                                      strokeWidth={1.8}
+                                    />
+                                    <span
+                                      data-slot="memory-studio-segment-card-note-size"
+                                      className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
+                                    >
+                                      {byteLengthLabel(segment.bodyByteLength)}
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                            </span>
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            data-slot="memory-studio-segment-timeline-anchor"
+                            className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
                           >
-                            <FileText
-                              aria-hidden="true"
-                              className="size-16 shrink-0"
-                              strokeWidth={2}
+                            <span
+                              data-slot="memory-studio-segment-timeline-dot"
+                              className={[
+                                'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
+                                isSelected ? 'bg-primary' : 'bg-muted-foreground',
+                              ].join(' ')}
                             />
-                            <span className="truncate">{contentTab.title}</span>
-                          </PrimaryContentTab>
-                        );
-                      }
-
-                      const supplement = contentTab.supplement;
-                      const supplementIsAudio = isAudioMemorySegmentSupplement(supplement);
-
-                      return (
-                        <SegmentSupplementTab
-                          key={supplement.supplementId}
-                          active={resolvedActiveContentTab === contentTab.value}
+                            <span
+                              data-slot="memory-studio-segment-timeline-time"
+                              className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
+                            >
+                              {createdTimeLabel(segment.createdAt)}
+                            </span>
+                          </span>
+                        </button>
+                        <SegmentActionsMenu
                           actionIdentity={{
                             memoryId: memory.memoryId,
-                            segmentId: selectedSegment.segmentId,
+                            segmentId: segment.segmentId,
                             workspaceHandle: workspaceSession.workspaceHandle,
                             workspaceId: workspaceSession.workspaceId,
                           }}
-                          actionsVisible={
-                            (draggedContentTab === null &&
-                              hoveredSupplementActionId === supplement.supplementId) ||
-                            draggedSupplementId === supplement.supplementId
+                          contentAlign="end"
+                          onDelete={() => {
+                            setOpenSegmentMenuId(null);
+                            onDeleteSegment({ memoryId: memory.memoryId, segment });
+                          }}
+                          onOpenChange={(open) =>
+                            setOpenSegmentMenuId(open ? segment.segmentId : null)
                           }
-                          supplement={supplement}
-                          supplementIndex={
-                            visibleSupplementIndexByTabValue.get(contentTab.value) ?? 0
+                          onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
+                          onRename={() => {
+                            setOpenSegmentMenuId(null);
+                            onRenameSegment({ memoryId: memory.memoryId, segment });
+                          }}
+                          open={openSegmentMenuId === segment.segmentId}
+                          segmentTitle={segment.title}
+                          transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
+                          transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
+                          trigger={
+                            <button
+                              type="button"
+                              aria-label={`片段 ${segment.title} 更多操作`}
+                              className={[
+                                'absolute right-8 top-8 z-[1] inline-flex size-28 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:bg-secondary data-[state=open]:text-foreground data-[state=open]:opacity-100',
+                              ].join(' ')}
+                            >
+                              <Ellipsis aria-hidden="true" className="size-16" />
+                            </button>
+                          }
+                          triggerLabel={`片段 ${segment.title} 更多操作`}
+                        />
+                      </div>
+                    );
+                  })}
+                {segmentStripWindowRange.end < visibleSegments.length ? (
+                  <div
+                    aria-hidden="true"
+                    data-slot="memory-studio-segment-strip-spacer"
+                    className="min-w-0 shrink-0"
+                    style={segmentStripSpacerStyle(
+                      visibleSegments.length - segmentStripWindowRange.end
+                    )}
+                  />
+                ) : null}
+              </div>
+              {stripScrollState.canScrollRight ? (
+                <div className="pointer-events-none absolute right-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
+                  <div className="pointer-events-auto">
+                    <CarouselArrowButton
+                      direction="right"
+                      ariaLabel="向右浏览片段卡片"
+                      onClick={() => scrollSegmentStrip('right')}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            <section
+              aria-label="片段内容"
+              data-slot="memory-studio-content-panel"
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              {isAudioMemorySegment(selectedSegment) ? (
+                <SegmentAudioPlayer
+                  audioResourceCache={segmentAudioResourceCacheRef.current}
+                  content={isAudioSegmentContent(segmentContent) ? segmentContent : undefined}
+                  loading={segmentContentQuery.isLoading}
+                  segment={selectedSegment}
+                  workspaceSession={workspaceSession}
+                />
+              ) : (
+                <MemoryStudioPlayerPlaceholder />
+              )}
+
+              <div
+                data-slot="memory-studio-content-tab-rail-row"
+                className="mt-12 flex shrink-0 items-center justify-start gap-8"
+              >
+                <div
+                  role="tablist"
+                  aria-label="片段内容类型"
+                  data-slot="memory-studio-content-tab-rail"
+                  className="edge-fade-x flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  {contentTabs.map((contentTab) => {
+                    if (contentTab.kind === 'transcript') {
+                      return (
+                        <PrimaryContentTab
+                          key={contentTab.value}
+                          active={resolvedActiveContentTab === 'transcript'}
+                          actionsVisible={
+                            draggedContentTab === null && primaryContentActionsVisible
                           }
                           dragging={
                             draggedContentTab?.segmentId === selectedSegment.segmentId &&
                             draggedContentTab.value === contentTab.value
                           }
-                          menuOpen={openSupplementActionMenuId === supplement.supplementId}
-                          revealMode={
-                            draggedContentTab === null
-                              ? 'normal'
-                              : draggedSupplementId === supplement.supplementId
-                                ? 'drag-source'
-                                : 'drag-suppressed'
-                          }
-                          tabId={contentTab.tabId}
-                          panelId={contentTab.panelId}
-                          tabIndex={resolvedActiveContentTab === contentTab.value ? 0 : -1}
-                          onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
+                          menuOpen={primaryContentMenuOpen}
                           onActionsVisible={() =>
                             draggedContentTab === null
-                              ? setHoveredSupplementActionId(supplement.supplementId)
+                              ? setPrimaryContentActionsVisible(true)
                               : undefined
                           }
                           onActionsHidden={() =>
                             draggedContentTab === null
-                              ? setHoveredSupplementActionId((currentSupplementId) =>
-                                  currentSupplementId === supplement.supplementId
-                                    ? null
-                                    : currentSupplementId
-                                )
+                              ? setPrimaryContentActionsVisible(false)
                               : undefined
                           }
                           onDragEnd={handleContentTabDragEnd}
@@ -3333,79 +3723,215 @@ export function MemoryStudio({
                           onDragStart={(event) =>
                             handleContentTabDragStart(event, contentTab.value)
                           }
-                          onMenuOpenChange={(open) =>
-                            setOpenSupplementActionMenuId(open ? supplement.supplementId : null)
-                          }
-                          onRequestTranscriptionBackfill={
-                            supplementIsAudio && transcriptionBackfill?.retrySupplement
-                              ? () => {
-                                  setOpenSupplementActionMenuId(null);
-                                  if (supplement.transcript.exists) {
-                                    setConfirmingTranscriptionBackfill({
-                                      kind: 'supplement',
-                                      memoryId: memory.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      supplementId: supplement.supplementId,
-                                      title: supplement.title,
-                                    });
-                                    return;
-                                  }
-                                  void transcriptionBackfill.retrySupplement?.({
+                          onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
+                          onSelect={() => requestActiveContentTab('transcript')}
+                          panelId={contentTab.panelId}
+                          renderMoreMenu={(trigger, onCloseAutoFocus) => (
+                            <SegmentContentActionsMenu
+                              actionIdentity={{
+                                memoryId: memory.memoryId,
+                                segmentId: selectedSegment.segmentId,
+                                workspaceHandle: workspaceSession.workspaceHandle,
+                                workspaceId: workspaceSession.workspaceId,
+                              }}
+                              contentAlign="center"
+                              onCloseAutoFocus={onCloseAutoFocus}
+                              clearDisabled={
+                                isAudioMemorySegment(selectedSegment)
+                                  ? !isAudioSegmentContent(segmentContent)
+                                  : !noteSegmentContent
+                              }
+                              contentKind={
+                                isAudioMemorySegment(selectedSegment) ? 'transcript' : 'body'
+                              }
+                              menuLabel={`${contentTab.title} 更多操作`}
+                              onClear={() => {
+                                setPrimaryContentMenuOpen(false);
+                                if (
+                                  isAudioMemorySegment(selectedSegment) &&
+                                  isAudioSegmentContent(segmentContent)
+                                ) {
+                                  onClearSegmentContent({
+                                    memoryId: memory.memoryId,
+                                    segment: selectedSegment,
+                                    contentKind: 'transcript',
+                                    currentTitle: contentTab.title,
+                                    baselineTranscriptHash: segmentContent.transcript.baselineHash,
+                                  });
+                                  return;
+                                }
+                                if (!isAudioMemorySegment(selectedSegment) && noteSegmentContent) {
+                                  onClearSegmentContent({
+                                    memoryId: memory.memoryId,
+                                    segment: selectedSegment,
+                                    contentKind: 'body',
+                                    currentTitle: contentTab.title,
+                                    baselineContentHash: noteSegmentContent.baselineContentHash,
+                                  });
+                                }
+                              }}
+                              onOpenChange={setPrimaryContentMenuOpen}
+                              onRename={() => {
+                                setPrimaryContentMenuOpen(false);
+                                onRenameSegmentContent({
+                                  memoryId: memory.memoryId,
+                                  segment: selectedSegment,
+                                  contentKind: isAudioMemorySegment(selectedSegment)
+                                    ? 'transcript'
+                                    : 'body',
+                                  currentTitle: contentTab.title,
+                                });
+                              }}
+                              open={primaryContentMenuOpen}
+                              trigger={trigger}
+                            />
+                          )}
+                          tabId={contentTab.tabId}
+                          tabIndex={resolvedActiveContentTab === 'transcript' ? 0 : -1}
+                          title={contentTab.title}
+                        >
+                          <FileText
+                            aria-hidden="true"
+                            className="size-16 shrink-0"
+                            strokeWidth={2}
+                          />
+                          <span className="truncate">{contentTab.title}</span>
+                        </PrimaryContentTab>
+                      );
+                    }
+
+                    const supplement = contentTab.supplement;
+                    const supplementIsAudio = isAudioMemorySegmentSupplement(supplement);
+
+                    return (
+                      <SegmentSupplementTab
+                        key={supplement.supplementId}
+                        active={resolvedActiveContentTab === contentTab.value}
+                        actionIdentity={{
+                          memoryId: memory.memoryId,
+                          segmentId: selectedSegment.segmentId,
+                          workspaceHandle: workspaceSession.workspaceHandle,
+                          workspaceId: workspaceSession.workspaceId,
+                        }}
+                        actionsVisible={
+                          (draggedContentTab === null &&
+                            hoveredSupplementActionId === supplement.supplementId) ||
+                          draggedSupplementId === supplement.supplementId
+                        }
+                        supplement={supplement}
+                        supplementIndex={
+                          visibleSupplementIndexByTabValue.get(contentTab.value) ?? 0
+                        }
+                        dragging={
+                          draggedContentTab?.segmentId === selectedSegment.segmentId &&
+                          draggedContentTab.value === contentTab.value
+                        }
+                        menuOpen={openSupplementActionMenuId === supplement.supplementId}
+                        revealMode={
+                          draggedContentTab === null
+                            ? 'normal'
+                            : draggedSupplementId === supplement.supplementId
+                              ? 'drag-source'
+                              : 'drag-suppressed'
+                        }
+                        tabId={contentTab.tabId}
+                        panelId={contentTab.panelId}
+                        tabIndex={resolvedActiveContentTab === contentTab.value ? 0 : -1}
+                        onKeyDown={(event) => handleContentTabKeyDown(event, contentTab.value)}
+                        onActionsVisible={() =>
+                          draggedContentTab === null
+                            ? setHoveredSupplementActionId(supplement.supplementId)
+                            : undefined
+                        }
+                        onActionsHidden={() =>
+                          draggedContentTab === null
+                            ? setHoveredSupplementActionId((currentSupplementId) =>
+                                currentSupplementId === supplement.supplementId
+                                  ? null
+                                  : currentSupplementId
+                              )
+                            : undefined
+                        }
+                        onDragEnd={handleContentTabDragEnd}
+                        onDragEnter={handleContentTabDragEnter}
+                        onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
+                        onDragStart={(event) => handleContentTabDragStart(event, contentTab.value)}
+                        onMenuOpenChange={(open) =>
+                          setOpenSupplementActionMenuId(open ? supplement.supplementId : null)
+                        }
+                        onRequestTranscriptionBackfill={
+                          supplementIsAudio && transcriptionBackfill?.retrySupplement
+                            ? () => {
+                                setOpenSupplementActionMenuId(null);
+                                if (supplement.transcript.exists) {
+                                  setConfirmingTranscriptionBackfill({
+                                    kind: 'supplement',
+                                    memoryId: memory.memoryId,
+                                    segmentId: selectedSegment.segmentId,
+                                    supplementId: supplement.supplementId,
+                                    title: supplement.title,
+                                  });
+                                  return;
+                                }
+                                void transcriptionBackfill.retrySupplement?.({
+                                  workspaceId: workspaceSession.workspaceId,
+                                  memoryId: memory.memoryId,
+                                  segmentId: selectedSegment.segmentId,
+                                  supplementId: supplement.supplementId,
+                                  mode: 'fill-missing',
+                                });
+                              }
+                            : undefined
+                        }
+                        onDelete={() =>
+                          onDeleteSegmentSupplement({
+                            memoryId: memory.memoryId,
+                            segment: selectedSegment,
+                            supplement,
+                          })
+                        }
+                        onRename={() =>
+                          onRenameSegmentSupplement({
+                            memoryId: memory.memoryId,
+                            segment: selectedSegment,
+                            supplement,
+                          })
+                        }
+                        onSelect={() => requestActiveContentTab(contentTab.value)}
+                        transcriptExists={supplementIsAudio ? supplement.transcript.exists : false}
+                        transcriptionBackfillDisabledReason={
+                          supplementIsAudio
+                            ? transcriptionBackfillDisabledReason({
+                                baseReason: transcriptionBackfill?.disabledReason,
+                                running:
+                                  transcriptionBackfill?.isSupplementRunning?.({
                                     workspaceId: workspaceSession.workspaceId,
                                     memoryId: memory.memoryId,
                                     segmentId: selectedSegment.segmentId,
                                     supplementId: supplement.supplementId,
-                                    mode: 'fill-missing',
-                                  });
-                                }
-                              : undefined
-                          }
-                          onDelete={() =>
-                            onDeleteSegmentSupplement({
-                              memoryId: memory.memoryId,
-                              segment: selectedSegment,
-                              supplement,
-                            })
-                          }
-                          onRename={() =>
-                            onRenameSegmentSupplement({
-                              memoryId: memory.memoryId,
-                              segment: selectedSegment,
-                              supplement,
-                            })
-                          }
-                          onSelect={() => setActiveContentTab(contentTab.value)}
-                          transcriptExists={
-                            supplementIsAudio ? supplement.transcript.exists : false
-                          }
-                          transcriptionBackfillDisabledReason={
-                            supplementIsAudio
-                              ? transcriptionBackfillDisabledReason({
-                                  baseReason: transcriptionBackfill?.disabledReason,
-                                  running:
-                                    transcriptionBackfill?.isSupplementRunning?.({
-                                      workspaceId: workspaceSession.workspaceId,
-                                      memoryId: memory.memoryId,
-                                      segmentId: selectedSegment.segmentId,
-                                      supplementId: supplement.supplementId,
-                                    }) === true,
-                                })
-                              : null
-                          }
-                        />
-                      );
-                    })}
-                  </div>
+                                  }) === true,
+                              })
+                            : null
+                        }
+                      />
+                    );
+                  })}
+                </div>
+                <div
+                  data-slot="memory-studio-content-tab-actions"
+                  className="flex shrink-0 items-center gap-4"
+                >
                   <DropdownMenu open={supplementMenuOpen} onOpenChange={setSupplementMenuOpen}>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghostIcon"
-                        size="icon"
+                        size="compact"
                         type="button"
                         aria-label="添加片段补充内容"
-                        className="text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+                        className="gap-[6px] px-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
                       >
                         <Plus aria-hidden="true" className="size-16" />
+                        <span>补充</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
@@ -3413,30 +3939,12 @@ export function MemoryStudio({
                       aria-labelledby={undefined}
                       align="end"
                     >
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setSupplementMenuOpen(false);
-                          onStartSegmentSupplementRecording({
-                            memoryId: memory.memoryId,
-                            segmentId: selectedSegment.segmentId,
-                            title: `补充录音${selectedSegment.supplementCount + 1}`,
-                          });
-                        }}
-                      >
+                      <DropdownMenuItem onSelect={requestStartSupplementRecording}>
                         <Mic aria-hidden="true" className="size-16" />
                         录音补充
                       </DropdownMenuItem>
                       {onStartSegmentSupplementNote ? (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSupplementMenuOpen(false);
-                            onStartSegmentSupplementNote({
-                              memoryId: memory.memoryId,
-                              segmentId: selectedSegment.segmentId,
-                              title: `补充笔记${selectedSegment.supplementCount + 1}`,
-                            });
-                          }}
-                        >
+                        <DropdownMenuItem onSelect={requestStartSupplementNote}>
                           <FileText aria-hidden="true" className="size-16" />
                           笔记补充
                         </DropdownMenuItem>
@@ -3444,116 +3952,214 @@ export function MemoryStudio({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                {resolvedActiveContentTab === 'transcript' ? (
-                  isAudioMemorySegment(selectedSegment) ? (
-                    <SegmentTranscriptMarkdownPanel
-                      ariaLabelledBy={transcriptContentTab.tabId}
-                      copy={{
-                        loading: '正在载入片段内容。',
-                        error: '片段内容加载失败，请重试。',
-                        empty: '这段录音还没有转录。',
-                        failedRetryable: '上次生成转录失败。',
-                        running: '正在生成转录。',
-                        retry: '重试',
-                      }}
-                      error={segmentContentQuery.isError}
-                      id={transcriptContentTab.panelId}
-                      loading={segmentContentQuery.isLoading}
-                      {...(retrySelectedSegmentTranscription
-                        ? { onRetry: retrySelectedSegmentTranscription }
-                        : {})}
-                      outcome={
-                        selectedSegmentTranscriptionRunning
-                          ? runningTranscriptOutcome(
-                              deriveTranscriptOutcome({
-                                lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
-                                transcript: isAudioSegmentContent(segmentContent)
-                                  ? segmentContent.transcript
-                                  : undefined,
-                              })
-                            )
-                          : deriveTranscriptOutcome({
+              </div>
+              {resolvedActiveContentTab === 'transcript' ? (
+                isAudioMemorySegment(selectedSegment) && isAudioSegmentContent(segmentContent) ? (
+                  <InlineMarkdownContentEditor<SavedSegmentTranscriptContent>
+                    ariaLabelledBy={transcriptContentTab.tabId}
+                    attachmentTarget={null}
+                    baselineContentHash={segmentContent.transcript.baselineHash}
+                    failureCopy="无法保存转录。"
+                    headerLabel="Markdown 转录"
+                    initialMarkdown={segmentContent.transcript.text}
+                    onDiskVersionAccepted={() => undefined}
+                    onDirtyChange={setInlineMarkdownDirty}
+                    onSave={(markdown, baselineTranscriptHash) =>
+                      saveInlineSegmentTranscriptMarkdown({
+                        baselineTranscriptHash,
+                        markdown,
+                        segment: selectedSegment,
+                      })
+                    }
+                    onSavedContent={onSegmentTranscriptSaved}
+                    panelId={transcriptContentTab.panelId}
+                    placeholder="整理或修正转录文本..."
+                    saveLabel="保存"
+                    surfaceTestId="memory-studio-inline-transcript-editor"
+                    targetKey={`segment-transcript:${selectedSegment.segmentId}`}
+                    editorId={`${transcriptContentTab.panelId}-inline-editor`}
+                    editorLabel="转录正文"
+                    workspaceSession={workspaceSession}
+                  />
+                ) : isAudioMemorySegment(selectedSegment) ? (
+                  <SegmentTranscriptMarkdownPanel
+                    ariaLabelledBy={transcriptContentTab.tabId}
+                    copy={{
+                      loading: '正在载入片段内容。',
+                      error: '片段内容加载失败，请重试。',
+                      empty: '这段录音还没有转录。',
+                      failedRetryable: '上次生成转录失败。',
+                      running: '正在生成转录。',
+                      retry: '重试',
+                    }}
+                    error={segmentContentQuery.isError}
+                    id={transcriptContentTab.panelId}
+                    loading={segmentContentQuery.isLoading}
+                    {...(retrySelectedSegmentTranscription
+                      ? { onRetry: retrySelectedSegmentTranscription }
+                      : {})}
+                    outcome={
+                      selectedSegmentTranscriptionRunning
+                        ? runningTranscriptOutcome(
+                            deriveTranscriptOutcome({
                               lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
                               transcript: isAudioSegmentContent(segmentContent)
                                 ? segmentContent.transcript
                                 : undefined,
                             })
-                      }
-                      title={transcriptContentTab.title}
-                    />
-                  ) : (
-                    <MarkdownContentSurface
-                      ariaLabelledBy={transcriptContentTab.tabId}
-                      attachmentContext={{
-                        kind: 'segment',
-                        workspaceId: workspaceSession.workspaceId,
-                        segmentId: selectedSegment.segmentId,
-                      }}
-                      bodyMarkdown={
-                        segmentContentQuery.isError ? undefined : noteSegmentContent?.bodyMarkdown
-                      }
-                      className="mt-4"
-                      editLabel={`编辑笔记 ${selectedSegment.title}`}
-                      id={transcriptContentTab.panelId}
-                      loading={segmentContentQuery.isLoading}
-                      role="tabpanel"
-                      showTitle={false}
-                      {...(noteSegmentContent && onEditNoteSegment
-                        ? {
-                            onEdit: () =>
-                              onEditNoteSegment({
-                                memoryId: selectedSegment.memoryId,
-                                segmentId: selectedSegment.segmentId,
-                                title: selectedSegment.title,
-                                bodyMarkdown: noteSegmentContent.bodyMarkdown,
-                                baselineContentHash: noteSegmentContent.baselineContentHash,
-                              }),
-                          }
-                        : {})}
-                      title={selectedSegment.title}
-                    />
-                  )
-                ) : activeSegmentSupplement ? (
-                  isAudioMemorySegmentSupplement(activeSegmentSupplement) ? (
-                    <section
-                      key={activeSegmentSupplement.supplementId}
-                      aria-label={activeSegmentSupplement.title}
-                      role="tabpanel"
-                      id={activeContentTabModel.panelId}
-                      aria-labelledby={activeContentTabModel.tabId}
-                      data-slot="memory-studio-supplement-panel"
-                      className="reo-content-tab-panel-motion mt-4 min-h-0 flex-1 overflow-y-auto pr-8 pb-6"
-                    >
-                      <SegmentSupplementAudioPlayer
-                        supplement={activeSegmentSupplement}
-                        audioResourceCache={supplementAudioResourceCacheRef.current}
-                        {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
-                        workspaceSession={workspaceSession}
-                      />
-                    </section>
-                  ) : isNoteMemorySegmentSupplement(activeSegmentSupplement) ? (
-                    <SegmentSupplementNotePanel
-                      key={activeSegmentSupplement.supplementId}
+                          )
+                        : deriveTranscriptOutcome({
+                            lastTranscriptionAttempt: selectedSegment.lastTranscriptionAttempt,
+                            transcript: isAudioSegmentContent(segmentContent)
+                              ? segmentContent.transcript
+                              : undefined,
+                          })
+                    }
+                    title={transcriptContentTab.title}
+                  />
+                ) : noteSegmentContent ? (
+                  <InlineMarkdownContentEditor<SavedNoteSegmentContent>
+                    ariaLabelledBy={transcriptContentTab.tabId}
+                    attachmentTarget={{
+                      kind: 'segment',
+                      memoryId: selectedSegment.memoryId,
+                      segmentId: selectedSegment.segmentId,
+                    }}
+                    baselineContentHash={noteSegmentContent.baselineContentHash}
+                    failureCopy="无法保存笔记正文。"
+                    headerLabel="Markdown 正文"
+                    initialMarkdown={noteSegmentContent.bodyMarkdown}
+                    onDiskVersionAccepted={(markdown, baselineContentHash) =>
+                      onNoteSegmentContentSaved(
+                        savedNoteSegmentContentFromConflict({
+                          conflict: {
+                            currentBodyMarkdown: markdown,
+                            currentBaselineContentHash: baselineContentHash,
+                          },
+                          memoryId: selectedSegment.memoryId,
+                          segmentId: selectedSegment.segmentId,
+                          title: selectedSegment.title,
+                          workspaceSession,
+                        })
+                      )
+                    }
+                    onDirtyChange={setInlineMarkdownDirty}
+                    onSave={(markdown, baselineContentHash) =>
+                      saveInlineNoteSegmentMarkdown({
+                        baselineContentHash,
+                        markdown,
+                        segment: selectedSegment,
+                      })
+                    }
+                    onSavedContent={onNoteSegmentContentSaved}
+                    panelId={transcriptContentTab.panelId}
+                    placeholder="写下正文..."
+                    saveLabel="保存"
+                    surfaceTestId="memory-studio-inline-note-editor"
+                    targetKey={`segment:${selectedSegment.segmentId}`}
+                    editorId={`${transcriptContentTab.panelId}-inline-editor`}
+                    editorLabel="笔记正文"
+                    workspaceSession={workspaceSession}
+                  />
+                ) : (
+                  <MarkdownContentSurface
+                    ariaLabelledBy={transcriptContentTab.tabId}
+                    attachmentContext={{
+                      kind: 'segment',
+                      workspaceId: workspaceSession.workspaceId,
+                      segmentId: selectedSegment.segmentId,
+                    }}
+                    bodyMarkdown={undefined}
+                    className="mt-12"
+                    id={transcriptContentTab.panelId}
+                    loading={segmentContentQuery.isLoading}
+                    role="tabpanel"
+                    showTitle={false}
+                    title={selectedSegment.title}
+                  />
+                )
+              ) : activeSegmentSupplement ? (
+                isAudioMemorySegmentSupplement(activeSegmentSupplement) ? (
+                  <section
+                    key={activeSegmentSupplement.supplementId}
+                    aria-label={activeSegmentSupplement.title}
+                    role="tabpanel"
+                    id={activeContentTabModel.panelId}
+                    aria-labelledby={activeContentTabModel.tabId}
+                    data-slot="memory-studio-supplement-panel"
+                    className="reo-content-tab-panel-motion mt-4 flex min-h-0 flex-1 flex-col overflow-hidden"
+                  >
+                    <SegmentSupplementAudioPlayer
                       ariaLabelledBy={activeContentTabModel.tabId}
-                      {...(onEditNoteSegmentSupplement
-                        ? { onEdit: onEditNoteSegmentSupplement }
-                        : {})}
-                      panelId={activeContentTabModel.panelId}
                       supplement={activeSegmentSupplement}
+                      audioResourceCache={supplementAudioResourceCacheRef.current}
+                      onDirtyChange={setInlineMarkdownDirty}
+                      onTranscriptSaved={onSegmentSupplementTranscriptSaved}
+                      panelId={activeContentTabModel.panelId}
+                      {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
                       workspaceSession={workspaceSession}
                     />
-                  ) : null
-                ) : null}
-              </section>
-            </>
-          ) : detailQuery.isError ? (
-            <p className="mt-32 text-body leading-body text-muted-foreground">
+                  </section>
+                ) : isNoteMemorySegmentSupplement(activeSegmentSupplement) ? (
+                  <SegmentSupplementNotePanel
+                    key={activeSegmentSupplement.supplementId}
+                    ariaLabelledBy={activeContentTabModel.tabId}
+                    onDiskVersionAccepted={(markdown, baselineContentHash) => {
+                      if (!activeNoteSupplementContent) {
+                        return;
+                      }
+                      onNoteSegmentSupplementContentSaved(
+                        savedNoteSegmentSupplementContentFromConflict({
+                          conflict: {
+                            currentBodyMarkdown: markdown,
+                            currentBaselineContentHash: baselineContentHash,
+                          },
+                          memoryId: activeSegmentSupplement.memoryId,
+                          segmentId: activeSegmentSupplement.segmentId,
+                          supplementId: activeSegmentSupplement.supplementId,
+                          title: activeSegmentSupplement.title,
+                          workspaceSession,
+                        })
+                      );
+                    }}
+                    onDirtyChange={setInlineMarkdownDirty}
+                    onSaveEdit={(markdown, baselineContentHash) => {
+                      if (!activeNoteSupplementContent) {
+                        return Promise.resolve({
+                          ok: false,
+                          kind: 'error',
+                          message: '无法保存补充笔记正文。',
+                        });
+                      }
+                      return saveInlineNoteSupplementMarkdown({
+                        baselineContentHash,
+                        markdown,
+                        supplement: activeSegmentSupplement,
+                      });
+                    }}
+                    onSavedContent={onNoteSegmentSupplementContentSaved}
+                    panelId={activeContentTabModel.panelId}
+                    supplement={activeSegmentSupplement}
+                    supplementContent={activeNoteSupplementContent}
+                    supplementContentError={activeNoteSupplementContentQuery.isError}
+                    supplementContentLoading={activeNoteSupplementContentQuery.isLoading}
+                    workspaceSession={workspaceSession}
+                  />
+                ) : null
+              ) : null}
+            </section>
+          </>
+        ) : detailQuery.isError ? (
+          <div className="mt-32 max-w-[420px]">
+            <p className="text-body leading-body text-muted-foreground">
               记忆内容加载失败，请重试。
             </p>
-          ) : (
-            <p className="mt-32 text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-32 max-w-[420px]">
+            <p className="text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
+          </div>
+        )}
       </section>
       <WorkspaceDangerConfirmDialog
         open={confirmingTranscriptionBackfill !== null}

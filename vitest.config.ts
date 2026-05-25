@@ -20,6 +20,7 @@ export default defineConfig({
           include: [
             'src/renderer/src/appProjection.test.ts',
             'src/renderer/src/workspace/memoryLabels.test.ts',
+            'src/renderer/src/workspace/noteEditorModel.test.ts',
             'src/renderer/src/workspace/noteMarkdownMode.test.ts',
             'src/renderer/src/workspace/recording/recordingTimeline.test.ts',
             'src/renderer/src/workspace/recordingMachine.test.ts',

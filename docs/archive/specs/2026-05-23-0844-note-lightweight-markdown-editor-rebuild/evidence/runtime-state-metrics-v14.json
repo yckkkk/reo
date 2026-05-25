@@ -1,0 +1,2074 @@
+{
+  "capturedAt": "2026-05-24T06:49:51.457Z",
+  "pageUrl": "http://localhost:5183/",
+  "viewport": {
+    "width": 1200,
+    "height": 800,
+    "devicePixelRatio": 2
+  },
+  "screenshots": [
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-body-action-group-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-body-editor-overlay-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-markdown-list-preview-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-markdown-code-table-preview-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-body-more-menu-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-body-clear-confirm-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-new-segment-menu-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-add-supplement-menu-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-empty-note-supplement-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-note-supplement-editor-focused-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-transcript-action-group-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-transcript-more-menu-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-transcript-clear-confirm-v14.png",
+    "docs/specs/2026-05-23-0844-note-lightweight-markdown-editor-rebuild/evidence/screenshots/runtime-transcript-editor-overlay-v14.png"
+  ],
+  "states": {
+    "runtime-body-action-group-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-body-editor-overlay-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": ["笔记\n\n正文\n\n正文\nMarkdown 笔记\n保存笔记\n笔记正文"],
+      "textarea": {
+        "valueSample": "---\ntitle: \"Markdown 全格式测试文档\"\nauthor: \"Markdown Editor QA\"\ndate: \"2026-05-22\"\ntags:\n  - markdown\n  - editor\n  - rich-text\ndescription: \"用于测试 Markdown 编辑器富文本预览能力的综合样例\"\n---\n\n# Markdown 全格式测试文档\n\n[TOC]\n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n---\n\n",
+        "focused": true
+      },
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-markdown-list-preview-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 12408,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-markdown-code-table-preview-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 12398,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-body-more-menu-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": ["重命名", "清空正文"],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-body-clear-confirm-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [
+        "清空正文？\n\n清空后会把「正文」保存为空，不会删除文件或附件。确认后需要手动重新输入内容。\n\n取消\n清空正文"
+      ],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-new-segment-menu-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": ["录音", "笔记"],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-add-supplement-menu-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\nMarkdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n \n\n转义测试：\\[这不应该是链接文本\\]\n\n \n\n特殊字符实体：&amp; &lt; &gt; &quot; &apos;\n\n \n\nEmoji 字符：😀 🚀 ✅ ❤️\n\n \n\nEmoji 短码，部分编辑器支持：:smile: :rocket: :white_check_mark:\n\n \n \n4. 链接测试\n \n\n普通链接：[OpenAI](https://openai.com)\n\n \n\n带标题的链接：[Example](https://example.com \"链接标题\")\n\n \n\n自动链接：<https://example.com>\n\n \n\n邮箱自动链接：<hello@example.com>\n\n \n\n裸 URL，GFM 支持自动识别：https://example.com/path?a=1&b=2\n\n \n\n内部锚点链接：[跳转到表格测试](#9-表格测试)\n\n \n\n引用式链接：[这是一个引用式链接][ref-link]\n\n \n\n引用式链接简写：[OpenAI Reference]\n\n \n\n链接中包含括号：[带括号 URL](https://example.com/path_(test))\n\n \n\n链接中包含编码字符：[编码 URL](https://example.com/search?q=markdown%20editor)\n\n \n\n[ref-link]: https://example.com/reference \"引用链接标题\"\n\n[OpenAI Reference]: https://openai.com\n\n \n \n5. 图片测试\n \n\n普通图片：\n\n \n\n \n\n带标题的图片：\n\n \n\n \n\n引用式图片：\n\n \n\n![Logo][logo-image]\n\n \n\n图片作为链接：\n\n \n\n[\n](https://example.com)\n\n \n\n[logo-image]: https://placehold.co/180x80?text=Logo \"引用式图片标题\"\n\n \n \n6. 引用块测试\n \n\n> 这是一级引用块。\n\n> \n\n> 引用块中包含第二段内容。\n\n \n\n> 这是引用块中的列表：\n\n> \n\n> * 引用中的无序列表项 1\n\n> * 引用中的无序列表项 2\n\n> * 引用中的无序列表项 3\n\n \n\n> 这是嵌套引用。\n\n>\n\n> > 这是二级引用。\n\n> >\n\n> > > 这是三级引用。\n\n \n\n> 引用块中",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑笔记 笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": ["录音补充", "笔记补充"],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "Markdown 全格式测试文档\n \n \n\n本文档用于测试 Markdown 编辑器的解析、富文本预览、编辑回写、复制粘贴、样式渲染和边界情况处理能力。\n\n \n \n1. 标题测试\n \n一级标题 H1\n \n二级标题 H2\n \n三级标题 H3\n \n四级标题 H4\n \n五级标题 H5\n \n六级标题 H6\n \n带尾部井号的标题\n \n\nSetext 一级标题\n\n================\n\n \n\nSetext 二级标题\n\n \n \n2. 段落与换行\n \n\n这是一个普通段落。它包含中文、English words、数字 123456、标点符号，以及一些特殊字符：& < > \" '。\n\n \n\n这是第二个段落。  \n\n这一行使用两个空格形成硬换行。  \n\n这里应该显示在新的一行。\n\n \n\n这一行使用反斜杠形成硬换行\\\n\n这里也应该显示在新的一行。\n\n \n\n这是一段较长文本，用于测试自动换行能力。Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 这段文字也混合了中文内容，用于观察不同语言混排时的行高、字距、断行和渲染表现。\n\n \n \n3. 行内格式\n \n\n普通文本\n\n \n\n*斜体文本，星号写法*\n\n \n\n_斜体文本，下划线写法_\n\n \n\n**粗体文本，星号写法**\n\n \n\n__粗体文本，下划线写法__\n\n \n\n***粗斜体文本，三星号写法***\n\n \n\n___粗斜体文本，三下划线写法___\n\n \n\n~~删除线文本~~\n\n \n\n`行内代码`\n\n \n\n`const value = \"inline code\";`\n\n \n\n==高亮文本，部分 Markdown 扩展支持==\n\n \n\n<u>下划线文本，HTML 写法</u>\n\n \n\n<mark>高亮文本，HTML 写法</mark>\n\n \n\n<small>小号文本，HTML 写法</small>\n\n \n\n上标：x<sup>2</sup>\n\n \n\n下标：H<sub>2</sub>O\n\n \n\n键盘按键：<kbd>Ctrl</kbd> + <kbd>S</kbd>\n\n \n\n转义测试：\\*这不应该是斜体\\*\n\n \n\n转义测试：\\# 这不应该是标题\n\n ",
+        "preCount": 20,
+        "codeSamples": [
+          "  列表项 3 中的代码块",
+          "这是一个没有指定语言的代码块。\n第二行内容。\n第三行内容。",
+          "function greet(name) {\n  const message = `Hello, ${name}`;\n  console.log(message);\n  return message;\n}\n\ngreet(\"Markdown\");",
+          "type User = {\n  id: string;\n  name: string;\n  active: boolean;\n};\n\nconst user: User = {\n  id: \"u_001\",\n  name: \"Alice\",\n  active: true,\n};",
+          "def fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(10))",
+          "{\n  \"name\": \"markdown-editor\",\n  \"version\": \"1.0.0\",\n  \"features\": [\"preview\", \"editing\", \"serialization\"],\n  \"enabled\": true\n}",
+          "<section>\n  <h1>Hello Markdown</h1>\n  <p>This is HTML inside a code block.</p>\n</section>",
+          ".markdown-body {\n  font-size: 16px;\n  line-height: 1.7;\n}"
+        ],
+        "rawFenceText": [
+          {
+            "tag": "DIV",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "PRE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          },
+          {
+            "tag": "CODE",
+            "text": "```text\n这里展示代码块内部的三反引号。\n```"
+          }
+        ],
+        "listDepths": [
+          {
+            "text": "星号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "星号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "连字符列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "加号列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "一级列表 A",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 A1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 A2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "三级列表 A2a",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "三级列表 A2b",
+            "depth": "2",
+            "className": "min-h-[1.65em] ml-[36px]"
+          },
+          {
+            "text": "一级列表 B",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "二级列表 B1",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "二级列表 B2",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "列表项 1 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 2 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "列表项 3 第一段。",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 1",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 2",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "有序列表项 3",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第五项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第六项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第七项",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          },
+          {
+            "text": "第一节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第二节",
+            "depth": "1",
+            "className": "min-h-[1.65em] ml-[18px]"
+          },
+          {
+            "text": "第一小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二小节",
+            "depth": "3",
+            "className": "min-h-[1.65em] ml-[54px]"
+          },
+          {
+            "text": "第二章",
+            "depth": "0",
+            "className": "min-h-[1.65em] "
+          }
+        ]
+      }
+    },
+    "runtime-empty-note-supplement-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\n\n这条补充笔记还没有正文。\n\n写补充笔记\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑补充笔记 补充笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "补充笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这条补充笔记还没有正文。\n\n写补充笔记",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    },
+    "runtime-note-supplement-editor-focused-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n正文\n补充笔记1\n补充笔记2\n编辑\n补充\n\n这条补充笔记还没有正文。\n\n写补充笔记\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段\n笔记\n\n补充笔记1\n\n补充笔记1\nMarkdown 笔记\n保存笔记\n笔记正文",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑补充笔记 补充笔记1"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "正文",
+          "selected": "false"
+        },
+        {
+          "text": "补充笔记1",
+          "selected": "true"
+        },
+        {
+          "text": "补充笔记2",
+          "selected": "false"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": ["笔记\n\n补充笔记1\n\n补充笔记1\nMarkdown 笔记\n保存笔记\n笔记正文"],
+      "textarea": {
+        "valueSample": "",
+        "focused": true
+      },
+      "surface": {
+        "slot": "markdown-content-surface",
+        "role": "tabpanel",
+        "label": "补充笔记1",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这条补充笔记还没有正文。\n\n写补充笔记",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    },
+    "runtime-transcript-action-group-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:04\n转录ya\n编辑\n补充\n\n这是一个测试，这是一个测，这是一个测试哦。\n\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑转录"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "转录ya",
+          "selected": "true"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "memory-studio-transcript-scroll",
+        "role": "tabpanel",
+        "label": "转录ya",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这是一个测试，这是一个测，这是一个测试哦。",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    },
+    "runtime-transcript-more-menu-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:04\n转录ya\n编辑\n补充\n\n这是一个测试，这是一个测，这是一个测试哦。\n\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段\n重命名\n清空转录",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑转录"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "转录ya",
+          "selected": "true"
+        }
+      ],
+      "menuItems": ["重命名", "清空转录"],
+      "dialogText": [],
+      "textarea": null,
+      "surface": {
+        "slot": "memory-studio-transcript-scroll",
+        "role": "tabpanel",
+        "label": "转录ya",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这是一个测试，这是一个测，这是一个测试哦。",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    },
+    "runtime-transcript-clear-confirm-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:04\n转录ya\n编辑\n补充\n\n这是一个测试，这是一个测，这是一个测试哦。\n\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段\n清空转录？\n\n清空后会把转录保存为空，不会删除录音文件。确认后需要手动重新输入或重新生成转录。\n\n取消\n清空转录",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑转录"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "转录ya",
+          "selected": "true"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": [
+        "清空转录？\n\n清空后会把转录保存为空，不会删除录音文件。确认后需要手动重新输入或重新生成转录。\n\n取消\n清空转录"
+      ],
+      "textarea": null,
+      "surface": {
+        "slot": "memory-studio-transcript-scroll",
+        "role": "tabpanel",
+        "label": "转录ya",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这是一个测试，这是一个测，这是一个测试哦。",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    },
+    "runtime-transcript-editor-overlay-v14": {
+      "bodyTextSample": "测试\n碎片记录\n首页\n资料库\n记忆空间\n测试\n设置\n新片段\n笔记1\n16 KB\n10:44\n录音7\n00:04\n02:48\n录音3呀\n01:07\n21:41\n录音5\n00:02\n21:43\n录音4\n00:02\n21:42\n录音2\n00:20\n21:40\nxzwsb\n00:03\n20:29\n00:00 / 00:04\n转录ya\n编辑\n补充\n\n这是一个测试，这是一个测，这是一个测试哦。\n\n碎片记录\n23:47 · 7 个片段\n生活\n05/17 20:34 · 1 个片段\n转录\n\n转录ya\n\n转录ya\n转录文本\n保存转录\n转录正文",
+      "agentationNodeCount": 0,
+      "actionLabels": [
+        {
+          "text": "编辑",
+          "aria": "编辑转录"
+        },
+        {
+          "text": "补充",
+          "aria": "添加片段补充内容"
+        }
+      ],
+      "activeTabs": [
+        {
+          "text": "转录ya",
+          "selected": "true"
+        }
+      ],
+      "menuItems": [],
+      "dialogText": ["转录\n\n转录ya\n\n转录ya\n转录文本\n保存转录\n转录正文"],
+      "textarea": {
+        "valueSample": "这是一个测试，这是一个测，这是一个测试哦。",
+        "focused": true
+      },
+      "surface": {
+        "slot": "memory-studio-transcript-scroll",
+        "role": "tabpanel",
+        "label": "转录ya",
+        "className": "reo-content-tab-panel-motion edge-fade-y scrollbar-hover relative min-h-0 flex-1 overflow-y-auto pr-8 pb-6 mt-14",
+        "scrollTop": 0,
+        "textSample": "这是一个测试，这是一个测，这是一个测试哦。",
+        "preCount": 0,
+        "codeSamples": [],
+        "rawFenceText": [],
+        "listDepths": []
+      }
+    }
+  }
+}

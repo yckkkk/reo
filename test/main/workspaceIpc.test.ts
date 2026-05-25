@@ -63,6 +63,7 @@ import {
   handleCopySegmentSupplementAbsolutePathForTest,
   handleCopySegmentSupplementRelativePathForTest,
   handleClearVoiceTranscriptionApiKeyForTest,
+  handleOpenMarkdownExternalLinkForTest,
   handleOpenVoiceTranscriptionProviderConsoleForTest,
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
@@ -603,6 +604,56 @@ test('voice settings IPC openVoiceTranscriptionProviderConsole opens the main-ow
 test('voice settings IPC openVoiceTranscriptionProviderConsole validates request payload', async () => {
   const response = await handleOpenVoiceTranscriptionProviderConsoleForTest({
     ...voiceIpcBaseOptions({ url: 'https://console.volcengine.com/' }),
+    openExternal: async () => {
+      throw new Error('invalid payload must not open');
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+});
+
+test('Markdown external link IPC opens bounded http and https URLs', async () => {
+  const opened: string[] = [];
+  const allowed = await handleOpenMarkdownExternalLinkForTest({
+    ...voiceIpcBaseOptions({ url: 'https://tiptap.dev/docs' }),
+    openExternal: async (url: string) => {
+      opened.push(url);
+    },
+  });
+
+  assert.deepEqual(allowed, { ok: true, value: {} });
+  assert.deepEqual(opened, ['https://tiptap.dev/docs']);
+});
+
+test('Markdown external link IPC rejects non-web and credential URLs', async () => {
+  for (const url of [
+    'javascript:alert(1)',
+    'file:///tmp/reo.md',
+    'data:text/html,hello',
+    'https://user:pass@example.com/docs',
+  ]) {
+    const opened: string[] = [];
+    const response = await handleOpenMarkdownExternalLinkForTest({
+      ...voiceIpcBaseOptions({ url }),
+      openExternal: async (openedUrl: string) => {
+        opened.push(openedUrl);
+      },
+    });
+
+    assert.equal(response.ok, false);
+    if (!response.ok) {
+      assert.equal(response.error.code, 'ERR_MARKDOWN_EXTERNAL_LINK_REJECTED');
+    }
+    assert.deepEqual(opened, []);
+  }
+});
+
+test('Markdown external link IPC validates request payload', async () => {
+  const response = await handleOpenMarkdownExternalLinkForTest({
+    ...voiceIpcBaseOptions(undefined),
     openExternal: async () => {
       throw new Error('invalid payload must not open');
     },
@@ -1287,6 +1338,7 @@ test('request segment backfill IPC forwards mode through validated handle owners
               updatedAt: '2026-05-17T01:00:00.000Z',
             },
             saved: true as const,
+            baselineTranscriptHash: 'b'.repeat(64),
           },
         };
       },
@@ -1345,6 +1397,7 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
             updatedAt: '2026-05-17T01:00:00.000Z',
           },
           saved: true as const,
+          baselineTranscriptHash: 'b'.repeat(64),
           segment: {
             audioByteLength: 10,
             createdAt: '2026-05-17T01:00:00.000Z',

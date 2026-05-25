@@ -60,6 +60,12 @@ export function openVoiceTranscriptionProviderConsole() {
   return window.reoWorkspace.openVoiceTranscriptionProviderConsole();
 }
 
+export function openMarkdownExternalLink(
+  payload: Parameters<Window['reoWorkspace']['openMarkdownExternalLink']>[0]
+) {
+  return window.reoWorkspace.openMarkdownExternalLink(payload);
+}
+
 export function openMemoryDocument(
   payload: Parameters<Window['reoWorkspace']['openMemoryDocument']>[0]
 ) {

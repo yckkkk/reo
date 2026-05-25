@@ -48,6 +48,18 @@ if (!window.localStorage) {
   });
 }
 
+window.matchMedia ??= (query: string) =>
+  ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  }) as MediaQueryList;
+
 const dispatchEvent = window.EventTarget.prototype.dispatchEvent;
 window.EventTarget.prototype.dispatchEvent = function dispatchWindowEvent(event: Event): boolean {
   const eventLike = event as unknown as {
@@ -72,6 +84,50 @@ window.EventTarget.prototype.dispatchEvent = function dispatchWindowEvent(event:
 };
 
 Element.prototype.setPointerCapture ??= () => undefined;
+
+function createTestDomRect(): DOMRect {
+  return {
+    bottom: 0,
+    height: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    width: 0,
+    x: 0,
+    y: 0,
+    toJSON() {
+      return this;
+    },
+  } as DOMRect;
+}
+
+function createTestDomRectList(): DOMRectList {
+  const rect = createTestDomRect();
+  return {
+    0: rect,
+    length: 1,
+    item: (index: number) => (index === 0 ? rect : null),
+    *[Symbol.iterator]() {
+      yield rect;
+    },
+  } as DOMRectList;
+}
+
+if (!document.elementFromPoint) {
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: () => document.body,
+  });
+}
+
+Element.prototype.getBoundingClientRect ??= createTestDomRect;
+Element.prototype.getClientRects ??= createTestDomRectList;
+
+if (typeof Range !== 'undefined') {
+  Range.prototype.getBoundingClientRect ??= createTestDomRect;
+  Range.prototype.getClientRects ??= createTestDomRectList;
+}
+
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   configurable: true,
   value: (contextType: string) =>

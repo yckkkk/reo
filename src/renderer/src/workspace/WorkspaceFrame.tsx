@@ -4,12 +4,8 @@ export const WORKSPACE_MEMORY_RAIL_ID = 'workspace-memory-rail';
 export const WORKSPACE_MEMORY_RAIL_LAYOUT = {
   railWidth: '240px',
 } as const;
-export const WORKSPACE_STAGE_LAYOUT = {
-  maxWidth: '1120px',
-} as const;
 const workspaceFrameStyle = {
   '--workspace-memory-rail-width': WORKSPACE_MEMORY_RAIL_LAYOUT.railWidth,
-  '--workspace-stage-max-width': WORKSPACE_STAGE_LAYOUT.maxWidth,
 } as CSSProperties;
 
 type WorkspaceFrameProps = {
@@ -54,22 +50,19 @@ export function WorkspaceFrame({
       >
         <div
           data-slot="workspace-stage-shell"
-          className="relative col-start-1 row-start-1 flex min-h-0 flex-col overflow-hidden px-24 py-24 sm:px-40 sm:py-32"
+          className="relative col-start-1 row-start-1 flex min-h-0 flex-col overflow-hidden px-24 pb-16 pt-0 sm:px-40"
         >
           <div
             data-slot="workspace-stage-content"
-            className="mx-auto flex min-h-0 w-full max-w-[var(--workspace-stage-max-width)] flex-1 items-stretch justify-center pb-32"
+            className="flex min-h-0 w-full flex-1 items-stretch justify-center"
           >
             {children}
           </div>
           <div
             data-slot="workspace-expression-fab-layer"
-            className="pointer-events-none absolute bottom-32 left-24 right-24 z-10 sm:left-40 sm:right-40"
+            className="pointer-events-none absolute bottom-16 left-24 right-24 z-10 sm:left-40 sm:right-40"
           >
-            <div
-              data-slot="workspace-expression-fab-track"
-              className="mx-auto w-full max-w-[var(--workspace-stage-max-width)]"
-            >
+            <div data-slot="workspace-expression-fab-track" className="w-full">
               {dock}
             </div>
           </div>

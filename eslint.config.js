@@ -23,6 +23,7 @@ export default defineConfig([
     'node_modules',
     'out',
     '.tmp',
+    '.reference',
     '.agents/skills',
     '.claude/skills',
     '.superpowers',

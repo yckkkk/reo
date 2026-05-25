@@ -637,7 +637,14 @@ async function executeBackfillTask(
     }
     return {
       ok: true,
-      response: { ok: true, value: { memory: saved.memory, saved: true } },
+      response: {
+        ok: true,
+        value: {
+          memory: saved.memory,
+          saved: true,
+          baselineTranscriptHash: transcriptDigest(recognized.transcriptText),
+        },
+      },
       transcriptText: recognized.transcriptText,
     };
   }
@@ -702,6 +709,7 @@ async function executeBackfillTask(
         segment: saved.segment,
         supplement: saved.supplement,
         saved: true,
+        baselineTranscriptHash: transcriptDigest(recognized.transcriptText),
       },
     },
     transcriptText: recognized.transcriptText,

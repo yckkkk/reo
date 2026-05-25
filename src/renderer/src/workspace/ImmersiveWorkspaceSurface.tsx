@@ -48,8 +48,8 @@ export function ImmersiveWorkspaceSurface({
         {...(immersive
           ? {
               className:
-                'fixed inset-0 flex h-dvh max-h-none w-screen translate-x-0 flex-col overflow-hidden rounded-none border-0 bg-transparent px-0 pb-0 pt-0 shadow-none sm:left-0 sm:right-0 sm:w-screen sm:translate-x-0 sm:px-0 sm:pb-0',
-              overlayClassName: 'bg-background',
+                'fixed inset-0 z-[100010] flex h-dvh max-h-none w-screen translate-x-0 flex-col overflow-hidden rounded-none border-0 bg-transparent px-0 pb-0 pt-0 shadow-none sm:left-0 sm:right-0 sm:w-screen sm:translate-x-0 sm:px-0 sm:pb-0',
+              overlayClassName: 'z-[100005] bg-background',
             }
           : {})}
       >

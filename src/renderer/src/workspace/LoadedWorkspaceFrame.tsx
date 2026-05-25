@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
-  type NoteSegmentEditTarget,
-  type NoteSegmentSupplementEditTarget,
+  type SavedSegmentSupplementTranscriptContent,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type TranscriptionBackfillController,
@@ -16,28 +15,42 @@ import type {
   SegmentContentRenameTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
-  SegmentTranscriptEditTarget,
 } from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
 import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
+import type {
+  SavedNoteSegmentContent,
+  SavedNoteSegmentSupplementContent,
+} from './finalizedNoteContentSave';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
+  readonly expressionDockVisible?: boolean;
   readonly memoryRailOpen?: boolean;
   readonly memoryRailMode?: 'inline' | 'overlay';
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
-  readonly onEditSegmentTranscript: (target: SegmentTranscriptEditTarget) => void;
-  readonly onEditNoteSegment?: (target: NoteSegmentEditTarget) => void;
-  readonly onEditNoteSegmentSupplement?: (target: NoteSegmentSupplementEditTarget) => void;
+  readonly onSegmentTranscriptSaved: (saved: {
+    readonly expectedSession: WorkspaceSession;
+    readonly baselineTranscriptHash: string;
+    readonly memory: WorkspaceMemorySummary;
+    readonly memoryId: string;
+    readonly segmentId: string;
+  }) => void;
+  readonly onSegmentSupplementTranscriptSaved: (
+    saved: SavedSegmentSupplementTranscriptContent
+  ) => void;
+  readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
+  readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
+  readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
@@ -51,19 +64,22 @@ type LoadedWorkspaceFrameProps = {
 
 export function LoadedWorkspaceFrame({
   currentMemory = null,
+  expressionDockVisible = true,
   memoryRailOpen = true,
   memoryRailMode = 'inline',
   onDeleteMemory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
   onClearSegmentContent,
-  onEditSegmentTranscript,
-  onEditNoteSegment,
-  onEditNoteSegmentSupplement,
+  onSegmentTranscriptSaved,
+  onSegmentSupplementTranscriptSaved,
+  onNoteSegmentContentSaved,
+  onNoteSegmentSupplementContentSaved,
   onRenameMemory,
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
+  onInlineMarkdownDirtyChange,
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
@@ -94,10 +110,12 @@ export function LoadedWorkspaceFrame({
         />
       }
       dock={
-        <ExpressionDock
-          {...(currentMemory && onStartNote ? { onStartNote } : {})}
-          onStartRecording={onStartRecording}
-        />
+        expressionDockVisible ? (
+          <ExpressionDock
+            {...(currentMemory && onStartNote ? { onStartNote } : {})}
+            onStartRecording={onStartRecording}
+          />
+        ) : null
       }
     >
       {currentMemory ? (
@@ -107,12 +125,14 @@ export function LoadedWorkspaceFrame({
           onDeleteSegment={onDeleteSegment}
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
           onClearSegmentContent={onClearSegmentContent}
-          onEditSegmentTranscript={onEditSegmentTranscript}
-          {...(onEditNoteSegment ? { onEditNoteSegment } : {})}
-          {...(onEditNoteSegmentSupplement ? { onEditNoteSegmentSupplement } : {})}
+          onSegmentTranscriptSaved={onSegmentTranscriptSaved}
+          onSegmentSupplementTranscriptSaved={onSegmentSupplementTranscriptSaved}
+          onNoteSegmentContentSaved={onNoteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegmentContent={onRenameSegmentContent}
           onRenameSegment={onRenameSegment}
+          {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}
