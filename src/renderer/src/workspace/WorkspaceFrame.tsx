@@ -60,7 +60,7 @@ export function WorkspaceFrame({
           </div>
           <div
             data-slot="workspace-expression-fab-layer"
-            className="pointer-events-none absolute bottom-16 left-24 right-24 z-10 sm:left-40 sm:right-40"
+            className="pointer-events-none absolute bottom-32 left-24 right-24 z-10 sm:left-40 sm:right-40"
           >
             <div data-slot="workspace-expression-fab-track" className="w-full">
               {dock}

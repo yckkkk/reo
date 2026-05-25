@@ -634,7 +634,7 @@ describe('LoadedWorkspaceFrame', () => {
     const dock = screen.getByRole('region', { name: '表达入口' });
     expect(dock).toHaveClass('pointer-events-none');
     expect(dock.closest('[data-slot="workspace-expression-fab-layer"]')).toHaveClass(
-      'bottom-16',
+      'bottom-32',
       'right-24',
       'sm:right-40'
     );
