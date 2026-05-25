@@ -89,7 +89,7 @@ export function LightweightMarkdownEditorSurface({
     >
       <div
         data-slot="lightweight-markdown-editor-toolbar"
-        className="flex h-[44px] min-h-[44px] items-center gap-8 border-b border-secondary !bg-transparent px-12 transition-none"
+        className="flex h-[44px] min-h-[44px] items-center gap-8 !bg-transparent px-12 transition-none"
       >
         {showHeaderLabel ? (
           <span className="flex min-w-fit items-center text-ui-sm leading-ui-sm text-muted-foreground">

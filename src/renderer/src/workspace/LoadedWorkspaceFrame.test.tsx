@@ -610,7 +610,7 @@ describe('LoadedWorkspaceFrame', () => {
     const dock = screen.getByRole('region', { name: '表达入口' });
     expect(dock).toHaveClass('pointer-events-none');
     expect(dock.closest('[data-slot="workspace-expression-fab-layer"]')).toHaveClass(
-      'bottom-32',
+      'bottom-16',
       'right-24',
       'sm:right-40'
     );
@@ -1022,7 +1022,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     const bodyPanel = within(content).getByRole('tabpanel', { name: '正文' });
     expect(bodyPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
-    expect(bodyPanel).toHaveClass('mt-[14px]');
+    expect(bodyPanel).toHaveClass('mt-12');
     expect(bodyPanel).toHaveClass('flex-1');
     expect(bodyPanel).toHaveClass('min-h-0');
     expect(bodyPanel).not.toHaveClass('max-w-[880px]');
@@ -1420,15 +1420,20 @@ describe('LoadedWorkspaceFrame', () => {
     });
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const stageShell = document.querySelector('[data-slot="workspace-stage-shell"]');
     const stageContent = document.querySelector('[data-slot="workspace-stage-content"]');
-    const studioLayout = studio.querySelector('[data-slot="memory-studio-layout"]');
+    const studioLayout = studio;
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
     const segmentItems = studio.querySelectorAll('[data-slot="memory-studio-segment-item"]');
     const segmentCards = studio.querySelectorAll('[data-slot="memory-studio-segment-card"]');
     const stripScroll = studio.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
     const contentPanel = studio.querySelector('[data-slot="memory-studio-content-panel"]');
+    const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const tabRailRow = studio.querySelector('[data-slot="memory-studio-content-tab-rail-row"]');
     const transcriptScroll = studio.querySelector('[data-slot="memory-studio-transcript-scroll"]');
 
+    expect(stageShell).toHaveClass('pt-0', 'pb-16');
+    expect(stageShell).not.toHaveClass('pt-8', 'py-16', 'py-24', 'sm:py-32');
     expect(stageContent).toHaveClass('w-full', 'items-stretch', 'justify-center');
     expect(stageContent).not.toHaveClass('mx-auto', 'max-w-[var(--workspace-stage-max-width)]');
     expect(studio).toHaveClass('overflow-hidden');
@@ -1476,7 +1481,13 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(stripScroll).not.toHaveClass('px-44');
     expect(stripScroll).toHaveClass('edge-fade-x');
+    expect(stripScroll).toHaveClass('pt-8', 'pb-0');
+    expect(stripScroll).not.toHaveClass('py-8');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
+    expect(contentPanel).not.toHaveClass('-mt-8', '-mt-4', 'mt-4', 'mt-12', 'mt-16', 'pt-12');
+    expect(player).toBeInstanceOf(HTMLElement);
+    expect(tabRailRow).toHaveClass('mt-12');
+    expect(tabRailRow).not.toHaveClass('mt-32');
     expect(contentPanel).not.toHaveClass('rounded-2xl', 'border', 'bg-card');
     expect(transcriptScroll).toHaveClass(
       'reo-content-tab-panel-motion',
@@ -1660,7 +1671,6 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const softFlatElements = [
       studio,
-      studio.querySelector('[data-slot="memory-studio-layout"]'),
       ...Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')),
       studio.querySelector('[data-slot="memory-studio-content-panel"]'),
       studio.querySelector('[data-slot="memory-studio-player"]'),
@@ -2630,7 +2640,7 @@ describe('LoadedWorkspaceFrame', () => {
       'data-slot',
       'memory-studio-inline-markdown-editor'
     );
-    expect(transcriptSurfacePanel).toHaveClass('mt-[14px]');
+    expect(transcriptSurfacePanel).toHaveClass('mt-12');
     expect(transcriptSurfacePanel).toHaveClass('flex-1', 'min-h-0');
     expect(transcriptSurfacePanel).not.toHaveClass('max-w-[880px]');
     expect(transcriptSurfacePanel).not.toHaveClass('mt-14');
@@ -2903,7 +2913,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(transcriptEditor).toHaveValue('这是一个补充的录音。');
     expect(
       transcriptEditor.closest('[data-slot="memory-studio-inline-markdown-editor"]')
-    ).toHaveClass('mt-[14px]', 'flex-1', 'min-h-0');
+    ).toHaveClass('mt-12', 'flex-1', 'min-h-0');
     expect(
       transcriptEditor.closest('[data-slot="memory-studio-inline-markdown-editor"]')
     ).not.toHaveClass('max-w-[880px]');
@@ -3052,7 +3062,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(inlineSupplementEditor).toHaveValue('## Follow-up\n\n- Capture the cake idea');
     expect(inlineSupplementEditor).not.toHaveFocus();
     expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-markdown-editor');
-    expect(supplementPanel).toHaveClass('mt-[14px]', 'flex-1', 'min-h-0');
+    expect(supplementPanel).toHaveClass('mt-12', 'flex-1', 'min-h-0');
     expect(supplementPanel).not.toHaveClass('max-w-[880px]');
     expect(supplementPanel).not.toHaveClass('mt-14');
     expect(supplementPanel).not.toHaveClass('h-[470px]');
