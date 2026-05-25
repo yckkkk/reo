@@ -51,6 +51,13 @@
   color: var(--foreground);
 }
 
+// Centered readable column matching the Tiptap Simple Editor template
+// (max-width: 648px; margin: 0 auto). Opt-in; default usages stay full-width.
+.reo-lightweight-markdown-editor-content--readable {
+  max-width: 648px;
+  margin: 0 auto;
+}
+
 .reo-lightweight-markdown-editor-placeholder {
   pointer-events: none;
   position: absolute;

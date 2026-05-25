@@ -79,6 +79,7 @@ type AttachmentUploadHandler = (
 ) => Promise<string | null> | string | null | void;
 
 export type LightweightMarkdownEditorSurfaceProps = {
+  readonly bordered?: boolean;
   readonly cancelButtonClassName?: string;
   readonly cancelLabel?: string;
   readonly attachmentContext?: MarkdownAttachmentContext | undefined;
@@ -95,11 +96,12 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly onDrop?: DragEventHandler<HTMLElement>;
   readonly onDragOver?: DragEventHandler<HTMLElement>;
   readonly onPaste?: ClipboardEventHandler<HTMLElement>;
-  readonly onSave: () => void;
+  readonly onSave?: () => void;
   readonly placeholder: string;
+  readonly readableWidth?: boolean;
   readonly saveDisabled?: boolean;
   readonly saveButtonClassName?: string;
-  readonly saveLabel: string;
+  readonly saveLabel?: string;
   readonly showHeaderLabel?: boolean;
   readonly showActions?: boolean;
   readonly surfaceRef?: Ref<HTMLDivElement>;
@@ -150,6 +152,7 @@ function captureEditorSelection(editor: Editor): LightweightMarkdownEditorSelect
 
 export function LightweightMarkdownEditorSurface({
   attachmentContext,
+  bordered = true,
   cancelButtonClassName,
   cancelLabel = '取消',
   disabled = false,
@@ -167,6 +170,7 @@ export function LightweightMarkdownEditorSurface({
   onPaste,
   onSave,
   placeholder,
+  readableWidth = false,
   saveDisabled = false,
   saveButtonClassName,
   saveLabel,
@@ -382,8 +386,12 @@ export function LightweightMarkdownEditorSurface({
     <div
       ref={surfaceRef}
       className={cn(
-        'reo-lightweight-markdown-editor-surface grid h-full min-h-0 w-full grid-rows-[44px_minmax(0,1fr)] overflow-hidden rounded-md border bg-background transition-[border-color] duration-150 ease-out',
-        resolvedEditorFocused ? 'border-ring' : 'border-secondary',
+        'reo-lightweight-markdown-editor-surface grid h-full min-h-0 w-full grid-rows-[44px_minmax(0,1fr)] overflow-hidden bg-background',
+        bordered &&
+          cn(
+            'rounded-md border transition-[border-color] duration-150 ease-out',
+            resolvedEditorFocused ? 'border-ring' : 'border-secondary'
+          ),
         toolbarLocked && 'reo-lightweight-markdown-editor-surface-disabled'
       )}
       data-slot="lightweight-markdown-editor-surface"
@@ -462,7 +470,7 @@ export function LightweightMarkdownEditorSurface({
               </>
             ) : null}
             <Spacer />
-            {showActions ? (
+            {showActions && onSave ? (
               <>
                 <ToolbarSeparator />
                 <ToolbarGroup
@@ -508,7 +516,12 @@ export function LightweightMarkdownEditorSurface({
             {editorLabel}
           </Label>
           <div className="reo-lightweight-markdown-editor-scrollport relative min-h-0 flex-1 overflow-y-auto">
-            <div className="simple-editor-content reo-lightweight-markdown-editor-content relative">
+            <div
+              className={cn(
+                'simple-editor-content reo-lightweight-markdown-editor-content relative',
+                readableWidth && 'reo-lightweight-markdown-editor-content--readable'
+              )}
+            >
               {placeholderNode}
               <EditorContent editor={editor} role="presentation" />
             </div>

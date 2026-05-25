@@ -64,27 +64,29 @@ describe('NoteEditorOverlay', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('keeps the window titlebar for navigation and saves from the editor header', async () => {
+  it('keeps the window titlebar for navigation and saves from the titlebar action', async () => {
     renderNoteEditorOverlay();
 
     const titlebarTitle = screen.getByTestId('note-editor-titlebar-title');
     expect(titlebarTitle).toHaveStyle({ left: '116px', top: '2px' });
     expect(titlebarTitle).toHaveClass('h-32', 'text-body', 'font-regular', 'leading-body');
     expect(within(titlebarTitle).getByRole('heading', { name: '正文' })).toBeInTheDocument();
-    expect(screen.queryByTestId('note-editor-titlebar-actions')).not.toBeInTheDocument();
+
+    const titlebarActions = screen.getByTestId('note-editor-titlebar-actions');
+    expect(titlebarActions).toHaveStyle({ right: '12px', top: '0px' });
+    expect(titlebarActions).toHaveClass('flex', 'h-48', 'items-center');
+    expect(within(titlebarActions).getByRole('button', { name: '保存笔记' })).toBeInTheDocument();
 
     const editorStage = screen.getByTestId('note-editor-surface-stage');
-    expect(editorStage).toHaveClass('max-w-[760px]');
+    expect(editorStage).toHaveClass('flex-1', 'min-h-0', 'w-full');
+    expect(editorStage).not.toHaveClass('max-w-[760px]');
     expect(within(editorStage).queryByRole('heading', { name: '正文' })).toBeNull();
     const editorSurface = screen.getByTestId('note-editor-text-surface');
+    expect(editorSurface).not.toHaveClass('border');
     expect(editorSurface.firstElementChild).toHaveClass('min-h-[44px]');
     expect(editorSurface.firstElementChild).not.toHaveClass('min-h-44');
     expect(within(editorSurface).getByText('Markdown 笔记')).toBeInTheDocument();
-    expect(within(editorStage).getByRole('button', { name: '保存笔记' })).toHaveClass(
-      'min-h-32',
-      'rounded-md',
-      'px-12'
-    );
+    expect(within(editorStage).queryByRole('button', { name: '保存笔记' })).toBeNull();
     await waitFor(() => expect(screen.getByRole('textbox', { name: '笔记正文' })).toHaveFocus());
   });
 
@@ -104,7 +106,7 @@ describe('NoteEditorOverlay', () => {
     expect(screen.getByText('写下补充笔记...')).toBeInTheDocument();
     expect(editor).toHaveClass('simple-editor', 'reo-lightweight-markdown-editor', 'ProseMirror');
     await waitFor(() => expect(editor).toHaveFocus());
-    expect(screen.getByTestId('note-editor-text-surface')).toHaveClass('border-ring');
+    expect(screen.getByTestId('note-editor-text-surface')).not.toHaveClass('border', 'border-ring');
     expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记1');
   });
 

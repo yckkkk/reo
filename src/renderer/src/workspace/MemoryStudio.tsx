@@ -2362,6 +2362,7 @@ function InlineMarkdownContentEditor<TSaved>({
           onCancel={cancelMarkdownEdit}
           onSave={() => void saveMarkdown()}
           placeholder={placeholder}
+          readableWidth
           saveButtonClassName="min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background"
           saveDisabled={disabled}
           saveLabel={saveLabel}

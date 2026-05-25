@@ -12,6 +12,7 @@ type ImmersiveWorkspaceSurfaceProps = {
   readonly children: ReactNode;
   readonly closeBlocked: boolean;
   readonly description: string;
+  readonly fill?: boolean;
   readonly footer?: ReactNode;
   readonly immersive?: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -23,6 +24,7 @@ export function ImmersiveWorkspaceSurface({
   children,
   closeBlocked,
   description,
+  fill = false,
   footer,
   immersive = false,
   onOpenChange,
@@ -61,10 +63,20 @@ export function ImmersiveWorkspaceSurface({
         {immersive ? (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden" data-vaul-no-drag>
             <div
-              className="mx-auto flex min-h-0 w-full max-w-[1360px] flex-1 items-end justify-center px-24 pb-24 pt-72 sm:px-48 sm:pb-28"
+              className={
+                fill
+                  ? 'flex min-h-0 w-full flex-1 flex-col pt-48'
+                  : 'mx-auto flex min-h-0 w-full max-w-[1360px] flex-1 items-end justify-center px-24 pb-24 pt-72 sm:px-48 sm:pb-28'
+              }
               data-testid="immersive-workspace-surface-stage"
             >
-              <div className="flex w-full flex-col gap-20">
+              <div
+                className={
+                  fill
+                    ? 'flex min-h-0 w-full flex-1 flex-col gap-20'
+                    : 'flex w-full flex-col gap-20'
+                }
+              >
                 {children}
                 {footer ? <div className="w-full">{footer}</div> : null}
               </div>

@@ -2,6 +2,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
+  TITLEBAR_ACTION_RIGHT,
   TITLEBAR_CONTROL_GAP,
   TITLEBAR_CONTROL_LEFT,
   TITLEBAR_CONTROL_SIZE,
@@ -250,6 +251,7 @@ export function NoteEditorOverlay({
     <ImmersiveWorkspaceSurface
       closeBlocked={pending}
       description={displayTitle}
+      fill
       immersive
       onOpenChange={handleImmersiveWorkspaceSurfaceOpenChange}
       open={open}
@@ -275,31 +277,45 @@ export function NoteEditorOverlay({
       >
         <h1 className="min-w-0 truncate">{displayTitle}</h1>
       </div>
+      <div
+        className="absolute z-10 flex h-48 items-center"
+        data-testid="note-editor-titlebar-actions"
+        style={{ right: TITLEBAR_ACTION_RIGHT, top: 0 }}
+      >
+        <Button
+          type="button"
+          size="compact"
+          disabled={pending || !target}
+          onClick={() => void saveNote()}
+        >
+          保存笔记
+        </Button>
+      </div>
 
       <section
         aria-label="笔记编辑器"
-        className="mx-auto grid h-[min(680px,calc(100dvh-104px))] w-full max-w-[760px] grid-rows-[minmax(0,1fr)_auto] gap-16 text-left"
+        className="grid min-h-0 w-full flex-1 grid-rows-[minmax(0,1fr)_auto] text-left"
         data-testid="note-editor-surface-stage"
       >
         <LightweightMarkdownEditorSurface
+          bordered={false}
           disabled={pending}
           editorId="note-editor-body"
           editorLabel="笔记正文"
           editorHandleRef={editorHandleRef}
           headerLabel="Markdown 笔记"
           onChange={setBodyMarkdown}
-          onSave={() => void saveNote()}
           placeholder={bodyPlaceholder}
-          saveDisabled={pending || !target}
-          saveLabel="保存笔记"
+          readableWidth
+          showActions={false}
           surfaceTestId="note-editor-text-surface"
           toolbarDisabled={pending}
           value={bodyMarkdown}
         />
 
-        <footer className="min-h-24">
+        <footer>
           {errorMessage ? (
-            <p role="status" className="text-ui-sm leading-ui-sm text-destructive">
+            <p role="status" className="px-24 py-8 text-ui-sm leading-ui-sm text-destructive">
               {errorMessage}
             </p>
           ) : null}
