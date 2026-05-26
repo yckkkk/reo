@@ -47,6 +47,7 @@ Reo 是未发布的 Electron 产品。项目规范是保持干净、可维护的
 - 不保留无当前用途的实现、文档、目录或接口。
 - 不创建 generic runtime、speculative abstraction 或无当前 consumer 的包装层。
 - 不重复造轮子。前端组件、UI primitives、editor、IPC/preload typing、filesystem transaction、file watching、schema validation、state machine、form/schema、data fetching、DB/migration、testing/QA、logging/observability、packaging/updater 都必须先评估官方方案和成熟开源包。
+- 成熟外部系统必须按其官方模型完整接入，先保护默认能力、内部一致性和公开扩展边界；Reo 的适配只发生在主题、布局、语言、数据真源、安全边界、Electron 权限和产品入口等明确边界层。不得因为局部 UI 偏好、表面简洁或短期症状，挑选式搬运、关闭默认能力、重写内部 primitive，或把 Reo 的设计系统缺陷转嫁给第三方系统内部。
 - 发现现成方案不完全适配 Reo 时，先考虑裁剪、retokenize、组合、薄适配或 fork；只有这些方式仍不能满足 Electron 安全边界、本地文件真源、Reo design system、测试可控性或代码复杂度预算时，才允许自研。
 - 当前工程事实以 `package.json`、源码和 `docs/current/*` 为准。技术路线不等于安装或激活许可。
 - 记忆空间文件合同以 `docs/current/architecture.md`、`docs/current/data.md`、`docs/current/electron.md` 和 `docs/current/flow.md` 为准；agent 不得把 `.reo` 当作用户语义第二真源。
