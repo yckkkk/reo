@@ -112,6 +112,7 @@ memories/<memory-directory>/segments/<any-title>/segment.md
 
 ```markdown
 ---
+id: seg_...
 title: 今天的想法
 kind: note
 ---
@@ -119,13 +120,15 @@ kind: note
 正文……
 ```
 
+`id` 是 Reo 管理的 portable identity carrier。人类不需要手写；Reo 在首次 reconcile 时自动补。Codex 可以读取和编辑，但修改或复制 `id` 必须遵守下文身份规则。
+
 Reo 打开或刷新时应：
 
 - 将该目录识别为 note Segment 候选。
 - 从 frontmatter、目录名或正文默认规则推断 title。
 - 生成 stable `segmentId`。
 - 默认保留用户创建的目录 basename 作为用户可见名称，不因缺 id 或不符合 `<id>--title` 形态而静默重命名。
-- 生成 stable `segmentId` 后，implementation plan 必须先选择低摩擦 id carrier。该决策是 implementation plan 前置阻断项，不能在实现中边写边猜。
+- 将 stable `segmentId` 写入 `segment.md` frontmatter `id`，作为跟随内容对象移动的主身份载体。
 - 补 `.reo/objects/segments/<segmentId>.json`。
 - 补 `kind: note` 和必要 frontmatter mirror。
 - 刷新 `.reo/index.json`。
@@ -145,7 +148,7 @@ Reo 打开或刷新时应：
 - 从 parent path 推断 `memoryId` 和 `segmentId`。
 - 生成 stable `supplementId`。
 - 默认保留用户创建的目录 basename 作为用户可见名称，不因缺 id 或不符合 `<id>--title` 形态而静默重命名。
-- 生成 stable `supplementId` 后，implementation plan 必须复用 Segment 的 id carrier 决策。该决策是 implementation plan 前置阻断项。
+- 将 stable `supplementId` 写入 `supplement.md` frontmatter `id`，复用 Segment 的主身份载体规则。
 - 补 `.reo/objects/supplements/<supplementId>.json`。
 - 补 `kind: note` 和必要 frontmatter mirror。
 - 刷新 parent Segment supplement projection。
@@ -335,12 +338,16 @@ memories/*/segments/*/supplements/*/supplement.md
 
 身份识别优先级：
 
-1. 目录名前缀里已有合法 id。
-2. manifest 里已有 id，且 ownership 与路径不冲突。
-3. Markdown frontmatter 或后续批准的 id carrier。
-4. 都没有时由 Reo 生成新 id，并通过已批准的低摩擦 id carrier 持久化。
+1. Markdown frontmatter `id` 是主 identity carrier。Segment 使用 `seg_*`，SegmentSupplement 使用 `sup_*`。
+2. manifest 里已有 id，且 ownership 与路径不冲突时，作为 Reo 技术镜像使用；若 Markdown 缺 `id`，Reo 可用 manifest id 回写 frontmatter。
+3. 目录名前缀里已有合法 id 时，只作为当前标准化目录和修复 hint 使用；Reo 应回写 frontmatter `id`，但不得把目录名前缀作为长期主身份载体。
+4. 都没有时由 Reo 生成新 id，并写入 Markdown frontmatter `id` 和对应 manifest。
 
-`id carrier` 必须满足两个未来约束：不要求人类理解 Reo 内部结构；不阻碍未来跨 parent move 时保留 stable id。只靠 central manifest path binding 不能证明对象移动时身份随目录移动；只靠目录规范化会增加用户可见摩擦。implementation plan 必须在这两个约束之间给出明确取舍。
+`id` frontmatter 是锁定的低摩擦身份载体。它满足两个未来约束：不要求人类理解 `.reo` 内部结构；移动整个对象目录或复制包含 frontmatter 的 Markdown 文件时，身份能跟随内容本身。`.reo/objects/*/*.json` 是 Reo 管理的技术 mirror，不是普通用户需要维护的主身份载体。目录 basename 是用户可见名称真源，不承载长期身份。
+
+若同一 stable `id` 同时出现在两个 live 内容对象入口，Reo 不自动把它们拆成两个对象，也不按路径较新者覆盖；这些对象进入 `needs-review`，不写入 `.reo/index.json` 的有效对象列表。用户或 Codex 删除其中一个副本的 frontmatter `id`，表示“把这个副本作为新对象导入”，Reo 再为它生成新 id。
+
+若 frontmatter `id` 与 manifest id 同时存在且不一致，进入 `needs-review`，除非 implementation plan 能通过当前锁、路径身份和缺失对象证据证明 manifest 只是 stale technical mirror 并安全修复。不得静默改写用户正文来匹配 manifest。
 
 ## 用户反馈模型
 
@@ -402,7 +409,7 @@ reconcile 诊断分类
 - 不实现跨 Memory Segment move，不实现跨 Segment Supplement move；仅保留设计和测试矩阵。
 - 不实现 `content.tiptap.json` 持久同步；仅保留 Markdown dialect 能力矩阵和未来 JSON 表示决策点。
 - 不新增 generic diagnostic IPC，不暴露 raw path。
-- 在写实现步骤前先锁定低摩擦 id carrier；未锁定则不得开始代码实现。
+- id carrier 已锁定为 Markdown frontmatter `id`；implementation plan 必须设计 schema 变更、candidate parser、repair write、duplicate-id `needs-review` 和 manifest mirror 同步。
 - 首期 parser 必须区分 candidate Markdown parser 和 finalized strict parser。候选 parser 可接受 body-only / missing frontmatter；repair 后再交给 finalized read model。
 - Reconcile 写入 owner 必须是 main process 的显式 repair/reconcile pass，不能在普通 read projection 中顺手写 manifest、frontmatter 或 index。
 - 需要执行真实 TDD，因为该工作命中文件系统、manifest、index rebuild、安全边界和用户可见 workflow。
@@ -410,7 +417,6 @@ reconcile 诊断分类
 
 ## Open Questions
 
-- **低摩擦 id carrier**：人类创建无 id 目录后，Reo 应把 stable id 写入 Markdown frontmatter、Reo 管理 marker、central manifest path binding，还是经确认后规范化目录名？首期不得默认静默重命名用户目录。
 - **扫描边界**：首期需要定义候选目录数量、Markdown 文件大小、frontmatter 解析失败和 HTML-in-Markdown 的扫描上限。
 - **HTML 不可信边界**：Markdown-compatible HTML 只作为文本内容进入现有编辑/预览管线，不新增 Electron 权限、外链或脚本执行能力。
 - **JSON 启用条件**：`content.tiptap.json` 只有在 Markdown dialect 能力矩阵证明负担过高或 round-trip 不可接受后，才进入独立 spec。
@@ -420,7 +426,7 @@ reconcile 诊断分类
 
 出现以下情况时停止 implementation plan 或实现，回到设计确认：
 
-- 低摩擦 id carrier 需要引入新的隐藏第二真源，且无法证明比目录规范化更简单。
+- Markdown frontmatter `id` 无法在不增加人类摩擦、不破坏 move 身份稳定性、不制造隐藏第二真源的前提下实现。
 - 直接文件创建必须放松 symlink、path traversal、root identity、parent identity、trusted sender 或 lock 边界才可实现。
 - 首期 scope 被迫同时实现目录移动、Tiptap JSON 同步或 generic diagnostic IPC。
 - accepted/repaired 规则会静默覆盖用户正文、删除附件或改写用户可见标题。
