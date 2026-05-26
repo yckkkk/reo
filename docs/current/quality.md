@@ -79,6 +79,7 @@ npm run verify:strict
 - `build:app`：运行 `electron-vite build --ignoreConfigWarning`，供已完成 typecheck 的严格验证复用。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试；默认以 64 个 test files 为批次运行，`MAIN_TEST_BATCH_SIZE=0` 可显式关闭批处理，传给 `npm run test:main -- ...` 的 Node test 参数会转发给每个批次。
+- `test/main/workspaceFiles.test.ts` 覆盖记忆空间初始化、打开、managed `AGENTS.md` block、`skills/reo-edit` / `skills/reo-doctor` 生成、缺失配置静默补全和 doctor script 不覆盖用户 `AGENTS.md` 内容。
 - `test:renderer`：使用 `scripts/run-renderer-tests.mjs` 包裹 Vitest projects 运行 renderer 测试。无显式参数时按 `renderer-node`、`renderer-jsdom-browser`、`renderer-jsdom-components` 顺序运行，避免 full renderer suite 的跨 project 并发污染诊断；传入 `--project`、file filter 或 reporter 参数时保持单次 Vitest 透传。runner 只过滤 Node 当前 `localStorage` backing file 的已知 `ExperimentalWarning`；其它 warning 失败。Projection/query/state-machine 测试归入 Node project；browser-facing 测试归入 jsdom browser project；React component 测试归入 jsdom components project 并串行执行。jsdom setup 提供 DOM matcher、pointer capture、canvas、geometry APIs、`ResizeObserver` 和 localStorage 测试替身，并在每个测试后 cleanup。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config、Vitest config 和脚本，并跳过非产品输入目录。
 - `lint:strict`：运行 `eslint . --max-warnings=0`，同一 flat config 下把 warning 作为失败。

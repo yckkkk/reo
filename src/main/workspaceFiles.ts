@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import { lstatSync, realpathSync, renameSync } from 'node:fs';
-import { lstat, opendir, rm } from 'node:fs/promises';
+import { lstat, mkdir, opendir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
+  writeWorkspaceFileAtomic,
   writeWorkspaceFileNoReplaceAtomic,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
@@ -54,85 +55,305 @@ const EMPTY_WORKSPACE_LOCK_REO_ENTRIES = new Set(['workspace.lock', 'workspace.l
 const WORKSPACE_ROOT_RENAME_TIMEOUT_MS = 5000;
 const DARWIN_MOVE_ITEM_NO_REPLACE_SCRIPT =
   'function run(argv) { ObjC.import("Foundation"); const ok = $.NSFileManager.defaultManager.moveItemAtPathToPathError(argv[0], argv[1], null); if (!ok) throw new Error("move failed"); }';
-export const DEFAULT_WORKSPACE_AGENTS_MD =
+const WORKSPACE_AGENTS_MANAGED_BLOCK_START = '<!-- reo-managed:agent-entry:start v1 -->';
+const WORKSPACE_AGENTS_MANAGED_BLOCK_END = '<!-- reo-managed:agent-entry:end -->';
+const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
+  WORKSPACE_AGENTS_MANAGED_BLOCK_START,
+  '## Reo 是什么',
+  '',
+  'Reo 是一个 agent-native 的本地记忆空间。人类、Codex 和其他 agent 都可以把它当作普通文件夹读写；Reo 负责把合法文件改动重新投影回应用界面。',
+  '',
+  '这个入口的目标是降低判断成本，不是限制能力。Agent 可以编辑任何文件；一般任务应优先读写用户语义文件，复杂一致性由 Reo 在打开、刷新、保存时收敛。',
+  '',
+  '## 核心实体',
+  '',
+  '- Memory space：当前文件夹本身，是一个可被 Finder、编辑器和 agent 打开的 Reo 记忆空间。',
+  '- Memory：`memories/` 下的一组长期主题或语义容器。',
+  '- Segment：Memory 内的正文片段，可以是 note、audio 或未来更多类型。',
+  '- SegmentSupplement：挂在某个 Segment 下的补充内容。',
+  '- `.reo/`：Reo 的技术完整性层，保存索引、manifest、草稿、回收站、lock 和恢复信息。',
+  '- `skills/`：给 agent 使用的工作流技能，不是用户语义内容本身。',
+  '',
+  '## 文件层',
+  '',
+  '- `memories/` 保存用户语义内容，是普通编辑和创建任务的默认工作区。',
+  '- Memory 使用 `memory.md`，Segment 使用 `segment.md`，SegmentSupplement 使用 `supplement.md`。',
+  '- `content.tiptap.json` 是同一正文的富结构载体，由 Reo 与编辑器维护。',
+  '- 普通 `.json`、`.html` 或未被对象合同识别的文件不会自动成为 Reo 对象。',
+  '- 目录 basename 是用户可见名称的一部分；对象身份由稳定 id 承载。',
+  '',
+  '## 使用技能',
+  '',
+  '- 编辑、创建、重命名、移动、整理 Memory、Segment 或 SegmentSupplement：读取 `skills/reo-edit/SKILL.md`。',
+  '- 诊断或修复 Reo 文件空间异常、缺失托管配置、重复 id、sidecar/mirror 冲突或 needs-review：读取 `skills/reo-doctor/SKILL.md`。',
+  '',
+  '## 协作原则',
+  '',
+  '- 不要为了普通内容任务推理 hash、sidecar 或 `.reo/objects`；先完成用户可见的文件改动。',
+  '- 不要创建 symlink，不要移动 `.reo/workspace.lock*`，不要删除不属于当前任务的文件。',
+  '- 如果文件缺字段或名称不完整，Reo 会做确定性补全；无法判断的冲突保留内容并进入 needs-review。',
+  '- 遇到 Reo 报错或不确定恢复路径时，停止猜测并使用 `reo-doctor`。',
+  WORKSPACE_AGENTS_MANAGED_BLOCK_END,
+].join('\n');
+export const DEFAULT_WORKSPACE_AGENTS_MD = `# Reo 记忆空间 Agent 入口\n\n${DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK}\n`;
+export const DEFAULT_REO_EDIT_SKILL_MD =
   [
-    '# Reo 记忆空间 Agent 入口',
-    '',
-    '这是一个 Reo 记忆空间。Codex、其他 agent 和人类都可以像编辑普通文件夹一样创建、移动、读取和编辑内容。',
-    '',
-    '## 读写边界',
-    '',
-    '- `memories/` 是语义真源；优先编辑这里的普通 Markdown 文件和同级 `content.tiptap.json`。',
-    '- `.reo/` 是 Reo 的索引、manifest、草稿、回收站和运行时 mirror。正常编辑不要把 `.reo` 当成第二语义真源；只有做恢复、异常测试或明确需要验证 mirror 修复时才直接编辑 `.reo/objects/*.json`。',
-    '- 文件或目录缺少标题、frontmatter、manifest 或命名不完整时，不要拒绝继续工作。保持可读内容和稳定 id，Reo 打开时会补全、检查或进入 needs-review。',
-    '- 不要创建 symlink，不要移动 `.reo/workspace.lock*`，不要删除不属于当前任务的文件。',
-    '',
-    '## 文件结构',
-    '',
-    '- Memory: `memories/<memoryId>--<title>/memory.md`',
-    '- Segment: `memories/<memory>/segments/<segmentId>--<title>/segment.md`',
-    '- Supplement: `memories/<memory>/segments/<segment>/supplements/<supplementId>--<title>/supplement.md`',
-    '- 富文本 sidecar: 与 `segment.md` 或 `supplement.md` 同级的 `content.tiptap.json`',
-    '',
-    '`memoryId`、`segmentId`、`supplementId` 要保持稳定。移动 Segment 或 Supplement 时移动整个目录；Reo 会按目录位置修复 parent manifest。',
-    '',
-    '## Markdown 合同',
-    '',
-    'Markdown frontmatter 常用字段：',
-    '',
-    '```yaml',
     '---',
-    'id: seg_example',
-    'title: 标题',
-    'kind: note',
+    'name: reo-edit',
+    'description: Use when editing, creating, renaming, moving, or organizing files inside a Reo memory space, including Memory, Segment, SegmentSupplement, Markdown, HTML rich text marks, titles, and directory names.',
     '---',
-    '```',
     '',
-    '- `kind: note` 的 `segment.md` / `supplement.md` 正文就是可编辑正文。',
-    '- `kind: audio` 的 `segment.md` / `supplement.md` 必须保留文件整体结构；可编辑 transcript 是 `## Transcript` 后的正文。',
-    '- audio 的 `content.tiptap.json` 只映射 transcript 正文，不映射标题、音频元数据或整个 Markdown 文件。',
+    '# Reo Edit',
     '',
-    '## 富文本格式',
+    'Use this skill for normal Reo memory-space file work. The goal is to edit files directly and let Reo reconcile deterministic structure later.',
     '',
-    '简单格式优先直接写 Markdown：',
+    '## Default Path',
+    '',
+    '- Edit user-visible content in `memories/` first.',
+    '- Do not maintain `.reo`, hash fields, manifests or sidecars for ordinary tasks.',
+    '- You may edit any file when the task explicitly asks for expert repair or low-level testing.',
+    '- If Reo reports missing config, duplicate ids, sidecar conflicts or unclear recovery state, switch to `skills/reo-doctor/SKILL.md`.',
+    '',
+    '## Common File Operations',
+    '',
+    '| Task | Normal action |',
+    '| --- | --- |',
+    '| Edit Memory text | Edit `memories/<memory>/memory.md`. |',
+    '| Edit Segment text | Edit `memories/<memory>/segments/<segment>/segment.md`. |',
+    '| Edit Supplement text | Edit `memories/<memory>/segments/<segment>/supplements/<supplement>/supplement.md`. |',
+    '| Rename Memory | Rename the Memory directory basename and update `memory.md` title/frontmatter. |',
+    '| Rename Segment | Rename the Segment directory basename and update `segment.md` title/frontmatter. |',
+    '| Rename Supplement | Rename the Supplement directory basename and update `supplement.md` title/frontmatter. |',
+    '| Move Segment | Move the whole Segment directory under another Memory `segments/` directory. |',
+    '| Move Supplement | Move the whole Supplement directory under another Segment `supplements/` directory. |',
+    '',
+    'Keep stable ids in directory prefixes and Markdown frontmatter when they already exist. For a new object, use a clear deterministic id prefix such as `mem_agent_<slug>`, `seg_agent_<slug>` or `sup_agent_<slug>`.',
+    '',
+    '## Minimal Shapes',
+    '',
+    'Memory:',
     '',
     '```markdown',
-    '## 标题',
+    '---',
+    'title: My Memory',
+    '---',
+    '# My Memory',
     '',
-    '普通文字、**加粗**、*斜体*、~~删除线~~、`代码`、++下划线++。',
-    '',
-    '<mark data-color="var(--tt-color-highlight-blue)" style="background-color: var(--tt-color-highlight-blue); color: inherit">蓝色高亮</mark>',
-    '',
-    '<sup>上标</sup> <sub>下标</sub>',
-    '',
-    '- [ ] 待办',
-    '- [x] 已完成',
+    'Body text.',
     '```',
     '',
-    '工具栏颜色高亮使用这些 CSS 变量：',
+    'Note Segment:',
+    '',
+    '```markdown',
+    '---',
+    'id: seg_agent_example',
+    'title: My Segment',
+    'kind: note',
+    '---',
+    '# My Segment',
+    '',
+    'Body text.',
+    '```',
+    '',
+    'Note Supplement:',
+    '',
+    '```markdown',
+    '---',
+    'id: sup_agent_example',
+    'title: My Supplement',
+    'kind: note',
+    '---',
+    '# My Supplement',
+    '',
+    'Body text.',
+    '```',
+    '',
+    '## Rich Text Markdown',
+    '',
+    'Use Markdown or HTML that Tiptap can read back:',
+    '',
+    '```markdown',
+    '## Heading',
+    '',
+    '**Bold**, *italic*, ~~strike~~, `inline code`, ++underline++.',
+    '',
+    '<mark data-color="var(--tt-color-highlight-blue)" style="background-color: var(--tt-color-highlight-blue); color: inherit">Blue highlight</mark>',
+    '',
+    '<sup>superscript</sup> <sub>subscript</sub>',
+    '',
+    '- [ ] Todo',
+    '- [x] Done',
+    '```',
+    '',
+    'Supported toolbar highlight colors:',
     '',
     ...REO_TIPTAP_HIGHLIGHT_COLOR_VALUES.map((value) => `- \`${value}\``),
+  ].join('\n') + '\n';
+export const DEFAULT_REO_DOCTOR_SKILL_MD =
+  [
+    '---',
+    'name: reo-doctor',
+    'description: Use when a Reo memory space has missing config, sidecar or mirror errors, duplicate ids, needs-review items, or the agent is unsure whether direct file edits left the space consistent.',
+    '---',
     '',
-    '如果要精确表达 Tiptap JSON，编辑同级 `content.tiptap.json`：',
+    '# Reo Doctor',
     '',
-    '- `source.hash` 表示当前 Markdown body 或 audio transcript body 的 hash。',
-    '- 只改 JSON、不改 Markdown 时，保留 `source.hash`，更新 `content` 与 canonical JSON `contentHash`；Reo 下次读取会把 JSON 镜像回 Markdown。',
-    '- 同时改 Markdown 和 JSON 时，确保两者表达同一内容，否则 Reo 会进入冲突/needs-review。',
-    '- 不要删除不认识的合法 Tiptap mark/node；需要不确定时先保留，并在任务说明里标注。',
+    'Use this skill only when normal direct file editing is not enough. For ordinary editing, creation, rename or move tasks, use `skills/reo-edit/SKILL.md` first.',
     '',
-    '## 创建与移动',
+    'Default rule: do not spend time reasoning about Reo internals unless a Reo error, missing config, duplicate id, sidecar conflict, mirror issue or needs-review state appears.',
     '',
-    '- 新建 Memory：创建 `memories/<memoryId>--<title>/memory.md` 和 `segments/`。',
-    '- 新建 Segment：创建 `segments/<segmentId>--<title>/segment.md`，需要补充内容时创建同级 `supplements/`。',
-    '- 新建 Supplement：创建 `supplements/<supplementId>--<title>/supplement.md`。',
-    '- 跨 Memory 移动 Segment、跨 Segment 移动 Supplement 都应移动整个目录，而不是只复制 Markdown。',
-    '- 复制或重复目录时生成新的 id；如果暂时无法安全生成，保留内容并标注 needs-review，不要 silently 伪装成同一个对象。',
+    '## Quick Check',
     '',
-    '## 验证建议',
+    'From the memory space root, run:',
     '',
-    '- 用 `find memories -type f` 查看语义文件。',
-    '- 用 `rg "<文本或 id>" memories` 验证内容位置。',
-    '- 对高级格式同时检查 Markdown 和 `content.tiptap.json` 是否存在并表达同一正文。',
+    '```bash',
+    'node skills/reo-doctor/scripts/reo-doctor.mjs',
+    '```',
+    '',
+    'To apply deterministic safe repairs:',
+    '',
+    '```bash',
+    'node skills/reo-doctor/scripts/reo-doctor.mjs --fix',
+    '```',
+    '',
+    'The script repairs Reo managed `AGENTS.md` blocks and managed skill files, then reports unresolved issues. It must preserve user-written content in `AGENTS.md`.',
+    '',
+    '## Boundaries',
+    '',
+    '- Deterministic missing managed config can be repaired.',
+    '- Duplicate ids, conflicting sidecar changes, ambiguous parentage and user content conflicts must be reported instead of guessed.',
+    '- Do not delete semantic files during repair unless the user explicitly asks.',
+  ].join('\n') + '\n';
+export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
+  [
+    '#!/usr/bin/env node',
+    "import { constants } from 'node:fs';",
+    "import { lstat, mkdir, open, readFile } from 'node:fs/promises';",
+    "import path from 'node:path';",
+    '',
+    "const START = '<!-- reo-managed:agent-entry:start v1 -->';",
+    "const END = '<!-- reo-managed:agent-entry:end -->';",
+    `const DEFAULT_AGENTS_MD = ${JSON.stringify(DEFAULT_WORKSPACE_AGENTS_MD)};`,
+    `const MANAGED_BLOCK = ${JSON.stringify(DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK)};`,
+    `const DOCTOR_SKILL_MD = ${JSON.stringify(DEFAULT_REO_DOCTOR_SKILL_MD)};`,
+    `const EDIT_SKILL_MD = ${JSON.stringify(DEFAULT_REO_EDIT_SKILL_MD)};`,
+    'const NOFOLLOW = constants.O_NOFOLLOW ?? 0;',
+    '',
+    'const fix = process.argv.includes("--fix");',
+    'const root = process.cwd();',
+    'const report = { ok: true, mode: fix ? "fix" : "check", repaired: { agentsMd: false, doctorSkill: false, editSkill: false }, issues: [] };',
+    '',
+    'async function readRegularText(filePath) {',
+    '  try {',
+    '    const stats = await lstat(filePath);',
+    '    if (!stats.isFile()) {',
+    '      report.ok = false;',
+    '      report.issues.push({ path: path.relative(root, filePath), code: "not-file" });',
+    '      return { status: "unsafe" };',
+    '    }',
+    '    return { status: "file", text: await readFile(filePath, "utf8") };',
+    '  } catch (error) {',
+    '    if (error && error.code === "ENOENT") return { status: "missing" };',
+    '    throw error;',
+    '  }',
+    '}',
+    '',
+    'function isLegacyReoAgentsTemplate(current) {',
+    '  const firstManagedBlockIndex = current.indexOf(START);',
+    '  const legacyPrefix = firstManagedBlockIndex >= 0 ? current.slice(0, firstManagedBlockIndex) : current;',
+    '  return legacyPrefix.trimStart().startsWith("# Reo 记忆空间 Agent 入口") && legacyPrefix.includes("## 读写边界") && legacyPrefix.includes("如果要精确表达 Tiptap JSON") && legacyPrefix.includes("source.hash") && legacyPrefix.includes("## 验证建议");',
+    '}',
+    '',
+    'function upsertManagedBlock(readResult) {',
+    '  if (readResult.status === "unsafe") return null;',
+    '  const current = readResult.status === "file" ? readResult.text : null;',
+    '  if (current === null || current.trim().length === 0 || isLegacyReoAgentsTemplate(current)) return DEFAULT_AGENTS_MD;',
+    '  const start = current.indexOf(START);',
+    '  const end = current.indexOf(END);',
+    '  if (start >= 0 && end >= start) {',
+    '    return `${current.slice(0, start)}${MANAGED_BLOCK}${current.slice(end + END.length)}`.replace(/\\n*$/, "\\n");',
+    '  }',
+    '  return `${current.trimEnd()}\\n\\n${MANAGED_BLOCK}\\n`;',
+    '}',
+    '',
+    'async function writeRegularText(filePath, readResult, next) {',
+    '  if (readResult.status === "unsafe") return false;',
+    '  if (!fix) return true;',
+    '  const flags = readResult.status === "missing" ? constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NOFOLLOW : constants.O_WRONLY | constants.O_TRUNC | NOFOLLOW;',
+    '  let handle;',
+    '  try {',
+    '    handle = await open(filePath, flags, 0o666);',
+    '    await handle.writeFile(next);',
+    '    return true;',
+    '  } catch (error) {',
+    '    report.ok = false;',
+    '    report.issues.push({ path: path.relative(root, filePath), code: error && error.code ? `write-${error.code}` : "write-failed" });',
+    '    return false;',
+    '  } finally {',
+    '    await handle?.close();',
+    '  }',
+    '}',
+    '',
+    'async function ensureDirectory(directoryPath) {',
+    '  try {',
+    '    const stats = await lstat(directoryPath);',
+    '    if (!stats.isDirectory()) {',
+    '      report.ok = false;',
+    '      report.issues.push({ path: path.relative(root, directoryPath), code: "not-directory" });',
+    '      return false;',
+    '    }',
+    '    return true;',
+    '  } catch (error) {',
+    '    if (!error || error.code !== "ENOENT") throw error;',
+    '    if (fix) await mkdir(directoryPath);',
+    '    return fix;',
+    '  }',
+    '}',
+    '',
+    'async function main() {',
+    '  const agentsPath = path.join(root, "AGENTS.md");',
+    '  const currentAgents = await readRegularText(agentsPath);',
+    '  const nextAgents = upsertManagedBlock(currentAgents);',
+    '  if (nextAgents !== null && (currentAgents.status !== "file" || currentAgents.text !== nextAgents)) {',
+    '    report.repaired.agentsMd = true;',
+    '    await writeRegularText(agentsPath, currentAgents, nextAgents);',
+    '  }',
+    '',
+    '  const skillsDir = path.join(root, "skills");',
+    '  const doctorDir = path.join(skillsDir, "reo-doctor");',
+    '  const editDir = path.join(skillsDir, "reo-edit");',
+    '  let doctorDirOk = false;',
+    '  let editDirOk = false;',
+    '  if (await ensureDirectory(skillsDir)) {',
+    '    doctorDirOk = await ensureDirectory(doctorDir);',
+    '    editDirOk = await ensureDirectory(editDir);',
+    '  }',
+    '',
+    '  if (doctorDirOk) {',
+    '    const doctorSkillPath = path.join(doctorDir, "SKILL.md");',
+    '    const currentDoctorSkill = await readRegularText(doctorSkillPath);',
+    '    if (currentDoctorSkill.status !== "unsafe" && (currentDoctorSkill.status !== "file" || currentDoctorSkill.text !== DOCTOR_SKILL_MD)) {',
+    '      report.repaired.doctorSkill = true;',
+    '      await writeRegularText(doctorSkillPath, currentDoctorSkill, DOCTOR_SKILL_MD);',
+    '    }',
+    '  }',
+    '',
+    '  if (editDirOk) {',
+    '    const editSkillPath = path.join(editDir, "SKILL.md");',
+    '    const currentEditSkill = await readRegularText(editSkillPath);',
+    '    if (currentEditSkill.status !== "unsafe" && (currentEditSkill.status !== "file" || currentEditSkill.text !== EDIT_SKILL_MD)) {',
+    '      report.repaired.editSkill = true;',
+    '      await writeRegularText(editSkillPath, currentEditSkill, EDIT_SKILL_MD);',
+    '    }',
+    '  }',
+    '',
+    '  console.log(JSON.stringify(report, null, 2));',
+    '}',
+    '',
+    'main().catch((error) => {',
+    '  console.error(error && error.stack ? error.stack : String(error));',
+    '  process.exit(1);',
+    '});',
   ].join('\n') + '\n';
 
 const workspaceMetadataSchema = z
@@ -595,6 +816,145 @@ function sameMemorySummaries(
   });
 }
 
+function upsertWorkspaceAgentsManagedBlock(current: string | null): string {
+  if (current === null || current.trim().length === 0) {
+    return DEFAULT_WORKSPACE_AGENTS_MD;
+  }
+
+  const firstManagedBlockIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_START);
+  const legacyPrefix =
+    firstManagedBlockIndex >= 0 ? current.slice(0, firstManagedBlockIndex) : current;
+  if (
+    legacyPrefix.trimStart().startsWith('# Reo 记忆空间 Agent 入口') &&
+    legacyPrefix.includes('## 读写边界') &&
+    legacyPrefix.includes('如果要精确表达 Tiptap JSON') &&
+    legacyPrefix.includes('source.hash') &&
+    legacyPrefix.includes('## 验证建议')
+  ) {
+    return DEFAULT_WORKSPACE_AGENTS_MD;
+  }
+
+  const startIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_START);
+  const endIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_END);
+  if (startIndex >= 0 && endIndex >= startIndex) {
+    return `${current.slice(0, startIndex)}${DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK}${current.slice(endIndex + WORKSPACE_AGENTS_MANAGED_BLOCK_END.length)}`.replace(
+      /\n*$/,
+      '\n'
+    );
+  }
+
+  return `${current.trimEnd()}\n\n${DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK}\n`;
+}
+
+async function readOptionalRegularTextFile(filePath: string): Promise<string | null> {
+  try {
+    const stats = await lstat(filePath);
+    if (!stats.isFile()) {
+      throw new Error('Managed Reo config path is not a regular file');
+    }
+    return await readFile(filePath, 'utf8');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function ensureManagedDirectory(
+  directoryPath: string,
+  assertUsable: AssertWorkspaceUsable | undefined
+): Promise<void> {
+  try {
+    const stats = await lstat(directoryPath);
+    if (!stats.isDirectory()) {
+      throw new Error('Managed Reo config path is not a directory');
+    }
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      assertWorkspaceUsable(assertUsable);
+      await mkdir(directoryPath);
+      assertWorkspaceUsable(assertUsable);
+      return;
+    }
+    throw error;
+  }
+}
+
+async function writeManagedFileIfChanged({
+  filePath,
+  current,
+  next,
+  assertUsable,
+}: {
+  readonly filePath: string;
+  readonly current: string | null;
+  readonly next: string;
+  readonly assertUsable: AssertWorkspaceUsable | undefined;
+}): Promise<void> {
+  if (current === next) {
+    return;
+  }
+  assertWorkspaceUsable(assertUsable);
+  if (current === null) {
+    await writeWorkspaceFileNoReplaceAtomic(filePath, next, () =>
+      assertWorkspaceUsable(assertUsable)
+    );
+  } else {
+    await writeWorkspaceFileAtomic(filePath, next, () => assertWorkspaceUsable(assertUsable));
+  }
+  assertWorkspaceUsable(assertUsable);
+}
+
+async function ensureWorkspaceManagedAgentConfig(
+  canonicalRoot: string,
+  assertUsable: AssertWorkspaceUsable | undefined
+): Promise<void> {
+  const agentsPath = path.join(canonicalRoot, 'AGENTS.md');
+  const currentAgents = await readOptionalRegularTextFile(agentsPath);
+  const skillsDirectory = path.join(canonicalRoot, 'skills');
+  const editDirectory = path.join(skillsDirectory, 'reo-edit');
+  const doctorDirectory = path.join(skillsDirectory, 'reo-doctor');
+  const scriptsDirectory = path.join(doctorDirectory, 'scripts');
+  await ensureManagedDirectory(skillsDirectory, assertUsable);
+  await ensureManagedDirectory(editDirectory, assertUsable);
+  await ensureManagedDirectory(doctorDirectory, assertUsable);
+  await ensureManagedDirectory(scriptsDirectory, assertUsable);
+
+  const editSkillPath = path.join(editDirectory, 'SKILL.md');
+  const currentEditSkill = await readOptionalRegularTextFile(editSkillPath);
+  const skillPath = path.join(doctorDirectory, 'SKILL.md');
+  const currentDoctorSkill = await readOptionalRegularTextFile(skillPath);
+  const scriptPath = path.join(scriptsDirectory, 'reo-doctor.mjs');
+  const currentDoctorScript = await readOptionalRegularTextFile(scriptPath);
+
+  await writeManagedFileIfChanged({
+    filePath: agentsPath,
+    current: currentAgents,
+    next: upsertWorkspaceAgentsManagedBlock(currentAgents),
+    assertUsable,
+  });
+  await writeManagedFileIfChanged({
+    filePath: editSkillPath,
+    current: currentEditSkill,
+    next: DEFAULT_REO_EDIT_SKILL_MD,
+    assertUsable,
+  });
+
+  await writeManagedFileIfChanged({
+    filePath: skillPath,
+    current: currentDoctorSkill,
+    next: DEFAULT_REO_DOCTOR_SKILL_MD,
+    assertUsable,
+  });
+  await writeManagedFileIfChanged({
+    filePath: scriptPath,
+    current: currentDoctorScript,
+    next: DEFAULT_REO_DOCTOR_SCRIPT_MJS,
+    assertUsable,
+  });
+}
+
 export async function validateWorkspaceInitializeTarget(
   rootPath: string
 ): Promise<WorkspaceInitializeTarget> {
@@ -936,11 +1296,7 @@ export async function initializeWorkspaceFiles({
 
   try {
     assertWorkspaceUsable(assertUsable);
-    await writeWorkspaceFileNoReplaceAtomic(
-      path.join(canonicalRoot, 'AGENTS.md'),
-      DEFAULT_WORKSPACE_AGENTS_MD,
-      () => assertWorkspaceUsable(assertUsable)
-    );
+    await ensureWorkspaceManagedAgentConfig(canonicalRoot, assertUsable);
     assertWorkspaceUsable(assertUsable);
     await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), metadata, () =>
       assertWorkspaceUsable(assertUsable)
@@ -987,6 +1343,8 @@ export async function openWorkspaceFiles({
     if (typeof memoriesDirectory !== 'string') {
       return memoriesDirectory;
     }
+    assertWorkspaceUsable(assertUsable);
+    await ensureWorkspaceManagedAgentConfig(canonicalRoot, assertUsable);
     assertWorkspaceUsable(assertUsable);
     await recoverRecordingFinalizeTransactions(canonicalRoot, {
       assertWorkspaceUsable: () => assertWorkspaceUsable(assertUsable),

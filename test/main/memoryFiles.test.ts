@@ -634,6 +634,71 @@ test('finalizes a draft into a durable memory directory', async () => {
   );
 });
 
+test('direct memory Markdown creation is repaired and projected', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_markdown_create';
+  const memoryDirectory = path.join(rootPath, 'memories', `${memoryId}--Direct Memory`);
+  await mkdir(path.join(memoryDirectory, 'segments'), { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: 'Direct Memory' },
+      content: '# Direct Memory\n\nCreated by a file-editing agent.\n',
+    })
+  );
+
+  const memories = await rebuildMemoryIndex(rootPath);
+  const repaired = memories.find((memory) => memory.memoryId === memoryId);
+
+  assert.notEqual(repaired, undefined);
+  assert.deepEqual(
+    await readJson(path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`)),
+    {
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId,
+      createdAt: repaired?.createdAt,
+      updatedAt: repaired?.updatedAt,
+    }
+  );
+});
+
+test('segment id lookup does not repair direct memory Markdown manifests', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_lookup_no_repair';
+  const segmentId = 'seg_direct_lookup_no_repair';
+  const memoryDirectory = path.join(rootPath, 'memories', `${memoryId}--Lookup No Repair`);
+  const segmentDirectory = path.join(
+    memoryDirectory,
+    'segments',
+    `${segmentId}--Lookup No Repair Segment`
+  );
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: 'Lookup No Repair' },
+      content: '# Lookup No Repair\n',
+    })
+  );
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { id: segmentId, title: 'Lookup No Repair Segment', kind: 'note' },
+      content: '# Lookup No Repair Segment\n',
+    })
+  );
+
+  await assert.rejects(findSegmentDirectoryById(rootPath, segmentId));
+
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`))
+  );
+});
+
 test('recording finalize refreshes only the owning memory index entry on success', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_finalize_targeted_refresh';

@@ -23,6 +23,7 @@ import { z } from 'zod';
 import {
   writeWorkspaceFileAtomic,
   writeWorkspaceFileAtomicInKnownDirectory,
+  writeWorkspaceFileNoReplaceAtomic,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
 import {
@@ -1982,6 +1983,28 @@ async function readMemoryObjectManifest(
   );
 }
 
+async function writeMemoryObjectManifestNoReplace({
+  assertUsable,
+  memory,
+  rootPath,
+}: {
+  readonly assertUsable?: AssertWorkspaceUsable;
+  readonly memory: MemoryObjectManifest;
+  readonly rootPath: string;
+}): Promise<void> {
+  await ensureWorkspaceObjectKindDirectory({
+    rootPath,
+    kind: 'memories',
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceFileNoReplaceAtomic(
+    await memoryObjectManifestPath(rootPath, memory.memoryId),
+    `${JSON.stringify(memory, null, 2)}\n`,
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
+}
+
 async function segmentObjectManifestPath(rootPath: string, segmentId: string): Promise<string> {
   return workspaceObjectManifestPath(rootPath, 'segments', segmentId);
 }
@@ -2427,21 +2450,57 @@ async function fsyncDirectoryTree(directoryPath: string): Promise<void> {
 
 async function readMemoryFileTruthFromDirectory(
   rootPath: string,
-  directory: string
+  directory: string,
+  {
+    assertWorkspaceUsable: assertUsable,
+    repairMissingManifest = false,
+  }: {
+    readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+    readonly repairMissingManifest?: boolean;
+  } = {}
 ): Promise<MemoryFileTruth> {
   const directoryName = path.basename(directory);
   const memoryId = directoryName.split('--')[0] ?? '';
   if (!MEMORY_ID_PATTERN.test(memoryId)) {
     throw new Error('Invalid memory id');
   }
-  const manifest = await readMemoryObjectManifest(rootPath, memoryId);
-  if (manifest.memoryId !== memoryId) {
-    throw new Error('Memory manifest does not match file truth');
-  }
   const object = parseWorkspaceMarkdownObject({
     objectType: 'memory',
     markdown: await readWorkspaceTextFile(path.join(directory, 'memory.md')),
   });
+  let manifest: MemoryObjectManifest;
+  try {
+    manifest = await readMemoryObjectManifest(rootPath, memoryId);
+  } catch (error) {
+    if (!repairMissingManifest || !isMissingFileError(error)) {
+      throw error;
+    }
+    const memoryMarkdownStats = await lstat(path.join(directory, 'memory.md'));
+    const repairedAt = memoryMarkdownStats.mtime.toISOString();
+    const repairedManifest: MemoryObjectManifest = {
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId,
+      createdAt: repairedAt,
+      updatedAt: repairedAt,
+    };
+    try {
+      await writeMemoryObjectManifestNoReplace({
+        rootPath,
+        memory: repairedManifest,
+        ...(assertUsable ? { assertUsable } : {}),
+      });
+      manifest = repairedManifest;
+    } catch (writeError) {
+      if ((writeError as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw writeError;
+      }
+      manifest = await readMemoryObjectManifest(rootPath, memoryId);
+    }
+  }
+  if (manifest.memoryId !== memoryId) {
+    throw new Error('Memory manifest does not match file truth');
+  }
   return {
     memoryId: manifest.memoryId,
     title: object.data.title,
@@ -3334,10 +3393,14 @@ export async function assertNoDuplicateSegmentDirectoryById(
 
 export async function readMemoryFileTruth(
   rootPath: string,
-  memoryId: string
+  memoryId: string,
+  options: {
+    readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+    readonly repairMissingManifest?: boolean;
+  } = {}
 ): Promise<MemoryFileTruth> {
   const directory = await memoryDirectory(rootPath, memoryId);
-  const memory = await readMemoryFileTruthFromDirectory(rootPath, directory);
+  const memory = await readMemoryFileTruthFromDirectory(rootPath, directory, options);
   if (memory.memoryId !== memoryId) {
     throw new Error('Memory metadata does not match directory id');
   }
@@ -4666,7 +4729,12 @@ export async function readMemoryDetailFromFileTruth(input: {
   try {
     await beforeMemoryDetailProjectionForTest?.();
     assertWorkspaceUsable(input.assertWorkspaceUsable);
-    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId, {
+      ...(input.assertWorkspaceUsable
+        ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+        : {}),
+      repairMissingManifest: true,
+    });
     const segments: WorkspaceSegmentProjection[] = [];
 
     assertWorkspaceUsable(input.assertWorkspaceUsable);
@@ -4735,7 +4803,10 @@ export async function rebuildWorkspaceReadModel(
     try {
       await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
       const memoryDirectoryPath = path.join(memoriesDirectory, entry.name);
-      const memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath);
+      const memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath, {
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+        repairMissingManifest: true,
+      });
       memories.push(
         await summarizeMemoryFromDirectory({
           rootPath,
@@ -4801,9 +4872,16 @@ export async function refreshMemoryIndexEntry(
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(rootPath, async () => {
     assertWorkspaceUsable(assertUsable);
-    const summary = await summarizeMemory(rootPath, await readMemoryFileTruth(rootPath, memoryId), {
-      repairFileSpaceCandidates: false,
-    });
+    const summary = await summarizeMemory(
+      rootPath,
+      await readMemoryFileTruth(rootPath, memoryId, {
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+        repairMissingManifest: true,
+      }),
+      {
+        repairFileSpaceCandidates: false,
+      }
+    );
     assertWorkspaceUsable(assertUsable);
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
@@ -4834,7 +4912,10 @@ export async function refreshMemoryIndexEntryWithDetail(input: {
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(input.rootPath, async () => {
     assertWorkspaceUsable(input.assertUsable);
-    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+    const memory = await readMemoryFileTruth(input.rootPath, input.memoryId, {
+      ...(input.assertUsable ? { assertWorkspaceUsable: input.assertUsable } : {}),
+      repairMissingManifest: true,
+    });
     const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId, {
       repairFileSpaceCandidates: false,
     });

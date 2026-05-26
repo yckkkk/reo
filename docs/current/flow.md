@@ -30,7 +30,7 @@
 
 - Directory selection flow：renderer 通过 preload 请求 OS dialog；main 校验 sender、main frame、trusted URL 和 session。成功只返回 `selectionToken` 和 `displayPath`，真实路径只保存在 main selection token store。
 - Selection token lifecycle 是 issued、consumed、expired、sender-mismatch 和 not-found。成功消费和过期会删除 token；错误 sender 不删除 token；所有错误都不返回真实路径。
-- Memory space initialize/open flow 必须在获取 single-writer lock 后写入或打开记忆空间。Initialize 在所选父目录下 no-replace 创建 title 同名 child root；open 可打开现有 Reo 记忆空间或把空目录原地初始化。非空非 Reo、unsafe `.reo`、unsafe draft/root 目录或 invalid metadata 必须返回 typed error，不能留下半初始化状态。
+- Memory space initialize/open flow 必须在获取 single-writer lock 后写入或打开记忆空间。Initialize 在所选父目录下 no-replace 创建 title 同名 child root；open 可打开现有 Reo 记忆空间或把空目录原地初始化。打开现有记忆空间会静默补齐或升级 Reo managed `AGENTS.md` block、`skills/reo-edit/` 与 `skills/reo-doctor/`，保留用户自定义 `AGENTS.md` 内容。非空非 Reo、unsafe `.reo`、unsafe draft/root 目录或 invalid metadata 必须返回 typed error，不能留下半初始化状态。
 - Workspace lock 必须绑定 root、`.reo` 和 lock directory identity。Lock leaf 与 owner file 使用 no-follow 创建或读取；可判定 stale 的 lock 可以替换，无法确认 owner 已失效时返回 locked error。
 - Memory space registry flow 属于 main-owned app state。Initialize/open 成功后 upsert canonical root 和 snapshot；list 只读取 registry，不扫描每个 root；registry open 只 resolve 当前 `workspaceId`，stored root 缺失时才做有界 sibling scan。
 - Memory space title update 同时支持 active workspace 和 inactive registry entry。Active path 在 single-writer lock 下移动真实 root folder basename 并写入 `.reo/workspace.json.title` mirror；root move 是提交点，成功后同一个 opaque handle 迁移到新 canonical root。

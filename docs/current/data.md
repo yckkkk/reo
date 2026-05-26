@@ -55,7 +55,7 @@
 - Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空列表处理；不可读 IO 错误返回 typed error envelope。Open 已导入记忆空间时只 resolve 当前 `workspaceId`；stored root 缺失时才做有界 sibling scan。
 - Memory space rename 使用 `workspace:updateMemorySpaceTitle`。Active request 使用 `workspaceHandle` 和安全 title；inactive request 使用 `workspaceId` 和安全 title。Main 在 single-writer lock 下移动真实 root folder basename，并在 root move 成功后写入 `.reo/workspace.json.title` mirror。Response 不返回 root path 或 handle。
 - 用户直接删除记忆空间文件夹后，registry entry 可以继续显示。点击该 entry 时 main 返回 missing-root typed error；用户可从 sidebar 移除 registry entry，该动作不删除本地文件夹。
-- Memory space stable files 包括入口 `AGENTS.md`、`.reo` metadata/index/object manifests、Memory/Segment/Supplement Markdown、audio payload、note attachment payload、draft、trash、lock 和 recovery marker。具体路径合同以 workspace contract 与文件读写代码为准；本文档只记录所有权与真源边界。
+- Memory space stable files 包括入口 `AGENTS.md`、Reo 托管的 `skills/reo-edit/` 和 `skills/reo-doctor/`、`.reo` metadata/index/object manifests、Memory/Segment/Supplement Markdown、audio payload、note attachment payload、draft、trash、lock 和 recovery marker。具体路径合同以 workspace contract 与文件读写代码为准；本文档只记录所有权与真源边界。
 - `memory.md`、`segment.md` 和 `supplement.md` 是用户和 agent 可编辑的语义真源；`.reo/workspace.json`、`.reo/objects/*/*.json`、draft、trash、lock 和 recovery marker 是 Reo 管理的技术完整性层。
 - 用户内容目录中的普通 `.json`、`.md`、`.html` 或其它文件可以存在，但不自动成为 Reo 对象，也不作为 Reo schema 输入。HTML 默认是不可信资源，未进入隔离预览能力前不由 renderer 执行或渲染。候选对象进入 needs-review 时，main-owned diagnostics 只记录类别和计数，不记录 root path、file path、title、正文、frontmatter 原文或 id 列表。
 - `.reo/index.json` 是可重建 UI index，不是用户内容真源。合法但陈旧的 index 只能作为启动 cache，不能让合法 finalized object 永久隐藏。
