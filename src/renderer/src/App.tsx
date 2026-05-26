@@ -705,6 +705,7 @@ export function App() {
   const activeNoteEditorFlow = noteEditorFlow.status === 'active' ? noteEditorFlow : null;
   const noteEditorTarget = activeNoteEditorFlow?.target ?? null;
   const noteEditorOpen = activeNoteEditorFlow?.open ?? false;
+  const noteEditorBlocking = noteEditorTarget !== null && noteEditorOpen;
   const transcriptionBackfillDisabledReason = voiceBackfillDisabledReason({
     recordingActive: recordingTarget !== null,
     settings: voiceSettingsQuery.data,
@@ -761,7 +762,7 @@ export function App() {
     const interruptionMessage =
       recordingTarget && recordingCloseBlocked
         ? RECORDING_FLOW_NAVIGATION_BLOCKED
-        : noteEditorTarget
+        : noteEditorBlocking
           ? NOTE_EDITOR_NAVIGATION_BLOCKED
           : memoryStudioInlineMarkdownDirty
             ? INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED
@@ -779,16 +780,16 @@ export function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [memoryStudioInlineMarkdownDirty, noteEditorTarget, recordingCloseBlocked, recordingTarget]);
+  }, [memoryStudioInlineMarkdownDirty, noteEditorBlocking, recordingCloseBlocked, recordingTarget]);
 
   useEffect(() => {
-    if (!workspaceSession || recordingTarget || noteEditorTarget) {
+    if (!workspaceSession || recordingTarget || noteEditorBlocking) {
       setRecordingRecoveryDraft(null);
       return;
     }
 
     setRecordingRecoveryDraft(readRecordingRecoveryDraft(workspaceSession));
-  }, [noteEditorTarget, recordingTarget, workspaceSession]);
+  }, [noteEditorBlocking, recordingTarget, workspaceSession]);
 
   useEffect(() => {
     if (!workspaceSession) {
@@ -1176,7 +1177,7 @@ export function App() {
       toast.error(RECORDING_FLOW_NAVIGATION_BLOCKED);
       return true;
     }
-    if (noteEditorTarget) {
+    if (noteEditorBlocking) {
       toast.error(NOTE_EDITOR_NAVIGATION_BLOCKED);
       return true;
     }
@@ -4160,9 +4161,13 @@ export function App() {
 
   function handleNoteEditorOpenChange(nextOpen: boolean) {
     setNoteEditorFlow((currentFlow) =>
-      currentFlow.status === 'active' && nextOpen
-        ? { ...currentFlow, open: true }
-        : { status: 'closed' }
+      currentFlow.status === 'active' ? { ...currentFlow, open: nextOpen } : currentFlow
+    );
+  }
+
+  function handleNoteEditorExitAnimationEnd() {
+    setNoteEditorFlow((currentFlow) =>
+      currentFlow.status === 'active' && !currentFlow.open ? { status: 'closed' } : currentFlow
     );
   }
 
@@ -4250,7 +4255,7 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
-            expressionDockVisible={recordingTarget === null && noteEditorTarget === null}
+            expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
             onStartNote={requestStartNote}
             onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
@@ -4275,6 +4280,7 @@ export function App() {
       {noteEditorTarget ? (
         <NoteEditorOverlay
           onNoteSegmentFinalized={handleNoteSegmentFinalized}
+          onExitAnimationEnd={handleNoteEditorExitAnimationEnd}
           onOpenChange={handleNoteEditorOpenChange}
           onSegmentSupplementNoteFinalized={handleSegmentSupplementNoteFinalized}
           open={noteEditorOpen}

@@ -13,6 +13,8 @@
   }
 
   body {
+    --reo-immersive-workspace-motion-duration: 280ms;
+
     min-width: 320px;
     margin: 0;
     background: var(--background);
@@ -145,6 +147,42 @@
   }
 }
 
+@keyframes reo-immersive-workspace-surface-enter {
+  from {
+    transform: translate3d(0, var(--reo-immersive-workspace-initial-y, 100%), 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes reo-immersive-workspace-surface-exit {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, var(--reo-immersive-workspace-initial-y, 100%), 0);
+  }
+}
+
+@keyframes reo-immersive-workspace-overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reo-immersive-workspace-overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .reo-undo-toast {
   position: relative;
   overflow: hidden;
@@ -191,6 +229,12 @@
   .reo-dropdown-menu-enter {
     animation: none;
   }
+
+  .reo-immersive-workspace-surface-motion,
+  .reo-immersive-workspace-overlay-motion {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 @utility reo-content-tab-panel-motion {
@@ -200,6 +244,48 @@
 @utility reo-dropdown-menu-enter {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   animation: reo-dropdown-menu-enter 150ms ease-out both;
+}
+
+.reo-immersive-workspace-surface-motion[data-vaul-drawer] {
+  --reo-immersive-workspace-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --reo-immersive-workspace-initial-y: var(--initial-transform, 100%);
+  transition-duration: var(--reo-immersive-workspace-motion-duration);
+  transition-timing-function: var(--reo-immersive-workspace-motion-easing);
+}
+
+.reo-immersive-workspace-surface-motion[data-vaul-drawer],
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'],
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'],
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay],
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-vaul-snap-points='false'][data-state='open'],
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-vaul-snap-points='false'][data-state='closed'] {
+  animation-duration: var(--reo-immersive-workspace-motion-duration);
+  animation-timing-function: var(--reo-immersive-workspace-motion-easing);
+  animation-fill-mode: both;
+}
+
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-state='open'],
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open'] {
+  animation-name: reo-immersive-workspace-surface-enter;
+}
+
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-state='closed'],
+.reo-immersive-workspace-surface-motion[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='closed'] {
+  animation-name: reo-immersive-workspace-surface-exit;
+}
+
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay] {
+  --reo-immersive-workspace-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-state='open'],
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-vaul-snap-points='false'][data-state='open'] {
+  animation-name: reo-immersive-workspace-overlay-enter;
+}
+
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-state='closed'],
+.reo-immersive-workspace-overlay-motion[data-vaul-overlay][data-vaul-snap-points='false'][data-state='closed'] {
+  animation-name: reo-immersive-workspace-overlay-exit;
 }
 
 @utility edge-fade-y {

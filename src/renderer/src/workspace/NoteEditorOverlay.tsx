@@ -35,6 +35,7 @@ type NoteDraftState =
 
 type NoteEditorOverlayProps = {
   readonly onNoteSegmentFinalized: (finalized: FinalizedNoteSegment) => void;
+  readonly onExitAnimationEnd?: () => void;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSegmentSupplementNoteFinalized: (finalized: FinalizedSegmentSupplementNote) => void;
   readonly open: boolean;
@@ -44,6 +45,7 @@ type NoteEditorOverlayProps = {
 
 export function NoteEditorOverlay({
   onNoteSegmentFinalized,
+  onExitAnimationEnd,
   onOpenChange,
   onSegmentSupplementNoteFinalized,
   open,
@@ -246,6 +248,7 @@ export function NoteEditorOverlay({
       onOpenChange={handleImmersiveWorkspaceSurfaceOpenChange}
       open={open}
       title="笔记"
+      {...(onExitAnimationEnd ? { onExitAnimationEnd } : {})}
     >
       <ImmersiveWorkspaceTitlebar
         actions={

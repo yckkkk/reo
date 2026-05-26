@@ -446,6 +446,76 @@ describe('App', () => {
     return screen.findByTestId('memory-studio-inline-supplement-note-editor');
   }
 
+  async function settleClosingDialog(name: string) {
+    const closingDialog = screen.getByRole('dialog', { name });
+    fireEvent.animationEnd(closingDialog);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name })).toBeNull());
+  }
+
+  function createEmptyBirthdayMemory(): WorkspaceMemorySummary {
+    return {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-04-12T09:00:00.000Z',
+      updatedAt: '2026-04-12T09:10:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+  }
+
+  function mockWorkspaceWithEmptyBirthdayMemory() {
+    const birthdayMemory = createEmptyBirthdayMemory();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [birthdayMemory],
+        },
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...birthdayMemory,
+          workspaceId: 'ws_1',
+          segments: [],
+        },
+      },
+    }));
+
+    return { birthdayMemory };
+  }
+
+  async function createWorkspaceWithEmptyBirthdayMemory(user: ReturnType<typeof userEvent.setup>) {
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await findTitlebarMemoryControl('My seventh birthday');
+  }
+
   function mockVoiceTranscriptionSettings(enabled: boolean) {
     reoWorkspace.readVoiceTranscriptionSettings.mockResolvedValue({
       ok: true,
@@ -10334,20 +10404,7 @@ describe('App', () => {
 
   it('finalizes a FAB Note against the current selected memory without creating a new memory', async () => {
     const user = userEvent.setup();
-    const birthdayMemory = {
-      memoryId: 'mem_birthday',
-      title: 'My seventh birthday',
-      createdAt: '2026-04-12T09:00:00.000Z',
-      updatedAt: '2026-04-12T09:10:00.000Z',
-      segmentCount: 0,
-      noteSegmentCount: 0,
-      audioSegmentCount: 0,
-      audioDurationMs: 0,
-      audioByteLength: 0,
-      hasAudioTranscript: false,
-      hasAnyNote: false,
-      supplementCount: 0,
-    };
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
     const finalizedNoteSegment = {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
@@ -10360,38 +10417,6 @@ describe('App', () => {
       supplementCount: 0,
       supplements: [],
     };
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'selection-token-1',
-        displayPath: 'Memory',
-      },
-    });
-    reoWorkspace.initializeWorkspace.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceHandle: 'workspace-handle-1',
-        workspaceId: 'ws_1',
-        snapshot: {
-          workspaceId: 'ws_1',
-          title: 'Daily memory',
-          description: '',
-          memories: [birthdayMemory],
-        },
-      },
-    });
-    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
-      ok: true,
-      value: {
-        requestId: payload.requestId,
-        detail: {
-          ...birthdayMemory,
-          workspaceId: 'ws_1',
-          segments: [],
-        },
-      },
-    }));
     reoWorkspace.createNoteSegmentDraft.mockResolvedValue({
       ok: true,
       value: { segmentId: 'seg_note_1', revision: 0 },
@@ -10433,12 +10458,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: '浏览' }));
-    await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: '创建' }));
-    await findTitlebarMemoryControl('My seventh birthday');
+    await createWorkspaceWithEmptyBirthdayMemory(user);
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '笔记' }));
     const dialog = await screen.findByRole('dialog', { name: '笔记' });
@@ -10472,6 +10492,8 @@ describe('App', () => {
       bodyMarkdown: '## Cake plan\n\n- Buy candles',
       revision: 0,
     });
+    expect(screen.getByRole('region', { name: '表达入口', hidden: true })).toBeInTheDocument();
+    await settleClosingDialog('笔记');
     expect(await screen.findByRole('button', { name: '选择片段 笔记1' })).toHaveAttribute(
       'aria-current',
       'true'
@@ -10486,52 +10508,7 @@ describe('App', () => {
 
   it('confirms before closing a dirty FAB Note without creating a draft', async () => {
     const user = userEvent.setup();
-    const birthdayMemory = {
-      memoryId: 'mem_birthday',
-      title: 'My seventh birthday',
-      createdAt: '2026-04-12T09:00:00.000Z',
-      updatedAt: '2026-04-12T09:10:00.000Z',
-      segmentCount: 0,
-      noteSegmentCount: 0,
-      audioSegmentCount: 0,
-      audioDurationMs: 0,
-      audioByteLength: 0,
-      hasAudioTranscript: false,
-      hasAnyNote: false,
-      supplementCount: 0,
-    };
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'selection-token-1',
-        displayPath: 'Memory',
-      },
-    });
-    reoWorkspace.initializeWorkspace.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceHandle: 'workspace-handle-1',
-        workspaceId: 'ws_1',
-        snapshot: {
-          workspaceId: 'ws_1',
-          title: 'Daily memory',
-          description: '',
-          memories: [birthdayMemory],
-        },
-      },
-    });
-    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
-      ok: true,
-      value: {
-        requestId: payload.requestId,
-        detail: {
-          ...birthdayMemory,
-          workspaceId: 'ws_1',
-          segments: [],
-        },
-      },
-    }));
+    mockWorkspaceWithEmptyBirthdayMemory();
 
     render(
       <ReoQueryProvider>
@@ -10539,12 +10516,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: '浏览' }));
-    await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: '创建' }));
-    await findTitlebarMemoryControl('My seventh birthday');
+    await createWorkspaceWithEmptyBirthdayMemory(user);
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '笔记' }));
     const dialog = await screen.findByRole('dialog', { name: '笔记' });
@@ -10562,26 +10534,40 @@ describe('App', () => {
     const reopenedConfirm = await screen.findByRole('alertdialog');
     await user.click(within(reopenedConfirm).getByRole('button', { name: '放弃' }));
 
-    expect(screen.queryByRole('dialog', { name: '笔记' })).not.toBeInTheDocument();
+    await settleClosingDialog('笔记');
+    expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
+  });
+
+  it('keeps a closing FAB Note mounted until the exit animation settles', async () => {
+    const user = userEvent.setup();
+    mockWorkspaceWithEmptyBirthdayMemory();
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createWorkspaceWithEmptyBirthdayMemory(user);
+    await user.click(screen.getByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '笔记' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '笔记' });
+    await user.click(within(dialog).getByRole('button', { name: '返回' }));
+
+    expect(screen.getByRole('dialog', { name: '笔记' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '表达入口', hidden: true })).toBeInTheDocument();
+    const toastErrorSpy = vi.spyOn(toast, 'error');
+    toastErrorSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: '设置', hidden: true }));
+    expect(toastErrorSpy).not.toHaveBeenCalledWith('当前笔记尚未完成，请先保存或关闭笔记。');
+    expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
     expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
   });
 
   it('retries a FAB Note save with the latest draft revision after finalize fails', async () => {
     const user = userEvent.setup();
-    const birthdayMemory = {
-      memoryId: 'mem_birthday',
-      title: 'My seventh birthday',
-      createdAt: '2026-04-12T09:00:00.000Z',
-      updatedAt: '2026-04-12T09:10:00.000Z',
-      segmentCount: 0,
-      noteSegmentCount: 0,
-      audioSegmentCount: 0,
-      audioDurationMs: 0,
-      audioByteLength: 0,
-      hasAudioTranscript: false,
-      hasAnyNote: false,
-      supplementCount: 0,
-    };
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
     const finalizedNoteSegment = {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
@@ -10594,38 +10580,6 @@ describe('App', () => {
       supplementCount: 0,
       supplements: [],
     };
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'selection-token-1',
-        displayPath: 'Memory',
-      },
-    });
-    reoWorkspace.initializeWorkspace.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceHandle: 'workspace-handle-1',
-        workspaceId: 'ws_1',
-        snapshot: {
-          workspaceId: 'ws_1',
-          title: 'Daily memory',
-          description: '',
-          memories: [birthdayMemory],
-        },
-      },
-    });
-    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
-      ok: true,
-      value: {
-        requestId: payload.requestId,
-        detail: {
-          ...birthdayMemory,
-          workspaceId: 'ws_1',
-          segments: [],
-        },
-      },
-    }));
     reoWorkspace.createNoteSegmentDraft.mockResolvedValue({
       ok: true,
       value: { segmentId: 'seg_note_1', revision: 0 },
@@ -10670,12 +10624,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: '浏览' }));
-    await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: '创建' }));
-    await findTitlebarMemoryControl('My seventh birthday');
+    await createWorkspaceWithEmptyBirthdayMemory(user);
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '笔记' }));
     const dialog = await screen.findByRole('dialog', { name: '笔记' });
@@ -10717,6 +10666,7 @@ describe('App', () => {
       bodyMarkdown: '## Cake plan\n\n- Buy candles',
       revision: 1,
     });
+    await settleClosingDialog('笔记');
     expect(await screen.findByRole('button', { name: '选择片段 笔记1' })).toHaveAttribute(
       'aria-current',
       'true'
@@ -10725,52 +10675,7 @@ describe('App', () => {
 
   it('does not create a Note draft when the create overlay is closed before saving', async () => {
     const user = userEvent.setup();
-    const birthdayMemory = {
-      memoryId: 'mem_birthday',
-      title: 'My seventh birthday',
-      createdAt: '2026-04-12T09:00:00.000Z',
-      updatedAt: '2026-04-12T09:10:00.000Z',
-      segmentCount: 0,
-      noteSegmentCount: 0,
-      audioSegmentCount: 0,
-      audioDurationMs: 0,
-      audioByteLength: 0,
-      hasAudioTranscript: false,
-      hasAnyNote: false,
-      supplementCount: 0,
-    };
-    reoWorkspace.chooseDirectory.mockResolvedValue({
-      ok: true,
-      value: {
-        status: 'selected',
-        selectionToken: 'selection-token-1',
-        displayPath: 'Memory',
-      },
-    });
-    reoWorkspace.initializeWorkspace.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceHandle: 'workspace-handle-1',
-        workspaceId: 'ws_1',
-        snapshot: {
-          workspaceId: 'ws_1',
-          title: 'Daily memory',
-          description: '',
-          memories: [birthdayMemory],
-        },
-      },
-    });
-    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
-      ok: true,
-      value: {
-        requestId: payload.requestId,
-        detail: {
-          ...birthdayMemory,
-          workspaceId: 'ws_1',
-          segments: [],
-        },
-      },
-    }));
+    mockWorkspaceWithEmptyBirthdayMemory();
 
     render(
       <ReoQueryProvider>
@@ -10778,12 +10683,7 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: '浏览' }));
-    await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: '创建' }));
-    await findTitlebarMemoryControl('My seventh birthday');
+    await createWorkspaceWithEmptyBirthdayMemory(user);
     await user.click(screen.getByRole('button', { name: '打开表达入口' }));
     await user.click(screen.getByRole('menuitem', { name: '笔记' }));
     const dialog = await screen.findByRole('dialog', { name: '笔记' });
@@ -12314,6 +12214,7 @@ describe('App', () => {
     expect(within(dialog).getByRole('heading', { name: '补充笔记1' })).toBeInTheDocument();
     await replaceRichEditorMarkdown(within(dialog).getByLabelText('笔记正文'), 'Supplement note');
     await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
+    await settleClosingDialog('笔记');
 
     const noteSupplementTab = await screen.findByRole('tab', { name: '补充笔记1' });
     expect(noteSupplementTab).toHaveAttribute('data-supplement-type', 'note');
