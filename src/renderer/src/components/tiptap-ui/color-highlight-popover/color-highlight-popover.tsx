@@ -28,6 +28,7 @@ import {
   useColorHighlight,
 } from '@/components/tiptap-ui/color-highlight-button';
 import { ButtonGroup } from '@/components/tiptap-ui-primitive/button-group';
+import { REO_TIPTAP_HIGHLIGHT_COLOR_VALUES } from '../../../../../tiptap-markdown/tiptapHighlightColors';
 
 export interface ColorHighlightPopoverContentProps {
   /**
@@ -85,13 +86,7 @@ ColorHighlightPopoverButton.displayName = 'ColorHighlightPopoverButton';
 
 export function ColorHighlightPopoverContent({
   editor,
-  colors = pickHighlightColorsByValue([
-    'var(--tt-color-highlight-green)',
-    'var(--tt-color-highlight-blue)',
-    'var(--tt-color-highlight-red)',
-    'var(--tt-color-highlight-purple)',
-    'var(--tt-color-highlight-yellow)',
-  ]),
+  colors = pickHighlightColorsByValue(REO_TIPTAP_HIGHLIGHT_COLOR_VALUES),
   useColorValue = false,
 }: ColorHighlightPopoverContentProps) {
   const { handleRemoveHighlight } = useColorHighlight({ editor });
@@ -158,13 +153,7 @@ export function ColorHighlightPopoverContent({
 
 export function ColorHighlightPopover({
   editor: providedEditor,
-  colors = pickHighlightColorsByValue([
-    'var(--tt-color-highlight-green)',
-    'var(--tt-color-highlight-blue)',
-    'var(--tt-color-highlight-red)',
-    'var(--tt-color-highlight-purple)',
-    'var(--tt-color-highlight-yellow)',
-  ]),
+  colors = pickHighlightColorsByValue(REO_TIPTAP_HIGHLIGHT_COLOR_VALUES),
   hideWhenUnavailable = false,
   useColorValue = false,
   onApplied,

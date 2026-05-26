@@ -43,6 +43,9 @@ function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}):
   };
 }
 
+const BASELINE_TIPTAP_HASH_A = 'd'.repeat(64);
+const BASELINE_TIPTAP_HASH_B = 'e'.repeat(64);
+
 const birthdayMemory = {
   memoryId: 'mem_birthday',
   title: 'My seventh birthday',
@@ -115,6 +118,21 @@ function expectRichEditorContent(editor: HTMLElement, expectedText: string | rea
   for (const expectedPart of expectedParts) {
     expect(editor).toHaveTextContent(expectedPart);
   }
+}
+
+function plainParagraphTiptapDoc(text: string) {
+  return {
+    type: 'doc',
+    content: text
+      ? [
+          {
+            type: 'paragraph',
+            attrs: { textAlign: null },
+            content: [{ type: 'text', text }],
+          },
+        ]
+      : [],
+  };
 }
 
 async function replaceRichEditorMarkdown(editor: HTMLElement, markdown: string) {
@@ -906,6 +924,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan\n\n- Buy candles\n- Call aunt Mei',
         bodyByteLength: 44,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const note = noteSegment();
@@ -948,6 +967,7 @@ describe('LoadedWorkspaceFrame', () => {
           bodyMarkdown: request.bodyMarkdown,
           bodyByteLength: 12,
           baselineContentHash: 'b'.repeat(64),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       } as const;
     });
@@ -1181,7 +1201,9 @@ describe('LoadedWorkspaceFrame', () => {
         memoryId: 'mem_birthday',
         segmentId: 'seg_birthday_note',
         bodyMarkdown: 'Updated body',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     expect(onNoteSegmentContentSaved).toHaveBeenCalledWith({
@@ -1190,7 +1212,9 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_note',
       title: 'Cake planning note',
       bodyMarkdown: 'Updated body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: 'b'.repeat(64),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       bodyByteLength: 12,
     });
     await waitFor(() => expect(editorSurface).not.toHaveClass('border-ring'));
@@ -1239,6 +1263,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan',
         bodyByteLength: 11,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -1306,6 +1331,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan',
         bodyByteLength: 11,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const writeSegmentContent = vi
@@ -1329,6 +1355,7 @@ describe('LoadedWorkspaceFrame', () => {
           bodyMarkdown: request.bodyMarkdown,
           bodyByteLength: 19,
           baselineContentHash: 'b'.repeat(64),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       }));
     const onNoteSegmentContentSaved = vi.fn();
@@ -1395,7 +1422,9 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_note',
       title: 'Cake planning note',
       bodyMarkdown: 'Expanded saved body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: 'b'.repeat(64),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       bodyByteLength: 19,
     });
   });
@@ -1425,6 +1454,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan\n\n- Buy candles',
         bodyByteLength: 28,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -1487,6 +1517,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan',
         bodyByteLength: 11,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -1557,6 +1588,7 @@ describe('LoadedWorkspaceFrame', () => {
         readonly bodyByteLength: number;
         readonly saved: true;
         readonly baselineContentHash: string;
+        readonly baselineTiptapContentHash: string;
       };
     }) => void;
     const writeSegmentContent = vi.fn(
@@ -1567,6 +1599,7 @@ describe('LoadedWorkspaceFrame', () => {
             readonly bodyByteLength: number;
             readonly saved: true;
             readonly baselineContentHash: string;
+            readonly baselineTiptapContentHash: string;
           };
         }>((resolve) => {
           resolveWrite = resolve;
@@ -1584,6 +1617,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Cake plan',
         bodyByteLength: 11,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const { queryClient, rerender } = renderLoadedWorkspaceFrame({
@@ -1637,7 +1671,12 @@ describe('LoadedWorkspaceFrame', () => {
 
     resolveWrite({
       ok: true,
-      value: { bodyByteLength: 12, saved: true, baselineContentHash: 'b'.repeat(64) },
+      value: {
+        bodyByteLength: 12,
+        saved: true,
+        baselineContentHash: 'b'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
+      },
     });
 
     await waitFor(() => expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'true'));
@@ -2818,6 +2857,8 @@ describe('LoadedWorkspaceFrame', () => {
           exists: true,
           text: 'Birthday transcript',
           baselineHash: 'b'.repeat(64),
+          tiptapJson: plainParagraphTiptapDoc('Birthday transcript'),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
         },
       },
     }));
@@ -2832,6 +2873,7 @@ describe('LoadedWorkspaceFrame', () => {
           memory: savedTranscriptMemory,
           saved: true,
           baselineTranscriptHash: 'c'.repeat(64),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       })
       .mockResolvedValueOnce({
@@ -2840,6 +2882,7 @@ describe('LoadedWorkspaceFrame', () => {
           memory: savedTranscriptMemory,
           saved: true,
           baselineTranscriptHash: 'd'.repeat(64),
+          baselineTiptapContentHash: 'f'.repeat(64),
         },
       });
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
@@ -2912,6 +2955,8 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: 'seg_birthday_voice',
         markdown: 'Updated transcript',
         baselineTranscriptHash: 'b'.repeat(64),
+        tiptapJson: plainParagraphTiptapDoc('Updated transcript'),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     expect(onSegmentTranscriptSaved).toHaveBeenCalledWith({
@@ -2920,6 +2965,7 @@ describe('LoadedWorkspaceFrame', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
       baselineTranscriptHash: 'c'.repeat(64),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
     await replaceRichEditorMarkdown(inlineTranscriptEditor, 'Second transcript');
     await user.click(within(content).getByRole('button', { name: '保存' }));
@@ -2930,6 +2976,8 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_voice',
       markdown: 'Second transcript',
       baselineTranscriptHash: 'c'.repeat(64),
+      tiptapJson: plainParagraphTiptapDoc('Second transcript'),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
     expect(primaryPlayback).toHaveAttribute('data-component', 'memory-studio-audio-player');
     expect(transcriptTab).toHaveAttribute('aria-selected', 'true');
@@ -3095,6 +3143,7 @@ describe('LoadedWorkspaceFrame', () => {
         value: {
           ...savedSupplementTranscriptValue,
           baselineTranscriptHash: 'd'.repeat(64),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       })
       .mockResolvedValueOnce({
@@ -3102,6 +3151,7 @@ describe('LoadedWorkspaceFrame', () => {
         value: {
           ...savedSupplementTranscriptValue,
           baselineTranscriptHash: 'e'.repeat(64),
+          baselineTiptapContentHash: 'f'.repeat(64),
         },
       });
     const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
@@ -3118,6 +3168,8 @@ describe('LoadedWorkspaceFrame', () => {
           exists: true,
           text: '这是一个补充的录音。',
           baselineHash: 'c'.repeat(64),
+          tiptapJson: plainParagraphTiptapDoc('这是一个补充的录音。'),
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
         },
       },
     }));
@@ -3169,6 +3221,8 @@ describe('LoadedWorkspaceFrame', () => {
         supplementId: 'sup_birthday_followup',
         markdown: '更新后的补充录音转录',
         baselineTranscriptHash: 'c'.repeat(64),
+        tiptapJson: plainParagraphTiptapDoc('更新后的补充录音转录'),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     await replaceRichEditorMarkdown(transcriptEditor, '再次更新补充录音转录');
@@ -3182,6 +3236,8 @@ describe('LoadedWorkspaceFrame', () => {
       supplementId: 'sup_birthday_followup',
       markdown: '再次更新补充录音转录',
       baselineTranscriptHash: 'd'.repeat(64),
+      tiptapJson: plainParagraphTiptapDoc('再次更新补充录音转录'),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
   });
 
@@ -3199,6 +3255,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Follow-up\n\n- Capture the cake idea',
         bodyByteLength: 36,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
@@ -3260,6 +3317,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: request.bodyMarkdown,
         bodyByteLength: 21,
         baselineContentHash: 'b'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     }));
     const readSegmentSupplementContent = vi.fn(async (request) => ({
@@ -3275,6 +3333,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '## Follow-up\n\n- Capture the cake idea',
         bodyByteLength: 36,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
@@ -3324,7 +3383,9 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: 'seg_birthday_voice',
         supplementId: 'sup_birthday_note',
         bodyMarkdown: 'Updated supplement',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     expect(onNoteSegmentSupplementContentSaved).toHaveBeenCalledWith({
@@ -3334,7 +3395,9 @@ describe('LoadedWorkspaceFrame', () => {
       supplementId: 'sup_birthday_note',
       title: '补充笔记',
       bodyMarkdown: 'Updated supplement',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: 'b'.repeat(64),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       bodyByteLength: 21,
     });
 
@@ -3372,6 +3435,7 @@ describe('LoadedWorkspaceFrame', () => {
         bodyMarkdown: '',
         bodyByteLength: 0,
         baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
@@ -3585,8 +3649,13 @@ describe('LoadedWorkspaceFrame', () => {
     await userEvent.click(firstSupplementItem);
 
     expect(firstSupplementItem).toHaveAttribute('aria-selected', 'true');
-    expect(readFinalizedAudioSegmentSupplement).toHaveBeenCalledTimes(2);
-    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(readFinalizedAudioSegmentSupplement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplementId: 'sup_birthday_followup',
+      })
+    );
+    expect(readFinalizedAudioSegmentSupplement.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(createObjectURL.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('reorders transcript and SegmentSupplement tabs with drag and drop', async () => {

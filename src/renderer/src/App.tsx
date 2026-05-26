@@ -2078,8 +2078,11 @@ export function App() {
           ? {
               ...currentContent,
               bodyMarkdown: saved.bodyMarkdown,
+              bodyTiptapJson: saved.bodyTiptapJson ?? currentContent.bodyTiptapJson,
               bodyByteLength: saved.bodyByteLength,
               baselineContentHash: saved.baselineContentHash,
+              baselineTiptapContentHash:
+                saved.baselineTiptapContentHash ?? currentContent.baselineTiptapContentHash,
             }
           : currentContent
     );
@@ -2125,8 +2128,11 @@ export function App() {
           ? {
               ...currentContent,
               bodyMarkdown: saved.bodyMarkdown,
+              bodyTiptapJson: saved.bodyTiptapJson ?? currentContent.bodyTiptapJson,
               bodyByteLength: saved.bodyByteLength,
               baselineContentHash: saved.baselineContentHash,
+              baselineTiptapContentHash:
+                saved.baselineTiptapContentHash ?? currentContent.baselineTiptapContentHash,
             }
           : currentContent
     );
@@ -4087,6 +4093,7 @@ export function App() {
           memoryId: target.memoryId,
           segmentId: target.segment.segmentId,
           markdown: '',
+          baselineTiptapContentHash: target.baselineTiptapContentHash,
           baselineTranscriptHash: target.baselineTranscriptHash,
         });
         if (!workspaceSessionMatches(session)) {

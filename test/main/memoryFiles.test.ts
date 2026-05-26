@@ -47,6 +47,7 @@ import {
   deleteMemoryFromFileTruth,
   deleteSegmentSupplementFromFileTruth,
   deleteSegmentFromFileTruth,
+  extractSegmentTranscript,
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
   readMemoryDetailFromFileTruth,
@@ -64,6 +65,7 @@ import {
   setBeforeReadModelPersistForTest,
   setBeforeSegmentDirectoryCandidateScanForTest,
   setBeforeSegmentFileTruthListForTest,
+  replaceSegmentTranscript,
   updateMemoryTitleFromFileTruth,
   updateSegmentContentTitleFromFileTruth,
   updateSegmentContentTabOrderFromFileTruth,
@@ -76,6 +78,10 @@ import {
   renderWorkspaceMarkdownObject,
 } from '../../src/main/workspaceMarkdownObjects.js';
 import { configureDiagnostics, type DiagnosticEvent } from '../../src/main/diagnostics.js';
+import {
+  TIPTAP_CONTENT_SIDECAR_FILE,
+  writeTiptapContentSidecar,
+} from '../../src/main/tiptapContentSidecar.js';
 import type { LastTranscriptionAttempt } from '../../src/workspace-contract/workspace-contract.js';
 
 async function workspaceRoot(): Promise<string> {
@@ -132,6 +138,16 @@ async function createMemoryForDraftFinalize({
 async function readJson(filePath: string): Promise<unknown> {
   return JSON.parse(await readFile(filePath, 'utf8'));
 }
+
+test('audio transcript helpers preserve heading markdown inside the transcript body', () => {
+  const content = '# Recording\n\n## Transcript\n\nintro\n\n## Tiptap heading\n\nbody\n';
+
+  assert.equal(extractSegmentTranscript(content), 'intro\n\n## Tiptap heading\n\nbody');
+  assert.equal(
+    replaceSegmentTranscript(content, 'next\n\n## Replacement heading\n\nstill transcript'),
+    '# Recording\n\n## Transcript\n\nnext\n\n## Replacement heading\n\nstill transcript'
+  );
+});
 
 async function readSupplementTitleForTest(supplementDirectory: string): Promise<string> {
   return (
@@ -3179,6 +3195,582 @@ test('direct note supplement reconcile uses Finder-renamed parent segment file t
     assert.equal(detail.value.segments[0]?.title, '项目片段');
     assert.equal(detail.value.segments[0]?.supplements[0]?.title, '现场补充');
   }
+});
+
+test('CLI-moved note segment is repaired under the destination memory', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceMemoryId = 'mem_cli_move_segment_source';
+  const destinationMemoryId = 'mem_cli_move_segment_destination';
+  const segmentId = 'seg_cli_move_segment';
+  const supplementId = 'sup_cli_move_segment_child';
+  await writeMemoryForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Source memory',
+  });
+  await writeMemoryForTest(rootPath, {
+    memoryId: destinationMemoryId,
+    title: 'Destination memory',
+  });
+  const segmentBody = '# Moved body\n\n==Highlighted text== stays in the file space.\n';
+  const sourceSegmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Moved Segment',
+    body: segmentBody,
+  });
+  await mkdir(path.join(sourceSegmentDirectory, 'attachments'), { recursive: true });
+  await writeFile(path.join(sourceSegmentDirectory, 'attachments', 'moved.txt'), 'attachment\n');
+  await writeTiptapContentSidecar({
+    bodyMarkdown: segmentBody,
+    objectDirectory: sourceSegmentDirectory,
+    tiptapJson: {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 1 },
+          content: [{ type: 'text', text: 'Moved body' }],
+        },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Highlighted text', marks: [{ type: 'highlight' }] },
+            { type: 'text', text: ' stays in the file space.' },
+          ],
+        },
+      ],
+    },
+  });
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    supplementId,
+    title: 'Moved child supplement',
+    body: 'Supplement body follows the segment.\n',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+  const destinationSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    destinationMemoryId,
+    'segments',
+    segmentId
+  );
+  await mkdir(path.dirname(destinationSegmentDirectory), { recursive: true });
+  await rename(sourceSegmentDirectory, destinationSegmentDirectory);
+
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  const destinationDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: destinationMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(destinationDetail.ok, true);
+  if (!sourceDetail.ok || !destinationDetail.ok) {
+    return;
+  }
+  assert.deepEqual(sourceDetail.value.segments, []);
+  assert.equal(destinationDetail.value.segmentCount, 1);
+  assert.equal(destinationDetail.value.supplementCount, 1);
+  const movedSegment = destinationDetail.value.segments[0];
+  assert.ok(movedSegment);
+  assert.equal(movedSegment.memoryId, destinationMemoryId);
+  assert.equal(movedSegment.segmentId, segmentId);
+  assert.equal(movedSegment.supplements[0]?.supplementId, supplementId);
+
+  const segmentManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as { readonly memoryId?: unknown; readonly updatedAt?: unknown };
+  assert.equal(segmentManifest.memoryId, destinationMemoryId);
+  assert.equal(typeof segmentManifest.updatedAt, 'string');
+  const supplementManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as { readonly memoryId?: unknown; readonly segmentId?: unknown };
+  assert.equal(supplementManifest.memoryId, destinationMemoryId);
+  assert.equal(supplementManifest.segmentId, segmentId);
+  assert.equal(
+    await readFile(path.join(destinationSegmentDirectory, 'attachments', 'moved.txt'), 'utf8'),
+    'attachment\n'
+  );
+  assert.equal(
+    (
+      (await readJson(path.join(destinationSegmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE))) as {
+        readonly objectType?: unknown;
+      }
+    ).objectType,
+    'tiptap-content'
+  );
+});
+
+test('CLI-moved audio segment is repaired under the destination memory', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceMemoryId = 'mem_cli_move_audio_segment_source';
+  const destinationMemoryId = 'mem_cli_move_audio_segment_destination';
+  const segmentId = 'seg_cli_move_audio_segment';
+  const supplementId = 'sup_cli_move_audio_segment_child';
+  await writeMemoryForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Audio source memory',
+  });
+  await writeMemoryForTest(rootPath, {
+    memoryId: destinationMemoryId,
+    title: 'Audio destination memory',
+  });
+  const transcript = 'Audio segment transcript\n\n## Tiptap heading\n\nstill transcript';
+  const sourceSegmentDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Moved Audio Segment',
+    audioBytes: [1, 2, 3, 4],
+    lastTranscriptionAttempt: 'success',
+  });
+  await writeFile(
+    path.join(sourceSegmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Moved Audio Segment', kind: 'audio' },
+      content: `# Moved Audio Segment\n\n## Transcript\n\n${transcript}`,
+    })
+  );
+  await writeTiptapContentSidecar({
+    bodyMarkdown: transcript,
+    objectDirectory: sourceSegmentDirectory,
+    tiptapJson: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Audio segment transcript' }],
+        },
+        {
+          type: 'heading',
+          attrs: { level: 2 },
+          content: [{ type: 'text', text: 'Tiptap heading' }],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'still transcript' }],
+        },
+      ],
+    },
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    supplementId,
+    title: 'Moved audio child supplement',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    transcript: 'Audio supplement transcript',
+    lastTranscriptionAttempt: 'success',
+  });
+  const destinationSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    destinationMemoryId,
+    'segments',
+    segmentId
+  );
+  await mkdir(path.dirname(destinationSegmentDirectory), { recursive: true });
+  await rename(sourceSegmentDirectory, destinationSegmentDirectory);
+
+  const destinationDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: destinationMemoryId,
+  });
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(destinationDetail.ok, true);
+  if (!sourceDetail.ok || !destinationDetail.ok) {
+    return;
+  }
+  assert.deepEqual(sourceDetail.value.segments, []);
+  assert.equal(destinationDetail.value.audioSegmentCount, 1);
+  assert.equal(destinationDetail.value.supplementCount, 1);
+  const movedSegment = destinationDetail.value.segments[0];
+  assert.ok(movedSegment);
+  assert.equal(movedSegment.type, 'audio');
+  if (movedSegment.type !== 'audio') {
+    return;
+  }
+  assert.equal(movedSegment.memoryId, destinationMemoryId);
+  assert.equal(movedSegment.segmentId, segmentId);
+  assert.equal(movedSegment.transcript.exists, true);
+  assert.equal(movedSegment.supplements[0]?.type, 'audio');
+  assert.equal(movedSegment.supplements[0]?.supplementId, supplementId);
+
+  const segmentManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as {
+    readonly memoryId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(segmentManifest.memoryId, destinationMemoryId);
+  assert.equal(segmentManifest.kind, 'audio');
+  assert.equal(segmentManifest.audioByteLength, 4);
+  const supplementManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as { readonly memoryId?: unknown; readonly segmentId?: unknown; readonly kind?: unknown };
+  assert.equal(supplementManifest.memoryId, destinationMemoryId);
+  assert.equal(supplementManifest.segmentId, segmentId);
+  assert.equal(supplementManifest.kind, 'audio');
+  assert.equal(
+    (
+      (await readJson(path.join(destinationSegmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE))) as {
+        readonly objectType?: unknown;
+      }
+    ).objectType,
+    'tiptap-content'
+  );
+});
+
+test('copied note segment is held for review instead of changing manifest ownership', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceMemoryId = 'mem_copy_segment_source';
+  const destinationMemoryId = 'mem_copy_segment_destination';
+  const segmentId = 'seg_copy_segment_review';
+  await writeMemoryForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Source memory',
+  });
+  await writeMemoryForTest(rootPath, {
+    memoryId: destinationMemoryId,
+    title: 'Destination memory',
+  });
+  const sourceSegmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Copied Segment',
+    body: 'Copied body stays with the original owner.\n',
+  });
+  const copiedSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    destinationMemoryId,
+    'segments',
+    segmentId
+  );
+  await mkdir(copiedSegmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(copiedSegmentDirectory, 'segment.md'),
+    await readFile(path.join(sourceSegmentDirectory, 'segment.md'), 'utf8')
+  );
+
+  const destinationDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: destinationMemoryId,
+  });
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+
+  assert.equal(destinationDetail.ok, true);
+  assert.equal(sourceDetail.ok, true);
+  if (!destinationDetail.ok || !sourceDetail.ok) {
+    return;
+  }
+  assert.deepEqual(destinationDetail.value.segments, []);
+  assert.equal(sourceDetail.value.segmentCount, 1);
+  assert.equal(sourceDetail.value.segments[0]?.segmentId, segmentId);
+  const segmentManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as { readonly memoryId?: unknown };
+  assert.equal(segmentManifest.memoryId, sourceMemoryId);
+});
+
+test('CLI-moved note supplement is repaired under the destination segment', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_cli_move_supplement';
+  const sourceSegmentId = 'seg_cli_move_supplement_source';
+  const destinationSegmentId = 'seg_cli_move_supplement_destination';
+  const supplementId = 'sup_cli_move_supplement';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Supplement move memory',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Segment',
+    body: '# Source body\n',
+  });
+  const destinationSegmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: destinationSegmentId,
+    title: 'Destination Segment',
+    body: '# Destination body\n',
+  });
+  const supplementBody = '++Supplement body++ moves to another segment.\n';
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Moved Supplement',
+    body: supplementBody,
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+  const sourceSupplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    sourceSegmentId,
+    'supplements',
+    supplementId
+  );
+  await mkdir(path.join(sourceSupplementDirectory, 'attachments'), { recursive: true });
+  await writeFile(
+    path.join(sourceSupplementDirectory, 'attachments', 'supplement.txt'),
+    'supplement attachment\n'
+  );
+  await writeTiptapContentSidecar({
+    bodyMarkdown: supplementBody,
+    objectDirectory: sourceSupplementDirectory,
+    tiptapJson: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Supplement body', marks: [{ type: 'underline' }] },
+            { type: 'text', text: ' moves to another segment.' },
+          ],
+        },
+      ],
+    },
+  });
+  const destinationSupplementDirectory = path.join(
+    destinationSegmentDirectory,
+    'supplements',
+    supplementId
+  );
+  await mkdir(path.dirname(destinationSupplementDirectory), { recursive: true });
+  await rename(sourceSupplementDirectory, destinationSupplementDirectory);
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const sourceSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === sourceSegmentId
+  );
+  const destinationSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === destinationSegmentId
+  );
+  assert.ok(sourceSegment);
+  assert.ok(destinationSegment);
+  assert.deepEqual(sourceSegment.supplements, []);
+  assert.equal(destinationSegment.supplements.length, 1);
+  assert.equal(destinationSegment.supplements[0]?.supplementId, supplementId);
+
+  const supplementManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as { readonly memoryId?: unknown; readonly segmentId?: unknown; readonly updatedAt?: unknown };
+  assert.equal(supplementManifest.memoryId, memoryId);
+  assert.equal(supplementManifest.segmentId, destinationSegmentId);
+  assert.equal(typeof supplementManifest.updatedAt, 'string');
+  assert.equal(
+    await readFile(
+      path.join(destinationSupplementDirectory, 'attachments', 'supplement.txt'),
+      'utf8'
+    ),
+    'supplement attachment\n'
+  );
+  assert.equal(
+    (
+      (await readJson(path.join(destinationSupplementDirectory, TIPTAP_CONTENT_SIDECAR_FILE))) as {
+        readonly objectType?: unknown;
+      }
+    ).objectType,
+    'tiptap-content'
+  );
+});
+
+test('CLI-moved audio supplement is repaired under the destination segment', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_cli_move_audio_supplement';
+  const sourceSegmentId = 'seg_cli_move_audio_supplement_source';
+  const destinationSegmentId = 'seg_cli_move_audio_supplement_destination';
+  const supplementId = 'sup_cli_move_audio_supplement';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Audio supplement move memory',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Audio Segment',
+    audioBytes: [1],
+  });
+  const destinationSegmentDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: destinationSegmentId,
+    title: 'Destination Audio Segment',
+    audioBytes: [2],
+  });
+  await writeFinalizedAudioSupplementForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Moved Audio Supplement',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    audioBytes: [7, 8, 9, 10, 11],
+    transcript: 'Moved audio supplement transcript',
+    lastTranscriptionAttempt: 'success',
+  });
+  const sourceSupplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    sourceSegmentId,
+    'supplements',
+    supplementId
+  );
+  const destinationSupplementDirectory = path.join(
+    destinationSegmentDirectory,
+    'supplements',
+    supplementId
+  );
+  await mkdir(path.dirname(destinationSupplementDirectory), { recursive: true });
+  await rename(sourceSupplementDirectory, destinationSupplementDirectory);
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const sourceSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === sourceSegmentId
+  );
+  const destinationSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === destinationSegmentId
+  );
+  assert.ok(sourceSegment);
+  assert.ok(destinationSegment);
+  assert.deepEqual(sourceSegment.supplements, []);
+  assert.equal(destinationSegment.supplements.length, 1);
+  const movedSupplement = destinationSegment.supplements[0];
+  assert.ok(movedSupplement);
+  assert.equal(movedSupplement.type, 'audio');
+  assert.equal(movedSupplement.supplementId, supplementId);
+
+  const supplementManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as {
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+    readonly updatedAt?: unknown;
+  };
+  assert.equal(supplementManifest.memoryId, memoryId);
+  assert.equal(supplementManifest.segmentId, destinationSegmentId);
+  assert.equal(supplementManifest.kind, 'audio');
+  assert.equal(supplementManifest.audioByteLength, 5);
+  assert.equal(typeof supplementManifest.updatedAt, 'string');
+});
+
+test('copied note supplement is held for review instead of changing manifest ownership', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_copy_supplement_review';
+  const sourceSegmentId = 'seg_copy_supplement_source';
+  const destinationSegmentId = 'seg_copy_supplement_destination';
+  const supplementId = 'sup_copy_supplement_review';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Supplement copy memory',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Segment',
+    body: '# Source body\n',
+  });
+  const destinationSegmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: destinationSegmentId,
+    title: 'Destination Segment',
+    body: '# Destination body\n',
+  });
+  const sourceSupplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    sourceSegmentId,
+    'supplements',
+    supplementId
+  );
+  await writeFinalizedNoteSupplementForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Copied Supplement',
+    body: 'Copied supplement stays with the original parent.\n',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+  });
+  const copiedSupplementDirectory = path.join(
+    destinationSegmentDirectory,
+    'supplements',
+    supplementId
+  );
+  await mkdir(copiedSupplementDirectory, { recursive: true });
+  await writeFile(
+    path.join(copiedSupplementDirectory, 'supplement.md'),
+    await readFile(path.join(sourceSupplementDirectory, 'supplement.md'), 'utf8')
+  );
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const sourceSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === sourceSegmentId
+  );
+  const destinationSegment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === destinationSegmentId
+  );
+  assert.ok(sourceSegment);
+  assert.ok(destinationSegment);
+  assert.equal(sourceSegment.supplements.length, 1);
+  assert.deepEqual(destinationSegment.supplements, []);
+  const supplementManifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as { readonly segmentId?: unknown };
+  assert.equal(supplementManifest.segmentId, sourceSegmentId);
 });
 
 test('duplicate direct note segment ids are excluded from detail and index', async () => {

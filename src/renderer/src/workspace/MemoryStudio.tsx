@@ -56,6 +56,7 @@ import {
 } from './LightweightMarkdownEditorSurface';
 import {
   createInlineMarkdownEditorState,
+  inlineMarkdownEditorHasUnacceptedDiskVersion,
   inlineMarkdownEditorIsDirty,
   inlineMarkdownEditorReducer,
 } from './inlineMarkdownEditorState';
@@ -102,7 +103,9 @@ import {
   memoryDetailQueryOptions,
   memoryDetailQueryKey,
   segmentSupplementContentQueryOptions,
+  segmentSupplementContentQueryKey,
   segmentContentQueryOptions,
+  segmentContentQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 import {
@@ -242,6 +245,7 @@ type SegmentSupplementAudioResource = {
 type SavedSegmentTranscriptContent = {
   readonly expectedSession: WorkspaceSession;
   readonly baselineTranscriptHash: string;
+  readonly baselineTiptapContentHash: string;
   readonly memory: WorkspaceMemorySummary;
   readonly memoryId: string;
   readonly segmentId: string;
@@ -249,6 +253,7 @@ type SavedSegmentTranscriptContent = {
 export type SavedSegmentSupplementTranscriptContent = {
   readonly expectedSession: WorkspaceSession;
   readonly baselineTranscriptHash: string;
+  readonly baselineTiptapContentHash: string;
   readonly memory: WorkspaceMemorySummary;
   readonly segment: MemorySegment;
   readonly supplement: AudioMemorySegmentSupplement;
@@ -1926,7 +1931,9 @@ function SegmentSupplementAudioPlayer({
 
   async function saveInlineSegmentSupplementTranscriptMarkdown(
     markdown: string,
-    baselineTranscriptHash: string
+    baselineTranscriptHash: string,
+    tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null,
+    baselineTiptapContentHash: string | null
   ): Promise<FinalizedNoteContentSaveResult<SavedSegmentSupplementTranscriptContent>> {
     const response = await saveSegmentSupplementTranscript({
       workspaceHandle: workspaceSession.workspaceHandle,
@@ -1936,6 +1943,8 @@ function SegmentSupplementAudioPlayer({
       supplementId: supplement.supplementId,
       markdown,
       baselineTranscriptHash,
+      ...(tiptapJson ? { tiptapJson } : {}),
+      ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
     });
     if (!response.ok) {
       return {
@@ -1959,10 +1968,12 @@ function SegmentSupplementAudioPlayer({
       saved: {
         expectedSession: workspaceSession,
         baselineTranscriptHash: response.value.baselineTranscriptHash,
+        baselineTiptapContentHash: response.value.baselineTiptapContentHash,
         memory: response.value.memory,
         segment: response.value.segment,
         supplement: response.value.supplement,
       },
+      nextBaselineTiptapContentHash: response.value.baselineTiptapContentHash,
     };
   }
 
@@ -2003,9 +2014,11 @@ function SegmentSupplementAudioPlayer({
           ariaLabelledBy={ariaLabelledBy}
           attachmentTarget={null}
           baselineContentHash={audioSupplementTranscript.baselineHash}
+          baselineTiptapContentHash={audioSupplementTranscript.baselineTiptapContentHash}
           failureCopy="无法保存补充录音转录。"
           headerLabel="Markdown 补充录音转录"
           initialMarkdown={audioSupplementTranscript.text}
+          initialTiptapJson={audioSupplementTranscript.tiptapJson}
           onDiskVersionAccepted={() => undefined}
           onDirtyChange={onDirtyChange}
           onSave={saveInlineSegmentSupplementTranscriptMarkdown}
@@ -2154,14 +2167,23 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly ariaLabelledBy: string;
   readonly attachmentTarget: MarkdownImageAttachmentTarget | null;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string | null;
   readonly failureCopy: string;
   readonly headerLabel: string;
   readonly initialMarkdown: string;
-  readonly onDiskVersionAccepted: (markdown: string, baselineContentHash: string) => void;
+  readonly initialTiptapJson?: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null;
+  readonly onDiskVersionAccepted: (content: {
+    readonly baselineContentHash: string;
+    readonly baselineTiptapContentHash: string;
+    readonly markdown: string;
+    readonly tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'];
+  }) => void;
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onSave: (
     markdown: string,
-    baselineContentHash: string
+    baselineContentHash: string,
+    tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null,
+    baselineTiptapContentHash: string | null
   ) => Promise<FinalizedNoteContentSaveResult<TSaved>>;
   readonly onSavedContent: (saved: TSaved) => void;
   readonly panelId: string;
@@ -2180,9 +2202,11 @@ function InlineMarkdownContentEditor<TSaved>({
   ariaLabelledBy,
   attachmentTarget,
   baselineContentHash,
+  baselineTiptapContentHash = null,
   failureCopy,
   headerLabel,
   initialMarkdown,
+  initialTiptapJson = null,
   onDiskVersionAccepted,
   onDirtyChange,
   onSave,
@@ -2205,7 +2229,12 @@ function InlineMarkdownContentEditor<TSaved>({
   const latestWorkspaceSessionKeyRef = useRef(workspaceSessionKey);
   const [editorState, dispatchEditorState] = useReducer(
     inlineMarkdownEditorReducer,
-    { baselineContentHash, markdown: initialMarkdown },
+    {
+      baselineContentHash,
+      baselineTiptapContentHash,
+      markdown: initialMarkdown,
+      tiptapJson: initialTiptapJson,
+    },
     createInlineMarkdownEditorState
   );
   const dirty = inlineMarkdownEditorIsDirty(editorState);
@@ -2252,7 +2281,9 @@ function InlineMarkdownContentEditor<TSaved>({
       dispatchEditorState({
         type: 'target-changed',
         baselineContentHash,
+        baselineTiptapContentHash,
         markdown: initialMarkdown,
+        tiptapJson: initialTiptapJson,
       });
       return;
     }
@@ -2260,9 +2291,17 @@ function InlineMarkdownContentEditor<TSaved>({
     dispatchEditorState({
       type: 'input-received',
       baselineContentHash,
+      baselineTiptapContentHash,
       markdown: initialMarkdown,
+      tiptapJson: initialTiptapJson,
     });
-  }, [baselineContentHash, initialMarkdown, targetKey]);
+  }, [
+    baselineContentHash,
+    baselineTiptapContentHash,
+    initialMarkdown,
+    initialTiptapJson,
+    targetKey,
+  ]);
 
   useEffect(() => {
     latestWorkspaceSessionKeyRef.current = workspaceSessionKey;
@@ -2286,6 +2325,7 @@ function InlineMarkdownContentEditor<TSaved>({
 
   async function saveMarkdown(
     nextBaselineContentHash = editorState.activeBaselineContentHash,
+    nextBaselineTiptapContentHash = editorState.activeBaselineTiptapContentHash,
     nextMarkdown = editorState.markdown
   ): Promise<boolean> {
     if (imageAttachment.pending) {
@@ -2296,7 +2336,12 @@ function InlineMarkdownContentEditor<TSaved>({
     });
     const saveWorkspaceSessionKey = workspaceSessionKey;
     try {
-      const result = await onSave(nextMarkdown, nextBaselineContentHash);
+      const result = await onSave(
+        nextMarkdown,
+        nextBaselineContentHash,
+        editorState.tiptapJson,
+        nextBaselineTiptapContentHash
+      );
       if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
         dispatchEditorState({ type: 'save-stale-session' });
         return false;
@@ -2308,6 +2353,9 @@ function InlineMarkdownContentEditor<TSaved>({
           type: 'save-succeeded',
           ...(result.nextBaselineContentHash
             ? { nextBaselineContentHash: result.nextBaselineContentHash }
+            : {}),
+          ...(result.nextBaselineTiptapContentHash
+            ? { nextBaselineTiptapContentHash: result.nextBaselineTiptapContentHash }
             : {}),
         });
         return true;
@@ -2334,15 +2382,25 @@ function InlineMarkdownContentEditor<TSaved>({
   function cancelMarkdownEdit() {
     if (editorState.diskChangeNoticeVisible) {
       const latestBaselineContentHash = editorState.lastInputBaselineContentHash;
-      if (latestBaselineContentHash !== editorState.activeBaselineContentHash) {
+      const latestBaselineTiptapContentHash = editorState.lastInputBaselineTiptapContentHash;
+      if (inlineMarkdownEditorHasUnacceptedDiskVersion(editorState)) {
         const latestMarkdown = editorState.lastInputMarkdown;
         blurEditorSurface();
         dispatchEditorState({
           type: 'disk-version-accepted',
           baselineContentHash: latestBaselineContentHash,
+          baselineTiptapContentHash: latestBaselineTiptapContentHash,
           markdown: latestMarkdown,
+          tiptapJson: editorState.lastInputTiptapJson,
         });
-        onDiskVersionAccepted(latestMarkdown, latestBaselineContentHash);
+        if (editorState.lastInputTiptapJson && latestBaselineTiptapContentHash) {
+          onDiskVersionAccepted({
+            baselineContentHash: latestBaselineContentHash,
+            baselineTiptapContentHash: latestBaselineTiptapContentHash,
+            markdown: latestMarkdown,
+            tiptapJson: editorState.lastInputTiptapJson,
+          });
+        }
         return;
       }
     }
@@ -2411,6 +2469,14 @@ function InlineMarkdownContentEditor<TSaved>({
           onChange={(nextMarkdown) =>
             dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown })
           }
+          onRichChange={({ markdown, tiptapJson, tiptapJsonKey }) =>
+            dispatchEditorState({
+              type: 'markdown-changed',
+              markdown,
+              tiptapJson,
+              tiptapJsonKey,
+            })
+          }
           onDragOver={imageAttachment.handleDragOver}
           onDrop={imageAttachment.handleDrop}
           onAttachmentUpload={imageAttachment.uploadFile}
@@ -2435,6 +2501,7 @@ function InlineMarkdownContentEditor<TSaved>({
           }
           toolbarDisabled={disabled}
           value={editorState.markdown}
+          valueTiptapJson={editorState.tiptapJson ?? undefined}
         />
       </EditorExpandShell>
       <AlertDialog
@@ -2513,12 +2580,16 @@ function InlineMarkdownContentEditor<TSaved>({
                 dispatchEditorState({
                   type: 'disk-version-accepted',
                   baselineContentHash: editorState.conflict.currentBaselineContentHash,
+                  baselineTiptapContentHash: editorState.conflict.currentBaselineTiptapContentHash,
                   markdown: editorState.conflict.currentBodyMarkdown,
+                  tiptapJson: editorState.conflict.currentBodyTiptapJson,
                 });
-                onDiskVersionAccepted(
-                  editorState.conflict.currentBodyMarkdown,
-                  editorState.conflict.currentBaselineContentHash
-                );
+                onDiskVersionAccepted({
+                  baselineContentHash: editorState.conflict.currentBaselineContentHash,
+                  baselineTiptapContentHash: editorState.conflict.currentBaselineTiptapContentHash,
+                  markdown: editorState.conflict.currentBodyMarkdown,
+                  tiptapJson: editorState.conflict.currentBodyTiptapJson,
+                });
               }}
             >
               使用磁盘版本
@@ -2530,8 +2601,14 @@ function InlineMarkdownContentEditor<TSaved>({
                   return;
                 }
                 const nextBaselineContentHash = editorState.conflict.currentBaselineContentHash;
+                const nextBaselineTiptapContentHash =
+                  editorState.conflict.currentBaselineTiptapContentHash;
                 dispatchEditorState({ type: 'conflict-dismissed' });
-                void saveMarkdown(nextBaselineContentHash, editorState.markdown);
+                void saveMarkdown(
+                  nextBaselineContentHash,
+                  nextBaselineTiptapContentHash,
+                  editorState.markdown
+                );
               }}
             >
               保留我的修改
@@ -2557,11 +2634,18 @@ function SegmentSupplementNotePanel({
   workspaceSession,
 }: {
   readonly ariaLabelledBy: string;
-  readonly onDiskVersionAccepted?: (markdown: string, baselineContentHash: string) => void;
+  readonly onDiskVersionAccepted?: (content: {
+    readonly baselineContentHash: string;
+    readonly baselineTiptapContentHash: string;
+    readonly markdown: string;
+    readonly tiptapJson: WorkspaceNoteSegmentSupplementContent['bodyTiptapJson'];
+  }) => void;
   readonly onDirtyChange?: (dirty: boolean) => void;
   readonly onSaveEdit?: (
     markdown: string,
-    baselineContentHash: string
+    baselineContentHash: string,
+    tiptapJson: WorkspaceNoteSegmentSupplementContent['bodyTiptapJson'] | null,
+    baselineTiptapContentHash: string | null
   ) => Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>>;
   readonly onSavedContent?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly panelId: string;
@@ -2582,9 +2666,11 @@ function SegmentSupplementNotePanel({
           supplementId: supplement.supplementId,
         }}
         baselineContentHash={supplementContent.baselineContentHash}
+        baselineTiptapContentHash={supplementContent.baselineTiptapContentHash}
         failureCopy="无法保存补充笔记正文。"
         headerLabel="Markdown 补充笔记"
         initialMarkdown={supplementContent.bodyMarkdown}
+        initialTiptapJson={supplementContent.bodyTiptapJson}
         onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
         onDirtyChange={onDirtyChange}
         onSave={onSaveEdit}
@@ -2802,23 +2888,76 @@ export function MemoryStudio({
     return true;
   }
 
+  function invalidateSegmentContent(targetSegment: MemorySegment | null) {
+    if (targetSegment === null) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentContentQueryKey({
+        workspaceId: workspaceSession.workspaceId,
+        memoryId: targetSegment.memoryId,
+        segmentId: targetSegment.segmentId,
+      }),
+      refetchType: 'active',
+    });
+  }
+
+  function invalidateSupplementContent(targetSupplement: MemorySegmentSupplement | null) {
+    if (targetSupplement === null) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: segmentSupplementContentQueryKey({
+        workspaceId: workspaceSession.workspaceId,
+        memoryId: targetSupplement.memoryId,
+        segmentId: targetSupplement.segmentId,
+        supplementId: targetSupplement.supplementId,
+      }),
+      refetchType: 'active',
+    });
+  }
+
   function requestSelectedSegment(segmentId: string) {
+    const targetSegment = visibleSegments.find((segment) => segment.segmentId === segmentId);
     if (selectedSegment?.segmentId === segmentId) {
+      if (!inlineMarkdownDirty) {
+        invalidateSegmentContent(targetSegment ?? null);
+      }
       return true;
     }
     if (blockDirtyInlineMarkdownNavigation()) {
       return false;
     }
+    invalidateSegmentContent(targetSegment ?? null);
     setSelectedSegmentId(segmentId);
     return true;
   }
 
   function requestActiveContentTab(nextTab: ActiveContentTab) {
+    const nextSupplementId = supplementIdFromContentTab(nextTab);
+    const targetSupplement =
+      nextSupplementId === null
+        ? null
+        : (selectedSegmentSupplementById.get(nextSupplementId) ?? null);
     if (resolvedActiveContentTab === nextTab) {
+      if (!inlineMarkdownDirty) {
+        if (nextSupplementId === null) {
+          invalidateSegmentContent(selectedSegment);
+        } else {
+          invalidateSupplementContent(targetSupplement);
+        }
+      }
       return true;
     }
     if (blockDirtyInlineMarkdownNavigation()) {
       return false;
+    }
+    if (nextSupplementId === null) {
+      invalidateSegmentContent(selectedSegment);
+    } else {
+      invalidateSupplementContent(targetSupplement);
     }
     setActiveContentTab(nextTab);
     return true;
@@ -2850,12 +2989,16 @@ export function MemoryStudio({
 
   async function saveInlineNoteSegmentMarkdown({
     baselineContentHash,
+    baselineTiptapContentHash,
     markdown,
     segment,
+    tiptapJson,
   }: {
     readonly baselineContentHash: string;
+    readonly baselineTiptapContentHash: string | null;
     readonly markdown: string;
     readonly segment: NoteMemorySegment;
+    readonly tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null;
   }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentContent>> {
     const result = await saveFinalizedNoteSegmentContent({
       workspaceSession,
@@ -2863,19 +3006,25 @@ export function MemoryStudio({
       segmentId: segment.segmentId,
       title: segment.title,
       bodyMarkdown: markdown,
+      bodyTiptapJson: tiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash,
     });
     return result;
   }
 
   async function saveInlineSegmentTranscriptMarkdown({
     baselineTranscriptHash,
+    baselineTiptapContentHash,
     markdown,
     segment,
+    tiptapJson,
   }: {
     readonly baselineTranscriptHash: string;
+    readonly baselineTiptapContentHash: string | null;
     readonly markdown: string;
     readonly segment: AudioMemorySegment;
+    readonly tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null;
   }): Promise<FinalizedNoteContentSaveResult<SavedSegmentTranscriptContent>> {
     const response = await saveTranscript({
       workspaceHandle: workspaceSession.workspaceHandle,
@@ -2883,6 +3032,8 @@ export function MemoryStudio({
       segmentId: segment.segmentId,
       markdown,
       baselineTranscriptHash,
+      ...(tiptapJson ? { tiptapJson } : {}),
+      ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
     });
     if (!response.ok) {
       return {
@@ -2895,9 +3046,11 @@ export function MemoryStudio({
     return {
       ok: true,
       nextBaselineContentHash: response.value.baselineTranscriptHash,
+      nextBaselineTiptapContentHash: response.value.baselineTiptapContentHash,
       saved: {
         expectedSession: workspaceSession,
         baselineTranscriptHash: response.value.baselineTranscriptHash,
+        baselineTiptapContentHash: response.value.baselineTiptapContentHash,
         memory: response.value.memory,
         memoryId: segment.memoryId,
         segmentId: segment.segmentId,
@@ -2907,12 +3060,16 @@ export function MemoryStudio({
 
   async function saveInlineNoteSupplementMarkdown({
     baselineContentHash,
+    baselineTiptapContentHash,
     markdown,
     supplement,
+    tiptapJson,
   }: {
     readonly baselineContentHash: string;
+    readonly baselineTiptapContentHash: string | null;
     readonly markdown: string;
     readonly supplement: NoteMemorySegmentSupplement;
+    readonly tiptapJson: WorkspaceNoteSegmentSupplementContent['bodyTiptapJson'] | null;
   }): Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>> {
     const result = await saveFinalizedNoteSegmentSupplementContent({
       workspaceSession,
@@ -2921,7 +3078,9 @@ export function MemoryStudio({
       supplementId: supplement.supplementId,
       title: supplement.title,
       bodyMarkdown: markdown,
+      bodyTiptapJson: tiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash,
     });
     return result;
   }
@@ -3865,6 +4024,8 @@ export function MemoryStudio({
                                     segment: selectedSegment,
                                     contentKind: 'transcript',
                                     currentTitle: contentTab.title,
+                                    baselineTiptapContentHash:
+                                      segmentContent.transcript.baselineTiptapContentHash,
                                     baselineTranscriptHash: segmentContent.transcript.baselineHash,
                                   });
                                   return;
@@ -4068,16 +4229,25 @@ export function MemoryStudio({
                     ariaLabelledBy={transcriptContentTab.tabId}
                     attachmentTarget={null}
                     baselineContentHash={segmentContent.transcript.baselineHash}
+                    baselineTiptapContentHash={segmentContent.transcript.baselineTiptapContentHash}
                     failureCopy="无法保存转录。"
                     headerLabel="Markdown 转录"
                     initialMarkdown={segmentContent.transcript.text}
+                    initialTiptapJson={segmentContent.transcript.tiptapJson}
                     onDiskVersionAccepted={() => undefined}
                     onDirtyChange={setInlineMarkdownDirty}
-                    onSave={(markdown, baselineTranscriptHash) =>
+                    onSave={(
+                      markdown,
+                      baselineTranscriptHash,
+                      tiptapJson,
+                      baselineTiptapContentHash
+                    ) =>
                       saveInlineSegmentTranscriptMarkdown({
                         baselineTranscriptHash,
+                        baselineTiptapContentHash,
                         markdown,
                         segment: selectedSegment,
+                        tiptapJson,
                       })
                     }
                     onSavedContent={onSegmentTranscriptSaved}
@@ -4136,15 +4306,19 @@ export function MemoryStudio({
                       segmentId: selectedSegment.segmentId,
                     }}
                     baselineContentHash={noteSegmentContent.baselineContentHash}
+                    baselineTiptapContentHash={noteSegmentContent.baselineTiptapContentHash}
                     failureCopy="无法保存笔记正文。"
                     headerLabel="Markdown 正文"
                     initialMarkdown={noteSegmentContent.bodyMarkdown}
-                    onDiskVersionAccepted={(markdown, baselineContentHash) =>
+                    initialTiptapJson={noteSegmentContent.bodyTiptapJson}
+                    onDiskVersionAccepted={(content) =>
                       onNoteSegmentContentSaved(
                         savedNoteSegmentContentFromConflict({
                           conflict: {
-                            currentBodyMarkdown: markdown,
-                            currentBaselineContentHash: baselineContentHash,
+                            currentBodyMarkdown: content.markdown,
+                            currentBodyTiptapJson: content.tiptapJson,
+                            currentBaselineContentHash: content.baselineContentHash,
+                            currentBaselineTiptapContentHash: content.baselineTiptapContentHash,
                           },
                           memoryId: selectedSegment.memoryId,
                           segmentId: selectedSegment.segmentId,
@@ -4154,11 +4328,18 @@ export function MemoryStudio({
                       )
                     }
                     onDirtyChange={setInlineMarkdownDirty}
-                    onSave={(markdown, baselineContentHash) =>
+                    onSave={(
+                      markdown,
+                      baselineContentHash,
+                      tiptapJson,
+                      baselineTiptapContentHash
+                    ) =>
                       saveInlineNoteSegmentMarkdown({
                         baselineContentHash,
+                        baselineTiptapContentHash,
                         markdown,
                         segment: selectedSegment,
+                        tiptapJson,
                       })
                     }
                     onSavedContent={onNoteSegmentContentSaved}
@@ -4215,15 +4396,17 @@ export function MemoryStudio({
                   <SegmentSupplementNotePanel
                     key={activeSegmentSupplement.supplementId}
                     ariaLabelledBy={activeContentTabModel.tabId}
-                    onDiskVersionAccepted={(markdown, baselineContentHash) => {
+                    onDiskVersionAccepted={(content) => {
                       if (!activeNoteSupplementContent) {
                         return;
                       }
                       onNoteSegmentSupplementContentSaved(
                         savedNoteSegmentSupplementContentFromConflict({
                           conflict: {
-                            currentBodyMarkdown: markdown,
-                            currentBaselineContentHash: baselineContentHash,
+                            currentBodyMarkdown: content.markdown,
+                            currentBodyTiptapJson: content.tiptapJson,
+                            currentBaselineContentHash: content.baselineContentHash,
+                            currentBaselineTiptapContentHash: content.baselineTiptapContentHash,
                           },
                           memoryId: activeSegmentSupplement.memoryId,
                           segmentId: activeSegmentSupplement.segmentId,
@@ -4234,7 +4417,12 @@ export function MemoryStudio({
                       );
                     }}
                     onDirtyChange={setInlineMarkdownDirty}
-                    onSaveEdit={(markdown, baselineContentHash) => {
+                    onSaveEdit={(
+                      markdown,
+                      baselineContentHash,
+                      tiptapJson,
+                      baselineTiptapContentHash
+                    ) => {
                       if (!activeNoteSupplementContent) {
                         return Promise.resolve({
                           ok: false,
@@ -4244,8 +4432,10 @@ export function MemoryStudio({
                       }
                       return saveInlineNoteSupplementMarkdown({
                         baselineContentHash,
+                        baselineTiptapContentHash,
                         markdown,
                         supplement: activeSegmentSupplement,
+                        tiptapJson,
                       });
                     }}
                     onSavedContent={onNoteSegmentSupplementContentSaved}

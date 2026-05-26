@@ -59,6 +59,11 @@ import {
 } from '../../src/main/workspaceMarkdownObjects.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 import { transcriptDigest } from '../../src/main/transcriptDigest.js';
+import {
+  hashTiptapJsonContent,
+  readTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+} from '../../src/main/tiptapContentSidecar.js';
 
 async function writeFinalizedAudioSegmentForTest(
   rootPath: string,
@@ -298,6 +303,301 @@ test('finalized audio content reads include transcript baseline hashes', async (
     assert.equal(
       (supplement.transcript as { readonly baselineHash?: string }).baselineHash,
       transcriptDigest('补充录音转录')
+    );
+  }
+});
+
+test('finalized audio transcript reads generate sidecars and mirror sidecar JSON back to transcript markdown', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_transcript_tiptap_sidecar';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Segment transcript sidecar', kind: 'audio' },
+      content: '# Segment transcript sidecar\n\n## Transcript\n\nPlain segment transcript',
+    })
+  );
+  const supplementId = 'sup_transcript_tiptap_sidecar';
+  await writeFinalizedAudioSupplementForTest({
+    rootPath,
+    segmentId,
+    supplementId,
+  });
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', supplementId);
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title: 'Supplement transcript sidecar', kind: 'audio' },
+      content: '# Supplement transcript sidecar\n\n## Transcript\n\nPlain supplement transcript',
+    })
+  );
+
+  const firstSegmentRead = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  const firstSupplementRead = await readFinalizedAudioSegmentSupplementContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(firstSegmentRead.ok, true);
+  assert.equal(firstSupplementRead.ok, true);
+  if (!firstSegmentRead.ok || !firstSupplementRead.ok) {
+    throw new Error('audio transcript content should be readable');
+  }
+  assert.equal(firstSegmentRead.transcript.text, 'Plain segment transcript');
+  assert.equal(firstSegmentRead.transcript.tiptapJson.type, 'doc');
+  assert.equal(
+    firstSegmentRead.transcript.baselineTiptapContentHash,
+    (await readTiptapContentSidecar(segmentDirectory)).contentHash
+  );
+  assert.equal(firstSupplementRead.transcript.text, 'Plain supplement transcript');
+  assert.equal(firstSupplementRead.transcript.tiptapJson.type, 'doc');
+  assert.equal(
+    firstSupplementRead.transcript.baselineTiptapContentHash,
+    (await readTiptapContentSidecar(supplementDirectory)).contentHash
+  );
+
+  const segmentSidecar = await readTiptapContentSidecar(segmentDirectory);
+  const nextSegmentTiptapJson = {
+    ...segmentSidecar.content,
+    content: [
+      ...(segmentSidecar.content.content ?? []),
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'JSON-authored audio segment transcript',
+            marks: [{ type: 'highlight', attrs: { color: 'var(--tt-color-highlight-blue)' } }],
+          },
+          { type: 'text', text: ' and ' },
+          { type: 'text', text: 'underlined transcript', marks: [{ type: 'underline' }] },
+        ],
+      },
+    ],
+  };
+  await writeFile(
+    path.join(segmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    `${JSON.stringify(
+      {
+        schemaVersion: segmentSidecar.schemaVersion,
+        objectType: segmentSidecar.objectType,
+        source: segmentSidecar.source,
+        profile: segmentSidecar.profile,
+        contentHash: hashTiptapJsonContent(nextSegmentTiptapJson),
+        content: nextSegmentTiptapJson,
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const supplementSidecar = await readTiptapContentSidecar(supplementDirectory);
+  const nextSupplementTiptapJson = {
+    ...supplementSidecar.content,
+    content: [
+      ...(supplementSidecar.content.content ?? []),
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'JSON-authored audio supplement transcript',
+            marks: [{ type: 'highlight', attrs: { color: 'var(--tt-color-highlight-red)' } }],
+          },
+          { type: 'text', text: ' and ' },
+          { type: 'text', text: 'sup transcript', marks: [{ type: 'superscript' }] },
+        ],
+      },
+    ],
+  };
+  await writeFile(
+    path.join(supplementDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    `${JSON.stringify(
+      {
+        schemaVersion: supplementSidecar.schemaVersion,
+        objectType: supplementSidecar.objectType,
+        source: supplementSidecar.source,
+        profile: supplementSidecar.profile,
+        contentHash: hashTiptapJsonContent(nextSupplementTiptapJson),
+        content: nextSupplementTiptapJson,
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const secondSegmentRead = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  const secondSupplementRead = await readFinalizedAudioSegmentSupplementContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(secondSegmentRead.ok, true);
+  assert.equal(secondSupplementRead.ok, true);
+  if (!secondSegmentRead.ok || !secondSupplementRead.ok) {
+    throw new Error('audio transcript JSON sidecar should reconcile');
+  }
+  assert.match(secondSegmentRead.transcript.text, /JSON-authored audio segment transcript/);
+  assert.match(secondSegmentRead.transcript.text, /var\(--tt-color-highlight-blue\)/);
+  assert.match(
+    await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    /\+\+underlined transcript\+\+/
+  );
+  assert.match(secondSupplementRead.transcript.text, /JSON-authored audio supplement transcript/);
+  assert.match(secondSupplementRead.transcript.text, /var\(--tt-color-highlight-red\)/);
+  assert.match(
+    await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    /<sup>sup transcript<\/sup>/
+  );
+});
+
+test('audio transcript save writes sidecar and rejects stale Tiptap sidecar baselines', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_transcript_tiptap_save';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', segmentId);
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Segment transcript sidecar save', kind: 'audio' },
+      content: '# Segment transcript sidecar save\n\n## Transcript\n\nEditable transcript',
+    })
+  );
+
+  const initial = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  assert.equal(initial.ok, true);
+  if (!initial.ok) {
+    throw new Error('audio transcript content should be readable');
+  }
+  const staleTiptapBaseline = initial.transcript.baselineTiptapContentHash;
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  const externallyChangedTiptapJson = {
+    ...sidecar.content,
+    content: [
+      ...(sidecar.content.content ?? []),
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'External JSON-only transcript change' }],
+      },
+    ],
+  };
+  await writeFile(
+    path.join(segmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    `${JSON.stringify(
+      {
+        schemaVersion: sidecar.schemaVersion,
+        objectType: sidecar.objectType,
+        source: sidecar.source,
+        profile: sidecar.profile,
+        contentHash: hashTiptapJsonContent(externallyChangedTiptapJson),
+        content: externallyChangedTiptapJson,
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const staleSave = await saveRecordingMarkdown({
+    allowOverwrite: true,
+    assertWorkspaceUsable: () => ({ ok: true }),
+    expectedTiptapContentHash: staleTiptapBaseline,
+    expectedTranscriptDigest: transcriptDigest('Editable transcript'),
+    fileName: 'transcript.md',
+    markdown: 'User save should not overwrite external JSON',
+    memoryId,
+    rootPath,
+    segmentId,
+    tiptapJson: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'User save should not overwrite external JSON' }],
+        },
+      ],
+    },
+    workspaceId: 'ws_draft',
+  });
+  assert.equal(staleSave.ok, false);
+  if (!staleSave.ok) {
+    assert.equal(staleSave.error.code, 'ERR_BACKFILL_TRANSCRIPT_CHANGED');
+  }
+
+  const refreshed = await readFinalizedAudioSegmentContent({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  assert.equal(refreshed.ok, true);
+  if (!refreshed.ok) {
+    throw new Error('audio transcript content should still be readable');
+  }
+  assert.match(refreshed.transcript.text, /External JSON-only transcript change/);
+
+  const saved = await saveRecordingMarkdown({
+    allowOverwrite: true,
+    assertWorkspaceUsable: () => ({ ok: true }),
+    expectedTiptapContentHash: refreshed.transcript.baselineTiptapContentHash,
+    expectedTranscriptDigest: refreshed.transcript.baselineHash,
+    fileName: 'transcript.md',
+    markdown:
+      '<mark data-color="var(--tt-color-highlight-purple)" style="background-color: var(--tt-color-highlight-purple); color: inherit">Saved audio transcript highlight</mark>',
+    memoryId,
+    rootPath,
+    segmentId,
+    tiptapJson: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Saved audio transcript highlight',
+              marks: [{ type: 'highlight', attrs: { color: 'var(--tt-color-highlight-purple)' } }],
+            },
+          ],
+        },
+      ],
+    },
+    workspaceId: 'ws_draft',
+  });
+  assert.equal(saved.ok, true);
+  if (saved.ok) {
+    assert.equal(
+      saved.baselineTiptapContentHash,
+      (await readTiptapContentSidecar(segmentDirectory)).contentHash
     );
   }
 });

@@ -1,4 +1,5 @@
 import type { WorkspaceSession } from './workspaceApi';
+import type { WorkspaceTiptapJsonContent } from '../../../workspace-contract/workspace-contract';
 import { writeSegmentContent, writeSegmentSupplementContent } from './workspaceApi';
 import { readStaleNoteContentConflict, type NoteContentConflict } from './noteEditorModel';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
@@ -9,7 +10,9 @@ export type SavedNoteSegmentContent = {
   readonly expectedSession: WorkspaceSession;
   readonly bodyByteLength: number;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson: WorkspaceTiptapJsonContent | null;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash: string | null;
   readonly memoryId: string;
   readonly segmentId: string;
   readonly title: string;
@@ -20,20 +23,29 @@ export type SavedNoteSegmentSupplementContent = SavedNoteSegmentContent & {
 };
 
 export type FinalizedNoteContentSaveResult<TSaved> =
-  | { readonly ok: true; readonly saved: TSaved; readonly nextBaselineContentHash?: string }
+  | {
+      readonly ok: true;
+      readonly saved: TSaved;
+      readonly nextBaselineContentHash?: string;
+      readonly nextBaselineTiptapContentHash?: string;
+    }
   | { readonly ok: false; readonly kind: 'conflict'; readonly conflict: NoteContentConflict }
   | { readonly ok: false; readonly kind: 'error'; readonly message: string };
 
 export async function saveFinalizedNoteSegmentContent({
   baselineContentHash,
+  baselineTiptapContentHash,
   bodyMarkdown,
+  bodyTiptapJson,
   memoryId,
   segmentId,
   title,
   workspaceSession,
 }: {
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string | null;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: WorkspaceTiptapJsonContent | null;
   readonly memoryId: string;
   readonly segmentId: string;
   readonly title: string;
@@ -45,7 +57,9 @@ export async function saveFinalizedNoteSegmentContent({
     memoryId,
     segmentId,
     bodyMarkdown,
+    ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
     baselineContentHash,
+    ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
   });
   if (!response.ok) {
     const conflict = readStaleNoteContentConflict(response.error);
@@ -61,13 +75,16 @@ export async function saveFinalizedNoteSegmentContent({
   return {
     ok: true,
     nextBaselineContentHash: response.value.baselineContentHash,
+    nextBaselineTiptapContentHash: response.value.baselineTiptapContentHash,
     saved: {
       expectedSession: workspaceSession,
       memoryId,
       segmentId,
       title,
       bodyMarkdown,
+      bodyTiptapJson: bodyTiptapJson ?? null,
       baselineContentHash: response.value.baselineContentHash,
+      baselineTiptapContentHash: response.value.baselineTiptapContentHash,
       bodyByteLength: response.value.bodyByteLength,
     },
   };
@@ -75,7 +92,9 @@ export async function saveFinalizedNoteSegmentContent({
 
 export async function saveFinalizedNoteSegmentSupplementContent({
   baselineContentHash,
+  baselineTiptapContentHash,
   bodyMarkdown,
+  bodyTiptapJson,
   memoryId,
   segmentId,
   supplementId,
@@ -83,7 +102,9 @@ export async function saveFinalizedNoteSegmentSupplementContent({
   workspaceSession,
 }: {
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string | null;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: WorkspaceTiptapJsonContent | null;
   readonly memoryId: string;
   readonly segmentId: string;
   readonly supplementId: string;
@@ -97,7 +118,9 @@ export async function saveFinalizedNoteSegmentSupplementContent({
     segmentId,
     supplementId,
     bodyMarkdown,
+    ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
     baselineContentHash,
+    ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
   });
   if (!response.ok) {
     const conflict = readStaleNoteContentConflict(response.error);
@@ -113,6 +136,7 @@ export async function saveFinalizedNoteSegmentSupplementContent({
   return {
     ok: true,
     nextBaselineContentHash: response.value.baselineContentHash,
+    nextBaselineTiptapContentHash: response.value.baselineTiptapContentHash,
     saved: {
       expectedSession: workspaceSession,
       memoryId,
@@ -120,7 +144,9 @@ export async function saveFinalizedNoteSegmentSupplementContent({
       supplementId,
       title,
       bodyMarkdown,
+      bodyTiptapJson: bodyTiptapJson ?? null,
       baselineContentHash: response.value.baselineContentHash,
+      baselineTiptapContentHash: response.value.baselineTiptapContentHash,
       bodyByteLength: response.value.bodyByteLength,
     },
   };
@@ -145,8 +171,10 @@ export function savedNoteSegmentContentFromConflict({
     segmentId,
     title,
     bodyMarkdown: conflict.currentBodyMarkdown,
+    bodyTiptapJson: conflict.currentBodyTiptapJson,
     bodyByteLength: utf8Encoder.encode(conflict.currentBodyMarkdown).byteLength,
     baselineContentHash: conflict.currentBaselineContentHash,
+    baselineTiptapContentHash: conflict.currentBaselineTiptapContentHash,
   };
 }
 
@@ -172,7 +200,9 @@ export function savedNoteSegmentSupplementContentFromConflict({
     supplementId,
     title,
     bodyMarkdown: conflict.currentBodyMarkdown,
+    bodyTiptapJson: conflict.currentBodyTiptapJson,
     bodyByteLength: utf8Encoder.encode(conflict.currentBodyMarkdown).byteLength,
     baselineContentHash: conflict.currentBaselineContentHash,
+    baselineTiptapContentHash: conflict.currentBaselineTiptapContentHash,
   };
 }

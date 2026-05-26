@@ -39,6 +39,16 @@ const memoryId = 'mem_note';
 const segmentId = 'seg_note';
 const supplementId = 'sup_note';
 const baselineContentHash = 'a'.repeat(64);
+const baselineTiptapContentHash = 'b'.repeat(64);
+const bodyTiptapJson = {
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Body' }],
+    },
+  ],
+};
 const timestamp = '2026-05-19T12:00:00.000Z';
 const memorySummary = {
   audioByteLength: 0,
@@ -269,8 +279,10 @@ test('note finalize and content schemas expose projections without absolute path
       type: 'note',
       title: 'Final note',
       bodyMarkdown: '# Body\n',
+      bodyTiptapJson,
       bodyByteLength: 7,
       baselineContentHash,
+      baselineTiptapContentHash,
     },
   });
   assert.equal(readContentResponse.ok, true);
@@ -295,7 +307,12 @@ test('note finalize and content schemas expose projections without absolute path
   );
   const writeContentResponse = workspaceWriteSegmentContentResponseSchema.parse({
     ok: true,
-    value: { bodyByteLength: 14, baselineContentHash, saved: true },
+    value: {
+      bodyByteLength: 14,
+      baselineContentHash,
+      baselineTiptapContentHash,
+      saved: true,
+    },
   });
   assert.equal(writeContentResponse.ok, true);
   assert.equal(writeContentResponse.value.saved, true);

@@ -1,3 +1,4 @@
+import type { WorkspaceTiptapJsonContent } from '../../../workspace-contract/workspace-contract';
 import { type WorkspaceError } from './workspaceApi';
 
 export const NOTE_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
@@ -30,7 +31,9 @@ export type NoteEditorTarget =
 
 export type NoteContentConflict = {
   readonly currentBaselineContentHash: string;
+  readonly currentBaselineTiptapContentHash: string;
   readonly currentBodyMarkdown: string;
+  readonly currentBodyTiptapJson: WorkspaceTiptapJsonContent;
 };
 
 export function targetIdentity(target: NoteEditorTarget | null) {
@@ -94,13 +97,18 @@ export function readStaleNoteContentConflict(error: WorkspaceError): NoteContent
   if (
     error.code !== 'ERR_SEGMENT_CONTENT_STALE' ||
     typeof error.currentBodyMarkdown !== 'string' ||
-    typeof error.currentBaselineContentHash !== 'string'
+    typeof error.currentBaselineContentHash !== 'string' ||
+    typeof error.currentBaselineTiptapContentHash !== 'string' ||
+    typeof error.currentBodyTiptapJson !== 'object' ||
+    error.currentBodyTiptapJson === null
   ) {
     return null;
   }
 
   return {
     currentBaselineContentHash: error.currentBaselineContentHash,
+    currentBaselineTiptapContentHash: error.currentBaselineTiptapContentHash,
     currentBodyMarkdown: error.currentBodyMarkdown,
+    currentBodyTiptapJson: error.currentBodyTiptapJson,
   };
 }

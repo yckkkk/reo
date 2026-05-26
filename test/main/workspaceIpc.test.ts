@@ -95,6 +95,7 @@ import {
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
 import {
+  DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
 } from '../../src/main/workspaceFiles.js';
@@ -987,10 +988,11 @@ test('initializeWorkspace creates a named workspace directory under the selected
 
   assert.equal(result.ok, true);
   assert.deepEqual((await readdir(parentPath)).sort(), ['你好']);
-  assert.equal(
-    await readFile(path.join(workspaceRoot, 'AGENTS.md'), 'utf8'),
-    '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n'
-  );
+  const agentsText = await readFile(path.join(workspaceRoot, 'AGENTS.md'), 'utf8');
+  assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
+  assert.match(agentsText, /content\.tiptap\.json/);
+  assert.match(agentsText, /## Transcript/);
+  assert.match(agentsText, /\.reo\/objects\/\*\.json/);
   await assert.rejects(stat(path.join(parentPath, '.reo')));
   await assert.rejects(stat(path.join(parentPath, 'AGENTS.md')));
 });
@@ -1339,6 +1341,7 @@ test('request segment backfill IPC forwards mode through validated handle owners
             },
             saved: true as const,
             baselineTranscriptHash: 'b'.repeat(64),
+            baselineTiptapContentHash: 'c'.repeat(64),
           },
         };
       },
@@ -1398,6 +1401,7 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
           },
           saved: true as const,
           baselineTranscriptHash: 'b'.repeat(64),
+          baselineTiptapContentHash: 'c'.repeat(64),
           segment: {
             audioByteLength: 10,
             createdAt: '2026-05-17T01:00:00.000Z',
@@ -2321,11 +2325,19 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     assert.equal(result.value.segmentId, 'seg_ipc_audio');
     assert.deepEqual(Array.from(result.value.audio), [1, 2, 3]);
     assert.equal(result.value.audioByteLength, 3);
-    assert.deepEqual(result.value.transcript, {
-      exists: true,
-      text: '大家一起唱生日快乐。',
-      baselineHash: transcriptDigest('大家一起唱生日快乐。'),
+    assert.equal(result.value.transcript.exists, true);
+    assert.equal(result.value.transcript.text, '大家一起唱生日快乐。');
+    assert.equal(result.value.transcript.baselineHash, transcriptDigest('大家一起唱生日快乐。'));
+    assert.deepEqual(result.value.transcript.tiptapJson, {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '大家一起唱生日快乐。' }],
+        },
+      ],
     });
+    assert.match(result.value.transcript.baselineTiptapContentHash, /^[a-f0-9]{64}$/);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
@@ -2394,11 +2406,19 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
-    assert.deepEqual(result.value.transcript, {
-      exists: true,
-      text: '补充录音转写正文',
-      baselineHash: transcriptDigest('补充录音转写正文'),
+    assert.equal(result.value.transcript.exists, true);
+    assert.equal(result.value.transcript.text, '补充录音转写正文');
+    assert.equal(result.value.transcript.baselineHash, transcriptDigest('补充录音转写正文'));
+    assert.deepEqual(result.value.transcript.tiptapJson, {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '补充录音转写正文' }],
+        },
+      ],
     });
+    assert.match(result.value.transcript.baselineTiptapContentHash, /^[a-f0-9]{64}$/);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
@@ -2558,11 +2578,11 @@ test('readFinalizedAudioSegmentSupplement returns empty transcript when suppleme
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
     assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
-    assert.deepEqual(result.value.transcript, {
-      exists: false,
-      text: '',
-      baselineHash: transcriptDigest(''),
-    });
+    assert.equal(result.value.transcript.exists, false);
+    assert.equal(result.value.transcript.text, '');
+    assert.equal(result.value.transcript.baselineHash, transcriptDigest(''));
+    assert.deepEqual(result.value.transcript.tiptapJson, { type: 'doc', content: [] });
+    assert.match(result.value.transcript.baselineTiptapContentHash, /^[a-f0-9]{64}$/);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
@@ -4309,7 +4329,7 @@ test('openWorkspace initializes an empty selected folder as a new workspace', as
   }
   assert.equal(
     await readFile(path.join(rootPath, 'AGENTS.md'), 'utf8'),
-    '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n'
+    DEFAULT_WORKSPACE_AGENTS_MD
   );
   await stat(path.join(rootPath, '.reo', 'workspace.json'));
 });

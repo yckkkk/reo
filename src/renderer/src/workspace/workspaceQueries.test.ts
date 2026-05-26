@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   memoryDetailQueryBelongsToWorkspace,
+  memoryDetailQueryOptions,
   memoryDetailQueryKey,
   memorySpacesQueryKey,
+  segmentContentQueryOptions,
   segmentContentQueryKey,
+  segmentSupplementContentQueryOptions,
   workspaceHandleScopedContentQueryBelongsToWorkspace,
   workspaceContentQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
@@ -39,6 +42,35 @@ describe('workspace queries', () => {
         workspaceHandle: 'secret-handle',
       })
     ).toEqual(['workspace', 'segment-content', 'ws_1', 'mem_1', 'seg_1']);
+  });
+
+  it('refetches file-backed detail and content when cached workspace data is opened again', () => {
+    const session = {
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      snapshot: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [],
+      },
+    };
+
+    expect(memoryDetailQueryOptions(session, 'mem_1').refetchOnMount).toBe('always');
+    expect(segmentContentQueryOptions(session, 'mem_1', 'seg_1', 'note').refetchOnMount).toBe(
+      'always'
+    );
+    expect(
+      segmentSupplementContentQueryOptions(session, 'mem_1', 'seg_1', 'sup_1', 'note')
+        .refetchOnMount
+    ).toBe('always');
+    expect(segmentContentQueryOptions(session, 'mem_1', 'seg_1', 'audio').refetchOnMount).toBe(
+      'always'
+    );
+    expect(
+      segmentSupplementContentQueryOptions(session, 'mem_1', 'seg_1', 'sup_1', 'audio')
+        .refetchOnMount
+    ).toBe('always');
   });
 
   it('matches handle-scoped workspace content query keys', () => {

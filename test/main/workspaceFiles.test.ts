@@ -19,6 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
   readWorkspaceSnapshotFromFileTruth,
@@ -185,6 +186,11 @@ test('workspace init creates only stable first-slice files and no future capabil
     },
   });
   assert.deepEqual((await readdir(root)).sort(), ['.reo', 'AGENTS.md', 'memories']);
+  const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
+  assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
+  assert.match(agentsText, /Codex/);
+  assert.match(agentsText, /content\.tiptap\.json/);
+  assert.match(agentsText, /## Transcript/);
   assert.deepEqual((await readdir(path.join(root, '.reo'))).sort(), [
     'drafts',
     'index.json',

@@ -13,6 +13,10 @@ function renderEditor(
   options: {
     readonly onAttachmentUpload?: (file: File) => Promise<string | null> | string | null | void;
     readonly onChange?: (value: string) => void;
+    readonly onRichChange?: Parameters<typeof LightweightMarkdownEditorSurface>[0]['onRichChange'];
+    readonly valueTiptapJson?: Parameters<
+      typeof LightweightMarkdownEditorSurface
+    >[0]['valueTiptapJson'];
   } = {}
 ) {
   return render(
@@ -33,6 +37,8 @@ function renderEditor(
       surfaceTestId="lightweight-editor"
       value={value}
       {...(options.onAttachmentUpload ? { onAttachmentUpload: options.onAttachmentUpload } : {})}
+      {...(options.onRichChange ? { onRichChange: options.onRichChange } : {})}
+      {...(options.valueTiptapJson ? { valueTiptapJson: options.valueTiptapJson } : {})}
     />
   );
 }
@@ -117,6 +123,42 @@ describe('LightweightMarkdownEditorSurface', () => {
     await waitFor(() => {
       expect(editorHandleRef.current?.getMarkdown()).toContain('# Codex 标题');
     });
+  });
+
+  it('initializes from Tiptap JSON and emits rich changes', async () => {
+    const user = userEvent.setup();
+    const onRichChange = vi.fn();
+    renderEditor('Ignored markdown', createRef<LightweightMarkdownEditorHandle>(), {
+      onRichChange,
+      valueTiptapJson: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'JSON body',
+                marks: [{ type: 'highlight' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    expect(editor).toHaveTextContent('JSON body');
+
+    await user.click(editor);
+    await user.keyboard(' updated');
+
+    await waitFor(() => {
+      expect(onRichChange).toHaveBeenCalled();
+    });
+    const latest = onRichChange.mock.calls.at(-1)?.[0];
+    expect(latest?.markdown).toContain('JSON body');
+    expect(latest?.tiptapJson.type).toBe('doc');
   });
 
   it('does not carry undo history across content target changes', async () => {

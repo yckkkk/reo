@@ -21,6 +21,7 @@ export type SegmentContentClearTarget =
       readonly currentTitle: string;
     })
   | (SegmentActionTarget & {
+      readonly baselineTiptapContentHash: string;
       readonly baselineTranscriptHash: string;
       readonly contentKind: 'transcript';
       readonly currentTitle: string;

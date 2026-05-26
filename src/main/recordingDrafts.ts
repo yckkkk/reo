@@ -15,6 +15,7 @@ import {
 import { rmdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import type { JSONContent } from '@tiptap/core';
 import {
   MAX_BACKFILL_AUDIO_READ_BYTES,
   MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
@@ -34,6 +35,7 @@ import {
 import {
   openExistingWorkspaceFileInDirectory,
   openNoReplaceWorkspaceFileInDirectory,
+  removeWorkspaceFileInDirectory,
   runInWorkspaceDirectorySync,
 } from './workspaceDirectoryTransactions.js';
 import {
@@ -62,6 +64,7 @@ import { transcriptDigest } from './transcriptDigest.js';
 import {
   draftSegmentMetadataSchema,
   draftSegmentSupplementMetadataSchema,
+  TIPTAP_JSON_CONTENT_SIDECAR_MAX_BYTES,
   workspaceError,
   type DraftSegmentSupplementMetadata,
   type DraftSegmentMetadata,
@@ -83,6 +86,13 @@ import {
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
 import { withWorkspaceAsyncQueue } from './workspaceAsyncQueue.js';
+import {
+  hashTiptapJsonContent,
+  reconcileTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+  writeTiptapContentSidecar,
+} from './tiptapContentSidecar.js';
+import { parseTiptapMarkdown } from './tiptapMarkdownCodec.js';
 
 const MAX_AUDIO_CHUNK_BYTES = 1_048_576;
 const MAX_FINALIZED_TRANSCRIPT_READ_BYTES = 1_048_576;
@@ -101,8 +111,10 @@ type RecordingMarkdownSaveInput = {
   readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly expectedTranscriptDigest?: string;
+  readonly expectedTiptapContentHash?: string;
   readonly isAbortRequested?: () => boolean;
   readonly requireTranscriptMissing?: boolean;
+  readonly tiptapJson?: JSONContent;
 };
 type FinalizedAudioSegmentMarkdownSaveInput = RecordingMarkdownSaveInput & {
   readonly workspaceId: string;
@@ -118,15 +130,28 @@ type FinalizedAudioSegmentSupplementMarkdownSaveInput = {
   readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly expectedTranscriptDigest?: string;
+  readonly expectedTiptapContentHash?: string;
   readonly isAbortRequested?: () => boolean;
   readonly requireTranscriptMissing?: boolean;
+  readonly tiptapJson?: JSONContent;
 };
 type TranscriptOverwriteRollback = {
   readonly directory: string;
   readonly directoryIdentity: DirectoryIdentity;
   readonly fileName: 'segment.md' | 'supplement.md';
+  readonly nextBaselineTiptapContentHash: string;
   readonly previousMarkdown: string;
+  readonly previousSidecar: string | null;
 };
+type FinalizedTranscriptContent = {
+  readonly exists: boolean;
+  readonly text: string;
+  readonly baselineHash: string;
+  readonly tiptapJson: JSONContent;
+  readonly baselineTiptapContentHash: string;
+  readonly markdownChanged: boolean;
+};
+type PublicFinalizedTranscriptContent = Omit<FinalizedTranscriptContent, 'markdownChanged'>;
 function checkWorkspaceUsable(
   assertWorkspaceUsable?: AssertWorkspaceUsable
 ): WorkspaceErrorEnvelope | null {
@@ -491,6 +516,42 @@ async function readTextFileInKnownDirectory(
   } finally {
     closeSync(fd);
   }
+}
+
+async function readOptionalTextFileInKnownDirectory(
+  directory: string,
+  directoryIdentity: DirectoryIdentity,
+  fileName: string,
+  maxBytes: number
+): Promise<string | null> {
+  try {
+    return await readTextFileInKnownDirectory(directory, directoryIdentity, fileName, maxBytes);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function emptyTranscriptContent(): FinalizedTranscriptContent {
+  const tiptapJson = parseTiptapMarkdown('');
+  return {
+    exists: false,
+    text: '',
+    baselineHash: transcriptDigest(''),
+    tiptapJson,
+    baselineTiptapContentHash: hashTiptapJsonContent(tiptapJson),
+    markdownChanged: false,
+  };
+}
+
+function publicTranscriptContent({
+  markdownChanged: _markdownChanged,
+  ...transcript
+}: FinalizedTranscriptContent): PublicFinalizedTranscriptContent {
+  void _markdownChanged;
+  return transcript;
 }
 
 async function writeMetadata(
@@ -1355,20 +1416,22 @@ async function readOptionalFinalizedTranscriptFile(
   directory: string,
   directoryIdentity: DirectoryIdentity,
   options: {
+    readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
     readonly markdownFileName: 'segment.md' | 'supplement.md';
     readonly objectType: 'segment' | 'supplement';
   }
-): Promise<{ readonly exists: boolean; readonly text: string; readonly baselineHash: string }> {
+): Promise<FinalizedTranscriptContent> {
   let fd: number;
   try {
     fd = openFileForReadInDirectory(directory, directoryIdentity, options.markdownFileName);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { exists: false, text: '', baselineHash: transcriptDigest('') };
+      return emptyTranscriptContent();
     }
     throw error;
   }
 
+  let markdown: string;
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile()) {
@@ -1377,18 +1440,54 @@ async function readOptionalFinalizedTranscriptFile(
     if (stat.size > MAX_FINALIZED_TRANSCRIPT_READ_BYTES) {
       throw new Error(`${options.markdownFileName} is too large`);
     }
-    const markdown = (await readFileDescriptor(fd, 'utf8')) as string;
-    const parsed = parseWorkspaceMarkdownObject({ objectType: options.objectType, markdown });
-    const text = extractSegmentTranscript(parsed.content);
-    await assertSameDirectory(directory, directoryIdentity);
-    return {
-      exists: text.length > 0,
-      text,
-      baselineHash: transcriptDigest(text),
-    };
+    markdown = (await readFileDescriptor(fd, 'utf8')) as string;
   } finally {
     closeSync(fd);
   }
+  const parsed = parseWorkspaceMarkdownObject({ objectType: options.objectType, markdown });
+  const text = extractSegmentTranscript(parsed.content);
+  await assertSameDirectory(directory, directoryIdentity);
+  const reconciled = await reconcileTiptapContentSidecar({
+    assertUsable: options.assertWorkspaceUsable
+      ? () => assertWorkspaceUsableForFileWrite(options.assertWorkspaceUsable)
+      : undefined,
+    bodyMarkdown: text,
+    objectDirectory: directory,
+    writeBodyMarkdown: async (nextTranscriptMarkdown) => {
+      const nextMarkdown = renderWorkspaceMarkdownObject({
+        objectType: options.objectType,
+        data: parsed.data,
+        content: replaceSegmentTranscript(parsed.content, nextTranscriptMarkdown),
+      });
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory,
+        directoryIdentity,
+        fileName: options.markdownFileName,
+        data: nextMarkdown,
+        ...(options.assertWorkspaceUsable
+          ? {
+              assertUsable: () => assertWorkspaceUsableForFileWrite(options.assertWorkspaceUsable),
+            }
+          : {}),
+      });
+      return nextTranscriptMarkdown;
+    },
+  });
+  if (!reconciled.ok) {
+    throw workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Transcript Tiptap sidecar could not be reconciled',
+      'previous-file-preserved'
+    );
+  }
+  return {
+    exists: reconciled.bodyMarkdown.length > 0,
+    text: reconciled.bodyMarkdown,
+    baselineHash: transcriptDigest(reconciled.bodyMarkdown),
+    tiptapJson: reconciled.tiptapJson,
+    baselineTiptapContentHash: reconciled.baselineTiptapContentHash,
+    markdownChanged: reconciled.bodyMarkdownChanged,
+  };
 }
 
 export async function readFinalizedAudioSegmentContent({
@@ -1409,11 +1508,7 @@ export async function readFinalizedAudioSegmentContent({
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: {
-        readonly exists: boolean;
-        readonly text: string;
-        readonly baselineHash: string;
-      };
+      readonly transcript: PublicFinalizedTranscriptContent;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1443,8 +1538,15 @@ export async function readFinalizedAudioSegmentContent({
     const transcript = await readOptionalFinalizedTranscriptFile(
       target.directory,
       recordingDirectoryIdentity,
-      { markdownFileName: 'segment.md', objectType: 'segment' }
+      {
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+        markdownFileName: 'segment.md',
+        objectType: 'segment',
+      }
     );
+    if (transcript.markdownChanged) {
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
 
     const audioFd = openFileForReadInDirectory(
       target.directory,
@@ -1478,7 +1580,7 @@ export async function readFinalizedAudioSegmentContent({
         audio: content,
         audioByteLength: target.audioByteLength,
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript,
+        transcript: publicTranscriptContent(transcript),
       };
     } finally {
       closeSync(audioFd);
@@ -1513,11 +1615,7 @@ export async function readFinalizedAudioSegmentBackfillSource({
       readonly audioFileDescriptor: number;
       readonly dispose: () => void;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: {
-        readonly exists: boolean;
-        readonly text: string;
-        readonly baselineHash: string;
-      };
+      readonly transcript: PublicFinalizedTranscriptContent;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1546,8 +1644,9 @@ export async function readFinalizedAudioSegmentBackfillSource({
     }
     const transcript =
       transcriptReadMode === 'assume-missing'
-        ? { exists: false, text: '', baselineHash: transcriptDigest('') }
+        ? emptyTranscriptContent()
         : await readOptionalFinalizedTranscriptFile(target.directory, recordingDirectoryIdentity, {
+            ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
             markdownFileName: 'segment.md',
             objectType: 'segment',
           });
@@ -1583,7 +1682,7 @@ export async function readFinalizedAudioSegmentBackfillSource({
         audioFileDescriptor: audioFd,
         dispose: () => closeSync(audioFd),
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript,
+        transcript: publicTranscriptContent(transcript),
       };
     } finally {
       if (fdOwned) {
@@ -1621,11 +1720,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
       readonly audio: Uint8Array;
       readonly audioByteLength: number;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: {
-        readonly exists: boolean;
-        readonly text: string;
-        readonly baselineHash: string;
-      };
+      readonly transcript: PublicFinalizedTranscriptContent;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1661,8 +1756,15 @@ export async function readFinalizedAudioSegmentSupplementContent({
     const transcript = await readOptionalFinalizedTranscriptFile(
       target.directory,
       supplementDirectoryIdentity,
-      { markdownFileName: 'supplement.md', objectType: 'supplement' }
+      {
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+        markdownFileName: 'supplement.md',
+        objectType: 'supplement',
+      }
     );
+    if (transcript.markdownChanged) {
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
 
     const audioFd = openFileForReadInDirectory(
       target.directory,
@@ -1696,7 +1798,7 @@ export async function readFinalizedAudioSegmentSupplementContent({
         audio: content,
         audioByteLength: target.audioByteLength,
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript,
+        transcript: publicTranscriptContent(transcript),
       };
     } finally {
       closeSync(audioFd);
@@ -1738,11 +1840,7 @@ export async function readFinalizedAudioSegmentSupplementBackfillSource({
       readonly audioFileDescriptor: number;
       readonly dispose: () => void;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
-      readonly transcript: {
-        readonly exists: boolean;
-        readonly text: string;
-        readonly baselineHash: string;
-      };
+      readonly transcript: PublicFinalizedTranscriptContent;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1777,8 +1875,9 @@ export async function readFinalizedAudioSegmentSupplementBackfillSource({
     }
     const transcript =
       transcriptReadMode === 'assume-missing'
-        ? { exists: false, text: '', baselineHash: transcriptDigest('') }
+        ? emptyTranscriptContent()
         : await readOptionalFinalizedTranscriptFile(target.directory, supplementDirectoryIdentity, {
+            ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
             markdownFileName: 'supplement.md',
             objectType: 'supplement',
           });
@@ -1814,7 +1913,7 @@ export async function readFinalizedAudioSegmentSupplementBackfillSource({
         audioFileDescriptor: audioFd,
         dispose: () => closeSync(audioFd),
         lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript,
+        transcript: publicTranscriptContent(transcript),
       };
     } finally {
       if (fdOwned) {
@@ -2205,43 +2304,99 @@ export async function discardSegmentSupplementRecordingDraft({
   }
 }
 
-async function writeSupplementTranscriptInRecordingDirectory({
+async function writeTranscriptInRecordingDirectory({
   recordingDirectory,
   markdown,
   allowOverwrite = false,
   assertWorkspaceUsable,
   expectedTranscriptDigest,
+  expectedTiptapContentHash,
   isAbortRequested,
+  objectType,
   requireTranscriptMissing = false,
+  tiptapJson,
 }: {
   readonly recordingDirectory: string;
   readonly markdown: string;
   readonly allowOverwrite?: boolean;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly expectedTranscriptDigest?: string;
+  readonly expectedTiptapContentHash?: string;
   readonly isAbortRequested?: () => boolean;
+  readonly objectType: 'segment' | 'supplement';
   readonly requireTranscriptMissing?: boolean;
+  readonly tiptapJson?: JSONContent;
 }): Promise<TranscriptOverwriteRollback> {
+  const fileName = objectType === 'segment' ? 'segment.md' : 'supplement.md';
   const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
   throwIfBackfillSaveAborted(isAbortRequested);
   await beforeMarkdownWriteForTest?.();
   throwIfBackfillSaveAborted(isAbortRequested);
   assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
   await assertSameDirectory(recordingDirectory, directoryIdentity);
-  const currentMarkdown = await readTextFileInKnownDirectory(
+  let currentMarkdown = await readTextFileInKnownDirectory(
     recordingDirectory,
     directoryIdentity,
-    'supplement.md',
+    fileName,
     MAX_FINALIZED_TRANSCRIPT_READ_BYTES
   );
   const current = parseWorkspaceMarkdownObject({
-    objectType: 'supplement',
+    objectType,
     markdown: currentMarkdown,
   });
   if ('kind' in current.data && current.data.kind && current.data.kind !== 'audio') {
-    throw new Error('Finalized supplement markdown kind is unsupported');
+    throw new Error('Finalized audio markdown kind is unsupported');
   }
-  if (requireTranscriptMissing && extractSegmentTranscript(current.content).length > 0) {
+  const currentTranscript = extractSegmentTranscript(current.content);
+  const reconciled = await reconcileTiptapContentSidecar({
+    assertUsable:
+      assertWorkspaceUsable || isAbortRequested
+        ? () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested)
+        : undefined,
+    bodyMarkdown: currentTranscript,
+    objectDirectory: recordingDirectory,
+    writeBodyMarkdown: async (nextTranscriptMarkdown) => {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: recordingDirectory,
+        directoryIdentity,
+        fileName,
+        data: renderWorkspaceMarkdownObject({
+          objectType,
+          data: current.data,
+          content: replaceSegmentTranscript(current.content, nextTranscriptMarkdown),
+        }),
+        ...(assertWorkspaceUsable || isAbortRequested
+          ? {
+              assertUsable: () =>
+                assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
+            }
+          : {}),
+      });
+      return nextTranscriptMarkdown;
+    },
+  });
+  if (!reconciled.ok) {
+    throw workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Transcript Tiptap sidecar could not be reconciled',
+      'previous-file-preserved'
+    );
+  }
+  if (reconciled.bodyMarkdownChanged) {
+    currentMarkdown = await readTextFileInKnownDirectory(
+      recordingDirectory,
+      directoryIdentity,
+      fileName,
+      MAX_FINALIZED_TRANSCRIPT_READ_BYTES
+    );
+  }
+  const previousSidecar = await readOptionalTextFileInKnownDirectory(
+    recordingDirectory,
+    directoryIdentity,
+    TIPTAP_CONTENT_SIDECAR_FILE,
+    TIPTAP_JSON_CONTENT_SIDECAR_MAX_BYTES
+  );
+  if (requireTranscriptMissing && reconciled.bodyMarkdown.length > 0) {
     throw workspaceError(
       'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
       'Backfill target already has a transcript'
@@ -2251,114 +2406,111 @@ async function writeSupplementTranscriptInRecordingDirectory({
     if (!allowOverwrite) {
       throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Transcript overwrite is not allowed');
     }
-    const currentTranscriptDigest = transcriptDigest(extractSegmentTranscript(current.content));
+    const currentTranscriptDigest = transcriptDigest(reconciled.bodyMarkdown);
     if (currentTranscriptDigest !== expectedTranscriptDigest) {
       throw workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
     }
+  }
+  if (
+    expectedTiptapContentHash !== undefined &&
+    reconciled.baselineTiptapContentHash !== expectedTiptapContentHash
+  ) {
+    throw workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
   }
   const currentData = current.data as { readonly kind?: 'audio' };
   assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
   throwIfBackfillSaveAborted(isAbortRequested);
-  await writeWorkspaceFileAtomicInKnownDirectory({
-    directory: recordingDirectory,
-    directoryIdentity,
-    fileName: 'supplement.md',
-    data: renderWorkspaceMarkdownObject({
-      objectType: 'supplement',
-      data: {
-        ...current.data,
-        kind: currentData.kind ?? 'audio',
-      },
-      content: replaceSegmentTranscript(current.content, markdown),
-    }),
-    ...(assertWorkspaceUsable || isAbortRequested
-      ? {
-          assertUsable: () =>
-            assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
+  let markdownWritten = false;
+  let savedTiptapContentHash: string;
+  try {
+    await writeWorkspaceFileAtomicInKnownDirectory({
+      directory: recordingDirectory,
+      directoryIdentity,
+      fileName,
+      data: renderWorkspaceMarkdownObject({
+        objectType,
+        data:
+          objectType === 'supplement'
+            ? {
+                ...current.data,
+                kind: currentData.kind ?? 'audio',
+              }
+            : current.data,
+        content: replaceSegmentTranscript(current.content, markdown),
+      }),
+      ...(assertWorkspaceUsable || isAbortRequested
+        ? {
+            assertUsable: () =>
+              assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
+          }
+        : {}),
+    });
+    markdownWritten = true;
+    const savedSidecar = await writeTiptapContentSidecar({
+      assertUsable:
+        assertWorkspaceUsable || isAbortRequested
+          ? () => assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested)
+          : undefined,
+      bodyMarkdown: markdown,
+      objectDirectory: recordingDirectory,
+      tiptapJson: tiptapJson ?? parseTiptapMarkdown(markdown),
+    });
+    savedTiptapContentHash = savedSidecar.contentHash;
+  } catch (error) {
+    if (markdownWritten) {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: recordingDirectory,
+        directoryIdentity,
+        fileName,
+        data: currentMarkdown,
+        ...(assertWorkspaceUsable
+          ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+          : {}),
+      }).catch(() => undefined);
+      if (previousSidecar === null) {
+        try {
+          removeWorkspaceFileInDirectory({
+            directory: recordingDirectory,
+            directoryIdentity,
+            fileName: TIPTAP_CONTENT_SIDECAR_FILE,
+          });
+        } catch {
+          // The caller reports the write failure; failed rollback leaves the index stale.
         }
-      : {}),
-  });
+      } else {
+        await writeWorkspaceFileAtomicInKnownDirectory({
+          directory: recordingDirectory,
+          directoryIdentity,
+          fileName: TIPTAP_CONTENT_SIDECAR_FILE,
+          data: previousSidecar,
+          ...(assertWorkspaceUsable
+            ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+            : {}),
+        }).catch(() => undefined);
+      }
+    }
+    throw error;
+  }
   return {
     directory: recordingDirectory,
     directoryIdentity,
-    fileName: 'supplement.md',
+    fileName,
+    nextBaselineTiptapContentHash: savedTiptapContentHash,
     previousMarkdown: currentMarkdown,
+    previousSidecar,
   };
 }
 
-async function writeSegmentTranscriptInRecordingDirectory({
-  recordingDirectory,
-  markdown,
-  allowOverwrite = false,
-  assertWorkspaceUsable,
-  expectedTranscriptDigest,
-  isAbortRequested,
-  requireTranscriptMissing = false,
-}: {
-  readonly recordingDirectory: string;
-  readonly markdown: string;
-  readonly allowOverwrite?: boolean;
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
-  readonly expectedTranscriptDigest?: string;
-  readonly isAbortRequested?: () => boolean;
-  readonly requireTranscriptMissing?: boolean;
-}): Promise<TranscriptOverwriteRollback> {
-  const directoryIdentity = await readDirectoryIdentity(recordingDirectory);
-  throwIfBackfillSaveAborted(isAbortRequested);
-  await beforeMarkdownWriteForTest?.();
-  throwIfBackfillSaveAborted(isAbortRequested);
-  assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-  const currentMarkdown = await readTextFileInKnownDirectory(
-    recordingDirectory,
-    directoryIdentity,
-    'segment.md',
-    MAX_FINALIZED_TRANSCRIPT_READ_BYTES
-  );
-  const current = parseWorkspaceMarkdownObject({
-    objectType: 'segment',
-    markdown: currentMarkdown,
-  });
-  if (requireTranscriptMissing && extractSegmentTranscript(current.content).length > 0) {
-    throw workspaceError(
-      'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
-      'Backfill target already has a transcript'
-    );
-  }
-  if (expectedTranscriptDigest !== undefined) {
-    if (!allowOverwrite) {
-      throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Transcript overwrite is not allowed');
-    }
-    const currentTranscriptDigest = transcriptDigest(extractSegmentTranscript(current.content));
-    if (currentTranscriptDigest !== expectedTranscriptDigest) {
-      throw workspaceError('ERR_BACKFILL_TRANSCRIPT_CHANGED', 'Transcript changed during backfill');
-    }
-  }
-  assertWorkspaceUsableForFileWrite(assertWorkspaceUsable);
-  throwIfBackfillSaveAborted(isAbortRequested);
-  const nextContent = replaceSegmentTranscript(current.content, markdown);
-  await assertSameDirectory(recordingDirectory, directoryIdentity);
-  await writeWorkspaceFileAtomicInKnownDirectory({
-    directory: recordingDirectory,
-    directoryIdentity,
-    fileName: 'segment.md',
-    data: renderWorkspaceMarkdownObject({
-      objectType: 'segment',
-      data: current.data,
-      content: nextContent,
-    }),
-    ...(assertWorkspaceUsable || isAbortRequested
-      ? {
-          assertUsable: () =>
-            assertBackfillSaveCanContinue(assertWorkspaceUsable, isAbortRequested),
-        }
-      : {}),
-  });
-  return {
-    directory: recordingDirectory,
-    directoryIdentity,
-    fileName: 'segment.md',
-    previousMarkdown: currentMarkdown,
-  };
+function writeSegmentTranscriptInRecordingDirectory(
+  input: Omit<Parameters<typeof writeTranscriptInRecordingDirectory>[0], 'objectType'>
+): Promise<TranscriptOverwriteRollback> {
+  return writeTranscriptInRecordingDirectory({ ...input, objectType: 'segment' });
+}
+
+function writeSupplementTranscriptInRecordingDirectory(
+  input: Omit<Parameters<typeof writeTranscriptInRecordingDirectory>[0], 'objectType'>
+): Promise<TranscriptOverwriteRollback> {
+  return writeTranscriptInRecordingDirectory({ ...input, objectType: 'supplement' });
 }
 
 async function rollbackTranscriptOverwrite(
@@ -2377,6 +2529,23 @@ async function rollbackTranscriptOverwrite(
         ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
         : {}),
     });
+    if (rollback.previousSidecar === null) {
+      removeWorkspaceFileInDirectory({
+        directory: rollback.directory,
+        directoryIdentity: rollback.directoryIdentity,
+        fileName: TIPTAP_CONTENT_SIDECAR_FILE,
+      });
+    } else {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: rollback.directory,
+        directoryIdentity: rollback.directoryIdentity,
+        fileName: TIPTAP_CONTENT_SIDECAR_FILE,
+        data: rollback.previousSidecar,
+        ...(assertWorkspaceUsable
+          ? { assertUsable: () => assertWorkspaceUsableForFileWrite(assertWorkspaceUsable) }
+          : {}),
+      });
+    }
     return true;
   } catch {
     return false;
@@ -2428,10 +2597,13 @@ async function throwAfterTranscriptOverwriteFailure(
   throw workspaceError('ERR_WORKSPACE_UPDATE_FAILED', fallbackMessage, 'file-written-index-stale');
 }
 
-export async function saveRecordingMarkdown(
-  input: FinalizedAudioSegmentMarkdownSaveInput
-): Promise<
-  | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
+export async function saveRecordingMarkdown(input: FinalizedAudioSegmentMarkdownSaveInput): Promise<
+  | {
+      readonly ok: true;
+      readonly baselineTiptapContentHash: string;
+      readonly memory: MemorySummary;
+      readonly saved: true;
+    }
   | WorkspaceErrorEnvelope
 > {
   return withMarkdownSaveQueue(
@@ -2451,8 +2623,15 @@ async function saveRecordingMarkdownNow({
   expectedTranscriptDigest,
   isAbortRequested,
   requireTranscriptMissing,
+  expectedTiptapContentHash,
+  tiptapJson,
 }: FinalizedAudioSegmentMarkdownSaveInput): Promise<
-  | { readonly ok: true; readonly memory: MemorySummary; readonly saved: true }
+  | {
+      readonly ok: true;
+      readonly baselineTiptapContentHash: string;
+      readonly memory: MemorySummary;
+      readonly saved: true;
+    }
   | WorkspaceErrorEnvelope
 > {
   const usable = checkWorkspaceUsable(assertWorkspaceUsable);
@@ -2460,21 +2639,13 @@ async function saveRecordingMarkdownNow({
     return usable;
   }
   let rollback: TranscriptOverwriteRollback;
+  let recordingDirectory: string;
   try {
-    const { directory: recordingDirectory } = await resolveFinalizedAudioSegmentReadTarget(
+    ({ directory: recordingDirectory } = await resolveFinalizedAudioSegmentReadTarget(
       rootPath,
       memoryId,
       segmentId
-    );
-    rollback = await writeSegmentTranscriptInRecordingDirectory({
-      recordingDirectory,
-      ...(allowOverwrite ? { allowOverwrite } : {}),
-      markdown,
-      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
-      ...(isAbortRequested ? { isAbortRequested } : {}),
-      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
-      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-    });
+    ));
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
     if (workspaceErrorEnvelope) {
@@ -2482,6 +2653,29 @@ async function saveRecordingMarkdownNow({
     }
     return workspaceError(
       'ERR_RECORDING_NOT_FOUND',
+      'Recording markdown could not be saved',
+      'previous-file-preserved'
+    );
+  }
+  try {
+    rollback = await writeSegmentTranscriptInRecordingDirectory({
+      recordingDirectory,
+      ...(allowOverwrite ? { allowOverwrite } : {}),
+      markdown,
+      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
+      ...(expectedTiptapContentHash !== undefined ? { expectedTiptapContentHash } : {}),
+      ...(isAbortRequested ? { isAbortRequested } : {}),
+      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      ...(tiptapJson ? { tiptapJson } : {}),
+    });
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_UPDATE_FAILED',
       'Recording markdown could not be saved',
       'previous-file-preserved'
     );
@@ -2498,7 +2692,12 @@ async function saveRecordingMarkdownNow({
       segmentId,
       ...(assertWorkspaceUsable ? { assertUsable: assertWorkspaceUsable } : {}),
     });
-    return { ok: true, memory, saved: true };
+    return {
+      ok: true,
+      baselineTiptapContentHash: rollback.nextBaselineTiptapContentHash,
+      memory,
+      saved: true,
+    };
   } catch (error) {
     try {
       await throwAfterTranscriptOverwriteFailure(
@@ -2530,6 +2729,7 @@ export async function saveSegmentSupplementMarkdown(
 ): Promise<
   | {
       readonly ok: true;
+      readonly baselineTiptapContentHash: string;
       readonly memory: MemorySummary;
       readonly segment: WorkspaceSegmentProjection;
       readonly supplement: WorkspaceSegmentSupplementProjection;
@@ -2555,9 +2755,12 @@ async function saveSegmentSupplementMarkdownNow({
   expectedTranscriptDigest,
   isAbortRequested,
   requireTranscriptMissing,
+  expectedTiptapContentHash,
+  tiptapJson,
 }: FinalizedAudioSegmentSupplementMarkdownSaveInput): Promise<
   | {
       readonly ok: true;
+      readonly baselineTiptapContentHash: string;
       readonly memory: MemorySummary;
       readonly segment: WorkspaceSegmentProjection;
       readonly supplement: WorkspaceSegmentSupplementProjection;
@@ -2570,24 +2773,15 @@ async function saveSegmentSupplementMarkdownNow({
     return usable;
   }
   let rollback: TranscriptOverwriteRollback;
+  let supplementDirectory: string;
   try {
-    const { directory: supplementDirectory } =
-      await resolveFinalizedAudioSegmentSupplementReadTarget(
-        rootPath,
-        workspaceId,
-        memoryId,
-        segmentId,
-        supplementId
-      );
-    rollback = await writeSupplementTranscriptInRecordingDirectory({
-      recordingDirectory: supplementDirectory,
-      ...(allowOverwrite ? { allowOverwrite } : {}),
-      markdown,
-      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
-      ...(isAbortRequested ? { isAbortRequested } : {}),
-      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
-      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-    });
+    ({ directory: supplementDirectory } = await resolveFinalizedAudioSegmentSupplementReadTarget(
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId
+    ));
   } catch (error) {
     const workspaceErrorEnvelope = caughtWorkspaceError(error);
     if (workspaceErrorEnvelope) {
@@ -2595,6 +2789,29 @@ async function saveSegmentSupplementMarkdownNow({
     }
     return workspaceError(
       'ERR_RECORDING_NOT_FOUND',
+      'Segment supplement markdown could not be saved',
+      'previous-file-preserved'
+    );
+  }
+  try {
+    rollback = await writeSupplementTranscriptInRecordingDirectory({
+      recordingDirectory: supplementDirectory,
+      ...(allowOverwrite ? { allowOverwrite } : {}),
+      markdown,
+      ...(expectedTranscriptDigest !== undefined ? { expectedTranscriptDigest } : {}),
+      ...(expectedTiptapContentHash !== undefined ? { expectedTiptapContentHash } : {}),
+      ...(isAbortRequested ? { isAbortRequested } : {}),
+      ...(requireTranscriptMissing ? { requireTranscriptMissing } : {}),
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      ...(tiptapJson ? { tiptapJson } : {}),
+    });
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_WORKSPACE_UPDATE_FAILED',
       'Segment supplement markdown could not be saved',
       'previous-file-preserved'
     );
@@ -2643,6 +2860,7 @@ async function saveSegmentSupplementMarkdownNow({
     };
     return {
       ok: true,
+      baselineTiptapContentHash: rollback.nextBaselineTiptapContentHash,
       memory: refreshed.memory,
       segment: {
         ...segment,

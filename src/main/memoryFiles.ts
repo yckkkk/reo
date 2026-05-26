@@ -89,6 +89,9 @@ const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
 type ManifestLastTranscriptionAttempt = FinalizeTranscriptionAttempt | 'success' | undefined;
+type FileTruthListOptions = {
+  readonly repairFileSpaceCandidates?: boolean;
+};
 
 const workspaceIdentitySchema = z
   .object({
@@ -1170,6 +1173,44 @@ async function readSupplementManifestOrNull(
   }
 }
 
+async function activeSegmentDirectoryStillExists({
+  memoryId,
+  rootPath,
+  segmentId,
+}: {
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+}): Promise<boolean> {
+  try {
+    const directory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const metadata = await lstat(directory);
+    return metadata.isDirectory() || metadata.isSymbolicLink();
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? false : true;
+  }
+}
+
+async function activeSupplementDirectoryStillExists({
+  memoryId,
+  rootPath,
+  segmentId,
+  supplementId,
+}: {
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<boolean> {
+  try {
+    const directory = await segmentSupplementDirectory(rootPath, memoryId, segmentId, supplementId);
+    const metadata = await lstat(directory);
+    return metadata.isDirectory() || metadata.isSymbolicLink();
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? false : true;
+  }
+}
+
 function directorySupplementIdHint(directoryName: string): string | null {
   const hint = directoryName.split('--')[0] ?? '';
   return SUPPLEMENT_ID_PATTERN.test(hint) ? hint : null;
@@ -1205,6 +1246,94 @@ async function reconcileNoteSegmentCandidate({
     markdown,
   });
   const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+  if (candidateKind === 'audio') {
+    const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+    const hintedId = directorySegmentIdHint(directoryName);
+    const segmentId = frontmatterId ?? hintedId;
+    if (!segmentId || blockedSegmentIds.has(segmentId)) {
+      return;
+    }
+    const existingManifest = await readSegmentManifestOrNull(rootPath, segmentId);
+    if (
+      !existingManifest ||
+      existingManifest.objectType !== 'segment' ||
+      existingManifest.workspaceId !== workspaceId ||
+      existingManifest.segmentId !== segmentId ||
+      existingManifest.kind !== 'audio'
+    ) {
+      return;
+    }
+    if (
+      existingManifest.memoryId !== memoryId &&
+      (await activeSegmentDirectoryStillExists({
+        memoryId: existingManifest.memoryId,
+        rootPath,
+        segmentId,
+      }))
+    ) {
+      recordDiagnosticEvent({
+        area: 'workspace-files',
+        event: 'markdown.segment.needs-review',
+        fields: {
+          ambiguousCandidateCount: 0,
+          duplicateIdCount: 1,
+        },
+        level: 'warn',
+      });
+      return;
+    }
+    let audioByteLength: number;
+    try {
+      audioByteLength = readFileSizeInKnownDirectory(
+        candidateDirectory,
+        candidateIdentity,
+        'audio.webm'
+      );
+    } catch {
+      return;
+    }
+    if (existingManifest.audioByteLength !== audioByteLength) {
+      return;
+    }
+    const title = inferCandidateTitle({
+      content: candidate.content,
+      directoryName,
+      metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+      nodeId: segmentId,
+    });
+    const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+    if (frontmatterId !== segmentId || candidateTitle !== title) {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: candidateDirectory,
+        directoryIdentity: candidateIdentity,
+        fileName: 'segment.md',
+        data: renderWorkspaceMarkdownObject({
+          objectType: 'segment',
+          data: {
+            ...candidate.data,
+            id: segmentId,
+            title,
+            kind: 'audio',
+          },
+          content: candidate.content,
+        }),
+      });
+    }
+    if (existingManifest.memoryId !== memoryId || existingManifest.workspaceId !== workspaceId) {
+      const timestamp = new Date().toISOString();
+      await writeSegmentObjectManifest({
+        rootPath,
+        segment: {
+          ...existingManifest,
+          workspaceId,
+          memoryId,
+          audioByteLength,
+          updatedAt: timestamp,
+        },
+      });
+    }
+    return;
+  }
   if (candidateKind !== undefined && candidateKind !== 'note') {
     return;
   }
@@ -1223,14 +1352,33 @@ async function reconcileNoteSegmentCandidate({
   });
   const bodyByteLength = markdownBodyByteLength(candidate.content);
   const existingManifest = await readSegmentManifestOrNull(rootPath, segmentId);
-  if (
+  const existingManifestMatchesIdentity =
     existingManifest &&
-    (existingManifest.objectType !== 'segment' ||
-      existingManifest.workspaceId !== workspaceId ||
-      existingManifest.memoryId !== memoryId ||
-      existingManifest.segmentId !== segmentId ||
-      existingManifest.kind !== 'note')
+    existingManifest.objectType === 'segment' &&
+    existingManifest.workspaceId === workspaceId &&
+    existingManifest.segmentId === segmentId &&
+    existingManifest.kind === 'note';
+  if (existingManifest && !existingManifestMatchesIdentity) {
+    return;
+  }
+  if (
+    existingManifestMatchesIdentity &&
+    existingManifest.memoryId !== memoryId &&
+    (await activeSegmentDirectoryStillExists({
+      memoryId: existingManifest.memoryId,
+      rootPath,
+      segmentId,
+    }))
   ) {
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'markdown.segment.needs-review',
+      fields: {
+        ambiguousCandidateCount: 0,
+        duplicateIdCount: 1,
+      },
+      level: 'warn',
+    });
     return;
   }
 
@@ -1253,10 +1401,15 @@ async function reconcileNoteSegmentCandidate({
     });
   }
 
-  if (!existingManifest || existingManifest.bodyByteLength !== bodyByteLength) {
+  if (
+    !existingManifest ||
+    existingManifest.memoryId !== memoryId ||
+    existingManifest.bodyByteLength !== bodyByteLength
+  ) {
     await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'segments' });
     const timestamp = new Date().toISOString();
     await writeWorkspaceJsonAtomic(await segmentObjectManifestPath(rootPath, segmentId), {
+      ...(existingManifest ?? {}),
       schemaVersion: 1,
       objectType: 'segment',
       workspaceId,
@@ -1310,7 +1463,7 @@ async function classifyNoteSegmentCandidatesForReview({
         ),
       });
       const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
-      if (candidateKind !== undefined && candidateKind !== 'note') {
+      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
         continue;
       }
       const candidateId =
@@ -1421,6 +1574,100 @@ async function reconcileNoteSupplementCandidate({
     markdown,
   });
   const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+  if (candidateKind === 'audio') {
+    const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+    const hintedId = directorySupplementIdHint(directoryName);
+    const supplementId = frontmatterId ?? hintedId;
+    if (!supplementId || blockedSupplementIds.has(supplementId)) {
+      return;
+    }
+    const existingManifest = await readSupplementManifestOrNull(rootPath, supplementId);
+    if (
+      !existingManifest ||
+      existingManifest.objectType !== 'supplement' ||
+      existingManifest.workspaceId !== workspaceId ||
+      existingManifest.supplementId !== supplementId ||
+      existingManifest.kind !== 'audio'
+    ) {
+      return;
+    }
+    if (
+      (existingManifest.memoryId !== memoryId || existingManifest.segmentId !== segmentId) &&
+      (await activeSupplementDirectoryStillExists({
+        memoryId: existingManifest.memoryId,
+        rootPath,
+        segmentId: existingManifest.segmentId,
+        supplementId,
+      }))
+    ) {
+      recordDiagnosticEvent({
+        area: 'workspace-files',
+        event: 'markdown.supplement.needs-review',
+        fields: {
+          ambiguousCandidateCount: 0,
+          duplicateIdCount: 1,
+        },
+        level: 'warn',
+      });
+      return;
+    }
+    let audioByteLength: number;
+    try {
+      audioByteLength = readFileSizeInKnownDirectory(
+        candidateDirectory,
+        candidateIdentity,
+        'audio.webm'
+      );
+    } catch {
+      return;
+    }
+    if (existingManifest.audioByteLength !== audioByteLength) {
+      return;
+    }
+    const title = inferCandidateTitle({
+      content: candidate.content,
+      directoryName,
+      metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+      nodeId: supplementId,
+    });
+    const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+    if (frontmatterId !== supplementId || candidateTitle !== title) {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: candidateDirectory,
+        directoryIdentity: candidateIdentity,
+        fileName: 'supplement.md',
+        data: renderWorkspaceMarkdownObject({
+          objectType: 'supplement',
+          data: {
+            ...candidate.data,
+            id: supplementId,
+            title,
+            kind: 'audio',
+          },
+          content: candidate.content,
+        }),
+      });
+    }
+    if (
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.segmentId !== segmentId ||
+      existingManifest.workspaceId !== workspaceId
+    ) {
+      const timestamp = new Date().toISOString();
+      await writeSupplementObjectManifest({
+        rootPath,
+        supplement: {
+          ...existingManifest,
+          workspaceId,
+          memoryId,
+          segmentId,
+          audioByteLength,
+          updatedAt: timestamp,
+        },
+      });
+    }
+    return;
+  }
   if (candidateKind !== undefined && candidateKind !== 'note') {
     return;
   }
@@ -1439,15 +1686,34 @@ async function reconcileNoteSupplementCandidate({
   });
   const bodyByteLength = markdownBodyByteLength(candidate.content);
   const existingManifest = await readSupplementManifestOrNull(rootPath, supplementId);
-  if (
+  const existingManifestMatchesIdentity =
     existingManifest &&
-    (existingManifest.objectType !== 'supplement' ||
-      existingManifest.workspaceId !== workspaceId ||
-      existingManifest.memoryId !== memoryId ||
-      existingManifest.segmentId !== segmentId ||
-      existingManifest.supplementId !== supplementId ||
-      existingManifest.kind !== 'note')
+    existingManifest.objectType === 'supplement' &&
+    existingManifest.workspaceId === workspaceId &&
+    existingManifest.supplementId === supplementId &&
+    existingManifest.kind === 'note';
+  if (existingManifest && !existingManifestMatchesIdentity) {
+    return;
+  }
+  if (
+    existingManifestMatchesIdentity &&
+    (existingManifest.memoryId !== memoryId || existingManifest.segmentId !== segmentId) &&
+    (await activeSupplementDirectoryStillExists({
+      memoryId: existingManifest.memoryId,
+      rootPath,
+      segmentId: existingManifest.segmentId,
+      supplementId,
+    }))
   ) {
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'markdown.supplement.needs-review',
+      fields: {
+        ambiguousCandidateCount: 0,
+        duplicateIdCount: 1,
+      },
+      level: 'warn',
+    });
     return;
   }
 
@@ -1470,10 +1736,16 @@ async function reconcileNoteSupplementCandidate({
     });
   }
 
-  if (!existingManifest || existingManifest.bodyByteLength !== bodyByteLength) {
+  if (
+    !existingManifest ||
+    existingManifest.memoryId !== memoryId ||
+    existingManifest.segmentId !== segmentId ||
+    existingManifest.bodyByteLength !== bodyByteLength
+  ) {
     await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'supplements' });
     const timestamp = new Date().toISOString();
     await writeWorkspaceJsonAtomic(await supplementObjectManifestPath(rootPath, supplementId), {
+      ...(existingManifest ?? {}),
       schemaVersion: 1,
       objectType: 'supplement',
       workspaceId,
@@ -1531,7 +1803,7 @@ async function classifyNoteSupplementCandidatesForReview({
         ),
       });
       const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
-      if (candidateKind !== undefined && candidateKind !== 'note') {
+      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
         continue;
       }
       const candidateId =
@@ -1779,10 +2051,7 @@ export function extractSegmentTranscript(markdownContent: string): string {
     return '';
   }
   const bodyStart = heading.index + heading[0].length;
-  const remaining = markdownContent.slice(bodyStart);
-  const visibleRemaining = removeHtmlComments(remaining);
-  const nextHeading = /^##\s+/m.exec(visibleRemaining);
-  const body = nextHeading ? visibleRemaining.slice(0, nextHeading.index) : visibleRemaining;
+  const body = removeHtmlComments(markdownContent.slice(bodyStart));
   return body.replace(/^\r?\n/, '').replace(/\s+$/, '');
 }
 
@@ -1808,11 +2077,7 @@ export function replaceSegmentTranscript(markdownContent: string, transcript: st
   const replacement = `## Transcript\n\n${transcript}`;
   const heading = /^## Transcript[ \t]*(?:\r?\n|$)/m.exec(markdownContent);
   if (heading) {
-    const bodyStart = heading.index + heading[0].length;
-    const remaining = markdownContent.slice(bodyStart);
-    const nextHeading = /^##\s+/m.exec(remaining);
-    const bodyEnd = nextHeading ? bodyStart + nextHeading.index : markdownContent.length;
-    return `${markdownContent.slice(0, heading.index)}${replacement}${markdownContent.slice(bodyEnd)}`;
+    return `${markdownContent.slice(0, heading.index)}${replacement}`;
   }
   const trimmed = markdownContent.replace(/\s+$/, '');
   return `${trimmed}\n\n${replacement}`;
@@ -3589,24 +3854,28 @@ async function listValidSegmentSupplementsFromDirectory({
   memoryId,
   segmentId,
   recordingDirectory,
+  repairFileSpaceCandidates = true,
 }: {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
   readonly recordingDirectory: string;
+  readonly repairFileSpaceCandidates?: boolean;
 }): Promise<WorkspaceSegmentSupplementProjection[]> {
   const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
     path.join(recordingDirectory, 'supplements')
   );
-  await reconcileNoteSupplementsInSegmentDirectory({
-    memoryId,
-    recordingDirectory,
-    rootPath,
-    segmentId,
-    workspaceId,
-  });
+  if (repairFileSpaceCandidates) {
+    await reconcileNoteSupplementsInSegmentDirectory({
+      memoryId,
+      recordingDirectory,
+      rootPath,
+      segmentId,
+      workspaceId,
+    });
+  }
   let entries: Dirent[];
   try {
     entries = await readExistingDirectoryEntries(supplementsDirectory);
@@ -3907,7 +4176,8 @@ async function readFinalizedSupplementIdFromMetadata(
 
 async function listValidFinalizedSegmentFileTruths(
   rootPath: string,
-  memoryId: string
+  memoryId: string,
+  options: FileTruthListOptions = {}
 ): Promise<FinalizedSegmentFileTruth[]> {
   await beforeSegmentFileTruthListForTest?.();
   const directory = await memoryDirectory(rootPath, memoryId);
@@ -3915,6 +4185,7 @@ async function listValidFinalizedSegmentFileTruths(
     rootPath,
     memoryId,
     memoryDirectoryPath: directory,
+    ...options,
   });
 }
 
@@ -3922,16 +4193,20 @@ async function listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
   rootPath,
   memoryId,
   memoryDirectoryPath,
+  repairFileSpaceCandidates = true,
 }: {
   readonly rootPath: string;
   readonly memoryId: string;
   readonly memoryDirectoryPath: string;
+  readonly repairFileSpaceCandidates?: boolean;
 }): Promise<FinalizedSegmentFileTruth[]> {
-  await reconcileNoteSegmentsInMemoryDirectory({
-    rootPath,
-    memoryId,
-    memoryDirectoryPath,
-  });
+  if (repairFileSpaceCandidates) {
+    await reconcileNoteSegmentsInMemoryDirectory({
+      rootPath,
+      memoryId,
+      memoryDirectoryPath,
+    });
+  }
   const segmentsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
     path.join(memoryDirectoryPath, 'segments')
@@ -3986,10 +4261,12 @@ async function readValidFinalizedSegmentFileTruth(
 async function summarizeMemoryFromFileTruths({
   fileTruths,
   memory,
+  repairFileSpaceCandidates = true,
   rootPath,
 }: {
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
+  readonly repairFileSpaceCandidates?: boolean;
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   let segmentCount = 0;
@@ -4010,6 +4287,7 @@ async function summarizeMemoryFromFileTruths({
         memoryId: memory.memoryId,
         segmentId: fileTruth.segmentId,
         recordingDirectory: fileTruth.recordingDirectory,
+        repairFileSpaceCandidates,
       });
       updatedAt = latestIsoTimestamp(
         updatedAt,
@@ -4051,10 +4329,15 @@ async function summarizeMemoryFromFileTruths({
   };
 }
 
-async function summarizeMemory(rootPath: string, memory: MemoryFileTruth): Promise<MemorySummary> {
+async function summarizeMemory(
+  rootPath: string,
+  memory: MemoryFileTruth,
+  options: FileTruthListOptions = {}
+): Promise<MemorySummary> {
   return summarizeMemoryFromFileTruths({
-    fileTruths: await listValidFinalizedSegmentFileTruths(rootPath, memory.memoryId),
+    fileTruths: await listValidFinalizedSegmentFileTruths(rootPath, memory.memoryId, options),
     memory,
+    ...options,
     rootPath,
   });
 }
@@ -4150,10 +4433,12 @@ async function finalizedSegmentProjectionFromFileTruth({
   rootPath,
   workspaceId,
   fileTruth,
+  repairFileSpaceCandidates = true,
 }: {
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly fileTruth: FinalizedSegmentFileTruth;
+  readonly repairFileSpaceCandidates?: boolean;
 }): Promise<WorkspaceSegmentProjection | null> {
   const { metadata, recordingDirectory, segmentId } = fileTruth;
   if (metadata.workspaceId !== workspaceId) {
@@ -4165,6 +4450,7 @@ async function finalizedSegmentProjectionFromFileTruth({
     memoryId: metadata.memoryId,
     segmentId,
     recordingDirectory,
+    repairFileSpaceCandidates,
   });
   const updatedAt = latestIsoTimestamp(
     metadata.updatedAt ?? metadata.finalizedAt,
@@ -4515,7 +4801,9 @@ export async function refreshMemoryIndexEntry(
   await beforeMemoryIndexEntryReadForTest?.();
   return withWorkspaceIndexWriteLock(rootPath, async () => {
     assertWorkspaceUsable(assertUsable);
-    const summary = await summarizeMemory(rootPath, await readMemoryFileTruth(rootPath, memoryId));
+    const summary = await summarizeMemory(rootPath, await readMemoryFileTruth(rootPath, memoryId), {
+      repairFileSpaceCandidates: false,
+    });
     assertWorkspaceUsable(assertUsable);
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(rootPath)))
@@ -4547,7 +4835,9 @@ export async function refreshMemoryIndexEntryWithDetail(input: {
   return withWorkspaceIndexWriteLock(input.rootPath, async () => {
     assertWorkspaceUsable(input.assertUsable);
     const memory = await readMemoryFileTruth(input.rootPath, input.memoryId);
-    const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId);
+    const fileTruths = await listValidFinalizedSegmentFileTruths(input.rootPath, input.memoryId, {
+      repairFileSpaceCandidates: false,
+    });
     const segments: WorkspaceSegmentProjection[] = [];
     for (const fileTruth of fileTruths) {
       assertWorkspaceUsable(input.assertUsable);
@@ -4555,6 +4845,7 @@ export async function refreshMemoryIndexEntryWithDetail(input: {
         rootPath: input.rootPath,
         workspaceId: input.workspaceId,
         fileTruth,
+        repairFileSpaceCandidates: false,
       });
       if (segment) {
         segments.push(segment);

@@ -4722,8 +4722,10 @@ function handleReadSegmentContentCore(
                   type: 'note',
                   title: result.title,
                   bodyMarkdown: result.bodyMarkdown,
+                  bodyTiptapJson: result.bodyTiptapJson,
                   bodyByteLength: result.bodyByteLength,
                   baselineContentHash: result.baselineContentHash,
+                  baselineTiptapContentHash: result.baselineTiptapContentHash,
                 },
               }
             : result
@@ -4770,8 +4772,10 @@ function handleReadSegmentSupplementContentCore(
                   type: 'note',
                   title: result.title,
                   bodyMarkdown: result.bodyMarkdown,
+                  bodyTiptapJson: result.bodyTiptapJson,
                   bodyByteLength: result.bodyByteLength,
                   baselineContentHash: result.baselineContentHash,
+                  baselineTiptapContentHash: result.baselineTiptapContentHash,
                 },
               }
             : result
@@ -4806,7 +4810,11 @@ function handleWriteSegmentContentCore({
           memoryId: request.memoryId,
           segmentId: request.segmentId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           baselineContentHash: request.baselineContentHash,
+          ...(request.baselineTiptapContentHash
+            ? { baselineTiptapContentHash: request.baselineTiptapContentHash }
+            : {}),
           now,
           assertWorkspaceUsable: assertUsable,
         });
@@ -4816,6 +4824,7 @@ function handleWriteSegmentContentCore({
                 ok: true,
                 value: {
                   baselineContentHash: result.baselineContentHash,
+                  baselineTiptapContentHash: result.baselineTiptapContentHash,
                   bodyByteLength: result.bodyByteLength,
                   saved: true,
                 },
@@ -4853,7 +4862,11 @@ function handleWriteSegmentSupplementContentCore({
           segmentId: request.segmentId,
           supplementId: request.supplementId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           baselineContentHash: request.baselineContentHash,
+          ...(request.baselineTiptapContentHash
+            ? { baselineTiptapContentHash: request.baselineTiptapContentHash }
+            : {}),
           now,
           assertWorkspaceUsable: assertUsable,
         });
@@ -4863,6 +4876,7 @@ function handleWriteSegmentSupplementContentCore({
                 ok: true,
                 value: {
                   baselineContentHash: result.baselineContentHash,
+                  baselineTiptapContentHash: result.baselineTiptapContentHash,
                   bodyByteLength: result.bodyByteLength,
                   saved: true,
                 },
@@ -5314,6 +5328,10 @@ function saveTranscriptWithHandle(
             expectedTranscriptDigest: request.baselineTranscriptHash,
           }
         : {}),
+      ...(request.baselineTiptapContentHash !== undefined
+        ? { expectedTiptapContentHash: request.baselineTiptapContentHash }
+        : {}),
+      ...(request.tiptapJson ? { tiptapJson: request.tiptapJson } : {}),
     });
     return workspaceRecordingMarkdownSaveResponseSchema.parse(
       result.ok
@@ -5323,6 +5341,7 @@ function saveTranscriptWithHandle(
               memory: result.memory,
               saved: true,
               baselineTranscriptHash: transcriptDigest(request.markdown),
+              baselineTiptapContentHash: result.baselineTiptapContentHash,
             },
           }
         : result
@@ -5356,6 +5375,10 @@ function saveSegmentSupplementTranscriptWithHandle(
             expectedTranscriptDigest: request.baselineTranscriptHash,
           }
         : {}),
+      ...(request.baselineTiptapContentHash !== undefined
+        ? { expectedTiptapContentHash: request.baselineTiptapContentHash }
+        : {}),
+      ...(request.tiptapJson ? { tiptapJson: request.tiptapJson } : {}),
     });
     return workspaceSegmentSupplementMarkdownSaveResponseSchema.parse(
       result.ok
@@ -5367,6 +5390,7 @@ function saveSegmentSupplementTranscriptWithHandle(
               supplement: result.supplement,
               saved: true,
               baselineTranscriptHash: transcriptDigest(request.markdown),
+              baselineTiptapContentHash: result.baselineTiptapContentHash,
             },
           }
         : result

@@ -16,6 +16,7 @@ const DEV_SCENARIO_QUERY_PARAM = 'reoScenario';
 const DEV_SCENARIO_BRIDGE_MARKER = '__reoDevWorkspaceScenarioBridge';
 const MEMORY_STUDIO_RICH_SCENARIO_ID = 'dev-memory-studio-rich';
 const BASELINE_HASH = 'd'.repeat(64);
+const BASELINE_TIPTAP_HASH = 'e'.repeat(64);
 const CREATED_AT = '2026-05-24T09:00:00.000Z';
 const UPDATED_AT = '2026-05-24T09:18:00.000Z';
 const AUDIO_TRANSCRIPT =
@@ -27,6 +28,21 @@ const NOTE_BODY =
 const SUPPLEMENT_NOTE_BODY = '补充笔记用于验证内容 tab 切换、长标题截断和正文编辑 surface。';
 
 let installedDevWorkspaceScenario: DevWorkspaceScenarioName | null = null;
+
+function transcriptTiptapDoc(text: string) {
+  return {
+    type: 'doc',
+    content:
+      text.length > 0
+        ? [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text }],
+            },
+          ]
+        : [],
+  };
+}
 
 type DevWorkspaceScenarioBridge = ReoWorkspaceBridge & {
   readonly [DEV_SCENARIO_BRIDGE_MARKER]?: DevWorkspaceScenarioName;
@@ -226,7 +242,13 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       segmentId: audioSegment.segmentId,
       audio,
       audioByteLength,
-      transcript: { exists: true, text: AUDIO_TRANSCRIPT, baselineHash: BASELINE_HASH },
+      transcript: {
+        exists: true,
+        text: AUDIO_TRANSCRIPT,
+        baselineHash: BASELINE_HASH,
+        tiptapJson: transcriptTiptapDoc(AUDIO_TRANSCRIPT),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
+      },
     },
     audioSupplementContent: {
       requestId: '',
@@ -240,6 +262,8 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
         exists: true,
         text: AUDIO_SUPPLEMENT_TRANSCRIPT,
         baselineHash: BASELINE_HASH,
+        tiptapJson: transcriptTiptapDoc(AUDIO_SUPPLEMENT_TRANSCRIPT),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
       },
     },
     detail,
@@ -258,8 +282,10 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       type: 'note',
       title: noteSegment.contentTitle,
       bodyMarkdown: NOTE_BODY,
+      bodyTiptapJson: { type: 'doc', content: [{ type: 'paragraph' }] },
       bodyByteLength: byteLength(NOTE_BODY),
       baselineContentHash: BASELINE_HASH,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
     },
     session: {
       workspaceHandle: 'dev-scenario-workspace-handle',
@@ -275,8 +301,10 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       type: 'note',
       title: '补充笔记：界面审查重点',
       bodyMarkdown: SUPPLEMENT_NOTE_BODY,
+      bodyTiptapJson: { type: 'doc', content: [{ type: 'paragraph' }] },
       bodyByteLength: byteLength(SUPPLEMENT_NOTE_BODY),
       baselineContentHash: BASELINE_HASH,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
     },
   };
 }
@@ -349,6 +377,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     writeSegmentContent: (payload: Parameters<ReoWorkspaceBridge['writeSegmentContent']>[0]) =>
       ok({
         baselineContentHash: BASELINE_HASH,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
         bodyByteLength: byteLength(payload.bodyMarkdown),
         saved: true as const,
       }),
@@ -357,6 +386,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     ) =>
       ok({
         baselineContentHash: BASELINE_HASH,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
         bodyByteLength: byteLength(payload.bodyMarkdown),
         saved: true as const,
       }),

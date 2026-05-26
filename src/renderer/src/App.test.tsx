@@ -19,6 +19,9 @@ describe('App', () => {
   const BASELINE_HASH_A = 'a'.repeat(64);
   const BASELINE_HASH_B = 'b'.repeat(64);
   const BASELINE_HASH_C = 'c'.repeat(64);
+  const BASELINE_TIPTAP_HASH_A = 'd'.repeat(64);
+  const BASELINE_TIPTAP_HASH_B = 'e'.repeat(64);
+  const BASELINE_TIPTAP_HASH_C = 'f'.repeat(64);
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(),
@@ -116,6 +119,42 @@ describe('App', () => {
 
   function expectRichEditorEnabled(editor: HTMLElement) {
     expect(editor).toHaveAttribute('contenteditable', 'true');
+  }
+
+  function noteTiptapDoc(text: string) {
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text }],
+        },
+      ],
+    };
+  }
+
+  function transcriptTiptapDoc(text: string) {
+    return text.length > 0 ? noteTiptapDoc(text) : { type: 'doc', content: [] };
+  }
+
+  function audioTranscriptContent({
+    baselineHash,
+    baselineTiptapContentHash = BASELINE_TIPTAP_HASH_A,
+    exists,
+    text,
+  }: {
+    readonly baselineHash: string;
+    readonly baselineTiptapContentHash?: string;
+    readonly exists: boolean;
+    readonly text: string;
+  }) {
+    return {
+      exists,
+      text,
+      baselineHash,
+      tiptapJson: transcriptTiptapDoc(text),
+      baselineTiptapContentHash,
+    };
   }
 
   function expectRichEditorDisabled(editor: HTMLElement) {
@@ -636,7 +675,11 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1]),
         audioByteLength: 1,
-        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: false,
+          text: '',
+          baselineHash: '0'.repeat(64),
+        }),
       },
     }));
     reoWorkspace.readFinalizedAudioSegmentSupplement.mockImplementation(async (payload) => ({
@@ -649,7 +692,11 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'a'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: true,
+          text: '补充录音转写正文',
+          baselineHash: 'a'.repeat(64),
+        }),
       },
     }));
   }
@@ -753,9 +800,11 @@ describe('App', () => {
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
         transcript: {
-          exists: transcriptExists,
-          text: transcriptExists ? '已有转录正文' : '',
-          baselineHash: transcriptExists ? 'f'.repeat(64) : '0'.repeat(64),
+          ...audioTranscriptContent({
+            exists: transcriptExists,
+            text: transcriptExists ? '已有转录正文' : '',
+            baselineHash: transcriptExists ? 'f'.repeat(64) : '0'.repeat(64),
+          }),
         },
       },
     }));
@@ -1263,7 +1312,11 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
-        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: false,
+          text: '',
+          baselineHash: '0'.repeat(64),
+        }),
       },
     }));
 
@@ -1308,6 +1361,7 @@ describe('App', () => {
         memory: { ...memory, hasAudioTranscript: true },
         saved: true,
         baselineTranscriptHash: BASELINE_HASH_B,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -1381,7 +1435,11 @@ describe('App', () => {
         segmentId: payload.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
-        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: false,
+          text: '',
+          baselineHash: '0'.repeat(64),
+        }),
       },
     }));
     const backfill =
@@ -1454,6 +1512,7 @@ describe('App', () => {
           memory: { ...memory, hasAudioTranscript: true },
           saved: true,
           baselineTranscriptHash: BASELINE_HASH_B,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       });
       await backfill.promise;
@@ -1463,6 +1522,7 @@ describe('App', () => {
           memory: { ...memory, hasAudioTranscript: true },
           saved: true,
           baselineTranscriptHash: BASELINE_HASH_C,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
         },
       });
       await reopenedBackfill.promise;
@@ -1501,7 +1561,11 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: false,
+          text: '',
+          baselineHash: '0'.repeat(64),
+        }),
       },
     }));
 
@@ -1550,6 +1614,7 @@ describe('App', () => {
         supplement: fixture.supplement,
         saved: true,
         baselineTranscriptHash: BASELINE_HASH_B,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -1581,7 +1646,11 @@ describe('App', () => {
         supplementId: payload.supplementId,
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
+        transcript: audioTranscriptContent({
+          exists: false,
+          text: '',
+          baselineHash: '0'.repeat(64),
+        }),
       },
     }));
     const backfill =
@@ -1664,6 +1733,7 @@ describe('App', () => {
           supplement: fixture.supplement,
           saved: true,
           baselineTranscriptHash: BASELINE_HASH_B,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       });
       await backfill.promise;
@@ -1675,6 +1745,7 @@ describe('App', () => {
           supplement: fixture.supplement,
           saved: true,
           baselineTranscriptHash: BASELINE_HASH_C,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
         },
       });
       await reopenedBackfill.promise;
@@ -1750,6 +1821,7 @@ describe('App', () => {
         supplement: transcriptSupplement,
         saved: true,
         baselineTranscriptHash: BASELINE_HASH_B,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -1810,6 +1882,7 @@ describe('App', () => {
         memory: { ...memory, hasAudioTranscript: true },
         saved: true,
         baselineTranscriptHash: BASELINE_HASH_B,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
     expect(await screen.findByText('已生成转录')).toBeInTheDocument();
@@ -4522,6 +4595,140 @@ describe('App', () => {
         queryKey: ['workspace', 'segment-content', 'other_workspace', 'mem_birthday', 'seg_note_1'],
       } as never)
     ).toBe(false);
+  });
+
+  it('reloads a cached Note Segment body when the Segment is selected again', async () => {
+    const user = userEvent.setup();
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 2,
+      noteSegmentCount: 2,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: true,
+      supplementCount: 0,
+    };
+    const segmentOne = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_note_1',
+      type: 'note' as const,
+      title: '笔记1',
+      createdAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+      bodyByteLength: 17,
+      supplementCount: 0,
+      supplements: [],
+    };
+    const segmentTwo = {
+      ...segmentOne,
+      segmentId: 'seg_note_2',
+      title: '笔记2',
+      bodyByteLength: 12,
+    };
+    const snapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [memory],
+    };
+    let segmentOneContent = {
+      bodyByteLength: 17,
+      bodyMarkdown: 'Segment one before',
+      bodyTiptapJson: noteTiptapDoc('Segment one before'),
+      baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+    };
+    const segmentTwoContent = {
+      bodyByteLength: 12,
+      bodyMarkdown: 'Segment two',
+      bodyTiptapJson: noteTiptapDoc('Segment two'),
+      baselineContentHash: BASELINE_HASH_B,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: snapshot,
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [segmentOne, segmentTwo],
+        },
+      },
+    }));
+    reoWorkspace.readSegmentContent.mockImplementation(async (payload) => {
+      const content = payload.segmentId === 'seg_note_1' ? segmentOneContent : segmentTwoContent;
+      return {
+        ok: true,
+        value: {
+          requestId: payload.requestId,
+          workspaceId: 'ws_1',
+          memoryId: payload.memoryId,
+          segmentId: payload.segmentId,
+          type: 'note',
+          title: payload.segmentId === 'seg_note_1' ? '笔记1' : '笔记2',
+          ...content,
+        },
+      };
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByText('Segment one before');
+
+    await user.click(screen.getByRole('button', { name: '选择片段 笔记2' }));
+    await screen.findByText('Segment two');
+    segmentOneContent = {
+      bodyByteLength: 29,
+      bodyMarkdown: 'Segment one after agent edit',
+      bodyTiptapJson: noteTiptapDoc('Segment one after agent edit'),
+      baselineContentHash: BASELINE_HASH_C,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
+    };
+
+    await user.click(screen.getByRole('button', { name: '选择片段 笔记1' }));
+
+    await screen.findByText('Segment one after agent edit');
+    expect(
+      reoWorkspace.readSegmentContent.mock.calls.filter(
+        ([payload]) => payload.segmentId === 'seg_note_1'
+      )
+    ).toHaveLength(2);
   });
 
   it('coalesces overlapping external file refreshes and compares the queued result with current session truth', async () => {
@@ -10768,11 +10975,17 @@ describe('App', () => {
         bodyMarkdown: 'Old note',
         bodyByteLength: 8,
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     reoWorkspace.writeSegmentContent.mockResolvedValue({
       ok: true,
-      value: { bodyByteLength: 12, saved: true, baselineContentHash: BASELINE_HASH_C },
+      value: {
+        bodyByteLength: 12,
+        saved: true,
+        baselineContentHash: BASELINE_HASH_C,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
+      },
     });
 
     render(
@@ -10801,7 +11014,9 @@ describe('App', () => {
         memoryId: 'mem_birthday',
         segmentId: 'seg_note_1',
         bodyMarkdown: 'Updated note\n\n- Keep candles',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     expect(await screen.findByText((text) => text.includes('Updated note'))).toBeInTheDocument();
@@ -10987,8 +11202,10 @@ describe('App', () => {
         type: 'note',
         title: '笔记1',
         bodyMarkdown: 'Disk before edit',
+        bodyTiptapJson: noteTiptapDoc('Disk before edit'),
         bodyByteLength: 16,
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     reoWorkspace.writeSegmentContent.mockResolvedValue({
@@ -10997,7 +11214,9 @@ describe('App', () => {
         code: 'ERR_SEGMENT_CONTENT_STALE',
         message: 'Note content changed on disk',
         currentBodyMarkdown: 'Disk changed by agent',
+        currentBodyTiptapJson: noteTiptapDoc('Disk changed by agent'),
         currentBaselineContentHash: BASELINE_HASH_B,
+        currentBaselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
 
@@ -11026,7 +11245,9 @@ describe('App', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
       bodyMarkdown: 'My unsaved body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
     });
     await user.click(
       within(screen.getByRole('alertdialog', { name: '外部修改已检测' })).getByRole('button', {
@@ -11067,8 +11288,10 @@ describe('App', () => {
     };
     let currentNoteContent = {
       bodyMarkdown: 'Disk before edit',
+      bodyTiptapJson: noteTiptapDoc('Disk before edit'),
       bodyByteLength: 16,
       baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
     };
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
@@ -11129,7 +11352,9 @@ describe('App', () => {
         code: 'ERR_SEGMENT_CONTENT_STALE',
         message: 'Note content changed on disk',
         currentBodyMarkdown: 'Disk changed by agent',
+        currentBodyTiptapJson: noteTiptapDoc('Disk changed by agent'),
         currentBaselineContentHash: BASELINE_HASH_B,
+        currentBaselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       },
     });
 
@@ -11160,8 +11385,10 @@ describe('App', () => {
 
     currentNoteContent = {
       bodyMarkdown: 'Disk reverted after conflict',
+      bodyTiptapJson: noteTiptapDoc('Disk reverted after conflict'),
       bodyByteLength: 28,
       baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
     };
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
@@ -11243,8 +11470,10 @@ describe('App', () => {
         type: 'note',
         title: '笔记1',
         bodyMarkdown: 'Disk before edit',
+        bodyTiptapJson: noteTiptapDoc('Disk before edit'),
         bodyByteLength: 16,
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     reoWorkspace.writeSegmentContent
@@ -11254,12 +11483,19 @@ describe('App', () => {
           code: 'ERR_SEGMENT_CONTENT_STALE',
           message: 'Note content changed on disk',
           currentBodyMarkdown: 'Disk changed by agent',
+          currentBodyTiptapJson: noteTiptapDoc('Disk changed by agent'),
           currentBaselineContentHash: BASELINE_HASH_B,
+          currentBaselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       })
       .mockResolvedValueOnce({
         ok: true,
-        value: { bodyByteLength: 16, baselineContentHash: BASELINE_HASH_C, saved: true },
+        value: {
+          bodyByteLength: 16,
+          baselineContentHash: BASELINE_HASH_C,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
+          saved: true,
+        },
       });
 
     render(
@@ -11290,7 +11526,9 @@ describe('App', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
       bodyMarkdown: 'My unsaved body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: BASELINE_HASH_B,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
   });
 
@@ -12187,13 +12425,20 @@ describe('App', () => {
         type: 'note',
         title: '补充笔记1',
         bodyMarkdown: 'Supplement note',
+        bodyTiptapJson: noteTiptapDoc('Supplement note'),
         bodyByteLength: 15,
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     reoWorkspace.writeSegmentSupplementContent.mockResolvedValue({
       ok: true,
-      value: { bodyByteLength: 23, saved: true, baselineContentHash: BASELINE_HASH_C },
+      value: {
+        bodyByteLength: 23,
+        saved: true,
+        baselineContentHash: BASELINE_HASH_C,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
+      },
     });
 
     render(
@@ -12233,7 +12478,9 @@ describe('App', () => {
         segmentId: 'seg_birthday_voice',
         supplementId: 'sup_birthday_note',
         bodyMarkdown: 'Edited supplement note',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       })
     );
     expect(await screen.findByText('Edited supplement note')).toBeInTheDocument();
@@ -12337,8 +12584,10 @@ describe('App', () => {
         type: 'note',
         title: '补充笔记1',
         bodyMarkdown: 'Supplement note',
+        bodyTiptapJson: noteTiptapDoc('Supplement note'),
         bodyByteLength: 15,
         baselineContentHash: BASELINE_HASH_A,
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
       },
     }));
     reoWorkspace.writeSegmentSupplementContent
@@ -12348,7 +12597,9 @@ describe('App', () => {
           code: 'ERR_SEGMENT_CONTENT_STALE',
           message: 'Supplement note content changed on disk',
           currentBodyMarkdown: 'Disk supplement changed',
+          currentBodyTiptapJson: noteTiptapDoc('Disk supplement changed'),
           currentBaselineContentHash: BASELINE_HASH_B,
+          currentBaselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
         },
       })
       .mockResolvedValueOnce({
@@ -12357,12 +12608,19 @@ describe('App', () => {
           code: 'ERR_SEGMENT_CONTENT_STALE',
           message: 'Supplement note content changed on disk again',
           currentBodyMarkdown: 'Disk supplement changed twice',
+          currentBodyTiptapJson: noteTiptapDoc('Disk supplement changed twice'),
           currentBaselineContentHash: BASELINE_HASH_C,
+          currentBaselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
         },
       })
       .mockResolvedValueOnce({
         ok: true,
-        value: { bodyByteLength: 19, saved: true, baselineContentHash: BASELINE_HASH_C },
+        value: {
+          bodyByteLength: 19,
+          saved: true,
+          baselineContentHash: BASELINE_HASH_C,
+          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
+        },
       });
 
     render(
@@ -12392,7 +12650,9 @@ describe('App', () => {
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_note',
       bodyMarkdown: 'My local supplement body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
     });
     await user.click(
       within(screen.getByRole('alertdialog', { name: '外部修改已检测' })).getByRole('button', {
@@ -12411,7 +12671,9 @@ describe('App', () => {
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_note',
       bodyMarkdown: 'Second local body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: BASELINE_HASH_B,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
     await user.click(within(conflictDialog).getByRole('button', { name: '保留我的修改' }));
 
@@ -12425,7 +12687,9 @@ describe('App', () => {
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_note',
       bodyMarkdown: 'Second local body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
       baselineContentHash: BASELINE_HASH_C,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_C,
     });
   });
 

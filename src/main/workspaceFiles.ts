@@ -39,6 +39,7 @@ import {
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
+import { REO_TIPTAP_HIGHLIGHT_COLOR_VALUES } from '../tiptap-markdown/tiptapHighlightColors.js';
 import { isSafeWorkspaceDirectoryName } from '../workspace-contract/workspace-name.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
 import {
@@ -53,6 +54,86 @@ const EMPTY_WORKSPACE_LOCK_REO_ENTRIES = new Set(['workspace.lock', 'workspace.l
 const WORKSPACE_ROOT_RENAME_TIMEOUT_MS = 5000;
 const DARWIN_MOVE_ITEM_NO_REPLACE_SCRIPT =
   'function run(argv) { ObjC.import("Foundation"); const ok = $.NSFileManager.defaultManager.moveItemAtPathToPathError(argv[0], argv[1], null); if (!ok) throw new Error("move failed"); }';
+export const DEFAULT_WORKSPACE_AGENTS_MD =
+  [
+    '# Reo 记忆空间 Agent 入口',
+    '',
+    '这是一个 Reo 记忆空间。Codex、其他 agent 和人类都可以像编辑普通文件夹一样创建、移动、读取和编辑内容。',
+    '',
+    '## 读写边界',
+    '',
+    '- `memories/` 是语义真源；优先编辑这里的普通 Markdown 文件和同级 `content.tiptap.json`。',
+    '- `.reo/` 是 Reo 的索引、manifest、草稿、回收站和运行时 mirror。正常编辑不要把 `.reo` 当成第二语义真源；只有做恢复、异常测试或明确需要验证 mirror 修复时才直接编辑 `.reo/objects/*.json`。',
+    '- 文件或目录缺少标题、frontmatter、manifest 或命名不完整时，不要拒绝继续工作。保持可读内容和稳定 id，Reo 打开时会补全、检查或进入 needs-review。',
+    '- 不要创建 symlink，不要移动 `.reo/workspace.lock*`，不要删除不属于当前任务的文件。',
+    '',
+    '## 文件结构',
+    '',
+    '- Memory: `memories/<memoryId>--<title>/memory.md`',
+    '- Segment: `memories/<memory>/segments/<segmentId>--<title>/segment.md`',
+    '- Supplement: `memories/<memory>/segments/<segment>/supplements/<supplementId>--<title>/supplement.md`',
+    '- 富文本 sidecar: 与 `segment.md` 或 `supplement.md` 同级的 `content.tiptap.json`',
+    '',
+    '`memoryId`、`segmentId`、`supplementId` 要保持稳定。移动 Segment 或 Supplement 时移动整个目录；Reo 会按目录位置修复 parent manifest。',
+    '',
+    '## Markdown 合同',
+    '',
+    'Markdown frontmatter 常用字段：',
+    '',
+    '```yaml',
+    '---',
+    'id: seg_example',
+    'title: 标题',
+    'kind: note',
+    '---',
+    '```',
+    '',
+    '- `kind: note` 的 `segment.md` / `supplement.md` 正文就是可编辑正文。',
+    '- `kind: audio` 的 `segment.md` / `supplement.md` 必须保留文件整体结构；可编辑 transcript 是 `## Transcript` 后的正文。',
+    '- audio 的 `content.tiptap.json` 只映射 transcript 正文，不映射标题、音频元数据或整个 Markdown 文件。',
+    '',
+    '## 富文本格式',
+    '',
+    '简单格式优先直接写 Markdown：',
+    '',
+    '```markdown',
+    '## 标题',
+    '',
+    '普通文字、**加粗**、*斜体*、~~删除线~~、`代码`、++下划线++。',
+    '',
+    '<mark data-color="var(--tt-color-highlight-blue)" style="background-color: var(--tt-color-highlight-blue); color: inherit">蓝色高亮</mark>',
+    '',
+    '<sup>上标</sup> <sub>下标</sub>',
+    '',
+    '- [ ] 待办',
+    '- [x] 已完成',
+    '```',
+    '',
+    '工具栏颜色高亮使用这些 CSS 变量：',
+    '',
+    ...REO_TIPTAP_HIGHLIGHT_COLOR_VALUES.map((value) => `- \`${value}\``),
+    '',
+    '如果要精确表达 Tiptap JSON，编辑同级 `content.tiptap.json`：',
+    '',
+    '- `source.hash` 表示当前 Markdown body 或 audio transcript body 的 hash。',
+    '- 只改 JSON、不改 Markdown 时，保留 `source.hash`，更新 `content` 与 canonical JSON `contentHash`；Reo 下次读取会把 JSON 镜像回 Markdown。',
+    '- 同时改 Markdown 和 JSON 时，确保两者表达同一内容，否则 Reo 会进入冲突/needs-review。',
+    '- 不要删除不认识的合法 Tiptap mark/node；需要不确定时先保留，并在任务说明里标注。',
+    '',
+    '## 创建与移动',
+    '',
+    '- 新建 Memory：创建 `memories/<memoryId>--<title>/memory.md` 和 `segments/`。',
+    '- 新建 Segment：创建 `segments/<segmentId>--<title>/segment.md`，需要补充内容时创建同级 `supplements/`。',
+    '- 新建 Supplement：创建 `supplements/<supplementId>--<title>/supplement.md`。',
+    '- 跨 Memory 移动 Segment、跨 Segment 移动 Supplement 都应移动整个目录，而不是只复制 Markdown。',
+    '- 复制或重复目录时生成新的 id；如果暂时无法安全生成，保留内容并标注 needs-review，不要 silently 伪装成同一个对象。',
+    '',
+    '## 验证建议',
+    '',
+    '- 用 `find memories -type f` 查看语义文件。',
+    '- 用 `rg "<文本或 id>" memories` 验证内容位置。',
+    '- 对高级格式同时检查 Markdown 和 `content.tiptap.json` 是否存在并表达同一正文。',
+  ].join('\n') + '\n';
 
 const workspaceMetadataSchema = z
   .object({
@@ -857,7 +938,7 @@ export async function initializeWorkspaceFiles({
     assertWorkspaceUsable(assertUsable);
     await writeWorkspaceFileNoReplaceAtomic(
       path.join(canonicalRoot, 'AGENTS.md'),
-      '# Reo workspace\n\n本文件是 Reo workspace 的 AI 协作入口。\n',
+      DEFAULT_WORKSPACE_AGENTS_MD,
       () => assertWorkspaceUsable(assertUsable)
     );
     assertWorkspaceUsable(assertUsable);

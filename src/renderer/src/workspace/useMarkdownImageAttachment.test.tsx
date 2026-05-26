@@ -49,6 +49,7 @@ function createEditorHandle(selection: LightweightMarkdownEditorSelection) {
     captureSelection: vi.fn(() => selection),
     focus: vi.fn(),
     getMarkdown: vi.fn(() => ''),
+    getTiptapJson: vi.fn(() => null),
     insertMarkdown: vi.fn(),
   } satisfies LightweightMarkdownEditorHandle;
 }

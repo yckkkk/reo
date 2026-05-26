@@ -125,6 +125,7 @@ import {
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceReadSegmentContentResponseSchema,
   workspaceReadSegmentSupplementContentResponseSchema,
+  workspaceTiptapJsonContentSchema,
   workspaceWriteSegmentContentRequestSchema,
   workspaceWriteSegmentSupplementContentRequestSchema,
   workspaceRecordingReadRequestSchema,
@@ -774,6 +775,15 @@ test('workspace error code schema accepts entity actions menu error codes', () =
 
 test('note content schemas require baseline hash for finalized edit conflict detection', () => {
   const baselineContentHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const bodyTiptapJson = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Body' }],
+      },
+    ],
+  };
   const readSegmentResponse = workspaceReadSegmentContentResponseSchema.parse({
     ok: true,
     value: {
@@ -784,8 +794,10 @@ test('note content schemas require baseline hash for finalized edit conflict det
       type: 'note',
       title: 'Note',
       bodyMarkdown: 'Body',
+      bodyTiptapJson,
       bodyByteLength: 4,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     },
   });
   assert.equal(readSegmentResponse.ok, true);
@@ -801,8 +813,10 @@ test('note content schemas require baseline hash for finalized edit conflict det
       type: 'note',
       title: 'Supplement',
       bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
       bodyByteLength: 15,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     },
   });
   assert.equal(readSupplementResponse.ok, true);
@@ -816,6 +830,17 @@ test('note content schemas require baseline hash for finalized edit conflict det
       bodyMarkdown: 'Body',
     })
   );
+  assert.throws(() =>
+    workspaceWriteSegmentContentRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      bodyMarkdown: 'Body',
+      bodyTiptapJson,
+      baselineContentHash,
+    })
+  );
   assert.deepEqual(
     workspaceWriteSegmentContentRequestSchema.parse({
       workspaceHandle: 'workspace-handle',
@@ -823,7 +848,9 @@ test('note content schemas require baseline hash for finalized edit conflict det
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       bodyMarkdown: 'Body',
+      bodyTiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     }),
     {
       workspaceHandle: 'workspace-handle',
@@ -831,8 +858,22 @@ test('note content schemas require baseline hash for finalized edit conflict det
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       bodyMarkdown: 'Body',
+      bodyTiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     }
+  );
+  assert.throws(() =>
+    workspaceWriteSegmentSupplementContentRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
+      baselineContentHash,
+    })
   );
   assert.deepEqual(
     workspaceWriteSegmentSupplementContentRequestSchema.parse({
@@ -842,7 +883,9 @@ test('note content schemas require baseline hash for finalized edit conflict det
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     }),
     {
       workspaceHandle: 'workspace-handle',
@@ -851,7 +894,9 @@ test('note content schemas require baseline hash for finalized edit conflict det
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
       baselineContentHash,
+      baselineTiptapContentHash: baselineContentHash,
     }
   );
 
@@ -863,7 +908,9 @@ test('note content schemas require baseline hash for finalized edit conflict det
         code: 'ERR_SEGMENT_CONTENT_STALE',
         message: 'Note content changed on disk',
         currentBodyMarkdown: 'Disk body',
+        currentBodyTiptapJson: bodyTiptapJson,
         currentBaselineContentHash: baselineContentHash,
+        currentBaselineTiptapContentHash: baselineContentHash,
       },
     }),
     {
@@ -872,7 +919,9 @@ test('note content schemas require baseline hash for finalized edit conflict det
         code: 'ERR_SEGMENT_CONTENT_STALE',
         message: 'Note content changed on disk',
         currentBodyMarkdown: 'Disk body',
+        currentBodyTiptapJson: bodyTiptapJson,
         currentBaselineContentHash: baselineContentHash,
+        currentBaselineTiptapContentHash: baselineContentHash,
       },
     }
   );
@@ -883,6 +932,20 @@ test('note content schemas require baseline hash for finalized edit conflict det
         code: 'ERR_SEGMENT_CONTENT_STALE',
         message: 'Note content changed on disk',
         currentBaselineContentHash: baselineContentHash,
+        currentBodyTiptapJson: bodyTiptapJson,
+        currentBaselineTiptapContentHash: baselineContentHash,
+      },
+    })
+  );
+  assert.throws(() =>
+    workspaceErrorEnvelopeSchema.parse({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_CONTENT_STALE',
+        message: 'Note content changed on disk',
+        currentBodyMarkdown: 'Disk body',
+        currentBaselineContentHash: baselineContentHash,
+        currentBaselineTiptapContentHash: baselineContentHash,
       },
     })
   );
@@ -893,9 +956,69 @@ test('note content schemas require baseline hash for finalized edit conflict det
         code: 'ERR_WORKSPACE_UPDATE_FAILED',
         message: 'Write failed',
         currentBodyMarkdown: 'Disk body',
+        currentBodyTiptapJson: bodyTiptapJson,
         currentBaselineContentHash: baselineContentHash,
+        currentBaselineTiptapContentHash: baselineContentHash,
       },
     })
+  );
+});
+
+test('workspace Tiptap JSON schema rejects non-finite attrs and unsupported highlight colors', () => {
+  assert.equal(
+    workspaceTiptapJsonContentSchema.safeParse({
+      type: 'doc',
+      content: [{ type: 'paragraph', attrs: { order: Number.NaN } }],
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceTiptapJsonContentSchema.safeParse({
+      type: 'doc',
+      content: [{ type: 'paragraph', attrs: { order: Number.POSITIVE_INFINITY } }],
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceTiptapJsonContentSchema.safeParse({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Unsafe color',
+              marks: [{ type: 'highlight', attrs: { color: '#facc15' } }],
+            },
+          ],
+        },
+      ],
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceTiptapJsonContentSchema.safeParse({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Token color',
+              marks: [
+                {
+                  type: 'highlight',
+                  attrs: { color: 'var(--tt-color-highlight-yellow)' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }).success,
+    true
   );
 });
 
@@ -1692,7 +1815,16 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'c'.repeat(64) },
+        transcript: {
+          exists: true,
+          text: '补充录音转写正文',
+          baselineHash: 'c'.repeat(64),
+          tiptapJson: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '补充录音转写正文' }] }],
+          },
+          baselineTiptapContentHash: 'e'.repeat(64),
+        },
       },
     }),
     {
@@ -1705,7 +1837,16 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         supplementId: 'sup_1',
         audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
-        transcript: { exists: true, text: '补充录音转写正文', baselineHash: 'c'.repeat(64) },
+        transcript: {
+          exists: true,
+          text: '补充录音转写正文',
+          baselineHash: 'c'.repeat(64),
+          tiptapJson: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '补充录音转写正文' }] }],
+          },
+          baselineTiptapContentHash: 'e'.repeat(64),
+        },
       },
     }
   );
@@ -2404,6 +2545,10 @@ test('segment supplement finalize contract accepts only failed or never transcri
 });
 
 test('finalized audio segment transcript save contract requires memory id plus segment id', () => {
+  const tiptapJson = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'note' }] }],
+  };
   assert.deepEqual(
     workspaceRecordingMarkdownSaveRequestSchema.parse({
       memoryId: 'mem_20260506_000001',
@@ -2419,6 +2564,15 @@ test('finalized audio segment transcript save contract requires memory id plus s
       markdown: 'note',
       baselineTranscriptHash: 'a'.repeat(64),
     }
+  );
+  assert.throws(() =>
+    workspaceRecordingMarkdownSaveRequestSchema.parse({
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      workspaceHandle: 'wh_1',
+      markdown: 'note',
+      tiptapJson,
+    })
   );
   assert.deepEqual(
     workspaceRecordingReadRequestSchema.parse({
@@ -2473,7 +2627,16 @@ test('finalized audio segment read contract requires memory and segment identity
       segmentId: 'seg_20260506_000001',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: true, text: '正文', baselineHash: 'b'.repeat(64) },
+      transcript: {
+        exists: true,
+        text: '正文',
+        baselineHash: 'b'.repeat(64),
+        tiptapJson: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '正文' }] }],
+        },
+        baselineTiptapContentHash: 'c'.repeat(64),
+      },
     },
   });
   assert.equal(response.ok, true);
@@ -2485,7 +2648,16 @@ test('finalized audio segment read contract requires memory and segment identity
       segmentId: 'seg_20260506_000001',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
-      transcript: { exists: true, text: '正文', baselineHash: 'b'.repeat(64) },
+      transcript: {
+        exists: true,
+        text: '正文',
+        baselineHash: 'b'.repeat(64),
+        tiptapJson: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '正文' }] }],
+        },
+        baselineTiptapContentHash: 'c'.repeat(64),
+      },
     });
   }
   assert.throws(() =>
@@ -2849,6 +3021,10 @@ test('microphone intent response exposes no token-like authority', () => {
 });
 
 test('finalized audio segment supplement transcript save contract requires parent identity', () => {
+  const tiptapJson = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: '补充录音转写' }] }],
+  };
   assert.deepEqual(
     workspaceSegmentSupplementMarkdownSaveRequestSchema.parse({
       workspaceHandle: 'wh_1',
@@ -2866,6 +3042,17 @@ test('finalized audio segment supplement transcript save contract requires paren
       supplementId: 'sup_1',
       markdown: '补充录音转写',
     }
+  );
+  assert.throws(() =>
+    workspaceSegmentSupplementMarkdownSaveRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      markdown: '补充录音转写',
+      tiptapJson,
+    })
   );
 
   const response = workspaceSegmentSupplementMarkdownSaveResponseSchema.parse({
@@ -2931,6 +3118,7 @@ test('finalized audio segment supplement transcript save contract requires paren
         transcript: { exists: true },
       },
       baselineTranscriptHash: 'b'.repeat(64),
+      baselineTiptapContentHash: 'c'.repeat(64),
     },
   });
   assert.equal(response.ok, true);

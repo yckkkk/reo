@@ -50,6 +50,7 @@ const savedMemorySummary = {
   title: 'Daily memory 录音',
   updatedAt: '2026-05-06T13:09:00.000Z',
 };
+const BASELINE_TIPTAP_CONTENT_HASH = 'c'.repeat(64);
 
 function createVoiceSettingsSnapshot(enabled: boolean = true): VoiceTranscriptionSettings {
   return {
@@ -205,11 +206,21 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     })),
     writeSegmentContent: vi.fn(async () => ({
       ok: true as const,
-      value: { bodyByteLength: 0, baselineContentHash: 'a'.repeat(64), saved: true as const },
+      value: {
+        bodyByteLength: 0,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: 'b'.repeat(64),
+        saved: true as const,
+      },
     })),
     writeSegmentSupplementContent: vi.fn(async () => ({
       ok: true as const,
-      value: { bodyByteLength: 0, baselineContentHash: 'a'.repeat(64), saved: true as const },
+      value: {
+        bodyByteLength: 0,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: 'b'.repeat(64),
+        saved: true as const,
+      },
     })),
     saveSegmentAttachment: vi.fn(async () => ({
       ok: false as const,
@@ -347,6 +358,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
         memory: savedMemorySummary,
         saved: true as const,
         baselineTranscriptHash: 'b'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
       },
     })),
     saveSegmentSupplementTranscript: vi.fn(async () => ({
@@ -399,6 +411,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
         },
         saved: true as const,
         baselineTranscriptHash: 'b'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
       },
     })),
     requestSegmentTranscriptionBackfill: vi.fn(async () => ({
@@ -1052,6 +1065,7 @@ describe('RecordingOverlay', () => {
           },
           saved: true,
           baselineTranscriptHash: 'b'.repeat(64),
+          baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         },
       });
       await transcriptSave.promise;

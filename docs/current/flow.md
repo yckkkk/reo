@@ -44,7 +44,7 @@
 - 实体 More 菜单 shell 动作是只读 OS 调用，不进入 lock-bound mutation 序列，不具备 transaction、rollback 或 grace-period 行为，也不写入 Query cache、session projection 或 registry projection。
 - Note Segment 和 Note SegmentSupplement draft 在用户点击保存时创建，finalize 后进入对应 finalized file-space node。Note body save 使用 baseline hash 防止外部修改覆盖；stale 保存必须返回当前磁盘正文和新 hash。
 - Segment 和 SegmentSupplement content tab order 属于 parent Segment 的 durable presentation state，写入 Segment manifest `contentTabOrder`，不改变 Segment 或 Memory activity 排序。
-- Finalized transcript save 必须直接定位 matching finalized Segment 或 SegmentSupplement 文件空间节点。Baseline 不匹配时返回 stale typed error，不覆盖 Markdown、不刷新 index、不推进 manifest。
+- Finalized transcript save 必须直接定位 matching finalized Segment 或 SegmentSupplement 文件空间节点，并同时保护 Markdown baseline 与 Tiptap JSON baseline。Baseline 不匹配时返回 stale typed error，不覆盖 Markdown、不刷新 index、不推进 manifest；保存事务后的 index refresh 不执行跨父级移动修复，manifest ownership 复核失败必须回滚 transcript 与 sidecar。
 - Manual transcription backfill 使用 finalized audio 文件作为 source，按 `fill-missing` 或 `regenerate` mode 复核 eligibility。成功后复用 transcript save 路径；同 target queued 或 running 时返回 already-running error。
 - Recording draft create、append、clone prefix、finalize、discard 和 draft audio read 都必须绑定当前 workspace handle、lock usability、draft identity 和 sequence。每个 draft 只允许一个 append 在途；metadata 写失败必须回滚 audio 到 append 前状态。
 - Finalize 必须使用显式 `memoryId`、`segmentId`、duration 和当前 draft truth。Finalize 通过 staging、marker、no-replace expose、index refresh 和 cleanup 表达事务边界；pre-expose failure 保留 draft，post-expose cleanup failure 通过 dataRetention 表达后续 recovery。

@@ -3,6 +3,7 @@ import { constants, lstatSync, mkdirSync } from 'node:fs';
 import { lstat, mkdir, open, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import type { JSONContent } from '@tiptap/core';
 import { writeWorkspaceFileAtomic, writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
 import {
   assertSameCurrentDirectoryIdentity,
@@ -25,6 +26,12 @@ import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
+import {
+  reconcileTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+  writeTiptapContentSidecar,
+} from './tiptapContentSidecar.js';
+import { parseTiptapMarkdown } from './tiptapMarkdownCodec.js';
 import { withWorkspaceAsyncQueue } from './workspaceAsyncQueue.js';
 import {
   createSafeSupplementId,
@@ -175,14 +182,20 @@ function noteContentHash(bodyMarkdown: string): string {
   return createHash('sha256').update(bodyMarkdown).digest('hex');
 }
 
-function staleNoteContentError(currentBodyMarkdown: string): WorkspaceErrorEnvelope {
+function staleNoteContentError(current: {
+  readonly bodyMarkdown: string;
+  readonly bodyTiptapJson: JSONContent;
+  readonly baselineTiptapContentHash: string;
+}): WorkspaceErrorEnvelope {
   return {
     ok: false,
     error: {
       code: 'ERR_SEGMENT_CONTENT_STALE',
       message: 'Note content changed on disk',
-      currentBodyMarkdown,
-      currentBaselineContentHash: noteContentHash(currentBodyMarkdown),
+      currentBodyMarkdown: current.bodyMarkdown,
+      currentBodyTiptapJson: current.bodyTiptapJson,
+      currentBaselineContentHash: noteContentHash(current.bodyMarkdown),
+      currentBaselineTiptapContentHash: current.baselineTiptapContentHash,
     },
   };
 }
@@ -216,7 +229,7 @@ function createOrEnsureWorkspaceChildDirectory({
   existing,
   parentDirectory,
 }: {
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable | undefined;
   readonly childName: string;
   readonly existing: 'allow' | 'reject';
   readonly parentDirectory: string;
@@ -253,7 +266,7 @@ async function ensureNoteFinalizeChildDirectory({
   childName,
   parentDirectory,
 }: {
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable | undefined;
   readonly childName: string;
   readonly parentDirectory: string;
 }): Promise<string> {
@@ -271,7 +284,7 @@ async function createNoteFinalizeChildDirectory({
   childName,
   parentDirectory,
 }: {
-  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable | undefined;
   readonly childName: string;
   readonly parentDirectory: string;
 }): Promise<string> {
@@ -1048,35 +1061,70 @@ type ReadNoteSegmentContentResult =
       readonly ok: true;
       readonly title: string;
       readonly bodyMarkdown: string;
+      readonly bodyTiptapJson: JSONContent;
       readonly bodyByteLength: number;
       readonly baselineContentHash: string;
+      readonly baselineTiptapContentHash: string;
     }
   | WorkspaceErrorEnvelope;
 
 async function readNoteMarkdownContent({
+  assertWorkspaceUsable,
   filePath,
+  objectDirectory,
   objectType,
 }: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable | undefined;
   readonly filePath: string;
+  readonly objectDirectory: string;
   readonly objectType: 'segment' | 'supplement';
 }): Promise<{
   readonly title: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson: JSONContent;
   readonly bodyByteLength: number;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash: string;
+  readonly bodyMarkdownChanged: boolean;
 }> {
+  const rawMarkdown = await readTextFileNoFollow(filePath);
   const parsed = parseWorkspaceMarkdownObject({
-    markdown: await readTextFileNoFollow(filePath),
+    markdown: rawMarkdown,
     objectType,
   });
   if (!('kind' in parsed.data) || parsed.data.kind !== 'note') {
     throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Workspace content is not a note');
   }
+  const reconciled = await reconcileTiptapContentSidecar({
+    assertUsable: workspaceWriteAssert(assertWorkspaceUsable),
+    bodyMarkdown: parsed.content,
+    objectDirectory,
+    writeBodyMarkdown: async (nextBodyMarkdown) => {
+      const markdown = renderWorkspaceMarkdownObject({
+        objectType,
+        data: parsed.data,
+        content: nextBodyMarkdown,
+      });
+      const rendered = parseWorkspaceMarkdownObject({ markdown, objectType });
+      await writeWorkspaceFileAtomic(
+        filePath,
+        markdown,
+        workspaceWriteAssert(assertWorkspaceUsable)
+      );
+      return rendered.content;
+    },
+  });
+  if (!reconciled.ok) {
+    throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Note content sidecar requires review');
+  }
   return {
     title: parsed.data.title,
-    bodyMarkdown: parsed.content,
-    bodyByteLength: bodyByteLength(parsed.content),
-    baselineContentHash: noteContentHash(parsed.content),
+    bodyMarkdown: reconciled.bodyMarkdown,
+    bodyTiptapJson: reconciled.tiptapJson,
+    bodyByteLength: bodyByteLength(reconciled.bodyMarkdown),
+    baselineContentHash: reconciled.baselineContentHash,
+    baselineTiptapContentHash: reconciled.baselineTiptapContentHash,
+    bodyMarkdownChanged: reconciled.bodyMarkdownChanged,
   };
 }
 
@@ -1098,21 +1146,40 @@ export async function readFinalizedNoteSegmentContent({
     if (usable) {
       return usable;
     }
-    assertFinalizedNoteSegmentManifestOwnership(
-      await readNoteSegmentManifest(rootPath, segmentId),
-      {
-        workspaceId,
-        memoryId,
-        segmentId,
-      }
-    );
+    const manifestPath = noteSegmentManifestPath(rootPath, segmentId);
+    const manifest = await readNoteSegmentManifest(rootPath, segmentId);
+    assertFinalizedNoteSegmentManifestOwnership(manifest, {
+      workspaceId,
+      memoryId,
+      segmentId,
+    });
     await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
     const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
     const content = await readNoteMarkdownContent({
       filePath: path.join(segmentDirectory, 'segment.md'),
+      objectDirectory: segmentDirectory,
       objectType: 'segment',
+      assertWorkspaceUsable,
     });
-    return { ok: true, ...content };
+    if (content.bodyMarkdownChanged) {
+      await updateManifestUpdatedAt({
+        assertWorkspaceUsable,
+        expected: {
+          objectType: 'segment',
+          workspaceId,
+          memoryId,
+          segmentId,
+        },
+        manifest,
+        manifestPath,
+        bodyByteLength: content.bodyByteLength,
+        now: () => new Date().toISOString(),
+      });
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
+    const { bodyMarkdownChanged: _bodyMarkdownChanged, ...responseContent } = content;
+    void _bodyMarkdownChanged;
+    return { ok: true, ...responseContent };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
@@ -1142,15 +1209,14 @@ export async function readFinalizedNoteSegmentSupplementContent({
     if (usable) {
       return usable;
     }
-    assertFinalizedNoteSupplementManifestOwnership(
-      await readNoteSupplementManifest(rootPath, supplementId),
-      {
-        workspaceId,
-        memoryId,
-        segmentId,
-        supplementId,
-      }
-    );
+    const manifestPath = noteSupplementManifestPath(rootPath, supplementId);
+    const manifest = await readNoteSupplementManifest(rootPath, supplementId);
+    assertFinalizedNoteSupplementManifestOwnership(manifest, {
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId,
+    });
     await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
     const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
     const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
@@ -1162,9 +1228,30 @@ export async function readFinalizedNoteSegmentSupplementContent({
     });
     const content = await readNoteMarkdownContent({
       filePath: path.join(supplementDirectory, 'supplement.md'),
+      objectDirectory: supplementDirectory,
       objectType: 'supplement',
+      assertWorkspaceUsable,
     });
-    return { ok: true, ...content };
+    if (content.bodyMarkdownChanged) {
+      await updateManifestUpdatedAt({
+        assertWorkspaceUsable,
+        expected: {
+          objectType: 'supplement',
+          workspaceId,
+          memoryId,
+          segmentId,
+          supplementId,
+        },
+        manifest,
+        manifestPath,
+        bodyByteLength: content.bodyByteLength,
+        now: () => new Date().toISOString(),
+      });
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
+    const { bodyMarkdownChanged: _bodyMarkdownChanged, ...responseContent } = content;
+    void _bodyMarkdownChanged;
+    return { ok: true, ...responseContent };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
@@ -1225,14 +1312,18 @@ async function restoreOriginalFinalizedNoteFiles({
   assertWorkspaceUsable,
   manifestPath,
   markdownPath,
+  sidecarPath,
   originalManifest,
   originalMarkdown,
+  originalSidecar,
 }: {
   readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
   readonly manifestPath: string;
   readonly markdownPath: string | null;
+  readonly sidecarPath: string | null;
   readonly originalManifest: string | null;
   readonly originalMarkdown: string | null;
+  readonly originalSidecar: string | null;
 }): Promise<void> {
   if (markdownPath === null || originalMarkdown === null || originalManifest === null) {
     return;
@@ -1240,6 +1331,13 @@ async function restoreOriginalFinalizedNoteFiles({
   const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
   try {
     await writeWorkspaceFileAtomic(markdownPath, originalMarkdown, assertUsable);
+    if (sidecarPath !== null) {
+      if (originalSidecar === null) {
+        await rm(sidecarPath, { force: true });
+      } else {
+        await writeWorkspaceFileAtomic(sidecarPath, originalSidecar, assertUsable);
+      }
+    }
     await writeWorkspaceFileAtomic(manifestPath, originalManifest, assertUsable);
   } catch {
     // The caller reports update failure; failed rollback means the file may be index-stale.
@@ -1252,7 +1350,9 @@ export async function writeFinalizedNoteSegmentContent({
   memoryId,
   segmentId,
   bodyMarkdown,
+  bodyTiptapJson,
   baselineContentHash,
+  baselineTiptapContentHash,
   now,
   assertWorkspaceUsable,
 }: {
@@ -1261,13 +1361,16 @@ export async function writeFinalizedNoteSegmentContent({
   readonly memoryId: string;
   readonly segmentId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string;
   readonly now: () => string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
   | {
       readonly ok: true;
       readonly baselineContentHash: string;
+      readonly baselineTiptapContentHash: string;
       readonly bodyByteLength: number;
       readonly saved: true;
     }
@@ -1280,7 +1383,9 @@ export async function writeFinalizedNoteSegmentContent({
       memoryId,
       segmentId,
       bodyMarkdown,
+      ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
       baselineContentHash,
+      ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
       now,
       ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
     })
@@ -1293,7 +1398,9 @@ async function writeFinalizedNoteSegmentContentNow({
   memoryId,
   segmentId,
   bodyMarkdown,
+  bodyTiptapJson,
   baselineContentHash,
+  baselineTiptapContentHash,
   now,
   assertWorkspaceUsable,
 }: {
@@ -1302,13 +1409,16 @@ async function writeFinalizedNoteSegmentContentNow({
   readonly memoryId: string;
   readonly segmentId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string;
   readonly now: () => string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
   | {
       readonly ok: true;
       readonly baselineContentHash: string;
+      readonly baselineTiptapContentHash: string;
       readonly bodyByteLength: number;
       readonly saved: true;
     }
@@ -1316,10 +1426,14 @@ async function writeFinalizedNoteSegmentContentNow({
 > {
   let originalMarkdown: string | null = null;
   let originalManifest: string | null = null;
+  let originalSidecar: string | null = null;
+  let segmentPath: string | null = null;
+  let sidecarPath: string | null = null;
   let finalizedWriteStarted = false;
   try {
     const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
-    const segmentPath = path.join(segmentDirectory, 'segment.md');
+    segmentPath = path.join(segmentDirectory, 'segment.md');
+    sidecarPath = path.join(segmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE);
     const manifestPath = noteSegmentManifestPath(rootPath, segmentId);
     originalManifest = await readTextFileNoFollow(manifestPath);
     const manifest = finalizedNoteSegmentManifestSchema.parse(JSON.parse(originalManifest));
@@ -1329,13 +1443,22 @@ async function writeFinalizedNoteSegmentContentNow({
       segmentId,
     });
     await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
-    originalMarkdown = await readTextFileNoFollow(segmentPath);
-    const current = parseWorkspaceMarkdownObject({
-      markdown: originalMarkdown,
+    const current = await readNoteMarkdownContent({
+      assertWorkspaceUsable,
+      filePath: segmentPath,
+      objectDirectory: segmentDirectory,
       objectType: 'segment',
     });
-    if (noteContentHash(current.content) !== baselineContentHash) {
-      throw staleNoteContentError(current.content);
+    originalMarkdown = await readTextFileNoFollow(segmentPath);
+    originalSidecar = await readTextFileNoFollow(sidecarPath).catch(() => null);
+    if (noteContentHash(current.bodyMarkdown) !== baselineContentHash) {
+      throw staleNoteContentError(current);
+    }
+    if (
+      baselineTiptapContentHash !== undefined &&
+      current.baselineTiptapContentHash !== baselineTiptapContentHash
+    ) {
+      throw staleNoteContentError(current);
     }
     const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
     assertWorkspaceUsableForWrite(assertWorkspaceUsable);
@@ -1343,10 +1466,17 @@ async function writeFinalizedNoteSegmentContentNow({
     finalizedWriteStarted = true;
     const rendered = renderPersistedNoteMarkdown({
       objectType: 'segment',
-      title: current.data.title,
+      title: current.title,
       bodyMarkdown,
     });
     await writeWorkspaceFileAtomic(segmentPath, rendered.markdown, assertUsable);
+    const savedTiptapJson = bodyTiptapJson ?? parseTiptapMarkdown(bodyMarkdown);
+    const savedSidecar = await writeTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: rendered.bodyMarkdown,
+      objectDirectory: segmentDirectory,
+      tiptapJson: savedTiptapJson,
+    });
     await updateManifestUpdatedAt({
       assertWorkspaceUsable,
       expected: {
@@ -1364,20 +1494,20 @@ async function writeFinalizedNoteSegmentContentNow({
     return {
       ok: true,
       baselineContentHash: rendered.baselineContentHash,
+      baselineTiptapContentHash: savedSidecar.contentHash,
       bodyByteLength: rendered.bodyByteLength,
       saved: true,
     };
   } catch (error) {
     if (finalizedWriteStarted) {
-      const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId).catch(
-        () => null
-      );
       await restoreOriginalFinalizedNoteFiles({
         assertWorkspaceUsable,
         manifestPath: noteSegmentManifestPath(rootPath, segmentId),
-        markdownPath: segmentDirectory ? path.join(segmentDirectory, 'segment.md') : null,
+        markdownPath: segmentPath,
+        sidecarPath,
         originalManifest,
         originalMarkdown,
+        originalSidecar,
       });
     }
     const envelope = caughtWorkspaceError(error);
@@ -1395,7 +1525,9 @@ export async function writeFinalizedNoteSegmentSupplementContent({
   segmentId,
   supplementId,
   bodyMarkdown,
+  bodyTiptapJson,
   baselineContentHash,
+  baselineTiptapContentHash,
   now,
   assertWorkspaceUsable,
 }: {
@@ -1405,13 +1537,16 @@ export async function writeFinalizedNoteSegmentSupplementContent({
   readonly segmentId: string;
   readonly supplementId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string;
   readonly now: () => string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
   | {
       readonly ok: true;
       readonly baselineContentHash: string;
+      readonly baselineTiptapContentHash: string;
       readonly bodyByteLength: number;
       readonly saved: true;
     }
@@ -1427,7 +1562,9 @@ export async function writeFinalizedNoteSegmentSupplementContent({
         segmentId,
         supplementId,
         bodyMarkdown,
+        ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
         baselineContentHash,
+        ...(baselineTiptapContentHash ? { baselineTiptapContentHash } : {}),
         now,
         ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
       })
@@ -1441,7 +1578,9 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
   segmentId,
   supplementId,
   bodyMarkdown,
+  bodyTiptapJson,
   baselineContentHash,
+  baselineTiptapContentHash,
   now,
   assertWorkspaceUsable,
 }: {
@@ -1451,13 +1590,16 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
   readonly segmentId: string;
   readonly supplementId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent;
   readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash?: string;
   readonly now: () => string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
   | {
       readonly ok: true;
       readonly baselineContentHash: string;
+      readonly baselineTiptapContentHash: string;
       readonly bodyByteLength: number;
       readonly saved: true;
     }
@@ -1465,6 +1607,9 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
 > {
   let originalMarkdown: string | null = null;
   let originalManifest: string | null = null;
+  let originalSidecar: string | null = null;
+  let supplementPath: string | null = null;
+  let sidecarPath: string | null = null;
   let finalizedWriteStarted = false;
   try {
     const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
@@ -1475,7 +1620,8 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
       segmentId,
       supplementId,
     });
-    const supplementPath = path.join(supplementDirectory, 'supplement.md');
+    supplementPath = path.join(supplementDirectory, 'supplement.md');
+    sidecarPath = path.join(supplementDirectory, TIPTAP_CONTENT_SIDECAR_FILE);
     const manifestPath = noteSupplementManifestPath(rootPath, supplementId);
     originalManifest = await readTextFileNoFollow(manifestPath);
     const manifest = finalizedNoteSupplementManifestSchema.parse(JSON.parse(originalManifest));
@@ -1486,13 +1632,22 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
       supplementId,
     });
     await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
-    originalMarkdown = await readTextFileNoFollow(supplementPath);
-    const current = parseWorkspaceMarkdownObject({
-      markdown: originalMarkdown,
+    const current = await readNoteMarkdownContent({
+      assertWorkspaceUsable,
+      filePath: supplementPath,
+      objectDirectory: supplementDirectory,
       objectType: 'supplement',
     });
-    if (noteContentHash(current.content) !== baselineContentHash) {
-      throw staleNoteContentError(current.content);
+    originalMarkdown = await readTextFileNoFollow(supplementPath);
+    originalSidecar = await readTextFileNoFollow(sidecarPath).catch(() => null);
+    if (noteContentHash(current.bodyMarkdown) !== baselineContentHash) {
+      throw staleNoteContentError(current);
+    }
+    if (
+      baselineTiptapContentHash !== undefined &&
+      current.baselineTiptapContentHash !== baselineTiptapContentHash
+    ) {
+      throw staleNoteContentError(current);
     }
     const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
     assertWorkspaceUsableForWrite(assertWorkspaceUsable);
@@ -1500,10 +1655,17 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
     finalizedWriteStarted = true;
     const rendered = renderPersistedNoteMarkdown({
       objectType: 'supplement',
-      title: current.data.title,
+      title: current.title,
       bodyMarkdown,
     });
     await writeWorkspaceFileAtomic(supplementPath, rendered.markdown, assertUsable);
+    const savedTiptapJson = bodyTiptapJson ?? parseTiptapMarkdown(bodyMarkdown);
+    const savedSidecar = await writeTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: rendered.bodyMarkdown,
+      objectDirectory: supplementDirectory,
+      tiptapJson: savedTiptapJson,
+    });
     await updateManifestUpdatedAt({
       assertWorkspaceUsable,
       expected: {
@@ -1522,29 +1684,20 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
     return {
       ok: true,
       baselineContentHash: rendered.baselineContentHash,
+      baselineTiptapContentHash: savedSidecar.contentHash,
       bodyByteLength: rendered.bodyByteLength,
       saved: true,
     };
   } catch (error) {
     if (finalizedWriteStarted) {
-      const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId).catch(
-        () => null
-      );
-      const supplementDirectory = segmentDirectory
-        ? await resolveSegmentSupplementDirectoryInSegmentDirectory({
-            rootPath,
-            memoryId,
-            segmentDirectory,
-            segmentId,
-            supplementId,
-          }).catch(() => null)
-        : null;
       await restoreOriginalFinalizedNoteFiles({
         assertWorkspaceUsable,
         manifestPath: noteSupplementManifestPath(rootPath, supplementId),
-        markdownPath: supplementDirectory ? path.join(supplementDirectory, 'supplement.md') : null,
+        markdownPath: supplementPath,
+        sidecarPath,
         originalManifest,
         originalMarkdown,
+        originalSidecar,
       });
     }
     const envelope = caughtWorkspaceError(error);

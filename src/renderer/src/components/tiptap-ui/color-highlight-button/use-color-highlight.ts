@@ -111,7 +111,7 @@ export interface UseColorHighlightConfig {
   onApplied?: (({ color, label }: { color: string; label: string }) => void) | undefined;
 }
 
-export function pickHighlightColorsByValue(values: string[]) {
+export function pickHighlightColorsByValue(values: readonly string[]) {
   const colorMap = new Map(HIGHLIGHT_COLORS.map((color) => [color.value, color]));
   return values
     .map((value) => colorMap.get(value))

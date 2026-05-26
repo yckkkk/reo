@@ -28,6 +28,11 @@ import {
   writeNoteSegmentDraftBody,
 } from '../../src/main/noteDrafts.js';
 import { saveNoteSegmentAttachment } from '../../src/main/noteAttachments.js';
+import {
+  hashTiptapJsonContent,
+  readTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+} from '../../src/main/tiptapContentSidecar.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 import { parseWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
 
@@ -62,6 +67,36 @@ async function wait(milliseconds: number): Promise<void> {
 
 function contentHash(markdown: string): string {
   return createHash('sha256').update(markdown).digest('hex');
+}
+
+function highlightedDoc(text: string) {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text,
+            marks: [{ type: 'highlight' }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function coloredHighlightDoc(text: string, color: string) {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text, marks: [{ type: 'highlight', attrs: { color } }] }],
+      },
+    ],
+  };
 }
 
 async function readNoteSegmentBaselineContentHash({
@@ -1076,9 +1111,180 @@ test('finalized note segment content returns baseline hash and rejects stale sav
   const staleError = stale.error as typeof stale.error & {
     readonly currentBaselineContentHash: string;
     readonly currentBodyMarkdown: string;
+    readonly currentBodyTiptapJson: {
+      readonly type: string;
+      readonly content?: readonly {
+        readonly content?: readonly { readonly text?: string }[];
+      }[];
+    };
+    readonly currentBaselineTiptapContentHash: string;
   };
   assert.equal(staleError.currentBodyMarkdown, '\nDisk body\n');
   assert.equal(staleError.currentBaselineContentHash, contentHash('\nDisk body\n'));
+  assert.equal(staleError.currentBodyTiptapJson.type, 'doc');
+  assert.equal(staleError.currentBodyTiptapJson.content?.[0]?.content?.[0]?.text, 'Disk body');
+  assert.equal(typeof staleError.currentBaselineTiptapContentHash, 'string');
+});
+
+test('finalized note segment content maintains tiptap json sidecar', async () => {
+  const rootPath = await workspaceRoot();
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_note',
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    title: 'Draft note',
+    createSegmentId: () => 'seg_tiptap_sidecar',
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId: 'seg_tiptap_sidecar',
+    bodyMarkdown: 'Original body\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_tiptap_sidecar',
+    title: 'Editable note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+
+  const content = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_tiptap_sidecar',
+  });
+  assert.equal(content.ok, true);
+  if (!content.ok) {
+    throw new Error('content read must succeed');
+  }
+  assert.equal(content.baselineContentHash, contentHash('Original body\n'));
+  assert.equal(content.bodyTiptapJson.type, 'doc');
+  assert.equal(typeof content.baselineTiptapContentHash, 'string');
+
+  const saved = await writeFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_tiptap_sidecar',
+    bodyMarkdown: '==Codex highlight==',
+    bodyTiptapJson: highlightedDoc('Codex highlight'),
+    baselineContentHash: content.baselineContentHash,
+    baselineTiptapContentHash: content.baselineTiptapContentHash,
+    now: () => '2026-05-19T12:44:00.000Z',
+  });
+  assert.equal(saved.ok, true, JSON.stringify(saved));
+  if (!saved.ok) {
+    throw new Error('sidecar save must succeed');
+  }
+  const segmentDirectory = await memorySegmentDirectory(rootPath, 'mem_note', 'seg_tiptap_sidecar');
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.equal(sidecar.source.hash, saved.baselineContentHash);
+  assert.equal(sidecar.contentHash, saved.baselineTiptapContentHash);
+});
+
+test('finalized note segment content read syncs sidecar-authored colored highlights into manifest truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_tiptap_sidecar_read_sync';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Draft note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Original body\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Editable note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+  const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+  const initial = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(initial.ok, true);
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  const coloredHighlight = coloredHighlightDoc(
+    'Runtime color highlight',
+    'var(--tt-color-highlight-green)'
+  );
+  const { currentContentHash: _currentContentHash, ...sidecarFile } = sidecar;
+  void _currentContentHash;
+  await writeFile(
+    path.join(segmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    `${JSON.stringify(
+      {
+        ...sidecarFile,
+        contentHash: hashTiptapJsonContent(coloredHighlight),
+        content: coloredHighlight,
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const content = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(content.ok, true);
+  if (!content.ok) {
+    throw new Error('content read must succeed');
+  }
+  assert.match(content.bodyMarkdown, /var\(--tt-color-highlight-green\)/);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(persisted.content, content.bodyMarkdown);
+  assert.match(
+    persisted.content,
+    /<mark data-color="var\(--tt-color-highlight-green\)" style="background-color: var\(--tt-color-highlight-green\); color: inherit">Runtime color highlight<\/mark>/
+  );
+  const manifest = JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`), 'utf8')
+  ) as { readonly bodyByteLength?: unknown };
+  assert.equal(manifest.bodyByteLength, Buffer.byteLength(persisted.content, 'utf8'));
 });
 
 test('finalized note segment save keeps manifest byte length aligned with persisted markdown body', async () => {
@@ -2547,7 +2753,20 @@ test('finalized note supplement content returns baseline hash and rejects stale 
   const staleError = stale.error as typeof stale.error & {
     readonly currentBaselineContentHash: string;
     readonly currentBodyMarkdown: string;
+    readonly currentBodyTiptapJson: {
+      readonly type: string;
+      readonly content?: readonly {
+        readonly content?: readonly { readonly text?: string }[];
+      }[];
+    };
+    readonly currentBaselineTiptapContentHash: string;
   };
   assert.equal(staleError.currentBodyMarkdown, '\nDisk supplement\n');
   assert.equal(staleError.currentBaselineContentHash, contentHash('\nDisk supplement\n'));
+  assert.equal(staleError.currentBodyTiptapJson.type, 'doc');
+  assert.equal(
+    staleError.currentBodyTiptapJson.content?.[0]?.content?.[0]?.text,
+    'Disk supplement'
+  );
+  assert.equal(typeof staleError.currentBaselineTiptapContentHash, 'string');
 });

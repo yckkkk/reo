@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { JSONContent } from '@tiptap/core';
+import { isReoTiptapHighlightColor } from '../tiptap-markdown/tiptapHighlightColors.js';
 import { MAX_RECORDING_DRAFT_AUDIO_READ_BYTES } from './recording-audio.js';
 import { isSafeWorkspaceDirectoryName } from './workspace-name.js';
 import { WORKSPACE_TITLE_MAX_LENGTH } from './workspace-title.js';
@@ -130,8 +132,141 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_SEGMENT_CONTENT_STALE',
 ]);
 
-const baselineContentHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const noteBodyMarkdownSchema = z.string().max(1_048_576);
+export const workspaceContentHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const baselineContentHashSchema = workspaceContentHashSchema;
+export const NOTE_BODY_MARKDOWN_MAX_LENGTH = 1_048_576;
+export const TIPTAP_JSON_CONTENT_MAX_DEPTH = 64;
+export const TIPTAP_JSON_CONTENT_MAX_NODES = 10_000;
+export const TIPTAP_JSON_CONTENT_MAX_MARKS = 20_000;
+export const TIPTAP_JSON_CONTENT_MAX_TEXT_LENGTH = NOTE_BODY_MARKDOWN_MAX_LENGTH;
+export const TIPTAP_JSON_CONTENT_MAX_ATTRS_LENGTH = 262_144;
+export const TIPTAP_JSON_CONTENT_SIDECAR_MAX_BYTES = 2_097_152;
+export const workspaceEditableMarkdownBodySchema = z.string().max(NOTE_BODY_MARKDOWN_MAX_LENGTH);
+const noteBodyMarkdownSchema = workspaceEditableMarkdownBodySchema;
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 32) {
+    return false;
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return true;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every((item) => isJsonValue(item, depth + 1));
+  }
+  if (isJsonRecord(value)) {
+    return Object.values(value).every((item) => isJsonValue(item, depth + 1));
+  }
+  return false;
+}
+
+type TiptapJsonContentStats = {
+  nodes: number;
+  marks: number;
+  textLength: number;
+  attrsLength: number;
+};
+
+function addTiptapAttrsLength(stats: TiptapJsonContentStats, attrs: unknown): boolean {
+  if (attrs === undefined) {
+    return true;
+  }
+  if (!isJsonValue(attrs)) {
+    return false;
+  }
+  stats.attrsLength += JSON.stringify(attrs).length;
+  return stats.attrsLength <= TIPTAP_JSON_CONTENT_MAX_ATTRS_LENGTH;
+}
+
+function areTiptapMarkAttrsAllowed(mark: Record<string, unknown>): boolean {
+  if (mark['type'] !== 'highlight') {
+    return true;
+  }
+  const attrs = mark['attrs'];
+  if (attrs === undefined || attrs === null) {
+    return true;
+  }
+  if (!isJsonRecord(attrs)) {
+    return false;
+  }
+  const color = attrs['color'];
+  return color === undefined || color === null || color === '' || isReoTiptapHighlightColor(color);
+}
+
+function isTiptapJsonContentWithinLimits(
+  value: unknown,
+  stats: TiptapJsonContentStats,
+  depth = 0
+): value is JSONContent {
+  if (
+    depth > TIPTAP_JSON_CONTENT_MAX_DEPTH ||
+    !isJsonRecord(value) ||
+    typeof value['type'] !== 'string'
+  ) {
+    return false;
+  }
+  stats.nodes += 1;
+  if (stats.nodes > TIPTAP_JSON_CONTENT_MAX_NODES) {
+    return false;
+  }
+  if (!addTiptapAttrsLength(stats, value['attrs'])) {
+    return false;
+  }
+  if (value['text'] !== undefined) {
+    if (typeof value['text'] !== 'string') {
+      return false;
+    }
+    stats.textLength += value['text'].length;
+    if (stats.textLength > TIPTAP_JSON_CONTENT_MAX_TEXT_LENGTH) {
+      return false;
+    }
+  }
+  const marks = value['marks'];
+  if (marks !== undefined) {
+    if (!Array.isArray(marks) || stats.marks + marks.length > TIPTAP_JSON_CONTENT_MAX_MARKS) {
+      return false;
+    }
+    stats.marks += marks.length;
+    for (const mark of marks) {
+      if (!isJsonRecord(mark) || typeof mark['type'] !== 'string') {
+        return false;
+      }
+      if (!addTiptapAttrsLength(stats, mark['attrs'])) {
+        return false;
+      }
+      if (!areTiptapMarkAttrsAllowed(mark)) {
+        return false;
+      }
+    }
+  }
+  const content = value['content'];
+  if (content !== undefined) {
+    if (!Array.isArray(content)) {
+      return false;
+    }
+    return content.every((child) => isTiptapJsonContentWithinLimits(child, stats, depth + 1));
+  }
+  return true;
+}
+
+export function isTiptapJsonContent(value: unknown): value is JSONContent {
+  return isTiptapJsonContentWithinLimits(value, {
+    attrsLength: 0,
+    marks: 0,
+    nodes: 0,
+    textLength: 0,
+  });
+}
+
+export const workspaceTiptapJsonContentSchema = z.custom<JSONContent>(isTiptapJsonContent);
+export type WorkspaceTiptapJsonContent = z.infer<typeof workspaceTiptapJsonContentSchema>;
 
 export const workspaceErrorSchema = z
   .strictObject({
@@ -148,11 +283,15 @@ export const workspaceErrorSchema = z
       ])
       .optional(),
     currentBodyMarkdown: noteBodyMarkdownSchema.optional(),
+    currentBodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     currentBaselineContentHash: baselineContentHashSchema.optional(),
+    currentBaselineTiptapContentHash: baselineContentHashSchema.optional(),
   })
   .superRefine((error, context) => {
     const hasConflictBody = error.currentBodyMarkdown !== undefined;
     const hasConflictHash = error.currentBaselineContentHash !== undefined;
+    const hasConflictTiptapBody = error.currentBodyTiptapJson !== undefined;
+    const hasConflictTiptapHash = error.currentBaselineTiptapContentHash !== undefined;
     if (error.code === 'ERR_SEGMENT_CONTENT_STALE') {
       if (!hasConflictBody) {
         context.addIssue({
@@ -168,9 +307,23 @@ export const workspaceErrorSchema = z
           message: 'Stale note content errors must include the current baseline hash',
         });
       }
+      if (!hasConflictTiptapBody) {
+        context.addIssue({
+          code: 'custom',
+          path: ['currentBodyTiptapJson'],
+          message: 'Stale note content errors must include the current Tiptap content',
+        });
+      }
+      if (!hasConflictTiptapHash) {
+        context.addIssue({
+          code: 'custom',
+          path: ['currentBaselineTiptapContentHash'],
+          message: 'Stale note content errors must include the current Tiptap baseline hash',
+        });
+      }
       return;
     }
-    if (hasConflictBody || hasConflictHash) {
+    if (hasConflictBody || hasConflictHash || hasConflictTiptapBody || hasConflictTiptapHash) {
       context.addIssue({
         code: 'custom',
         message: 'Only stale note content errors may include current content payload',
@@ -772,19 +925,49 @@ export const workspaceReadSegmentSupplementContentRequestSchema =
     })
     .strict();
 
+function requireBaselineTiptapContentHashWhenTiptapJsonPresent(
+  jsonField: 'bodyTiptapJson' | 'tiptapJson'
+) {
+  return (
+    value: {
+      readonly bodyTiptapJson?: unknown;
+      readonly tiptapJson?: unknown;
+      readonly baselineTiptapContentHash?: unknown;
+    },
+    ctx: z.RefinementCtx
+  ) => {
+    if (value[jsonField] !== undefined && value.baselineTiptapContentHash === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'baselineTiptapContentHash is required when Tiptap JSON is provided',
+        path: ['baselineTiptapContentHash'],
+      });
+    }
+  };
+}
+
 export const workspaceWriteSegmentContentRequestSchema = workspaceRecordingReadRequestSchema
   .extend({
     workspaceId: z.string().min(1),
     bodyMarkdown: noteBodyMarkdownSchema,
+    bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     baselineContentHash: baselineContentHashSchema,
+    baselineTiptapContentHash: baselineContentHashSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(requireBaselineTiptapContentHashWhenTiptapJsonPresent('bodyTiptapJson'));
 
 export const workspaceWriteSegmentSupplementContentRequestSchema =
-  workspaceReadSegmentSupplementContentRequestSchema.omit({ requestId: true }).extend({
-    bodyMarkdown: noteBodyMarkdownSchema,
-    baselineContentHash: baselineContentHashSchema,
-  });
+  workspaceReadSegmentSupplementContentRequestSchema
+    .omit({ requestId: true })
+    .extend({
+      bodyMarkdown: noteBodyMarkdownSchema,
+      bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
+      baselineContentHash: baselineContentHashSchema,
+      baselineTiptapContentHash: baselineContentHashSchema.optional(),
+    })
+    .strict()
+    .superRefine(requireBaselineTiptapContentHashWhenTiptapJsonPresent('bodyTiptapJson'));
 
 const workspaceMemoryEntityRequestSchema = workspaceMemoryIdRequestSchema
   .extend({
@@ -1009,6 +1192,14 @@ export const workspaceReadMemoryDetailResponseSchema = z.discriminatedUnion('ok'
   workspaceErrorEnvelopeSchema,
 ]);
 
+const workspaceTranscriptContentSchema = z.strictObject({
+  exists: z.boolean(),
+  text: workspaceEditableMarkdownBodySchema,
+  baselineHash: baselineContentHashSchema,
+  tiptapJson: workspaceTiptapJsonContentSchema,
+  baselineTiptapContentHash: baselineContentHashSchema,
+});
+
 export const workspaceReadFinalizedAudioSegmentResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -1019,11 +1210,7 @@ export const workspaceReadFinalizedAudioSegmentResponseSchema = z.discriminatedU
       segmentId: segmentIdSchema,
       audio: z.instanceof(Uint8Array),
       audioByteLength: z.number().int().nonnegative(),
-      transcript: z.strictObject({
-        exists: z.boolean(),
-        text: z.string(),
-        baselineHash: baselineContentHashSchema,
-      }),
+      transcript: workspaceTranscriptContentSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1042,11 +1229,7 @@ export const workspaceReadFinalizedAudioSegmentSupplementResponseSchema = z.disc
         supplementId: supplementIdSchema,
         audio: z.instanceof(Uint8Array),
         audioByteLength: z.number().int().nonnegative(),
-        transcript: z.strictObject({
-          exists: z.boolean(),
-          text: z.string(),
-          baselineHash: baselineContentHashSchema,
-        }),
+        transcript: workspaceTranscriptContentSchema,
       }),
     }),
     workspaceErrorEnvelopeSchema,
@@ -1219,6 +1402,7 @@ export const workspaceRecordingMarkdownSaveResponseSchema = z.discriminatedUnion
       memory: workspaceMemorySummarySchema,
       saved: z.literal(true),
       baselineTranscriptHash: baselineContentHashSchema,
+      baselineTiptapContentHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1233,6 +1417,7 @@ export const workspaceSegmentSupplementMarkdownSaveResponseSchema = z.discrimina
       supplement: workspaceSegmentSupplementProjectionSchema,
       saved: z.literal(true),
       baselineTranscriptHash: baselineContentHashSchema,
+      baselineTiptapContentHash: baselineContentHashSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1246,8 +1431,10 @@ const workspaceNoteSegmentContentSchema = z.strictObject({
   type: z.literal('note'),
   title: workspaceRecordingTitleSchema,
   bodyMarkdown: noteBodyMarkdownSchema,
+  bodyTiptapJson: workspaceTiptapJsonContentSchema,
   bodyByteLength: z.number().int().nonnegative(),
   baselineContentHash: baselineContentHashSchema,
+  baselineTiptapContentHash: baselineContentHashSchema,
 });
 
 const workspaceNoteSegmentSupplementContentSchema = workspaceNoteSegmentContentSchema.extend({
@@ -1276,6 +1463,7 @@ export const workspaceWriteSegmentContentResponseSchema = z.discriminatedUnion('
     value: z.strictObject({
       bodyByteLength: z.number().int().nonnegative(),
       baselineContentHash: baselineContentHashSchema,
+      baselineTiptapContentHash: baselineContentHashSchema,
       saved: z.literal(true),
     }),
   }),
@@ -1395,19 +1583,25 @@ export const workspaceRecordingFinalizeRequestSchema = workspaceSegmentIdRequest
 
 export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingReadRequestSchema
   .extend({
-    markdown: z.string(),
+    markdown: workspaceEditableMarkdownBodySchema,
     baselineTranscriptHash: baselineContentHashSchema.optional(),
+    tiptapJson: workspaceTiptapJsonContentSchema.optional(),
+    baselineTiptapContentHash: baselineContentHashSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(requireBaselineTiptapContentHashWhenTiptapJsonPresent('tiptapJson'));
 
 export const workspaceSegmentSupplementMarkdownSaveRequestSchema =
   workspaceReadFinalizedAudioSegmentSupplementRequestSchema
     .omit({ requestId: true, maxBytes: true })
     .extend({
-      markdown: z.string(),
+      markdown: workspaceEditableMarkdownBodySchema,
       baselineTranscriptHash: baselineContentHashSchema.optional(),
+      tiptapJson: workspaceTiptapJsonContentSchema.optional(),
+      baselineTiptapContentHash: baselineContentHashSchema.optional(),
     })
-    .strict();
+    .strict()
+    .superRefine(requireBaselineTiptapContentHashWhenTiptapJsonPresent('tiptapJson'));
 
 export const workspaceRequestSegmentTranscriptionBackfillRequestSchema =
   workspaceSegmentEntityRequestSchema

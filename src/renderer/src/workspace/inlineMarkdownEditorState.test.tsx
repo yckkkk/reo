@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInlineMarkdownEditorState,
+  inlineMarkdownEditorHasUnacceptedDiskVersion,
   inlineMarkdownEditorIsDirty,
   inlineMarkdownEditorReducer,
 } from './inlineMarkdownEditorState';
@@ -57,6 +58,44 @@ describe('inlineMarkdownEditorState', () => {
     expect(state.markdown).toBe('Next body');
     expect(state.cleanMarkdown).toBe('Next body');
     expect(state.activeBaselineContentHash).toBe('c'.repeat(64));
+    expect(inlineMarkdownEditorIsDirty(state)).toBe(false);
+  });
+
+  it('treats Tiptap-only disk baseline changes as an unaccepted disk version', () => {
+    let state = createInlineMarkdownEditorState({
+      baselineContentHash: 'a'.repeat(64),
+      baselineTiptapContentHash: 'b'.repeat(64),
+      markdown: 'Disk body',
+      tiptapJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+    });
+
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'markdown-changed',
+      markdown: 'Local body',
+      tiptapJson: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+    });
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'input-received',
+      baselineContentHash: 'a'.repeat(64),
+      baselineTiptapContentHash: 'c'.repeat(64),
+      markdown: 'Disk body',
+      tiptapJson: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2 } }] },
+    });
+
+    expect(state.diskChangeNoticeVisible).toBe(true);
+    expect(inlineMarkdownEditorHasUnacceptedDiskVersion(state)).toBe(true);
+
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'disk-version-accepted',
+      baselineContentHash: state.lastInputBaselineContentHash,
+      baselineTiptapContentHash: state.lastInputBaselineTiptapContentHash,
+      markdown: state.lastInputMarkdown,
+      tiptapJson: state.lastInputTiptapJson,
+    });
+
+    expect(state.activeBaselineContentHash).toBe('a'.repeat(64));
+    expect(state.activeBaselineTiptapContentHash).toBe('c'.repeat(64));
+    expect(inlineMarkdownEditorHasUnacceptedDiskVersion(state)).toBe(false);
     expect(inlineMarkdownEditorIsDirty(state)).toBe(false);
   });
 });

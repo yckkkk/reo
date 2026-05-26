@@ -103,6 +103,7 @@ export function memoryDetailQueryOptions(session: WorkspaceSession, memoryId: st
       return result.value;
     },
     retry: false,
+    refetchOnMount: 'always' as const,
     staleTime: Infinity,
   });
 }
@@ -164,6 +165,7 @@ export function segmentContentQueryOptions(
       return result.value;
     },
     retry: false,
+    refetchOnMount: 'always' as const,
     staleTime: Infinity,
   });
 }
@@ -255,6 +257,7 @@ export function segmentSupplementContentQueryOptions(
       return result.value;
     },
     retry: false,
+    refetchOnMount: 'always',
     staleTime: Infinity,
   });
 }

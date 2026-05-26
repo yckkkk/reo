@@ -20,6 +20,7 @@ import type {
 } from '../../src/workspace-contract/workspace-contract.js';
 
 const usable = () => ({ ok: true as const });
+const BASELINE_TIPTAP_CONTENT_HASH = 'c'.repeat(64);
 
 const validVoiceSettingsStore = {
   read: () => ({
@@ -290,6 +291,7 @@ function savedSegmentResponse() {
       updatedAt: '2026-05-17T01:00:00.000Z',
     },
     ok: true as const,
+    baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
     saved: true as const,
   };
 }
@@ -362,6 +364,7 @@ test('workspace backfill runtime runs manual segment backfill with injected remu
           updatedAt: '2026-05-17T01:00:00.000Z',
         },
         ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         saved: true,
       };
     },
@@ -1151,6 +1154,7 @@ test('workspace backfill runtime cancels before transcript save can write', asyn
           updatedAt: '2026-05-17T01:00:00.000Z',
         },
         ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         saved: true,
       };
     },
@@ -1286,6 +1290,7 @@ test('workspace backfill runtime scans and enqueues automatic eligible targets s
           updatedAt: '2026-05-17T01:00:00.000Z',
         },
         ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         saved: true,
       };
     },
@@ -1312,6 +1317,7 @@ test('workspace backfill runtime scans and enqueues automatic eligible targets s
           updatedAt: '2026-05-17T01:00:00.000Z',
         },
         ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         saved: true,
         segment,
         supplement,
@@ -1516,6 +1522,7 @@ test('workspace backfill runtime still reads audio after file-truth target reval
           updatedAt: '2026-05-17T01:00:00.000Z',
         },
         ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
         saved: true,
       };
     },

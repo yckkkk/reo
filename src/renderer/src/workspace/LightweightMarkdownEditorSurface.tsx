@@ -5,6 +5,7 @@ import { Selection } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import { EditorContent, EditorContext, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import type { JSONContent } from '@tiptap/core';
 import {
   useEffect,
   useImperativeHandle,
@@ -29,7 +30,6 @@ import { Spacer } from '@/components/tiptap-ui-primitive/spacer';
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from '@/components/tiptap-ui-primitive/toolbar';
 import { BlockquoteButton } from '@/components/tiptap-ui/blockquote-button';
 import { ColorHighlightPopover } from '@/components/tiptap-ui/color-highlight-popover';
-import { pickHighlightColorsByValue } from '@/components/tiptap-ui/color-highlight-button';
 import { CodeBlockButton } from '@/components/tiptap-ui/code-block-button';
 import { HeadingDropdownMenu } from '@/components/tiptap-ui/heading-dropdown-menu';
 import { ImageUploadButton } from '@/components/tiptap-ui/image-upload-button';
@@ -63,6 +63,7 @@ export type LightweightMarkdownEditorHandle = {
   readonly captureSelection: () => LightweightMarkdownEditorSelection | null;
   readonly focus: () => void;
   readonly getMarkdown: () => string;
+  readonly getTiptapJson: () => JSONContent | null;
   readonly insertMarkdown: (
     markdown: string,
     selection?: LightweightMarkdownEditorSelection | null
@@ -95,6 +96,11 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly onAttachmentUpload?: AttachmentUploadHandler;
   readonly onCancel?: () => void;
   readonly onChange: (value: string) => void;
+  readonly onRichChange?: (value: {
+    readonly markdown: string;
+    readonly tiptapJson: JSONContent;
+    readonly tiptapJsonKey: string;
+  }) => void;
   readonly onDrop?: DragEventHandler<HTMLElement>;
   readonly onDragOver?: DragEventHandler<HTMLElement>;
   readonly onPaste?: ClipboardEventHandler<HTMLElement>;
@@ -111,6 +117,7 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly onEditorFocusChange?: (editorFocused: boolean) => void;
   readonly toolbarDisabled?: boolean;
   readonly value: string;
+  readonly valueTiptapJson?: JSONContent | undefined;
 };
 
 type LightweightMarkdownEditorSurfaceContentProps = LightweightMarkdownEditorSurfaceProps & {
@@ -118,13 +125,6 @@ type LightweightMarkdownEditorSurfaceContentProps = LightweightMarkdownEditorSur
 };
 
 const IMAGE_ATTACHMENT_ACCEPT = 'image/gif,image/jpeg,image/png,image/webp';
-const HIGHLIGHT_COLORS = pickHighlightColorsByValue([
-  'var(--tt-color-highlight-green)',
-  'var(--tt-color-highlight-blue)',
-  'var(--tt-color-highlight-red)',
-  'var(--tt-color-highlight-purple)',
-  'var(--tt-color-highlight-yellow)',
-]);
 const UPLOAD_PROGRESS_DONE = 100;
 
 function isUsableEditor(editor: Editor | null): editor is Editor {
@@ -133,6 +133,10 @@ function isUsableEditor(editor: Editor | null): editor is Editor {
 
 function editorMarkdown(editor: Editor | null) {
   return isUsableEditor(editor) ? editor.getMarkdown() : '';
+}
+
+function editorTiptapJson(editor: Editor | null): JSONContent | null {
+  return isUsableEditor(editor) ? editor.getJSON() : null;
 }
 
 function captureEditorSelection(editor: Editor): LightweightMarkdownEditorSelection {
@@ -184,6 +188,7 @@ function LightweightMarkdownEditorSurfaceContent({
   onAttachmentUpload,
   onCancel,
   onChange,
+  onRichChange,
   onDragOver,
   onDrop,
   onPaste,
@@ -200,12 +205,19 @@ function LightweightMarkdownEditorSurfaceContent({
   onEditorFocusChange,
   toolbarDisabled = false,
   value,
+  valueTiptapJson,
   resolvedAttachmentContextKey,
 }: LightweightMarkdownEditorSurfaceContentProps) {
   const [uncontrolledEditorFocused, setUncontrolledEditorFocused] = useState(false);
   const onAttachmentUploadRef = useRef(onAttachmentUpload);
   const onChangeRef = useRef(onChange);
+  const onRichChangeRef = useRef(onRichChange);
   const lastSyncedEditorMarkdownRef = useRef(value);
+  const valueTiptapJsonKey = useMemo(
+    () => (valueTiptapJson ? JSON.stringify(valueTiptapJson) : null),
+    [valueTiptapJson]
+  );
+  const lastSyncedEditorTiptapJsonKeyRef = useRef(valueTiptapJsonKey);
   const resolvedEditorFocused = editorFocused ?? uncontrolledEditorFocused;
   const attachmentContextKey = resolvedAttachmentContextKey;
 
@@ -216,6 +228,10 @@ function LightweightMarkdownEditorSurfaceContent({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onRichChangeRef.current = onRichChange;
+  }, [onRichChange]);
 
   const extensions = useMemo(
     () => [
@@ -282,8 +298,8 @@ function LightweightMarkdownEditorSurfaceContent({
 
   const editor = useEditor(
     {
-      content: value,
-      contentType: 'markdown',
+      content: valueTiptapJson ?? value,
+      ...(valueTiptapJson ? {} : { contentType: 'markdown' as const }),
       editable: !disabled,
       editorProps: {
         attributes: {
@@ -316,10 +332,24 @@ function LightweightMarkdownEditorSurfaceContent({
           return;
         }
         const nextMarkdown = updatedEditor.getMarkdown();
-        if (nextMarkdown === lastSyncedEditorMarkdownRef.current) {
+        const nextTiptapJson = updatedEditor.getJSON();
+        const nextTiptapJsonKey = JSON.stringify(nextTiptapJson);
+        if (
+          nextMarkdown === lastSyncedEditorMarkdownRef.current &&
+          nextTiptapJsonKey === lastSyncedEditorTiptapJsonKeyRef.current
+        ) {
           return;
         }
         lastSyncedEditorMarkdownRef.current = nextMarkdown;
+        lastSyncedEditorTiptapJsonKeyRef.current = nextTiptapJsonKey;
+        if (onRichChangeRef.current) {
+          onRichChangeRef.current({
+            markdown: nextMarkdown,
+            tiptapJson: nextTiptapJson,
+            tiptapJsonKey: nextTiptapJsonKey,
+          });
+          return;
+        }
         onChangeRef.current(nextMarkdown);
       },
     },
@@ -331,6 +361,7 @@ function LightweightMarkdownEditorSurfaceContent({
       return;
     }
     lastSyncedEditorMarkdownRef.current = editorMarkdown(editor);
+    lastSyncedEditorTiptapJsonKeyRef.current = JSON.stringify(editor.getJSON());
   }, [editor]);
 
   useEffect(() => {
@@ -344,6 +375,18 @@ function LightweightMarkdownEditorSurfaceContent({
     if (!isUsableEditor(editor)) {
       return;
     }
+    if (valueTiptapJson) {
+      if (
+        lastSyncedEditorMarkdownRef.current === value &&
+        lastSyncedEditorTiptapJsonKeyRef.current === valueTiptapJsonKey
+      ) {
+        return;
+      }
+      editor.commands.setContent(valueTiptapJson, { emitUpdate: false });
+      lastSyncedEditorMarkdownRef.current = editorMarkdown(editor);
+      lastSyncedEditorTiptapJsonKeyRef.current = JSON.stringify(editor.getJSON());
+      return;
+    }
     if (lastSyncedEditorMarkdownRef.current === value) {
       return;
     }
@@ -354,7 +397,8 @@ function LightweightMarkdownEditorSurfaceContent({
     }
     editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false });
     lastSyncedEditorMarkdownRef.current = editorMarkdown(editor);
-  }, [editor, value]);
+    lastSyncedEditorTiptapJsonKeyRef.current = JSON.stringify(editor.getJSON());
+  }, [editor, value, valueTiptapJson, valueTiptapJsonKey]);
 
   useImperativeHandle(
     editorHandleRef,
@@ -371,6 +415,7 @@ function LightweightMarkdownEditorSurfaceContent({
         }
       },
       getMarkdown: () => editorMarkdown(editor),
+      getTiptapJson: () => editorTiptapJson(editor),
       insertMarkdown: (markdown: string, selection?: LightweightMarkdownEditorSelection | null) => {
         if (!isUsableEditor(editor)) {
           return;
@@ -470,11 +515,7 @@ function LightweightMarkdownEditorSurfaceContent({
               <MarkButton editor={editor} type="strike" disabled={toolbarLocked} />
               <MarkButton editor={editor} type="code" disabled={toolbarLocked} />
               <MarkButton editor={editor} type="underline" disabled={toolbarLocked} />
-              <ColorHighlightPopover
-                editor={editor}
-                colors={HIGHLIGHT_COLORS}
-                disabled={toolbarLocked}
-              />
+              <ColorHighlightPopover editor={editor} disabled={toolbarLocked} />
               <LinkPopover editor={editor} disabled={toolbarLocked} />
             </ToolbarGroup>
             <ToolbarSeparator />
