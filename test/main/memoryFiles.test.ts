@@ -75,6 +75,7 @@ import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from '../../src/main/workspaceMarkdownObjects.js';
+import { configureDiagnostics, type DiagnosticEvent } from '../../src/main/diagnostics.js';
 import type { LastTranscriptionAttempt } from '../../src/workspace-contract/workspace-contract.js';
 
 async function workspaceRoot(): Promise<string> {
@@ -1635,7 +1636,7 @@ test('delete and restore keep externally renamed segment directories addressable
   assert.equal(restored.ok, true);
   if (restored.ok) {
     assert.equal(restored.value.segment.segmentId, segmentId);
-    assert.equal(restored.value.segment.title, 'Metadata segment title');
+    assert.equal(restored.value.segment.title, 'Finder segment title');
     assert.equal(restored.value.memory.segmentCount, 2);
   }
   await stat(
@@ -2626,7 +2627,7 @@ test('restore Segment stops before moving files when the workspace lock is lost'
   await assert.rejects(stat(path.join(rootPath, 'memories', memoryId, 'segments', segmentId)));
 });
 
-test('reads segment markdown as the segment title source of truth', async () => {
+test('reads segment directory basename as the segment title source of truth', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_external_segment_title';
   const segmentId = 'seg_20260506_external_title';
@@ -2654,7 +2655,7 @@ test('reads segment markdown as the segment title source of truth', async () => 
   if (detail.ok) {
     assert.equal(detail.value.segments.length, 1);
     assert.equal(detail.value.segments[0]?.segmentId, segmentId);
-    assert.equal(detail.value.segments[0]?.title, '录音1');
+    assert.equal(detail.value.segments[0]?.title, '晚间散步');
   }
 });
 
@@ -2973,6 +2974,395 @@ test('memory detail projects finalized note segments and note supplements from f
     assert.equal('audioByteLength' in supplement, false);
     assert.equal('transcript' in supplement, false);
   }
+});
+
+test('direct body-only note segment file creation is repaired and projected', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_note_segment';
+  const segmentBody = '今天的想法\n\n继续写正文。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '直接文件创建',
+  });
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', '我的新想法');
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'segment.md'), segmentBody);
+
+  const memories = await rebuildMemoryIndex(rootPath);
+  const memory = memories.find((candidate) => candidate.memoryId === memoryId);
+
+  assert.ok(memory);
+  assert.equal(memory.noteSegmentCount, 1);
+  assert.equal(memory.segmentCount, 1);
+  assert.equal(path.basename(segmentDirectory), '我的新想法');
+
+  const repaired = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(repaired.data.title, '我的新想法');
+  assert.equal('kind' in repaired.data ? repaired.data.kind : undefined, 'note');
+  assert.match('id' in repaired.data ? String(repaired.data.id) : '', /^seg_/);
+  assert.equal(repaired.content, segmentBody);
+
+  const segmentId = 'id' in repaired.data ? String(repaired.data.id) : '';
+  assert.match(segmentId, /^seg_/);
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as {
+    readonly schemaVersion?: unknown;
+    readonly objectType?: unknown;
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly kind?: unknown;
+    readonly createdAt?: unknown;
+    readonly finalizedAt?: unknown;
+    readonly updatedAt?: unknown;
+    readonly bodyByteLength?: unknown;
+  };
+  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.objectType, 'segment');
+  assert.equal(manifest.workspaceId, 'ws_memory');
+  assert.equal(manifest.memoryId, memoryId);
+  assert.equal(manifest.segmentId, segmentId);
+  assert.equal(manifest.kind, 'note');
+  assert.equal(manifest.bodyByteLength, Buffer.byteLength(segmentBody, 'utf8'));
+  assert.equal(typeof manifest.createdAt, 'string');
+  assert.equal(typeof manifest.finalizedAt, 'string');
+  assert.equal(typeof manifest.updatedAt, 'string');
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments.length, 1);
+    const segment = detail.value.segments[0];
+    assert.ok(segment);
+    assert.equal(segment.type, 'note');
+    assert.equal(segment.segmentId, segmentId);
+    assert.equal(segment.title, '我的新想法');
+    assert.equal(segment.bodyByteLength, Buffer.byteLength(segmentBody, 'utf8'));
+  }
+});
+
+test('existing standardized note segment missing frontmatter id is repaired from manifest', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_frontmatter_id_repair';
+  const segmentId = 'seg_note_frontmatter_id_repair';
+  const segmentBody = '# Existing note\n\nBody stays unchanged.\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '已有 Note',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Existing note',
+    body: segmentBody,
+  });
+
+  await rebuildMemoryIndex(rootPath);
+
+  const repaired = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal('id' in repaired.data ? repaired.data.id : undefined, segmentId);
+  assert.equal(repaired.content, segmentBody);
+});
+
+test('direct body-only note supplement file creation is repaired under parent segment', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_note_supplement';
+  const segmentId = 'seg_direct_note_supplement_parent';
+  const supplementBody = '补充观察\n\n继续记录。\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '直接补充创建',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const supplementDirectory = path.join(segmentDirectory, 'supplements', '补充观察');
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'supplement.md'), supplementBody);
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  assert.equal(detail.value.segmentCount, 1);
+  assert.equal(detail.value.supplementCount, 1);
+  const segment = detail.value.segments[0];
+  assert.ok(segment);
+  assert.equal(segment.supplements.length, 1);
+  const supplement = segment.supplements[0];
+  assert.ok(supplement);
+  assert.equal(supplement.type, 'note');
+  assert.equal(supplement.title, '补充观察');
+  assert.equal(supplement.bodyByteLength, Buffer.byteLength(supplementBody, 'utf8'));
+  assert.equal(path.basename(supplementDirectory), '补充观察');
+
+  const repaired = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+  });
+  assert.equal(repaired.data.title, '补充观察');
+  assert.equal('kind' in repaired.data ? repaired.data.kind : undefined, 'note');
+  assert.match('id' in repaired.data ? String(repaired.data.id) : '', /^sup_/);
+  assert.equal(repaired.content, supplementBody);
+
+  const supplementId = 'id' in repaired.data ? String(repaired.data.id) : '';
+  assert.equal(supplement.supplementId, supplementId);
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly supplementId?: unknown;
+    readonly kind?: unknown;
+    readonly bodyByteLength?: unknown;
+  };
+  assert.equal(manifest.workspaceId, 'ws_memory');
+  assert.equal(manifest.memoryId, memoryId);
+  assert.equal(manifest.segmentId, segmentId);
+  assert.equal(manifest.supplementId, supplementId);
+  assert.equal(manifest.kind, 'note');
+  assert.equal(manifest.bodyByteLength, Buffer.byteLength(supplementBody, 'utf8'));
+});
+
+test('direct note supplement reconcile uses Finder-renamed parent segment file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_note_supplement_renamed_parent';
+  const segmentId = 'seg_direct_note_supplement_renamed_parent';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: 'Finder 父级',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const renamedSegmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', '项目片段');
+  await rename(segmentDirectory, renamedSegmentDirectory);
+  const supplementDirectory = path.join(renamedSegmentDirectory, 'supplements', '现场补充');
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'supplement.md'), '现场补充正文\n');
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.segments[0]?.segmentId, segmentId);
+    assert.equal(detail.value.segments[0]?.title, '项目片段');
+    assert.equal(detail.value.segments[0]?.supplements[0]?.title, '现场补充');
+  }
+});
+
+test('duplicate direct note segment ids are excluded from detail and index', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_duplicate_direct_note_segment';
+  const segmentId = 'seg_duplicate_direct_note_segment';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '重复片段',
+  });
+
+  for (const [directoryName, body] of [
+    ['第一个重复', '第一个重复正文\n'],
+    ['第二个重复', '第二个重复正文更长\n'],
+  ] as const) {
+    const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', directoryName);
+    await mkdir(segmentDirectory, { recursive: true });
+    await writeFile(
+      path.join(segmentDirectory, 'segment.md'),
+      renderWorkspaceMarkdownObject({
+        objectType: 'segment',
+        data: { id: segmentId, title: directoryName, kind: 'note' },
+        content: body,
+      })
+    );
+  }
+
+  const summaries = await rebuildMemoryIndex(rootPath);
+  const memory = summaries.find((candidate) => candidate.memoryId === memoryId);
+  assert.ok(memory);
+  assert.equal(memory.segmentCount, 0);
+  assert.equal(memory.noteSegmentCount, 0);
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.deepEqual(detail.value.segments, []);
+  }
+  assert.deepEqual(await readWorkspaceIndex(rootPath), {
+    schemaVersion: 1,
+    memories: summaries,
+  });
+  assert.equal(
+    (
+      (await readJson(path.join(rootPath, '.reo', 'index.json'))) as {
+        readonly memories: Array<{ readonly memoryId: string; readonly segmentCount: number }>;
+      }
+    ).memories.find((candidate) => candidate.memoryId === memoryId)?.segmentCount,
+    0
+  );
+});
+
+test('duplicate direct note supplement ids are excluded from parent tabs', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_duplicate_direct_note_supplement';
+  const segmentId = 'seg_duplicate_direct_note_supplement_parent';
+  const supplementId = 'sup_duplicate_direct_note_supplement';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '重复补充',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  for (const [directoryName, body] of [
+    ['第一个补充', '第一个补充正文\n'],
+    ['第二个补充', '第二个补充正文更长\n'],
+  ] as const) {
+    const supplementDirectory = path.join(segmentDirectory, 'supplements', directoryName);
+    await mkdir(supplementDirectory, { recursive: true });
+    await writeFile(
+      path.join(supplementDirectory, 'supplement.md'),
+      renderWorkspaceMarkdownObject({
+        objectType: 'supplement',
+        data: { id: supplementId, title: directoryName, kind: 'note' },
+        content: body,
+      })
+    );
+  }
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.supplementCount, 0);
+    assert.deepEqual(detail.value.segments[0]?.supplements, []);
+  }
+});
+
+test('ambiguous direct note segment candidate is excluded from repair and projection', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_ambiguous_direct_note_segment';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '歧义片段',
+  });
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', '混合候选');
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'segment.md'), '正文\n');
+  await writeFile(path.join(segmentDirectory, 'supplement.md'), '补充正文\n');
+
+  const summaries = await rebuildMemoryIndex(rootPath);
+  const memory = summaries.find((candidate) => candidate.memoryId === memoryId);
+  assert.ok(memory);
+  assert.equal(memory.segmentCount, 0);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'objects', 'segments')));
+});
+
+test('symlink direct note segment candidate is excluded from repair and projection', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_symlink_direct_note_segment';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '软链接片段',
+  });
+  const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', '软链接候选');
+  await mkdir(segmentDirectory, { recursive: true });
+  const outsideMarkdown = path.join(rootPath, 'outside-segment.md');
+  await writeFile(outsideMarkdown, '外部正文\n');
+  await symlink(outsideMarkdown, path.join(segmentDirectory, 'segment.md'));
+
+  const summaries = await rebuildMemoryIndex(rootPath);
+  const memory = summaries.find((candidate) => candidate.memoryId === memoryId);
+  assert.ok(memory);
+  assert.equal(memory.segmentCount, 0);
+  await assert.rejects(stat(path.join(rootPath, '.reo', 'objects', 'segments')));
+});
+
+test('needs-review diagnostics for direct note candidates only record aggregate counts', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_note_needs_review_diagnostics';
+  const segmentId = 'seg_direct_note_needs_review_diagnostics';
+  const events: DiagnosticEvent[] = [];
+  configureDiagnostics({ write: (event) => events.push(event) });
+  try {
+    await writeMemoryForTest(rootPath, {
+      memoryId,
+      title: '诊断计数',
+    });
+    for (const directoryName of ['重复一', '重复二'] as const) {
+      const segmentDirectory = path.join(rootPath, 'memories', memoryId, 'segments', directoryName);
+      await mkdir(segmentDirectory, { recursive: true });
+      await writeFile(
+        path.join(segmentDirectory, 'segment.md'),
+        renderWorkspaceMarkdownObject({
+          objectType: 'segment',
+          data: { id: segmentId, title: directoryName, kind: 'note' },
+          content: `${directoryName}\n`,
+        })
+      );
+    }
+    const ambiguousDirectory = path.join(rootPath, 'memories', memoryId, 'segments', '混合候选');
+    await mkdir(ambiguousDirectory, { recursive: true });
+    await writeFile(path.join(ambiguousDirectory, 'segment.md'), '正文\n');
+    await writeFile(path.join(ambiguousDirectory, 'supplement.md'), '补充正文\n');
+
+    await rebuildMemoryIndex(rootPath);
+  } finally {
+    configureDiagnostics({ write() {} });
+  }
+
+  const event = events.find(
+    (candidate) =>
+      candidate.area === 'workspace-files' && candidate.event === 'markdown.segment.needs-review'
+  );
+  assert.ok(event);
+  assert.equal(event.level, 'warn');
+  assert.deepEqual(event.fields, {
+    ambiguousCandidateCount: 1,
+    duplicateIdCount: 1,
+  });
 });
 
 test('memory detail projects persisted Segment content tab order from segment manifest', async () => {

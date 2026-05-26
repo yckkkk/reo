@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  parseWorkspaceMarkdownObjectCandidate,
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
   validateWorkspaceRelativeResourcePath,
@@ -110,6 +111,51 @@ test('workspace markdown object accepts note kind and rejects unsupported object
       parseWorkspaceMarkdownObject({
         objectType: 'segment',
         markdown: `---\ntitle: HTML resource\nkind: html\n---\nbody\n`,
+      }),
+    /Invalid workspace markdown frontmatter/
+  );
+});
+
+test('workspace markdown object accepts segment and supplement portable ids', () => {
+  const segment = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: `---\nid: seg_external_note\ntitle: Direct note\nkind: note\n---\nbody\n`,
+  });
+
+  assert.deepEqual(segment.data, {
+    id: 'seg_external_note',
+    kind: 'note',
+    title: 'Direct note',
+  });
+
+  const supplement = parseWorkspaceMarkdownObject({
+    objectType: 'supplement',
+    markdown: `---\nid: sup_external_note\ntitle: Direct supplement\nkind: note\n---\nbody\n`,
+  });
+
+  assert.deepEqual(supplement.data, {
+    id: 'sup_external_note',
+    kind: 'note',
+    title: 'Direct supplement',
+  });
+});
+
+test('workspace markdown candidate parser accepts body-only markdown', () => {
+  const candidate = parseWorkspaceMarkdownObjectCandidate({
+    objectType: 'segment',
+    markdown: '今天的想法\n\n继续写正文。\n',
+  });
+
+  assert.deepEqual(candidate.data, {});
+  assert.equal(candidate.content, '今天的想法\n\n继续写正文。\n');
+});
+
+test('workspace markdown candidate parser rejects invalid frontmatter', () => {
+  assert.throws(
+    () =>
+      parseWorkspaceMarkdownObjectCandidate({
+        objectType: 'segment',
+        markdown: `---\ntitle: [bad\n---\n正文\n`,
       }),
     /Invalid workspace markdown frontmatter/
   );

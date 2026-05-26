@@ -17,6 +17,7 @@ import {
 import { lstat, open, opendir, readdir, realpath, utimes } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
@@ -38,9 +39,11 @@ import {
   resolveWorkspaceDraftSegmentDirectory,
 } from './workspacePaths.js';
 import {
+  parseWorkspaceMarkdownObjectCandidate,
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
+import { recordDiagnosticEvent } from './diagnostics.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
   isUnsupportedWorkspaceDirectoryFsyncError,
@@ -86,6 +89,12 @@ const inFlightMemoryWrites = new Set<string>();
 const workspaceIndexWriteQueues = new Map<string, Promise<void>>();
 type MaybePromise<T> = T | Promise<T>;
 type ManifestLastTranscriptionAttempt = FinalizeTranscriptionAttempt | 'success' | undefined;
+
+const workspaceIdentitySchema = z
+  .object({
+    workspaceId: z.string().min(1),
+  })
+  .passthrough();
 
 class FinalizeTransactionFailure extends Error {
   readonly dataRetention: WorkspaceError['dataRetention'];
@@ -1064,6 +1073,547 @@ async function readExistingDirectoryNames(directoryPath: string): Promise<string
       return [];
     }
     throw error;
+  }
+}
+
+async function readWorkspaceId(rootPath: string): Promise<string> {
+  return workspaceIdentitySchema.parse(
+    JSON.parse(await readWorkspaceTextFile(path.join(rootPath, '.reo', 'workspace.json')))
+  ).workspaceId;
+}
+
+function createReconciledSegmentId(): string {
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return `seg_${timestamp}_${randomUUID().slice(0, 8)}`;
+}
+
+function createReconciledSupplementId(): string {
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return `sup_${timestamp}_${randomUUID().slice(0, 8)}`;
+}
+
+function firstNonEmptyMarkdownLine(content: string): string | null {
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line
+      .trim()
+      .replace(/^#{1,6}\s+/, '')
+      .trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function inferCandidateTitle({
+  content,
+  directoryName,
+  metadataTitle,
+  nodeId,
+}: {
+  readonly content: string;
+  readonly directoryName: string;
+  readonly metadataTitle?: string | undefined;
+  readonly nodeId: string;
+}): string {
+  const frontmatterTitle = metadataTitle?.trim();
+  if (frontmatterTitle) {
+    return frontmatterTitle;
+  }
+  const directoryTitle = titleFromFileSpaceDirectoryName({
+    directoryName,
+    metadataTitle: '',
+    nodeId,
+  }).trim();
+  if (directoryTitle) {
+    return directoryTitle;
+  }
+  return firstNonEmptyMarkdownLine(content) ?? 'Untitled note';
+}
+
+async function readSegmentManifestOrNull(
+  rootPath: string,
+  segmentId: string
+): Promise<SegmentObjectManifest | null> {
+  try {
+    return segmentObjectManifestSchema.parse(
+      JSON.parse(await readWorkspaceTextFile(await segmentObjectManifestPath(rootPath, segmentId)))
+    );
+  } catch {
+    return null;
+  }
+}
+
+function directorySegmentIdHint(directoryName: string): string | null {
+  const hint = directoryName.split('--')[0] ?? '';
+  return SEGMENT_ID_PATTERN.test(hint) ? hint : null;
+}
+
+async function readSupplementManifestOrNull(
+  rootPath: string,
+  supplementId: string
+): Promise<SupplementObjectManifest | null> {
+  try {
+    return supplementObjectManifestSchema.parse(
+      JSON.parse(
+        await readWorkspaceTextFile(await supplementObjectManifestPath(rootPath, supplementId))
+      )
+    );
+  } catch {
+    return null;
+  }
+}
+
+function directorySupplementIdHint(directoryName: string): string | null {
+  const hint = directoryName.split('--')[0] ?? '';
+  return SUPPLEMENT_ID_PATTERN.test(hint) ? hint : null;
+}
+
+async function reconcileNoteSegmentCandidate({
+  blockedSegmentIds,
+  candidateDirectory,
+  candidateIdentity,
+  directoryName,
+  memoryId,
+  rootPath,
+  workspaceId,
+}: {
+  readonly blockedSegmentIds: ReadonlySet<string>;
+  readonly candidateDirectory: string;
+  readonly candidateIdentity: DirectoryIdentity;
+  readonly directoryName: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  if (await exists(path.join(candidateDirectory, 'supplement.md'))) {
+    return;
+  }
+  const markdown = readWorkspaceTextFileInKnownDirectory(
+    candidateDirectory,
+    candidateIdentity,
+    'segment.md'
+  );
+  const candidate = parseWorkspaceMarkdownObjectCandidate({
+    objectType: 'segment',
+    markdown,
+  });
+  const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+  if (candidateKind !== undefined && candidateKind !== 'note') {
+    return;
+  }
+
+  const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+  const hintedId = directorySegmentIdHint(directoryName);
+  const segmentId = frontmatterId ?? hintedId ?? createReconciledSegmentId();
+  if (blockedSegmentIds.has(segmentId)) {
+    return;
+  }
+  const title = inferCandidateTitle({
+    content: candidate.content,
+    directoryName,
+    metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+    nodeId: segmentId,
+  });
+  const bodyByteLength = markdownBodyByteLength(candidate.content);
+  const existingManifest = await readSegmentManifestOrNull(rootPath, segmentId);
+  if (
+    existingManifest &&
+    (existingManifest.objectType !== 'segment' ||
+      existingManifest.workspaceId !== workspaceId ||
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.segmentId !== segmentId ||
+      existingManifest.kind !== 'note')
+  ) {
+    return;
+  }
+
+  const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+  if (frontmatterId !== segmentId || candidateTitle !== title || candidateKind !== 'note') {
+    await writeWorkspaceFileAtomicInKnownDirectory({
+      directory: candidateDirectory,
+      directoryIdentity: candidateIdentity,
+      fileName: 'segment.md',
+      data: renderWorkspaceMarkdownObject({
+        objectType: 'segment',
+        data: {
+          ...candidate.data,
+          id: segmentId,
+          title,
+          kind: 'note',
+        },
+        content: candidate.content,
+      }),
+    });
+  }
+
+  if (!existingManifest || existingManifest.bodyByteLength !== bodyByteLength) {
+    await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'segments' });
+    const timestamp = new Date().toISOString();
+    await writeWorkspaceJsonAtomic(await segmentObjectManifestPath(rootPath, segmentId), {
+      schemaVersion: 1,
+      objectType: 'segment',
+      workspaceId,
+      memoryId,
+      segmentId,
+      kind: 'note',
+      createdAt: existingManifest?.createdAt ?? timestamp,
+      finalizedAt: existingManifest?.finalizedAt ?? timestamp,
+      updatedAt: timestamp,
+      bodyByteLength,
+    });
+  }
+}
+
+async function classifyNoteSegmentCandidatesForReview({
+  entries,
+  rootPath,
+  segmentsDirectory,
+}: {
+  readonly entries: readonly Dirent[];
+  readonly rootPath: string;
+  readonly segmentsDirectory: string;
+}): Promise<{
+  readonly ambiguousCandidateCount: number;
+  readonly duplicateSegmentIds: ReadonlySet<string>;
+}> {
+  const idCounts = new Map<string, number>();
+  let ambiguousCandidateCount = 0;
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const candidateDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(segmentsDirectory, entry.name)
+      );
+      await assertSafeExistingDirectory(candidateDirectory, 'Segment directory is not safe');
+      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
+      if (await exists(path.join(candidateDirectory, 'supplement.md'))) {
+        ambiguousCandidateCount += 1;
+        continue;
+      }
+      const candidate = parseWorkspaceMarkdownObjectCandidate({
+        objectType: 'segment',
+        markdown: readWorkspaceTextFileInKnownDirectory(
+          candidateDirectory,
+          candidateIdentity,
+          'segment.md'
+        ),
+      });
+      const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+      if (candidateKind !== undefined && candidateKind !== 'note') {
+        continue;
+      }
+      const candidateId =
+        ('id' in candidate.data ? candidate.data.id : undefined) ??
+        directorySegmentIdHint(entry.name);
+      if (candidateId) {
+        idCounts.set(candidateId, (idCounts.get(candidateId) ?? 0) + 1);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    ambiguousCandidateCount,
+    duplicateSegmentIds: new Set(
+      [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+    ),
+  };
+}
+
+async function reconcileNoteSegmentsInMemoryDirectory({
+  memoryDirectoryPath,
+  memoryId,
+  rootPath,
+}: {
+  readonly memoryDirectoryPath: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+}): Promise<void> {
+  const workspaceId = await readWorkspaceId(rootPath);
+  const segmentsDirectory = await resolveSafeWorkspaceChild(
+    rootPath,
+    path.join(memoryDirectoryPath, 'segments')
+  );
+  const entries = await readExistingDirectoryEntries(segmentsDirectory);
+  const review = await classifyNoteSegmentCandidatesForReview({
+    entries,
+    rootPath,
+    segmentsDirectory,
+  });
+  if (review.duplicateSegmentIds.size > 0 || review.ambiguousCandidateCount > 0) {
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'markdown.segment.needs-review',
+      fields: {
+        ambiguousCandidateCount: review.ambiguousCandidateCount,
+        duplicateIdCount: review.duplicateSegmentIds.size,
+      },
+      level: 'warn',
+    });
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const candidateDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(segmentsDirectory, entry.name)
+      );
+      await assertSafeExistingDirectory(candidateDirectory, 'Segment directory is not safe');
+      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
+      await reconcileNoteSegmentCandidate({
+        blockedSegmentIds: review.duplicateSegmentIds,
+        candidateDirectory,
+        candidateIdentity,
+        directoryName: entry.name,
+        memoryId,
+        rootPath,
+        workspaceId,
+      });
+    } catch {
+      continue;
+    }
+  }
+}
+
+async function reconcileNoteSupplementCandidate({
+  blockedSupplementIds,
+  candidateDirectory,
+  candidateIdentity,
+  directoryName,
+  memoryId,
+  rootPath,
+  segmentId,
+  workspaceId,
+}: {
+  readonly blockedSupplementIds: ReadonlySet<string>;
+  readonly candidateDirectory: string;
+  readonly candidateIdentity: DirectoryIdentity;
+  readonly directoryName: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  if (await exists(path.join(candidateDirectory, 'segment.md'))) {
+    return;
+  }
+  const markdown = readWorkspaceTextFileInKnownDirectory(
+    candidateDirectory,
+    candidateIdentity,
+    'supplement.md'
+  );
+  const candidate = parseWorkspaceMarkdownObjectCandidate({
+    objectType: 'supplement',
+    markdown,
+  });
+  const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+  if (candidateKind !== undefined && candidateKind !== 'note') {
+    return;
+  }
+
+  const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+  const hintedId = directorySupplementIdHint(directoryName);
+  const supplementId = frontmatterId ?? hintedId ?? createReconciledSupplementId();
+  if (blockedSupplementIds.has(supplementId)) {
+    return;
+  }
+  const title = inferCandidateTitle({
+    content: candidate.content,
+    directoryName,
+    metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+    nodeId: supplementId,
+  });
+  const bodyByteLength = markdownBodyByteLength(candidate.content);
+  const existingManifest = await readSupplementManifestOrNull(rootPath, supplementId);
+  if (
+    existingManifest &&
+    (existingManifest.objectType !== 'supplement' ||
+      existingManifest.workspaceId !== workspaceId ||
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.segmentId !== segmentId ||
+      existingManifest.supplementId !== supplementId ||
+      existingManifest.kind !== 'note')
+  ) {
+    return;
+  }
+
+  const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+  if (frontmatterId !== supplementId || candidateTitle !== title || candidateKind !== 'note') {
+    await writeWorkspaceFileAtomicInKnownDirectory({
+      directory: candidateDirectory,
+      directoryIdentity: candidateIdentity,
+      fileName: 'supplement.md',
+      data: renderWorkspaceMarkdownObject({
+        objectType: 'supplement',
+        data: {
+          ...candidate.data,
+          id: supplementId,
+          title,
+          kind: 'note',
+        },
+        content: candidate.content,
+      }),
+    });
+  }
+
+  if (!existingManifest || existingManifest.bodyByteLength !== bodyByteLength) {
+    await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'supplements' });
+    const timestamp = new Date().toISOString();
+    await writeWorkspaceJsonAtomic(await supplementObjectManifestPath(rootPath, supplementId), {
+      schemaVersion: 1,
+      objectType: 'supplement',
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId,
+      kind: 'note',
+      createdAt: existingManifest?.createdAt ?? timestamp,
+      finalizedAt: existingManifest?.finalizedAt ?? timestamp,
+      updatedAt: timestamp,
+      bodyByteLength,
+    });
+  }
+}
+
+async function classifyNoteSupplementCandidatesForReview({
+  entries,
+  rootPath,
+  supplementsDirectory,
+}: {
+  readonly entries: readonly Dirent[];
+  readonly rootPath: string;
+  readonly supplementsDirectory: string;
+}): Promise<{
+  readonly ambiguousCandidateCount: number;
+  readonly duplicateSupplementIds: ReadonlySet<string>;
+}> {
+  const idCounts = new Map<string, number>();
+  let ambiguousCandidateCount = 0;
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const candidateDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(supplementsDirectory, entry.name)
+      );
+      await assertSafeExistingDirectory(
+        candidateDirectory,
+        'Segment supplement directory is not safe'
+      );
+      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
+      if (await exists(path.join(candidateDirectory, 'segment.md'))) {
+        ambiguousCandidateCount += 1;
+        continue;
+      }
+      const candidate = parseWorkspaceMarkdownObjectCandidate({
+        objectType: 'supplement',
+        markdown: readWorkspaceTextFileInKnownDirectory(
+          candidateDirectory,
+          candidateIdentity,
+          'supplement.md'
+        ),
+      });
+      const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+      if (candidateKind !== undefined && candidateKind !== 'note') {
+        continue;
+      }
+      const candidateId =
+        ('id' in candidate.data ? candidate.data.id : undefined) ??
+        directorySupplementIdHint(entry.name);
+      if (candidateId) {
+        idCounts.set(candidateId, (idCounts.get(candidateId) ?? 0) + 1);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    ambiguousCandidateCount,
+    duplicateSupplementIds: new Set(
+      [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+    ),
+  };
+}
+
+async function reconcileNoteSupplementsInSegmentDirectory({
+  memoryId,
+  recordingDirectory,
+  rootPath,
+  segmentId,
+  workspaceId,
+}: {
+  readonly memoryId: string;
+  readonly recordingDirectory: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
+    rootPath,
+    path.join(recordingDirectory, 'supplements')
+  );
+  const entries = await readExistingDirectoryEntries(supplementsDirectory);
+  const review = await classifyNoteSupplementCandidatesForReview({
+    entries,
+    rootPath,
+    supplementsDirectory,
+  });
+  if (review.duplicateSupplementIds.size > 0 || review.ambiguousCandidateCount > 0) {
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'markdown.supplement.needs-review',
+      fields: {
+        ambiguousCandidateCount: review.ambiguousCandidateCount,
+        duplicateIdCount: review.duplicateSupplementIds.size,
+      },
+      level: 'warn',
+    });
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const candidateDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(supplementsDirectory, entry.name)
+      );
+      await assertSafeExistingDirectory(
+        candidateDirectory,
+        'Segment supplement directory is not safe'
+      );
+      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
+      await reconcileNoteSupplementCandidate({
+        blockedSupplementIds: review.duplicateSupplementIds,
+        candidateDirectory,
+        candidateIdentity,
+        directoryName: entry.name,
+        memoryId,
+        rootPath,
+        segmentId,
+        workspaceId,
+      });
+    } catch {
+      continue;
+    }
   }
 }
 
@@ -2311,12 +2861,14 @@ async function segmentDirectoryInParent({
   memoryId,
   parentDirectory,
   rootPath,
+  scanFallbackCandidates = true,
   segmentId,
 }: {
   readonly defaultDirectoryName: string;
   readonly memoryId: string;
   readonly parentDirectory: string;
   readonly rootPath: string;
+  readonly scanFallbackCandidates?: boolean;
   readonly segmentId: string;
 }): Promise<string> {
   if (!SEGMENT_ID_PATTERN.test(segmentId)) {
@@ -2338,7 +2890,7 @@ async function segmentDirectoryInParent({
     nodeId: segmentId,
     parentDirectory,
     rootPath,
-    scanFallbackCandidates: false,
+    scanFallbackCandidates,
     unsafeMessage: 'Workspace segment directory is not safe',
   });
 }
@@ -2353,6 +2905,7 @@ async function trashedSegmentDirectory(
     memoryId,
     parentDirectory: path.join(rootPath, '.reo', 'trash', 'segments'),
     rootPath,
+    scanFallbackCandidates: false,
     segmentId,
   });
 }
@@ -2616,21 +3169,6 @@ async function readFinalizedSegmentMetadata(
 ): Promise<FinalizedSegmentSemanticTruth> {
   const directoryIdentity =
     recordingDirectoryIdentity ?? (await readDirectoryIdentity(recordingDirectory));
-  const directorySegmentId = path.basename(recordingDirectory).split('--')[0] ?? '';
-  if (!SEGMENT_ID_PATTERN.test(directorySegmentId)) {
-    throw new Error('Finalized segment directory does not expose a stable segment id');
-  }
-  const manifest = segmentObjectManifestSchema.parse(
-    JSON.parse(
-      await readWorkspaceTextFile(await segmentObjectManifestPath(rootPath, directorySegmentId))
-    )
-  );
-  if (
-    manifest.segmentId !== directorySegmentId ||
-    !fileSpaceNodeDirectoryNameMatchesId(path.basename(recordingDirectory), manifest.segmentId)
-  ) {
-    throw new Error('Finalized segment manifest does not match file-space node');
-  }
   const markdown = parseWorkspaceMarkdownObject({
     objectType: 'segment',
     markdown: readWorkspaceTextFileInKnownDirectory(
@@ -2639,6 +3177,21 @@ async function readFinalizedSegmentMetadata(
       'segment.md'
     ),
   });
+  const markdownSegmentId = 'id' in markdown.data ? markdown.data.id : undefined;
+  const directorySegmentId = directorySegmentIdHint(path.basename(recordingDirectory));
+  const segmentId = markdownSegmentId ?? directorySegmentId;
+  if (!segmentId) {
+    throw new Error('Finalized segment markdown does not expose a stable segment id');
+  }
+  if (directorySegmentId && directorySegmentId !== segmentId) {
+    throw new Error('Finalized segment directory id conflicts with markdown id');
+  }
+  const manifest = segmentObjectManifestSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(await segmentObjectManifestPath(rootPath, segmentId)))
+  );
+  if (manifest.segmentId !== segmentId) {
+    throw new Error('Finalized segment manifest does not match file-space node');
+  }
   const markdownKind = 'kind' in markdown.data ? markdown.data.kind : undefined;
   if ((markdownKind ?? 'audio') !== manifest.kind) {
     throw new Error('Finalized segment markdown kind does not match manifest');
@@ -2776,25 +3329,6 @@ async function readFinalizedSegmentSupplementMetadata(
 ): Promise<FinalizedSupplementSemanticTruth> {
   const directoryIdentity =
     supplementDirectoryIdentity ?? readDirectoryIdentitySync(supplementDirectory);
-  const directorySupplementId = path.basename(supplementDirectory).split('--')[0] ?? '';
-  if (!SUPPLEMENT_ID_PATTERN.test(directorySupplementId)) {
-    throw new Error(
-      'Finalized segment supplement directory does not expose a stable supplement id'
-    );
-  }
-  const manifest = supplementObjectManifestSchema.parse(
-    JSON.parse(
-      await readWorkspaceTextFile(
-        await supplementObjectManifestPath(rootPath, directorySupplementId)
-      )
-    )
-  );
-  if (
-    manifest.supplementId !== directorySupplementId ||
-    !fileSpaceNodeDirectoryNameMatchesId(path.basename(supplementDirectory), manifest.supplementId)
-  ) {
-    throw new Error('Finalized supplement manifest does not match file-space node');
-  }
   const markdown = parseWorkspaceMarkdownObject({
     objectType: 'supplement',
     markdown: readWorkspaceTextFileInKnownDirectory(
@@ -2803,6 +3337,23 @@ async function readFinalizedSegmentSupplementMetadata(
       'supplement.md'
     ),
   });
+  const markdownSupplementId = 'id' in markdown.data ? markdown.data.id : undefined;
+  const directorySupplementId = directorySupplementIdHint(path.basename(supplementDirectory));
+  const supplementId = markdownSupplementId ?? directorySupplementId;
+  if (!supplementId) {
+    throw new Error('Finalized segment supplement markdown does not expose a stable supplement id');
+  }
+  if (directorySupplementId && directorySupplementId !== supplementId) {
+    throw new Error('Finalized segment supplement directory id conflicts with markdown id');
+  }
+  const manifest = supplementObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(await supplementObjectManifestPath(rootPath, supplementId))
+    )
+  );
+  if (manifest.supplementId !== supplementId) {
+    throw new Error('Finalized supplement manifest does not match file-space node');
+  }
   const markdownKind = 'kind' in markdown.data ? markdown.data.kind : undefined;
   if ((markdownKind ?? 'audio') !== manifest.kind) {
     throw new Error('Finalized supplement markdown kind does not match manifest');
@@ -2877,7 +3428,7 @@ export async function resolveSegmentSupplementDirectoryInSegmentDirectory({
     nodeId: supplementId,
     parentDirectory: supplementsDirectory,
     rootPath,
-    scanFallbackCandidates: false,
+    scanFallbackCandidates: true,
     unsafeMessage: 'Workspace segment supplement directory is not safe',
   });
 }
@@ -3049,6 +3600,13 @@ async function listValidSegmentSupplementsFromDirectory({
     rootPath,
     path.join(recordingDirectory, 'supplements')
   );
+  await reconcileNoteSupplementsInSegmentDirectory({
+    memoryId,
+    recordingDirectory,
+    rootPath,
+    segmentId,
+    workspaceId,
+  });
   let entries: Dirent[];
   try {
     entries = await readExistingDirectoryEntries(supplementsDirectory);
@@ -3369,6 +3927,11 @@ async function listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
   readonly memoryId: string;
   readonly memoryDirectoryPath: string;
 }): Promise<FinalizedSegmentFileTruth[]> {
+  await reconcileNoteSegmentsInMemoryDirectory({
+    rootPath,
+    memoryId,
+    memoryDirectoryPath,
+  });
   const segmentsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
     path.join(memoryDirectoryPath, 'segments')
@@ -3611,7 +4174,11 @@ async function finalizedSegmentProjectionFromFileTruth({
     workspaceId,
     memoryId: metadata.memoryId,
     segmentId,
-    title: metadata.title,
+    title: titleFromFileSpaceDirectoryName({
+      nodeId: segmentId,
+      directoryName: path.basename(recordingDirectory),
+      metadataTitle: metadata.title,
+    }),
     ...(metadata.contentTitle !== undefined ? { contentTitle: metadata.contentTitle } : {}),
     createdAt: metadata.createdAt,
     updatedAt,

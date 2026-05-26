@@ -336,6 +336,14 @@ memories/*/segments/*/supplements/*/supplement.md
 
 不把 `.reo`、draft、trash、attachments 或普通孤立 JSON 当作内容对象入口。
 
+首期扫描边界已锁定为浅层有界扫描：
+
+- 只扫描每个 Memory 的一层 `segments/*/segment.md`。
+- 只扫描每个 Segment 的一层 `supplements/*/supplement.md`。
+- 不递归发现任意 `.md`，不扫描 attachments，不把普通 `.html` / `.json` / 孤立 `.md` 作为对象入口。
+- 复用现有 no-follow Markdown 读取边界；超过当前 workspace text file 上限的候选文件不进入 repaired 投影。
+- 候选数量和失败计数只进入受控 summary / 脱敏日志，不暴露 raw path。
+
 身份识别优先级：
 
 1. Markdown frontmatter `id` 是主 identity carrier。Segment 使用 `seg_*`，SegmentSupplement 使用 `sup_*`。
@@ -364,6 +372,8 @@ memories/*/segments/*/supplements/*/supplement.md
 - “有 1 个文件夹因安全原因未读取。”
 
 Codex 可以通过受控诊断输出或直接读取文件空间状态继续修复文件，但不获得新的通用 raw path / generic IPC 能力。
+
+首期 `needs-review` surface 已锁定为受控摘要和 main-owned 脱敏日志，不新增完整 renderer 待检查列表。Ambiguous 对象不进入 Memory detail、Workspace snapshot 或 `.reo/index.json` 有效对象列表。日志只记录 category、计数和安全 reason，不记录 root path、file path、title、正文、frontmatter 原文或 id 列表。
 
 ## 验证标准
 
@@ -417,10 +427,8 @@ reconcile 诊断分类
 
 ## Open Questions
 
-- **扫描边界**：首期需要定义候选目录数量、Markdown 文件大小、frontmatter 解析失败和 HTML-in-Markdown 的扫描上限。
 - **HTML 不可信边界**：Markdown-compatible HTML 只作为文本内容进入现有编辑/预览管线，不新增 Electron 权限、外链或脚本执行能力。
 - **JSON 启用条件**：`content.tiptap.json` 只有在 Markdown dialect 能力矩阵证明负担过高或 round-trip 不可接受后，才进入独立 spec。
-- **待检查 UI**：首期是否需要可见 `needs-review` surface，还是先通过 safe error/diagnostic summary 证明主流程，不阻断 accepted/repaired。
 
 ## Stop Conditions
 

@@ -17,17 +17,18 @@
 - 记忆空间是用户选择的本地文件夹；用户内容真源是该文件夹内的普通文件。
 - `.reo/workspace.json` 保存 `schemaVersion`、`workspaceId`、title、description 和 createdAt；它定义记忆空间身份，不保存 UI 状态、root path、handle 或查询缓存。
 - Workspace snapshot 是 IPC response 和 TanStack Query cache 投影，只包含 `workspaceId`、title、description 和 `memories[]`；不包含顶层 `segments[]`、root path、selection token 或 `workspaceHandle`。
-- Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点。用户可编辑语义写在 Markdown/frontmatter；稳定 id、归属、时长、音频字节数、正文 byte 长度、presentation state 和事务字段写在 `.reo/objects/<kind>/<id>.json` manifest。
+- Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点。用户可编辑语义写在 Markdown/frontmatter；Segment 和 SegmentSupplement 的稳定 id 写在对应 Markdown frontmatter `id`，`.reo/objects/<kind>/<id>.json` manifest 镜像 id、归属、kind、时长、音频字节数、正文 byte 长度、presentation state 和事务字段。
 - 目录 basename 是用户可见名称真源；Markdown frontmatter title 是 Reo 持锁写入的语义镜像。目录 basename 等于稳定 id 时使用 Markdown title 投影；目录 basename 为 `<id>--<title>` 或用户手动改名后的安全名称时使用 basename title 投影。
 - Memory summary 由 `.reo/index.json` 的 `memories[]` 提供，包含 identity、title、timestamps、Segment 计数、audio 聚合、note presence 和 supplement count。`hasAnyNote` 表示存在 note Segment 或 note SegmentSupplement。
 - Memory detail 由 matching Memory 目录内的 `memory.md`、Memory manifest 和 finalized Segment 文件空间节点派生，包含 Memory summary 字段和 `segments[]`。
 - Segment projection 当前支持 `audio` 和 `note`。Audio Segment 持有 duration、audio byte length、transcript presence、lastTranscriptionAttempt、supplements 和 contentTabOrder；note Segment 持有 bodyByteLength、supplements 和 contentTabOrder。
 - Segment primary content tab 的用户可见名称来自 `segment.md` frontmatter `content_title`，缺失时由 renderer 按 Segment type 显示 `转录` 或 `正文`。
 - SegmentSupplement projection 当前支持 `audio` 和 `note`。Audio supplement 持有 duration、audio byte length、transcript presence 和 lastTranscriptionAttempt；note supplement 持有 bodyByteLength。
-- Memory 的 Segment 关系由该 Memory 目录下合法 finalized Segment 文件空间节点表达；当前不保存显式 Segment id 列表。关系来自合法目录、Markdown/frontmatter 和 `.reo/objects/*` manifest。
+- Memory 的 Segment 关系由该 Memory 目录下合法 finalized Segment 文件空间节点表达；当前不保存显式 Segment id 列表。关系来自合法目录、Markdown/frontmatter `id` 和 `.reo/objects/*` manifest mirror。
 - 当前 finalized read model 只接受 `audio` 和 `note`；photo、video、imported_file 和其它 kind 不进入投影。
 - Draft 属于 `.reo/drafts/segments/<segmentId>/` 或 `.reo/drafts/supplements/<supplementId>/`。Finalized Segment 属于 matching Memory 的 `segments/<segmentDirectory>/`；Finalized SegmentSupplement 属于 matching Segment 的 `supplements/<supplementDirectory>/`。
 - Audio finalized object 由 Markdown、manifest 和 `audio.webm` 表达；note finalized object 由 Markdown 和 manifest 表达。Note Segment 与 note SegmentSupplement 可以包含同目录 `attachments/<filename>` 图片 payload。
+- Reo 打开、刷新和 index rebuild 时只对 `memories/*/segments/*/segment.md` 与 `memories/*/segments/*/supplements/*/supplement.md` 做浅层有界候选识别。缺少 frontmatter 的 note Segment 或 note SegmentSupplement 可以在身份唯一且路径安全时被补全 `id`、`title`、`kind: note` 和 manifest mirror；duplicate id、混合对象形态、unsafe path 或无法唯一归属的候选不进入 Memory detail、Workspace snapshot 或 `.reo/index.json`。
 - Finalized Segment manifest 的 `contentTabOrder` 是 Reo 管理的可选 durable presentation 字段，元素为 `segment` 或 `supplement:<supplementId>`；读取投影时按当前合法 tab 归一化。
 - `lastTranscriptionAttempt` 是 Reo 管理的技术状态字段，取值为 `'success'`、`'failed'` 或 `'never'`；读取投影时缺失按 `'never'` 投影。手动补转录 mode 不扩展该字段取值。
 - Note projection 不暴露 duration、audio byte、transcript 或 lastTranscriptionAttempt 字段。附件相对引用写在 Markdown 正文中；附件本身不是独立对象、不是 `.reo/index.json` 投影，也不进入 manifest 列表。
@@ -55,7 +56,7 @@
 - 用户直接删除记忆空间文件夹后，registry entry 可以继续显示。点击该 entry 时 main 返回 missing-root typed error；用户可从 sidebar 移除 registry entry，该动作不删除本地文件夹。
 - Memory space stable files 包括入口 `AGENTS.md`、`.reo` metadata/index/object manifests、Memory/Segment/Supplement Markdown、audio payload、note attachment payload、draft、trash、lock 和 recovery marker。具体路径合同以 workspace contract 与文件读写代码为准；本文档只记录所有权与真源边界。
 - `memory.md`、`segment.md` 和 `supplement.md` 是用户和 agent 可编辑的语义真源；`.reo/workspace.json`、`.reo/objects/*/*.json`、draft、trash、lock 和 recovery marker 是 Reo 管理的技术完整性层。
-- 用户内容目录中的普通 `.json`、`.md`、`.html` 或其它文件可以存在，但不自动成为 Reo 对象，也不作为 Reo schema 输入。HTML 默认是不可信资源，未进入隔离预览能力前不由 renderer 执行或渲染。
+- 用户内容目录中的普通 `.json`、`.md`、`.html` 或其它文件可以存在，但不自动成为 Reo 对象，也不作为 Reo schema 输入。HTML 默认是不可信资源，未进入隔离预览能力前不由 renderer 执行或渲染。候选对象进入 needs-review 时，main-owned diagnostics 只记录类别和计数，不记录 root path、file path、title、正文、frontmatter 原文或 id 列表。
 - `.reo/index.json` 是可重建 UI index，不是用户内容真源。合法但陈旧的 index 只能作为启动 cache，不能让合法 finalized object 永久隐藏。
 - `.reo/workspace.lock` 和 `.reo/workspace.lock.lock` 是 volatile runtime lock artifacts，不进入稳定内容 hash；owner file 只用于识别 stale lock，不是用户内容。
 - Query keys 使用 stable `workspaceId`、`memoryId`、`segmentId` 和 `supplementId`；`workspaceHandle` 是 runtime capability，不进入 query key、不写入文件、不跨 app restart 持久化。

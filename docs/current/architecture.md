@@ -57,7 +57,7 @@ docs/
 
 Reo 的记忆空间是用户选择的本地文件夹。记忆空间 folder 是用户记忆内容的 durable artifact source；DB 只能作为索引、关系、查询和处理状态层。
 
-记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，对象技术完整性 manifest 位于 `.reo/objects/<kind>/<id>.json`，single-writer lock 位于 `.reo/workspace.lock*`。用户语义内容使用普通 Markdown 文件保存：Memory 使用 `memory.md`，Segment 使用 `segment.md`，SegmentSupplement 使用 `supplement.md`；audio 对象额外保存 `audio.webm`，note 对象使用 Markdown 正文和同节点 `attachments/`。Draft 位于 `.reo/drafts/*`，trash 位于 `.reo/trash/*`。目录 basename 是用户可见名称真源，manifest id 建立身份和归属。合法外部编辑通过 index cache、active snapshot refresh 和 focused detail read 重新投影 UI；普通 `.json`、`.html` 或未被对象合同识别的文件不自动成为 Reo 对象。字段级文件合同见 `data.md` 和 `flow.md`。
+记忆空间 root 使用 `AGENTS.md` 作为 agent 协作入口。Reo metadata 位于 `.reo/workspace.json`，可重建 index 位于 `.reo/index.json`，对象技术完整性 manifest 位于 `.reo/objects/<kind>/<id>.json`，single-writer lock 位于 `.reo/workspace.lock*`。用户语义内容使用普通 Markdown 文件保存：Memory 使用 `memory.md`，Segment 使用 `segment.md`，SegmentSupplement 使用 `supplement.md`；audio 对象额外保存 `audio.webm`，note 对象使用 Markdown 正文和同节点 `attachments/`。Draft 位于 `.reo/drafts/*`，trash 位于 `.reo/trash/*`。目录 basename 是用户可见名称真源；Segment 和 SegmentSupplement 的 Markdown frontmatter `id` 是身份载体，`.reo/objects/*/*.json` manifest 镜像身份、归属和技术完整性字段。合法外部编辑通过 index cache、active snapshot refresh 和 focused detail read 重新投影 UI；普通 `.json`、`.html` 或未被对象合同识别的文件不自动成为 Reo 对象。字段级文件合同见 `data.md` 和 `flow.md`。
 
 当前没有 DB-backed persistence layer。
 
