@@ -89,6 +89,7 @@ import type {
   WorkspaceRecordingTranscriptionCloseRequest,
   WorkspaceRecordingTranscriptionControlResponse,
   WorkspaceRecordingTranscriptionEvent,
+  WorkspaceFileTruthChangedEvent,
   WorkspaceRecordingTranscriptionStartRequest,
   WorkspaceRevealMemoryInFinderRequest,
   WorkspaceRevealMemorySpaceInFinderRequest,
@@ -367,5 +368,8 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceOpenMarkdownExternalLinkResponse>;
   readonly onRecordingTranscriptionEvent: (
     callback: (event: WorkspaceRecordingTranscriptionEvent) => void
+  ) => () => void;
+  readonly onFileTruthChanged: (
+    callback: (event: WorkspaceFileTruthChangedEvent) => void
   ) => () => void;
 }

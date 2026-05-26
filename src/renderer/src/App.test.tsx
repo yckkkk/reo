@@ -97,6 +97,7 @@ describe('App', () => {
     openVoiceTranscriptionProviderConsole: vi.fn(),
     openMarkdownExternalLink: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
+    onFileTruthChanged: vi.fn(),
   };
 
   function createDeferred<T>() {
@@ -455,6 +456,7 @@ describe('App', () => {
       },
     });
     reoWorkspace.onRecordingTranscriptionEvent.mockReturnValue(() => {});
+    reoWorkspace.onFileTruthChanged.mockReturnValue(() => {});
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
       value: reoWorkspace,
@@ -486,8 +488,10 @@ describe('App', () => {
   }
 
   async function settleClosingDialog(name: string) {
-    const closingDialog = screen.getByRole('dialog', { name });
-    fireEvent.animationEnd(closingDialog);
+    const closingDialog = screen.queryByRole('dialog', { name });
+    if (closingDialog) {
+      fireEvent.animationEnd(closingDialog);
+    }
     await waitFor(() => expect(screen.queryByRole('dialog', { name })).toBeNull());
   }
 
@@ -4016,7 +4020,7 @@ describe('App', () => {
     expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it('skips child query invalidation when external file refresh returns the same snapshot', async () => {
+  it('refreshes child detail when external file refresh returns the same snapshot', async () => {
     const user = userEvent.setup();
     const originalMemory = {
       memoryId: 'mem_birthday',
@@ -4089,7 +4093,7 @@ describe('App', () => {
     });
 
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
-    expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(2);
   });
 
   it('refreshes the active workspace from external Markdown edits when the document becomes visible', async () => {
@@ -4182,6 +4186,106 @@ describe('App', () => {
         workspaceHandle: 'workspace-handle-1',
       })
     );
+    expect(
+      within(titlebar).getByRole('button', { name: '外部空间 记忆空间操作' })
+    ).toBeInTheDocument();
+    expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('refreshes the active workspace from file truth events without visibility or reselect', async () => {
+    const user = userEvent.setup();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const originalMemory = {
+      memoryId: 'mem_birthday',
+      title: '旧记忆',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 1000,
+      audioByteLength: 3,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const refreshedMemory = {
+      ...originalMemory,
+      title: '外部记忆',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      hasAudioTranscript: true,
+    };
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: '外部空间',
+          description: 'Codex updated workspace metadata.',
+          memories: [refreshedMemory],
+        },
+      });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 1,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
     expect(
       within(titlebar).getByRole('button', { name: '外部空间 记忆空间操作' })
     ).toBeInTheDocument();
@@ -4508,6 +4612,10 @@ describe('App', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
     });
+    const memoryDetailKey = memoryDetailQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+    });
     reoWorkspace.chooseDirectory.mockResolvedValue({
       ok: true,
       value: {
@@ -4590,6 +4698,7 @@ describe('App', () => {
           options.predicate({ queryKey: noteContentKey } as never)
       );
     expect(contentInvalidation).toBeDefined();
+    expect(contentInvalidation?.predicate?.({ queryKey: memoryDetailKey } as never)).toBe(true);
     expect(
       contentInvalidation?.predicate?.({
         queryKey: ['workspace', 'segment-content', 'other_workspace', 'mem_birthday', 'seg_note_1'],
@@ -10693,12 +10802,15 @@ describe('App', () => {
         })
       )
     );
-    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenCalledWith({
-      workspaceHandle: 'workspace-handle-1',
-      segmentId: 'seg_note_1',
-      bodyMarkdown: '## Cake plan\n\n- Buy candles',
-      revision: 0,
-    });
+    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-1',
+        segmentId: 'seg_note_1',
+        bodyMarkdown: '## Cake plan\n\n- Buy candles',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+        revision: 0,
+      })
+    );
     expect(screen.getByRole('region', { name: '表达入口', hidden: true })).toBeInTheDocument();
     await settleClosingDialog('笔记');
     expect(await screen.findByRole('button', { name: '选择片段 笔记1' })).toHaveAttribute(
@@ -10861,18 +10973,26 @@ describe('App', () => {
     });
 
     await waitFor(() => expect(reoWorkspace.finalizeNoteSegmentDraft).toHaveBeenCalledTimes(2));
-    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenNthCalledWith(1, {
-      workspaceHandle: 'workspace-handle-1',
-      segmentId: 'seg_note_1',
-      bodyMarkdown: '## Cake plan\n\n- Buy candles',
-      revision: 0,
-    });
-    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenNthCalledWith(2, {
-      workspaceHandle: 'workspace-handle-1',
-      segmentId: 'seg_note_1',
-      bodyMarkdown: '## Cake plan\n\n- Buy candles',
-      revision: 1,
-    });
+    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-1',
+        segmentId: 'seg_note_1',
+        bodyMarkdown: '## Cake plan\n\n- Buy candles',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+        revision: 0,
+      })
+    );
+    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-1',
+        segmentId: 'seg_note_1',
+        bodyMarkdown: '## Cake plan\n\n- Buy candles',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+        revision: 1,
+      })
+    );
     await settleClosingDialog('笔记');
     expect(await screen.findByRole('button', { name: '选择片段 笔记1' })).toHaveAttribute(
       'aria-current',
@@ -11005,7 +11125,6 @@ describe('App', () => {
     const body = within(editor).getByLabelText('笔记正文');
     await replaceRichEditorMarkdown(body, 'Updated note\n\n- Keep candles');
     expect(within(editor).queryByText('Raw Markdown')).toBeNull();
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledWith({
@@ -11023,7 +11142,7 @@ describe('App', () => {
     expect(screen.queryByText('Old note')).not.toBeInTheDocument();
   });
 
-  it('reenables the finalized Note editor when save rejects', async () => {
+  it('keeps the finalized Note editor editable when autosave rejects', async () => {
     const user = userEvent.setup();
     const birthdayMemory = {
       memoryId: 'mem_birthday',
@@ -11117,18 +11236,11 @@ describe('App', () => {
     const editorSurface = editor;
     await replaceRichEditorMarkdown(body, 'Unsaved note');
     expect(editorSurface).toHaveClass('border-ring');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
-    await waitFor(() =>
-      expect(within(editor).queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledTimes(1));
     pendingSave.reject(new Error('bridge failed'));
 
     expect(await screen.findByText('无法保存笔记正文。')).toBeInTheDocument();
     expectRichEditorEnabled(body);
-    expect(within(editor).getByRole('button', { name: '保存' })).toBeEnabled();
-    expect(within(editor).getByRole('button', { name: '取消' })).toBeEnabled();
-    expect(editorSurface).toHaveClass('border-secondary');
-    expect(editorSurface).not.toHaveClass('border-ring');
     expectRichEditorContent(body, 'Unsaved note');
   });
 
@@ -11235,7 +11347,6 @@ describe('App', () => {
     const editor = await openInlineNoteEditor(user);
     const body = within(editor).getByLabelText('笔记正文');
     await replaceRichEditorMarkdown(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expectRichEditorContent(body, 'My unsaved body');
@@ -11374,7 +11485,6 @@ describe('App', () => {
     const editor = await openInlineNoteEditor(user);
     const body = within(editor).getByLabelText('笔记正文');
     await replaceRichEditorMarkdown(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
     await user.click(
       within(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).getByRole(
         'button',
@@ -11513,7 +11623,6 @@ describe('App', () => {
     const editor = await openInlineNoteEditor(user);
     const body = within(editor).getByLabelText('笔记正文');
     await replaceRichEditorMarkdown(body, 'My unsaved body');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expectRichEditorContent(body, 'My unsaved body');
@@ -11672,7 +11781,6 @@ describe('App', () => {
     await waitFor(() =>
       expect(within(body).getAllByRole('img', { name: 'Cake Plan' })).toHaveLength(2)
     );
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentContent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -12468,7 +12576,6 @@ describe('App', () => {
     const editor = await openInlineSupplementNoteEditor(user);
     const body = within(editor).getByLabelText('补充笔记正文');
     await replaceRichEditorMarkdown(body, 'Edited supplement note');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     await waitFor(() =>
       expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenCalledWith({
@@ -12639,7 +12746,6 @@ describe('App', () => {
     const editor = await openInlineSupplementNoteEditor(user);
     const body = within(editor).getByLabelText('补充笔记正文');
     await replaceRichEditorMarkdown(body, 'My local supplement body');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
 
     expect(await screen.findByRole('alertdialog', { name: '外部修改已检测' })).toBeInTheDocument();
     expectRichEditorContent(body, 'My local supplement body');
@@ -12662,7 +12768,6 @@ describe('App', () => {
     expectRichEditorContent(body, 'Disk supplement changed');
 
     await replaceRichEditorMarkdown(body, 'Second local body');
-    await user.click(within(editor).getByRole('button', { name: '保存' }));
     const conflictDialog = await screen.findByRole('alertdialog', { name: '外部修改已检测' });
     expect(reoWorkspace.writeSegmentSupplementContent).toHaveBeenLastCalledWith({
       workspaceHandle: 'workspace-handle-1',

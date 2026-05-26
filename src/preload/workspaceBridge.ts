@@ -30,6 +30,7 @@ import {
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
@@ -477,6 +478,10 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       ),
     onRecordingTranscriptionEvent: (callback) =>
       invoker.on?.(WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, (payload) =>
+        callback(payload as Parameters<typeof callback>[0])
+      ) ?? (() => {}),
+    onFileTruthChanged: (callback) =>
+      invoker.on?.(WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, (payload) =>
         callback(payload as Parameters<typeof callback>[0])
       ) ?? (() => {}),
   };

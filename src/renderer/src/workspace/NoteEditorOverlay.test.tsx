@@ -2,11 +2,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
 import { NoteEditorOverlay } from './NoteEditorOverlay';
 import type { NoteEditorTarget } from './noteEditorModel';
-import type { WorkspaceSession } from './workspaceApi';
+import type { FinalizedNoteSegment, WorkspaceSession } from './workspaceApi';
 
 const workspaceSession: WorkspaceSession = {
   workspaceHandle: 'workspace-handle-secret',
@@ -20,9 +20,11 @@ const workspaceSession: WorkspaceSession = {
 };
 
 function renderNoteEditorOverlay({
+  onNoteSegmentFinalized = vi.fn() as (finalized: FinalizedNoteSegment) => void,
   onOpenChange = vi.fn() as (open: boolean) => void,
   target = null,
 }: {
+  readonly onNoteSegmentFinalized?: (finalized: FinalizedNoteSegment) => void;
   readonly onOpenChange?: (open: boolean) => void;
   readonly target?: NoteEditorTarget | null;
 } = {}) {
@@ -36,7 +38,7 @@ function renderNoteEditorOverlay({
     onOpenChange,
     ...render(
       <NoteEditorOverlay
-        onNoteSegmentFinalized={() => {}}
+        onNoteSegmentFinalized={onNoteSegmentFinalized}
         onOpenChange={onOpenChange}
         onSegmentSupplementNoteFinalized={() => {}}
         open
@@ -47,6 +49,63 @@ function renderNoteEditorOverlay({
     ),
   };
 }
+
+function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {}) {
+  const bridge = {
+    createNoteSegmentDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: { segmentId: 'seg_note_1', revision: 0 },
+    })),
+    createSegmentSupplementNoteDraft: vi.fn(),
+    writeNoteSegmentDraftBody: vi.fn(async () => ({
+      ok: true as const,
+      value: { bodyByteLength: 15, revision: 1 },
+    })),
+    writeSegmentSupplementNoteDraftBody: vi.fn(),
+    finalizeNoteSegmentDraft: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        memory: {
+          audioByteLength: 0,
+          audioDurationMs: 0,
+          audioSegmentCount: 0,
+          createdAt: '2026-05-19T12:00:00.000Z',
+          hasAnyNote: true,
+          hasAudioTranscript: false,
+          memoryId: 'memory_1',
+          noteSegmentCount: 1,
+          segmentCount: 1,
+          supplementCount: 0,
+          title: 'Memory',
+          updatedAt: '2026-05-19T12:00:00.000Z',
+        },
+        segment: {
+          bodyByteLength: 15,
+          createdAt: '2026-05-19T12:00:00.000Z',
+          memoryId: 'memory_1',
+          segmentId: 'seg_note_1',
+          supplementCount: 0,
+          supplements: [],
+          title: '新笔记',
+          type: 'note',
+          updatedAt: '2026-05-19T12:00:00.000Z',
+          workspaceId: 'ws_1',
+        },
+      },
+    })),
+    finalizeSegmentSupplementNoteDraft: vi.fn(),
+    ...overrides,
+  };
+  Object.defineProperty(window, 'reoWorkspace', {
+    configurable: true,
+    value: bridge as unknown as Window['reoWorkspace'],
+  });
+  return bridge;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('NoteEditorOverlay', () => {
   it('places the return button on the shared titlebar control grid', async () => {
@@ -141,5 +200,32 @@ describe('NoteEditorOverlay', () => {
     expect(screen.queryByRole('menu', { name: '格式' })).not.toBeInTheDocument();
     expect(screen.getByRole('toolbar', { name: '文本编辑工具栏' })).toBeVisible();
     expect(screen.queryByRole('toolbar', { name: 'Markdown 格式工具栏' })).not.toBeInTheDocument();
+  });
+
+  it('saves a new note segment with the Tiptap JSON produced by the editor', async () => {
+    const user = userEvent.setup();
+    const bridge = installWorkspaceBridge();
+    const onNoteSegmentFinalized = vi.fn<(finalized: FinalizedNoteSegment) => void>();
+
+    renderNoteEditorOverlay({
+      onNoteSegmentFinalized,
+      target: {
+        kind: 'segment',
+        memoryId: 'memory_1',
+        title: '新笔记',
+      },
+    });
+
+    await user.type(screen.getByRole('textbox', { name: '笔记正文' }), 'Codex highlight');
+    await user.click(screen.getByRole('button', { name: '保存笔记' }));
+
+    await waitFor(() => expect(bridge.writeNoteSegmentDraftBody).toHaveBeenCalled());
+    expect(bridge.writeNoteSegmentDraftBody).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bodyMarkdown: expect.stringContaining('Codex highlight'),
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+      })
+    );
+    expect(onNoteSegmentFinalized).toHaveBeenCalledOnce();
   });
 });

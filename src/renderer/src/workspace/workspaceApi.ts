@@ -458,6 +458,12 @@ export function onRecordingTranscriptionEvent(
   return window.reoWorkspace.onRecordingTranscriptionEvent(callback);
 }
 
+export function onFileTruthChanged(
+  callback: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0]
+) {
+  return window.reoWorkspace.onFileTruthChanged(callback);
+}
+
 export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];

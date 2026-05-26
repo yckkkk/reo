@@ -27,6 +27,7 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
+  WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
@@ -326,11 +327,15 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:copySegmentSupplementRelativePath',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
-  assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, ['workspace:recordingTranscriptionEvent']);
+  assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, [
+    'workspace:recordingTranscriptionEvent',
+    'workspace:fileTruthChanged',
+  ]);
 
   const namedChannelContracts: readonly (readonly [string, string])[] = [
     [WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory'],
     [WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, 'workspace:recordingTranscriptionEvent'],
+    [WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, 'workspace:fileTruthChanged'],
     [WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory'],
     [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],

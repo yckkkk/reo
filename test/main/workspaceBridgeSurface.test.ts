@@ -85,6 +85,7 @@ const workspaceBridgeKeys = [
   'openVoiceTranscriptionProviderConsole',
   'openMarkdownExternalLink',
   'onRecordingTranscriptionEvent',
+  'onFileTruthChanged',
 ] as const;
 
 const workspaceEntityActionBridgeKeys = [
@@ -680,9 +681,19 @@ test('workspace preload bridge maps recording transcription methods and strips i
   });
 
   const events: unknown[] = [];
+  const fileTruthEvents: unknown[] = [];
   const unsubscribe = bridge.onRecordingTranscriptionEvent((event) => events.push(event));
+  const unsubscribeFileTruth = bridge.onFileTruthChanged((event) => fileTruthEvents.push(event));
   subscriptions[0]?.listener({ kind: 'closed', recordingSessionId: 'recording-1' });
+  subscriptions[1]?.listener({
+    kind: 'changed',
+    reason: 'file-system',
+    sequence: 1,
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+  });
   unsubscribe();
+  unsubscribeFileTruth();
 
   assert.deepEqual(calls, [
     {
@@ -726,9 +737,18 @@ test('workspace preload bridge maps recording transcription methods and strips i
   ]);
   assert.deepEqual(
     subscriptions.map((subscription) => subscription.channel),
-    ['workspace:recordingTranscriptionEvent']
+    ['workspace:recordingTranscriptionEvent', 'workspace:fileTruthChanged']
   );
   assert.deepEqual(events, [{ kind: 'closed', recordingSessionId: 'recording-1' }]);
+  assert.deepEqual(fileTruthEvents, [
+    {
+      kind: 'changed',
+      reason: 'file-system',
+      sequence: 1,
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    },
+  ]);
   assert.equal(removed, true);
 });
 

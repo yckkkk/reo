@@ -35,6 +35,7 @@ import {
   WORKSPACE_FINALIZE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
@@ -110,6 +111,7 @@ import {
   workspaceFinalizeNoteSegmentDraftResponseSchema,
   workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
   workspaceFinalizeSegmentSupplementNoteDraftResponseSchema,
+  workspaceFileTruthChangedEventSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
   workspaceListMemorySpacesResponseSchema,
@@ -232,6 +234,10 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import {
+  createWorkspaceFileTruthWatcherRegistry,
+  type WorkspaceFileTruthWatcherRegistry,
+} from './workspaceFileTruthWatcher.js';
+import {
   createWorkspaceMemorySpaceRegistry,
   WorkspaceMemorySpaceRegistryReadError,
   type WorkspaceMemorySpaceRegistry,
@@ -350,6 +356,7 @@ const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Pa
   typeof import('electron')
 >;
 const defaultHandleStore = createWorkspaceHandleStore();
+const defaultWorkspaceFileTruthWatcherRegistry = createWorkspaceFileTruthWatcherRegistry();
 let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
 const defaultRecordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry();
 
@@ -413,6 +420,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly handleStore?: WorkspaceHandleStore;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
+  readonly fileTruthWatcher?: WorkspaceFileTruthWatcherRegistry;
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly voiceSettingsStore: VoiceSettingsStore;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
@@ -454,6 +462,7 @@ interface HandleWorkspaceRequestOptions {
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly handleStore?: WorkspaceHandleStore;
   readonly onBeforeBackfillCancel?: (workspaceHandle: string) => boolean;
+  readonly onWorkspaceClosed?: (workspaceHandle: string) => Promise<void> | void;
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
 }
 
@@ -1749,6 +1758,7 @@ export async function handleUpdateMemorySpaceTitleForTest(
 export async function closeAllWorkspaceHandles(): Promise<void> {
   clearAllMicrophoneIntents();
   defaultRecordingTranscriptionSessions.closeAll();
+  await defaultWorkspaceFileTruthWatcherRegistry.closeAll();
   await defaultHandleStore.closeAllHandles();
   clearRecordingRuntimeState();
 }
@@ -1826,10 +1836,17 @@ function senderKeyFor(sender: TrustedSenderIdentity): string {
   return `${sender.sessionKey}:${sender.processId}:${sender.frameRoutingId}:${sender.origin}`;
 }
 
-function sendRecordingTranscriptionEvent(
-  event: TrustedSenderEventAdapter,
-  payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
-): void {
+function sendWorkspaceRendererEvent({
+  channel,
+  event,
+  payload,
+  schema,
+}: {
+  readonly channel: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly payload: unknown;
+  readonly schema: { parse: (payload: unknown) => unknown };
+}): void {
   const sender = event.sender as {
     readonly isDestroyed?: () => boolean;
     readonly send?: (channel: string, payload: unknown) => void;
@@ -1840,9 +1857,9 @@ function sendRecordingTranscriptionEvent(
   if (typeof sender.send !== 'function') {
     return;
   }
-  const parsedPayload = workspaceRecordingTranscriptionEventSchema.parse(payload);
+  const parsedPayload = schema.parse(payload);
   try {
-    sender.send(WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, parsedPayload);
+    sender.send(channel, parsedPayload);
   } catch (sendError) {
     if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) {
       return;
@@ -1851,11 +1868,42 @@ function sendRecordingTranscriptionEvent(
   }
 }
 
+function sendRecordingTranscriptionEvent(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
+): void {
+  sendWorkspaceRendererEvent({
+    channel: WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+    event,
+    payload,
+    schema: workspaceRecordingTranscriptionEventSchema,
+  });
+}
+
+function sendFileTruthChangedEvent(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceFileTruthChangedEventSchema>
+): void {
+  sendWorkspaceRendererEvent({
+    channel: WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
+    event,
+    payload,
+    schema: workspaceFileTruthChangedEventSchema,
+  });
+}
+
 export function sendRecordingTranscriptionEventForTest(
   event: TrustedSenderEventAdapter,
   payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
 ): void {
   sendRecordingTranscriptionEvent(event, payload);
+}
+
+export function sendFileTruthChangedEventForTest(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceFileTruthChangedEventSchema>
+): void {
+  sendFileTruthChangedEvent(event, payload);
 }
 
 async function releaseWorkspaceLockAfterFailure(
@@ -3553,6 +3601,7 @@ async function handleCloseWorkspaceCore({
   isTrustedUrl,
   handleStore = createWorkspaceHandleStore(),
   onBeforeBackfillCancel,
+  onWorkspaceClosed,
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
 }: HandleWorkspaceRequestOptions): Promise<z.infer<typeof workspaceCloseResponseSchema>> {
   const trusted = validateWorkspaceSender({
@@ -3593,6 +3642,7 @@ async function handleCloseWorkspaceCore({
   }
 
   clearRecordingRuntimeStateForRoot(handle.handle.canonicalRoot);
+  await onWorkspaceClosed?.(request.data.workspaceHandle);
   return workspaceCloseResponseSchema.parse({ ok: true, value: { closed: true } });
 }
 
@@ -4205,6 +4255,7 @@ function handleWriteNoteSegmentDraftBodyCore(
           rootPath: handle.canonicalRoot,
           segmentId: request.segmentId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
           assertWorkspaceUsable: assertUsable,
         });
@@ -4235,6 +4286,7 @@ function handleWriteSegmentSupplementNoteDraftBodyCore(
           rootPath: handle.canonicalRoot,
           supplementId: request.supplementId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
           assertWorkspaceUsable: assertUsable,
         });
@@ -5486,6 +5538,7 @@ export function registerWorkspaceIpc({
   isTrustedUrl,
   tokenStore = createWorkspaceSelectionTokenStore(),
   handleStore = defaultHandleStore,
+  fileTruthWatcher = defaultWorkspaceFileTruthWatcherRegistry,
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   voiceSettingsStore,
@@ -5578,6 +5631,12 @@ export function registerWorkspaceIpc({
       workspaceHandle,
       workspaceId,
     };
+    fileTruthWatcher.watchWorkspace({
+      rootPath: required.handle.canonicalRoot,
+      sendEvent: (payload) => sendFileTruthChangedEvent(event, payload),
+      workspaceHandle,
+      workspaceId,
+    });
     maybeTriggerAutomaticBackfill();
     return response;
   }
@@ -6219,6 +6278,7 @@ export function registerWorkspaceIpc({
         lastFiredBackfillReadyKey = null;
         return true;
       },
+      onWorkspaceClosed: (workspaceHandle) => fileTruthWatcher.closeWorkspace(workspaceHandle),
       recordingTranscriptionSessions,
     })
   );
@@ -6316,6 +6376,7 @@ export function registerWorkspaceIpc({
           rootPath: handle.canonicalRoot,
           segmentId: request.segmentId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
           assertWorkspaceUsable: assertUsable,
         });
@@ -6339,6 +6400,7 @@ export function registerWorkspaceIpc({
           rootPath: handle.canonicalRoot,
           supplementId: request.supplementId,
           bodyMarkdown: request.bodyMarkdown,
+          ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
           assertWorkspaceUsable: assertUsable,
         });

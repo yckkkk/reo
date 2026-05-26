@@ -7,7 +7,7 @@ import {
 } from './inlineMarkdownEditorState';
 
 describe('inlineMarkdownEditorState', () => {
-  it('keeps focus independent from dirty state and clears focus after a successful save', () => {
+  it('keeps focus independent from dirty state and preserves focus after autosave succeeds', () => {
     let state = createInlineMarkdownEditorState({
       baselineContentHash: 'a'.repeat(64),
       markdown: 'Original body',
@@ -24,13 +24,13 @@ describe('inlineMarkdownEditorState', () => {
     expect(state.editorFocused).toBe(true);
     expect(inlineMarkdownEditorIsDirty(state)).toBe(true);
 
-    state = inlineMarkdownEditorReducer(state, { type: 'save-started' });
+    state = inlineMarkdownEditorReducer(state, { type: 'autosave-started' });
     state = inlineMarkdownEditorReducer(state, {
-      type: 'save-succeeded',
+      type: 'autosave-succeeded',
       nextBaselineContentHash: 'b'.repeat(64),
     });
 
-    expect(state.editorFocused).toBe(false);
+    expect(state.editorFocused).toBe(true);
     expect(state.markdown).toBe('Updated');
     expect(state.cleanMarkdown).toBe('Updated');
     expect(state.activeBaselineContentHash).toBe('b'.repeat(64));
@@ -97,5 +97,51 @@ describe('inlineMarkdownEditorState', () => {
     expect(state.activeBaselineTiptapContentHash).toBe('c'.repeat(64));
     expect(inlineMarkdownEditorHasUnacceptedDiskVersion(state)).toBe(false);
     expect(inlineMarkdownEditorIsDirty(state)).toBe(false);
+  });
+
+  it('does not mark newer local input clean when an older autosave snapshot succeeds', () => {
+    let state = createInlineMarkdownEditorState({
+      baselineContentHash: 'a'.repeat(64),
+      baselineTiptapContentHash: 'b'.repeat(64),
+      markdown: 'Original body',
+      tiptapJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+    });
+
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'markdown-changed',
+      markdown: 'Autosave snapshot',
+      tiptapJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Autosave snapshot' }] }],
+      },
+    });
+    const savingMarkdown = state.markdown;
+    const savingTiptapJson = state.tiptapJson;
+    const savingTiptapJsonKey = state.tiptapJsonKey;
+    state = inlineMarkdownEditorReducer(state, { type: 'autosave-started' });
+
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'markdown-changed',
+      markdown: 'Newer local input',
+      tiptapJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Newer local input' }] }],
+      },
+    });
+    state = inlineMarkdownEditorReducer(state, {
+      type: 'autosave-succeeded',
+      markdown: savingMarkdown,
+      tiptapJson: savingTiptapJson,
+      tiptapJsonKey: savingTiptapJsonKey,
+      nextBaselineContentHash: 'c'.repeat(64),
+      nextBaselineTiptapContentHash: 'd'.repeat(64),
+    });
+
+    expect(state.markdown).toBe('Newer local input');
+    expect(state.cleanMarkdown).toBe('Autosave snapshot');
+    expect(state.activeBaselineContentHash).toBe('c'.repeat(64));
+    expect(state.activeBaselineTiptapContentHash).toBe('d'.repeat(64));
+    expect(state.lastInputMarkdown).toBe('Autosave snapshot');
+    expect(inlineMarkdownEditorIsDirty(state)).toBe(true);
   });
 });

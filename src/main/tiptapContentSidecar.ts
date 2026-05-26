@@ -201,7 +201,7 @@ function okResult({
   };
 }
 
-function assertTiptapJsonMatchesMarkdown({
+export function assertTiptapJsonMatchesMarkdown({
   bodyMarkdown,
   tiptapJson,
 }: {

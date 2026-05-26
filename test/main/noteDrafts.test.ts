@@ -1196,6 +1196,430 @@ test('finalized note segment content maintains tiptap json sidecar', async () =>
   assert.equal(sidecar.contentHash, saved.baselineTiptapContentHash);
 });
 
+test('note segment draft finalization preserves body tiptap json from first durable write', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_draft_rich_sidecar';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Draft note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: '==Codex highlight==',
+    bodyTiptapJson: highlightedDoc('Codex highlight'),
+    revision: 0,
+  });
+  assert.equal(write.ok, true, JSON.stringify(write));
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Editable note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true, JSON.stringify(finalized));
+
+  const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.deepEqual(sidecar.content, highlightedDoc('Codex highlight'));
+  assert.equal(sidecar.source.hash, contentHash('==Codex highlight==\n'));
+});
+
+test('note segment draft write rolls back markdown and sidecar when tiptap json is invalid', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_draft_rich_rollback';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Draft note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const firstWrite = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Original body\n',
+    revision: 0,
+  });
+  assert.equal(firstWrite.ok, true);
+  const draftDirectory = path.join(rootPath, '.reo', 'drafts', 'segments', segmentId);
+  const metadataBefore = await readFile(path.join(draftDirectory, 'segment.json'), 'utf8');
+  const markdownBefore = await readFile(path.join(draftDirectory, 'segment.md'), 'utf8');
+  const sidecarBefore = await readFile(
+    path.join(draftDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    'utf8'
+  );
+
+  const failedWrite = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Next body\n',
+    bodyTiptapJson: highlightedDoc('Different rich body'),
+    revision: 1,
+  });
+
+  assert.equal(failedWrite.ok, false);
+  assert.equal(await readFile(path.join(draftDirectory, 'segment.json'), 'utf8'), metadataBefore);
+  assert.equal(await readFile(path.join(draftDirectory, 'segment.md'), 'utf8'), markdownBefore);
+  assert.equal(
+    await readFile(path.join(draftDirectory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'),
+    sidecarBefore
+  );
+});
+
+test('note supplement draft finalization preserves body tiptap json from first durable write', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_parent';
+  const supplementId = 'sup_draft_rich_sidecar';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const segmentDraft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Parent note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(segmentDraft.ok, true);
+  const segmentWrite = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Parent body\n',
+    revision: 0,
+  });
+  assert.equal(segmentWrite.ok, true);
+  const finalizedSegment = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const supplementDraft = await createSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Rich supplement',
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-19T12:44:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  const supplementWrite = await writeSegmentSupplementNoteDraftBody({
+    rootPath,
+    supplementId,
+    bodyMarkdown: '==Supplement highlight==',
+    bodyTiptapJson: highlightedDoc('Supplement highlight'),
+    revision: 0,
+  });
+  assert.equal(supplementWrite.ok, true, JSON.stringify(supplementWrite));
+  const finalizedSupplement = await finalizeSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: 'Rich supplement',
+    now: () => '2026-05-19T12:45:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true, JSON.stringify(finalizedSupplement));
+
+  const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+  const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+    rootPath,
+    memoryId,
+    segmentDirectory,
+    segmentId,
+    supplementId,
+  });
+  const sidecar = await readTiptapContentSidecar(supplementDirectory);
+  assert.deepEqual(sidecar.content, highlightedDoc('Supplement highlight'));
+  assert.equal(sidecar.source.hash, contentHash('==Supplement highlight==\n'));
+});
+
+test('note supplement draft write rolls back markdown and sidecar when tiptap json is invalid', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_parent_rich_rollback';
+  const supplementId = 'sup_draft_rich_rollback';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const segmentDraft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Parent note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(segmentDraft.ok, true);
+  const segmentWrite = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Parent body\n',
+    revision: 0,
+  });
+  assert.equal(segmentWrite.ok, true);
+  const finalizedSegment = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const supplementDraft = await createSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Rich supplement',
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-19T12:44:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  const firstWrite = await writeSegmentSupplementNoteDraftBody({
+    rootPath,
+    supplementId,
+    bodyMarkdown: 'Original supplement\n',
+    revision: 0,
+  });
+  assert.equal(firstWrite.ok, true);
+  const draftDirectory = path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId);
+  const metadataBefore = await readFile(path.join(draftDirectory, 'supplement.json'), 'utf8');
+  const markdownBefore = await readFile(path.join(draftDirectory, 'supplement.md'), 'utf8');
+  const sidecarBefore = await readFile(
+    path.join(draftDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    'utf8'
+  );
+
+  const failedWrite = await writeSegmentSupplementNoteDraftBody({
+    rootPath,
+    supplementId,
+    bodyMarkdown: 'Next supplement\n',
+    bodyTiptapJson: highlightedDoc('Different rich supplement'),
+    revision: 1,
+  });
+
+  assert.equal(failedWrite.ok, false);
+  assert.equal(
+    await readFile(path.join(draftDirectory, 'supplement.json'), 'utf8'),
+    metadataBefore
+  );
+  assert.equal(await readFile(path.join(draftDirectory, 'supplement.md'), 'utf8'), markdownBefore);
+  assert.equal(
+    await readFile(path.join(draftDirectory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'),
+    sidecarBefore
+  );
+});
+
+test('note segment draft finalization syncs sidecar-authored tiptap json into markdown', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_draft_sidecar_authored';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Draft note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Original body\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+  const nextTiptapJson = highlightedDoc('Draft sidecar highlight');
+  await writeFile(
+    path.join(rootPath, '.reo', 'drafts', 'segments', segmentId, TIPTAP_CONTENT_SIDECAR_FILE),
+    JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'tiptap-content',
+      source: {
+        format: 'markdown',
+        hash: contentHash('Original body\n'),
+      },
+      profile: {
+        name: 'reo-tiptap-markdown',
+        version: 1,
+      },
+      contentHash: hashTiptapJsonContent(nextTiptapJson),
+      content: nextTiptapJson,
+    })
+  );
+
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Editable note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true, JSON.stringify(finalized));
+  const content = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+  });
+  assert.equal(content.ok, true);
+  if (!content.ok) {
+    throw new Error('content read must succeed');
+  }
+  assert.equal(content.bodyMarkdown, '==Draft sidecar highlight==\n');
+  assert.deepEqual(content.bodyTiptapJson, nextTiptapJson);
+});
+
+test('note supplement draft finalization syncs sidecar-authored tiptap json into markdown', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note';
+  const segmentId = 'seg_parent_sidecar_authored';
+  const supplementId = 'sup_draft_sidecar_authored';
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId,
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const segmentDraft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    title: 'Parent note',
+    createSegmentId: () => segmentId,
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(segmentDraft.ok, true);
+  const segmentWrite = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId,
+    bodyMarkdown: 'Parent body\n',
+    revision: 0,
+  });
+  assert.equal(segmentWrite.ok, true);
+  const finalizedSegment = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalizedSegment.ok, true);
+  const supplementDraft = await createSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    title: 'Rich supplement',
+    createSupplementId: () => supplementId,
+    now: () => '2026-05-19T12:44:00.000Z',
+  });
+  assert.equal(supplementDraft.ok, true);
+  const supplementWrite = await writeSegmentSupplementNoteDraftBody({
+    rootPath,
+    supplementId,
+    bodyMarkdown: 'Original supplement\n',
+    revision: 0,
+  });
+  assert.equal(supplementWrite.ok, true);
+  const nextTiptapJson = highlightedDoc('Supplement sidecar highlight');
+  await writeFile(
+    path.join(rootPath, '.reo', 'drafts', 'supplements', supplementId, TIPTAP_CONTENT_SIDECAR_FILE),
+    JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'tiptap-content',
+      source: {
+        format: 'markdown',
+        hash: contentHash('Original supplement\n'),
+      },
+      profile: {
+        name: 'reo-tiptap-markdown',
+        version: 1,
+      },
+      contentHash: hashTiptapJsonContent(nextTiptapJson),
+      content: nextTiptapJson,
+    })
+  );
+
+  const finalizedSupplement = await finalizeSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: 'Rich supplement',
+    now: () => '2026-05-19T12:45:00.000Z',
+  });
+  assert.equal(finalizedSupplement.ok, true, JSON.stringify(finalizedSupplement));
+  const content = await readFinalizedNoteSegmentSupplementContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId,
+    segmentId,
+    supplementId,
+  });
+  assert.equal(content.ok, true);
+  if (!content.ok) {
+    throw new Error('content read must succeed');
+  }
+  assert.equal(content.bodyMarkdown, '==Supplement sidecar highlight==\n');
+  assert.deepEqual(content.bodyTiptapJson, nextTiptapJson);
+});
+
 test('finalized note segment content read syncs sidecar-authored colored highlights into manifest truth', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_note';

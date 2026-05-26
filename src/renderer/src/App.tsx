@@ -89,6 +89,7 @@ import {
   discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
+  onFileTruthChanged,
   openWorkspace,
   openMemorySpace,
   readWorkspaceSnapshot,
@@ -971,7 +972,10 @@ export function App() {
               typeof query.getObserversCount === 'function' ? query.getObserversCount() : 1;
             return (
               observerCount > 0 &&
-              workspaceContentQueryBelongsToWorkspace(query.queryKey, response.value.workspaceId) &&
+              workspaceHandleScopedContentQueryBelongsToWorkspace(
+                query.queryKey,
+                response.value.workspaceId
+              ) &&
               !queryKeyMatchesProtectedPendingDelete(query.queryKey)
             );
           },
@@ -1017,10 +1021,21 @@ export function App() {
       }
     }
 
+    const unsubscribeFileTruthChanged = onFileTruthChanged((event) => {
+      if (
+        event.workspaceHandle !== refreshSession.workspaceHandle ||
+        event.workspaceId !== refreshSession.workspaceId
+      ) {
+        return;
+      }
+      void refreshWorkspaceFromFileTruth({ showError: false });
+    });
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     void refreshWorkspaceFromFileTruth({ showError: false });
     return () => {
       disposed = true;
+      unsubscribeFileTruthChanged();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [

@@ -487,6 +487,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     openVoiceTranscriptionProviderConsole: entityOk,
     openMarkdownExternalLink: entityOk,
     onRecordingTranscriptionEvent: () => () => {},
+    onFileTruthChanged: () => () => {},
   } as unknown as ReoWorkspaceBridge;
 }
 

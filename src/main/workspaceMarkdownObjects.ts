@@ -2,6 +2,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import {
+  MEMORY_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   SUPPLEMENT_ID_PATTERN,
   WORKSPACE_CONTENT_KINDS,
@@ -26,6 +27,7 @@ const workspaceMarkdownSharedSemanticDataSchema = z
   .strict();
 
 export const workspaceMemoryMarkdownDataSchema = workspaceMarkdownSharedSemanticDataSchema.extend({
+  id: z.string().regex(MEMORY_ID_PATTERN).optional(),
   memory_date: z.string().optional(),
 });
 

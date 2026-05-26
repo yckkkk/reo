@@ -720,6 +720,7 @@ export const workspaceWriteNoteSegmentDraftBodyRequestSchema = workspaceHandleSc
   .extend({
     segmentId: segmentIdSchema,
     bodyMarkdown: noteBodyMarkdownSchema,
+    bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     revision: z.number().int().nonnegative(),
   })
   .strict();
@@ -728,6 +729,7 @@ export const workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema = workspa
   .extend({
     supplementId: supplementIdSchema,
     bodyMarkdown: noteBodyMarkdownSchema,
+    bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     revision: z.number().int().nonnegative(),
   })
   .strict();
@@ -1572,6 +1574,14 @@ export const workspaceRecordingTranscriptionEventSchema = z.discriminatedUnion('
   }),
 ]);
 
+export const workspaceFileTruthChangedEventSchema = z.strictObject({
+  kind: z.literal('changed'),
+  reason: z.literal('file-system'),
+  sequence: z.number().int().positive(),
+  workspaceHandle: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
+
 export const workspaceRecordingFinalizeRequestSchema = workspaceSegmentIdRequestSchema
   .extend({
     memoryId: memoryIdSchema,
@@ -2037,6 +2047,7 @@ export type WorkspaceRecordingTranscriptionControlResponse = z.infer<
 export type WorkspaceRecordingTranscriptionEvent = z.infer<
   typeof workspaceRecordingTranscriptionEventSchema
 >;
+export type WorkspaceFileTruthChangedEvent = z.infer<typeof workspaceFileTruthChangedEventSchema>;
 export type WorkspaceRecordingFinalizeRequest = z.infer<
   typeof workspaceRecordingFinalizeRequestSchema
 >;

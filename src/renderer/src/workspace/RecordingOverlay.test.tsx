@@ -504,6 +504,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       value: {},
     })),
     onRecordingTranscriptionEvent: vi.fn(() => () => {}),
+    onFileTruthChanged: vi.fn(() => () => {}),
   };
 }
 

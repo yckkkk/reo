@@ -106,6 +106,7 @@ export const WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL =
   'workspace:openMarkdownExternalLink' as const;
 export const WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL =
   'workspace:recordingTranscriptionEvent' as const;
+export const WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL = 'workspace:fileTruthChanged' as const;
 export const WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL =
   'workspace:revealMemorySpaceInFinder' as const;
 export const WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL = 'workspace:revealMemoryInFinder' as const;
@@ -221,6 +222,7 @@ export type WorkspaceIpcChannel = (typeof WORKSPACE_IPC_CHANNELS)[number];
 
 export const WORKSPACE_RENDERER_EVENT_CHANNELS = [
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
 ] as const;
 
 export type WorkspaceRendererEventChannel = (typeof WORKSPACE_RENDERER_EVENT_CHANNELS)[number];

@@ -161,6 +161,42 @@ describe('LightweightMarkdownEditorSurface', () => {
     expect(latest?.tiptapJson.type).toBe('doc');
   });
 
+  it('surfaces Tiptap content errors without replacing the current document', async () => {
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const { rerender } = renderEditor('Stable body', editorHandleRef);
+
+    rerender(
+      <LightweightMarkdownEditorSurface
+        attachmentContext={{
+          kind: 'segment',
+          workspaceId: 'ws_1',
+          segmentId: 'seg_1',
+        }}
+        editorId="lightweight-editor-body"
+        editorLabel="笔记正文"
+        editorHandleRef={editorHandleRef}
+        headerLabel="格式笔记"
+        onChange={() => undefined}
+        onSave={() => undefined}
+        placeholder="写下正文..."
+        saveLabel="保存"
+        surfaceTestId="lightweight-editor"
+        value="Stable body"
+        valueTiptapJson={
+          {
+            type: 'doc',
+            content: [{ type: 'unsupportedNode', attrs: { id: 'external-json-drift' } }],
+          } as Parameters<typeof LightweightMarkdownEditorSurface>[0]['valueTiptapJson']
+        }
+      />
+    );
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '富文本结构无法按当前编辑器模型读取。'
+    );
+    expect(editorHandleRef.current?.getMarkdown()).toContain('Stable body');
+  });
+
   it('does not carry undo history across content target changes', async () => {
     const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
     const onChange = vi.fn();

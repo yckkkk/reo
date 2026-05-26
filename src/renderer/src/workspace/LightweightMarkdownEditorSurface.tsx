@@ -131,6 +131,28 @@ function isUsableEditor(editor: Editor | null): editor is Editor {
   return Boolean(editor && !editor.isDestroyed);
 }
 
+function findUnsupportedTiptapJsonContent(editor: Editor, content: JSONContent): Error | null {
+  const stack: JSONContent[] = [content];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) {
+      continue;
+    }
+    if (node.type && !(node.type in editor.schema.nodes)) {
+      return new Error(`Unsupported Tiptap node: ${node.type}`);
+    }
+    for (const mark of node.marks ?? []) {
+      if (mark.type && !(mark.type in editor.schema.marks)) {
+        return new Error(`Unsupported Tiptap mark: ${mark.type}`);
+      }
+    }
+    for (const child of node.content ?? []) {
+      stack.push(child);
+    }
+  }
+  return null;
+}
+
 function editorMarkdown(editor: Editor | null) {
   return isUsableEditor(editor) ? editor.getMarkdown() : '';
 }
@@ -209,6 +231,7 @@ function LightweightMarkdownEditorSurfaceContent({
   resolvedAttachmentContextKey,
 }: LightweightMarkdownEditorSurfaceContentProps) {
   const [uncontrolledEditorFocused, setUncontrolledEditorFocused] = useState(false);
+  const [contentErrorMessage, setContentErrorMessage] = useState<string | null>(null);
   const onAttachmentUploadRef = useRef(onAttachmentUpload);
   const onChangeRef = useRef(onChange);
   const onRichChangeRef = useRef(onRichChange);
@@ -315,10 +338,14 @@ function LightweightMarkdownEditorSurfaceContent({
         },
       },
       extensions,
+      emitContentError: true,
       immediatelyRender: false,
       onBlur: ({ editor: blurredEditor }) => {
         setTiptapInteractiveSelectionReady(blurredEditor, false);
         setResolvedEditorFocused(false);
+      },
+      onContentError: () => {
+        setContentErrorMessage('富文本结构无法按当前编辑器模型读取。');
       },
       onFocus: ({ editor: focusedEditor }) => {
         setTiptapInteractiveSelectionReady(focusedEditor, false);
@@ -340,6 +367,7 @@ function LightweightMarkdownEditorSurfaceContent({
         ) {
           return;
         }
+        setContentErrorMessage(null);
         lastSyncedEditorMarkdownRef.current = nextMarkdown;
         lastSyncedEditorTiptapJsonKeyRef.current = nextTiptapJsonKey;
         if (onRichChangeRef.current) {
@@ -382,7 +410,16 @@ function LightweightMarkdownEditorSurfaceContent({
       ) {
         return;
       }
-      editor.commands.setContent(valueTiptapJson, { emitUpdate: false });
+      const unsupportedContentError = findUnsupportedTiptapJsonContent(editor, valueTiptapJson);
+      if (unsupportedContentError) {
+        setContentErrorMessage('富文本结构无法按当前编辑器模型读取。');
+        return;
+      }
+      const accepted = editor.commands.setContent(valueTiptapJson, { emitUpdate: false });
+      if (!accepted) {
+        return;
+      }
+      setContentErrorMessage(null);
       lastSyncedEditorMarkdownRef.current = editorMarkdown(editor);
       lastSyncedEditorTiptapJsonKeyRef.current = JSON.stringify(editor.getJSON());
       return;
@@ -395,7 +432,14 @@ function LightweightMarkdownEditorSurfaceContent({
       lastSyncedEditorMarkdownRef.current = currentMarkdown;
       return;
     }
-    editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false });
+    const accepted = editor.commands.setContent(value, {
+      contentType: 'markdown',
+      emitUpdate: false,
+    });
+    if (!accepted) {
+      return;
+    }
+    setContentErrorMessage(null);
     lastSyncedEditorMarkdownRef.current = editorMarkdown(editor);
     lastSyncedEditorTiptapJsonKeyRef.current = JSON.stringify(editor.getJSON());
   }, [editor, value, valueTiptapJson, valueTiptapJsonKey]);
@@ -455,6 +499,7 @@ function LightweightMarkdownEditorSurfaceContent({
   );
 
   const toolbarLocked = toolbarDisabled || disabled;
+  const visibleNotice = contentErrorMessage ?? notice;
 
   return (
     <div
@@ -576,9 +621,9 @@ function LightweightMarkdownEditorSurfaceContent({
           className="flex min-h-0 flex-col bg-background"
           onPaste={onPaste}
         >
-          {notice ? (
+          {visibleNotice ? (
             <p role="status" className="mx-20 mt-16 text-ui-sm leading-ui-sm text-muted-foreground">
-              {notice}
+              {visibleNotice}
             </p>
           ) : null}
           <Label htmlFor={editorId} className="sr-only">

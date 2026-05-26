@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { WorkspaceTiptapJsonContent } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
 import {
   createNoteSegmentDraft,
@@ -43,6 +44,10 @@ type NoteEditorOverlayProps = {
   readonly workspaceSession: WorkspaceSession;
 };
 
+function noteDraftBodyTiptapJsonKey(content: WorkspaceTiptapJsonContent | null): string {
+  return content === null ? 'null' : JSON.stringify(content);
+}
+
 export function NoteEditorOverlay({
   onNoteSegmentFinalized,
   onExitAnimationEnd,
@@ -53,20 +58,31 @@ export function NoteEditorOverlay({
   workspaceSession,
 }: NoteEditorOverlayProps) {
   const [bodyMarkdown, setBodyMarkdown] = useState('');
+  const [bodyTiptapJson, setBodyTiptapJson] = useState<WorkspaceTiptapJsonContent | null>(null);
   const [draft, setDraft] = useState<NoteDraftState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [initialBodyMarkdown, setInitialBodyMarkdown] = useState('');
+  const [initialBodyTiptapJsonKey, setInitialBodyTiptapJsonKey] = useState(
+    noteDraftBodyTiptapJsonKey(null)
+  );
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const editorHandleRef = useRef<LightweightMarkdownEditorHandle | null>(null);
   const activeTargetIdentity = useMemo(() => targetIdentity(target), [target]);
   const displayTitle = noteEditorDisplayTitle(target);
   const bodyPlaceholder = target?.kind === 'segment-supplement' ? '写下补充笔记...' : '写下正文...';
-  const dirty = bodyMarkdown !== initialBodyMarkdown;
+  const bodyTiptapJsonKey = useMemo(
+    () => noteDraftBodyTiptapJsonKey(bodyTiptapJson),
+    [bodyTiptapJson]
+  );
+  const dirty =
+    bodyMarkdown !== initialBodyMarkdown || bodyTiptapJsonKey !== initialBodyTiptapJsonKey;
 
   useEffect(() => {
     setBodyMarkdown('');
+    setBodyTiptapJson(null);
     setInitialBodyMarkdown('');
+    setInitialBodyTiptapJsonKey(noteDraftBodyTiptapJsonKey(null));
     setDraft(null);
     setDiscardConfirmOpen(false);
     setErrorMessage(null);
@@ -161,6 +177,7 @@ export function NoteEditorOverlay({
           workspaceHandle: workspaceSession.workspaceHandle,
           segmentId: activeDraft.segmentId,
           bodyMarkdown,
+          ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
           revision: activeDraft.revision,
         });
         if (!writeResponse.ok) {
@@ -189,6 +206,7 @@ export function NoteEditorOverlay({
         }
         onNoteSegmentFinalized(finalizeResponse.value);
         setInitialBodyMarkdown(bodyMarkdown);
+        setInitialBodyTiptapJsonKey(bodyTiptapJsonKey);
         onOpenChange(false);
         setPending(false);
         return;
@@ -199,6 +217,7 @@ export function NoteEditorOverlay({
           workspaceHandle: workspaceSession.workspaceHandle,
           supplementId: activeDraft.supplementId,
           bodyMarkdown,
+          ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
           revision: activeDraft.revision,
         });
         if (!writeResponse.ok) {
@@ -230,6 +249,7 @@ export function NoteEditorOverlay({
         }
         onSegmentSupplementNoteFinalized(finalizeResponse.value);
         setInitialBodyMarkdown(bodyMarkdown);
+        setInitialBodyTiptapJsonKey(bodyTiptapJsonKey);
         onOpenChange(false);
         setPending(false);
       }
@@ -282,6 +302,10 @@ export function NoteEditorOverlay({
           editorHandleRef={editorHandleRef}
           headerLabel="Markdown 笔记"
           onChange={setBodyMarkdown}
+          onRichChange={({ markdown, tiptapJson }) => {
+            setBodyMarkdown(markdown);
+            setBodyTiptapJson(tiptapJson);
+          }}
           placeholder={bodyPlaceholder}
           readableWidth
           showActions={false}

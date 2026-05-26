@@ -27,8 +27,10 @@ import {
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
 import {
+  assertTiptapJsonMatchesMarkdown,
   reconcileTiptapContentSidecar,
   TIPTAP_CONTENT_SIDECAR_FILE,
+  tiptapContentSidecarPath,
   writeTiptapContentSidecar,
 } from './tiptapContentSidecar.js';
 import { parseTiptapMarkdown } from './tiptapMarkdownCodec.js';
@@ -526,6 +528,67 @@ function noteSupplementDraftMarkdownPath(draftDirectory: string): string {
   return path.join(draftDirectory, 'supplement.md');
 }
 
+type DraftNoteBodyFileSnapshot = {
+  readonly markdown: string | null;
+  readonly metadata: string | null;
+  readonly sidecar: string | null;
+};
+
+type DraftNoteBodyFilePaths = {
+  readonly markdownPath: string;
+  readonly metadataPath: string;
+  readonly sidecarPath: string;
+};
+
+async function readOptionalDraftTextFile(filePath: string): Promise<string | null> {
+  try {
+    return await readTextFileNoFollow(filePath);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function readDraftNoteBodyFileSnapshot({
+  markdownPath,
+  metadataPath,
+  sidecarPath,
+}: DraftNoteBodyFilePaths): Promise<DraftNoteBodyFileSnapshot> {
+  return {
+    markdown: await readOptionalDraftTextFile(markdownPath),
+    metadata: await readOptionalDraftTextFile(metadataPath),
+    sidecar: await readOptionalDraftTextFile(sidecarPath),
+  };
+}
+
+async function restoreDraftTextFile(
+  filePath: string,
+  content: string | null,
+  assertUsable: (() => void) | undefined
+): Promise<void> {
+  if (content === null) {
+    await rm(filePath, { force: true });
+    return;
+  }
+  await writeWorkspaceFileAtomic(filePath, content, assertUsable);
+}
+
+async function restoreDraftNoteBodyFileSnapshot({
+  assertUsable,
+  paths,
+  snapshot,
+}: {
+  readonly assertUsable: (() => void) | undefined;
+  readonly paths: DraftNoteBodyFilePaths;
+  readonly snapshot: DraftNoteBodyFileSnapshot;
+}): Promise<void> {
+  await restoreDraftTextFile(paths.metadataPath, snapshot.metadata, assertUsable);
+  await restoreDraftTextFile(paths.markdownPath, snapshot.markdown, assertUsable);
+  await restoreDraftTextFile(paths.sidecarPath, snapshot.sidecar, assertUsable);
+}
+
 function noteSegmentManifestPath(rootPath: string, segmentId: string): string {
   return path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`);
 }
@@ -591,62 +654,112 @@ async function readNoteSupplementDraftMetadata(
   );
 }
 
+async function writeDraftNoteBodyFiles<
+  Metadata extends { readonly bodyByteLength: number; readonly title: string },
+>({
+  assertWorkspaceUsable,
+  bodyMarkdown,
+  bodyTiptapJson,
+  draftDirectory,
+  markdownPath,
+  metadata,
+  metadataPath,
+  objectType,
+}: {
+  readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
+  readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent | undefined;
+  readonly draftDirectory: string;
+  readonly markdownPath: string;
+  readonly metadata: Metadata;
+  readonly metadataPath: string;
+  readonly objectType: 'segment' | 'supplement';
+}): Promise<void> {
+  const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
+  const rendered = renderPersistedNoteMarkdown({
+    objectType,
+    title: metadata.title,
+    bodyMarkdown,
+  });
+  const tiptapJson = bodyTiptapJson ?? parseTiptapMarkdown(rendered.bodyMarkdown);
+  assertTiptapJsonMatchesMarkdown({ bodyMarkdown: rendered.bodyMarkdown, tiptapJson });
+  const paths = {
+    markdownPath,
+    metadataPath,
+    sidecarPath: tiptapContentSidecarPath(draftDirectory),
+  };
+  const snapshot = await readDraftNoteBodyFileSnapshot(paths);
+  let writeStarted = false;
+  try {
+    writeStarted = true;
+    await writeWorkspaceJsonAtomic(
+      metadataPath,
+      { ...metadata, bodyByteLength: rendered.bodyByteLength },
+      assertUsable
+    );
+    await writeWorkspaceFileAtomic(markdownPath, rendered.markdown, assertUsable);
+    await writeTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: rendered.bodyMarkdown,
+      objectDirectory: draftDirectory,
+      tiptapJson,
+    });
+  } catch (error) {
+    if (writeStarted) {
+      await restoreDraftNoteBodyFileSnapshot({ assertUsable, paths, snapshot });
+    }
+    throw error;
+  }
+}
+
 async function writeNoteDraftFiles({
   assertWorkspaceUsable,
   bodyMarkdown,
+  bodyTiptapJson,
   draftDirectory,
   metadata,
 }: {
   readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent | undefined;
   readonly draftDirectory: string;
   readonly metadata: NoteDraftMetadata;
 }): Promise<void> {
-  const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
-  const rendered = renderPersistedNoteMarkdown({
-    objectType: 'segment',
-    title: metadata.title,
+  await writeDraftNoteBodyFiles({
+    assertWorkspaceUsable,
     bodyMarkdown,
+    ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
+    draftDirectory,
+    markdownPath: noteDraftMarkdownPath(draftDirectory),
+    metadata,
+    metadataPath: noteDraftMetadataPath(draftDirectory),
+    objectType: 'segment',
   });
-  await writeWorkspaceJsonAtomic(
-    noteDraftMetadataPath(draftDirectory),
-    { ...metadata, bodyByteLength: rendered.bodyByteLength },
-    assertUsable
-  );
-  await writeWorkspaceFileAtomic(
-    noteDraftMarkdownPath(draftDirectory),
-    rendered.markdown,
-    assertUsable
-  );
 }
 
 async function writeNoteSupplementDraftFiles({
   assertWorkspaceUsable,
   bodyMarkdown,
+  bodyTiptapJson,
   draftDirectory,
   metadata,
 }: {
   readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent | undefined;
   readonly draftDirectory: string;
   readonly metadata: NoteSupplementDraftMetadata;
 }): Promise<void> {
-  const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
-  const rendered = renderPersistedNoteMarkdown({
-    objectType: 'supplement',
-    title: metadata.title,
+  await writeDraftNoteBodyFiles({
+    assertWorkspaceUsable,
     bodyMarkdown,
+    ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
+    draftDirectory,
+    markdownPath: noteSupplementDraftMarkdownPath(draftDirectory),
+    metadata,
+    metadataPath: noteSupplementDraftMetadataPath(draftDirectory),
+    objectType: 'supplement',
   });
-  await writeWorkspaceJsonAtomic(
-    noteSupplementDraftMetadataPath(draftDirectory),
-    { ...metadata, bodyByteLength: rendered.bodyByteLength },
-    assertUsable
-  );
-  await writeWorkspaceFileAtomic(
-    noteSupplementDraftMarkdownPath(draftDirectory),
-    rendered.markdown,
-    assertUsable
-  );
 }
 
 export async function createNoteSegmentDraft({
@@ -722,12 +835,14 @@ export async function writeNoteSegmentDraftBody({
   rootPath,
   segmentId,
   bodyMarkdown,
+  bodyTiptapJson,
   revision,
   assertWorkspaceUsable,
 }: {
   readonly rootPath: string;
   readonly segmentId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent | undefined;
   readonly revision: number;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
@@ -760,6 +875,7 @@ export async function writeNoteSegmentDraftBody({
     await writeNoteDraftFiles({
       assertWorkspaceUsable,
       bodyMarkdown,
+      ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
       draftDirectory,
       metadata: nextMetadata,
     });
@@ -859,12 +975,14 @@ export async function writeSegmentSupplementNoteDraftBody({
   rootPath,
   supplementId,
   bodyMarkdown,
+  bodyTiptapJson,
   revision,
   assertWorkspaceUsable,
 }: {
   readonly rootPath: string;
   readonly supplementId: string;
   readonly bodyMarkdown: string;
+  readonly bodyTiptapJson?: JSONContent | undefined;
   readonly revision: number;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
 }): Promise<
@@ -900,6 +1018,7 @@ export async function writeSegmentSupplementNoteDraftBody({
     await writeNoteSupplementDraftFiles({
       assertWorkspaceUsable,
       bodyMarkdown,
+      ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
       draftDirectory,
       metadata: nextMetadata,
     });
@@ -971,9 +1090,35 @@ export async function finalizeNoteSegmentDraft({
       markdown: await readTextFileNoFollow(noteDraftMarkdownPath(draftDirectory)),
       objectType: 'segment',
     });
-    const bodyMarkdown = parsed.content;
-    const finalizedAt = now();
     const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
+    const reconciled = await reconcileTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: parsed.content,
+      objectDirectory: draftDirectory,
+      writeBodyMarkdown: async (nextBodyMarkdown) => {
+        const renderedDraft = renderPersistedNoteMarkdown({
+          objectType: 'segment',
+          title: draft.title,
+          bodyMarkdown: nextBodyMarkdown,
+        });
+        await writeWorkspaceJsonAtomic(
+          noteDraftMetadataPath(draftDirectory),
+          { ...draft, bodyByteLength: renderedDraft.bodyByteLength },
+          assertUsable
+        );
+        await writeWorkspaceFileAtomic(
+          noteDraftMarkdownPath(draftDirectory),
+          renderedDraft.markdown,
+          assertUsable
+        );
+        return renderedDraft.bodyMarkdown;
+      },
+    });
+    if (!reconciled.ok) {
+      return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Note draft content requires review');
+    }
+    const bodyMarkdown = reconciled.bodyMarkdown;
+    const finalizedAt = now();
     await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
     const targetDirectory = await memorySegmentDirectoryForNewNode(
       rootPath,
@@ -1012,6 +1157,12 @@ export async function finalizeNoteSegmentDraft({
       rendered.markdown,
       assertUsable
     );
+    await writeTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: rendered.bodyMarkdown,
+      objectDirectory: targetDirectory,
+      tiptapJson: reconciled.tiptapJson,
+    });
     await mkdir(path.join(rootPath, '.reo', 'objects', 'segments'), { recursive: true });
     exposedManifestPath = noteSegmentManifestPath(rootPath, segmentId);
     await writeWorkspaceJsonAtomic(
@@ -1773,9 +1924,38 @@ export async function finalizeSegmentSupplementNoteDraft({
       markdown: await readTextFileNoFollow(noteSupplementDraftMarkdownPath(draftDirectory)),
       objectType: 'supplement',
     });
-    const bodyMarkdown = parsed.content;
-    const finalizedAt = now();
     const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
+    const reconciled = await reconcileTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: parsed.content,
+      objectDirectory: draftDirectory,
+      writeBodyMarkdown: async (nextBodyMarkdown) => {
+        const renderedDraft = renderPersistedNoteMarkdown({
+          objectType: 'supplement',
+          title: draft.title,
+          bodyMarkdown: nextBodyMarkdown,
+        });
+        await writeWorkspaceJsonAtomic(
+          noteSupplementDraftMetadataPath(draftDirectory),
+          { ...draft, bodyByteLength: renderedDraft.bodyByteLength },
+          assertUsable
+        );
+        await writeWorkspaceFileAtomic(
+          noteSupplementDraftMarkdownPath(draftDirectory),
+          renderedDraft.markdown,
+          assertUsable
+        );
+        return renderedDraft.bodyMarkdown;
+      },
+    });
+    if (!reconciled.ok) {
+      return workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'Note supplement draft content requires review'
+      );
+    }
+    const bodyMarkdown = reconciled.bodyMarkdown;
+    const finalizedAt = now();
     const parentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
     const supplementsDirectory = path.join(parentDirectory, 'supplements');
     const targetDirectory = await segmentSupplementDirectoryForNewNode(
@@ -1821,6 +2001,12 @@ export async function finalizeSegmentSupplementNoteDraft({
       rendered.markdown,
       assertUsable
     );
+    await writeTiptapContentSidecar({
+      assertUsable,
+      bodyMarkdown: rendered.bodyMarkdown,
+      objectDirectory: targetDirectory,
+      tiptapJson: reconciled.tiptapJson,
+    });
     await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
     exposedManifestPath = noteSupplementManifestPath(rootPath, supplementId);
     await writeWorkspaceJsonAtomic(

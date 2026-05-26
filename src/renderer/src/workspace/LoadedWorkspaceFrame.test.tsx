@@ -1163,36 +1163,13 @@ describe('LoadedWorkspaceFrame', () => {
     expect(editorSurface).not.toHaveClass('border-secondary');
     expect(
       editorSurface.querySelector('[data-slot="lightweight-markdown-editor-actions"]')
-    ).toBeInTheDocument();
-    const cancelButton = within(content).getByRole('button', { name: '取消' });
-    const saveButton = within(content).getByRole('button', { name: '保存' });
-    expect(cancelButton).toBeInTheDocument();
-    expect(cancelButton).toHaveClass(
-      '!transition-none',
-      'hover:!bg-secondary',
-      'active:!bg-secondary'
-    );
-    expect(saveButton).toBeInTheDocument();
-    expect(saveButton).toHaveClass(
-      '!transition-none',
-      'hover:!bg-foreground',
-      'active:!bg-foreground'
-    );
-    await userEvent.click(within(content).getByRole('button', { name: '取消' }));
-    expectRichEditorContent(inlineBodyEditor, ['Cake plan', 'Buy candles', 'Call aunt Mei']);
-    expect(editorSurface).toHaveClass('border-secondary');
-    expect(editorSurface).not.toHaveClass('border-ring');
+    ).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    await replaceRichEditorMarkdown(inlineBodyEditor, 'Updated body');
-    await userEvent.click(inlineBodyEditor);
-    expect(editorSurface).toHaveClass('border-ring');
-    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() => expect(writeSegmentContent).toHaveBeenCalledTimes(1));
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
-    expect(editorSurface).toHaveClass('border-secondary');
-    expect(editorSurface).not.toHaveClass('border-ring');
+    expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'true');
     pendingSave.resolve();
     await waitFor(() =>
       expect(writeSegmentContent).toHaveBeenCalledWith({
@@ -1217,9 +1194,8 @@ describe('LoadedWorkspaceFrame', () => {
       baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
       bodyByteLength: 12,
     });
-    await waitFor(() => expect(editorSurface).not.toHaveClass('border-ring'));
-    expect(editorSurface).toHaveClass('border-secondary');
-    expect(inlineBodyEditor).not.toHaveFocus();
+    expect(editorSurface).toHaveClass('border-ring');
+    expect(inlineBodyEditor).toHaveFocus();
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
 
@@ -1243,6 +1219,92 @@ describe('LoadedWorkspaceFrame', () => {
     expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
     expect(railAddButton).not.toHaveClass('gap-6', 'px-10');
     expect(railAddButton.parentElement).toBe(contentTabActions);
+  });
+
+  it('autosaves finalized Note segment body edits without exposing manual save actions', async () => {
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: 'Original note body',
+        bodyByteLength: 18,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+      },
+    }));
+    const writeSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId ?? 'write_segment_note_autosave',
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: request.bodyMarkdown,
+        bodyByteLength: 14,
+        baselineContentHash: 'b'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
+      },
+    }));
+    const note = noteSegment();
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, segmentCount: 1, noteSegmentCount: 1, hasAnyNote: true }],
+    });
+    const onNoteSegmentContentSaved = vi.fn();
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onNoteSegmentContentSaved,
+      readSegmentContent,
+      session,
+      writeSegmentContent,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_segment_autosave',
+      detail: {
+        ...birthdayDetail,
+        ...session.snapshot.memories[0],
+        segments: [note],
+      },
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
+
+    await replaceRichEditorMarkdown(inlineBodyEditor, 'Autosaved body');
+
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(writeSegmentContent).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_note',
+        bodyMarkdown: 'Autosaved body',
+        bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+      })
+    );
+    expect(onNoteSegmentContentSaved).toHaveBeenCalledWith({
+      expectedSession: session,
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_note',
+      title: 'Cake planning note',
+      bodyMarkdown: 'Autosaved body',
+      bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+      baselineContentHash: 'b'.repeat(64),
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
+      bodyByteLength: 14,
+    });
   });
 
   it('routes dirty expanded Note return through continue and discard decisions', async () => {
@@ -1641,8 +1703,8 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const inlineBodyEditor = await within(content).findByLabelText('笔记正文');
     await replaceRichEditorMarkdown(inlineBodyEditor, 'Unsaved body');
-    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
-    expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'false');
+    await waitFor(() => expect(writeSegmentContent).toHaveBeenCalledTimes(1));
+    expect(inlineBodyEditor).toHaveAttribute('contenteditable', 'true');
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -2945,9 +3007,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     await replaceRichEditorMarkdown(inlineTranscriptEditor, 'Updated transcript');
-    expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
-    expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
-    await user.click(within(content).getByRole('button', { name: '保存' }));
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(saveTranscript).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-secret',
@@ -2968,7 +3029,6 @@ describe('LoadedWorkspaceFrame', () => {
       baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
     });
     await replaceRichEditorMarkdown(inlineTranscriptEditor, 'Second transcript');
-    await user.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() => expect(saveTranscript).toHaveBeenCalledTimes(2));
     expect(saveTranscript).toHaveBeenNthCalledWith(2, {
       workspaceHandle: 'workspace-handle-secret',
@@ -3210,7 +3270,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(content.querySelector('[data-slot="memory-studio-supplement-transcript"]')).toBeNull();
 
     await replaceRichEditorMarkdown(transcriptEditor, '更新后的补充录音转录');
-    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
 
     await waitFor(() =>
       expect(saveSegmentSupplementTranscript).toHaveBeenCalledWith({
@@ -3226,7 +3286,6 @@ describe('LoadedWorkspaceFrame', () => {
       })
     );
     await replaceRichEditorMarkdown(transcriptEditor, '再次更新补充录音转录');
-    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
     await waitFor(() => expect(saveSegmentSupplementTranscript).toHaveBeenCalledTimes(2));
     expect(saveSegmentSupplementTranscript).toHaveBeenNthCalledWith(2, {
       workspaceHandle: 'workspace-handle-secret',
@@ -3372,9 +3431,8 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     await replaceRichEditorMarkdown(inlineSupplementEditor, 'Updated supplement');
-    expect(within(content).getByRole('button', { name: '取消' })).toBeInTheDocument();
-    expect(within(content).getByRole('button', { name: '保存' })).toBeInTheDocument();
-    await userEvent.click(within(content).getByRole('button', { name: '保存' }));
+    expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+    expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(writeSegmentSupplementContent).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-secret',

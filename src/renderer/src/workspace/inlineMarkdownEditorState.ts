@@ -52,15 +52,18 @@ export type InlineMarkdownEditorAction =
       readonly tiptapJsonKey?: string;
     }
   | { readonly type: 'editor-focus-changed'; readonly editorFocused: boolean }
-  | { readonly type: 'save-started' }
-  | { readonly type: 'save-stale-session' }
+  | { readonly type: 'autosave-started' }
+  | { readonly type: 'autosave-stale-session' }
   | {
-      readonly type: 'save-succeeded';
+      readonly type: 'autosave-succeeded';
+      readonly markdown?: string;
+      readonly tiptapJson?: JSONContent | null;
+      readonly tiptapJsonKey?: string;
       readonly nextBaselineContentHash?: string;
       readonly nextBaselineTiptapContentHash?: string;
     }
-  | { readonly type: 'save-conflicted'; readonly conflict: NoteContentConflict }
-  | { readonly type: 'save-failed'; readonly message: string }
+  | { readonly type: 'autosave-conflicted'; readonly conflict: NoteContentConflict }
+  | { readonly type: 'autosave-failed'; readonly message: string }
   | {
       readonly type: 'disk-version-accepted';
       readonly baselineContentHash: string;
@@ -204,52 +207,55 @@ export function inlineMarkdownEditorReducer(
         editorFocused: action.editorFocused,
       };
 
-    case 'save-started':
+    case 'autosave-started':
       return {
         ...state,
         errorMessage: null,
         pending: true,
       };
 
-    case 'save-stale-session':
+    case 'autosave-stale-session':
       return {
         ...state,
         pending: false,
       };
 
-    case 'save-succeeded': {
+    case 'autosave-succeeded': {
       const nextBaselineContentHash =
         action.nextBaselineContentHash ?? state.activeBaselineContentHash;
       const nextBaselineTiptapContentHash =
         action.nextBaselineTiptapContentHash ?? state.activeBaselineTiptapContentHash;
+      const savedTiptapJson = action.tiptapJson ?? state.tiptapJson;
+      const savedTiptapJsonKey = action.tiptapJsonKey ?? tiptapJsonKey(savedTiptapJson);
+      const savedMarkdown = action.markdown ?? state.markdown;
       return {
         ...state,
         activeBaselineContentHash: nextBaselineContentHash,
         activeBaselineTiptapContentHash: nextBaselineTiptapContentHash,
-        cleanMarkdown: state.markdown,
-        cleanTiptapJson: state.tiptapJson,
-        cleanTiptapJsonKey: state.tiptapJsonKey,
+        cleanMarkdown: savedMarkdown,
+        cleanTiptapJson: savedTiptapJson,
+        cleanTiptapJsonKey: savedTiptapJsonKey,
         conflict: null,
         diskChangeNoticeVisible: false,
         errorMessage: null,
         lastInputBaselineContentHash: nextBaselineContentHash,
         lastInputBaselineTiptapContentHash: nextBaselineTiptapContentHash,
-        lastInputMarkdown: state.markdown,
-        lastInputTiptapJson: state.tiptapJson,
-        lastInputTiptapJsonKey: state.tiptapJsonKey,
+        lastInputMarkdown: savedMarkdown,
+        lastInputTiptapJson: savedTiptapJson,
+        lastInputTiptapJsonKey: savedTiptapJsonKey,
         pending: false,
-        editorFocused: false,
+        editorFocused: state.editorFocused,
       };
     }
 
-    case 'save-conflicted':
+    case 'autosave-conflicted':
       return {
         ...state,
         conflict: action.conflict,
         pending: false,
       };
 
-    case 'save-failed':
+    case 'autosave-failed':
       return {
         ...state,
         errorMessage: action.message,

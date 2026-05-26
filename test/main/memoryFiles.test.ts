@@ -3130,6 +3130,42 @@ test('direct body-only note segment file creation is repaired and projected', as
   }
 });
 
+test('agent-created memory with frontmatter id remains a valid Memory candidate', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_agent_frontmatter_id';
+  const memoryDirectory = path.join(rootPath, 'memories', `${memoryId}--Agent Memory`);
+  await mkdir(memoryDirectory, { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    [
+      '---',
+      `id: ${memoryId}`,
+      'title: Agent Memory',
+      '---',
+      '# Agent Memory',
+      '',
+      'Agent created this file with a redundant id field.',
+      '',
+    ].join('\n')
+  );
+
+  const summaries = await rebuildMemoryIndex(rootPath);
+  const summary = summaries.find((candidate) => candidate.memoryId === memoryId);
+
+  assert.ok(summary);
+  assert.equal(summary.title, 'Agent Memory');
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.memoryId, memoryId);
+    assert.equal(detail.value.title, 'Agent Memory');
+  }
+});
+
 test('existing standardized note segment missing frontmatter id is repaired from manifest', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_note_frontmatter_id_repair';

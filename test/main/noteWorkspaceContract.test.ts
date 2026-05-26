@@ -156,12 +156,14 @@ test('note draft schemas keep body markdown separate from title and file paths',
       workspaceHandle,
       segmentId,
       bodyMarkdown: '# Body\n',
+      bodyTiptapJson,
       revision: 1,
     }),
     {
       workspaceHandle,
       segmentId,
       bodyMarkdown: '# Body\n',
+      bodyTiptapJson,
       revision: 1,
     }
   );
@@ -201,12 +203,14 @@ test('note supplement draft schemas carry parent identity', () => {
       workspaceHandle,
       supplementId,
       bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
       revision: 3,
     }),
     {
       workspaceHandle,
       supplementId,
       bodyMarkdown: 'Supplement body',
+      bodyTiptapJson,
       revision: 3,
     }
   );

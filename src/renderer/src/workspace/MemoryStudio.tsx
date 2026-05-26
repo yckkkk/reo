@@ -59,6 +59,7 @@ import {
   inlineMarkdownEditorHasUnacceptedDiskVersion,
   inlineMarkdownEditorIsDirty,
   inlineMarkdownEditorReducer,
+  type InlineMarkdownEditorState,
 } from './inlineMarkdownEditorState';
 import { MarkdownContentSurface } from './MarkdownContentSurface';
 import { byteLengthLabel } from './memoryLabels';
@@ -200,6 +201,7 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
 const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
 const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
+const INLINE_MARKDOWN_AUTOSAVE_DELAY_MS = 300;
 const INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME =
   'min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground';
 const INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME =
@@ -2198,6 +2200,24 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly workspaceSession: WorkspaceSession;
 };
 
+type InlineMarkdownSaveSnapshot = {
+  readonly baselineContentHash: string;
+  readonly baselineTiptapContentHash: string | null;
+  readonly markdown: string;
+  readonly tiptapJson: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null;
+  readonly tiptapJsonKey: string;
+};
+
+function inlineMarkdownSaveSnapshot(state: InlineMarkdownEditorState): InlineMarkdownSaveSnapshot {
+  return {
+    baselineContentHash: state.activeBaselineContentHash,
+    baselineTiptapContentHash: state.activeBaselineTiptapContentHash,
+    markdown: state.markdown,
+    tiptapJson: state.tiptapJson,
+    tiptapJsonKey: state.tiptapJsonKey,
+  };
+}
+
 function InlineMarkdownContentEditor<TSaved>({
   ariaLabelledBy,
   attachmentTarget,
@@ -2272,7 +2292,7 @@ function InlineMarkdownContentEditor<TSaved>({
       workspaceSession.workspaceId,
     ]
   );
-  const disabled = editorState.pending || imageAttachment.pending;
+  const disabled = imageAttachment.pending;
 
   useEffect(() => {
     if (loadedTargetKeyRef.current !== targetKey) {
@@ -2324,33 +2344,33 @@ function InlineMarkdownContentEditor<TSaved>({
   }
 
   async function saveMarkdown(
-    nextBaselineContentHash = editorState.activeBaselineContentHash,
-    nextBaselineTiptapContentHash = editorState.activeBaselineTiptapContentHash,
-    nextMarkdown = editorState.markdown
+    snapshot = inlineMarkdownSaveSnapshot(editorState)
   ): Promise<boolean> {
-    if (imageAttachment.pending) {
+    if (imageAttachment.pending || editorState.pending) {
       return false;
     }
     flushSync(() => {
-      dispatchEditorState({ type: 'save-started' });
+      dispatchEditorState({ type: 'autosave-started' });
     });
     const saveWorkspaceSessionKey = workspaceSessionKey;
     try {
       const result = await onSave(
-        nextMarkdown,
-        nextBaselineContentHash,
-        editorState.tiptapJson,
-        nextBaselineTiptapContentHash
+        snapshot.markdown,
+        snapshot.baselineContentHash,
+        snapshot.tiptapJson,
+        snapshot.baselineTiptapContentHash
       );
       if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
-        dispatchEditorState({ type: 'save-stale-session' });
+        dispatchEditorState({ type: 'autosave-stale-session' });
         return false;
       }
       if (result.ok) {
         onSavedContent(result.saved);
-        blurEditorSurface();
         dispatchEditorState({
-          type: 'save-succeeded',
+          type: 'autosave-succeeded',
+          markdown: snapshot.markdown,
+          tiptapJson: snapshot.tiptapJson,
+          tiptapJsonKey: snapshot.tiptapJsonKey,
           ...(result.nextBaselineContentHash
             ? { nextBaselineContentHash: result.nextBaselineContentHash }
             : {}),
@@ -2361,23 +2381,54 @@ function InlineMarkdownContentEditor<TSaved>({
         return true;
       }
       if (result.kind === 'conflict') {
-        dispatchEditorState({ type: 'save-conflicted', conflict: result.conflict });
+        dispatchEditorState({ type: 'autosave-conflicted', conflict: result.conflict });
         return false;
       }
-      dispatchEditorState({ type: 'save-failed', message: result.message });
+      dispatchEditorState({ type: 'autosave-failed', message: result.message });
       return false;
     } catch (error) {
       if (latestWorkspaceSessionKeyRef.current !== saveWorkspaceSessionKey) {
-        dispatchEditorState({ type: 'save-stale-session' });
+        dispatchEditorState({ type: 'autosave-stale-session' });
         return false;
       }
       dispatchEditorState({
-        type: 'save-failed',
+        type: 'autosave-failed',
         message: unknownErrorDisplayMessage(error, failureCopy),
       });
       return false;
     }
   }
+
+  useEffect(() => {
+    if (
+      !dirty ||
+      editorState.pending ||
+      imageAttachment.pending ||
+      editorState.conflict ||
+      editorState.errorMessage
+    ) {
+      return;
+    }
+
+    const snapshot = inlineMarkdownSaveSnapshot(editorState);
+    const autosaveTimer = window.setTimeout(() => {
+      void saveMarkdown(snapshot);
+    }, INLINE_MARKDOWN_AUTOSAVE_DELAY_MS);
+    return () => {
+      window.clearTimeout(autosaveTimer);
+    };
+  }, [
+    dirty,
+    editorState.activeBaselineContentHash,
+    editorState.activeBaselineTiptapContentHash,
+    editorState.conflict,
+    editorState.errorMessage,
+    editorState.markdown,
+    editorState.pending,
+    editorState.tiptapJson,
+    editorState.tiptapJsonKey,
+    imageAttachment.pending,
+  ]);
 
   function cancelMarkdownEdit() {
     if (editorState.diskChangeNoticeVisible) {
@@ -2441,7 +2492,7 @@ function InlineMarkdownContentEditor<TSaved>({
       <EditorExpandShell
         ariaLabelledBy={ariaLabelledBy}
         cancelButtonClassName={INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME}
-        dirty={dirty}
+        dirty={false}
         expanded={expanded}
         onCancel={cancelMarkdownEdit}
         onExpandedChange={setExpanded}
@@ -2488,7 +2539,7 @@ function InlineMarkdownContentEditor<TSaved>({
           saveButtonClassName={INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME}
           saveDisabled={disabled}
           saveLabel={saveLabel}
-          showActions={!expanded && dirty && !editorState.pending}
+          showActions={false}
           showHeaderLabel={false}
           surfaceRef={surfaceRef}
           surfaceTestId={surfaceTestId}
@@ -2604,11 +2655,11 @@ function InlineMarkdownContentEditor<TSaved>({
                 const nextBaselineTiptapContentHash =
                   editorState.conflict.currentBaselineTiptapContentHash;
                 dispatchEditorState({ type: 'conflict-dismissed' });
-                void saveMarkdown(
-                  nextBaselineContentHash,
-                  nextBaselineTiptapContentHash,
-                  editorState.markdown
-                );
+                void saveMarkdown({
+                  ...inlineMarkdownSaveSnapshot(editorState),
+                  baselineContentHash: nextBaselineContentHash,
+                  baselineTiptapContentHash: nextBaselineTiptapContentHash,
+                });
               }}
             >
               保留我的修改
