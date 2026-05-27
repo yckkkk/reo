@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import {
   chmod,
   lstat,
@@ -19,6 +19,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import type { JSONContent } from '@tiptap/core';
 import {
   DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
@@ -33,18 +34,385 @@ import {
   setBeforeWorkspaceIndexReconciliationPersistForTest,
   updateWorkspaceIndex,
 } from '../../src/main/workspaceFiles.js';
-import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
+import {
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from '../../src/main/workspaceMarkdownObjects.js';
+import {
+  hashTiptapJsonContent,
+  hashTiptapSourceMarkdown,
+  readTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+  writeTiptapContentSidecar,
+} from '../../src/main/tiptapContentSidecar.js';
 import {
   setAfterAtomicWorkspaceFileTempOpenForTest,
   setBeforeAtomicWorkspaceFileCommitForTest,
 } from '../../src/main/atomicWorkspaceFile.js';
-import { setBeforeReadModelReaddirForTest } from '../../src/main/memoryFiles.js';
+import {
+  extractSegmentTranscript,
+  setBeforeReadModelReaddirForTest,
+} from '../../src/main/memoryFiles.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
 
 async function sha256(filePath: string): Promise<string> {
   return createHash('sha256')
     .update(await readFile(filePath))
     .digest('hex');
+}
+
+function paragraphDoc(text: string): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text }],
+      },
+    ],
+  };
+}
+
+function passiveRichDoc(label: string): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: `${label} highlight`,
+            marks: [
+              {
+                type: 'highlight',
+                attrs: { color: 'var(--tt-color-highlight-purple)' },
+              },
+            ],
+          },
+          { type: 'text', text: ' and ' },
+          { type: 'text', text: `${label} underline`, marks: [{ type: 'underline' }] },
+        ],
+      },
+    ],
+  };
+}
+
+function unsupportedTableDoc(): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'table',
+        content: [],
+      },
+    ],
+  };
+}
+
+function sidecarWritableFile(sidecar: Awaited<ReturnType<typeof readTiptapContentSidecar>>) {
+  const { currentContentHash: _currentContentHash, ...file } = sidecar;
+  void _currentContentHash;
+  return file;
+}
+
+async function writeExternalSidecarContent({
+  objectDirectory,
+  tiptapJson,
+  updateContentHash = false,
+}: {
+  readonly objectDirectory: string;
+  readonly tiptapJson: JSONContent;
+  readonly updateContentHash?: boolean;
+}): Promise<void> {
+  const sidecar = await readTiptapContentSidecar(objectDirectory);
+  await writeFile(
+    path.join(objectDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    `${JSON.stringify(
+      {
+        ...sidecarWritableFile(sidecar),
+        ...(updateContentHash ? { contentHash: hashTiptapJsonContent(tiptapJson) } : {}),
+        content: tiptapJson,
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+async function initializePassiveSidecarWorkspace({
+  workspaceId = 'ws_passive_sidecar',
+}: {
+  readonly workspaceId?: string;
+} = {}): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-passive-sidecar-'));
+  const initialized = await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Passive sidecar',
+    description: '',
+    createWorkspaceId: () => workspaceId,
+    now: () => '2026-05-27T06:00:00.000Z',
+  });
+  assert.equal(initialized.ok, true);
+  return root;
+}
+
+async function writeMemoryForPassiveSidecarTest({
+  memoryId,
+  root,
+  title = 'Passive memory',
+}: {
+  readonly memoryId: string;
+  readonly root: string;
+  readonly title?: string;
+}): Promise<void> {
+  const memoryDirectory = path.join(root, 'memories', memoryId);
+  await mkdir(memoryDirectory, { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'memories'), { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title },
+      content: `# ${title}\n`,
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'memories', `${memoryId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'memory',
+        memoryId,
+        createdAt: '2026-05-27T06:00:00.000Z',
+        updatedAt: '2026-05-27T06:00:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+async function writeNoteSegmentForPassiveSidecarTest({
+  body,
+  memoryId,
+  root,
+  segmentId,
+  title = 'Passive note segment',
+  workspaceId = 'ws_passive_sidecar',
+}: {
+  readonly body: string;
+  readonly memoryId: string;
+  readonly root: string;
+  readonly segmentId: string;
+  readonly title?: string;
+  readonly workspaceId?: string;
+}): Promise<string> {
+  const segmentDirectory = path.join(root, 'memories', memoryId, 'segments', segmentId);
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title, kind: 'note' },
+      content: body,
+    })
+  );
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', `${segmentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId,
+        memoryId,
+        segmentId,
+        kind: 'note',
+        createdAt: '2026-05-27T06:01:00.000Z',
+        finalizedAt: '2026-05-27T06:01:00.000Z',
+        updatedAt: '2026-05-27T06:01:00.000Z',
+        bodyByteLength: Buffer.byteLength(body, 'utf8'),
+      },
+      null,
+      2
+    )}\n`
+  );
+  return segmentDirectory;
+}
+
+async function writeNoteSupplementForPassiveSidecarTest({
+  body,
+  memoryId,
+  root,
+  segmentId,
+  supplementId,
+  title = 'Passive note supplement',
+  workspaceId = 'ws_passive_sidecar',
+}: {
+  readonly body: string;
+  readonly memoryId: string;
+  readonly root: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly title?: string;
+  readonly workspaceId?: string;
+}): Promise<string> {
+  const supplementDirectory = path.join(
+    root,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements',
+    supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title, kind: 'note' },
+      content: body,
+    })
+  );
+  await mkdir(path.join(root, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        kind: 'note',
+        createdAt: '2026-05-27T06:02:00.000Z',
+        finalizedAt: '2026-05-27T06:02:00.000Z',
+        updatedAt: '2026-05-27T06:02:00.000Z',
+        bodyByteLength: Buffer.byteLength(body, 'utf8'),
+      },
+      null,
+      2
+    )}\n`
+  );
+  return supplementDirectory;
+}
+
+async function writeAudioSegmentForPassiveSidecarTest({
+  memoryId,
+  root,
+  segmentId,
+  title = 'Passive audio segment',
+  transcript,
+  workspaceId = 'ws_passive_sidecar',
+}: {
+  readonly memoryId: string;
+  readonly root: string;
+  readonly segmentId: string;
+  readonly title?: string;
+  readonly transcript: string;
+  readonly workspaceId?: string;
+}): Promise<string> {
+  const segmentDirectory = path.join(root, 'memories', memoryId, 'segments', segmentId);
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'audio.webm'), new Uint8Array([1, 2, 3, 4]));
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\nNon transcript context must stay.\n\n## Transcript\n\n${transcript}`,
+    })
+  );
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', `${segmentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId,
+        memoryId,
+        segmentId,
+        kind: 'audio',
+        createdAt: '2026-05-27T06:01:00.000Z',
+        finalizedAt: '2026-05-27T06:01:00.000Z',
+        updatedAt: '2026-05-27T06:01:00.000Z',
+        durationMs: 1000,
+        nextSequence: 1,
+        audioByteLength: 4,
+        lastTranscriptionAttempt: 'success',
+      },
+      null,
+      2
+    )}\n`
+  );
+  return segmentDirectory;
+}
+
+async function writeAudioSupplementForPassiveSidecarTest({
+  memoryId,
+  root,
+  segmentId,
+  supplementId,
+  title = 'Passive audio supplement',
+  transcript,
+  workspaceId = 'ws_passive_sidecar',
+}: {
+  readonly memoryId: string;
+  readonly root: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly title?: string;
+  readonly transcript: string;
+  readonly workspaceId?: string;
+}): Promise<string> {
+  const supplementDirectory = path.join(
+    root,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements',
+    supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'audio.webm'), new Uint8Array([5, 6, 7]));
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\nSupplement context must stay.\n\n## Transcript\n\n${transcript}`,
+    })
+  );
+  await mkdir(path.join(root, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        kind: 'audio',
+        createdAt: '2026-05-27T06:02:00.000Z',
+        finalizedAt: '2026-05-27T06:02:00.000Z',
+        updatedAt: '2026-05-27T06:02:00.000Z',
+        durationMs: 500,
+        nextSequence: 1,
+        audioByteLength: 3,
+        lastTranscriptionAttempt: 'success',
+      },
+      null,
+      2
+    )}\n`
+  );
+  return supplementDirectory;
 }
 
 async function writeFinalizedMemoryRecording({
@@ -867,6 +1235,458 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     schemaVersion: 1,
     memories: [expectedMemory],
   });
+});
+
+test('workspace snapshot refresh passively serializes note Segment sidecar JSON to Markdown', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_note_segment';
+  const segmentId = 'seg_passive_note_segment';
+  const originalBody = 'Original note segment\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const segmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: originalBody,
+    memoryId,
+    root,
+    segmentId,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalBody,
+    objectDirectory: segmentDirectory,
+    tiptapJson: paragraphDoc('Original note segment'),
+  });
+  const nextTiptapJson = passiveRichDoc('Segment passive');
+  await writeExternalSidecarContent({
+    objectDirectory: segmentDirectory,
+    tiptapJson: nextTiptapJson,
+  });
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.memories[0]?.noteSegmentCount, 1);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(persisted.data.title, 'Passive note segment');
+  assert.equal('kind' in persisted.data ? persisted.data.kind : undefined, 'note');
+  assert.match(persisted.content, /Segment passive highlight/);
+  assert.match(persisted.content, /var\(--tt-color-highlight-purple\)/);
+  assert.match(persisted.content, /\+\+Segment passive underline\+\+/);
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.deepEqual(sidecar.content, nextTiptapJson);
+  assert.equal(sidecar.source.hash, hashTiptapSourceMarkdown(persisted.content));
+  assert.equal(sidecar.contentHash, hashTiptapJsonContent(nextTiptapJson));
+  const manifest = JSON.parse(
+    await readFile(path.join(root, '.reo', 'objects', 'segments', `${segmentId}.json`), 'utf8')
+  ) as { readonly bodyByteLength?: unknown };
+  assert.equal(manifest.bodyByteLength, Buffer.byteLength(persisted.content, 'utf8'));
+});
+
+test('workspace snapshot refresh passively serializes note Supplement sidecar JSON to Markdown', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_note_supplement';
+  const segmentId = 'seg_passive_note_supplement';
+  const supplementId = 'sup_passive_note_supplement';
+  const originalSegmentBody = 'Original parent note\n';
+  const originalSupplementBody = 'Original note supplement\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  await writeNoteSegmentForPassiveSidecarTest({
+    body: originalSegmentBody,
+    memoryId,
+    root,
+    segmentId,
+  });
+  const supplementDirectory = await writeNoteSupplementForPassiveSidecarTest({
+    body: originalSupplementBody,
+    memoryId,
+    root,
+    segmentId,
+    supplementId,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalSupplementBody,
+    objectDirectory: supplementDirectory,
+    tiptapJson: paragraphDoc('Original note supplement'),
+  });
+  const nextTiptapJson = passiveRichDoc('Supplement passive');
+  await writeExternalSidecarContent({
+    objectDirectory: supplementDirectory,
+    tiptapJson: nextTiptapJson,
+    updateContentHash: true,
+  });
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.memories[0]?.supplementCount, 1);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    objectType: 'supplement',
+  });
+  assert.equal(persisted.data.title, 'Passive note supplement');
+  assert.equal('kind' in persisted.data ? persisted.data.kind : undefined, 'note');
+  assert.match(persisted.content, /Supplement passive highlight/);
+  assert.match(persisted.content, /var\(--tt-color-highlight-purple\)/);
+  assert.match(persisted.content, /\+\+Supplement passive underline\+\+/);
+  const sidecar = await readTiptapContentSidecar(supplementDirectory);
+  assert.deepEqual(sidecar.content, nextTiptapJson);
+  assert.equal(sidecar.source.hash, hashTiptapSourceMarkdown(persisted.content));
+  assert.equal(sidecar.contentHash, hashTiptapJsonContent(nextTiptapJson));
+  const manifest = JSON.parse(
+    await readFile(
+      path.join(root, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+      'utf8'
+    )
+  ) as { readonly bodyByteLength?: unknown };
+  assert.equal(manifest.bodyByteLength, Buffer.byteLength(persisted.content, 'utf8'));
+});
+
+test('workspace snapshot refresh passively serializes audio Segment transcript sidecar JSON to Markdown', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_audio_segment';
+  const segmentId = 'seg_passive_audio_segment';
+  const originalTranscript = 'Original audio transcript';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const segmentDirectory = await writeAudioSegmentForPassiveSidecarTest({
+    memoryId,
+    root,
+    segmentId,
+    transcript: originalTranscript,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalTranscript,
+    objectDirectory: segmentDirectory,
+    tiptapJson: paragraphDoc(originalTranscript),
+  });
+  const nextTiptapJson = passiveRichDoc('Audio segment passive');
+  await writeExternalSidecarContent({
+    objectDirectory: segmentDirectory,
+    tiptapJson: nextTiptapJson,
+  });
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.memories[0]?.audioSegmentCount, 1);
+  assert.equal(snapshot.snapshot.memories[0]?.hasAudioTranscript, true);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal('kind' in persisted.data ? persisted.data.kind : undefined, 'audio');
+  assert.match(persisted.content, /Non transcript context must stay/);
+  assert.match(persisted.content, /## Transcript/);
+  assert.doesNotMatch(persisted.content, /Original audio transcript/);
+  assert.match(persisted.content, /Audio segment passive highlight/);
+  assert.match(persisted.content, /var\(--tt-color-highlight-purple\)/);
+  assert.match(persisted.content, /\+\+Audio segment passive underline\+\+/);
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.deepEqual(sidecar.content, nextTiptapJson);
+  assert.equal(
+    sidecar.source.hash,
+    hashTiptapSourceMarkdown(extractSegmentTranscript(persisted.content))
+  );
+  assert.notEqual(sidecar.source.hash, hashTiptapSourceMarkdown(originalTranscript));
+});
+
+test('workspace snapshot refresh passively serializes audio Supplement transcript sidecar JSON to Markdown', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_audio_supplement';
+  const segmentId = 'seg_passive_audio_supplement';
+  const supplementId = 'sup_passive_audio_supplement';
+  const originalTranscript = 'Original audio supplement transcript';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  await writeAudioSegmentForPassiveSidecarTest({
+    memoryId,
+    root,
+    segmentId,
+    transcript: 'Parent audio transcript',
+  });
+  const supplementDirectory = await writeAudioSupplementForPassiveSidecarTest({
+    memoryId,
+    root,
+    segmentId,
+    supplementId,
+    transcript: originalTranscript,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalTranscript,
+    objectDirectory: supplementDirectory,
+    tiptapJson: paragraphDoc(originalTranscript),
+  });
+  const nextTiptapJson = passiveRichDoc('Audio supplement passive');
+  await writeExternalSidecarContent({
+    objectDirectory: supplementDirectory,
+    tiptapJson: nextTiptapJson,
+  });
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.memories[0]?.supplementCount, 1);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    objectType: 'supplement',
+  });
+  assert.equal('kind' in persisted.data ? persisted.data.kind : undefined, 'audio');
+  assert.match(persisted.content, /Supplement context must stay/);
+  assert.match(persisted.content, /## Transcript/);
+  assert.doesNotMatch(persisted.content, /Original audio supplement transcript/);
+  assert.match(persisted.content, /Audio supplement passive highlight/);
+  assert.match(persisted.content, /var\(--tt-color-highlight-purple\)/);
+  assert.match(persisted.content, /\+\+Audio supplement passive underline\+\+/);
+  const sidecar = await readTiptapContentSidecar(supplementDirectory);
+  assert.deepEqual(sidecar.content, nextTiptapJson);
+  assert.equal(
+    sidecar.source.hash,
+    hashTiptapSourceMarkdown(extractSegmentTranscript(persisted.content))
+  );
+  assert.notEqual(sidecar.source.hash, hashTiptapSourceMarkdown(originalTranscript));
+});
+
+test('workspace snapshot refresh preserves simultaneous Markdown and sidecar edits', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_conflict';
+  const segmentId = 'seg_passive_conflict';
+  const originalBody = 'Original conflict body\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const segmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: originalBody,
+    memoryId,
+    root,
+    segmentId,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalBody,
+    objectDirectory: segmentDirectory,
+    tiptapJson: paragraphDoc('Original conflict body'),
+  });
+  const nextTiptapJson = passiveRichDoc('Conflicting sidecar');
+  await writeExternalSidecarContent({
+    objectDirectory: segmentDirectory,
+    tiptapJson: nextTiptapJson,
+    updateContentHash: true,
+  });
+  const markdownChangedOutside = 'Markdown changed outside\n';
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Passive note segment', kind: 'note' },
+      content: markdownChangedOutside,
+    })
+  );
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  const persisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(persisted.content, markdownChangedOutside);
+  const sidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.deepEqual(sidecar.content, nextTiptapJson);
+  assert.notEqual(sidecar.source.hash, hashTiptapSourceMarkdown(persisted.content));
+});
+
+test('workspace snapshot refresh does not clobber Markdown changed during passive sidecar write', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_concurrent_markdown';
+  const segmentId = 'seg_passive_concurrent_markdown';
+  const originalBody = 'Original concurrent body\n';
+  const concurrentBody = 'Concurrent Markdown body\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const segmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: originalBody,
+    memoryId,
+    root,
+    segmentId,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalBody,
+    objectDirectory: segmentDirectory,
+    tiptapJson: paragraphDoc('Original concurrent body'),
+  });
+  const nextTiptapJson = passiveRichDoc('Concurrent sidecar');
+  await writeExternalSidecarContent({
+    objectDirectory: segmentDirectory,
+    tiptapJson: nextTiptapJson,
+  });
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+    writeFileSync(
+      path.join(segmentDirectory, 'segment.md'),
+      renderWorkspaceMarkdownObject({
+        objectType: 'segment',
+        data: { title: 'Passive note segment', kind: 'note' },
+        content: concurrentBody,
+      })
+    );
+  });
+
+  try {
+    const snapshot = await readWorkspaceSnapshotFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_passive_sidecar',
+    });
+
+    assert.equal(snapshot.ok, true);
+    const persisted = parseWorkspaceMarkdownObject({
+      markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+      objectType: 'segment',
+    });
+    assert.equal(persisted.content, concurrentBody);
+    const sidecar = await readTiptapContentSidecar(segmentDirectory);
+    assert.deepEqual(sidecar.content, nextTiptapJson);
+    assert.notEqual(sidecar.source.hash, hashTiptapSourceMarkdown(persisted.content));
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+});
+
+test('workspace snapshot refresh aborts when passive sidecar write fails', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_write_failed';
+  const segmentId = 'seg_passive_write_failed';
+  const originalBody = 'Original write failure body\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const segmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: originalBody,
+    memoryId,
+    root,
+    segmentId,
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: originalBody,
+    objectDirectory: segmentDirectory,
+    tiptapJson: paragraphDoc('Original write failure body'),
+  });
+  await writeExternalSidecarContent({
+    objectDirectory: segmentDirectory,
+    tiptapJson: passiveRichDoc('Write failure sidecar'),
+  });
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+    throw new Error('passive write failed');
+  });
+
+  try {
+    const snapshot = await readWorkspaceSnapshotFromFileTruth({
+      rootPath: root,
+      workspaceId: 'ws_passive_sidecar',
+    });
+
+    assert.equal(snapshot.ok, false);
+    if (!snapshot.ok) {
+      assert.equal(snapshot.error.code, 'ERR_WORKSPACE_OPEN_FAILED');
+      assert.equal(snapshot.error.dataRetention, 'previous-file-preserved');
+    }
+    const persisted = parseWorkspaceMarkdownObject({
+      markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+      objectType: 'segment',
+    });
+    assert.equal(persisted.content, originalBody);
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+});
+
+test('workspace snapshot refresh preserves invalid and unsupported sidecars', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_passive_bad_sidecars';
+  const invalidSegmentId = 'seg_passive_invalid_sidecar';
+  const unsupportedSegmentId = 'seg_passive_unsupported_sidecar';
+  const invalidBody = 'Invalid sidecar Markdown stays\n';
+  const unsupportedBody = 'Unsupported sidecar Markdown stays\n';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId });
+  const invalidSegmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: invalidBody,
+    memoryId,
+    root,
+    segmentId: invalidSegmentId,
+    title: 'Invalid sidecar segment',
+  });
+  const unsupportedSegmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: unsupportedBody,
+    memoryId,
+    root,
+    segmentId: unsupportedSegmentId,
+    title: 'Unsupported sidecar segment',
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: invalidBody,
+    objectDirectory: invalidSegmentDirectory,
+    tiptapJson: paragraphDoc('Invalid sidecar Markdown stays'),
+  });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: unsupportedBody,
+    objectDirectory: unsupportedSegmentDirectory,
+    tiptapJson: paragraphDoc('Unsupported sidecar Markdown stays'),
+  });
+  await writeFile(
+    path.join(invalidSegmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
+    '{ invalid json\n'
+  );
+  await writeExternalSidecarContent({
+    objectDirectory: unsupportedSegmentDirectory,
+    tiptapJson: unsupportedTableDoc(),
+  });
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.memories[0]?.noteSegmentCount, 2);
+  const invalidPersisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(invalidSegmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(invalidPersisted.content, invalidBody);
+  assert.equal(
+    await readFile(path.join(invalidSegmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'),
+    '{ invalid json\n'
+  );
+  const unsupportedPersisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(unsupportedSegmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(unsupportedPersisted.content, unsupportedBody);
+  const unsupportedSidecar = await readTiptapContentSidecar(unsupportedSegmentDirectory);
+  assert.deepEqual(unsupportedSidecar.content, unsupportedTableDoc());
 });
 
 test('open workspace returns valid index without reconciliation before returning ready', async () => {

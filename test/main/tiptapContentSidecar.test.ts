@@ -133,6 +133,27 @@ test('tiptap content sidecar is generated from markdown when missing', async () 
   }
 });
 
+test('tiptap content sidecar existing-only reconcile does not create a missing sidecar', async () => {
+  const directory = await objectDirectory();
+  try {
+    const result = await reconcileTiptapContentSidecar({
+      bodyMarkdown: 'Original body\n',
+      objectDirectory: directory,
+      createIfMissing: false,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.bodyMarkdown, 'Original body\n');
+    assert.equal(result.bodyMarkdownChanged, false);
+    await assert.rejects(
+      readFile(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT'
+    );
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('tiptap content sidecar updates markdown when json adds highlight and underline', async () => {
   const directory = await objectDirectory();
   let bodyMarkdown = 'Original body\n';

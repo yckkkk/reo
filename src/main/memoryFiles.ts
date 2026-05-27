@@ -21,11 +21,16 @@ import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
+  WorkspaceFileChangedBeforeAtomicWrite,
   writeWorkspaceFileAtomic,
   writeWorkspaceFileAtomicInKnownDirectory,
   writeWorkspaceFileNoReplaceAtomic,
   writeWorkspaceJsonAtomic,
 } from './atomicWorkspaceFile.js';
+import {
+  reconcileTiptapContentSidecar,
+  TIPTAP_CONTENT_SIDECAR_FILE,
+} from './tiptapContentSidecar.js';
 import {
   assertSameCurrentDirectoryIdentity as assertSameCurrentDirectory,
   assertSameDirectoryIdentity as assertSameDirectoryPathAsync,
@@ -454,6 +459,15 @@ class WorkspaceHandleLost extends Error {
   constructor(envelope: WorkspaceErrorEnvelope) {
     super(envelope.error.message);
     this.envelope = envelope;
+  }
+}
+
+class PassiveTiptapSidecarReconcileFailed extends Error {
+  override readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super('Passive Tiptap sidecar reconcile failed');
+    this.cause = cause;
   }
 }
 
@@ -4203,6 +4217,296 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
   }
 }
 
+function workspaceAtomicWriteAssert(
+  assertUsable: AssertWorkspaceUsable | undefined
+): (() => void) | undefined {
+  return assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined;
+}
+
+async function existingTiptapSidecarInKnownDirectory({
+  directory,
+  directoryIdentity,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+}): Promise<boolean> {
+  try {
+    await lstat(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE));
+    await assertSameDirectoryPathAsync(directory, directoryIdentity);
+    return true;
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function updatePassiveNoteSidecarManifest({
+  assertWorkspaceUsable: assertUsable,
+  bodyMarkdown,
+  manifest,
+  rootPath,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly bodyMarkdown: string;
+  readonly manifest: NoteSegmentObjectManifest | NoteSupplementObjectManifest;
+  readonly rootPath: string;
+}): Promise<void> {
+  const manifestPath =
+    manifest.objectType === 'segment'
+      ? await segmentObjectManifestPath(rootPath, manifest.segmentId)
+      : await supplementObjectManifestPath(rootPath, manifest.supplementId);
+  await writeWorkspaceJsonAtomic(
+    manifestPath,
+    {
+      ...manifest,
+      updatedAt: new Date().toISOString(),
+      bodyByteLength: markdownBodyByteLength(bodyMarkdown),
+    },
+    workspaceAtomicWriteAssert(assertUsable)
+  );
+}
+
+async function passivelyReconcileExistingTiptapSidecar({
+  assertWorkspaceUsable: assertUsable,
+  directory,
+  directoryIdentity,
+  markdownFileName,
+  noteManifest,
+  objectType,
+  rootPath,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly markdownFileName: 'segment.md' | 'supplement.md';
+  readonly noteManifest?: NoteSegmentObjectManifest | NoteSupplementObjectManifest;
+  readonly objectType: 'segment' | 'supplement';
+  readonly rootPath: string;
+}): Promise<boolean> {
+  if (!(await existingTiptapSidecarInKnownDirectory({ directory, directoryIdentity }))) {
+    return false;
+  }
+
+  const originalMarkdown = readWorkspaceTextFileInKnownDirectory(
+    directory,
+    directoryIdentity,
+    markdownFileName
+  );
+  const parsed = parseWorkspaceMarkdownObject({
+    objectType,
+    markdown: originalMarkdown,
+  });
+  const kind = 'kind' in parsed.data ? parsed.data.kind : undefined;
+  if (kind !== 'note' && kind !== 'audio') {
+    return false;
+  }
+  const bodyMarkdown = kind === 'audio' ? extractSegmentTranscript(parsed.content) : parsed.content;
+  const writeAssert = workspaceAtomicWriteAssert(assertUsable);
+  let reconciled: Awaited<ReturnType<typeof reconcileTiptapContentSidecar>>;
+  try {
+    reconciled = await reconcileTiptapContentSidecar({
+      ...(writeAssert ? { assertUsable: writeAssert } : {}),
+      bodyMarkdown,
+      createIfMissing: false,
+      objectDirectory: directory,
+      writeBodyMarkdown: async (nextBodyMarkdown) => {
+        const nextContent =
+          kind === 'audio'
+            ? replaceSegmentTranscript(parsed.content, nextBodyMarkdown)
+            : nextBodyMarkdown;
+        const nextMarkdown = renderWorkspaceMarkdownObject({
+          objectType,
+          data: parsed.data,
+          content: nextContent,
+        });
+        const rendered = parseWorkspaceMarkdownObject({
+          objectType,
+          markdown: nextMarkdown,
+        });
+        await writeWorkspaceFileAtomicInKnownDirectory({
+          directory,
+          directoryIdentity,
+          fileName: markdownFileName,
+          data: nextMarkdown,
+          expectedCurrentData: originalMarkdown,
+          ...(writeAssert ? { assertUsable: writeAssert } : {}),
+        });
+        return kind === 'audio' ? nextBodyMarkdown : rendered.content;
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileChangedBeforeAtomicWrite)) {
+      throw error;
+    }
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'tiptap.sidecar.needs-review',
+      fields: {
+        kind,
+        objectType,
+        reason: 'content-conflict',
+      },
+      level: 'warn',
+    });
+    return false;
+  }
+
+  if (!reconciled.ok) {
+    recordDiagnosticEvent({
+      area: 'workspace-files',
+      event: 'tiptap.sidecar.needs-review',
+      fields: {
+        kind,
+        objectType,
+        reason: reconciled.reason,
+      },
+      level: 'warn',
+    });
+    return false;
+  }
+  if (reconciled.bodyMarkdownChanged && kind === 'note' && noteManifest) {
+    await updatePassiveNoteSidecarManifest({
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+      bodyMarkdown: reconciled.bodyMarkdown,
+      manifest: noteManifest,
+      rootPath,
+    });
+  }
+  return reconciled.bodyMarkdownChanged;
+}
+
+async function passivelyReconcileExistingTiptapSidecarsForSupplements({
+  assertWorkspaceUsable: assertUsable,
+  fileTruth,
+  rootPath,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly fileTruth: FinalizedSegmentFileTruth;
+  readonly rootPath: string;
+}): Promise<boolean> {
+  const { metadata, recordingDirectory, segmentId } = fileTruth;
+  const supplementsDirectory = await resolveSafeWorkspaceChild(
+    rootPath,
+    path.join(recordingDirectory, 'supplements')
+  );
+  let entries: Dirent[];
+  try {
+    entries = await readExistingDirectoryEntries(supplementsDirectory);
+  } catch {
+    return false;
+  }
+
+  const candidates: Array<{
+    readonly directory: string;
+    readonly directoryIdentity: DirectoryIdentity;
+    readonly metadata: FinalizedSupplementSemanticTruth;
+  }> = [];
+  const seen = new Set<string>();
+  const duplicated = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const supplementDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(supplementsDirectory, entry.name)
+      );
+      await assertSafeExistingDirectory(supplementDirectory, 'Segment supplement path is not safe');
+      const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
+      const supplement = await readFinalizedSegmentSupplementMetadata(
+        rootPath,
+        supplementDirectory,
+        supplementDirectoryIdentity
+      );
+      if (
+        supplement.workspaceId !== metadata.workspaceId ||
+        supplement.memoryId !== metadata.memoryId ||
+        supplement.segmentId !== segmentId
+      ) {
+        continue;
+      }
+      if (seen.has(supplement.supplementId)) {
+        duplicated.add(supplement.supplementId);
+        continue;
+      }
+      seen.add(supplement.supplementId);
+      candidates.push({
+        directory: supplementDirectory,
+        directoryIdentity: supplementDirectoryIdentity,
+        metadata: supplement,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  let bodyMarkdownChanged = false;
+  for (const candidate of candidates) {
+    if (duplicated.has(candidate.metadata.supplementId)) {
+      continue;
+    }
+    assertWorkspaceUsable(assertUsable);
+    bodyMarkdownChanged =
+      (await passivelyReconcileExistingTiptapSidecar({
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+        directory: candidate.directory,
+        directoryIdentity: candidate.directoryIdentity,
+        markdownFileName: 'supplement.md',
+        ...(candidate.metadata.kind === 'note' ? { noteManifest: candidate.metadata } : {}),
+        objectType: 'supplement',
+        rootPath,
+      })) || bodyMarkdownChanged;
+  }
+  return bodyMarkdownChanged;
+}
+
+async function passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
+  assertWorkspaceUsable: assertUsable,
+  memory,
+  memoryDirectoryPath,
+  rootPath,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly memory: MemoryFileTruth;
+  readonly memoryDirectoryPath: string;
+  readonly rootPath: string;
+}): Promise<{
+  readonly bodyMarkdownChanged: boolean;
+  readonly fileTruths: readonly FinalizedSegmentFileTruth[];
+}> {
+  const fileTruths = await listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+    rootPath,
+    memoryId: memory.memoryId,
+    memoryDirectoryPath,
+  });
+
+  let bodyMarkdownChanged = false;
+  for (const fileTruth of fileTruths) {
+    assertWorkspaceUsable(assertUsable);
+    bodyMarkdownChanged =
+      (await passivelyReconcileExistingTiptapSidecar({
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+        directory: fileTruth.recordingDirectory,
+        directoryIdentity: fileTruth.recordingDirectoryIdentity,
+        markdownFileName: 'segment.md',
+        ...(fileTruth.metadata.kind === 'note' ? { noteManifest: fileTruth.metadata } : {}),
+        objectType: 'segment',
+        rootPath,
+      })) || bodyMarkdownChanged;
+    assertWorkspaceUsable(assertUsable);
+    bodyMarkdownChanged =
+      (await passivelyReconcileExistingTiptapSidecarsForSupplements({
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+        fileTruth,
+        rootPath,
+      })) || bodyMarkdownChanged;
+  }
+  return { bodyMarkdownChanged, fileTruths };
+}
+
 async function readFinalizedSegmentIdFromMetadata(
   rootPath: string,
   recordingDirectory: string
@@ -4406,21 +4710,25 @@ async function summarizeMemory(
 }
 
 async function summarizeMemoryFromDirectory({
+  fileTruths,
   memory,
   memoryDirectoryPath,
   rootPath,
 }: {
+  readonly fileTruths?: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
   readonly memoryDirectoryPath: string;
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   await beforeSegmentFileTruthListForTest?.();
   return summarizeMemoryFromFileTruths({
-    fileTruths: await listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
-      rootPath,
-      memoryId: memory.memoryId,
-      memoryDirectoryPath,
-    }),
+    fileTruths:
+      fileTruths ??
+      (await listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+        rootPath,
+        memoryId: memory.memoryId,
+        memoryDirectoryPath,
+      })),
     memory,
     rootPath,
   });
@@ -4778,9 +5086,14 @@ export async function readMemoryDetailFromFileTruth(input: {
 export async function rebuildWorkspaceReadModel(
   rootPath: string,
   {
+    passiveTiptapSidecarReconcile = false,
     persist = false,
     assertWorkspaceUsable: assertUsable,
-  }: { readonly persist?: boolean; readonly assertWorkspaceUsable?: AssertWorkspaceUsable } = {}
+  }: {
+    readonly passiveTiptapSidecarReconcile?: boolean;
+    readonly persist?: boolean;
+    readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  } = {}
 ): Promise<{
   readonly memories: MemorySummary[];
   readonly assertMemoriesRootCurrent: () => Promise<void>;
@@ -4807,14 +5120,40 @@ export async function rebuildWorkspaceReadModel(
         ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
         repairMissingManifest: true,
       });
+      let fileTruths: readonly FinalizedSegmentFileTruth[] | undefined;
+      if (passiveTiptapSidecarReconcile) {
+        let passiveReconcile: Awaited<
+          ReturnType<typeof passivelyReconcileExistingTiptapSidecarsForMemoryDirectory>
+        >;
+        try {
+          passiveReconcile = await passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
+            ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+            memory,
+            memoryDirectoryPath,
+            rootPath,
+          });
+        } catch (error) {
+          throw new PassiveTiptapSidecarReconcileFailed(error);
+        }
+        if (!passiveReconcile.bodyMarkdownChanged) {
+          fileTruths = passiveReconcile.fileTruths;
+        }
+      }
       memories.push(
         await summarizeMemoryFromDirectory({
+          ...(fileTruths ? { fileTruths } : {}),
           rootPath,
           memory,
           memoryDirectoryPath,
         })
       );
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof WorkspaceHandleLost ||
+        error instanceof PassiveTiptapSidecarReconcileFailed
+      ) {
+        throw error;
+      }
       continue;
     }
   }

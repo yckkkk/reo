@@ -1,4 +1,13 @@
-import { closeSync, fsync, linkSync, renameSync, rmSync, writeFile } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fsync,
+  linkSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFile,
+} from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -12,6 +21,7 @@ import {
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
   isUnsupportedWorkspaceDirectoryFsyncError,
+  openExistingWorkspaceFileInDirectory,
   openNoReplaceWorkspaceFileInDirectory,
   removeWorkspaceFileInDirectory,
 } from './workspaceDirectoryTransactions.js';
@@ -43,6 +53,12 @@ type AssertWorkspaceFileUsable = () => void;
 const fsyncDescriptor = promisify(fsync);
 const writeFileDescriptor = promisify(writeFile);
 
+export class WorkspaceFileChangedBeforeAtomicWrite extends Error {
+  constructor() {
+    super('Workspace file changed before atomic write');
+  }
+}
+
 let beforeAtomicWorkspaceFileCommitForTest: (() => void) | null = null;
 let beforeAtomicWorkspaceFileTempOpenForTest: (() => void) | null = null;
 let afterAtomicWorkspaceFileTempOpenForTest: (() => void) | null = null;
@@ -60,6 +76,7 @@ async function writeWorkspaceFileAtomicInDirectory({
   data,
   noReplace,
   assertUsable,
+  expectedCurrentData,
 }: {
   readonly directory: string;
   readonly directoryIdentity: DirectoryIdentity;
@@ -67,6 +84,7 @@ async function writeWorkspaceFileAtomicInDirectory({
   readonly data: string | Uint8Array;
   readonly noReplace: boolean;
   readonly assertUsable?: AssertWorkspaceFileUsable | undefined;
+  readonly expectedCurrentData?: string | Uint8Array | undefined;
 }): Promise<void> {
   const previousCwd = process.cwd();
   const tempName = `.${targetName}.${process.pid}.${Date.now()}.part`;
@@ -105,6 +123,25 @@ async function writeWorkspaceFileAtomicInDirectory({
     assertSameCurrentDirectory(directoryIdentity);
     afterAtomicWorkspaceFileValidationForTest?.();
     assertUsable?.();
+    if (expectedCurrentData !== undefined) {
+      const expected = Buffer.from(expectedCurrentData);
+      let targetFd: number | null = null;
+      try {
+        targetFd = openExistingWorkspaceFileInDirectory({
+          directory,
+          directoryIdentity,
+          fileName: targetName,
+          flags: constants.O_RDONLY,
+        });
+        if (!readFileSync(targetFd).equals(expected)) {
+          throw new WorkspaceFileChangedBeforeAtomicWrite();
+        }
+      } finally {
+        if (targetFd !== null) {
+          closeSync(targetFd);
+        }
+      }
+    }
     if (noReplace) {
       linkSync(tempName, targetName);
       targetCreated = true;
@@ -268,12 +305,14 @@ export async function writeWorkspaceFileAtomicInKnownDirectory({
   fileName,
   data,
   assertUsable,
+  expectedCurrentData,
 }: {
   readonly directory: string;
   readonly directoryIdentity: DirectoryIdentity;
   readonly fileName: string;
   readonly data: string | Uint8Array;
   readonly assertUsable?: AssertWorkspaceFileUsable | undefined;
+  readonly expectedCurrentData?: string | Uint8Array | undefined;
 }): Promise<void> {
   await writeWorkspaceFileAtomicInDirectory({
     directory,
@@ -282,6 +321,7 @@ export async function writeWorkspaceFileAtomicInKnownDirectory({
     data,
     noReplace: false,
     assertUsable,
+    expectedCurrentData,
   });
 }
 

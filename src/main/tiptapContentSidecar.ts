@@ -70,6 +70,12 @@ function hashComparableTiptapMarkdown(markdown: string): string {
   return hashString(markdown.trimEnd());
 }
 
+function serializedMarkdownMatchesSourceHash(markdown: string, sourceHash: string): boolean {
+  const normalized = markdown.trimEnd();
+  const variants = new Set([markdown, normalized, `${normalized}\n`]);
+  return [...variants].some((variant) => hashTiptapSourceMarkdown(variant) === sourceHash);
+}
+
 function canonicalizeJson(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => canonicalizeJson(item));
@@ -219,12 +225,14 @@ export function assertTiptapJsonMatchesMarkdown({
 export async function reconcileTiptapContentSidecar({
   assertUsable,
   bodyMarkdown,
+  createIfMissing = true,
   objectDirectory,
   writeBodyMarkdown,
 }: {
   readonly bodyMarkdown: string;
   readonly objectDirectory: string;
   readonly assertUsable?: (() => void) | undefined;
+  readonly createIfMissing?: boolean | undefined;
   readonly writeBodyMarkdown?: (nextBodyMarkdown: string) => Promise<string | void> | string | void;
 }): Promise<TiptapContentSidecarReconcileResult> {
   const currentMarkdownHash = hashTiptapSourceMarkdown(bodyMarkdown);
@@ -236,11 +244,13 @@ export async function reconcileTiptapContentSidecar({
       return { ok: false, reason: 'invalid-sidecar' };
     }
     const tiptapJson = parseTiptapMarkdown(bodyMarkdown);
-    await writeSidecarFile(
-      objectDirectory,
-      createSidecarFile({ bodyMarkdown, content: tiptapJson }),
-      assertUsable
-    );
+    if (createIfMissing) {
+      await writeSidecarFile(
+        objectDirectory,
+        createSidecarFile({ bodyMarkdown, content: tiptapJson }),
+        assertUsable
+      );
+    }
     return okResult({ bodyMarkdown, tiptapJson });
   }
 
@@ -255,7 +265,9 @@ export async function reconcileTiptapContentSidecar({
   }
 
   const markdownChanged = currentMarkdownHash !== sidecar.source.hash;
-  const sidecarChanged = sidecar.currentContentHash !== sidecar.contentHash;
+  const sidecarChanged =
+    sidecar.currentContentHash !== sidecar.contentHash ||
+    !serializedMarkdownMatchesSourceHash(sidecarMarkdown, sidecar.source.hash);
   const sidecarMatchesMarkdown =
     hashComparableTiptapMarkdown(sidecarMarkdown) === hashComparableTiptapMarkdown(bodyMarkdown);
 

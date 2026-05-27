@@ -1628,6 +1628,7 @@ export async function readWorkspaceSnapshotFromFileTruth({
     });
     const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
       ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+      passiveTiptapSidecarReconcile: true,
     });
     assertWorkspaceUsable(assertUsable);
     const index = await readOrRebuildIndex(canonicalRoot, {
