@@ -4662,7 +4662,7 @@ test('projects supplement updates to segment and memory ordering', async () => {
   }
 });
 
-test('rebuild index uses memory markdown as the title source of truth', async () => {
+test('Memory file truth uses memory directory basename as the title source of truth', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_markdown_title_truth';
   await writeMemoryForTest(rootPath, {
@@ -4677,7 +4677,7 @@ test('rebuild index uses memory markdown as the title source of truth', async ()
   assert.deepEqual(await rebuildMemoryIndex(rootPath, { persist: false }), [
     {
       memoryId,
-      title: 'Markdown title',
+      title: 'Finder title',
       createdAt: '2026-05-06T13:08:00.000Z',
       updatedAt: '2026-05-06T13:08:00.000Z',
       segmentCount: 0,
@@ -4690,6 +4690,23 @@ test('rebuild index uses memory markdown as the title source of truth', async ()
       supplementCount: 0,
     },
   ]);
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (detail.ok) {
+    assert.equal(detail.value.title, 'Finder title');
+  }
+  const markdown = parseWorkspaceMarkdownObject({
+    objectType: 'memory',
+    markdown: await readFile(
+      path.join(rootPath, 'memories', `${memoryId}--Finder title`, 'memory.md'),
+      'utf8'
+    ),
+  });
+  assert.equal(markdown.data.title, 'Markdown title');
 });
 
 test('rebuild index summarizes memories from the initial directory scan', async () => {
@@ -4752,7 +4769,7 @@ test('delete and restore keep externally renamed memory directories addressable 
     memories: [
       {
         memoryId,
-        title: 'Metadata title',
+        title: 'Finder title',
         createdAt: '2026-05-06T13:08:00.000Z',
         updatedAt: '2026-05-06T13:08:00.000Z',
         segmentCount: 0,

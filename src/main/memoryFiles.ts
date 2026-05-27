@@ -2646,7 +2646,11 @@ async function readMemoryFileTruthFromDirectory(
   }
   return {
     memoryId: manifest.memoryId,
-    title: object.data.title,
+    title: titleFromFileSpaceDirectoryName({
+      directoryName,
+      metadataTitle: object.data.title,
+      nodeId: manifest.memoryId,
+    }),
     createdAt: manifest.createdAt,
     updatedAt: manifest.updatedAt,
   };
