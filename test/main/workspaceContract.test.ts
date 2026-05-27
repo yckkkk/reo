@@ -2082,6 +2082,54 @@ test('workspace snapshot contract rejects top-level segments projection', () => 
   );
 });
 
+test('workspace snapshot contract accepts redacted review summary counts', () => {
+  assert.deepEqual(
+    workspaceSnapshotSchema.parse({
+      workspaceId: 'ws_1',
+      title: '新的 workspace',
+      description: '',
+      memories: [],
+      review: {
+        needsReviewCount: 2,
+        markdownCandidateCount: 1,
+        tiptapSidecarCount: 1,
+      },
+    }),
+    {
+      workspaceId: 'ws_1',
+      title: '新的 workspace',
+      description: '',
+      memories: [],
+      review: {
+        needsReviewCount: 2,
+        markdownCandidateCount: 1,
+        tiptapSidecarCount: 1,
+      },
+    }
+  );
+});
+
+test('workspace snapshot contract rejects review paths and entries', () => {
+  assert.throws(() =>
+    workspaceSnapshotSchema.parse({
+      workspaceId: 'ws_1',
+      title: '新的 workspace',
+      description: '',
+      memories: [],
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+        entries: [
+          {
+            path: 'memories/private/segment.md',
+          },
+        ],
+      },
+    })
+  );
+});
+
 test('workspace memory summary contract rejects unknown nested fields', () => {
   assert.deepEqual(
     workspaceMemorySummarySchema.parse({

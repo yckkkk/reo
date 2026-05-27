@@ -87,7 +87,7 @@ export function isIgnoredWorkspaceFileEventPath(rootPath: string, changedPath: s
   if (parts.includes('node_modules') || parts.includes('.git')) {
     return true;
   }
-  if (parts[0] === '.reo' && ['locks', 'tmp', 'cache'].includes(parts[1] ?? '')) {
+  if (parts[0] === '.reo' && ['locks', 'tmp', 'cache', 'review'].includes(parts[1] ?? '')) {
     return true;
   }
   return false;

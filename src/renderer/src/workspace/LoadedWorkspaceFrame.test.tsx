@@ -630,6 +630,23 @@ function renderLoadedWorkspaceFrame({
 }
 
 describe('LoadedWorkspaceFrame', () => {
+  it('renders a compact needs-review indicator from snapshot review counts', () => {
+    renderLoadedWorkspaceFrame({
+      session: workspaceSession({
+        review: {
+          needsReviewCount: 2,
+          markdownCandidateCount: 1,
+          tiptapSidecarCount: 1,
+        },
+      }),
+    });
+
+    const indicator = screen.getByRole('status', { name: '记忆空间需要检查' });
+    expect(indicator).toHaveTextContent('2 个文件需要检查');
+    expect(indicator).toHaveTextContent('reo-doctor');
+    expect(indicator).not.toHaveTextContent('memories/');
+  });
+
   it('renders the loaded workspace frame as a workspace stage with one real expression entry', async () => {
     const user = userEvent.setup();
     const onStartRecording = vi.fn();

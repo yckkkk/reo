@@ -92,6 +92,7 @@ export function LoadedWorkspaceFrame({
 }: LoadedWorkspaceFrameProps) {
   const snapshotQuery = useQuery(workspaceSnapshotQueryOptions(workspaceSession));
   const snapshot = snapshotQuery.data ?? workspaceSession.snapshot;
+  const needsReviewCount = snapshot.review?.needsReviewCount ?? 0;
 
   return (
     <WorkspaceFrame
@@ -118,6 +119,17 @@ export function LoadedWorkspaceFrame({
         ) : null
       }
     >
+      {needsReviewCount > 0 ? (
+        <div
+          role="status"
+          aria-label="记忆空间需要检查"
+          className="absolute left-24 right-24 top-16 z-20 flex justify-center sm:left-40 sm:right-40"
+        >
+          <div className="max-w-full rounded-md border border-brand-ember/40 bg-card px-12 py-6 text-ui-sm font-medium leading-ui-sm text-foreground shadow-sm">
+            {needsReviewCount} 个文件需要检查 · 运行 reo-doctor
+          </div>
+        </div>
+      ) : null}
       {currentMemory ? (
         <MemoryStudio
           key={currentMemory.memoryId}

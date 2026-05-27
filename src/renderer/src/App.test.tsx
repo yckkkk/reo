@@ -4323,6 +4323,78 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
   });
 
+  it('refreshes the needs-review indicator when only review counts change', async () => {
+    const user = userEvent.setup();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const initialSnapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [],
+    };
+    const reviewSnapshot = {
+      ...initialSnapshot,
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+      },
+    };
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: initialSnapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({ ok: true, value: initialSnapshot })
+      .mockResolvedValueOnce({ ok: true, value: reviewSnapshot });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('status', { name: '记忆空间需要检查' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 2,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('status', { name: '记忆空间需要检查' })).toHaveTextContent(
+      '1 个文件需要检查'
+    );
+  });
+
   it('refreshes non-body workspace projections while a dirty Note editor stays open', async () => {
     const user = userEvent.setup();
     const originalMemory = {

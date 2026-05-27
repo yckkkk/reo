@@ -81,6 +81,7 @@
 ## Loaded Workspace
 
 - 当前 loaded workspace frame 使用 AppShell panel titlebar、中央 Workspace Stage 或 Memory Studio、右侧可折叠 MemoryRail。WorkspaceFrame 底部 ExpressionDock 在 Workspace Stage 和 Memory Studio 中都保持挂载，由当前 Memory context 决定笔记 action 是否可用。
+- LoadedWorkspaceFrame 读取 Workspace snapshot 的可选 `review` 汇总计数；当 `needsReviewCount > 0` 时在主舞台顶部显示 compact status indicator，只显示数量和 `reo-doctor` 恢复入口提示，不显示 report entries、相对路径或内部 hash。
 - Titlebar 使用 shadcn/ui Breadcrumb 组合当前记忆空间标题和当前 Memory 标题，两个层级都接入实体 More 菜单，中间 separator 使用 4px 圆点；titlebar 内容使用 `px-28`，右侧 icon controls 额外内收 `mr-16`。未选中 Memory 时 titlebar 右侧显示全局 `新建记忆`；选中 Memory 后该全局新建入口隐藏，只保留 Memory rail 折叠控制，避免和 Memory Studio 内的片段创建入口重复。
 - 右侧 MemoryRail 读取当前 workspace snapshot 的 Memory 容器，按 Memory 投影 `updatedAt` 倒序展示 title、最近更新时间和片段数，并通过 `MemoryActionsMenu` 承载每个 Memory 的 More 操作。
 - Memory space、Memory、Segment 和 SegmentSupplement rename Dialog 提交后立即关闭并更新本地投影；普通保存失败只在当前 title 仍是本次提交值时回滚，`file-written-index-stale` 保持 optimistic title 并显示错误。Memory delete 使用真实 IPC 和 undo toast；Segment delete 使用确认弹层、renderer optimistic projection、toast grace period 和 delayed IPC commit；Memory space remove 不提供 undo，也不删除本地文件夹。

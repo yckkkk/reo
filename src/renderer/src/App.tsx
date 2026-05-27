@@ -346,10 +346,20 @@ function sameWorkspaceSnapshot(
   first: WorkspaceSession['snapshot'],
   second: WorkspaceSession['snapshot']
 ): boolean {
+  const firstReview = first.review;
+  const secondReview = second.review;
+  const sameReview =
+    firstReview === secondReview ||
+    (firstReview !== undefined &&
+      secondReview !== undefined &&
+      firstReview.needsReviewCount === secondReview.needsReviewCount &&
+      firstReview.markdownCandidateCount === secondReview.markdownCandidateCount &&
+      firstReview.tiptapSidecarCount === secondReview.tiptapSidecarCount);
   return (
     first.workspaceId === second.workspaceId &&
     first.title === second.title &&
     first.description === second.description &&
+    sameReview &&
     first.memories.length === second.memories.length &&
     first.memories.every((memory, index) => {
       const other = second.memories[index];

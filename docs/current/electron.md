@@ -66,6 +66,7 @@ Electron 是 Reo 的一等产品宿主，不是 thin shell。
 - `electron-log` 当前只允许在 main process 本地日志中使用；renderer/preload bridge 只能在真实 renderer diagnostics 能力中引入。
 - Sentry 只能在真实 crash/error reporting 能力中引入。
 - Diagnostics 能力必须同批定义 process boundary、sensitive data rules、redaction、retention、DSN/release/privacy/source-map 计划和 renderer visibility。当前本地日志只保留 `main.log` 与一次 rotation 的 `main.old.log`，单文件大小上限为 1 MiB。
+- Workspace snapshot 的 needs-review visibility 只能通过 aggregate counts 暴露给 renderer。`.reo/review/needs-review.json` 的具体 workspace-relative paths 只存在于本地文件系统和 main-owned `reo-doctor` 脚本输出，不通过 preload/IPC 作为 entries 或 raw paths 传给 renderer。
 
 ## IPC 设计纪律
 

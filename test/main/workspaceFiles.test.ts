@@ -45,6 +45,7 @@ import {
   TIPTAP_CONTENT_SIDECAR_FILE,
   writeTiptapContentSidecar,
 } from '../../src/main/tiptapContentSidecar.js';
+import { writeWorkspaceNeedsReviewReport } from '../../src/main/workspaceReviewReport.js';
 import {
   setAfterAtomicWorkspaceFileTempOpenForTest,
   setBeforeAtomicWorkspaceFileCommitForTest,
@@ -114,6 +115,25 @@ function sidecarWritableFile(sidecar: Awaited<ReturnType<typeof readTiptapConten
   const { currentContentHash: _currentContentHash, ...file } = sidecar;
   void _currentContentHash;
   return file;
+}
+
+async function readNeedsReviewReport(root: string): Promise<{
+  readonly schemaVersion: 1;
+  readonly updatedAt: string;
+  readonly summary: {
+    readonly needsReviewCount: number;
+    readonly markdownCandidateCount: number;
+    readonly tiptapSidecarCount: number;
+  };
+  readonly entries: Array<{
+    readonly category: string;
+    readonly reason: string;
+    readonly objectType?: string;
+    readonly kind?: string;
+    readonly paths: readonly string[];
+  }>;
+}> {
+  return JSON.parse(await readFile(path.join(root, '.reo', 'review', 'needs-review.json'), 'utf8'));
 }
 
 async function writeExternalSidecarContent({
@@ -746,6 +766,86 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8'),
     /^name: reo-edit/m
   );
+});
+
+test('reo-doctor skill script reports unresolved needs-review entries', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-review-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Doctor review',
+    description: '',
+    createWorkspaceId: () => 'ws_doctor_review',
+    now: () => '2026-05-26T12:43:00.000Z',
+  });
+  await mkdir(path.join(root, '.reo', 'review'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'review', 'needs-review.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        updatedAt: '2026-05-27T08:00:00.000Z',
+        summary: {
+          needsReviewCount: 1,
+          markdownCandidateCount: 0,
+          tiptapSidecarCount: 1,
+        },
+        entries: [
+          {
+            category: 'tiptap-sidecar',
+            reason: 'content-conflict',
+            objectType: 'segment',
+            kind: 'note',
+            paths: [
+              'memories/mem_review/segments/seg_review/segment.md',
+              'memories/mem_review/segments/seg_review/content.tiptap.json',
+            ],
+          },
+        ],
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs')],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout) as {
+    readonly ok: boolean;
+    readonly needsReview?: {
+      readonly count: number;
+      readonly entries: Array<{
+        readonly category: string;
+        readonly paths: readonly string[];
+        readonly reason: string;
+      }>;
+    };
+    readonly issues: Array<{ readonly code: string; readonly path?: string }>;
+  };
+  assert.equal(report.ok, false);
+  assert.equal(report.needsReview?.count, 1);
+  assert.deepEqual(report.needsReview?.entries, [
+    {
+      category: 'tiptap-sidecar',
+      kind: 'note',
+      objectType: 'segment',
+      paths: [
+        'memories/mem_review/segments/seg_review/segment.md',
+        'memories/mem_review/segments/seg_review/content.tiptap.json',
+      ],
+      reason: 'content-conflict',
+    },
+  ]);
+  assert.deepEqual(report.issues, [
+    {
+      code: 'needs-review',
+      path: '.reo/review/needs-review.json',
+    },
+  ]);
 });
 
 test('reo-doctor skill script does not overwrite symlink targets while repairing managed config', async () => {
@@ -1516,6 +1616,36 @@ test('workspace snapshot refresh preserves simultaneous Markdown and sidecar edi
   const sidecar = await readTiptapContentSidecar(segmentDirectory);
   assert.deepEqual(sidecar.content, nextTiptapJson);
   assert.notEqual(sidecar.source.hash, hashTiptapSourceMarkdown(persisted.content));
+
+  const report = await readNeedsReviewReport(root);
+  const serializedReport = JSON.stringify(report);
+  assert.equal(report.summary.needsReviewCount, 1);
+  assert.equal(report.summary.tiptapSidecarCount, 1);
+  assert.deepEqual(
+    report.entries.map((entry) => ({
+      category: entry.category,
+      kind: entry.kind,
+      objectType: entry.objectType,
+      paths: entry.paths,
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'tiptap-sidecar',
+        kind: 'note',
+        objectType: 'segment',
+        paths: [
+          `memories/${memoryId}/segments/${segmentId}/segment.md`,
+          `memories/${memoryId}/segments/${segmentId}/${TIPTAP_CONTENT_SIDECAR_FILE}`,
+        ],
+        reason: 'content-conflict',
+      },
+    ]
+  );
+  assert.equal(snapshot.snapshot.review?.needsReviewCount, 1);
+  assert.equal(snapshot.snapshot.review?.tiptapSidecarCount, 1);
+  assert.doesNotMatch(serializedReport, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(serializedReport, /Markdown changed outside|Original conflict body/);
 });
 
 test('workspace snapshot refresh does not clobber Markdown changed during passive sidecar write', async () => {
@@ -1687,6 +1817,320 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
   assert.equal(unsupportedPersisted.content, unsupportedBody);
   const unsupportedSidecar = await readTiptapContentSidecar(unsupportedSegmentDirectory);
   assert.deepEqual(unsupportedSidecar.content, unsupportedTableDoc());
+
+  const report = await readNeedsReviewReport(root);
+  assert.equal(report.summary.needsReviewCount, 2);
+  assert.equal(report.summary.tiptapSidecarCount, 2);
+  assert.deepEqual(
+    report.entries.map((entry) => ({
+      category: entry.category,
+      paths: entry.paths,
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'tiptap-sidecar',
+        paths: [
+          `memories/${memoryId}/segments/${invalidSegmentId}/segment.md`,
+          `memories/${memoryId}/segments/${invalidSegmentId}/${TIPTAP_CONTENT_SIDECAR_FILE}`,
+        ],
+        reason: 'invalid-sidecar',
+      },
+      {
+        category: 'tiptap-sidecar',
+        paths: [
+          `memories/${memoryId}/segments/${unsupportedSegmentId}/segment.md`,
+          `memories/${memoryId}/segments/${unsupportedSegmentId}/${TIPTAP_CONTENT_SIDECAR_FILE}`,
+        ],
+        reason: 'unsupported-tiptap-content',
+      },
+    ]
+  );
+});
+
+test('workspace snapshot refresh clears stale needs-review report when clean', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  await mkdir(path.join(root, '.reo', 'review'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'review', 'needs-review.json'),
+    '{"schemaVersion":1,"summary":{"needsReviewCount":1,"markdownCandidateCount":0,"tiptapSidecarCount":1},"entries":[]}\n'
+  );
+  await writeFile(path.join(root, '.reo', 'review', 'needs-review.md'), '# stale\n');
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  assert.equal(snapshot.snapshot.review, undefined);
+  await assert.rejects(readFile(path.join(root, '.reo', 'review', 'needs-review.json'), 'utf8'), {
+    code: 'ENOENT',
+  });
+  await assert.rejects(readFile(path.join(root, '.reo', 'review', 'needs-review.md'), 'utf8'), {
+    code: 'ENOENT',
+  });
+});
+
+test('workspace snapshot refresh writes duplicate and ambiguous Markdown candidate review entries', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_markdown_candidate_review';
+  const segmentId = 'seg_markdown_candidate_review';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId, title: '候选检查' });
+  for (const directoryName of ['重复一', '重复二'] as const) {
+    const segmentDirectory = path.join(root, 'memories', memoryId, 'segments', directoryName);
+    await mkdir(segmentDirectory, { recursive: true });
+    await writeFile(
+      path.join(segmentDirectory, 'segment.md'),
+      renderWorkspaceMarkdownObject({
+        objectType: 'segment',
+        data: { id: segmentId, title: directoryName, kind: 'note' },
+        content: `${directoryName}正文不应进入报告\n`,
+      })
+    );
+  }
+  const ambiguousDirectory = path.join(root, 'memories', memoryId, 'segments', '混合候选');
+  await mkdir(ambiguousDirectory, { recursive: true });
+  await writeFile(path.join(ambiguousDirectory, 'segment.md'), '正文不应进入报告\n');
+  await writeFile(path.join(ambiguousDirectory, 'supplement.md'), '补充正文不应进入报告\n');
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  const report = await readNeedsReviewReport(root);
+  const serializedReport = JSON.stringify(report);
+  assert.equal(snapshot.snapshot.review?.needsReviewCount, 2);
+  assert.equal(snapshot.snapshot.review?.markdownCandidateCount, 2);
+  assert.deepEqual(
+    report.entries.map((entry) => ({
+      category: entry.category,
+      paths: entry.paths,
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'markdown-segment',
+        paths: [
+          `memories/${memoryId}/segments/混合候选/segment.md`,
+          `memories/${memoryId}/segments/混合候选/supplement.md`,
+        ],
+        reason: 'ambiguous-candidate',
+      },
+      {
+        category: 'markdown-segment',
+        paths: [
+          `memories/${memoryId}/segments/重复一/segment.md`,
+          `memories/${memoryId}/segments/重复二/segment.md`,
+        ],
+        reason: 'duplicate-id',
+      },
+    ]
+  );
+  assert.doesNotMatch(serializedReport, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(serializedReport, /正文不应进入报告|补充正文不应进入报告/);
+});
+
+test('workspace snapshot refresh writes duplicate and ambiguous Markdown supplement review entries', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const memoryId = 'mem_markdown_supplement_candidate_review';
+  const segmentId = 'seg_markdown_supplement_candidate_review';
+  const supplementId = 'sup_markdown_candidate_review';
+  await writeMemoryForPassiveSidecarTest({ root, memoryId, title: '补充候选检查' });
+  await writeNoteSegmentForPassiveSidecarTest({
+    body: '父片段正文\n',
+    memoryId,
+    root,
+    segmentId,
+  });
+  const supplementsDirectory = path.join(
+    root,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements'
+  );
+  for (const [directoryName, title] of [
+    ['sup_dir_one', '重复补充一'],
+    ['sup_dir_two', '重复补充二'],
+  ] as const) {
+    const supplementDirectory = path.join(supplementsDirectory, directoryName);
+    await mkdir(supplementDirectory, { recursive: true });
+    await writeFile(
+      path.join(supplementDirectory, 'supplement.md'),
+      renderWorkspaceMarkdownObject({
+        objectType: 'supplement',
+        data: { id: supplementId, title, kind: 'note' },
+        content: `${title}正文不应进入报告\n`,
+      })
+    );
+  }
+  const ambiguousDirectory = path.join(supplementsDirectory, '混合补充候选');
+  await mkdir(ambiguousDirectory, { recursive: true });
+  await writeFile(path.join(ambiguousDirectory, 'segment.md'), '片段正文不应进入报告\n');
+  await writeFile(path.join(ambiguousDirectory, 'supplement.md'), '补充正文不应进入报告\n');
+
+  const snapshot = await readWorkspaceSnapshotFromFileTruth({
+    rootPath: root,
+    workspaceId: 'ws_passive_sidecar',
+  });
+
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) {
+    throw new Error('snapshot refresh should succeed');
+  }
+  const report = await readNeedsReviewReport(root);
+  const serializedReport = JSON.stringify(report);
+  assert.equal(snapshot.snapshot.review?.needsReviewCount, 2);
+  assert.equal(snapshot.snapshot.review?.markdownCandidateCount, 2);
+  assert.deepEqual(
+    report.entries.map((entry) => ({
+      category: entry.category,
+      paths: entry.paths,
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'markdown-supplement',
+        paths: [
+          `memories/${memoryId}/segments/${segmentId}/supplements/混合补充候选/segment.md`,
+          `memories/${memoryId}/segments/${segmentId}/supplements/混合补充候选/supplement.md`,
+        ],
+        reason: 'ambiguous-candidate',
+      },
+      {
+        category: 'markdown-supplement',
+        paths: [
+          `memories/${memoryId}/segments/${segmentId}/supplements/sup_dir_one/supplement.md`,
+          `memories/${memoryId}/segments/${segmentId}/supplements/sup_dir_two/supplement.md`,
+        ],
+        reason: 'duplicate-id',
+      },
+    ]
+  );
+  assert.doesNotMatch(serializedReport, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(
+    serializedReport,
+    /正文不应进入报告|补充正文不应进入报告|重复补充一|重复补充二/
+  );
+});
+
+test('needs-review report write does not create review files after lock loss', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+
+  await assert.rejects(
+    writeWorkspaceNeedsReviewReport({
+      assertUsable: () => {
+        throw new Error('workspace lock lost');
+      },
+      entries: [
+        {
+          category: 'tiptap-sidecar',
+          kind: 'note',
+          objectType: 'segment',
+          paths: ['memories/mem_1/segments/seg_1/segment.md'],
+          reason: 'content-conflict',
+        },
+      ],
+      rootPath: root,
+    }),
+    /workspace lock lost/
+  );
+
+  await assert.rejects(stat(path.join(root, '.reo', 'review')), { code: 'ENOENT' });
+});
+
+test('needs-review report clear preserves stale files after lock loss', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  await mkdir(path.join(root, '.reo', 'review'), { recursive: true });
+  await writeFile(path.join(root, '.reo', 'review', 'needs-review.json'), '{"stale":true}\n');
+  await writeFile(path.join(root, '.reo', 'review', 'needs-review.md'), '# stale\n');
+
+  await assert.rejects(
+    writeWorkspaceNeedsReviewReport({
+      assertUsable: () => {
+        throw new Error('workspace lock lost');
+      },
+      entries: [],
+      rootPath: root,
+    }),
+    /workspace lock lost/
+  );
+
+  assert.equal(
+    await readFile(path.join(root, '.reo', 'review', 'needs-review.json'), 'utf8'),
+    '{"stale":true}\n'
+  );
+  assert.equal(
+    await readFile(path.join(root, '.reo', 'review', 'needs-review.md'), 'utf8'),
+    '# stale\n'
+  );
+});
+
+test('needs-review Markdown report escapes unusual relative paths', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const unusualPath = 'memories/mem_1/segments/seg_1--`tick\nnext/segment.md';
+
+  await writeWorkspaceNeedsReviewReport({
+    entries: [
+      {
+        category: 'markdown-segment',
+        objectType: 'segment',
+        paths: [unusualPath],
+        reason: 'ambiguous-candidate',
+      },
+    ],
+    rootPath: root,
+  });
+
+  const markdown = await readFile(path.join(root, '.reo', 'review', 'needs-review.md'), 'utf8');
+  assert.match(markdown, /\\u0060tick\\nnext/);
+  assert.doesNotMatch(markdown, /`tick/);
+});
+
+test('needs-review report skips rewriting unchanged entries', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+  const entry = {
+    category: 'tiptap-sidecar' as const,
+    kind: 'note' as const,
+    objectType: 'segment' as const,
+    paths: ['memories/mem_1/segments/seg_1/segment.md'],
+    reason: 'content-conflict' as const,
+  };
+
+  await writeWorkspaceNeedsReviewReport({
+    entries: [entry],
+    rootPath: root,
+  });
+  const reportPath = path.join(root, '.reo', 'review', 'needs-review.json');
+  const report = await readNeedsReviewReport(root);
+  await writeFile(
+    reportPath,
+    `${JSON.stringify(
+      {
+        ...report,
+        updatedAt: '2026-05-27T00:00:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  await writeWorkspaceNeedsReviewReport({
+    entries: [entry],
+    rootPath: root,
+  });
+
+  assert.equal((await readNeedsReviewReport(root)).updatedAt, '2026-05-27T00:00:00.000Z');
 });
 
 test('open workspace returns valid index without reconciliation before returning ready', async () => {

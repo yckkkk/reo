@@ -521,11 +521,18 @@ export const workspaceMemoryDetailProjectionSchema = workspaceMemorySummarySchem
   segments: z.array(workspaceSegmentProjectionSchema),
 });
 
+export const workspaceReviewSummarySchema = z.strictObject({
+  needsReviewCount: z.number().int().nonnegative(),
+  markdownCandidateCount: z.number().int().nonnegative(),
+  tiptapSidecarCount: z.number().int().nonnegative(),
+});
+
 export const workspaceSnapshotSchema = z.strictObject({
   workspaceId: z.string().min(1),
   title: z.string(),
   description: z.string(),
   memories: z.array(workspaceMemorySummarySchema),
+  review: workspaceReviewSummarySchema.optional(),
 });
 
 export const workspaceInitializeRequestSchema = z.strictObject({
@@ -1691,6 +1698,7 @@ export type WorkspaceChooseDirectoryResponse = z.infer<
 export type DraftSegmentMetadata = z.infer<typeof draftSegmentMetadataSchema>;
 export type DraftSegmentSupplementMetadata = z.infer<typeof draftSegmentSupplementMetadataSchema>;
 export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>;
+export type WorkspaceReviewSummary = z.infer<typeof workspaceReviewSummarySchema>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
 export type WorkspaceSegmentProjection = z.infer<typeof workspaceSegmentProjectionSchema>;
 export type WorkspaceSegmentSupplementProjection = z.infer<

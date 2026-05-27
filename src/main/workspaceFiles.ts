@@ -34,10 +34,12 @@ import {
   getWorkspaceMetadataPath,
   resolveWorkspaceRoot,
 } from './workspacePaths.js';
+import { writeWorkspaceNeedsReviewReport } from './workspaceReviewReport.js';
 import {
   workspaceError,
   workspaceMemorySummarySchema,
   type WorkspaceErrorEnvelope,
+  type WorkspaceReviewSummary,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
 import { REO_TIPTAP_HIGHLIGHT_COLOR_VALUES } from '../tiptap-markdown/tiptapHighlightColors.js';
@@ -270,6 +272,7 @@ export const DEFAULT_REO_DOCTOR_SKILL_MD =
     '```',
     '',
     'The script repairs Reo managed `AGENTS.md` blocks and managed skill files, then reports unresolved issues. It must preserve user-written content in `AGENTS.md`.',
+    'When `.reo/review/needs-review.json` exists, the script prints the unresolved entries with workspace-relative paths.',
     '',
     '## Boundaries',
     '',
@@ -363,6 +366,43 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '  }',
     '}',
     '',
+    'function isSafeRelativePath(value) {',
+    '  return typeof value === "string" && value.length > 0 && !path.isAbsolute(value) && !value.split(/[\\\\/]+/).includes("..");',
+    '}',
+    '',
+    'function sanitizeReviewEntry(entry) {',
+    '  if (!entry || typeof entry !== "object") return null;',
+    '  if (typeof entry.category !== "string" || typeof entry.reason !== "string") return null;',
+    '  if (!Array.isArray(entry.paths) || entry.paths.length === 0) return null;',
+    '  const paths = entry.paths.filter(isSafeRelativePath);',
+    '  if (paths.length !== entry.paths.length) return null;',
+    '  return { category: entry.category, reason: entry.reason, paths, ...(typeof entry.objectType === "string" ? { objectType: entry.objectType } : {}), ...(typeof entry.kind === "string" ? { kind: entry.kind } : {}) };',
+    '}',
+    '',
+    'async function readNeedsReviewReport() {',
+    '  const reportPath = path.join(root, ".reo", "review", "needs-review.json");',
+    '  const current = await readRegularText(reportPath);',
+    '  if (current.status === "missing" || current.status === "unsafe") return;',
+    '  try {',
+    '    const parsed = JSON.parse(current.text);',
+    '    const rawEntries = Array.isArray(parsed.entries) ? parsed.entries : [];',
+    '    const entries = rawEntries.map(sanitizeReviewEntry);',
+    '    if (entries.some((entry) => entry === null)) {',
+    '      report.ok = false;',
+    '      report.issues.push({ path: ".reo/review/needs-review.json", code: "needs-review-invalid" });',
+    '      return;',
+    '    }',
+    '    if (entries.length > 0) {',
+    '      report.ok = false;',
+    '      report.needsReview = { count: entries.length, entries };',
+    '      report.issues.push({ path: ".reo/review/needs-review.json", code: "needs-review" });',
+    '    }',
+    '  } catch {',
+    '    report.ok = false;',
+    '    report.issues.push({ path: ".reo/review/needs-review.json", code: "needs-review-invalid" });',
+    '  }',
+    '}',
+    '',
     'async function main() {',
     '  const agentsPath = path.join(root, "AGENTS.md");',
     '  const currentAgents = await readRegularText(agentsPath);',
@@ -399,6 +439,8 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '      await writeRegularText(editSkillPath, currentEditSkill, EDIT_SKILL_MD);',
     '    }',
     '  }',
+    '',
+    '  await readNeedsReviewReport();',
     '',
     '  console.log(JSON.stringify(report, null, 2));',
     '}',
@@ -810,12 +852,17 @@ function finalizeWorkspaceRootDirectoryRename({
   }
 }
 
-function snapshotFrom(metadata: WorkspaceMetadata, index: WorkspaceIndex): WorkspaceSnapshot {
+function snapshotFrom(
+  metadata: WorkspaceMetadata,
+  index: WorkspaceIndex,
+  review?: WorkspaceReviewSummary
+): WorkspaceSnapshot {
   return {
     workspaceId: metadata.workspaceId,
     title: metadata.title,
     description: metadata.description,
     memories: index.memories,
+    ...(review ? { review } : {}),
   };
 }
 
@@ -1638,10 +1685,15 @@ export async function readWorkspaceSnapshotFromFileTruth({
       },
       rebuiltMemories: readModel.memories,
     });
+    const review = await writeWorkspaceNeedsReviewReport({
+      ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
+      entries: readModel.reviewEntries,
+      rootPath: canonicalRoot,
+    });
     assertWorkspaceUsable(assertUsable);
     return {
       ok: true,
-      snapshot: snapshotFrom(metadata, index),
+      snapshot: snapshotFrom(metadata, index, review),
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {

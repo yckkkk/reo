@@ -107,6 +107,8 @@ test('workspace file truth watcher ignores transient files and closes pending ev
 
   fakeWatcher.emit('all', 'change', '/workspace/root/.DS_Store');
   fakeWatcher.emit('all', 'change', '/workspace/root/.reo/locks/workspace.lock');
+  fakeWatcher.emit('all', 'change', '/workspace/root/.reo/review/needs-review.json');
+  fakeWatcher.emit('all', 'change', '/workspace/root/.reo/review/needs-review.md');
   fakeWatcher.emit('all', 'add', '/workspace/root/memories/memory-a/.segment.md.1.2.part');
   fakeWatcher.emit('all', 'add', '/workspace/root/memories/memory-a/.content.tiptap.json.1.2.part');
   fakeWatcher.emit('all', 'change', '/workspace/root/memories/memory-a/segment.md');
@@ -125,6 +127,13 @@ test('workspace file truth watcher ignore rules are path-bound to the workspace 
   );
   assert.equal(
     isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root/.reo/tmp/write.tmp'),
+    true
+  );
+  assert.equal(
+    isIgnoredWorkspaceFileEventPath(
+      '/workspace/root',
+      '/workspace/root/.reo/review/needs-review.md'
+    ),
     true
   );
   assert.equal(

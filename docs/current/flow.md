@@ -52,6 +52,7 @@
 - Recovery 只处理带 marker、staging 或明确 supplement recovery work 的对象；没有 recovery marker 时不得为了修复投影全量读取 Segment manifest。无法证明可安全删除的用户 payload 必须 fail-open 保留。
 - Metadata、index、transcript 和 note body atomic write 必须在已验证 parent directory 内提交。Replace write 覆盖已有 target 前保留同目录 backup；commit 后发现 parent identity 改变时必须删除本次暴露 target，replace write 还必须恢复旧 target。
 - Open、snapshot refresh 和 index rebuild 都以文件空间节点真源为准。Scan 只纳入 schema、manifest ownership、file-space ownership 和 kind-specific payload 一致的 finalized audio/note Segment 与 SegmentSupplement。
+- Snapshot refresh 执行 passive sidecar reconcile 和 direct Markdown candidate scan 后，必须把无法确定的 sidecar 冲突、invalid/unsupported Tiptap JSON、重复 id 和歧义候选写入 `.reo/review/needs-review.json` / `.reo/review/needs-review.md`；没有 unresolved item 时删除旧 report。Renderer 只收到 snapshot `review` 汇总计数，具体相对路径留在本地 report 和 `reo-doctor` 输出。
 - 同一 `memoryId` 的 create、append、title update、Segment title update 和 Segment delete/restore 通过 main process memory write lock 串行保护。同一 workspace 的 full index replace 和 single memory index refresh 进入同一个 main process write queue。
 - Paused draft playback 默认只使用 renderer 当前录音会话持有的有效 chunk 前缀；异常恢复只能通过 `workspace:readRecordingDraftAudio` 在 marker byte map 限制内重建回听检查前缀，不跨 MediaRecorder session 继续或替换。
 - 豆包 live ASR 只在 main 侧运行。Renderer 只能通过 preload 方法 start/send/finish/close 和订阅安全 event；renderer 不得生成鉴权 header，不得保存或显示 X-Api-Key 明文。Live ASR 失败不回滚 durable audio finalize，必要时触发 completion backfill。

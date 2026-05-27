@@ -50,6 +50,7 @@ import {
   renderWorkspaceMarkdownObject,
 } from './workspaceMarkdownObjects.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
+import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
   isUnsupportedWorkspaceDirectoryFsyncError,
@@ -1231,12 +1232,47 @@ function directorySupplementIdHint(directoryName: string): string | null {
   return SUPPLEMENT_ID_PATTERN.test(hint) ? hint : null;
 }
 
+function pushReviewEntry(
+  reviewEntries: WorkspaceReviewEntryInput[] | undefined,
+  entry: WorkspaceReviewEntryInput
+): void {
+  reviewEntries?.push(entry);
+}
+
+function pushTiptapSidecarReviewEntry({
+  directory,
+  kind,
+  markdownFileName,
+  objectType,
+  reason,
+  reviewEntries,
+}: {
+  readonly directory: string;
+  readonly kind: 'audio' | 'note';
+  readonly markdownFileName: 'segment.md' | 'supplement.md';
+  readonly objectType: 'segment' | 'supplement';
+  readonly reason: WorkspaceReviewEntryInput['reason'];
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
+}): void {
+  pushReviewEntry(reviewEntries, {
+    category: 'tiptap-sidecar',
+    kind,
+    objectType,
+    paths: [
+      path.join(directory, markdownFileName),
+      path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE),
+    ],
+    reason,
+  });
+}
+
 async function reconcileNoteSegmentCandidate({
   blockedSegmentIds,
   candidateDirectory,
   candidateIdentity,
   directoryName,
   memoryId,
+  reviewEntries,
   rootPath,
   workspaceId,
 }: {
@@ -1245,6 +1281,7 @@ async function reconcileNoteSegmentCandidate({
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
   readonly memoryId: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
   readonly workspaceId: string;
 }): Promise<void> {
@@ -1294,6 +1331,13 @@ async function reconcileNoteSegmentCandidate({
           duplicateIdCount: 1,
         },
         level: 'warn',
+      });
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-segment',
+        kind: 'audio',
+        objectType: 'segment',
+        paths: [path.join(candidateDirectory, 'segment.md')],
+        reason: 'duplicate-id',
       });
       return;
     }
@@ -1394,6 +1438,13 @@ async function reconcileNoteSegmentCandidate({
       },
       level: 'warn',
     });
+    pushReviewEntry(reviewEntries, {
+      category: 'markdown-segment',
+      kind: 'note',
+      objectType: 'segment',
+      paths: [path.join(candidateDirectory, 'segment.md')],
+      reason: 'duplicate-id',
+    });
     return;
   }
 
@@ -1450,9 +1501,11 @@ async function classifyNoteSegmentCandidatesForReview({
 }): Promise<{
   readonly ambiguousCandidateCount: number;
   readonly duplicateSegmentIds: ReadonlySet<string>;
+  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
 }> {
-  const idCounts = new Map<string, number>();
+  const idPaths = new Map<string, string[]>();
   let ambiguousCandidateCount = 0;
+  const reviewEntries: WorkspaceReviewEntryInput[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
@@ -1467,6 +1520,15 @@ async function classifyNoteSegmentCandidatesForReview({
       const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
       if (await exists(path.join(candidateDirectory, 'supplement.md'))) {
         ambiguousCandidateCount += 1;
+        reviewEntries.push({
+          category: 'markdown-segment',
+          objectType: 'segment',
+          paths: [
+            path.join(candidateDirectory, 'segment.md'),
+            path.join(candidateDirectory, 'supplement.md'),
+          ],
+          reason: 'ambiguous-candidate',
+        });
         continue;
       }
       const candidate = parseWorkspaceMarkdownObjectCandidate({
@@ -1485,28 +1547,44 @@ async function classifyNoteSegmentCandidatesForReview({
         ('id' in candidate.data ? candidate.data.id : undefined) ??
         directorySegmentIdHint(entry.name);
       if (candidateId) {
-        idCounts.set(candidateId, (idCounts.get(candidateId) ?? 0) + 1);
+        const paths = idPaths.get(candidateId) ?? [];
+        paths.push(path.join(candidateDirectory, 'segment.md'));
+        idPaths.set(candidateId, paths);
       }
     } catch {
       continue;
     }
   }
 
+  for (const paths of idPaths.values()) {
+    if (paths.length > 1) {
+      reviewEntries.push({
+        category: 'markdown-segment',
+        objectType: 'segment',
+        paths,
+        reason: 'duplicate-id',
+      });
+    }
+  }
+
   return {
     ambiguousCandidateCount,
     duplicateSegmentIds: new Set(
-      [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+      [...idPaths.entries()].filter(([, paths]) => paths.length > 1).map(([id]) => id)
     ),
+    reviewEntries,
   };
 }
 
 async function reconcileNoteSegmentsInMemoryDirectory({
   memoryDirectoryPath,
   memoryId,
+  reviewEntries,
   rootPath,
 }: {
   readonly memoryDirectoryPath: string;
   readonly memoryId: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<void> {
   const workspaceId = await readWorkspaceId(rootPath);
@@ -1531,6 +1609,9 @@ async function reconcileNoteSegmentsInMemoryDirectory({
       level: 'warn',
     });
   }
+  for (const entry of review.reviewEntries) {
+    pushReviewEntry(reviewEntries, entry);
+  }
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
@@ -1548,6 +1629,7 @@ async function reconcileNoteSegmentsInMemoryDirectory({
         candidateIdentity,
         directoryName: entry.name,
         memoryId,
+        ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
         workspaceId,
       });
@@ -1563,6 +1645,7 @@ async function reconcileNoteSupplementCandidate({
   candidateIdentity,
   directoryName,
   memoryId,
+  reviewEntries,
   rootPath,
   segmentId,
   workspaceId,
@@ -1572,6 +1655,7 @@ async function reconcileNoteSupplementCandidate({
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
   readonly memoryId: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
   readonly segmentId: string;
   readonly workspaceId: string;
@@ -1623,6 +1707,13 @@ async function reconcileNoteSupplementCandidate({
           duplicateIdCount: 1,
         },
         level: 'warn',
+      });
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-supplement',
+        kind: 'audio',
+        objectType: 'supplement',
+        paths: [path.join(candidateDirectory, 'supplement.md')],
+        reason: 'duplicate-id',
       });
       return;
     }
@@ -1729,6 +1820,13 @@ async function reconcileNoteSupplementCandidate({
       },
       level: 'warn',
     });
+    pushReviewEntry(reviewEntries, {
+      category: 'markdown-supplement',
+      kind: 'note',
+      objectType: 'supplement',
+      paths: [path.join(candidateDirectory, 'supplement.md')],
+      reason: 'duplicate-id',
+    });
     return;
   }
 
@@ -1787,9 +1885,11 @@ async function classifyNoteSupplementCandidatesForReview({
 }): Promise<{
   readonly ambiguousCandidateCount: number;
   readonly duplicateSupplementIds: ReadonlySet<string>;
+  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
 }> {
-  const idCounts = new Map<string, number>();
+  const idPaths = new Map<string, string[]>();
   let ambiguousCandidateCount = 0;
+  const reviewEntries: WorkspaceReviewEntryInput[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
@@ -1807,6 +1907,15 @@ async function classifyNoteSupplementCandidatesForReview({
       const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
       if (await exists(path.join(candidateDirectory, 'segment.md'))) {
         ambiguousCandidateCount += 1;
+        reviewEntries.push({
+          category: 'markdown-supplement',
+          objectType: 'supplement',
+          paths: [
+            path.join(candidateDirectory, 'segment.md'),
+            path.join(candidateDirectory, 'supplement.md'),
+          ],
+          reason: 'ambiguous-candidate',
+        });
         continue;
       }
       const candidate = parseWorkspaceMarkdownObjectCandidate({
@@ -1825,30 +1934,46 @@ async function classifyNoteSupplementCandidatesForReview({
         ('id' in candidate.data ? candidate.data.id : undefined) ??
         directorySupplementIdHint(entry.name);
       if (candidateId) {
-        idCounts.set(candidateId, (idCounts.get(candidateId) ?? 0) + 1);
+        const paths = idPaths.get(candidateId) ?? [];
+        paths.push(path.join(candidateDirectory, 'supplement.md'));
+        idPaths.set(candidateId, paths);
       }
     } catch {
       continue;
     }
   }
 
+  for (const paths of idPaths.values()) {
+    if (paths.length > 1) {
+      reviewEntries.push({
+        category: 'markdown-supplement',
+        objectType: 'supplement',
+        paths,
+        reason: 'duplicate-id',
+      });
+    }
+  }
+
   return {
     ambiguousCandidateCount,
     duplicateSupplementIds: new Set(
-      [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id)
+      [...idPaths.entries()].filter(([, paths]) => paths.length > 1).map(([id]) => id)
     ),
+    reviewEntries,
   };
 }
 
 async function reconcileNoteSupplementsInSegmentDirectory({
   memoryId,
   recordingDirectory,
+  reviewEntries,
   rootPath,
   segmentId,
   workspaceId,
 }: {
   readonly memoryId: string;
   readonly recordingDirectory: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
   readonly segmentId: string;
   readonly workspaceId: string;
@@ -1874,6 +1999,9 @@ async function reconcileNoteSupplementsInSegmentDirectory({
       level: 'warn',
     });
   }
+  for (const entry of review.reviewEntries) {
+    pushReviewEntry(reviewEntries, entry);
+  }
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
@@ -1894,6 +2022,7 @@ async function reconcileNoteSupplementsInSegmentDirectory({
         candidateIdentity,
         directoryName: entry.name,
         memoryId,
+        ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
         segmentId,
         workspaceId,
@@ -3932,6 +4061,7 @@ async function listValidSegmentSupplementsFromDirectory({
   segmentId,
   recordingDirectory,
   repairFileSpaceCandidates = true,
+  reviewEntries,
 }: {
   readonly rootPath: string;
   readonly workspaceId: string;
@@ -3939,6 +4069,7 @@ async function listValidSegmentSupplementsFromDirectory({
   readonly segmentId: string;
   readonly recordingDirectory: string;
   readonly repairFileSpaceCandidates?: boolean;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
 }): Promise<WorkspaceSegmentSupplementProjection[]> {
   const supplementsDirectory = await resolveSafeWorkspaceChild(
     rootPath,
@@ -3948,6 +4079,7 @@ async function listValidSegmentSupplementsFromDirectory({
     await reconcileNoteSupplementsInSegmentDirectory({
       memoryId,
       recordingDirectory,
+      ...(reviewEntries ? { reviewEntries } : {}),
       rootPath,
       segmentId,
       workspaceId,
@@ -4275,6 +4407,7 @@ async function passivelyReconcileExistingTiptapSidecar({
   markdownFileName,
   noteManifest,
   objectType,
+  reviewEntries,
   rootPath,
 }: {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
@@ -4283,6 +4416,7 @@ async function passivelyReconcileExistingTiptapSidecar({
   readonly markdownFileName: 'segment.md' | 'supplement.md';
   readonly noteManifest?: NoteSegmentObjectManifest | NoteSupplementObjectManifest;
   readonly objectType: 'segment' | 'supplement';
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<boolean> {
   if (!(await existingTiptapSidecarInKnownDirectory({ directory, directoryIdentity }))) {
@@ -4350,6 +4484,14 @@ async function passivelyReconcileExistingTiptapSidecar({
       },
       level: 'warn',
     });
+    pushTiptapSidecarReviewEntry({
+      directory,
+      kind,
+      markdownFileName,
+      objectType,
+      reason: 'content-conflict',
+      ...(reviewEntries ? { reviewEntries } : {}),
+    });
     return false;
   }
 
@@ -4363,6 +4505,14 @@ async function passivelyReconcileExistingTiptapSidecar({
         reason: reconciled.reason,
       },
       level: 'warn',
+    });
+    pushTiptapSidecarReviewEntry({
+      directory,
+      kind,
+      markdownFileName,
+      objectType,
+      reason: reconciled.reason,
+      ...(reviewEntries ? { reviewEntries } : {}),
     });
     return false;
   }
@@ -4380,10 +4530,12 @@ async function passivelyReconcileExistingTiptapSidecar({
 async function passivelyReconcileExistingTiptapSidecarsForSupplements({
   assertWorkspaceUsable: assertUsable,
   fileTruth,
+  reviewEntries,
   rootPath,
 }: {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly fileTruth: FinalizedSegmentFileTruth;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<boolean> {
   const { metadata, recordingDirectory, segmentId } = fileTruth;
@@ -4457,6 +4609,7 @@ async function passivelyReconcileExistingTiptapSidecarsForSupplements({
         markdownFileName: 'supplement.md',
         ...(candidate.metadata.kind === 'note' ? { noteManifest: candidate.metadata } : {}),
         objectType: 'supplement',
+        ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
       })) || bodyMarkdownChanged;
   }
@@ -4467,11 +4620,13 @@ async function passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
   assertWorkspaceUsable: assertUsable,
   memory,
   memoryDirectoryPath,
+  reviewEntries,
   rootPath,
 }: {
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
   readonly memory: MemoryFileTruth;
   readonly memoryDirectoryPath: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<{
   readonly bodyMarkdownChanged: boolean;
@@ -4481,6 +4636,7 @@ async function passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
     rootPath,
     memoryId: memory.memoryId,
     memoryDirectoryPath,
+    ...(reviewEntries ? { reviewEntries } : {}),
   });
 
   let bodyMarkdownChanged = false;
@@ -4494,6 +4650,7 @@ async function passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
         markdownFileName: 'segment.md',
         ...(fileTruth.metadata.kind === 'note' ? { noteManifest: fileTruth.metadata } : {}),
         objectType: 'segment',
+        ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
       })) || bodyMarkdownChanged;
     assertWorkspaceUsable(assertUsable);
@@ -4501,6 +4658,7 @@ async function passivelyReconcileExistingTiptapSidecarsForMemoryDirectory({
       (await passivelyReconcileExistingTiptapSidecarsForSupplements({
         ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
         fileTruth,
+        ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
       })) || bodyMarkdownChanged;
   }
@@ -4561,17 +4719,20 @@ async function listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
   memoryId,
   memoryDirectoryPath,
   repairFileSpaceCandidates = true,
+  reviewEntries,
 }: {
   readonly rootPath: string;
   readonly memoryId: string;
   readonly memoryDirectoryPath: string;
   readonly repairFileSpaceCandidates?: boolean;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
 }): Promise<FinalizedSegmentFileTruth[]> {
   if (repairFileSpaceCandidates) {
     await reconcileNoteSegmentsInMemoryDirectory({
       rootPath,
       memoryId,
       memoryDirectoryPath,
+      ...(reviewEntries ? { reviewEntries } : {}),
     });
   }
   const segmentsDirectory = await resolveSafeWorkspaceChild(
@@ -4629,11 +4790,13 @@ async function summarizeMemoryFromFileTruths({
   fileTruths,
   memory,
   repairFileSpaceCandidates = true,
+  reviewEntries,
   rootPath,
 }: {
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
   readonly repairFileSpaceCandidates?: boolean;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   let segmentCount = 0;
@@ -4655,6 +4818,7 @@ async function summarizeMemoryFromFileTruths({
         segmentId: fileTruth.segmentId,
         recordingDirectory: fileTruth.recordingDirectory,
         repairFileSpaceCandidates,
+        ...(reviewEntries ? { reviewEntries } : {}),
       });
       updatedAt = latestIsoTimestamp(
         updatedAt,
@@ -4713,11 +4877,13 @@ async function summarizeMemoryFromDirectory({
   fileTruths,
   memory,
   memoryDirectoryPath,
+  reviewEntries,
   rootPath,
 }: {
   readonly fileTruths?: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
   readonly memoryDirectoryPath: string;
+  readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
 }): Promise<MemorySummary> {
   await beforeSegmentFileTruthListForTest?.();
@@ -4728,8 +4894,10 @@ async function summarizeMemoryFromDirectory({
         rootPath,
         memoryId: memory.memoryId,
         memoryDirectoryPath,
+        ...(reviewEntries ? { reviewEntries } : {}),
       })),
     memory,
+    ...(reviewEntries ? { reviewEntries } : {}),
     rootPath,
   });
 }
@@ -5097,6 +5265,7 @@ export async function rebuildWorkspaceReadModel(
 ): Promise<{
   readonly memories: MemorySummary[];
   readonly assertMemoriesRootCurrent: () => Promise<void>;
+  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
 }> {
   const memoriesDirectory = await resolveSafeWorkspaceChild(
     rootPath,
@@ -5108,6 +5277,7 @@ export async function rebuildWorkspaceReadModel(
   const entries = await readExistingDirectoryEntries(memoriesDirectory);
   await assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity);
   const memories: MemorySummary[] = [];
+  const reviewEntries: WorkspaceReviewEntryInput[] = [];
   for (const entry of entries) {
     assertWorkspaceUsable(assertUsable);
     if (!entry.isDirectory()) {
@@ -5130,6 +5300,7 @@ export async function rebuildWorkspaceReadModel(
             ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
             memory,
             memoryDirectoryPath,
+            reviewEntries,
             rootPath,
           });
         } catch (error) {
@@ -5142,6 +5313,7 @@ export async function rebuildWorkspaceReadModel(
       memories.push(
         await summarizeMemoryFromDirectory({
           ...(fileTruths ? { fileTruths } : {}),
+          reviewEntries,
           rootPath,
           memory,
           memoryDirectoryPath,
@@ -5183,6 +5355,7 @@ export async function rebuildWorkspaceReadModel(
     memories: sortedMemories,
     assertMemoriesRootCurrent: () =>
       assertSameDirectoryPathAsync(memoriesDirectory, memoriesDirectoryIdentity),
+    reviewEntries,
   };
 }
 
