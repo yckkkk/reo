@@ -1696,6 +1696,8 @@ test('finalized note segment content read syncs sidecar-authored colored highlig
     throw new Error('content read must succeed');
   }
   assert.match(content.bodyMarkdown, /var\(--tt-color-highlight-green\)/);
+  assert.deepEqual(content.bodyTiptapJson, coloredHighlight);
+  assert.equal(content.baselineTiptapContentHash, hashTiptapJsonContent(coloredHighlight));
   const persisted = parseWorkspaceMarkdownObject({
     markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
     objectType: 'segment',
@@ -1709,6 +1711,9 @@ test('finalized note segment content read syncs sidecar-authored colored highlig
     await readFile(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`), 'utf8')
   ) as { readonly bodyByteLength?: unknown };
   assert.equal(manifest.bodyByteLength, Buffer.byteLength(persisted.content, 'utf8'));
+  const updatedSidecar = await readTiptapContentSidecar(segmentDirectory);
+  assert.equal(updatedSidecar.source.hash, content.baselineContentHash);
+  assert.equal(updatedSidecar.contentHash, content.baselineTiptapContentHash);
 });
 
 test('finalized note segment save keeps manifest byte length aligned with persisted markdown body', async () => {

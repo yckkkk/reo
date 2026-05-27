@@ -141,6 +141,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
             <Button
               type="button"
               onClick={setLink}
+              aria-label="应用链接"
               title="应用链接"
               disabled={!url && !isActive}
               variant="ghost"
@@ -156,6 +157,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
               <Button
                 type="button"
                 onClick={openLink}
+                aria-label="打开链接"
                 title="打开链接"
                 disabled={!url && !isActive}
                 variant="ghost"
@@ -168,6 +170,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
               <Button
                 type="button"
                 onClick={removeLink}
+                aria-label="移除链接"
                 title="移除链接"
                 disabled={!url && !isActive}
                 variant="ghost"

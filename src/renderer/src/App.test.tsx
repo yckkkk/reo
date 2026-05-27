@@ -134,6 +134,37 @@ describe('App', () => {
     };
   }
 
+  function richMarkedNoteTiptapDoc() {
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'JSON highlight',
+              marks: [
+                {
+                  type: 'highlight',
+                  attrs: {
+                    color: 'var(--tt-color-highlight-green)',
+                  },
+                },
+              ],
+            },
+            { type: 'text', text: ' and ' },
+            {
+              type: 'text',
+              text: 'JSON underline',
+              marks: [{ type: 'underline' }],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
   function transcriptTiptapDoc(text: string) {
     return text.length > 0 ? noteTiptapDoc(text) : { type: 'doc', content: [] };
   }
@@ -4566,6 +4597,157 @@ describe('App', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('reloads clean Note editor JSON-only rich marks from file truth events without reselect', async () => {
+    const user = userEvent.setup();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: true,
+      supplementCount: 0,
+    };
+    const snapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [memory],
+    };
+    const noteSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_note_1',
+      type: 'note' as const,
+      title: '笔记1',
+      createdAt: '2026-05-06T13:09:00.000Z',
+      updatedAt: '2026-05-06T13:09:00.000Z',
+      bodyByteLength: 24,
+      supplementCount: 0,
+      supplements: [],
+    };
+    let currentNoteContent = {
+      bodyByteLength: 24,
+      bodyMarkdown: 'Disk before JSON sidecar',
+      bodyTiptapJson: noteTiptapDoc('Disk before JSON sidecar'),
+      baselineContentHash: BASELINE_HASH_A,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+    };
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: snapshot,
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...memory,
+          workspaceId: 'ws_1',
+          segments: [noteSegment],
+        },
+      },
+    }));
+    reoWorkspace.readSegmentContent.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        type: 'note',
+        title: '笔记1',
+        ...currentNoteContent,
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByText('Disk before JSON sidecar');
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    const editor = await openInlineNoteEditor(user);
+    const body = within(editor).getByLabelText('笔记正文');
+    expectRichEditorContent(body, 'Disk before JSON sidecar');
+    const snapshotReadCountBeforeFileEvent = reoWorkspace.readWorkspaceSnapshot.mock.calls.length;
+    const contentReadCountBeforeFileEvent = reoWorkspace.readSegmentContent.mock.calls.filter(
+      ([payload]) => payload.segmentId === 'seg_note_1'
+    ).length;
+    currentNoteContent = {
+      bodyByteLength: 128,
+      bodyMarkdown: 'Markdown fallback stayed plain and does not contain JSON marks',
+      bodyTiptapJson: richMarkedNoteTiptapDoc(),
+      baselineContentHash: BASELINE_HASH_B,
+      baselineTiptapContentHash: BASELINE_TIPTAP_HASH_B,
+    };
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 2,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot.mock.calls.length).toBeGreaterThan(
+        snapshotReadCountBeforeFileEvent
+      )
+    );
+    await waitFor(() =>
+      expect(
+        reoWorkspace.readSegmentContent.mock.calls.filter(
+          ([payload]) => payload.segmentId === 'seg_note_1'
+        ).length
+      ).toBeGreaterThan(contentReadCountBeforeFileEvent)
+    );
+    await waitFor(() => expectRichEditorContent(body, ['JSON highlight', 'JSON underline']));
+    expect(body).not.toHaveTextContent('Markdown fallback stayed plain');
+    const highlighted = within(body).getByText('JSON highlight');
+    expect(highlighted.closest('mark')).toHaveAttribute(
+      'data-color',
+      'var(--tt-color-highlight-green)'
+    );
+    const underlined = within(body).getByText('JSON underline');
+    expect(underlined.closest('u')).not.toBeNull();
+  });
+
   it('detects body-only Note editor refresh when the Workspace snapshot is unchanged', async () => {
     const user = userEvent.setup();
     const memory = {
@@ -4611,6 +4793,12 @@ describe('App', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
+    });
+    const supplementContentKey = segmentSupplementContentQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_note_1',
+      supplementId: 'sup_note_1',
     });
     const memoryDetailKey = memoryDetailQueryKey({
       workspaceId: 'ws_1',
@@ -4699,6 +4887,9 @@ describe('App', () => {
       );
     expect(contentInvalidation).toBeDefined();
     expect(contentInvalidation?.predicate?.({ queryKey: memoryDetailKey } as never)).toBe(true);
+    expect(contentInvalidation?.predicate?.({ queryKey: supplementContentKey } as never)).toBe(
+      true
+    );
     expect(
       contentInvalidation?.predicate?.({
         queryKey: ['workspace', 'segment-content', 'other_workspace', 'mem_birthday', 'seg_note_1'],

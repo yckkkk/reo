@@ -212,7 +212,19 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   const editSkillText = await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8');
   assert.match(editSkillText, /^name: reo-edit/m);
   assert.match(editSkillText, /Rename/);
-  assert.match(editSkillText, /var\(--tt-color-highlight-blue\)/);
+  for (const expected of [
+    /Reo Markdown profile/,
+    /# Heading/,
+    /\[text\]\(https:\/\/example\.com\)/,
+    /- \[ \] task/,
+    /var\(--tt-color-highlight-blue\)/,
+    /<p style="text-align: center">text<\/p>/,
+    /```ts\nconst value = 1\n```/,
+    /edit only the `content` field/,
+    /Do not maintain `source\.hash` or `contentHash`/,
+  ]) {
+    assert.match(editSkillText, expected);
+  }
   const scriptText = await readFile(
     path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'),
     'utf8'

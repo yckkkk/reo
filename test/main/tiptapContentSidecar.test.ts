@@ -62,6 +62,58 @@ function writableSidecar(sidecar: Awaited<ReturnType<typeof readTiptapContentSid
   return sidecarFile;
 }
 
+type WritableSidecar = ReturnType<typeof writableSidecar>;
+
+async function writeSidecarContent(
+  directory: string,
+  content: JSONContent,
+  overrides: Partial<WritableSidecar> = {}
+): Promise<string> {
+  const sidecar = await readTiptapContentSidecar(directory);
+  const text = `${JSON.stringify({ ...writableSidecar(sidecar), ...overrides, content }, null, 2)}\n`;
+  await writeFile(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE), text);
+  return text;
+}
+
+async function reconcileSidecarAuthoredContent({
+  content,
+  expectedMarkdown,
+}: {
+  readonly content: JSONContent;
+  readonly expectedMarkdown: readonly RegExp[];
+}): Promise<void> {
+  const directory = await objectDirectory();
+  let bodyMarkdown = 'Original body\n';
+  try {
+    const initial = await reconcileTiptapContentSidecar({
+      bodyMarkdown,
+      objectDirectory: directory,
+    });
+    assert.equal(initial.ok, true);
+
+    await writeSidecarContent(directory, content);
+
+    const reconciled = await reconcileTiptapContentSidecar({
+      bodyMarkdown,
+      objectDirectory: directory,
+      writeBodyMarkdown: async (nextBodyMarkdown: string) => {
+        bodyMarkdown = nextBodyMarkdown;
+      },
+    });
+
+    assert.equal(reconciled.ok, true);
+    for (const expected of expectedMarkdown) {
+      assert.match(bodyMarkdown, expected);
+    }
+    const updated = await readTiptapContentSidecar(directory);
+    assert.deepEqual(updated.content, content);
+    assert.equal(updated.source.hash, reconciled.baselineContentHash);
+    assert.equal(updated.contentHash, reconciled.baselineTiptapContentHash);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+}
+
 test('tiptap content sidecar is generated from markdown when missing', async () => {
   const directory = await objectDirectory();
   try {
@@ -85,21 +137,14 @@ test('tiptap content sidecar updates markdown when json adds highlight and under
   const directory = await objectDirectory();
   let bodyMarkdown = 'Original body\n';
   try {
+    const nextContent = highlightedAndUnderlinedDoc();
     const initial = await reconcileTiptapContentSidecar({
       bodyMarkdown,
       objectDirectory: directory,
     });
     assert.equal(initial.ok, true);
 
-    const sidecar = await readTiptapContentSidecar(directory);
-    await writeFile(
-      path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE),
-      `${JSON.stringify(
-        { ...writableSidecar(sidecar), content: highlightedAndUnderlinedDoc() },
-        null,
-        2
-      )}\n`
-    );
+    await writeSidecarContent(directory, nextContent);
 
     const reconciled = await reconcileTiptapContentSidecar({
       bodyMarkdown,
@@ -114,6 +159,7 @@ test('tiptap content sidecar updates markdown when json adds highlight and under
     assert.match(bodyMarkdown, /\+\+underlined\+\+/);
     assert.equal(reconciled.bodyMarkdown, bodyMarkdown);
     const updated = await readTiptapContentSidecar(directory);
+    assert.deepEqual(updated.content, nextContent);
     assert.equal(updated.source.hash, reconciled.baselineContentHash);
     assert.equal(updated.contentHash, reconciled.baselineTiptapContentHash);
   } finally {
@@ -135,19 +181,9 @@ test('tiptap content sidecar mirrors json edits even when contentHash is updated
     });
     assert.equal(initial.ok, true);
 
-    const sidecar = await readTiptapContentSidecar(directory);
-    await writeFile(
-      path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE),
-      `${JSON.stringify(
-        {
-          ...writableSidecar(sidecar),
-          contentHash: hashTiptapJsonContent(coloredHighlight),
-          content: coloredHighlight,
-        },
-        null,
-        2
-      )}\n`
-    );
+    await writeSidecarContent(directory, coloredHighlight, {
+      contentHash: hashTiptapJsonContent(coloredHighlight),
+    });
 
     const reconciled = await reconcileTiptapContentSidecar({
       bodyMarkdown,
@@ -163,10 +199,159 @@ test('tiptap content sidecar mirrors json edits even when contentHash is updated
       /<mark data-color="var\(--tt-color-highlight-green\)" style="background-color: var\(--tt-color-highlight-green\); color: inherit">Color highlight<\/mark>/
     );
     const updated = await readTiptapContentSidecar(directory);
+    assert.deepEqual(updated.content, coloredHighlight);
     assert.equal(updated.source.hash, reconciled.baselineContentHash);
     assert.equal(updated.contentHash, reconciled.baselineTiptapContentHash);
   } finally {
     await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('tiptap content sidecar mirrors json-only durable toolbar matrix to markdown', async (t) => {
+  const cases: readonly {
+    readonly name: string;
+    readonly content: JSONContent;
+    readonly expectedMarkdown: readonly RegExp[];
+  }[] = [
+    {
+      name: 'link mark',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Spec link',
+                marks: [
+                  {
+                    type: 'link',
+                    attrs: {
+                      href: 'https://example.com',
+                      target: '_blank',
+                      rel: 'noopener noreferrer nofollow',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      expectedMarkdown: [/\[Spec link\]\(https:\/\/example\.com\)/],
+    },
+    {
+      name: 'heading node',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 3 },
+            content: [{ type: 'text', text: 'Sidecar heading' }],
+          },
+        ],
+      },
+      expectedMarkdown: [/^### Sidecar heading/m],
+    },
+    {
+      name: 'bullet ordered and task lists',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'bulletList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'bullet item' }] }],
+              },
+            ],
+          },
+          {
+            type: 'orderedList',
+            attrs: { start: 3 },
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ordered item' }] }],
+              },
+            ],
+          },
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { checked: true },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'done' }] }],
+              },
+            ],
+          },
+        ],
+      },
+      expectedMarkdown: [/- bullet item/, /3\. ordered item/, /- \[x\] done/],
+    },
+    {
+      name: 'inline code and code block',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'inline', marks: [{ type: 'code' }] }],
+          },
+          {
+            type: 'codeBlock',
+            attrs: { language: 'ts' },
+            content: [{ type: 'text', text: 'const value = 1' }],
+          },
+        ],
+      },
+      expectedMarkdown: [/`inline`/, /```ts\nconst value = 1\n```/],
+    },
+    {
+      name: 'blockquote node',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'blockquote',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'quoted' }] }],
+          },
+        ],
+      },
+      expectedMarkdown: [/> quoted/],
+    },
+    {
+      name: 'paragraph and heading alignment',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textAlign: 'center' },
+            content: [{ type: 'text', text: 'center paragraph' }],
+          },
+          {
+            type: 'heading',
+            attrs: { level: 2, textAlign: 'right' },
+            content: [{ type: 'text', text: 'right heading' }],
+          },
+        ],
+      },
+      expectedMarkdown: [
+        /<p style="text-align: center">center paragraph<\/p>/,
+        /<h2 style="text-align: right">right heading<\/h2>/,
+      ],
+    },
+  ];
+
+  for (const testCase of cases) {
+    await t.test(testCase.name, async () => {
+      await reconcileSidecarAuthoredContent(testCase);
+    });
   }
 });
 
@@ -204,11 +389,7 @@ test('tiptap content sidecar reports conflict when markdown and json both change
     });
     assert.equal(initial.ok, true);
 
-    const sidecar = await readTiptapContentSidecar(directory);
-    await writeFile(
-      path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE),
-      `${JSON.stringify({ ...writableSidecar(sidecar), content: paragraphDoc('Codex body') }, null, 2)}\n`
-    );
+    const text = await writeSidecarContent(directory, paragraphDoc('Codex body'));
 
     const result = await reconcileTiptapContentSidecar({
       bodyMarkdown: 'Human body\n',
@@ -220,10 +401,7 @@ test('tiptap content sidecar reports conflict when markdown and json both change
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'content-conflict');
-    assert.equal(
-      await readFile(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'),
-      `${JSON.stringify({ ...writableSidecar(sidecar), content: paragraphDoc('Codex body') }, null, 2)}\n`
-    );
+    assert.equal(await readFile(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'), text);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

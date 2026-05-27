@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { JSONContent } from '@tiptap/core';
 import { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -41,6 +42,44 @@ function renderEditor(
       {...(options.valueTiptapJson ? { valueTiptapJson: options.valueTiptapJson } : {})}
     />
   );
+}
+
+function walkJsonContent(node: JSONContent | null | undefined, visit: (node: JSONContent) => void) {
+  if (!node) return;
+  visit(node);
+  for (const child of node.content ?? []) {
+    walkJsonContent(child, visit);
+  }
+}
+
+function textNodeWithMark(
+  doc: JSONContent | null | undefined,
+  text: string,
+  markType: string
+): JSONContent | null {
+  let matched: JSONContent | null = null;
+  walkJsonContent(doc, (node) => {
+    if (matched || node.type !== 'text' || node.text !== text) {
+      return;
+    }
+    if ((node.marks ?? []).some((mark) => mark.type === markType)) {
+      matched = node;
+    }
+  });
+  return matched;
+}
+
+function firstNodeOfType(
+  doc: JSONContent | null | undefined,
+  nodeType: string
+): JSONContent | null {
+  let matched: JSONContent | null = null;
+  walkJsonContent(doc, (node) => {
+    if (!matched && node.type === nodeType) {
+      matched = node;
+    }
+  });
+  return matched;
 }
 
 describe('LightweightMarkdownEditorSurface', () => {
@@ -381,7 +420,7 @@ describe('LightweightMarkdownEditorSurface', () => {
 
     await user.click(screen.getByRole('button', { name: '链接' }));
     await user.type(await screen.findByPlaceholderText('粘贴链接...'), 'https://tiptap.dev/docs');
-    await user.click(screen.getByTitle('打开链接'));
+    await user.click(screen.getByRole('button', { name: '打开链接' }));
 
     expect(openMarkdownExternalLink).toHaveBeenCalledWith({ url: 'https://tiptap.dev/docs' });
     expect(windowOpenSpy).not.toHaveBeenCalled();
@@ -491,7 +530,8 @@ describe('LightweightMarkdownEditorSurface', () => {
   it('offers official highlight colors and serializes chosen color as Markdown-compatible HTML', async () => {
     const user = userEvent.setup();
     const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
-    renderEditor('Color', editorHandleRef);
+    const onRichChange = vi.fn();
+    renderEditor('Color', editorHandleRef, { onRichChange });
 
     const editor = screen.getByRole('textbox', { name: '笔记正文' });
     await user.dblClick(within(editor).getByText('Color'));
@@ -502,6 +542,185 @@ describe('LightweightMarkdownEditorSurface', () => {
       expect(editorHandleRef.current?.getMarkdown()).toContain(
         '<mark data-color="var(--tt-color-highlight-green)" style="background-color: var(--tt-color-highlight-green); color: inherit">Color</mark>'
       );
+    });
+    await waitFor(() => {
+      const highlighted = textNodeWithMark(
+        onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson,
+        'Color',
+        'highlight'
+      );
+      expect(highlighted?.marks?.[0]?.attrs).toEqual({
+        color: 'var(--tt-color-highlight-green)',
+      });
+    });
+  });
+
+  it('serializes heading dropdown commands as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Heading', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(within(editor).getByText('Heading'));
+    await user.click(screen.getByRole('button', { name: '标题' }));
+    await user.click(await screen.findByRole('menuitem', { name: '标题 2' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toMatch(/^## Heading/m);
+    });
+    await waitFor(() => {
+      const heading = firstNodeOfType(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, 'heading');
+      expect(heading?.attrs).toMatchObject({ level: 2 });
+    });
+  });
+
+  it.each([
+    { buttonName: '下划线', markType: 'underline', text: 'Underline', markdown: '++Underline++' },
+    { buttonName: '上标', markType: 'superscript', text: 'Sup', markdown: '<sup>Sup</sup>' },
+    { buttonName: '下标', markType: 'subscript', text: 'Sub', markdown: '<sub>Sub</sub>' },
+    { buttonName: '行内代码', markType: 'code', text: 'Code', markdown: '`Code`' },
+  ])(
+    'serializes toolbar $buttonName mark commands as Markdown and Tiptap JSON',
+    async ({ buttonName, markType, text, markdown }) => {
+      const user = userEvent.setup();
+      const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+      const onRichChange = vi.fn();
+      renderEditor(text, editorHandleRef, { onRichChange });
+
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+      await user.dblClick(within(editor).getByText(text));
+      await user.click(screen.getByRole('button', { name: buttonName }));
+
+      await waitFor(() => {
+        expect(editorHandleRef.current?.getMarkdown()).toContain(markdown);
+      });
+      await waitFor(() => {
+        expect(
+          textNodeWithMark(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, text, markType)
+        ).not.toBeNull();
+      });
+    }
+  );
+
+  it('serializes link toolbar commands as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Link', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.dblClick(within(editor).getByText('Link'));
+    await user.click(screen.getByRole('button', { name: '链接' }));
+    await user.type(await screen.findByPlaceholderText('粘贴链接...'), 'https://example.com');
+    await user.click(screen.getByRole('button', { name: '应用链接' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toContain('[Link](https://example.com)');
+    });
+    await waitFor(() => {
+      const linked = textNodeWithMark(
+        onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson,
+        'Link',
+        'link'
+      );
+      expect(linked?.marks?.[0]?.attrs).toMatchObject({ href: 'https://example.com' });
+    });
+  });
+
+  it('serializes blockquote toolbar commands as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Quote', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(within(editor).getByText('Quote'));
+    await user.click(screen.getByRole('button', { name: '引用' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toMatch(/^> Quote/m);
+    });
+    await waitFor(() => {
+      expect(
+        firstNodeOfType(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, 'blockquote')
+      ).not.toBeNull();
+    });
+  });
+
+  it('serializes code block toolbar commands as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('const value = 1', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(within(editor).getByText('const value = 1'));
+    await user.click(screen.getByRole('button', { name: '代码块' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toContain('```\nconst value = 1\n```');
+    });
+    await waitFor(() => {
+      expect(
+        firstNodeOfType(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, 'codeBlock')
+      ).not.toBeNull();
+    });
+  });
+
+  it('serializes task list toolbar commands and checkbox state as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Task item', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(within(editor).getByText('Task item'));
+    await user.click(screen.getByRole('button', { name: '列表' }));
+    await user.click(await screen.findByRole('menuitem', { name: /待办列表/ }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toMatch(/^- \[ \] Task item/m);
+    });
+    await waitFor(() => {
+      expect(
+        firstNodeOfType(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, 'taskList')
+      ).not.toBeNull();
+    });
+
+    await user.click(within(editor).getByRole('checkbox', { name: '待办复选框：Task item' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toMatch(/^- \[x\] Task item/m);
+    });
+    await waitFor(() => {
+      expect(
+        firstNodeOfType(editorHandleRef.current?.getTiptapJson(), 'taskItem')?.attrs
+      ).toMatchObject({ checked: true });
+    });
+  });
+
+  it('serializes alignment toolbar commands as Markdown and Tiptap JSON', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Centered', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.click(within(editor).getByText('Centered'));
+    await user.click(screen.getByRole('button', { name: '居中对齐' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).toContain(
+        '<p style="text-align: center">Centered</p>'
+      );
+    });
+    await waitFor(() => {
+      const paragraph = firstNodeOfType(
+        onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson,
+        'paragraph'
+      );
+      expect(paragraph?.attrs).toMatchObject({ textAlign: 'center' });
     });
   });
 
