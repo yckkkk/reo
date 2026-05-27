@@ -65,6 +65,8 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '',
   '这个入口的目标是降低判断成本，不是限制能力。Agent 可以编辑任何文件；一般任务应优先读写用户语义文件，复杂一致性由 Reo 在打开、刷新、保存时收敛。',
   '',
+  '普通编辑、创建、重命名和移动任务不需要离开当前记忆空间查询 Reo 仓库源码、全局记忆或历史文档；当前 `AGENTS.md`、`skills/reo-edit/SKILL.md` 和目标文件通常已经足够。',
+  '',
   '## 核心实体',
   '',
   '- Memory space：当前文件夹本身，是一个可被 Finder、编辑器和 agent 打开的 Reo 记忆空间。',
@@ -106,6 +108,17 @@ export const DEFAULT_REO_EDIT_SKILL_MD =
     '# Reo Edit',
     '',
     'Use this skill for normal Reo memory-space file work. The goal is to edit files directly and let Reo reconcile deterministic structure later.',
+    '',
+    '## Quick Start',
+    '',
+    'For ordinary edit, create, rename, move or organize tasks:',
+    '',
+    '1. Read the target `memory.md`, `segment.md` or `supplement.md` and nearby directory names.',
+    '2. Apply the requested change to ordinary files and directories under `memories/`.',
+    '3. Preserve existing stable ids; add simple frontmatter ids only for new Segment or SegmentSupplement objects.',
+    '4. Verify direct file effects, then stop.',
+    '',
+    'Do not read Reo repo source, global agent memories, `.reo`, hash fields, manifests or sidecars for ordinary tasks. Use those only when the user asks for low-level repair/testing or Reo reports an explicit conflict.',
     '',
     '## Default Path',
     '',
@@ -1392,6 +1405,12 @@ export async function openWorkspaceFiles({
     assertWorkspaceUsable(assertUsable);
     index = await readOrRebuildIndex(canonicalRoot, {
       assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
+    });
+    assertWorkspaceUsable(assertUsable);
+    metadata = await repairWorkspaceTitleMetadataMirror({
+      canonicalRoot,
+      metadata,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
     assertWorkspaceUsable(assertUsable);
   } catch (error) {

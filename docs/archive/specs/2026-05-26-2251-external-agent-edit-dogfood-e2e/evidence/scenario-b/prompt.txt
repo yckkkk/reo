@@ -1,0 +1,17 @@
+你在一个 Reo 记忆空间 root 中工作。请按当前 AGENTS.md 和 skills/reo-edit/SKILL.md 的普通文件路径完成任务。
+
+任务：创建一个新的 Memory。
+
+要求：
+- 新目录路径必须是：memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058
+- 新文件必须是：memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/memory.md
+- memory.md frontmatter title 必须是：Codex Dogfood Memory 17800058
+- 正文必须包含一级标题 Codex Dogfood Memory 17800058
+- 正文必须包含二级标题：Agent dogfood memory creation
+- 正文必须包含两条 bullet，说明这是普通文件创建测试，以及 Reo 应该负责后续投影收敛。
+
+约束：
+- 普通任务只读当前记忆空间内的 AGENTS.md、skills/reo-edit/SKILL.md 和目标附近文件即可。
+- 不要读取 Reo 仓库源码、全局 agent memory 或历史文档。
+- 不要编辑 .reo、hash、manifest 或 sidecar。
+- 完成后只做直接文件存在和内容校验。

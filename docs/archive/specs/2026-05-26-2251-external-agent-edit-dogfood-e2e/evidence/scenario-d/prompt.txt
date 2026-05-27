@@ -1,0 +1,20 @@
+你在一个 Reo 记忆空间 root 中工作。请按当前 AGENTS.md 和 skills/reo-edit/SKILL.md 的普通文件路径完成任务。
+
+任务：重命名并跨 Segment 移动一个 SegmentSupplement。
+
+源目录：memories/mem_20260519032914_666583be--碎片记录/segments/seg_codex_e2e_1779782693--Codex Dogfood Segment 1779861247/supplements/sup_codex_dogfood_1779861247--Codex Dogfood Supplement 1779861247
+目标目录：memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments/seg_codex_dogfood_17800103--Codex Dogfood Segment 17800103/supplements/sup_codex_dogfood_1779861247--Codex Dogfood Moved Supplement 17800218
+
+要求：
+- 移动整个 Supplement 目录到目标 Segment 的 supplements/ 下。
+- 保持已有稳定 id：sup_codex_dogfood_1779861247。
+- 更新 supplement.md frontmatter title 为：Codex Dogfood Moved Supplement 17800218
+- 保持 supplement.md frontmatter id 为：sup_codex_dogfood_1779861247，kind 为 note。
+- 正文一级标题更新为：Codex Dogfood Moved Supplement 17800218
+- 在正文末尾追加一句：Moved by Scenario D 17800218.
+
+约束：
+- 只读当前记忆空间内的 AGENTS.md、skills/reo-edit/SKILL.md 和源/目标附近文件即可。
+- 不要读取 Reo 仓库源码、全局 agent memory 或历史文档。
+- 不要编辑 .reo、hash、manifest 或 sidecar。
+- 完成后只做直接文件存在、旧目录不存在、id/title 内容校验。

@@ -191,6 +191,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
   assert.match(agentsText, /Codex/);
   assert.match(agentsText, /核心实体/);
+  assert.match(agentsText, /不需要离开当前记忆空间查询 Reo 仓库源码/);
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
   assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
@@ -212,6 +213,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   const editSkillText = await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8');
   assert.match(editSkillText, /^name: reo-edit/m);
   assert.match(editSkillText, /Rename/);
+  assert.match(editSkillText, /Verify direct file effects, then stop/);
   for (const expected of [
     /Reo Markdown profile/,
     /# Heading/,
@@ -458,7 +460,7 @@ test('corrupt index rebuilds while corrupt workspace metadata blocks writes', as
     ok: true,
     snapshot: {
       workspaceId: 'ws_rebuild',
-      title: '可重建索引',
+      title: path.basename(root),
       description: '',
       memories: [],
     },
@@ -611,7 +613,7 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     ok: true,
     snapshot: {
       workspaceId: 'ws_rebuild_memories',
-      title: '录音索引',
+      title: path.basename(root),
       description: '',
       memories: [expectedMemory],
     },
@@ -693,7 +695,7 @@ test('open workspace uses a valid index without scanning finalized memory files'
       ok: true,
       snapshot: {
         workspaceId: 'ws_fast_open',
-        title: '快速进入',
+        title: path.basename(root),
         description: '',
         memories: [indexedMemory],
       },
@@ -832,7 +834,7 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     ok: true,
     snapshot: {
       workspaceId: 'ws_stale_index',
-      title: '合法但陈旧索引',
+      title: path.basename(root),
       description: '',
       memories: [],
     },
@@ -1238,6 +1240,32 @@ test('workspace snapshot refresh uses root folder basename when metadata title i
   assert.equal(
     JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
     '生活记呀啊'
+  );
+  assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
+});
+
+test('open workspace uses root folder basename when metadata title is stale', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'reo-open-root-title-stale-'));
+  const root = path.join(parent, '外部改名后的空间');
+  await mkdir(root, { recursive: true });
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '旧空间名',
+    description: '',
+    createWorkspaceId: () => 'ws_open_root_title_stale',
+    now: () => '2026-05-27T06:30:00.000Z',
+  });
+  const previousIndex = await readFile(path.join(root, '.reo', 'index.json'), 'utf8');
+
+  const opened = await openWorkspaceFiles({ rootPath: root });
+
+  assert.equal(opened.ok, true);
+  if (opened.ok) {
+    assert.equal(opened.snapshot.title, '外部改名后的空间');
+  }
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'workspace.json'), 'utf8')).title,
+    '外部改名后的空间'
   );
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });

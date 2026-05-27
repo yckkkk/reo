@@ -1,0 +1,20 @@
+你在一个 Reo 记忆空间 root 中工作。请按当前 AGENTS.md 和 skills/reo-edit/SKILL.md 的 Expert Tiptap JSON 路径完成任务。
+
+任务：只通过同节点 content.tiptap.json 添加一段富结构内容，验证 Reo 后续把 JSON 投影回 Markdown/UI。
+
+目标节点：memories/mem_20260519032914_666583be--碎片记录/segments/seg_codex_e2e_1779782693--Codex Dogfood Segment 1779861247
+目标文件：memories/mem_20260519032914_666583be--碎片记录/segments/seg_codex_e2e_1779782693--Codex Dogfood Segment 1779861247/content.tiptap.json
+
+要求：
+- 只编辑 content.tiptap.json 的顶层 content 字段。
+- 不要编辑 segment.md。
+- 不要维护或改写 source.hash、contentHash、.reo、manifest 或任何 hash 字段。
+- 在 doc.content 末尾追加一个 paragraph，内容包含：
+  - text: "Scenario E purple highlight 17800335"，marks 为 highlight，color 为 "var(--tt-color-highlight-purple)"
+  - text: " and "，无 marks
+  - text: "Scenario E underline 17800335"，marks 为 underline
+- 完成后直接校验 JSON 中存在这两个文本，并校验 segment.md 暂时未被你直接修改。
+
+约束：
+- 只读当前记忆空间内的 AGENTS.md、skills/reo-edit/SKILL.md 和目标节点文件即可。
+- 不要读取 Reo 仓库源码、全局 agent memory 或历史文档。
