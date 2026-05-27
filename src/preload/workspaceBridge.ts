@@ -11,6 +11,7 @@ import {
   WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
@@ -195,6 +196,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     copySegmentSupplementRelativePath: (payload) =>
       invoke<WorkspaceBridgeResponse<'copySegmentSupplementRelativePath'>>(
         WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
+        payload
+      ),
+    copyNeedsReviewAgentPrompt: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyNeedsReviewAgentPrompt'>>(
+        WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
         payload
       ),
     updateMemorySpaceTitle: (payload) =>

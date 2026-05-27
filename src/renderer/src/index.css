@@ -205,6 +205,18 @@
   background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
 }
 
+.reo-toast-close {
+  appearance: none;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.reo-toast-close:hover,
+.reo-toast-close:active,
+.reo-toast-close:focus-visible {
+  background-color: transparent;
+}
+
 .reo-undo-toast::after {
   position: absolute;
   right: 0;

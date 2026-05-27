@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { showReoToast, toast } from '../components/ui/toaster';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
   MemoryStudio,
@@ -23,7 +25,11 @@ import type {
   SavedNoteSegmentContent,
   SavedNoteSegmentSupplementContent,
 } from './finalizedNoteContentSave';
+import { copyNeedsReviewAgentPrompt } from './workspaceApi';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
+import { workspaceReviewToastId } from './workspaceReviewToast';
+
+const REVIEW_PROMPT_COPIED_FEEDBACK_MS = 1800;
 
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
@@ -93,6 +99,84 @@ export function LoadedWorkspaceFrame({
   const snapshotQuery = useQuery(workspaceSnapshotQueryOptions(workspaceSession));
   const snapshot = snapshotQuery.data ?? workspaceSession.snapshot;
   const needsReviewCount = snapshot.review?.needsReviewCount ?? 0;
+  const reviewToastId = workspaceReviewToastId(snapshot.workspaceId);
+  const activeReviewToastIdRef = useRef<string | null>(null);
+  const copiedFeedbackTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const [reviewPromptCopied, setReviewPromptCopied] = useState(false);
+  const clearCopiedFeedbackTimeout = useCallback(() => {
+    if (copiedFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(copiedFeedbackTimeoutRef.current);
+      copiedFeedbackTimeoutRef.current = null;
+    }
+  }, []);
+  const showCopiedFeedback = useCallback(() => {
+    clearCopiedFeedbackTimeout();
+    setReviewPromptCopied(true);
+    copiedFeedbackTimeoutRef.current = window.setTimeout(() => {
+      copiedFeedbackTimeoutRef.current = null;
+      setReviewPromptCopied(false);
+    }, REVIEW_PROMPT_COPIED_FEEDBACK_MS);
+  }, [clearCopiedFeedbackTimeout]);
+  const copyNeedsReviewPrompt = useCallback(() => {
+    void copyNeedsReviewAgentPrompt({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: snapshot.workspaceId,
+      needsReviewCount,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          showReoToast({ type: 'error', title: '无法复制提示词' });
+          return;
+        }
+        showCopiedFeedback();
+      })
+      .catch(() => {
+        showReoToast({ type: 'error', title: '无法复制提示词' });
+      });
+  }, [
+    needsReviewCount,
+    showCopiedFeedback,
+    snapshot.workspaceId,
+    workspaceSession.workspaceHandle,
+  ]);
+
+  useEffect(() => {
+    if (needsReviewCount <= 0) {
+      clearCopiedFeedbackTimeout();
+      setReviewPromptCopied(false);
+      if (activeReviewToastIdRef.current === reviewToastId) {
+        toast.dismiss(reviewToastId);
+        activeReviewToastIdRef.current = null;
+      }
+      return;
+    }
+
+    showReoToast({
+      type: 'reo-doctor',
+      id: reviewToastId,
+      title: `${needsReviewCount}个文件需要检查`,
+      description: '复制提示词给您的Agent',
+      onCopyPrompt: copyNeedsReviewPrompt,
+      copyState: reviewPromptCopied ? 'copied' : 'idle',
+    });
+    activeReviewToastIdRef.current = reviewToastId;
+  }, [
+    clearCopiedFeedbackTimeout,
+    copyNeedsReviewPrompt,
+    needsReviewCount,
+    reviewPromptCopied,
+    reviewToastId,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearCopiedFeedbackTimeout();
+      if (activeReviewToastIdRef.current === reviewToastId) {
+        toast.dismiss(reviewToastId);
+        activeReviewToastIdRef.current = null;
+      }
+    };
+  }, [clearCopiedFeedbackTimeout, reviewToastId]);
 
   return (
     <WorkspaceFrame
@@ -119,17 +203,6 @@ export function LoadedWorkspaceFrame({
         ) : null
       }
     >
-      {needsReviewCount > 0 ? (
-        <div
-          role="status"
-          aria-label="记忆空间需要检查"
-          className="absolute left-24 right-24 top-16 z-20 flex justify-center sm:left-40 sm:right-40"
-        >
-          <div className="max-w-full rounded-md border border-brand-ember/40 bg-card px-12 py-6 text-ui-sm font-medium leading-ui-sm text-foreground shadow-sm">
-            {needsReviewCount} 个文件需要检查 · 运行 reo-doctor
-          </div>
-        </div>
-      ) : null}
       {currentMemory ? (
         <MemoryStudio
           key={currentMemory.memoryId}

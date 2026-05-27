@@ -16,6 +16,7 @@ import {
   WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
+  WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_SEGMENT_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL,
   WORKSPACE_COPY_SEGMENT_SUPPLEMENT_ABSOLUTE_PATH_CHANNEL,
@@ -128,6 +129,7 @@ import {
   workspaceCopyMemoryAbsolutePathRequestSchema,
   workspaceCopyMemorySpaceAbsolutePathRequestSchema,
   workspaceCopyMemoryRelativePathRequestSchema,
+  workspaceCopyNeedsReviewAgentPromptRequestSchema,
   workspaceCopySegmentAbsolutePathRequestSchema,
   workspaceCopySegmentRelativePathRequestSchema,
   workspaceCopySegmentSupplementAbsolutePathRequestSchema,
@@ -232,6 +234,7 @@ import {
   type WorkspaceErrorEnvelope,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
+import { buildWorkspaceReviewAgentPrompt } from '../workspace-contract/workspace-review-prompt.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import {
   createWorkspaceFileTruthWatcherRegistry,
@@ -652,6 +655,10 @@ interface HandleCopySegmentSupplementRelativePathOptions extends HandleWorkspace
   readonly writeText?: WriteClipboardText;
 }
 
+interface HandleCopyNeedsReviewAgentPromptOptions extends HandleWorkspaceRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
 interface HandleRevealMemoryInFinderOptions extends HandleWorkspaceRequestOptions {
   readonly fs?: FsProbe;
   readonly resolver?: ResolveMemoryPaths;
@@ -1013,6 +1020,52 @@ export async function handleCopyMemorySpaceAbsolutePathForTest(
   options: HandleCopyMemorySpaceAbsolutePathOptions
 ): Promise<WorkspaceEntityActionResponse> {
   return handleCopyMemorySpaceAbsolutePathCore(options);
+}
+
+function handleCopyNeedsReviewAgentPromptCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyNeedsReviewAgentPromptOptions): Promise<
+  WorkspaceEntityActionResponse | WorkspaceErrorEnvelope
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCopyNeedsReviewAgentPromptRequestSchema,
+    invalidMessage: 'copyNeedsReviewAgentPrompt request is invalid',
+    run: (request, handle) => {
+      if (request.workspaceId !== handle.workspaceId) {
+        return workspaceError(
+          'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+          'Needs-review prompt copy workspace does not match the active handle'
+        );
+      }
+
+      try {
+        writeText(buildWorkspaceReviewAgentPrompt(request.needsReviewCount));
+      } catch {
+        return workspaceError(
+          'ERR_CLIPBOARD_WRITE_FAILED',
+          'Needs-review prompt could not be copied'
+        );
+      }
+
+      return workspaceEntityActionResponseSchema.parse({ ok: true });
+    },
+  });
+}
+
+export async function handleCopyNeedsReviewAgentPrompt(
+  options: HandleCopyNeedsReviewAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyNeedsReviewAgentPromptCore(options);
+}
+
+export async function handleCopyNeedsReviewAgentPromptForTest(
+  options: HandleCopyNeedsReviewAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyNeedsReviewAgentPromptCore(options);
 }
 
 function handleCopyMemoryAbsolutePathCore({
@@ -5840,6 +5893,16 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL, (event, input) =>
     handleCopySegmentRelativePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL, (event, input) =>
+    handleCopyNeedsReviewAgentPrompt({
       event,
       input,
       expectedSession,

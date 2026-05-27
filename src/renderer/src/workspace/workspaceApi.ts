@@ -126,6 +126,12 @@ export function copySegmentSupplementRelativePath(
   return window.reoWorkspace.copySegmentSupplementRelativePath(payload);
 }
 
+export function copyNeedsReviewAgentPrompt(
+  payload: Parameters<Window['reoWorkspace']['copyNeedsReviewAgentPrompt']>[0]
+) {
+  return window.reoWorkspace.copyNeedsReviewAgentPrompt(payload);
+}
+
 export function updateMemorySpaceTitle(
   payload: Parameters<Window['reoWorkspace']['updateMemorySpaceTitle']>[0]
 ) {

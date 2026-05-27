@@ -343,6 +343,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     copyMemoryRelativePath: entityOk,
     copySegmentRelativePath: entityOk,
     copySegmentSupplementRelativePath: entityOk,
+    copyNeedsReviewAgentPrompt: entityOk,
     updateMemorySpaceTitle: () => ok(scenario.session.snapshot),
     closeWorkspace: () => ok({ closed: true }),
     readWorkspaceSnapshot: () => ok(scenario.session.snapshot),

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   FINALIZE_TRANSCRIPTION_ATTEMPTS,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
+  WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -104,6 +105,7 @@ import {
   workspaceCopySegmentAbsolutePathRequestSchema,
   workspaceCopySegmentSupplementAbsolutePathRequestSchema,
   workspaceCopyMemoryRelativePathRequestSchema,
+  workspaceCopyNeedsReviewAgentPromptRequestSchema,
   workspaceCopySegmentRelativePathRequestSchema,
   workspaceCopySegmentSupplementRelativePathRequestSchema,
   workspaceEntityActionResponseSchema,
@@ -325,6 +327,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:copyMemoryRelativePath',
     'workspace:copySegmentRelativePath',
     'workspace:copySegmentSupplementRelativePath',
+    'workspace:copyNeedsReviewAgentPrompt',
   ]);
   assert.ok(WORKSPACE_IPC_CHANNELS.every((channel) => !channel.includes('*')));
   assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, [
@@ -337,6 +340,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, 'workspace:recordingTranscriptionEvent'],
     [WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, 'workspace:fileTruthChanged'],
     [WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory'],
+    [WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL, 'workspace:copyNeedsReviewAgentPrompt'],
     [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
     [WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment'],
@@ -1051,6 +1055,37 @@ test('workspace IPC channels include entity actions menu shell channels', () => 
   for (const channel of entityActionChannels) {
     assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
   }
+});
+
+test('workspace needs-review prompt copy request is narrow and rejects raw prompt or path payloads', () => {
+  const request = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    needsReviewCount: 1,
+  };
+
+  assert.deepEqual(workspaceCopyNeedsReviewAgentPromptRequestSchema.parse(request), request);
+  assert.equal(
+    workspaceCopyNeedsReviewAgentPromptRequestSchema.safeParse({
+      ...request,
+      prompt: 'run a generic command',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceCopyNeedsReviewAgentPromptRequestSchema.safeParse({
+      ...request,
+      reportPath: '/Users/example/space/.reo/review/needs-review.md',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceCopyNeedsReviewAgentPromptRequestSchema.safeParse({
+      ...request,
+      needsReviewCount: -1,
+    }).success,
+    false
+  );
 });
 
 test('workspace entity action schemas accept memory-space identity only', () => {

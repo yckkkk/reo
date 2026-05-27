@@ -155,6 +155,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     copyMemoryRelativePath: vi.fn(),
     copySegmentRelativePath: vi.fn(),
     copySegmentSupplementRelativePath: vi.fn(),
+    copyNeedsReviewAgentPrompt: vi.fn(),
     closeWorkspace: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),

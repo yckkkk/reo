@@ -25,6 +25,7 @@ const workspaceBridgeKeys = [
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
+  'copyNeedsReviewAgentPrompt',
   'updateMemorySpaceTitle',
   'closeWorkspace',
   'readWorkspaceSnapshot',
@@ -153,6 +154,11 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
   await bridge.updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
   await bridge.readWorkspaceSnapshot({ workspaceHandle: 'wh_1' });
+  await bridge.copyNeedsReviewAgentPrompt({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    needsReviewCount: 1,
+  });
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
   await bridge.restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
@@ -371,6 +377,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:removeMemorySpace',
     'workspace:updateMemorySpaceTitle',
     'workspace:readWorkspaceSnapshot',
+    'workspace:copyNeedsReviewAgentPrompt',
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
@@ -417,7 +424,7 @@ test('workspace preload bridge exposes entity actions menu methods', () => {
   }
 });
 
-test('workspace preload bridge maps entity actions menu methods to explicit channels', async () => {
+test('workspace preload bridge maps entity action and review prompt copy methods to explicit channels', async () => {
   const memorySpacePayload = { workspaceId: 'ws_1' };
   const memoryPayload = {
     workspaceHandle: 'wh_1',
@@ -460,6 +467,11 @@ test('workspace preload bridge maps entity actions menu methods to explicit chan
   await bridge.copyMemoryRelativePath(memoryPayload);
   await bridge.copySegmentRelativePath(segmentPayload);
   await bridge.copySegmentSupplementRelativePath(supplementPayload);
+  await bridge.copyNeedsReviewAgentPrompt({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    needsReviewCount: 1,
+  });
 
   assert.deepEqual(calls, [
     { channel: 'workspace:revealMemorySpaceInFinder', payload: memorySpacePayload },
@@ -477,6 +489,14 @@ test('workspace preload bridge maps entity actions menu methods to explicit chan
     { channel: 'workspace:copyMemoryRelativePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentRelativePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementRelativePath', payload: supplementPayload },
+    {
+      channel: 'workspace:copyNeedsReviewAgentPrompt',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        needsReviewCount: 1,
+      },
+    },
   ]);
 });
 

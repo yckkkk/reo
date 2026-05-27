@@ -58,6 +58,7 @@ import {
   handleCopyMemoryAbsolutePathForTest,
   handleCopyMemorySpaceAbsolutePathForTest,
   handleCopyMemoryRelativePathForTest,
+  handleCopyNeedsReviewAgentPromptForTest,
   handleCopySegmentAbsolutePathForTest,
   handleCopySegmentRelativePathForTest,
   handleCopySegmentSupplementAbsolutePathForTest,
@@ -5904,6 +5905,150 @@ test('copyMemorySpaceAbsolutePath writes the resolved root absolute path to clip
 
   assert.deepEqual(result, { ok: true });
   assert.deepEqual(copiedText, ['/tmp/reo-memory-space-canonical']);
+});
+
+test('copyNeedsReviewAgentPrompt rejects untrusted sender and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-review-prompt-untrusted');
+  const copiedText: string[] = [];
+  const result = await handleCopyNeedsReviewAgentPromptForTest({
+    event: {
+      ...event,
+      senderFrame: {
+        routingId: 4,
+        topRoutingId: 4,
+        url: 'https://example.invalid/',
+      },
+    },
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      needsReviewCount: 1,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyNeedsReviewAgentPrompt rejects prompt/path payloads and does not write clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-review-prompt-invalid');
+  const copiedText: string[] = [];
+  const result = await handleCopyNeedsReviewAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      needsReviewCount: 1,
+      prompt: 'renderer must not provide clipboard text',
+      reportPath: '/tmp/reo-review-prompt-invalid/.reo/review/needs-review.md',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyNeedsReviewAgentPrompt rejects a workspace id that does not match the handle', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-review-prompt-mismatch');
+  const copiedText: string[] = [];
+  const result = await handleCopyNeedsReviewAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      needsReviewCount: 1,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyNeedsReviewAgentPrompt writes a main-owned safe prompt to clipboard', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-review-prompt-success');
+  const copiedText: string[] = [];
+  const result = await handleCopyNeedsReviewAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      needsReviewCount: 2,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  assert.match(copiedText[0] ?? '', /2 个文件需要检查/);
+  assert.match(copiedText[0] ?? '', /node skills\/reo-doctor\/scripts\/reo-doctor\.mjs/);
+  assert.match(copiedText[0] ?? '', /\.reo\/review\/needs-review\.md/);
+  assert.equal((copiedText[0] ?? '').includes('/tmp/reo-review-prompt-success'), false);
+  assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
+  assert.equal((copiedText[0] ?? '').includes('memories/mem_'), false);
+  assert.equal((copiedText[0] ?? '').includes('contentHash'), false);
+});
+
+test('copyNeedsReviewAgentPrompt returns clipboard-write failed when clipboard write throws', async () => {
+  const handleStore = createRegisteredHandleStore('/tmp/reo-review-prompt-clipboard-failure');
+  const copiedText: string[] = [];
+  const result = await handleCopyNeedsReviewAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      needsReviewCount: 1,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+      throw new Error('clipboard offline');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
+  }
+  assert.equal(copiedText.length, 1);
 });
 
 test('copyMemoryAbsolutePath rejects untrusted sender and does not write clipboard', async () => {

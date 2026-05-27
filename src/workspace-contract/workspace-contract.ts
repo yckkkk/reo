@@ -1038,6 +1038,12 @@ export const workspaceCopyMemoryRelativePathRequestSchema = workspaceMemoryEntit
 export const workspaceCopySegmentRelativePathRequestSchema = workspaceSegmentEntityRequestSchema;
 export const workspaceCopySegmentSupplementRelativePathRequestSchema =
   workspaceSegmentSupplementEntityRequestSchema;
+export const workspaceCopyNeedsReviewAgentPromptRequestSchema = workspaceHandleSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    needsReviewCount: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema = workspaceHandleSchema
   .extend({
@@ -1763,6 +1769,9 @@ export type WorkspaceCopySegmentRelativePathRequest = z.infer<
 >;
 export type WorkspaceCopySegmentSupplementRelativePathRequest = z.infer<
   typeof workspaceCopySegmentSupplementRelativePathRequestSchema
+>;
+export type WorkspaceCopyNeedsReviewAgentPromptRequest = z.infer<
+  typeof workspaceCopyNeedsReviewAgentPromptRequestSchema
 >;
 export type WorkspaceUpdateMemorySpaceTitleRequest = z.infer<
   typeof workspaceUpdateMemorySpaceTitleRequestSchema

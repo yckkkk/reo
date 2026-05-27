@@ -9,8 +9,9 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
+import { showReoToast, toast } from '../components/ui/toaster';
 import type {
   SavedNoteSegmentContent,
   SavedNoteSegmentSupplementContent,
@@ -28,6 +29,23 @@ import {
   segmentSupplementContentQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
+
+const { showReoToastMock, toastMock } = vi.hoisted(() => ({
+  showReoToastMock: vi.fn(() => 'toast-id'),
+  toastMock: {
+    dismiss: vi.fn(),
+  },
+}));
+
+vi.mock('../components/ui/toaster', () => ({
+  showReoToast: showReoToastMock,
+  toast: toastMock,
+}));
+
+beforeEach(() => {
+  showReoToastMock.mockClear();
+  toastMock.dismiss.mockClear();
+});
 
 function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}): WorkspaceSession {
   return {
@@ -424,6 +442,7 @@ function renderLoadedWorkspaceFrame({
   copyMemoryAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
   copySegmentSupplementRelativePath = vi.fn().mockResolvedValue({ ok: true }),
   copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
+  copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
   readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -540,6 +559,7 @@ function renderLoadedWorkspaceFrame({
   readonly copyMemoryAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly copySegmentSupplementRelativePath?: ReturnType<typeof vi.fn>;
   readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
+  readonly copyNeedsReviewAgentPrompt?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
   readonly readSegmentContent?: ReturnType<typeof vi.fn>;
@@ -558,6 +578,7 @@ function renderLoadedWorkspaceFrame({
       copyMemoryRelativePath,
       copySegmentSupplementAbsolutePath,
       copySegmentSupplementRelativePath,
+      copyNeedsReviewAgentPrompt,
       openMemoryDocument,
       openSegmentSupplementDocument,
       readFinalizedAudioSegmentSupplement,
@@ -630,7 +651,7 @@ function renderLoadedWorkspaceFrame({
 }
 
 describe('LoadedWorkspaceFrame', () => {
-  it('renders a compact needs-review indicator from snapshot review counts', () => {
+  it('projects needs-review counts into the root reo-doctor toast', async () => {
     renderLoadedWorkspaceFrame({
       session: workspaceSession({
         review: {
@@ -641,10 +662,126 @@ describe('LoadedWorkspaceFrame', () => {
       }),
     });
 
-    const indicator = screen.getByRole('status', { name: '记忆空间需要检查' });
-    expect(indicator).toHaveTextContent('2 个文件需要检查');
-    expect(indicator).toHaveTextContent('reo-doctor');
-    expect(indicator).not.toHaveTextContent('memories/');
+    await waitFor(() =>
+      expect(showReoToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'reo-doctor',
+          id: 'reo-needs-review:ws_1',
+          title: '2个文件需要检查',
+          description: '复制提示词给您的Agent',
+        })
+      )
+    );
+    expect(screen.queryByRole('status', { name: '记忆空间需要检查' })).not.toBeInTheDocument();
+    expect(JSON.stringify(vi.mocked(showReoToast).mock.calls[0]?.[0])).not.toContain('memories/');
+  });
+
+  it('does not dismiss a nonexistent root review toast when the initial snapshot is clean', () => {
+    renderLoadedWorkspaceFrame();
+
+    expect(toast.dismiss).not.toHaveBeenCalledWith('reo-needs-review:ws_1');
+  });
+
+  it('dismisses the root review toast after snapshot review counts clear', async () => {
+    const session = workspaceSession({
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+      },
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({ session });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalled());
+
+    act(() => {
+      seedWorkspaceSnapshot(queryClient, {
+        ...session,
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [],
+        },
+      });
+    });
+
+    await waitFor(() => expect(toast.dismiss).toHaveBeenCalledWith('reo-needs-review:ws_1'));
+  });
+
+  it('copies the needs-review prompt through the narrow workspace bridge', async () => {
+    const copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    renderLoadedWorkspaceFrame({
+      copyNeedsReviewAgentPrompt,
+      session: workspaceSession({
+        review: {
+          needsReviewCount: 1,
+          markdownCandidateCount: 0,
+          tiptapSidecarCount: 1,
+        },
+      }),
+    });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalled());
+    const reviewToastInput = vi.mocked(showReoToast).mock.calls[0]?.[0] as
+      | { readonly onCopyPrompt?: () => void }
+      | undefined;
+
+    reviewToastInput?.onCopyPrompt?.();
+
+    await waitFor(() =>
+      expect(copyNeedsReviewAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        needsReviewCount: 1,
+      })
+    );
+    await waitFor(() =>
+      expect(showReoToast).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          type: 'reo-doctor',
+          id: 'reo-needs-review:ws_1',
+          copyState: 'copied',
+        })
+      )
+    );
+  });
+
+  it('shows a safe copy failure toast without report entries when prompt copy fails', async () => {
+    const copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_CLIPBOARD_WRITE_FAILED',
+        message: 'Needs-review prompt could not be copied',
+      },
+    });
+    renderLoadedWorkspaceFrame({
+      copyNeedsReviewAgentPrompt,
+      session: workspaceSession({
+        review: {
+          needsReviewCount: 1,
+          markdownCandidateCount: 0,
+          tiptapSidecarCount: 1,
+        },
+      }),
+    });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalled());
+    const reviewToastInput = vi.mocked(showReoToast).mock.calls[0]?.[0] as
+      | { readonly onCopyPrompt?: () => void }
+      | undefined;
+
+    reviewToastInput?.onCopyPrompt?.();
+
+    await waitFor(() =>
+      expect(showReoToast).toHaveBeenLastCalledWith({
+        type: 'error',
+        title: '无法复制提示词',
+      })
+    );
+    expect(JSON.stringify(vi.mocked(showReoToast).mock.calls.at(-1)?.[0])).not.toContain(
+      'memories/'
+    );
   });
 
   it('renders the loaded workspace frame as a workspace stage with one real expression entry', async () => {

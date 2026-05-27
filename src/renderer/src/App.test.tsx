@@ -44,6 +44,7 @@ describe('App', () => {
     copyMemoryRelativePath: vi.fn(),
     copySegmentAbsolutePath: vi.fn(),
     copySegmentRelativePath: vi.fn(),
+    copyNeedsReviewAgentPrompt: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
     createMemory: vi.fn(),
@@ -311,6 +312,7 @@ describe('App', () => {
     reoWorkspace.copyMemoryRelativePath.mockResolvedValue({ ok: true });
     reoWorkspace.copySegmentAbsolutePath.mockResolvedValue({ ok: true });
     reoWorkspace.copySegmentRelativePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyNeedsReviewAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
     reoWorkspace.createMemory.mockResolvedValue({
@@ -4467,7 +4469,7 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
   });
 
-  it('refreshes the needs-review indicator when only review counts change', async () => {
+  it('refreshes the needs-review toast when only review counts change and copies a safe agent prompt', async () => {
     const user = userEvent.setup();
     let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
     const initialSnapshot = {
@@ -4522,6 +4524,9 @@ describe('App', () => {
 
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('status', { name: '记忆空间需要检查' })).not.toBeInTheDocument();
+    expect([...toast.getToasts()].some((entry) => entry.id === 'reo-needs-review:ws_1')).toBe(
+      false
+    );
 
     await act(async () => {
       fileTruthChanged?.({
@@ -4534,8 +4539,34 @@ describe('App', () => {
     });
 
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole('status', { name: '记忆空间需要检查' })).toHaveTextContent(
-      '1 个文件需要检查'
+    await waitFor(() =>
+      expect([...toast.getToasts()].some((entry) => entry.id === 'reo-needs-review:ws_1')).toBe(
+        true
+      )
+    );
+    expect(screen.queryByRole('status', { name: '记忆空间需要检查' })).not.toBeInTheDocument();
+
+    const reviewToast = [...toast.getToasts()].find(
+      (entry) => entry.id === 'reo-needs-review:ws_1'
+    );
+    expect(reviewToast).toMatchObject({
+      title: '1个文件需要检查',
+      description: '复制提示词给您的Agent',
+      className: 'reo-doctor-toast',
+    });
+
+    const action =
+      reviewToast && 'action' in reviewToast
+        ? (reviewToast.action as { onClick: () => void } | undefined)
+        : undefined;
+    action?.onClick();
+
+    await waitFor(() =>
+      expect(reoWorkspace.copyNeedsReviewAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        needsReviewCount: 1,
+      })
     );
   });
 
@@ -6414,7 +6445,8 @@ describe('App', () => {
       .find((entry) => 'title' in entry && entry.title === '已删除片段');
     expect(segmentDeleteToast).toMatchObject({
       className: 'reo-undo-toast',
-      dismissible: false,
+      closeButton: true,
+      dismissible: true,
       duration: 10000,
     });
     if (!segmentDeleteToast || !('onAutoClose' in segmentDeleteToast)) {

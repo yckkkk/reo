@@ -8,6 +8,7 @@ import type {
   WorkspaceCopyMemoryAbsolutePathRequest,
   WorkspaceCopyMemoryRelativePathRequest,
   WorkspaceCopyMemorySpaceAbsolutePathRequest,
+  WorkspaceCopyNeedsReviewAgentPromptRequest,
   WorkspaceCopySegmentAbsolutePathRequest,
   WorkspaceCopySegmentRelativePathRequest,
   WorkspaceCopySegmentSupplementAbsolutePathRequest,
@@ -192,6 +193,9 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copySegmentSupplementRelativePath: (
     payload: WorkspaceCopySegmentSupplementRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyNeedsReviewAgentPrompt: (
+    payload: WorkspaceCopyNeedsReviewAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly updateMemorySpaceTitle: (
     payload: WorkspaceUpdateMemorySpaceTitleRequest
