@@ -50,9 +50,11 @@ function normalizeWatchedRelativePath(rootPath: string, changedPath: string): st
   const platformRelativePath = path.isAbsolute(changedPath)
     ? path.relative(rootPath, changedPath)
     : changedPath;
+  if (platformRelativePath === '') {
+    return '';
+  }
   const relativePath = platformRelativePath.split(path.sep).join('/');
   if (
-    !relativePath ||
     relativePath === '..' ||
     relativePath.startsWith('../') ||
     path.isAbsolute(platformRelativePath)
@@ -64,8 +66,11 @@ function normalizeWatchedRelativePath(rootPath: string, changedPath: string): st
 
 export function isIgnoredWorkspaceFileEventPath(rootPath: string, changedPath: string): boolean {
   const relativePath = normalizeWatchedRelativePath(rootPath, changedPath);
-  if (!relativePath) {
+  if (relativePath === null) {
     return true;
+  }
+  if (relativePath === '') {
+    return false;
   }
   const parts = relativePath.split('/');
   const basename = parts.at(-1) ?? '';

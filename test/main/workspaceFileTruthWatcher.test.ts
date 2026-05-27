@@ -118,6 +118,7 @@ test('workspace file truth watcher ignores transient files and closes pending ev
 });
 
 test('workspace file truth watcher ignore rules are path-bound to the workspace root', () => {
+  assert.equal(isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root'), false);
   assert.equal(
     isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root/.git/index'),
     true
