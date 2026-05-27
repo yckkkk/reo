@@ -427,6 +427,69 @@ describe('LightweightMarkdownEditorSurface', () => {
     windowOpenSpy.mockRestore();
   });
 
+  it('does not externally open relative link popover URLs', async () => {
+    const user = userEvent.setup();
+    const openMarkdownExternalLink = vi.fn(async () => ({ ok: true, value: {} }));
+    Object.defineProperty(window, 'reoWorkspace', {
+      configurable: true,
+      value: {
+        openMarkdownExternalLink,
+      } as unknown as Window['reoWorkspace'],
+    });
+    renderEditor('链接');
+
+    await user.click(screen.getByRole('button', { name: '链接' }));
+    await user.type(await screen.findByPlaceholderText('粘贴链接...'), 'docs/page');
+    await user.click(screen.getByRole('button', { name: '打开链接' }));
+
+    expect(openMarkdownExternalLink).not.toHaveBeenCalled();
+  });
+
+  it('does not persist unsafe link toolbar URLs', async () => {
+    const user = userEvent.setup();
+    const editorHandleRef = createRef<LightweightMarkdownEditorHandle>();
+    const onRichChange = vi.fn();
+    renderEditor('Link', editorHandleRef, { onRichChange });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    await user.dblClick(within(editor).getByText('Link'));
+    await user.click(screen.getByRole('button', { name: '链接' }));
+    await user.type(await screen.findByPlaceholderText('粘贴链接...'), 'javascript:alert(1)');
+    await user.click(screen.getByRole('button', { name: '应用链接' }));
+
+    await waitFor(() => {
+      expect(editorHandleRef.current?.getMarkdown()).not.toContain('javascript:alert');
+    });
+    expect(textNodeWithMark(onRichChange.mock.calls.at(-1)?.[0]?.tiptapJson, 'Link', 'link')).toBe(
+      null
+    );
+  });
+
+  it('strips credential link hrefs through the official Tiptap Link boundary', async () => {
+    renderEditor('', createRef<LightweightMarkdownEditorHandle>(), {
+      valueTiptapJson: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Credential link',
+                marks: [{ type: 'link', attrs: { href: 'https://user@example.com' } }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const link = await screen.findByText('Credential link');
+    const anchor = link.closest('a');
+    expect(anchor).not.toBeNull();
+    expect(anchor as HTMLAnchorElement).not.toHaveAttribute('href', 'https://user@example.com');
+  });
+
   it('inserts the official image upload node before choosing files', async () => {
     const user = userEvent.setup();
     const onAttachmentUpload = vi.fn<(file: File) => string>(() => 'attachments/cake.png');
@@ -626,6 +689,48 @@ describe('LightweightMarkdownEditorSurface', () => {
       );
       expect(linked?.marks?.[0]?.attrs).toMatchObject({ href: 'https://example.com' });
     });
+  });
+
+  it('renders durable sidecar JSON marks and attrs through the Tiptap surface', async () => {
+    const pink = 'var(--tt-color-highlight-pink)';
+    renderEditor('', createRef<LightweightMarkdownEditorHandle>(), {
+      valueTiptapJson: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textAlign: 'right' },
+            content: [
+              {
+                type: 'text',
+                text: 'Pink highlight',
+                marks: [{ type: 'highlight', attrs: { color: pink } }],
+              },
+              { type: 'text', text: ' underlined', marks: [{ type: 'underline' }] },
+              {
+                type: 'text',
+                text: ' link',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
+              },
+              { type: 'text', text: ' sup', marks: [{ type: 'superscript' }] },
+              { type: 'text', text: ' sub', marks: [{ type: 'subscript' }] },
+            ],
+          },
+        ],
+      },
+    });
+
+    const editor = screen.getByRole('textbox', { name: '笔记正文' });
+    const highlighted = await within(editor).findByText('Pink highlight');
+    expect(highlighted.closest('mark')).toHaveAttribute('data-color', pink);
+    expect(within(editor).getByText('underlined').closest('u')).not.toBeNull();
+    expect(within(editor).getByText('link').closest('a')).toHaveAttribute(
+      'href',
+      'https://example.com'
+    );
+    expect(within(editor).getByText('sup').closest('sup')).not.toBeNull();
+    expect(within(editor).getByText('sub').closest('sub')).not.toBeNull();
+    expect(highlighted.closest('p')).toHaveStyle({ textAlign: 'right' });
   });
 
   it('serializes blockquote toolbar commands as Markdown and Tiptap JSON', async () => {

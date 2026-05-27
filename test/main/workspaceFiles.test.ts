@@ -111,6 +111,19 @@ function unsupportedTableDoc(): JSONContent {
   };
 }
 
+function unsupportedOfficialAttrDoc(): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'heading',
+        attrs: { level: 2, textAlign: 'middle' },
+        content: [{ type: 'text', text: 'Invalid align' }],
+      },
+    ],
+  };
+}
+
 function sidecarWritableFile(sidecar: Awaited<ReturnType<typeof readTiptapContentSidecar>>) {
   const { currentContentHash: _currentContentHash, ...file } = sidecar;
   void _currentContentHash;
@@ -1755,8 +1768,10 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
   const memoryId = 'mem_passive_bad_sidecars';
   const invalidSegmentId = 'seg_passive_invalid_sidecar';
   const unsupportedSegmentId = 'seg_passive_unsupported_sidecar';
+  const officialAttrSegmentId = 'seg_passive_official_attr_sidecar';
   const invalidBody = 'Invalid sidecar Markdown stays\n';
   const unsupportedBody = 'Unsupported sidecar Markdown stays\n';
+  const officialAttrBody = 'Official attr Markdown stays\n';
   await writeMemoryForPassiveSidecarTest({ root, memoryId });
   const invalidSegmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
     body: invalidBody,
@@ -1772,6 +1787,13 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
     segmentId: unsupportedSegmentId,
     title: 'Unsupported sidecar segment',
   });
+  const officialAttrSegmentDirectory = await writeNoteSegmentForPassiveSidecarTest({
+    body: officialAttrBody,
+    memoryId,
+    root,
+    segmentId: officialAttrSegmentId,
+    title: 'Official attr sidecar segment',
+  });
   await writeTiptapContentSidecar({
     bodyMarkdown: invalidBody,
     objectDirectory: invalidSegmentDirectory,
@@ -1782,6 +1804,11 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
     objectDirectory: unsupportedSegmentDirectory,
     tiptapJson: paragraphDoc('Unsupported sidecar Markdown stays'),
   });
+  await writeTiptapContentSidecar({
+    bodyMarkdown: officialAttrBody,
+    objectDirectory: officialAttrSegmentDirectory,
+    tiptapJson: paragraphDoc('Official attr Markdown stays'),
+  });
   await writeFile(
     path.join(invalidSegmentDirectory, TIPTAP_CONTENT_SIDECAR_FILE),
     '{ invalid json\n'
@@ -1789,6 +1816,10 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
   await writeExternalSidecarContent({
     objectDirectory: unsupportedSegmentDirectory,
     tiptapJson: unsupportedTableDoc(),
+  });
+  await writeExternalSidecarContent({
+    objectDirectory: officialAttrSegmentDirectory,
+    tiptapJson: unsupportedOfficialAttrDoc(),
   });
 
   const snapshot = await readWorkspaceSnapshotFromFileTruth({
@@ -1800,7 +1831,7 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
   if (!snapshot.ok) {
     throw new Error('snapshot refresh should succeed');
   }
-  assert.equal(snapshot.snapshot.memories[0]?.noteSegmentCount, 2);
+  assert.equal(snapshot.snapshot.memories[0]?.noteSegmentCount, 3);
   const invalidPersisted = parseWorkspaceMarkdownObject({
     markdown: await readFile(path.join(invalidSegmentDirectory, 'segment.md'), 'utf8'),
     objectType: 'segment',
@@ -1817,10 +1848,17 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
   assert.equal(unsupportedPersisted.content, unsupportedBody);
   const unsupportedSidecar = await readTiptapContentSidecar(unsupportedSegmentDirectory);
   assert.deepEqual(unsupportedSidecar.content, unsupportedTableDoc());
+  const officialAttrPersisted = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(officialAttrSegmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(officialAttrPersisted.content, officialAttrBody);
+  const officialAttrSidecar = await readTiptapContentSidecar(officialAttrSegmentDirectory);
+  assert.deepEqual(officialAttrSidecar.content, unsupportedOfficialAttrDoc());
 
   const report = await readNeedsReviewReport(root);
-  assert.equal(report.summary.needsReviewCount, 2);
-  assert.equal(report.summary.tiptapSidecarCount, 2);
+  assert.equal(report.summary.needsReviewCount, 3);
+  assert.equal(report.summary.tiptapSidecarCount, 3);
   assert.deepEqual(
     report.entries.map((entry) => ({
       category: entry.category,
@@ -1839,6 +1877,14 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
       {
         category: 'tiptap-sidecar',
         paths: [
+          `memories/${memoryId}/segments/${officialAttrSegmentId}/segment.md`,
+          `memories/${memoryId}/segments/${officialAttrSegmentId}/${TIPTAP_CONTENT_SIDECAR_FILE}`,
+        ],
+        reason: 'unsupported-tiptap-content',
+      },
+      {
+        category: 'tiptap-sidecar',
+        paths: [
           `memories/${memoryId}/segments/${unsupportedSegmentId}/segment.md`,
           `memories/${memoryId}/segments/${unsupportedSegmentId}/${TIPTAP_CONTENT_SIDECAR_FILE}`,
         ],
@@ -1846,6 +1892,9 @@ test('workspace snapshot refresh preserves invalid and unsupported sidecars', as
       },
     ]
   );
+  assert.equal(snapshot.snapshot.review?.needsReviewCount, 3);
+  assert.equal(snapshot.snapshot.review?.tiptapSidecarCount, 3);
+  assert.equal(snapshot.snapshot.review?.markdownCandidateCount, 0);
 });
 
 test('workspace snapshot refresh clears stale needs-review report when clean', async () => {

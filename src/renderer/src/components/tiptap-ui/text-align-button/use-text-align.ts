@@ -13,8 +13,9 @@ import { AlignCenterIcon } from '@/components/tiptap-icons/align-center-icon';
 import { AlignJustifyIcon } from '@/components/tiptap-icons/align-justify-icon';
 import { AlignLeftIcon } from '@/components/tiptap-icons/align-left-icon';
 import { AlignRightIcon } from '@/components/tiptap-icons/align-right-icon';
+import type { ReoTiptapTextAlign } from '../../../../../tiptap-markdown/tiptapTextAlign';
 
-export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+export type TextAlign = ReoTiptapTextAlign;
 
 /**
  * Configuration for the text align functionality

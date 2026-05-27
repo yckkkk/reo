@@ -5,6 +5,7 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import { isReoTiptapHighlightColor } from './tiptapHighlightColors.js';
+import { isReoTiptapTextAlign } from './tiptapTextAlign.js';
 
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -14,7 +15,7 @@ const HIGHLIGHT_TEXT_COLOR = 'inherit';
 
 function textAlignAttr(node: { readonly attrs?: Record<string, unknown> | undefined }) {
   const textAlign = node.attrs?.['textAlign'];
-  return typeof textAlign === 'string' ? textAlign : null;
+  return isReoTiptapTextAlign(textAlign) ? textAlign : null;
 }
 
 function renderHtmlMarkdownBlock({

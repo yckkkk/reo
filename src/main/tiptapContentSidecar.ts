@@ -207,6 +207,30 @@ function okResult({
   };
 }
 
+function unsupportedTiptapContentResult(): Extract<
+  TiptapContentSidecarReconcileResult,
+  { readonly ok: false }
+> {
+  return { ok: false, reason: 'unsupported-tiptap-content' };
+}
+
+function parsedSerializableMarkdownResult(
+  bodyMarkdown: string
+):
+  | { readonly ok: true; readonly tiptapJson: JSONContent }
+  | Extract<TiptapContentSidecarReconcileResult, { readonly ok: false }> {
+  const tiptapJson = parseTiptapMarkdown(bodyMarkdown);
+  try {
+    assertTiptapMarkdownSerializable(tiptapJson);
+  } catch (error) {
+    if (error instanceof UnsupportedTiptapMarkdownContentError) {
+      return unsupportedTiptapContentResult();
+    }
+    throw error;
+  }
+  return { ok: true, tiptapJson };
+}
+
 export function assertTiptapJsonMatchesMarkdown({
   bodyMarkdown,
   tiptapJson,
@@ -214,7 +238,6 @@ export function assertTiptapJsonMatchesMarkdown({
   readonly bodyMarkdown: string;
   readonly tiptapJson: JSONContent;
 }): string {
-  assertTiptapMarkdownSerializable(tiptapJson);
   const tiptapMarkdown = serializeTiptapMarkdown(tiptapJson);
   if (hashComparableTiptapMarkdown(tiptapMarkdown) !== hashComparableTiptapMarkdown(bodyMarkdown)) {
     throw new Error('Tiptap JSON does not match Markdown body');
@@ -243,15 +266,18 @@ export async function reconcileTiptapContentSidecar({
     if (!isMissingFile(error)) {
       return { ok: false, reason: 'invalid-sidecar' };
     }
-    const tiptapJson = parseTiptapMarkdown(bodyMarkdown);
+    const parsed = parsedSerializableMarkdownResult(bodyMarkdown);
+    if (!parsed.ok) {
+      return parsed;
+    }
     if (createIfMissing) {
       await writeSidecarFile(
         objectDirectory,
-        createSidecarFile({ bodyMarkdown, content: tiptapJson }),
+        createSidecarFile({ bodyMarkdown, content: parsed.tiptapJson }),
         assertUsable
       );
     }
-    return okResult({ bodyMarkdown, tiptapJson });
+    return okResult({ bodyMarkdown, tiptapJson: parsed.tiptapJson });
   }
 
   let sidecarMarkdown: string;
@@ -310,11 +336,14 @@ export async function reconcileTiptapContentSidecar({
     return { ok: false, reason: 'content-conflict' };
   }
 
-  const tiptapJson = parseTiptapMarkdown(bodyMarkdown);
+  const parsed = parsedSerializableMarkdownResult(bodyMarkdown);
+  if (!parsed.ok) {
+    return parsed;
+  }
   await writeSidecarFile(
     objectDirectory,
-    createSidecarFile({ bodyMarkdown, content: tiptapJson }),
+    createSidecarFile({ bodyMarkdown, content: parsed.tiptapJson }),
     assertUsable
   );
-  return okResult({ bodyMarkdown, tiptapJson });
+  return okResult({ bodyMarkdown, tiptapJson: parsed.tiptapJson });
 }

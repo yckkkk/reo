@@ -8,8 +8,12 @@ import { hasInteractiveTiptapSelection, useTiptapEditor } from '@/hooks/use-tipt
 import { LinkIcon } from '@/components/tiptap-icons/link-icon';
 
 // --- Lib ---
-import { isMarkInSchema, isNodeTypeSelected, sanitizeUrl } from '@/lib/tiptap-utils';
+import { isMarkInSchema, isNodeTypeSelected } from '@/lib/tiptap-utils';
 import { openMarkdownExternalLink } from '@/workspace/workspaceApi';
+import {
+  isReoMarkdownExternalLinkHref,
+  isReoTiptapLinkHref,
+} from '../../../../../tiptap-markdown/tiptapLinkHref';
 
 /**
  * Configuration for the link popover functionality
@@ -132,17 +136,18 @@ export function useLinkHandler(props: LinkHandlerProps) {
   }, [editor]);
 
   const setLink = useCallback(() => {
-    if (!url || !editor) return;
+    if (!url || !editor || !isReoTiptapLinkHref(url)) return;
+    const href = url.trim();
 
     const { selection } = editor.state;
     const isEmpty = selection.empty;
 
     let chain = editor.chain().focus();
 
-    chain = chain.extendMarkRange('link').setLink({ href: url });
+    chain = chain.extendMarkRange('link').setLink({ href });
 
     if (isEmpty) {
-      chain = chain.insertContent({ type: 'text', text: url });
+      chain = chain.insertContent({ type: 'text', text: href });
     }
 
     chain.run();
@@ -165,12 +170,9 @@ export function useLinkHandler(props: LinkHandlerProps) {
   }, [editor]);
 
   const openLink = useCallback(() => {
-    if (!url) return;
+    if (!url || !isReoMarkdownExternalLinkHref(url)) return;
 
-    const safeUrl = sanitizeUrl(url, window.location.href);
-    if (safeUrl !== '#') {
-      void openMarkdownExternalLink({ url: safeUrl });
-    }
+    void openMarkdownExternalLink({ url: url.trim() });
   }, [url]);
 
   return {

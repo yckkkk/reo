@@ -235,6 +235,7 @@ import {
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
 import { buildWorkspaceReviewAgentPrompt } from '../workspace-contract/workspace-review-prompt.js';
+import { parseReoMarkdownExternalLinkHref } from '../tiptap-markdown/tiptapLinkHref.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import {
   createWorkspaceFileTruthWatcherRegistry,
@@ -2356,18 +2357,8 @@ function isAllowedVolcengineExternalUrl(
 function isAllowedMarkdownExternalLinkUrl(
   rawUrl: string
 ): { readonly ok: true; readonly url: URL } | { readonly ok: false } {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return { ok: false };
-  }
-
-  if (
-    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
-    url.username !== '' ||
-    url.password !== ''
-  ) {
+  const url = parseReoMarkdownExternalLinkHref(rawUrl);
+  if (!url) {
     return { ok: false };
   }
   return { ok: true, url };

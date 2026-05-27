@@ -7,6 +7,18 @@ import {
 } from '../../src/main/tiptapMarkdownCodec.js';
 import { REO_TIPTAP_HIGHLIGHT_COLOR_VALUES } from '../../src/tiptap-markdown/tiptapHighlightColors.js';
 
+const DURABLE_TOOLBAR_HIGHLIGHT_TOKENS = [
+  'var(--tt-color-highlight-gray)',
+  'var(--tt-color-highlight-brown)',
+  'var(--tt-color-highlight-orange)',
+  'var(--tt-color-highlight-yellow)',
+  'var(--tt-color-highlight-green)',
+  'var(--tt-color-highlight-blue)',
+  'var(--tt-color-highlight-purple)',
+  'var(--tt-color-highlight-pink)',
+  'var(--tt-color-highlight-red)',
+] as const;
+
 function walkJsonContent(node: JSONContent, visit: (node: JSONContent) => void): void {
   visit(node);
   for (const child of node.content ?? []) {
@@ -63,7 +75,7 @@ test('tiptap markdown codec roundtrips underline markdown marks', () => {
 });
 
 test('tiptap markdown codec preserves colored highlight through html-compatible markdown', () => {
-  const yellow = REO_TIPTAP_HIGHLIGHT_COLOR_VALUES[4];
+  const yellow = 'var(--tt-color-highlight-yellow)';
   const doc: JSONContent = {
     type: 'doc',
     content: [
@@ -90,6 +102,35 @@ test('tiptap markdown codec preserves colored highlight through html-compatible 
   assert.deepEqual(highlighted.marks?.[0]?.attrs, { color: yellow });
 });
 
+test('tiptap markdown codec accepts every durable toolbar highlight token', () => {
+  assert.deepEqual(REO_TIPTAP_HIGHLIGHT_COLOR_VALUES, DURABLE_TOOLBAR_HIGHLIGHT_TOKENS);
+  for (const color of DURABLE_TOOLBAR_HIGHLIGHT_TOKENS) {
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: color,
+              marks: [{ type: 'highlight', attrs: { color } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const markdown = serializeTiptapMarkdown(doc);
+    assert.match(markdown, new RegExp(`data-color="${color.replace(/[()]/g, '\\$&')}"`));
+
+    const parsed = parseTiptapMarkdown(markdown);
+    const highlighted = textNodeWithMark(parsed, 'highlight');
+    assert.ok(highlighted);
+    assert.deepEqual(highlighted.marks?.[0]?.attrs, { color });
+  }
+});
+
 test('tiptap markdown codec rejects arbitrary persisted highlight colors', () => {
   const arbitraryColorDoc: JSONContent = {
     type: 'doc',
@@ -108,6 +149,25 @@ test('tiptap markdown codec rejects arbitrary persisted highlight colors', () =>
   };
 
   assert.throws(() => serializeTiptapMarkdown(arbitraryColorDoc), /Unsupported Tiptap Markdown/);
+  assert.throws(
+    () =>
+      serializeTiptapMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'clear',
+                marks: [{ type: 'highlight', attrs: { color: 'var(--tt-bg-color)' } }],
+              },
+            ],
+          },
+        ],
+      }),
+    /Unsupported Tiptap Markdown/
+  );
 
   const parsed = parseTiptapMarkdown(
     '<mark data-color="#facc15" style="background-color: #facc15; color: inherit">unsafe</mark>'
@@ -391,4 +451,295 @@ test('tiptap markdown codec accepts default link html attrs but rejects non-dura
   };
 
   assert.throws(() => serializeTiptapMarkdown(nonDurableLinkDoc), /Unsupported Tiptap Markdown/);
+});
+
+test('tiptap markdown codec rejects official-incompatible durable attrs', () => {
+  const cases: ReadonlyArray<{ readonly name: string; readonly doc: JSONContent }> = [
+    {
+      name: 'heading level below official range',
+      doc: {
+        type: 'doc',
+        content: [{ type: 'heading', attrs: { level: 0 }, content: [{ type: 'text', text: 'H' }] }],
+      },
+    },
+    {
+      name: 'heading level above official range',
+      doc: {
+        type: 'doc',
+        content: [{ type: 'heading', attrs: { level: 7 }, content: [{ type: 'text', text: 'H' }] }],
+      },
+    },
+    {
+      name: 'heading level string',
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: '2' }, content: [{ type: 'text', text: 'H' }] },
+        ],
+      },
+    },
+    {
+      name: 'heading empty level',
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: '' }, content: [{ type: 'text', text: 'H' }] },
+        ],
+      },
+    },
+    {
+      name: 'paragraph invalid textAlign',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textAlign: 'middle' },
+            content: [{ type: 'text', text: 'P' }],
+          },
+        ],
+      },
+    },
+    {
+      name: 'paragraph unknown false attr',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { draggable: false },
+            content: [{ type: 'text', text: 'P' }],
+          },
+        ],
+      },
+    },
+    {
+      name: 'heading invalid textAlign',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 2, textAlign: 'middle' },
+            content: [{ type: 'text', text: 'H' }],
+          },
+        ],
+      },
+    },
+    {
+      name: 'ordered list non-number start',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            attrs: { start: '3' },
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'item' }] }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'ordered list start below one',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            attrs: { start: 0 },
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'item' }] }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'task item non-boolean checked',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { checked: 'true' },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'task' }] }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'task item empty checked',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'taskList',
+            content: [
+              {
+                type: 'taskItem',
+                attrs: { checked: '' },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'task' }] }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'code block non-string language',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'codeBlock',
+            attrs: { language: 42 },
+            content: [{ type: 'text', text: 'const value = 1' }],
+          },
+        ],
+      },
+    },
+    {
+      name: 'image non-string src',
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'image', attrs: { src: { file: 'a.png' } } }] },
+        ],
+      },
+    },
+    {
+      name: 'link non-string href',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [{ type: 'link', attrs: { href: 42 } }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'link javascript href',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'link credential href',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [{ type: 'link', attrs: { href: 'https://user@example.com' } }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'link non-string title',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com', title: 7 } }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'link empty target',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com', target: '' } }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      name: 'link unknown false attr',
+      doc: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'link',
+                marks: [
+                  {
+                    type: 'link',
+                    attrs: { href: 'https://example.com', draggable: false },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ];
+
+  for (const { doc, name } of cases) {
+    assert.throws(
+      () => serializeTiptapMarkdown(doc),
+      /Unsupported Tiptap Markdown/,
+      `expected ${name} to be rejected`
+    );
+  }
 });

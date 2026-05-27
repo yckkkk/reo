@@ -16,6 +16,8 @@ import {
   MarkdownSuperscript,
 } from '../tiptap-markdown/tiptapMarkdownExtensions.js';
 import { isReoTiptapHighlightColor } from '../tiptap-markdown/tiptapHighlightColors.js';
+import { isReoTiptapLinkHref } from '../tiptap-markdown/tiptapLinkHref.js';
+import { isReoTiptapTextAlign } from '../tiptap-markdown/tiptapTextAlign.js';
 
 const SUPPORTED_NODE_TYPES = new Set([
   'blockquote',
@@ -44,59 +46,95 @@ const SUPPORTED_MARK_TYPES = new Set([
   'superscript',
   'underline',
 ]);
-const TEXT_ALIGN_VALUES = new Set(['left', 'center', 'right', 'justify']);
+const HEADING_LEVEL_SET = new Set<number>(HEADING_LEVELS);
 const DEFAULT_LINK_TARGET = '_blank';
 const DEFAULT_LINK_REL = 'noopener noreferrer nofollow';
 
 function meaningfulAttrValue(value: unknown): boolean {
-  return value !== null && value !== undefined && value !== false && value !== '';
+  return !emptyAttrValue(value);
+}
+
+function emptyAttrValue(value: unknown): boolean {
+  return value === null || value === undefined;
+}
+
+function allowedOptionalStringAttr(value: unknown): boolean {
+  return emptyAttrValue(value) || typeof value === 'string';
+}
+
+function allowedTextAlignAttr(value: unknown): boolean {
+  return emptyAttrValue(value) || isReoTiptapTextAlign(value);
+}
+
+function allowedHeadingLevelAttr(value: unknown): boolean {
+  return (
+    emptyAttrValue(value) ||
+    (typeof value === 'number' && Number.isInteger(value) && HEADING_LEVEL_SET.has(value))
+  );
+}
+
+function allowedOrderedListStartAttr(value: unknown): boolean {
+  return (
+    emptyAttrValue(value) || (typeof value === 'number' && Number.isInteger(value) && value >= 1)
+  );
+}
+
+function allowedBooleanAttr(value: unknown): boolean {
+  return emptyAttrValue(value) || typeof value === 'boolean';
 }
 
 function allowedNodeAttr(nodeType: string, key: string, value: unknown): boolean {
-  if (!meaningfulAttrValue(value)) {
-    return true;
-  }
   if (nodeType === 'heading') {
-    return key === 'level' || key === 'textAlign';
+    if (key === 'level') {
+      return allowedHeadingLevelAttr(value);
+    }
+    if (key === 'textAlign') {
+      return allowedTextAlignAttr(value);
+    }
+    return !meaningfulAttrValue(value);
   }
   if (nodeType === 'paragraph') {
-    return key === 'textAlign';
+    return key === 'textAlign' ? allowedTextAlignAttr(value) : !meaningfulAttrValue(value);
   }
   if (nodeType === 'orderedList') {
-    return key === 'start';
+    return key === 'start' ? allowedOrderedListStartAttr(value) : !meaningfulAttrValue(value);
   }
   if (nodeType === 'taskItem') {
-    return key === 'checked';
+    return key === 'checked' ? allowedBooleanAttr(value) : !meaningfulAttrValue(value);
   }
   if (nodeType === 'codeBlock') {
-    return key === 'language';
+    return key === 'language' ? allowedOptionalStringAttr(value) : !meaningfulAttrValue(value);
   }
   if (nodeType === 'image') {
-    return key === 'src' || key === 'alt' || key === 'title';
+    return key === 'src' || key === 'alt' || key === 'title'
+      ? allowedOptionalStringAttr(value)
+      : !meaningfulAttrValue(value);
   }
-  return false;
+  return !meaningfulAttrValue(value);
 }
 
 function allowedMarkAttr(markType: string, key: string, value: unknown): boolean {
-  if (!meaningfulAttrValue(value)) {
-    return true;
-  }
   if (markType === 'highlight') {
-    return key === 'color' && isReoTiptapHighlightColor(value);
+    return key === 'color'
+      ? emptyAttrValue(value) || isReoTiptapHighlightColor(value)
+      : !meaningfulAttrValue(value);
   }
   if (markType === 'link') {
-    if (key === 'href' || key === 'title') {
-      return true;
+    if (key === 'href') {
+      return isReoTiptapLinkHref(value);
+    }
+    if (key === 'title') {
+      return allowedOptionalStringAttr(value);
     }
     if (key === 'target') {
-      return value === DEFAULT_LINK_TARGET;
+      return emptyAttrValue(value) || value === DEFAULT_LINK_TARGET;
     }
     if (key === 'rel') {
-      return value === DEFAULT_LINK_REL;
+      return emptyAttrValue(value) || value === DEFAULT_LINK_REL;
     }
-    return false;
+    return !meaningfulAttrValue(value);
   }
-  return false;
+  return !meaningfulAttrValue(value);
 }
 
 function collectUnsupportedTiptapMarkdownContent(
@@ -181,7 +219,7 @@ function extractHtmlAttribute(attrs: string, name: string) {
 function extractTextAlign(attrs: string) {
   const style = extractHtmlAttribute(attrs, 'style');
   const textAlign = style ? /text-align\s*:\s*([^;]+)/i.exec(style)?.[1]?.trim() : undefined;
-  return textAlign && TEXT_ALIGN_VALUES.has(textAlign) ? textAlign : null;
+  return isReoTiptapTextAlign(textAlign) ? textAlign : null;
 }
 
 const ReoColoredHighlightMarkdown = Extension.create({
@@ -374,6 +412,7 @@ function createTiptapMarkdownManager() {
         link: {
           openOnClick: false,
           enableClickSelection: true,
+          isAllowedUri: (url) => isReoTiptapLinkHref(url),
         },
         paragraph: false,
       }),

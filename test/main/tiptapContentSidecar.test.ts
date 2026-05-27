@@ -503,6 +503,61 @@ test('tiptap content sidecar reports unsupported tiptap content without rewritin
   }
 });
 
+test('tiptap content sidecar reports official-incompatible attrs without rewriting markdown', async () => {
+  const directory = await objectDirectory();
+  let bodyMarkdown = 'Original body\n';
+  try {
+    const initial = await reconcileTiptapContentSidecar({
+      bodyMarkdown,
+      objectDirectory: directory,
+    });
+    assert.equal(initial.ok, true);
+
+    await writeSidecarContent(directory, {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2, textAlign: 'middle' },
+          content: [{ type: 'text', text: 'Invalid align' }],
+        },
+      ],
+    });
+
+    const result = await reconcileTiptapContentSidecar({
+      bodyMarkdown,
+      objectDirectory: directory,
+      writeBodyMarkdown: async (nextBodyMarkdown: string) => {
+        bodyMarkdown = nextBodyMarkdown;
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'unsupported-tiptap-content');
+    assert.equal(bodyMarkdown, 'Original body\n');
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('tiptap content sidecar reports unsupported markdown-derived content without creating sidecar', async () => {
+  const directory = await objectDirectory();
+  try {
+    const result = await reconcileTiptapContentSidecar({
+      bodyMarkdown: '[Unsafe link](javascript:alert(1))\n',
+      objectDirectory: directory,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'unsupported-tiptap-content');
+    await assert.rejects(readFile(path.join(directory, TIPTAP_CONTENT_SIDECAR_FILE), 'utf8'), {
+      code: 'ENOENT',
+    });
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('tiptap content sidecar rejects transient image upload nodes before persistence', async () => {
   const directory = await objectDirectory();
   try {

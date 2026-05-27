@@ -56,6 +56,7 @@ import {
   MarkdownSubscript,
   MarkdownSuperscript,
 } from './tiptapMarkdownExtensions';
+import { isReoTiptapLinkHref } from '../../../tiptap-markdown/tiptapLinkHref';
 import './LightweightMarkdownEditorSurface.scss';
 
 export type LightweightMarkdownEditorHandle = {
@@ -264,6 +265,7 @@ function LightweightMarkdownEditorSurfaceContent({
         link: {
           openOnClick: false,
           enableClickSelection: true,
+          isAllowedUri: (url) => isReoTiptapLinkHref(url),
         },
         paragraph: false,
       }),
