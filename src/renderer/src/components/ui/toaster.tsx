@@ -8,12 +8,19 @@ type ReoToasterProps = {
   readonly themeMode: ThemeMode;
 };
 
-type ReoUndoToastOptions = {
-  readonly description: string;
-  readonly durationMs?: number;
-  readonly onAutoClose?: (toast: ToastT) => void;
+export type ReoToastType = 'neutral' | 'success' | 'error' | 'warning' | 'info';
+
+type ReoToastUndo = {
   readonly onUndo: () => void;
+  readonly onAutoClose?: (toast: ToastT) => void;
+};
+
+type ReoToastInput = {
+  readonly type?: ReoToastType;
   readonly title: string;
+  readonly description?: string;
+  readonly durationMs?: number;
+  readonly undo?: ReoToastUndo;
 };
 
 const REO_UNDO_TOAST_DURATION_MS = 3200;
@@ -27,13 +34,8 @@ export function ReoToastUndoActionLabel() {
   );
 }
 
-export function showReoUndoToast({
-  description,
-  durationMs = REO_UNDO_TOAST_DURATION_MS,
-  onAutoClose,
-  onUndo,
-  title,
-}: ReoUndoToastOptions) {
+function showUndoToast(input: ReoToastInput & { undo: ReoToastUndo }): string | number {
+  const { title, description, durationMs = REO_UNDO_TOAST_DURATION_MS, undo } = input;
   const toastOptions: ExternalToast = {
     action: {
       label: <ReoToastUndoActionLabel />,
@@ -41,12 +43,11 @@ export function showReoUndoToast({
         if (undoToastId !== undefined) {
           toast.dismiss(undoToastId);
         }
-        onUndo();
+        undo.onUndo();
       },
     },
     className: 'reo-undo-toast',
     closeButton: false,
-    description,
     dismissible: false,
     duration: durationMs,
     style: {
@@ -54,13 +55,34 @@ export function showReoUndoToast({
     } as CSSProperties,
   };
 
-  if (onAutoClose) {
-    toastOptions.onAutoClose = onAutoClose;
+  if (description !== undefined) {
+    toastOptions.description = description;
+  }
+  if (undo.onAutoClose) {
+    toastOptions.onAutoClose = undo.onAutoClose;
   }
 
   const undoToastId = toast(title, toastOptions);
 
   return undoToastId;
+}
+
+export function showReoToast(input: ReoToastInput): string | number {
+  if (input.undo) {
+    return showUndoToast({ ...input, undo: input.undo });
+  }
+
+  const { type = 'neutral', title, description, durationMs } = input;
+  const data: ExternalToast = {};
+  if (description !== undefined) {
+    data.description = description;
+  }
+  if (durationMs !== undefined) {
+    data.duration = durationMs;
+  }
+
+  const level = type === 'neutral' ? toast : toast[type];
+  return Object.keys(data).length > 0 ? level(title, data) : level(title);
 }
 
 export function ReoToaster({ themeMode }: ReoToasterProps) {

@@ -12,7 +12,7 @@ import {
   FieldRow,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 import { Textarea } from '@/components/ui/textarea';
 import { isSafeWorkspaceDirectoryName } from '../../../workspace-contract/workspace-name';
 import { FolderPickerField } from './FolderPickerField';
@@ -84,9 +84,7 @@ export function CreateWorkspaceForm({
   }, []);
 
   function showCreateWorkspaceError(message: string) {
-    toast.error('无法创建记忆空间', {
-      description: message,
-    });
+    showReoToast({ type: 'error', title: '无法创建记忆空间', description: message });
   }
 
   function handleFolderError(message: string) {

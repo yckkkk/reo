@@ -8,7 +8,7 @@ import { FieldControl, FieldError, FieldGroup, FieldHint, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 import { WorkspaceDangerConfirmDialog } from '../workspace/WorkspaceDangerConfirmDialog';
 import { openVoiceTranscriptionProviderConsole } from '../workspace/workspaceApi';
 import {
@@ -193,10 +193,16 @@ export function VoiceSettingsPanel({ onBusyChange }: VoiceSettingsPanelProps = {
     try {
       const response = await openVoiceTranscriptionProviderConsole();
       if (!response.ok) {
-        toast.error(workspaceErrorDisplayMessage(response.error, '外部链接无法打开。'));
+        showReoToast({
+          type: 'error',
+          title: workspaceErrorDisplayMessage(response.error, '外部链接无法打开。'),
+        });
       }
     } catch (error) {
-      toast.error(unknownErrorDisplayMessage(error, '外部链接无法打开。'));
+      showReoToast({
+        type: 'error',
+        title: unknownErrorDisplayMessage(error, '外部链接无法打开。'),
+      });
     }
   }
 

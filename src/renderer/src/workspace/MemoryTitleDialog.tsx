@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 
 type MemoryTitleFormValues = {
   readonly title: string;
@@ -91,9 +91,7 @@ export function MemoryTitleDialog({
   async function submit(values: MemoryTitleFormValues) {
     const saveError = await onSubmitTitle(values.title.trim());
     if (saveError) {
-      toast.error(saveErrorTitle, {
-        description: saveError,
-      });
+      showReoToast({ type: 'error', title: saveErrorTitle, description: saveError });
       return;
     }
 

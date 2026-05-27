@@ -19,7 +19,7 @@ import {
   mergeMemoryIntoSnapshotIfCurrentTitle,
   upsertByProjectedUpdatedAt,
 } from './appProjection';
-import { ReoToaster, showReoUndoToast, toast } from './components/ui/toaster';
+import { ReoToaster, showReoToast } from './components/ui/toaster';
 import {
   devWorkspaceScenarioMemorySpaceId,
   readAutoOpenDevWorkspaceScenarioName,
@@ -1199,15 +1199,15 @@ export function App() {
 
   function blockWorkspaceFlowInterruption() {
     if (recordingTarget) {
-      toast.error(RECORDING_FLOW_NAVIGATION_BLOCKED);
+      showReoToast({ type: 'error', title: RECORDING_FLOW_NAVIGATION_BLOCKED });
       return true;
     }
     if (noteEditorBlocking) {
-      toast.error(NOTE_EDITOR_NAVIGATION_BLOCKED);
+      showReoToast({ type: 'error', title: NOTE_EDITOR_NAVIGATION_BLOCKED });
       return true;
     }
     if (memoryStudioInlineMarkdownDirty) {
-      toast.error(INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED);
+      showReoToast({ type: 'error', title: INLINE_MARKDOWN_EDIT_NAVIGATION_BLOCKED });
       return true;
     }
 
@@ -1248,7 +1248,9 @@ export function App() {
             return;
           }
           if (!response.ok) {
-            toast.error(TRANSCRIPTION_BACKFILL_ERROR, {
+            showReoToast({
+              type: 'error',
+              title: TRANSCRIPTION_BACKFILL_ERROR,
               description: workspaceErrorDisplayMessage(
                 response.error,
                 TRANSCRIPTION_BACKFILL_ERROR
@@ -1257,9 +1259,11 @@ export function App() {
             return;
           }
           applySuccess(response.value);
-          toast.success(TRANSCRIPTION_BACKFILL_SUCCESS);
+          showReoToast({ type: 'success', title: TRANSCRIPTION_BACKFILL_SUCCESS });
         } catch (error) {
-          toast.error(TRANSCRIPTION_BACKFILL_ERROR, {
+          showReoToast({
+            type: 'error',
+            title: TRANSCRIPTION_BACKFILL_ERROR,
             description: unknownErrorDisplayMessage(error, TRANSCRIPTION_BACKFILL_ERROR),
           });
         } finally {
@@ -1443,9 +1447,7 @@ export function App() {
   }
 
   function setMemorySpaceRemoveFailure(message: string) {
-    toast.error('无法移除记忆空间', {
-      description: message,
-    });
+    showReoToast({ type: 'error', title: '无法移除记忆空间', description: message });
   }
 
   function handleMemorySpaceRemoveOpenChange(nextOpen: boolean) {
@@ -1582,7 +1584,9 @@ export function App() {
           if (response.error.dataRetention !== 'file-written-index-stale') {
             rollback();
           }
-          toast.error('无法保存记忆空间名称', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存记忆空间名称',
             description: workspaceErrorDisplayMessage(response.error, '无法重命名记忆空间。'),
           });
           return;
@@ -1614,7 +1618,9 @@ export function App() {
         }
       } catch (error) {
         rollback();
-        toast.error('无法保存记忆空间名称', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存记忆空间名称',
           description: unknownErrorDisplayMessage(error, '无法重命名记忆空间。'),
         });
       }
@@ -1678,7 +1684,9 @@ export function App() {
         }
       }
 
-      toast.success('已移除记忆空间', {
+      showReoToast({
+        type: 'success',
+        title: '已移除记忆空间',
         description: closeFailureMessage ?? '本地文件夹不会被删除。',
       });
     } catch (error) {
@@ -1778,9 +1786,7 @@ export function App() {
       return;
     }
 
-    toast.error('操作失败', {
-      description: visibleWorkspaceEntryError,
-    });
+    showReoToast({ type: 'error', title: '操作失败', description: visibleWorkspaceEntryError });
     lastWorkspaceErrorToastRef.current = visibleWorkspaceEntryError;
   }, [visibleWorkspaceEntryError]);
 
@@ -2260,7 +2266,9 @@ export function App() {
         let finalizedSupplement = draft.finalizedSupplement ?? null;
         if (!finalizedSupplement) {
           if (!draft.parentSegmentId) {
-            toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+            showReoToast({
+              type: 'error',
+              title: RECORDING_RECOVERY_SAVE_ERROR,
               description: '无法确认补充录音所属片段。',
             });
             return;
@@ -2284,7 +2292,9 @@ export function App() {
             return;
           }
           if (!response.ok) {
-            toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+            showReoToast({
+              type: 'error',
+              title: RECORDING_RECOVERY_SAVE_ERROR,
               description: workspaceErrorDisplayMessage(
                 response.error,
                 RECORDING_RECOVERY_SAVE_ERROR
@@ -2338,7 +2348,9 @@ export function App() {
               );
             } else {
               transcriptSaved = false;
-              toast.error('补充录音已保存，转写暂时无法写入。', {
+              showReoToast({
+                type: 'error',
+                title: '补充录音已保存，转写暂时无法写入。',
                 description: workspaceErrorDisplayMessage(
                   transcriptResponse.error,
                   '补充录音已保存，转写暂时无法写入。'
@@ -2350,7 +2362,9 @@ export function App() {
               return;
             }
             transcriptSaved = false;
-            toast.error('补充录音已保存，转写暂时无法写入。', {
+            showReoToast({
+              type: 'error',
+              title: '补充录音已保存，转写暂时无法写入。',
               description: unknownErrorDisplayMessage(
                 transcriptError,
                 '补充录音已保存，转写暂时无法写入。'
@@ -2369,7 +2383,7 @@ export function App() {
           workspaceId: recoverySession.workspaceId,
         });
         setRecordingRecoveryDraft(null);
-        toast.success('已保存未完成录音');
+        showReoToast({ type: 'success', title: '已保存未完成录音' });
         return;
       }
 
@@ -2391,7 +2405,9 @@ export function App() {
           return;
         }
         if (!response.ok) {
-          toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+          showReoToast({
+            type: 'error',
+            title: RECORDING_RECOVERY_SAVE_ERROR,
             description: workspaceErrorDisplayMessage(
               response.error,
               RECORDING_RECOVERY_SAVE_ERROR
@@ -2436,7 +2452,9 @@ export function App() {
             });
           } else {
             transcriptSaved = false;
-            toast.error('录音已保存，转写暂时无法写入。', {
+            showReoToast({
+              type: 'error',
+              title: '录音已保存，转写暂时无法写入。',
               description: workspaceErrorDisplayMessage(
                 transcriptResponse.error,
                 '录音已保存，转写暂时无法写入。'
@@ -2448,7 +2466,9 @@ export function App() {
             return;
           }
           transcriptSaved = false;
-          toast.error('录音已保存，转写暂时无法写入。', {
+          showReoToast({
+            type: 'error',
+            title: '录音已保存，转写暂时无法写入。',
             description: unknownErrorDisplayMessage(
               transcriptError,
               '录音已保存，转写暂时无法写入。'
@@ -2467,12 +2487,14 @@ export function App() {
         workspaceId: recoverySession.workspaceId,
       });
       setRecordingRecoveryDraft(null);
-      toast.success('已保存未完成录音');
+      showReoToast({ type: 'success', title: '已保存未完成录音' });
     } catch (error) {
       if (!recoveryActionIsCurrent()) {
         return;
       }
-      toast.error(RECORDING_RECOVERY_SAVE_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: RECORDING_RECOVERY_SAVE_ERROR,
         description: unknownErrorDisplayMessage(error, RECORDING_RECOVERY_SAVE_ERROR),
       });
     } finally {
@@ -2506,7 +2528,7 @@ export function App() {
           workspaceId: recoverySession.workspaceId,
         });
         setRecordingRecoveryDraft(null);
-        toast.success('已关闭录音恢复提示');
+        showReoToast({ type: 'success', title: '已关闭录音恢复提示' });
         return;
       }
 
@@ -2524,7 +2546,9 @@ export function App() {
         return;
       }
       if (!response.ok) {
-        toast.error(RECORDING_RECOVERY_DISCARD_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: RECORDING_RECOVERY_DISCARD_ERROR,
           description: workspaceErrorDisplayMessage(
             response.error,
             RECORDING_RECOVERY_DISCARD_ERROR
@@ -2538,12 +2562,14 @@ export function App() {
         workspaceId: recoverySession.workspaceId,
       });
       setRecordingRecoveryDraft(null);
-      toast.success('已放弃未完成录音');
+      showReoToast({ type: 'success', title: '已放弃未完成录音' });
     } catch (error) {
       if (!recoveryActionIsCurrent()) {
         return;
       }
-      toast.error(RECORDING_RECOVERY_DISCARD_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: RECORDING_RECOVERY_DISCARD_ERROR,
         description: unknownErrorDisplayMessage(error, RECORDING_RECOVERY_DISCARD_ERROR),
       });
     } finally {
@@ -2616,7 +2642,7 @@ export function App() {
         openRecording({ kind: 'existing-memory', memoryId: response.value.memoryId });
       } else {
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
-        toast.success('已新建记忆');
+        showReoToast({ type: 'success', title: '已新建记忆' });
       }
 
       return null;
@@ -2684,7 +2710,9 @@ export function App() {
 
         if (!response.ok) {
           rollback();
-          toast.error('无法保存记忆名称', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存记忆名称',
             description: workspaceErrorDisplayMessage(response.error, '无法重命名记忆。'),
           });
           return;
@@ -2715,7 +2743,9 @@ export function App() {
         }
 
         rollback();
-        toast.error('无法保存记忆名称', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存记忆名称',
           description: unknownErrorDisplayMessage(error, '无法重命名记忆。'),
         });
       }
@@ -2790,7 +2820,9 @@ export function App() {
 
         if (!response.ok) {
           rollback();
-          toast.error('无法保存片段名称', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存片段名称',
             description: workspaceErrorDisplayMessage(response.error, '无法重命名片段。'),
           });
           return;
@@ -2832,7 +2864,9 @@ export function App() {
         }
 
         rollback();
-        toast.error('无法保存片段名称', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存片段名称',
           description: unknownErrorDisplayMessage(error, '无法重命名片段。'),
         });
       }
@@ -2909,7 +2943,9 @@ export function App() {
 
         if (!response.ok) {
           rollback();
-          toast.error('无法保存内容名称', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存内容名称',
             description: workspaceErrorDisplayMessage(response.error, '无法重命名内容。'),
           });
           return;
@@ -2952,7 +2988,9 @@ export function App() {
         }
 
         rollback();
-        toast.error('无法保存内容名称', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存内容名称',
           description: unknownErrorDisplayMessage(error, '无法重命名内容。'),
         });
       }
@@ -3037,7 +3075,9 @@ export function App() {
           if (response.error.dataRetention !== 'file-written-index-stale') {
             rollback();
           }
-          toast.error('无法保存补充内容名称', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存补充内容名称',
             description: workspaceErrorDisplayMessage(response.error, '无法重命名补充内容。'),
           });
           return;
@@ -3080,7 +3120,9 @@ export function App() {
         }
 
         rollback();
-        toast.error('无法保存补充内容名称', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存补充内容名称',
           description: unknownErrorDisplayMessage(error, '无法重命名补充内容。'),
         });
       }
@@ -3283,7 +3325,9 @@ export function App() {
       }
 
       if (!response.ok) {
-        toast.error(MEMORY_RESTORE_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: MEMORY_RESTORE_ERROR,
           description: workspaceErrorDisplayMessage(response.error, MEMORY_RESTORE_ERROR),
         });
         return;
@@ -3291,13 +3335,15 @@ export function App() {
 
       applyMemoryListUpdate(response.value.memories, mutationSession);
       setSelectedMemoryId(response.value.memory.memoryId);
-      toast.success('已恢复记忆');
+      showReoToast({ type: 'success', title: '已恢复记忆' });
     } catch (error) {
       if (!mutationSessionIsActive()) {
         return;
       }
 
-      toast.error(MEMORY_RESTORE_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: MEMORY_RESTORE_ERROR,
         description: unknownErrorDisplayMessage(error, MEMORY_RESTORE_ERROR),
       });
     } finally {
@@ -3330,7 +3376,9 @@ export function App() {
       }
 
       if (!response.ok) {
-        toast.error(MEMORY_DELETE_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: MEMORY_DELETE_ERROR,
           description: workspaceErrorDisplayMessage(response.error, MEMORY_DELETE_ERROR),
         });
         return;
@@ -3347,19 +3395,23 @@ export function App() {
         setSelectedMemoryId(response.value.memories[0]?.memoryId ?? null);
       }
       setMemoryDeleteTarget(null);
-      showReoUndoToast({
-        description: target.title,
-        onUndo: () => {
-          void restoreDeletedMemoryFromUndo(response.value.restoreToken);
-        },
+      showReoToast({
         title: '已删除记忆',
+        description: target.title,
+        undo: {
+          onUndo: () => {
+            void restoreDeletedMemoryFromUndo(response.value.restoreToken);
+          },
+        },
       });
     } catch (error) {
       if (!mutationSessionIsActive()) {
         return;
       }
 
-      toast.error(MEMORY_DELETE_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: MEMORY_DELETE_ERROR,
         description: unknownErrorDisplayMessage(error, MEMORY_DELETE_ERROR),
       });
     } finally {
@@ -3393,7 +3445,9 @@ export function App() {
         if (response.error.dataRetention === 'file-written-index-stale') {
           projectRestoredSegmentSupplement(context);
         }
-        toast.error(SEGMENT_SUPPLEMENT_RESTORE_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_SUPPLEMENT_RESTORE_ERROR,
           description: workspaceErrorDisplayMessage(
             response.error,
             SEGMENT_SUPPLEMENT_RESTORE_ERROR
@@ -3437,13 +3491,15 @@ export function App() {
         memoryId: context.memoryId,
         segmentId: context.segmentId,
       });
-      toast.success('已恢复补充内容');
+      showReoToast({ type: 'success', title: '已恢复补充内容' });
     } catch (error) {
       if (!restoreSessionIsActive()) {
         return;
       }
 
-      toast.error(SEGMENT_SUPPLEMENT_RESTORE_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: SEGMENT_SUPPLEMENT_RESTORE_ERROR,
         description: unknownErrorDisplayMessage(error, SEGMENT_SUPPLEMENT_RESTORE_ERROR),
       });
     } finally {
@@ -3476,20 +3532,22 @@ export function App() {
       supplementId: target.supplement.supplementId,
     });
     const showDeletedSegmentSupplementToast = (restoreToken: string) => {
-      showReoUndoToast({
-        description: target.supplement.title,
-        onUndo: () => {
-          void restoreDeletedSegmentSupplementFromUndo({
-            supplement: target.supplement,
-            memoryId: target.memoryId,
-            restoreToken,
-            segment: target.segment,
-            segmentId: target.segment.segmentId,
-            workspaceHandle: session.workspaceHandle,
-            workspaceId: session.workspaceId,
-          });
-        },
+      showReoToast({
         title: '已删除补充内容',
+        description: target.supplement.title,
+        undo: {
+          onUndo: () => {
+            void restoreDeletedSegmentSupplementFromUndo({
+              supplement: target.supplement,
+              memoryId: target.memoryId,
+              restoreToken,
+              segment: target.segment,
+              segmentId: target.segment.segmentId,
+              workspaceHandle: session.workspaceHandle,
+              workspaceId: session.workspaceId,
+            });
+          },
+        },
       });
     };
     const projectDeletedSegmentSupplement = () => {
@@ -3571,7 +3629,9 @@ export function App() {
           projectDeletedSegmentSupplement();
           showDeletedSegmentSupplementToast(target.supplement.supplementId);
         }
-        toast.error(SEGMENT_SUPPLEMENT_DELETE_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_SUPPLEMENT_DELETE_ERROR,
           description: workspaceErrorDisplayMessage(
             response.error,
             SEGMENT_SUPPLEMENT_DELETE_ERROR
@@ -3612,7 +3672,9 @@ export function App() {
         return;
       }
 
-      toast.error(SEGMENT_SUPPLEMENT_DELETE_ERROR, {
+      showReoToast({
+        type: 'error',
+        title: SEGMENT_SUPPLEMENT_DELETE_ERROR,
         description: unknownErrorDisplayMessage(error, SEGMENT_SUPPLEMENT_DELETE_ERROR),
       });
     } finally {
@@ -3647,7 +3709,7 @@ export function App() {
 
     if (!memoryBeforeDelete) {
       setSegmentDeleteTarget(null);
-      toast.error(SEGMENT_DELETE_ERROR);
+      showReoToast({ type: 'error', title: SEGMENT_DELETE_ERROR });
       return;
     }
 
@@ -3800,7 +3862,9 @@ export function App() {
           } else {
             rollbackSegmentDelete();
           }
-          toast.error(SEGMENT_DELETE_ERROR, {
+          showReoToast({
+            type: 'error',
+            title: SEGMENT_DELETE_ERROR,
             description: workspaceErrorDisplayMessage(response.error, SEGMENT_DELETE_ERROR),
           });
           return;
@@ -3850,7 +3914,9 @@ export function App() {
           return;
         }
         rollbackSegmentDelete();
-        toast.error(SEGMENT_DELETE_ERROR, {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_DELETE_ERROR,
           description: unknownErrorDisplayMessage(error, SEGMENT_DELETE_ERROR),
         });
       }
@@ -3899,34 +3965,36 @@ export function App() {
     setSegmentDeleteTarget(null);
 
     let toastPhase: SegmentDeleteToastPhase = 'pending';
-    showReoUndoToast({
+    showReoToast({
+      title: '已删除片段',
       description: target.segment.title,
       durationMs: SEGMENT_DELETE_UNDO_DURATION_MS,
-      onAutoClose: () => {
-        if (toastPhase !== 'pending') {
-          return;
-        }
-        toastPhase = 'committing';
-        if (!segmentDeleteSessionIsActive()) {
-          toastPhase = 'settled';
+      undo: {
+        onAutoClose: () => {
+          if (toastPhase !== 'pending') {
+            return;
+          }
+          toastPhase = 'committing';
+          if (!segmentDeleteSessionIsActive()) {
+            toastPhase = 'settled';
+            clearPendingSegmentDeleteProjection();
+            return;
+          }
+          void commitSegmentDelete();
+        },
+        onUndo: () => {
+          if (toastPhase !== 'pending') {
+            return;
+          }
+          toastPhase = 'undone';
+          if (!segmentDeleteSessionIsActive()) {
+            clearPendingSegmentDeleteProjection();
+            return;
+          }
           clearPendingSegmentDeleteProjection();
-          return;
-        }
-        void commitSegmentDelete();
+          rollbackSegmentDelete();
+        },
       },
-      onUndo: () => {
-        if (toastPhase !== 'pending') {
-          return;
-        }
-        toastPhase = 'undone';
-        if (!segmentDeleteSessionIsActive()) {
-          clearPendingSegmentDeleteProjection();
-          return;
-        }
-        clearPendingSegmentDeleteProjection();
-        rollbackSegmentDelete();
-      },
-      title: '已删除片段',
     });
   }
 
@@ -4125,7 +4193,9 @@ export function App() {
           return;
         }
         if (!response.ok) {
-          toast.error('无法清空转录。', {
+          showReoToast({
+            type: 'error',
+            title: '无法清空转录。',
             description: workspaceErrorDisplayMessage(response.error, '无法清空转录。'),
           });
           return;
@@ -4152,7 +4222,9 @@ export function App() {
         return;
       }
       if (!result.ok) {
-        toast.error('无法清空正文。', {
+        showReoToast({
+          type: 'error',
+          title: '无法清空正文。',
           description:
             result.kind === 'conflict' ? '磁盘内容已变化，请重新打开后再清空。' : result.message,
         });
@@ -4161,7 +4233,9 @@ export function App() {
       handleNoteSegmentContentSaved(result.saved);
       setSegmentContentClearTarget(null);
     } catch (error) {
-      toast.error(target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。', {
+      showReoToast({
+        type: 'error',
+        title: target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。',
         description: unknownErrorDisplayMessage(
           error,
           target.contentKind === 'transcript' ? '无法清空转录。' : '无法清空正文。'

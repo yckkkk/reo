@@ -10,7 +10,19 @@ vi.mock('@/components/ui/toaster', () => {
     success: vi.fn(),
   });
 
-  return { toast };
+  const showReoToast = (input: {
+    readonly type?: string;
+    readonly title: string;
+    readonly description?: string;
+  }) => {
+    const fn =
+      input.type === 'success' ? toast.success : input.type === 'error' ? toast.error : toast;
+    return input.description === undefined
+      ? fn(input.title)
+      : fn(input.title, { description: input.description });
+  };
+
+  return { toast, showReoToast, ReoToaster: () => null };
 });
 
 function deferred<T>() {

@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 import {
   appendRecordingAudioChunk,
   appendSegmentSupplementRecordingAudioChunk,
@@ -507,7 +507,7 @@ export function RecordingOverlay({
       return;
     }
 
-    toast.error(displayMessage);
+    showReoToast({ type: 'error', title: displayMessage });
     lastRecordingErrorToastRef.current = displayMessage;
   }, []);
 
@@ -847,7 +847,7 @@ export function RecordingOverlay({
       const nextDurationMs = readRecordingDurationMs();
       if (nextDurationMs >= MAX_RECORDING_DURATION_MS) {
         pauseRecordingAt(MAX_RECORDING_DURATION_MS);
-        toast(MAX_RECORDING_DURATION_NOTICE);
+        showReoToast({ title: MAX_RECORDING_DURATION_NOTICE });
         return;
       }
       if (
@@ -855,7 +855,7 @@ export function RecordingOverlay({
         nextDurationMs >= LONG_RECORDING_WARNING_THRESHOLD_MS
       ) {
         longRecordingWarningShownRef.current = true;
-        toast(LONG_RECORDING_WARNING_NOTICE);
+        showReoToast({ title: LONG_RECORDING_WARNING_NOTICE });
       }
       setElapsedMsSnapshot(nextDurationMs, { realtime: true });
       persistRecoveryDuration(nextDurationMs);
@@ -1981,7 +1981,7 @@ export function RecordingOverlay({
       durationMs - lastNoticeableAudioAtMsRef.current >= SILENCE_NOTICE_THRESHOLD_MS
     ) {
       silenceNoticeShownRef.current = true;
-      toast(SILENCE_NOTICE);
+      showReoToast({ title: SILENCE_NOTICE });
     }
     const averageLevel = displayLevelSum / divisor;
     appendLiveWaveformSample(averageLevel, durationMs);

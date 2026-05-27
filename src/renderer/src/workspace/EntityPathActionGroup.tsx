@@ -5,7 +5,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 export const entityActionMenuSeparatorClassName = 'mx-8 bg-foreground/20';
@@ -25,7 +25,10 @@ function EntityPathActionIcon({ icon: Icon }: { readonly icon: typeof ExternalLi
 
 export function toastEntityActionError(response: WorkspaceEntityActionResponse) {
   if (!response.ok) {
-    toast.error(workspaceErrorDisplayMessage(response.error, '操作失败，请重试。'));
+    showReoToast({
+      type: 'error',
+      title: workspaceErrorDisplayMessage(response.error, '操作失败，请重试。'),
+    });
     return false;
   }
 
@@ -33,14 +36,14 @@ export function toastEntityActionError(response: WorkspaceEntityActionResponse) 
 }
 
 function toastEntityPathCopied() {
-  toast.success('已复制路径');
+  showReoToast({ type: 'success', title: '已复制路径' });
 }
 
 async function handleEntityAction(action: EntityPathAction) {
   try {
     toastEntityActionError(await action());
   } catch {
-    toast.error('操作失败，请重试。');
+    showReoToast({ type: 'error', title: '操作失败，请重试。' });
   }
 }
 
@@ -49,7 +52,7 @@ async function handleEntityPathCopy(action: EntityPathAction) {
   try {
     copied = toastEntityActionError(await action());
   } catch {
-    toast.error('操作失败，请重试。');
+    showReoToast({ type: 'error', title: '操作失败，请重试。' });
     return;
   }
 

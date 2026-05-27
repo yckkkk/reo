@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui/toaster';
+import { showReoToast } from '@/components/ui/toaster';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2935,7 +2935,7 @@ export function MemoryStudio({
     if (!inlineMarkdownDirty) {
       return false;
     }
-    toast.error(INLINE_MARKDOWN_UNSAVED_MESSAGE);
+    showReoToast({ type: 'error', title: INLINE_MARKDOWN_UNSAVED_MESSAGE });
     return true;
   }
 
@@ -3665,7 +3665,9 @@ export function MemoryStudio({
     })
       .then((response) => {
         if (!response.ok) {
-          toast.error('无法保存片段内容顺序', {
+          showReoToast({
+            type: 'error',
+            title: '无法保存片段内容顺序',
             description: workspaceErrorDisplayMessage(response.error, '无法保存片段内容顺序。'),
           });
           return;
@@ -3673,7 +3675,9 @@ export function MemoryStudio({
         seedContentTabOrderResult(response.value);
       })
       .catch((error: unknown) => {
-        toast.error('无法保存片段内容顺序', {
+        showReoToast({
+          type: 'error',
+          title: '无法保存片段内容顺序',
           description: unknownErrorDisplayMessage(error, '无法保存片段内容顺序。'),
         });
       })
