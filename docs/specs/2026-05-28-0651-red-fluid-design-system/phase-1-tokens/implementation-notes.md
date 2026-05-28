@@ -26,3 +26,11 @@
 - 改动：`docs/current/design-system/variables.css`（完整重写）
 - 验证：与 tokens.json 逐项对齐——`:root/[data-theme='light']` 段含 Layer 1 raw + Layer 2 semantic + Layer 3 radius + Layer 4 effect；`[data-theme='dark']` 段含同样的 Layer 1 raw + Layer 2 semantic + Layer 4 effect（radius 继承自 :root）。所有新增 token 名落入 spec Section 6.7 reserved prefix
 - 备注：variables.css 不被 runtime build 直接引用，是 design-system 源文件镜像；runtime 真源是 theme.css（Task 4 处理）
+- Commit: `fe3ef439 feat(design-system): rewrite variables.css mirror for red fluid system`
+
+## Task 3 · 更新 DESIGN.md
+
+- 时间：2026-05-28 07:28 PDT
+- 改动：`docs/current/design-system/DESIGN.md`（完整重写）
+- 验证：重新读取后确认：标题改为 "Reo Red Fluid Design System"；核心定义不再描述黑色为主 Soft Flat；视觉语义新增 surface-1..4、primary-hover、brand-gradient 表述；Hero 表面表格与 spec Section 4.1 / 4.2 一致；命名规范关键约束指向 spec README#section-6
+- 备注：narrative 文档，runtime 不消费；只服务 agent 阅读
