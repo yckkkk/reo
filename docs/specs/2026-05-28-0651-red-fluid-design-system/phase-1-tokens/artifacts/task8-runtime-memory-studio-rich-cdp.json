@@ -1,0 +1,103 @@
+{
+  "url": "http://localhost:5183/?reoScenario=memory-studio-rich",
+  "capturedAt": "2026-05-28T16:05:50.397Z",
+  "viewport": {
+    "width": 1440,
+    "height": 1000,
+    "deviceScaleFactor": 1
+  },
+  "memoryStudio": {
+    "light": {
+      "theme": "light",
+      "primary": "#18181b",
+      "primaryHover": "color-mix(in oklab, #18181b 86%, #ffffff)",
+      "ring": "#18181b",
+      "destructive": "#b91c1c",
+      "hasMemoryStudio": true,
+      "hasWaveformCanvas": true,
+      "fabClassName": "!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-brand-ember !text-destructive-foreground !transition-colors !duration-200 !ease-out hover:!bg-brand-ember focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background p-speeddial-button p-button-rounded p-button p-component p-button-icon-only",
+      "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/artifacts/task8-runtime-memory-studio-rich-light-cdp.png"
+    },
+    "dark": {
+      "theme": "dark",
+      "primary": "#fafafa",
+      "primaryHover": "color-mix(in oklab, #fafafa 86%, #09090b)",
+      "ring": "#fafafa",
+      "destructive": "#b91c1c",
+      "hasMemoryStudio": true,
+      "hasWaveformCanvas": true,
+      "fabClassName": "!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-brand-ember !text-destructive-foreground !transition-colors !duration-200 !ease-out hover:!bg-brand-ember focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background p-speeddial-button p-button-rounded p-button p-component p-button-icon-only",
+      "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/artifacts/task8-runtime-memory-studio-rich-dark-cdp.png"
+    }
+  },
+  "settingsVoice": {
+    "light": {
+      "theme": "light",
+      "primary": "#18181b",
+      "primaryHover": "color-mix(in oklab, #18181b 86%, #ffffff)",
+      "ring": "#18181b",
+      "switchBackground": "rgb(24, 24, 27)",
+      "switchBackgroundHex": "#18181b",
+      "thumbBackground": "rgb(255, 255, 255)",
+      "thumbBackgroundHex": "#ffffff",
+      "thumbTranslate": "18px",
+      "switchState": "checked",
+      "switchDataSlot": "switch",
+      "switchClassName": "peer inline-flex h-24 w-40 shrink-0 cursor-pointer items-center rounded-full border-0 bg-secondary shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-100 data-[state=checked]:bg-primary",
+      "isNeutralCheckedSwitch": true,
+      "isRedCheckedSwitch": false,
+      "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/artifacts/task8-runtime-settings-voice-light-neutral-cdp.png"
+    },
+    "dark": {
+      "theme": "dark",
+      "primary": "#fafafa",
+      "primaryHover": "color-mix(in oklab, #fafafa 86%, #09090b)",
+      "ring": "#fafafa",
+      "switchBackground": "rgb(250, 250, 250)",
+      "switchBackgroundHex": "#fafafa",
+      "thumbBackground": "rgb(9, 9, 11)",
+      "thumbBackgroundHex": "#09090b",
+      "thumbTranslate": "18px",
+      "switchState": "checked",
+      "switchDataSlot": "switch",
+      "switchClassName": "peer inline-flex h-24 w-40 shrink-0 cursor-pointer items-center rounded-full border-0 bg-secondary shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-100 data-[state=checked]:bg-primary",
+      "isNeutralCheckedSwitch": true,
+      "isRedCheckedSwitch": false,
+      "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/artifacts/task8-runtime-settings-voice-dark-neutral-cdp.png"
+    }
+  },
+  "assertions": {
+    "memoryLightPrimaryIsNeutral": true,
+    "memoryDarkPrimaryIsNeutral": true,
+    "memoryRingFollowsPrimary": true,
+    "settingsLightSwitchIsNeutral": true,
+    "settingsDarkSwitchIsNeutral": true,
+    "destructiveRemainsDangerRed": true,
+    "memoryStudioLoaded": true,
+    "waveformCanvasPresent": true,
+    "noRuntimeExceptions": true
+  },
+  "events": {
+    "logs": [
+      {
+        "level": "error",
+        "source": "network",
+        "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "url": "http://localhost:5183/favicon.ico"
+      },
+      {
+        "level": "verbose",
+        "source": "recommendation",
+        "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+        "url": "http://localhost:5183/?reoScenario=memory-studio-rich"
+      },
+      {
+        "level": "verbose",
+        "source": "recommendation",
+        "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+        "url": "http://localhost:5183/?reoScenario=memory-studio-rich"
+      }
+    ],
+    "exceptions": []
+  }
+}

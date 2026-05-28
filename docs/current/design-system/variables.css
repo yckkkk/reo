@@ -26,9 +26,9 @@
   --card-foreground: #18181b;
   --popover: var(--surface-4);
   --popover-foreground: #18181b;
-  --primary: var(--brand-red);
-  --primary-foreground: #ffffff;
-  --primary-hover: color-mix(in oklab, var(--primary) 90%, var(--foreground));
+  --primary: #18181b;
+  --primary-foreground: var(--background);
+  --primary-hover: color-mix(in oklab, var(--primary) 86%, var(--background));
   --secondary: #e5e7eb;
   --secondary-foreground: #18181b;
   --muted: var(--surface-2);
@@ -41,7 +41,7 @@
   --scrim: rgb(24 24 27 / 0.32);
   --border: transparent;
   --input: var(--surface-3);
-  --ring: var(--brand-red);
+  --ring: var(--primary);
 
   /* Layer 3 · radius scale */
   --radius: 16px;
@@ -91,9 +91,9 @@
   --card-foreground: #fafafa;
   --popover: var(--surface-4);
   --popover-foreground: #fafafa;
-  --primary: var(--brand-red);
-  --primary-foreground: #ffffff;
-  --primary-hover: color-mix(in oklab, var(--primary) 90%, var(--foreground));
+  --primary: #fafafa;
+  --primary-foreground: var(--background);
+  --primary-hover: color-mix(in oklab, var(--primary) 86%, var(--background));
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
   --muted: var(--surface-2);
@@ -106,7 +106,7 @@
   --scrim: rgb(0 0 0 / 0.62);
   --border: transparent;
   --input: var(--surface-3);
-  --ring: var(--brand-red);
+  --ring: var(--primary);
 
   /* Layer 4 · effect tokens (dark variants) */
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.4);

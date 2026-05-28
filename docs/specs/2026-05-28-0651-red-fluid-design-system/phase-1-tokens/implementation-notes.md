@@ -48,12 +48,12 @@
 - 备注：**主动声明的行为变化**：shadow utility 现在 dark mode 下会切换值；旧实现是 latent bug（不切换）。本次顺手修正与命名规范是同一架构改动的一部分
 - Commit: `17162b3a feat(theme): replace runtime tokens with red fluid system`
 
-## Task 5 · 新增 bg-brand-gradient utility
+## Task 5 · bg-brand-gradient utility（Task 8 已回滚）
 
 - 时间：2026-05-28 07:34 PDT
-- 改动：`src/renderer/src/index.css`（在 `@utility reo-segment-card-squircle` 之后追加 `@utility bg-brand-gradient`）
-- 验证：utility 体内 `background: var(--brand-gradient)`；`--brand-gradient` 在 light / dark 两个主题都有定义（Task 4 已确认），所以 `bg-brand-gradient` 自动随主题切换
-- 备注：gradient 不能走 `@theme inline` 的 `--color-*` 路径（Tailwind v4 把 `--color-*` 当作单色处理），所以用 `@utility` 显式定义；此 utility 在 Phase 4（FAB）与 Phase 5（RecordingOverlay）才有真实 consumer
+- 改动：初始 commit 曾在 `src/renderer/src/index.css` 暴露 `@utility bg-brand-gradient`；Task 8 review 后已移除
+- 验证：Task 8 新增 `renderer Tailwind entry does not source-scan docs or expose ownerless gradient utilities`，断言 `src/renderer/src/index.css` 不含 `@utility bg-brand-gradient`
+- 备注：Phase 1 只保留 `--brand-gradient` raw token；gradient utility 延后到真实 owner primitive 接入时再落
 - Commit: `d884428e feat(theme): expose bg-brand-gradient Tailwind utility`
 
 ## Task 6 · 修正 frontend.md 设计系统描述
@@ -75,4 +75,25 @@
 - 验证：
   - `npm run verify:quick` 第二次运行 exit code 0；532 tests 全过；lint 无 warning；format:check pass（只 spec 文档剩 prettier warning，下一 commit 处理）
   - **plan 缺口暴露与修补**：原 plan 没包含 `docs/current/design-system/theme.css` 镜像更新与 token contract 测试同步——这两个缺口让 verify:quick 第一次失败。本次以"修补 + 记录"方式收口，未来 phase 应在 plan 阶段就盘点所有镜像与契约测试
-- 备注：dev server 视觉 smoke 留待用户复核或单独 chrome browser session，因为 Electron app + claude-in-chrome 的接入需要 vite scenario URL，属于人眼判断而不是机器自动化。verify:quick 通过已满足 spec README 的 success criteria 第一条
+- 备注：Task 8 已补充浏览器 runtime 视觉证据；本节原始 "视觉 smoke 留待用户复核" 不再是当前缺口
+
+## Task 8 · review + simplify gate
+
+- 时间：2026-05-28 08:24 PDT
+- 改动：
+  - `src/renderer/src/index.css`：移除无 current TSX consumer 的 `bg-brand-gradient` utility；按 Tailwind v4 `@source not` 官方模型排除 `docs` source scanning，避免 spec prose 生成 runtime CSS
+  - `src/renderer/src/components/ui/button.tsx` + `button.test.tsx`：Button primary hover 改用 `hover:bg-primary-hover`，给 `primary-hover` semantic token 一个真实 primitive consumer
+  - `docs/current/design-system/tokens.json`：`brand-gradient` 值复用 `--brand-*` raw token，不重复硬编码品牌色
+  - `test/main/designSystemTokens.test.ts`：扩展为规则化 token contract，覆盖 `variables.css` / `theme.css` mirror、gradient、radius、shadow、命名规则和 Tailwind entry source 边界
+  - `docs/current/*` 与 phase spec：同步 Phase 1 实际范围、Button hover、Tailwind source scanning、Red Fluid 命名和 review gate 状态
+  - `artifacts/task8-runtime-memory-studio-rich-*-cdp.png` + `task8-runtime-memory-studio-rich-cdp.json`：记录 light / dark Memory Studio rich runtime 证据
+- 验证：
+  - Context7 查询 Tailwind CSS 当前文档，确认 v4 CSS-first 可在 `@import 'tailwindcss'` 后使用 `@source not "<path>"` 排除扫描路径
+  - `/review` + `/simplify` 子任务指出：docs 误扫、ownerless gradient utility、Button hover token 无 consumer、current docs future truth、token test 覆盖不足；以上均已修正
+  - RED：`npm run test:renderer -- --project renderer-jsdom-components src/renderer/src/components/ui/button.test.tsx` 先因 Button 仍输出 `hover:bg-primary/90` 失败
+  - GREEN：同一 renderer targeted test 通过，1 file / 7 tests
+  - `MAIN_TEST_FILES=test/main/designSystemTokens.test.ts npm run test:main` 通过，6 tests
+  - `npm run build:app` 通过；产物 CSS scan 确认没有 `.bg-brand-gradient` 或 `.shadow-hero-*` class selector，且 `.hover\\:bg-primary-hover:hover` 已生成
+  - Chrome extension/browser-client 通道返回 unavailable；插件诊断显示 Chrome、Codex Chrome Extension 与 native host 均安装启用，因此 runtime smoke 改用临时 headless Chrome CDP 会话，不触碰用户现有 profile
+  - `task8-runtime-memory-studio-rich-cdp.json` assertions 全 true：light/dark 均加载 Memory Studio rich，primary/ring 分别为 `#18181b` / `#fafafa`，Settings 语音页 Switch checked 分别为 `#18181b` / `#fafafa`，destructive 保持 `#b91c1c`，有 canvas waveform，无 runtime exception；Memory Studio light/dark 与 Settings light/dark 四张 screenshot 均为 1440x1000
+- 备注：Task 8 的简化结论是"token 可先落 raw asset，但 runtime utility 必须有 current consumer 或明确 owner phase"；Phase 2 之前不再补无 consumer utility。用户指出 Settings 层级红色 Switch 不符合设计心智后，Phase 1 将 `primary/ring` 从品牌红纠正为中性黑白；品牌红只保留在 brand / recording / Hero raw 资产与 destructive 之外的明确 owner 内

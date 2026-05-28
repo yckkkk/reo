@@ -22,9 +22,9 @@ const lightColorContract = {
   'card-foreground': '#18181b',
   popover: 'var(--surface-4)',
   'popover-foreground': '#18181b',
-  primary: 'var(--brand-red)',
-  'primary-foreground': '#ffffff',
-  'primary-hover': 'color-mix(in oklab, var(--primary) 90%, var(--foreground))',
+  primary: '#18181b',
+  'primary-foreground': 'var(--background)',
+  'primary-hover': 'color-mix(in oklab, var(--primary) 86%, var(--background))',
   secondary: '#e5e7eb',
   'secondary-foreground': '#18181b',
   muted: 'var(--surface-2)',
@@ -37,7 +37,7 @@ const lightColorContract = {
   scrim: 'rgb(24 24 27 / 0.32)',
   border: 'transparent',
   input: 'var(--surface-3)',
-  ring: 'var(--brand-red)',
+  ring: 'var(--primary)',
 } as const;
 
 const darkColorContract = {
@@ -59,9 +59,9 @@ const darkColorContract = {
   'card-foreground': '#fafafa',
   popover: 'var(--surface-4)',
   'popover-foreground': '#fafafa',
-  primary: 'var(--brand-red)',
-  'primary-foreground': '#ffffff',
-  'primary-hover': 'color-mix(in oklab, var(--primary) 90%, var(--foreground))',
+  primary: '#fafafa',
+  'primary-foreground': 'var(--background)',
+  'primary-hover': 'color-mix(in oklab, var(--primary) 86%, var(--background))',
   secondary: '#27272a',
   'secondary-foreground': '#fafafa',
   muted: 'var(--surface-2)',
@@ -74,7 +74,7 @@ const darkColorContract = {
   scrim: 'rgb(0 0 0 / 0.62)',
   border: 'transparent',
   input: 'var(--surface-3)',
-  ring: 'var(--brand-red)',
+  ring: 'var(--primary)',
 } as const;
 
 const radiusContract = {
@@ -109,9 +109,50 @@ const darkShadowContract = {
   'surface-inset': 'inset 0 1px 0 rgb(255 255 255 / 0.04)',
 } as const;
 
+const gradientContract = {
+  'brand-gradient-light':
+    'linear-gradient(135deg, var(--brand-ember) 0%, var(--brand-red) 50%, var(--brand-magenta) 100%)',
+  'brand-gradient-dark':
+    'linear-gradient(135deg, color-mix(in oklab, var(--brand-ember) 92%, #09090b) 0%, color-mix(in oklab, var(--brand-red) 92%, #09090b) 50%, color-mix(in oklab, var(--brand-magenta) 92%, #09090b) 100%)',
+} as const;
+
+const semanticColorRoles = new Set([
+  'accent',
+  'accent-foreground',
+  'background',
+  'border',
+  'card',
+  'card-foreground',
+  'destructive',
+  'destructive-foreground',
+  'destructive-hover',
+  'foreground',
+  'input',
+  'muted',
+  'muted-foreground',
+  'popover',
+  'popover-foreground',
+  'primary',
+  'primary-foreground',
+  'primary-hover',
+  'ring',
+  'scrim',
+  'secondary',
+  'secondary-foreground',
+]);
+
+const cssTokenFiles = [
+  'src/renderer/src/theme.css',
+  'docs/current/design-system/theme.css',
+  'docs/current/design-system/variables.css',
+] as const;
+
+const rendererGlobalCssEntry = 'src/renderer/src/index.css';
+
 type DesignTokens = {
   color: Record<string, { $value: string }>;
   dark: Record<string, { $value: string }>;
+  gradient: Record<string, { $value: string }>;
   radius: Record<string, { $value: string }>;
   shadow: Record<string, { $value: string }>;
   darkShadow: Record<string, { $value: string }>;
@@ -137,7 +178,10 @@ function cssVariableMap(css: string, scope: 'light' | 'dark'): Map<string, strin
     if (name && value) {
       // Collapse whitespace so multi-line shadow values compare against
       // single-line contract strings.
-      variables.set(name, value.replace(/\s+/g, ' ').trim());
+      variables.set(
+        name,
+        value.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim()
+      );
     }
   }
   return variables;
@@ -154,7 +198,25 @@ function cssVariableValue(
   return value;
 }
 
-test('design token source defines red fluid semantic colors and raw layer', () => {
+function assertColorTokenNameAllowed(name: string): void {
+  if (name.startsWith('brand-')) {
+    assert.doesNotMatch(
+      name,
+      /-(hover|active|disabled)$/,
+      `raw brand token cannot carry state: ${name}`
+    );
+    return;
+  }
+
+  if (name.startsWith('surface-')) {
+    assert.match(name, /^surface-[1-4]$/, `surface token must use surface-1..4: ${name}`);
+    return;
+  }
+
+  assert.ok(semanticColorRoles.has(name), `unexpected semantic color token: ${name}`);
+}
+
+test('design token source defines red fluid raw layer and neutral semantic controls', () => {
   const tokens = readDesignTokens();
 
   for (const [name, expectedValue] of Object.entries(lightColorContract)) {
@@ -165,23 +227,25 @@ test('design token source defines red fluid semantic colors and raw layer', () =
     assert.equal(tokens.dark[name]?.$value, expectedValue, `dark ${name}`);
   }
 
-  // Legacy and never-shipped tokens stay absent.
-  assert.equal(tokens.color['brand-blue'], undefined, 'light brand-blue removed');
-  assert.equal(tokens.color['brand-spectrum'], undefined, 'light brand-spectrum removed');
-  assert.equal(tokens.color['brand-red-hover'], undefined, 'raw layer carries no state suffix');
-  assert.equal(tokens.color['brand-grad'], undefined, 'gradient uses full word in raw layer');
-  assert.equal(tokens.dark['brand-blue'], undefined, 'dark brand-blue removed');
-  assert.equal(tokens.dark['brand-spectrum'], undefined, 'dark brand-spectrum removed');
+  for (const tokenName of [...Object.keys(tokens.color), ...Object.keys(tokens.dark)]) {
+    assertColorTokenNameAllowed(tokenName);
+    assert.doesNotMatch(
+      tokenName,
+      /\bgrad\b/,
+      `gradient token names use the full word: ${tokenName}`
+    );
+  }
+});
+
+test('renderer Tailwind entry does not source-scan docs or expose ownerless gradient utilities', () => {
+  const css = readProjectFile(rendererGlobalCssEntry);
+
+  assert.match(css, /@source\s+not\s+['"]\.\.\/\.\.\/\.\.\/docs['"];/);
+  assert.doesNotMatch(css, /@utility\s+bg-brand-gradient\b/);
 });
 
 test('runtime and design-system CSS project the same semantic tokens', () => {
-  const cssFiles = [
-    'src/renderer/src/theme.css',
-    'docs/current/design-system/theme.css',
-    'docs/current/design-system/variables.css',
-  ] as const;
-
-  for (const path of cssFiles) {
+  for (const path of cssTokenFiles) {
     const css = readProjectFile(path);
     const lightVariables = cssVariableMap(css, 'light');
     const darkVariables = cssVariableMap(css, 'dark');
@@ -194,12 +258,14 @@ test('runtime and design-system CSS project the same semantic tokens', () => {
       assert.equal(cssVariableValue(darkVariables, name, 'dark'), expectedValue, path);
     }
 
-    assert.doesNotMatch(css, /--brand-blue|--brand-spectrum/, path);
-    assert.doesNotMatch(
-      css,
-      /--brand-red-hover|--brand-grad\b/,
-      `${path} must not carry retired raw-layer names`
-    );
+    for (const tokenName of [...lightVariables.keys(), ...darkVariables.keys()]) {
+      if (tokenName.startsWith('color-') || tokenName.startsWith('font-')) {
+        continue;
+      }
+
+      assert.doesNotMatch(tokenName, /^brand-.+-(hover|active|disabled)$/, path);
+      assert.doesNotMatch(tokenName, /\bgrad\b/, path);
+    }
   }
 });
 
@@ -210,7 +276,7 @@ test('radius scale includes squircle Hero sizes and full radius is reserved', ()
     assert.equal(tokens.radius[name]?.$value, expectedValue, `radius ${name}`);
   }
 
-  for (const path of ['src/renderer/src/theme.css', 'docs/current/design-system/theme.css']) {
+  for (const path of cssTokenFiles) {
     const css = readProjectFile(path);
     const lightVariables = cssVariableMap(css, 'light');
     assert.equal(cssVariableValue(lightVariables, 'radius', 'light'), radiusContract.base, path);
@@ -243,7 +309,7 @@ test('floating and hero shadows are defined with light and dark variants', () =>
     assert.equal(tokens.darkShadow[name]?.$value, expectedValue, `dark shadow ${name}`);
   }
 
-  for (const path of ['src/renderer/src/theme.css', 'docs/current/design-system/theme.css']) {
+  for (const path of cssTokenFiles) {
     const css = readProjectFile(path);
     const lightVariables = cssVariableMap(css, 'light');
     const darkVariables = cssVariableMap(css, 'dark');
@@ -267,11 +333,13 @@ test('floating and hero shadows are defined with light and dark variants', () =>
 });
 
 test('brand gradient is exposed as a CSS variable, not as a raw color', () => {
-  for (const path of [
-    'src/renderer/src/theme.css',
-    'docs/current/design-system/theme.css',
-    'docs/current/design-system/variables.css',
-  ] as const) {
+  const tokens = readDesignTokens();
+
+  for (const [name, expectedValue] of Object.entries(gradientContract)) {
+    assert.equal(tokens.gradient[name]?.$value, expectedValue, `gradient ${name}`);
+  }
+
+  for (const path of cssTokenFiles) {
     const css = readProjectFile(path);
     const lightVariables = cssVariableMap(css, 'light');
     const darkVariables = cssVariableMap(css, 'dark');
@@ -294,5 +362,7 @@ test('brand gradient is exposed as a CSS variable, not as a raw color', () => {
       darkGradient,
       `${path} dark gradient must reduce saturation vs light`
     );
+    assert.equal(lightGradient, tokens.gradient['brand-gradient-light']?.$value, path);
+    assert.equal(darkGradient, tokens.gradient['brand-gradient-dark']?.$value, path);
   }
 });

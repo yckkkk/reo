@@ -66,7 +66,7 @@ describe('Button primitive', () => {
       'rounded-lg',
       'border-0',
       'bg-primary',
-      'hover:bg-primary/90',
+      'hover:bg-primary-hover',
       'shadow-none'
     );
     expect(button).not.toHaveClass('rounded-full');

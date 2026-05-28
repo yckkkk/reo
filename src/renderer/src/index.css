@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@source not '../../../docs';
 @import './theme.css';
 
 @custom-variant dark (&:is([data-theme='dark'] *, .dark *));
@@ -10,10 +11,6 @@
 @utility reo-segment-card-squircle {
   border-radius: clamp(33px, 4.34vw, 36px);
   corner-shape: squircle;
-}
-
-@utility bg-brand-gradient {
-  background: var(--brand-gradient);
 }
 
 @layer base {
