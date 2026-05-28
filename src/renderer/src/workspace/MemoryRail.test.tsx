@@ -24,6 +24,26 @@ function memory(overrides: Partial<WorkspaceMemory>): WorkspaceMemory {
 }
 
 describe('MemoryRail', () => {
+  it('renders the empty state through the rail card surface', () => {
+    render(
+      <MemoryRail
+        memories={[]}
+        onDeleteMemory={vi.fn()}
+        onRenameMemory={vi.fn()}
+        onSelectMemory={vi.fn()}
+        workspaceHandle="workspace-handle-secret"
+        workspaceId="ws_1"
+      />
+    );
+
+    const emptyCard = screen
+      .getByText('还没有记忆')
+      .closest('[data-slot="memory-rail-empty-card"]');
+
+    expect(emptyCard).toBeTruthy();
+    expect(emptyCard).toHaveClass('reo-card-squircle', 'rounded-xl', 'bg-card');
+  });
+
   it('renders memories in upstream snapshot order without resorting in render', () => {
     render(
       <MemoryRail

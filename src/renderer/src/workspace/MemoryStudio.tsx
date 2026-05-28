@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import { Ellipsis, FileText, Mic, Pause, Play, Plus } from 'lucide-react';
 import {
   useEffect,
@@ -10,7 +9,6 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
-  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -43,6 +41,14 @@ import {
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
+import {
+  MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS,
+  MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX,
+  MEMORY_STUDIO_SEGMENT_STRIP_STYLE,
+  MemoryStudioSegmentCard,
+  MemoryStudioSegmentCardActionButton,
+  memoryStudioSegmentStripSpacerStyle,
+} from './MemoryStudioSegmentCard';
 import { SegmentActionsMenu } from './SegmentActionsMenu';
 import { SegmentContentActionsMenu } from './SegmentContentActionsMenu';
 import {
@@ -62,7 +68,6 @@ import {
   type InlineMarkdownEditorState,
 } from './inlineMarkdownEditorState';
 import { MarkdownContentSurface } from './MarkdownContentSurface';
-import { byteLengthLabel } from './memoryLabels';
 import {
   type FinalizedNoteContentSaveResult,
   saveFinalizedNoteSegmentContent,
@@ -198,8 +203,6 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
   canScrollLeft: false,
   canScrollRight: false,
 };
-const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
-const SEGMENT_PREVIEW_WAVEFORM_DATA = SEGMENT_PREVIEW_SPECTRUM_DATA.map((level) => level / 100);
 const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
 const INLINE_MARKDOWN_AUTOSAVE_DELAY_MS = 300;
 const INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME =
@@ -397,14 +400,6 @@ function durationLabel(durationMs: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-function createdTimeLabel(createdAt: string) {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) {
-    return '时间未知';
-  }
-  return format(date, 'HH:mm');
 }
 
 function supplementContentTabValue(supplementId: string): `supplement:${string}` {
@@ -695,23 +690,6 @@ function MemoryStudioAudioPlaybackRow({
         {loading ? '载入中' : `${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
       </span>
     </div>
-  );
-}
-
-function SegmentPreviewSpectrum({ active }: { readonly active: boolean }) {
-  return (
-    <Waveform
-      barGap={2}
-      barRadius={4}
-      barWidth={4}
-      className="w-[52px] shrink-0"
-      data={SEGMENT_PREVIEW_WAVEFORM_DATA}
-      data-slot="memory-studio-segment-card-waveform"
-      decorative
-      height={32}
-      mode="bars"
-      tone={active ? 'neutral' : 'muted'}
-    />
   );
 }
 
@@ -2102,7 +2080,6 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
   };
 }
 
-const SEGMENT_STRIP_CARD_ESTIMATE_PX = 160;
 const SEGMENT_STRIP_WINDOW_OVERSCAN = 4;
 const SEGMENT_STRIP_MIN_WINDOW_SIZE = 12;
 
@@ -2146,7 +2123,7 @@ function segmentStripWindowFromElement(
   if (segmentCount <= SEGMENT_STRIP_MIN_WINDOW_SIZE) {
     return { start: 0, end: segmentCount };
   }
-  const safeItemStep = itemStep > 0 ? itemStep : SEGMENT_STRIP_CARD_ESTIMATE_PX;
+  const safeItemStep = itemStep > 0 ? itemStep : MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX;
   const visibleCount = Math.max(
     SEGMENT_STRIP_MIN_WINDOW_SIZE,
     Math.ceil(element.clientWidth / safeItemStep) + SEGMENT_STRIP_WINDOW_OVERSCAN * 2
@@ -2162,7 +2139,7 @@ function readSegmentStripItemStep(element: HTMLElement): number {
   const itemWidth = firstItem?.getBoundingClientRect().width;
   return itemWidth && itemWidth > 0
     ? itemWidth + (Number.isFinite(columnGap) ? columnGap : 0)
-    : SEGMENT_STRIP_CARD_ESTIMATE_PX;
+    : MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX;
 }
 
 type InlineMarkdownContentEditorProps<TSaved> = {
@@ -2760,15 +2737,6 @@ function SegmentSupplementNotePanel({
   );
 }
 
-function segmentStripSpacerStyle(count: number): CSSProperties {
-  return {
-    flexBasis:
-      count <= 1
-        ? 'var(--memory-studio-segment-card-size)'
-        : `calc(${count} * (var(--memory-studio-segment-card-size) + var(--memory-studio-segment-gap)) - var(--memory-studio-segment-gap))`,
-  };
-}
-
 export function MemoryStudio({
   memory,
   onDeleteSegment,
@@ -2799,7 +2767,7 @@ export function MemoryStudio({
   const [hoveredSupplementActionId, setHoveredSupplementActionId] = useState<string | null>(null);
   const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
-  const segmentStripItemStepRef = useRef(SEGMENT_STRIP_CARD_ESTIMATE_PX);
+  const segmentStripItemStepRef = useRef(MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
   const [inlineMarkdownDirty, setInlineMarkdownDirty] = useState(false);
   const [confirmingTranscriptionBackfill, setConfirmingTranscriptionBackfill] =
@@ -3778,17 +3746,12 @@ export function MemoryStudio({
             <section
               aria-label="片段预览流"
               className="relative min-w-0 shrink-0 pt-4"
-              style={
-                {
-                  '--memory-studio-segment-card-min-size': '136px',
-                  '--memory-studio-segment-card-size':
-                    'clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)',
-                  '--memory-studio-segment-gap': '12px',
-                } as CSSProperties
-              }
+              style={MEMORY_STUDIO_SEGMENT_STRIP_STYLE}
             >
               {stripScrollState.canScrollLeft ? (
-                <div className="pointer-events-none absolute left-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
+                <div
+                  className={`pointer-events-none absolute left-0 ${MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS} z-10`}
+                >
                   <div className="pointer-events-auto">
                     <CarouselArrowButton
                       direction="left"
@@ -3808,7 +3771,7 @@ export function MemoryStudio({
                     aria-hidden="true"
                     data-slot="memory-studio-segment-strip-spacer"
                     className="min-w-0 shrink-0"
-                    style={segmentStripSpacerStyle(segmentStripWindowRange.start)}
+                    style={memoryStudioSegmentStripSpacerStyle(segmentStripWindowRange.start)}
                   />
                 ) : null}
                 {visibleSegments
@@ -3849,120 +3812,43 @@ export function MemoryStudio({
                           }
                         : undefined;
                     return (
-                      <div
+                      <MemoryStudioSegmentCard
                         key={segment.segmentId}
-                        data-slot="memory-studio-segment-item"
-                        className={[
-                          'group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col rounded-xl text-left outline-none [contain-intrinsic-size:184px_184px] [content-visibility:auto]',
-                        ].join(' ')}
-                      >
-                        <button
-                          type="button"
-                          aria-current={isSelected ? 'true' : undefined}
-                          aria-label={`选择片段 ${segment.title}`}
-                          className="group/segment-card flex w-full flex-col rounded-xl text-left outline-none"
-                          onClick={() => requestSelectedSegment(segment.segmentId)}
-                        >
-                          <span className="block min-w-0">
-                            <span
-                              data-slot="memory-studio-segment-card"
-                              className={[
-                                'box-border flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden rounded-xl p-12 transition-colors duration-150 group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background',
-                                isSelected ? 'bg-secondary' : 'bg-card group-hover:bg-secondary',
-                              ].join(' ')}
-                            >
-                              <span className="block min-w-0 pr-24">
-                                <span className="block max-w-[88px] whitespace-normal text-body font-bold leading-body text-foreground">
-                                  {segment.title}
-                                </span>
-                              </span>
-                              <span className="flex min-w-0 items-center justify-between gap-6">
-                                {segmentIsAudio ? (
-                                  <>
-                                    <SegmentPreviewSpectrum active={isSelected} />
-                                    <span
-                                      data-slot="memory-studio-segment-card-duration"
-                                      className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
-                                    >
-                                      {durationLabel(segment.durationMs)}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FileText
-                                      aria-hidden="true"
-                                      className="size-28 text-muted-foreground"
-                                      strokeWidth={1.8}
-                                    />
-                                    <span
-                                      data-slot="memory-studio-segment-card-note-size"
-                                      className="shrink-0 font-mono text-ui-sm font-bold leading-none tracking-wide text-foreground"
-                                    >
-                                      {byteLengthLabel(segment.bodyByteLength)}
-                                    </span>
-                                  </>
-                                )}
-                              </span>
-                            </span>
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            data-slot="memory-studio-segment-timeline-anchor"
-                            className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
-                          >
-                            <span
-                              data-slot="memory-studio-segment-timeline-dot"
-                              className={[
-                                'relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full',
-                                isSelected ? 'bg-primary' : 'bg-muted-foreground',
-                              ].join(' ')}
-                            />
-                            <span
-                              data-slot="memory-studio-segment-timeline-time"
-                              className="mt-12 block font-mono text-ui-xs leading-ui-xs tracking-wide text-muted-foreground"
-                            >
-                              {createdTimeLabel(segment.createdAt)}
-                            </span>
-                          </span>
-                        </button>
-                        <SegmentActionsMenu
-                          actionIdentity={{
-                            memoryId: memory.memoryId,
-                            segmentId: segment.segmentId,
-                            workspaceHandle: workspaceSession.workspaceHandle,
-                            workspaceId: workspaceSession.workspaceId,
-                          }}
-                          contentAlign="end"
-                          onDelete={() => {
-                            setOpenSegmentMenuId(null);
-                            onDeleteSegment({ memoryId: memory.memoryId, segment });
-                          }}
-                          onOpenChange={(open) =>
-                            setOpenSegmentMenuId(open ? segment.segmentId : null)
-                          }
-                          onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
-                          onRename={() => {
-                            setOpenSegmentMenuId(null);
-                            onRenameSegment({ memoryId: memory.memoryId, segment });
-                          }}
-                          open={openSegmentMenuId === segment.segmentId}
-                          segmentTitle={segment.title}
-                          transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
-                          transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
-                          trigger={
-                            <button
-                              type="button"
-                              aria-label={`片段 ${segment.title} 更多操作`}
-                              className={[
-                                'absolute right-8 top-8 z-[1] inline-flex size-28 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:bg-secondary data-[state=open]:text-foreground data-[state=open]:opacity-100',
-                              ].join(' ')}
-                            >
-                              <Ellipsis aria-hidden="true" className="size-16" />
-                            </button>
-                          }
-                          triggerLabel={`片段 ${segment.title} 更多操作`}
-                        />
-                      </div>
+                        actionMenu={
+                          <SegmentActionsMenu
+                            actionIdentity={{
+                              memoryId: memory.memoryId,
+                              segmentId: segment.segmentId,
+                              workspaceHandle: workspaceSession.workspaceHandle,
+                              workspaceId: workspaceSession.workspaceId,
+                            }}
+                            contentAlign="end"
+                            onDelete={() => {
+                              setOpenSegmentMenuId(null);
+                              onDeleteSegment({ memoryId: memory.memoryId, segment });
+                            }}
+                            onOpenChange={(open) =>
+                              setOpenSegmentMenuId(open ? segment.segmentId : null)
+                            }
+                            onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
+                            onRename={() => {
+                              setOpenSegmentMenuId(null);
+                              onRenameSegment({ memoryId: memory.memoryId, segment });
+                            }}
+                            open={openSegmentMenuId === segment.segmentId}
+                            segmentTitle={segment.title}
+                            transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
+                            transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
+                            trigger={
+                              <MemoryStudioSegmentCardActionButton segmentTitle={segment.title} />
+                            }
+                            triggerLabel={`片段 ${segment.title} 更多操作`}
+                          />
+                        }
+                        onSelect={() => requestSelectedSegment(segment.segmentId)}
+                        segment={segment}
+                        selected={isSelected}
+                      />
                     );
                   })}
                 {segmentStripWindowRange.end < visibleSegments.length ? (
@@ -3970,14 +3856,16 @@ export function MemoryStudio({
                     aria-hidden="true"
                     data-slot="memory-studio-segment-strip-spacer"
                     className="min-w-0 shrink-0"
-                    style={segmentStripSpacerStyle(
+                    style={memoryStudioSegmentStripSpacerStyle(
                       visibleSegments.length - segmentStripWindowRange.end
                     )}
                   />
                 ) : null}
               </div>
               {stripScrollState.canScrollRight ? (
-                <div className="pointer-events-none absolute right-0 top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)] z-10">
+                <div
+                  className={`pointer-events-none absolute right-0 ${MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS} z-10`}
+                >
                   <div className="pointer-events-auto">
                     <CarouselArrowButton
                       direction="right"

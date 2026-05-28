@@ -1068,8 +1068,13 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(birthdayMemoryButton).toHaveClass('min-h-[68px]', 'px-12', 'py-12');
     expect(birthdayMemoryButton).toHaveAttribute('aria-current', 'page');
-    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'bg-secondary');
-    expect(recitalMemoryCard).toHaveClass('rounded-xl', 'bg-card', 'hover:bg-secondary');
+    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'reo-card-squircle', 'bg-secondary');
+    expect(recitalMemoryCard).toHaveClass(
+      'rounded-xl',
+      'reo-card-squircle',
+      'bg-card',
+      'hover:bg-secondary'
+    );
     expect(birthdayMemoryCard).not.toHaveClass(
       'border',
       'border-primary',
@@ -2054,7 +2059,11 @@ describe('LoadedWorkspaceFrame', () => {
     expect(studioLayout).not.toHaveClass('max-w-[1120px]');
     expect(segmentItems).toHaveLength(2);
     expect(segmentCards).toHaveLength(2);
-    expect(segmentItems[0]).toHaveClass(
+    const firstSegmentItem = segmentItems[0];
+    const firstSegmentCard = segmentCards[0];
+    const secondSegmentCard = segmentCards[1];
+
+    expect(firstSegmentItem).toHaveClass(
       'flex-[0_0_var(--memory-studio-segment-card-size)]',
       'snap-start',
       'flex-col',
@@ -2062,16 +2071,19 @@ describe('LoadedWorkspaceFrame', () => {
       '[content-visibility:auto]',
       '[contain-intrinsic-size:184px_184px]'
     );
-    expect(segmentCards[0]).toHaveClass(
+    expect(firstSegmentItem).not.toHaveClass('rounded-xl');
+    expect(firstSegmentCard?.closest('button')).not.toHaveClass('rounded-xl');
+    expect(firstSegmentCard).toHaveClass(
       'aspect-square',
-      'rounded-xl',
+      'reo-segment-card-squircle',
       'bg-secondary',
       'p-12',
       'min-h-[var(--memory-studio-segment-card-min-size)]',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
-    expect(segmentCards[1]).toHaveClass('bg-card');
-    expect(segmentCards[0]).not.toHaveClass(
+    expect(firstSegmentCard).not.toHaveClass('rounded-xl', 'reo-card-squircle');
+    expect(secondSegmentCard).toHaveClass('bg-card');
+    expect(firstSegmentCard).not.toHaveClass(
       'border',
       'border-2',
       'border-primary',

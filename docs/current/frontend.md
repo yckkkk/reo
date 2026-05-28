@@ -10,10 +10,10 @@
 - Reo 设计系统源文件位于 `docs/current/design-system/`；renderer 可执行主题文件是 `src/renderer/src/theme.css`；renderer 样式入口是 `src/renderer/src/index.css`。
 - 当前设计系统是黑色为主、ember 和 destructive red 为辅的 Soft Flat Design System：纯白或极深灰画布、低对比灰度容器、无同平面描边、基础组件无阴影、浮层使用克制 Z 轴投影、黑色用于核心动作和明确状态，ember 用于表达入口和录音主按钮，destructive red 用于删除、清空、放弃等危险动作。
 - `src/renderer/src/index.css` 负责 Tailwind v4 import、`data-theme="dark"` 与 `.dark` dark variant、Electron drag/no-drag utility、全局不可选中文本和输入/转录类文本可选中规则。
-- `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x`、`scrollbar-hover` 和 `reo-content-tab-panel-motion`。它们用于可滚动内容边缘渐隐、hover/focus 时才显露滚动条的文本容器，以及内容 tab panel 的轻量进入反馈，不由业务组件重复实现 gradient overlay、mask、scrollbar 或 panel motion 规则。业务局部的 sibling action reveal 留在 owner component，不写入全局 CSS。`edge-fade-*` 是滚动感知的：通过 `@property` 注册的边缘偏移变量 + scroll-driven animation，每个边缘只在该方向有内容被滚走时才渐隐，内容不溢出时无 fade。
+- `src/renderer/src/index.css` 定义设计系统级 Tailwind v4 utilities：`edge-fade-y`、`edge-fade-x`、`scrollbar-hover`、`reo-card-squircle`、`reo-segment-card-squircle` 和 `reo-content-tab-panel-motion`。它们用于可滚动内容边缘渐隐、hover/focus 时才显露滚动条的文本容器、Memory/Segment 卡片的平滑方圆角，以及内容 tab panel 的轻量进入反馈，不由业务组件重复实现 gradient overlay、mask、scrollbar、card corner smoothing 或 panel motion 规则。业务局部的 sibling action reveal 留在 owner component，不写入全局 CSS。`edge-fade-*` 是滚动感知的：通过 `@property` 注册的边缘偏移变量 + scroll-driven animation，每个边缘只在该方向有内容被滚走时才渐隐，内容不溢出时无 fade。
 - 当前 App shell 支持三态外观偏好 `浅色 / 深色 / 跟随系统`；偏好由 `App` 持有，默认 `跟随系统`，通过 `localStorage` key `reo.themePreference.v1` 跨会话持久化。`跟随系统` 由 `matchMedia('(prefers-color-scheme: dark)')` 解析并订阅 OS 偏好变化，得到 effective theme `light|dark`；effective theme 同时写入 App shell `data-theme`、document 根节点 `data-theme` 和 document 根节点 `.dark` class 驱动 token 级联，并传给 Sonner toast theme，确保 Radix portal 内容和 Tiptap template content 也继承当前主题。侧边栏底部提供齿轮「设置」入口和单按钮主题循环 `浅色 → 深色 → 跟随系统 → 浅色`，主题按钮图标随当前偏好变化（Sun / Moon / MonitorSmartphone）。
 - 深色主题的 `accent` 是 popover 上的交互高光色，使用 `color-mix(in oklab, var(--foreground) 10%, var(--popover))`，不得与 `popover` 同色；DropdownMenu、ghost icon、secondary Button hover 和弹层内次要按钮 hover 都依赖它表达可见但克制的状态反馈。
-- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/alert-dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx`、`components/ui/switch.tsx` 和 `lib/utils.ts`。
+- 当前 shadcn/ui source 范围包含 `components.json`、renderer `@/*` alias、`components/ui/button.tsx`、`components/ui/card-surface.tsx`、`components/ui/input.tsx`、`components/ui/label.tsx`、`components/ui/dialog.tsx`、`components/ui/alert-dialog.tsx`、`components/ui/drawer.tsx`、`components/ui/dropdown-menu.tsx`、`components/ui/breadcrumb.tsx`、`components/ui/textarea.tsx`、`components/ui/tooltip.tsx`、`components/ui/separator.tsx`、`components/ui/field.tsx`、`components/ui/switch.tsx` 和 `lib/utils.ts`。
 - 当前 `components/ui/floating-action-button-speed-dial.tsx` 是 Reo 的 Floating Action Button Speed Dial primitive，使用 PrimeReact SpeedDial mechanics 并映射到 Reo design system。
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
@@ -36,7 +36,8 @@
 - Button、Input、Textarea、Field、Memory card、Segment card 和普通 action 默认无阴影。
 - 只有 Tooltip、DropdownMenu、Dialog、AlertDialog、Drawer 和 Toast 这类临时浮层使用 `shadow-float` 或 `shadow-modal`。
 - Hover、active、selected 通过灰度阶梯表达：常态使用透明或 `bg-card`，hover 使用 `bg-secondary` 或 `bg-accent`，选中使用 `bg-secondary` 并配合文字权重、状态点或黑色主动作。
-- `rounded-full` 只用于 FAB trigger、FAB action、录音主按钮、Segment strip overlay arrow、圆点、timeline marker 和 drawer/waveform handle。普通文本按钮使用 `rounded-lg`，compact 文本按钮使用 `rounded-md`，32px icon button 使用 `rounded-sm`，40px icon button 和菜单 action 使用 `rounded-md`，titlebar Breadcrumb trigger 使用 `rounded-sm`，输入框和卡片使用方圆角。
+- `rounded-full` 只用于 FAB trigger、FAB action、录音主按钮、Segment strip overlay arrow、圆点、timeline marker 和 drawer/waveform handle。普通文本按钮使用 `rounded-lg`，compact 文本按钮使用 `rounded-md`，32px icon button 使用 `rounded-sm`，40px icon button 和菜单 action 使用 `rounded-md`，titlebar Breadcrumb trigger 使用 `rounded-sm`，输入框使用方圆角。Memory card 使用 `ReoCardSurface` 默认形态；Segment preview card 使用 `ReoCardSurface` 的 `segmentPreview` 形态。
+- Memory card 和 Segment card 的外形所有权在 `ReoCardSurface`；feature 页面不得在同一张卡片的 layout wrapper、button wrapper 和真实 surface 上重复写圆角。MemoryRail 使用 `MemoryRailCard`，Memory Studio 片段预览流使用 `MemoryStudioSegmentCard`。`segmentPreview` 形态按 Figma 参考卡片 88 / 365 的比例还原，136px 卡片约 33px radius，148px 卡片约 36px radius，并使用 `corner-shape: squircle`。
 - 常规交互动效使用 `duration-150 ease-out`；结构动效上限 `duration-200 ease-out`；reduced motion 下关闭。Memory Studio 内容 tab rail 是 demo 对齐的局部例外：tab pill、tab text/icon color 和 tab More reveal 使用 400ms `cubic-bezier(0.2, 0.9, 0.1, 1)`，content tab panel 切换使用 300ms 同曲线。
 - 全局默认不可选中文本；输入、textarea、contenteditable、转录、日志、路径和其他需要复制的内容必须显式 `select-text` 或 `.selectable-text`。
 - 顶部标题栏拖拽区使用 `.drag-region` 或等价 `-webkit-app-region: drag`；内部按钮必须使用 `.no-drag-region` 或等价 `-webkit-app-region: no-drag`。
@@ -92,7 +93,7 @@
 - MemoryRail 默认折叠并退出可访问树和指针交互。宽视口使用 inline 模式，`WorkspaceFrame` 使用固定双轨 grid：主内容列和 Memory rail 列；第二轨从 `0px` 到 `240px` 使用 `transition-[grid-template-columns] duration-200 ease-out` 展开或折叠，和 sidebar 的结构动效保持同一时长与曲线。rail shell 使用 `border-l border-secondary` 标记主内容和右侧记忆列表的跨区域边界；主内容轨道在可用主列内保持左右 gutter 对称，不根据 rail 状态做页面内补丁；compact workspace 宽度下才使用 overlay rail。
 - Compact workspace 宽度下用户手动展开时使用 overlay 模式覆盖在舞台右侧，不改变中央舞台和 FAB 的对称横向 padding，避免 Memory Studio 被压成窄列。
 - MemoryRail list surface 使用全高 `bg-background` 与 `px-8 py-20`，和主内容区保持同一画布填充，不使用 item border、shadow 或 blur。
-- MemoryRail memory item 使用灰度卡片填充表达信息单元：常态 `bg-card`，hover `bg-secondary`，当前 Memory `bg-secondary` 并保留 `aria-current`；item 最小高度 68px，主标题 14px，meta 12px，More button 24px。
+- MemoryRail memory item 由 feature-local `MemoryRailCard` 渲染，使用灰度卡片填充表达信息单元：常态 `bg-card`，hover `bg-secondary`，当前 Memory `bg-secondary` 并保留 `aria-current`；card surface 使用 `ReoCardSurface` 默认形态；item 最小高度 68px，主标题 14px，meta 12px，More button 24px。
 
 ## 实体 More 菜单
 
@@ -108,7 +109,7 @@
 - Memory Studio 填满 WorkspaceFrame 提供的居中内容轨道，本身只管理 Segment 预览流、播放区和内容区的内部布局。
 - Memory Studio 展示空态、按 Segment 投影 `updatedAt` 倒序排列的 Segment 横向预览流、横向浏览按钮、时间轴和当前片段内容区；不重复渲染 Memory 标题、片段数量或总时长 meta。Segment 横向预览流只挂载当前窗口内的真实 Segment item，并用前后 spacer 保持横向滚动范围和选中项定位，避免大量 Segment 时一次性挂载所有 card/menu/timeline 交互树。
 - Segment card、时间轴点、播放区、内容 tab 和内容区通过 feature-local `selectedSegmentId` 同步，只作用于当前 Memory 内的 Segment。
-- Segment card 使用紧凑正方形比例、无描边填充状态、静态 waveform glyph 和等宽时间；preview waveform 低振幅为圆点、高振幅为圆角竖柱，常态使用 `muted-foreground`，选中态使用 `foreground`；card 常态为 `bg-card`，选中为 `bg-secondary`。
+- Segment card 由 feature-local `MemoryStudioSegmentCard` 渲染，使用紧凑正方形比例、`ReoCardSurface` 的 `segmentPreview` 形态、无描边填充状态、静态 waveform glyph 和等宽时间；preview waveform 低振幅为圆点、高振幅为圆角竖柱，常态使用 `muted-foreground`，选中态使用 `foreground`；card 常态为 `bg-card`，选中为 `bg-secondary`。
 - Segment card 的选择 button 和 More trigger 是同一 item 内的 sibling controls。More trigger 只在 item hover、focus-within 或 menu open 时可见，使用 `SegmentActionsMenu` 承载实体 More 菜单；`重命名` 打开 `SegmentRenameDialog`，`删除` 打开 `SegmentDeleteDialog`。转录菜单项在 voice settings 关闭、未配置 X-Api-Key、最近验证为 `auth`、录音 overlay 或 Note editor open，或同 target 手动任务 running 时 disabled 并显示 tooltip；最近验证为 `network` 时保持可点击。
 - Segment card width 使用 `--memory-studio-segment-card-min-size: 136px` 和 `--memory-studio-segment-card-size: clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)`，Segment item 与 card 都保留同一最小尺寸，窄窗口通过 strip 横向滚动承载，不压缩卡片内容。
 - Segment 横向预览流使用 `edge-fade-x` 表达左右边缘裁切；不在业务层创建独立 gradient overlay。
