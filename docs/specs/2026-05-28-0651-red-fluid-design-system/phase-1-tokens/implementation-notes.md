@@ -54,3 +54,12 @@
 - 改动：`src/renderer/src/index.css`（在 `@utility reo-segment-card-squircle` 之后追加 `@utility bg-brand-gradient`）
 - 验证：utility 体内 `background: var(--brand-gradient)`；`--brand-gradient` 在 light / dark 两个主题都有定义（Task 4 已确认），所以 `bg-brand-gradient` 自动随主题切换
 - 备注：gradient 不能走 `@theme inline` 的 `--color-*` 路径（Tailwind v4 把 `--color-*` 当作单色处理），所以用 `@utility` 显式定义；此 utility 在 Phase 4（FAB）与 Phase 5（RecordingOverlay）才有真实 consumer
+- Commit: `d884428e feat(theme): expose bg-brand-gradient Tailwind utility`
+
+## Task 6 · 修正 frontend.md 设计系统描述
+
+- 时间：2026-05-28 07:36 PDT
+- 改动：`docs/current/frontend.md` 第 11 行附近的设计系统描述句
+- 验证：修订后该行准确描述 Red Fluid System，引用所有新 token（brand-red/magenta/ember/gradient、surface-1..4、destructive #b91c1c、shadow-float/modal），并指针 DESIGN.md 作为完整规范来源
+- 备注：frontend.md 其余段落（Hero 表面映射、组件清单等）涉及 Phase 2-5 的 TSX 改动，留到 Phase 6 文档收口阶段统一更新（写当前事实时实现已落地）
+- Commit: `c42b2017 docs(frontend): update design system tagline to red fluid system`（描述句改动单独 commit；本 notes 追加另开 commit）
