@@ -46,3 +46,11 @@
   - `:root/[data-theme='light']` 段完整复制自 Task 2 variables.css，确保 runtime 与 design-system 源逐字一致
   - `[data-theme='dark']` 段同样完整复制
 - 备注：**主动声明的行为变化**：shadow utility 现在 dark mode 下会切换值；旧实现是 latent bug（不切换）。本次顺手修正与命名规范是同一架构改动的一部分
+- Commit: `17162b3a feat(theme): replace runtime tokens with red fluid system`
+
+## Task 5 · 新增 bg-brand-gradient utility
+
+- 时间：2026-05-28 07:34 PDT
+- 改动：`src/renderer/src/index.css`（在 `@utility reo-segment-card-squircle` 之后追加 `@utility bg-brand-gradient`）
+- 验证：utility 体内 `background: var(--brand-gradient)`；`--brand-gradient` 在 light / dark 两个主题都有定义（Task 4 已确认），所以 `bg-brand-gradient` 自动随主题切换
+- 备注：gradient 不能走 `@theme inline` 的 `--color-*` 路径（Tailwind v4 把 `--color-*` 当作单色处理），所以用 `@utility` 显式定义；此 utility 在 Phase 4（FAB）与 Phase 5（RecordingOverlay）才有真实 consumer

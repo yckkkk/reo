@@ -12,6 +12,10 @@
   corner-shape: squircle;
 }
 
+@utility bg-brand-gradient {
+  background: var(--brand-gradient);
+}
+
 @layer base {
   html,
   body,
