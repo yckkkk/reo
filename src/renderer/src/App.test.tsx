@@ -4469,6 +4469,53 @@ describe('App', () => {
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
   });
 
+  it('ignores file truth events from stale workspace handles', async () => {
+    const user = userEvent.setup();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    mockLoadedNoteWorkspace(createNoteSegmentFixture());
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 2,
+        workspaceHandle: 'workspace-handle-2',
+        workspaceId: 'ws_1',
+      });
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 3,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_2',
+      });
+      await Promise.resolve();
+    });
+
+    expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes the needs-review toast when only review counts change and copies a safe agent prompt', async () => {
     const user = userEvent.setup();
     let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;

@@ -87,7 +87,7 @@ test('workspace file truth watcher coalesces file changes without exposing paths
   assert.equal((watchedOptions as Record<string, unknown>)['followSymlinks'], false);
 });
 
-test('workspace file truth watcher ignores transient files and closes pending events', async () => {
+test('workspace file truth watcher ignores transient files without scheduling events', () => {
   const timers = createManualTimerScheduler();
   const fakeWatcher = new FakeWatcher();
   const sent: WorkspaceFileTruthChangedEvent[] = [];
@@ -106,11 +106,36 @@ test('workspace file truth watcher ignores transient files and closes pending ev
   });
 
   fakeWatcher.emit('all', 'change', '/workspace/root/.DS_Store');
-  fakeWatcher.emit('all', 'change', '/workspace/root/.reo/locks/workspace.lock');
+  fakeWatcher.emit('all', 'change', '/workspace/root/.reo/workspace.lock');
+  fakeWatcher.emit('all', 'change', '/workspace/root/.reo/workspace.lock.lock/owner.json');
   fakeWatcher.emit('all', 'change', '/workspace/root/.reo/review/needs-review.json');
   fakeWatcher.emit('all', 'change', '/workspace/root/.reo/review/needs-review.md');
   fakeWatcher.emit('all', 'add', '/workspace/root/memories/memory-a/.segment.md.1.2.part');
   fakeWatcher.emit('all', 'add', '/workspace/root/memories/memory-a/.content.tiptap.json.1.2.part');
+  timers.flush();
+
+  assert.deepEqual(sent, []);
+  assert.equal(fakeWatcher.closeCalls, 0);
+});
+
+test('workspace file truth watcher closes pending events', async () => {
+  const timers = createManualTimerScheduler();
+  const fakeWatcher = new FakeWatcher();
+  const sent: WorkspaceFileTruthChangedEvent[] = [];
+  const registry = createWorkspaceFileTruthWatcherRegistry({
+    clearTimer: timers.clearTimer,
+    setTimer: timers.setTimer,
+    settlementDelayMs: 25,
+    watch: () => fakeWatcher,
+  });
+
+  registry.watchWorkspace({
+    rootPath: '/workspace/root',
+    sendEvent: (event) => sent.push(event),
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+  });
+
   fakeWatcher.emit('all', 'change', '/workspace/root/memories/memory-a/segment.md');
   await registry.closeWorkspace('wh_1');
   timers.flush();
@@ -130,9 +155,20 @@ test('workspace file truth watcher ignore rules are path-bound to the workspace 
     true
   );
   assert.equal(
+    isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root/.reo/workspace.lock'),
+    true
+  );
+  assert.equal(
     isIgnoredWorkspaceFileEventPath(
       '/workspace/root',
       '/workspace/root/.reo/review/needs-review.md'
+    ),
+    true
+  );
+  assert.equal(
+    isIgnoredWorkspaceFileEventPath(
+      '/workspace/root',
+      '/workspace/root/.reo/workspace.lock.lock/owner.json'
     ),
     true
   );

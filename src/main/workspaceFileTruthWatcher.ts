@@ -38,6 +38,13 @@ export type CreateWorkspaceFileTruthWatcherRegistryOptions = {
 };
 
 const DEFAULT_SETTLEMENT_DELAY_MS = 120;
+const IGNORED_REO_TECHNICAL_CHILDREN = new Set([
+  'locks',
+  'tmp',
+  'cache',
+  'review',
+  'workspace.lock.lock',
+]);
 
 type WorkspaceFileTruthWatcherDiagnostic = {
   readonly code: string | null;
@@ -87,7 +94,7 @@ export function isIgnoredWorkspaceFileEventPath(rootPath: string, changedPath: s
   if (parts.includes('node_modules') || parts.includes('.git')) {
     return true;
   }
-  if (parts[0] === '.reo' && ['locks', 'tmp', 'cache', 'review'].includes(parts[1] ?? '')) {
+  if (parts[0] === '.reo' && IGNORED_REO_TECHNICAL_CHILDREN.has(parts[1] ?? '')) {
     return true;
   }
   return false;
