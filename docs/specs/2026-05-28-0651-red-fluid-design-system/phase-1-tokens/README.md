@@ -12,14 +12,14 @@
 
 仅以下 5 个文件可改：
 
-| 文件 | 角色 | 变更类型 |
-|---|---|---|
-| `docs/current/design-system/tokens.json` | W3C-style 结构化 token 源 | 重写 |
-| `docs/current/design-system/variables.css` | CSS custom property 源 | 重写 |
-| `docs/current/design-system/DESIGN.md` | 设计系统叙述 | 更新核心定义 + 视觉语义 + 三条铁律 + 组件规则 |
-| `src/renderer/src/theme.css` | runtime 主题投影 | 重写（@theme inline 暴露新 token；:root / [data-theme='dark'] 落 raw + semantic） |
-| `src/renderer/src/index.css` | Tailwind 入口 + utility | 仅新增 `@utility bg-brand-gradient` |
-| `docs/current/frontend.md` | 前端真源 | 单行修正（设计系统描述句） |
+| 文件                                       | 角色                      | 变更类型                                                                          |
+| ------------------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
+| `docs/current/design-system/tokens.json`   | W3C-style 结构化 token 源 | 重写                                                                              |
+| `docs/current/design-system/variables.css` | CSS custom property 源    | 重写                                                                              |
+| `docs/current/design-system/DESIGN.md`     | 设计系统叙述              | 更新核心定义 + 视觉语义 + 三条铁律 + 组件规则                                     |
+| `src/renderer/src/theme.css`               | runtime 主题投影          | 重写（@theme inline 暴露新 token；:root / [data-theme='dark'] 落 raw + semantic） |
+| `src/renderer/src/index.css`               | Tailwind 入口 + utility   | 仅新增 `@utility bg-brand-gradient`                                               |
+| `docs/current/frontend.md`                 | 前端真源                  | 单行修正（设计系统描述句）                                                        |
 
 不动：任何 `.tsx`、任何业务组件、任何 IPC / preload / main process、任何测试。
 

@@ -14,21 +14,22 @@
 
 ## File Structure
 
-| 文件 | 责任 | 改动幅度 |
-|---|---|---|
-| `docs/current/design-system/tokens.json` | W3C-style 结构化 token 源（设计系统的"数据"） | 重写 |
-| `docs/current/design-system/variables.css` | CSS 变量源（设计系统的"实现"） | 重写 |
-| `docs/current/design-system/DESIGN.md` | 设计系统叙述（设计系统的"语言"） | 多节更新 |
-| `src/renderer/src/theme.css` | runtime 主题（Tailwind v4 `@theme inline` + `:root` + `[data-theme='dark']`） | 重写 |
-| `src/renderer/src/index.css` | Tailwind 入口 + 全局 utility | 仅追加 `@utility bg-brand-gradient` |
-| `docs/current/frontend.md` | 前端真源叙述（避免与新设计系统矛盾） | 第 11 行单句修正 |
-| `docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/implementation-notes.md` | 执行证据 | 追加 |
+| 文件                                                                                        | 责任                                                                          | 改动幅度                            |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- |
+| `docs/current/design-system/tokens.json`                                                    | W3C-style 结构化 token 源（设计系统的"数据"）                                 | 重写                                |
+| `docs/current/design-system/variables.css`                                                  | CSS 变量源（设计系统的"实现"）                                                | 重写                                |
+| `docs/current/design-system/DESIGN.md`                                                      | 设计系统叙述（设计系统的"语言"）                                              | 多节更新                            |
+| `src/renderer/src/theme.css`                                                                | runtime 主题（Tailwind v4 `@theme inline` + `:root` + `[data-theme='dark']`） | 重写                                |
+| `src/renderer/src/index.css`                                                                | Tailwind 入口 + 全局 utility                                                  | 仅追加 `@utility bg-brand-gradient` |
+| `docs/current/frontend.md`                                                                  | 前端真源叙述（避免与新设计系统矛盾）                                          | 第 11 行单句修正                    |
+| `docs/specs/2026-05-28-0651-red-fluid-design-system/phase-1-tokens/implementation-notes.md` | 执行证据                                                                      | 追加                                |
 
 ---
 
 ## Task 1 · 重写 tokens.json
 
 **Files:**
+
 - Modify: `docs/current/design-system/tokens.json`
 
 - [ ] **Step 1: 用以下内容完整重写 `tokens.json`**
@@ -234,6 +235,7 @@ Part of spec docs/specs/2026-05-28-0651-red-fluid-design-system Phase 1."
 ## Task 2 · 重写 variables.css
 
 **Files:**
+
 - Modify: `docs/current/design-system/variables.css`
 
 - [ ] **Step 1: 用以下内容完整重写 `variables.css`**
@@ -298,18 +300,10 @@ Part of spec docs/specs/2026-05-28-0651-red-fluid-design-system Phase 1."
   /* Layer 4 · effect tokens */
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.08);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.12);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.12),
-    inset 0 1px 0 rgb(255 255 255 / 0.6);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.18),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    inset 0 -8px 16px rgb(0 0 0 / 0.12);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -8px 16px rgb(0 0 0 / 0.12);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.4);
   --shadow-surface-inset: inset 0 1px 0 rgb(0 0 0 / 0.02);
 }
 
@@ -360,18 +354,10 @@ Part of spec docs/specs/2026-05-28-0651-red-fluid-design-system Phase 1."
   /* Layer 4 · effect tokens (dark variants) */
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.22),
-    inset 0 1px 0 rgb(255 255 255 / 0.06);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.28),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
-    inset 0 -8px 16px rgb(0 0 0 / 0.18);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 -8px 16px rgb(0 0 0 / 0.18);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.05), inset 0 1px 0 rgb(255 255 255 / 0.2);
   --shadow-surface-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 ```
@@ -398,6 +384,7 @@ git commit -m "feat(design-system): rewrite variables.css mirror for red fluid s
 ## Task 3 · 更新 DESIGN.md
 
 **Files:**
+
 - Modify: `docs/current/design-system/DESIGN.md`
 
 - [ ] **Step 1: 用以下内容完整重写 `DESIGN.md`**
@@ -457,13 +444,13 @@ Reo token 分为两层：
 
 Hero 不参与 elevation 阶梯（即不存在 `surface-5`），只挂在表达入口与身份载体上：
 
-| 表达 | Hero token 组合 | Owner |
-|---|---|---|
-| FAB SpeedDial trigger | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + 静态 specular | `components/ui/floating-action-button-speed-dial.tsx` |
-| FAB SpeedDial action | `--brand-ember` 实色（不上 gradient） | 同上 |
-| RecordingOverlay 主 CTA | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + pulse ring（录音中） | `RecordingHeroCta.tsx`（Phase 5 创建） |
-| RecordingOverlay surface | `--surface-1` + 顶部 30vh aurora mask | `RecordingAuroraOverlay.tsx`（Phase 5 创建） |
-| MemoryIcon primitive | 多层 CSS gradient + `--shadow-hero-inset` + `--shadow-hero-lift` + 静态/可 hover specular | `components/ui/memory-icon.tsx`（Phase 2 创建） |
+| 表达                     | Hero token 组合                                                                           | Owner                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| FAB SpeedDial trigger    | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + 静态 specular          | `components/ui/floating-action-button-speed-dial.tsx` |
+| FAB SpeedDial action     | `--brand-ember` 实色（不上 gradient）                                                     | 同上                                                  |
+| RecordingOverlay 主 CTA  | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + pulse ring（录音中）   | `RecordingHeroCta.tsx`（Phase 5 创建）                |
+| RecordingOverlay surface | `--surface-1` + 顶部 30vh aurora mask                                                     | `RecordingAuroraOverlay.tsx`（Phase 5 创建）          |
+| MemoryIcon primitive     | 多层 CSS gradient + `--shadow-hero-inset` + `--shadow-hero-lift` + 静态/可 hover specular | `components/ui/memory-icon.tsx`（Phase 2 创建）       |
 
 ## 命名规范关键约束
 
@@ -512,6 +499,7 @@ git commit -m "docs(design-system): describe red fluid system + token naming con
 ## Task 4 · 重写 theme.css（runtime 投影）
 
 **Files:**
+
 - Modify: `src/renderer/src/theme.css`
 
 - [ ] **Step 1: 用以下内容完整重写 `theme.css`**
@@ -671,18 +659,10 @@ git commit -m "docs(design-system): describe red fluid system + token naming con
 
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.08);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.12);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.12),
-    inset 0 1px 0 rgb(255 255 255 / 0.6);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.18),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    inset 0 -8px 16px rgb(0 0 0 / 0.12);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -8px 16px rgb(0 0 0 / 0.12);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.4);
   --shadow-surface-inset: inset 0 1px 0 rgb(0 0 0 / 0.02);
 }
 
@@ -729,18 +709,10 @@ git commit -m "docs(design-system): describe red fluid system + token naming con
 
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.22),
-    inset 0 1px 0 rgb(255 255 255 / 0.06);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.28),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
-    inset 0 -8px 16px rgb(0 0 0 / 0.18);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 -8px 16px rgb(0 0 0 / 0.18);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.05), inset 0 1px 0 rgb(255 255 255 / 0.2);
   --shadow-surface-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 ```
@@ -778,6 +750,7 @@ Part of spec docs/specs/2026-05-28-0651-red-fluid-design-system Phase 1."
 ## Task 5 · 暴露 bg-brand-gradient Tailwind utility
 
 **Files:**
+
 - Modify: `src/renderer/src/index.css`
 
 - [ ] **Step 1: 读取当前 `index.css`**
@@ -831,6 +804,7 @@ git commit -m "feat(theme): expose bg-brand-gradient Tailwind utility"
 ## Task 6 · 修正 frontend.md 第 11 行设计系统描述
 
 **Files:**
+
 - Modify: `docs/current/frontend.md:11`
 
 - [ ] **Step 1: 用 Edit 替换当前 frontend.md 中的描述句**
@@ -869,6 +843,7 @@ git commit -m "docs(frontend): update design system tagline to red fluid system"
 ## Task 7 · verify:quick + 视觉 smoke
 
 **Files:**
+
 - 仅运行命令，不改文件
 
 - [ ] **Step 1: 跑 verify:quick**
@@ -876,6 +851,7 @@ git commit -m "docs(frontend): update design system tagline to red fluid system"
 Run: `npm run verify:quick`
 
 Expected: 全部通过，无 type error，无 lint error，无 test failure。如果失败：
+
 - 如果是 type error 涉及 `bg-primary-hover` 之类的 Tailwind class 不存在 — 说明 Tailwind v4 未生成 `*-hover` color utility（默认只生成 background-color/text-color/border-color 的基础色）。预期不该失败，因为本次没有 TSX 改动。
 - 如果是其他失败：在 implementation-notes 记录，然后判断是预存问题还是本 phase 引入。
 
@@ -922,6 +898,7 @@ git commit -m "docs(spec): record Phase 1 verify + smoke evidence"
 ## Task 8 · 过 /review 与 /simplify 门禁
 
 **Files:**
+
 - 仅运行 skill，不直接改文件（按 review 结果可能产生小修复 commit）
 
 - [ ] **Step 1: 跑 /review**
@@ -970,18 +947,18 @@ git commit -m "docs(spec): record Phase 1 review + simplify gate evidence"
 
 **1. Spec coverage:**
 
-| Spec 要求 | 实现 task |
-|---|---|
+| Spec 要求                                                                                                                                             | 实现 task                                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Section 1.1 颜色 token（brand-red / brand-magenta / brand-ember / brand-gradient / primary / primary-hover / ring / destructive / destructive-hover） | Task 1（tokens.json）+ Task 2（variables.css）+ Task 4（theme.css） |
-| Section 1.2 surface-1..4 + 与 background/card/input/popover 映射 | Task 1 + Task 2 + Task 4 |
-| Section 1.3 radius scale 含 3xl / 4xl | Task 1 + Task 2 + Task 4 |
-| Section 1.4 shadow stack 含 hero-{lift,fill,inset,edge} + surface-inset | Task 1 + Task 2 + Task 4 |
-| Section 5.1 Phase 1 范围（零 TSX 改动；仅 4 个 token 文件 + 最小 frontend.md） | Task 1-4 + Task 6 |
-| Section 6 命名规范（raw / semantic 分层、reserved prefix） | DESIGN.md（Task 3）+ 完整规范引用 spec README |
-| `bg-brand-gradient` utility（Phase 4 / 5 需要） | Task 5 |
-| TDD 红线判断（Phase 1 豁免） | Plan header 明确说明；Task 7 用 verify:quick + 视觉 smoke 代替 |
-| phase-gate /review + /simplify | Task 8 |
-| implementation-notes 持续追加 | 每个 Task 都有追加步骤 |
+| Section 1.2 surface-1..4 + 与 background/card/input/popover 映射                                                                                      | Task 1 + Task 2 + Task 4                                            |
+| Section 1.3 radius scale 含 3xl / 4xl                                                                                                                 | Task 1 + Task 2 + Task 4                                            |
+| Section 1.4 shadow stack 含 hero-{lift,fill,inset,edge} + surface-inset                                                                               | Task 1 + Task 2 + Task 4                                            |
+| Section 5.1 Phase 1 范围（零 TSX 改动；仅 4 个 token 文件 + 最小 frontend.md）                                                                        | Task 1-4 + Task 6                                                   |
+| Section 6 命名规范（raw / semantic 分层、reserved prefix）                                                                                            | DESIGN.md（Task 3）+ 完整规范引用 spec README                       |
+| `bg-brand-gradient` utility（Phase 4 / 5 需要）                                                                                                       | Task 5                                                              |
+| TDD 红线判断（Phase 1 豁免）                                                                                                                          | Plan header 明确说明；Task 7 用 verify:quick + 视觉 smoke 代替      |
+| phase-gate /review + /simplify                                                                                                                        | Task 8                                                              |
+| implementation-notes 持续追加                                                                                                                         | 每个 Task 都有追加步骤                                              |
 
 **2. Placeholder scan:** 已扫描，无 TBD / TODO / "implement later" / "appropriate error handling"。所有代码块为完整可粘贴内容。
 
