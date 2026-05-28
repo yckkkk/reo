@@ -54,6 +54,30 @@ type AssertWorkspaceFileUsable = () => void;
 const REVIEW_DIRECTORY = '.reo/review';
 const REVIEW_JSON_FILE = 'needs-review.json';
 const REVIEW_MARKDOWN_FILE = 'needs-review.md';
+export const WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT =
+  'Inspect the listed workspace-relative files, preserve user content, make one deterministic fix, then refresh Reo.';
+
+export const WORKSPACE_REVIEW_RECOVERY_HINTS = {
+  'ambiguous-candidate':
+    'Make this candidate one clear object shape. Preserve every user payload first, then rename or move competing candidates out of this object shape.',
+  'content-conflict':
+    'Both Markdown and content.tiptap.json changed. Choose one source; do not guess a merge.',
+  'duplicate-id':
+    'Keep exactly one object with this id in the reported parent scope. Move, rename, or assign a new id to duplicates while preserving user payload.',
+  'invalid-sidecar':
+    'Fix content.tiptap.json to valid Reo Tiptap sidecar JSON, or remove only that sidecar when Markdown should regenerate it.',
+  'markdown-write-required':
+    'The sidecar can serialize, but Reo could not write the Markdown mirror in this read path. Refresh through Reo or manually update Markdown and sidecar to match.',
+  'unsupported-tiptap-content':
+    "Simplify content.tiptap.json to Reo's durable Tiptap profile or recreate the rich structure through Reo UI or Markdown.",
+} satisfies Record<WorkspaceReviewEntryReason, string>;
+
+export function workspaceReviewRecoveryHint(reason: string): string {
+  if (Object.prototype.hasOwnProperty.call(WORKSPACE_REVIEW_RECOVERY_HINTS, reason)) {
+    return WORKSPACE_REVIEW_RECOVERY_HINTS[reason as WorkspaceReviewEntryReason];
+  }
+  return WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT;
+}
 
 function workspaceRelativePath(rootPath: string, filePath: string): string {
   const root = path.resolve(rootPath);
@@ -131,6 +155,7 @@ function renderReviewMarkdown(report: WorkspaceReviewReport): string {
       .filter(Boolean)
       .join(' / ');
     lines.push(`- ${detail}`);
+    lines.push(`  - recovery: ${workspaceReviewRecoveryHint(entry.reason)}`);
     for (const filePath of entry.paths) {
       lines.push(`  - path: ${renderPathForMarkdown(filePath)}`);
     }

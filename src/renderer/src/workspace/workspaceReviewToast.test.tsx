@@ -42,6 +42,7 @@ describe('buildWorkspaceReviewAgentPrompt', () => {
     expect(prompt).toContain('Reo 检测到这个记忆空间有 2 个文件需要检查。');
     expect(prompt).toContain('node skills/reo-doctor/scripts/reo-doctor.mjs');
     expect(prompt).toContain('.reo/review/needs-review.md');
+    expect(prompt).toContain('按每条 recovery hint 处理');
     expect(prompt).not.toContain('/Users/');
     expect(prompt).not.toContain('workspace-handle');
     expect(prompt).not.toContain('source.hash');

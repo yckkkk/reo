@@ -47,7 +47,10 @@ import {
   TIPTAP_CONTENT_SIDECAR_FILE,
   writeTiptapContentSidecar,
 } from '../../src/main/tiptapContentSidecar.js';
-import { writeWorkspaceNeedsReviewReport } from '../../src/main/workspaceReviewReport.js';
+import {
+  WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT,
+  writeWorkspaceNeedsReviewReport,
+} from '../../src/main/workspaceReviewReport.js';
 import {
   setAfterAtomicWorkspaceFileTempOpenForTest,
   setBeforeAtomicWorkspaceFileCommitForTest,
@@ -670,6 +673,7 @@ test('managed AGENTS block presents ordinary file editing before Reo internals',
   );
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /验证直接文件效果后停止/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /Reo 明确提示 needs-review/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /workspace-relative 信息与 recovery hint/);
 });
 
 test('managed reo-edit skill keeps stop rules explicit and keeps Tiptap JSON non-default', () => {
@@ -704,6 +708,7 @@ test('managed reo-doctor skill remains recovery-only guidance', () => {
     DEFAULT_REO_DOCTOR_SKILL_MD,
     /For ordinary editing, creation, rename or move tasks, use `skills\/reo-edit\/SKILL\.md` first/
   );
+  assert.match(DEFAULT_REO_DOCTOR_SKILL_MD, /workspace-relative paths and recovery hints/);
   assert.doesNotMatch(DEFAULT_REO_DOCTOR_SKILL_MD, /before every edit/i);
 });
 
@@ -898,6 +903,7 @@ test('reo-doctor skill script reports unresolved needs-review entries', async ()
         readonly category: string;
         readonly paths: readonly string[];
         readonly reason: string;
+        readonly recoveryHint: string;
       }>;
     };
     readonly issues: Array<{ readonly code: string; readonly path?: string }>;
@@ -914,12 +920,73 @@ test('reo-doctor skill script reports unresolved needs-review entries', async ()
         'memories/mem_review/segments/seg_review/content.tiptap.json',
       ],
       reason: 'content-conflict',
+      recoveryHint:
+        'Both Markdown and content.tiptap.json changed. Choose one source; do not guess a merge.',
     },
   ]);
   assert.deepEqual(report.issues, [
     {
       code: 'needs-review',
       path: '.reo/review/needs-review.json',
+    },
+  ]);
+});
+
+test('reo-doctor skill script falls back for inherited review reasons', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-review-reason-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Doctor review reason',
+    description: '',
+    createWorkspaceId: () => 'ws_doctor_review_reason',
+    now: () => '2026-05-26T12:43:00.000Z',
+  });
+  await mkdir(path.join(root, '.reo', 'review'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'review', 'needs-review.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        updatedAt: '2026-05-27T08:00:00.000Z',
+        summary: {
+          needsReviewCount: 1,
+          markdownCandidateCount: 0,
+          tiptapSidecarCount: 1,
+        },
+        entries: [
+          {
+            category: 'tiptap-sidecar',
+            reason: '__proto__',
+            paths: ['memories/mem_review/segments/seg_review/content.tiptap.json'],
+          },
+        ],
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs')],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout) as {
+    readonly needsReview?: {
+      readonly entries: Array<{
+        readonly reason: string;
+        readonly recoveryHint: string;
+      }>;
+    };
+  };
+  assert.deepEqual(report.needsReview?.entries, [
+    {
+      paths: ['memories/mem_review/segments/seg_review/content.tiptap.json'],
+      category: 'tiptap-sidecar',
+      reason: '__proto__',
+      recoveryHint: WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT,
     },
   ]);
 });
@@ -2207,6 +2274,93 @@ test('needs-review Markdown report escapes unusual relative paths', async () => 
   const markdown = await readFile(path.join(root, '.reo', 'review', 'needs-review.md'), 'utf8');
   assert.match(markdown, /\\u0060tick\\nnext/);
   assert.doesNotMatch(markdown, /`tick/);
+});
+
+test('needs-review Markdown report includes conservative recovery hints', async () => {
+  const root = await initializePassiveSidecarWorkspace();
+
+  await writeWorkspaceNeedsReviewReport({
+    entries: [
+      {
+        category: 'tiptap-sidecar',
+        kind: 'note',
+        objectType: 'segment',
+        paths: [
+          'memories/mem_hint/segments/seg_conflict/segment.md',
+          'memories/mem_hint/segments/seg_conflict/content.tiptap.json',
+        ],
+        reason: 'content-conflict',
+      },
+      {
+        category: 'tiptap-sidecar',
+        kind: 'note',
+        objectType: 'segment',
+        paths: ['memories/mem_hint/segments/seg_invalid/content.tiptap.json'],
+        reason: 'invalid-sidecar',
+      },
+      {
+        category: 'tiptap-sidecar',
+        kind: 'note',
+        objectType: 'segment',
+        paths: ['memories/mem_hint/segments/seg_unsupported/content.tiptap.json'],
+        reason: 'unsupported-tiptap-content',
+      },
+      {
+        category: 'tiptap-sidecar',
+        kind: 'note',
+        objectType: 'supplement',
+        paths: [
+          'memories/mem_hint/segments/seg_hint/supplements/sup_markdown_write/supplement.md',
+          'memories/mem_hint/segments/seg_hint/supplements/sup_markdown_write/content.tiptap.json',
+        ],
+        reason: 'markdown-write-required',
+      },
+      {
+        category: 'markdown-segment',
+        objectType: 'segment',
+        paths: [
+          'memories/mem_hint/segments/seg_duplicate_first/segment.md',
+          'memories/mem_hint/segments/seg_duplicate_second/segment.md',
+        ],
+        reason: 'duplicate-id',
+      },
+      {
+        category: 'markdown-supplement',
+        objectType: 'supplement',
+        paths: ['memories/mem_hint/segments/seg_hint/supplements/ambiguous/supplement.md'],
+        reason: 'ambiguous-candidate',
+      },
+    ],
+    rootPath: root,
+  });
+
+  const markdown = await readFile(path.join(root, '.reo', 'review', 'needs-review.md'), 'utf8');
+  assert.match(
+    markdown,
+    /Both Markdown and content\.tiptap\.json changed\. Choose one source; do not guess a merge\./
+  );
+  assert.match(markdown, /Fix content\.tiptap\.json to valid Reo Tiptap sidecar JSON/);
+  assert.match(markdown, /Simplify content\.tiptap\.json to Reo's durable Tiptap profile/);
+  assert.match(markdown, /could not write the Markdown mirror in this read path/);
+  assert.match(markdown, /Keep exactly one object with this id/);
+  assert.match(markdown, /Make this candidate one clear object shape/);
+  assert.doesNotMatch(markdown, /\/Users\//);
+  assert.doesNotMatch(markdown, /workspace-handle/);
+  assert.doesNotMatch(markdown, /source\.hash|contentHash/);
+
+  const report = (await readNeedsReviewReport(root)) as {
+    readonly entries: Array<Record<string, unknown>>;
+  };
+  assert.equal(
+    report.entries.some((entry) => 'recoveryHint' in entry),
+    false
+  );
+  for (const entry of report.entries) {
+    assert.deepEqual(
+      Object.keys(entry).sort(),
+      ['category', 'kind', 'objectType', 'paths', 'reason'].filter((key) => key in entry).sort()
+    );
+  }
 });
 
 test('needs-review report skips rewriting unchanged entries', async () => {
