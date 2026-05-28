@@ -95,7 +95,7 @@ export function MemoryStudioSegmentCard({
   return (
     <div
       data-slot="memory-studio-segment-item"
-      className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none [contain-intrinsic-size:184px_184px] [content-visibility:auto]"
+      className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none"
     >
       <button
         type="button"
@@ -153,7 +153,7 @@ export function MemoryStudioSegmentCard({
         <span
           aria-hidden="true"
           data-slot="memory-studio-segment-timeline-anchor"
-          className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-6px] before:right-[-6px] before:top-[3px] before:h-px before:bg-secondary"
+          className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-12px] before:right-[-12px] before:top-[3px] before:h-px before:bg-secondary"
         >
           <span
             data-slot="memory-studio-segment-timeline-dot"

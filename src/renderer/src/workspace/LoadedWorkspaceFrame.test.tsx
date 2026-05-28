@@ -2067,7 +2067,9 @@ describe('LoadedWorkspaceFrame', () => {
       'flex-[0_0_var(--memory-studio-segment-card-size)]',
       'snap-start',
       'flex-col',
-      'min-w-[var(--memory-studio-segment-card-min-size)]',
+      'min-w-[var(--memory-studio-segment-card-min-size)]'
+    );
+    expect(firstSegmentItem).not.toHaveClass(
       '[content-visibility:auto]',
       '[contain-intrinsic-size:184px_184px]'
     );
@@ -2106,6 +2108,7 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(stripScroll).not.toHaveClass('px-44');
     expect(stripScroll).toHaveClass('edge-fade-x');
+    expect(stripScroll).not.toHaveClass('relative', 'before:left-0', 'before:right-0');
     expect(stripScroll).toHaveClass('pt-8', 'pb-0');
     expect(stripScroll).not.toHaveClass('py-8');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
@@ -2194,7 +2197,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(activeItem.querySelector('[data-slot="memory-studio-segment-card"]')).toBeTruthy();
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
-    ).toHaveClass('before:top-[3px]');
+    ).toHaveClass('before:left-[-12px]', 'before:right-[-12px]', 'before:top-[3px]');
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
     ).toHaveClass('block', 'size-[7px]', 'min-h-[7px]', 'min-w-[7px]', 'rounded-full');
