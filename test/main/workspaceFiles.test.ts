@@ -21,6 +21,8 @@ import path from 'node:path';
 import test from 'node:test';
 import type { JSONContent } from '@tiptap/core';
 import {
+  DEFAULT_REO_DOCTOR_SKILL_MD,
+  DEFAULT_REO_EDIT_SKILL_MD,
   DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
@@ -97,6 +99,16 @@ function passiveRichDoc(label: string): JSONContent {
       },
     ],
   };
+}
+
+function assertIncludesInOrder(text: string, markers: readonly string[]): void {
+  let previousIndex = -1;
+  for (const marker of markers) {
+    const index = text.indexOf(marker);
+    assert.notEqual(index, -1, `missing marker: ${marker}`);
+    assert.ok(index > previousIndex, `marker out of order: ${marker}`);
+    previousIndex = index;
+  }
 }
 
 function unsupportedTableDoc(): JSONContent {
@@ -642,6 +654,57 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   for (const forbidden of ['photos', 'videos', 'files', 'films']) {
     await assert.rejects(stat(path.join(root, forbidden)));
   }
+});
+
+test('managed AGENTS block presents ordinary file editing before Reo internals', () => {
+  assertIncludesInOrder(DEFAULT_WORKSPACE_AGENTS_MD, [
+    '## 普通任务默认路径',
+    '不要把能力限制成 Markdown-only',
+    '验证直接文件效果后停止',
+    '## 需要检查时',
+    '## 核心实体',
+  ]);
+  assert.match(
+    DEFAULT_WORKSPACE_AGENTS_MD,
+    /Markdown、同节点 `content\.tiptap\.json`、附件和普通对象文件/
+  );
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /验证直接文件效果后停止/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /Reo 明确提示 needs-review/);
+});
+
+test('managed reo-edit skill keeps stop rules explicit and keeps Tiptap JSON non-default', () => {
+  assertIncludesInOrder(DEFAULT_REO_EDIT_SKILL_MD, [
+    '## Quick Start',
+    'Do not reduce Reo work to Markdown-only',
+    '## Stop Rules',
+    '## Common File Operations',
+    '## Rich Text Markdown',
+    '## Expert Tiptap JSON',
+  ]);
+  assert.match(
+    DEFAULT_REO_EDIT_SKILL_MD,
+    /Markdown, same-node `content\.tiptap\.json`, attachments and ordinary object files/
+  );
+  assert.match(DEFAULT_REO_EDIT_SKILL_MD, /After direct file verification, stop/);
+  assert.match(
+    DEFAULT_REO_EDIT_SKILL_MD,
+    /Do not inspect Reo repo source, global memories, `.reo`, hashes, manifests, index or lock files/
+  );
+  assert.match(
+    DEFAULT_REO_EDIT_SKILL_MD,
+    /Use Expert Tiptap JSON only when the user asks for exact rich structure/
+  );
+  assert.doesNotMatch(DEFAULT_REO_EDIT_SKILL_MD, /only edit Markdown/i);
+});
+
+test('managed reo-doctor skill remains recovery-only guidance', () => {
+  assert.match(DEFAULT_REO_DOCTOR_SKILL_MD, /Recovery-only/);
+  assert.match(DEFAULT_REO_DOCTOR_SKILL_MD, /Run it only after Reo reports needs-review/);
+  assert.match(
+    DEFAULT_REO_DOCTOR_SKILL_MD,
+    /For ordinary editing, creation, rename or move tasks, use `skills\/reo-edit\/SKILL\.md` first/
+  );
+  assert.doesNotMatch(DEFAULT_REO_DOCTOR_SKILL_MD, /before every edit/i);
 });
 
 test('open workspace silently restores missing Reo agent managed config', async () => {
