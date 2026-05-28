@@ -34,3 +34,15 @@
 - 改动：`docs/current/design-system/DESIGN.md`（完整重写）
 - 验证：重新读取后确认：标题改为 "Reo Red Fluid Design System"；核心定义不再描述黑色为主 Soft Flat；视觉语义新增 surface-1..4、primary-hover、brand-gradient 表述；Hero 表面表格与 spec Section 4.1 / 4.2 一致；命名规范关键约束指向 spec README#section-6
 - 备注：narrative 文档，runtime 不消费；只服务 agent 阅读
+- Commit: `a36227fa docs(design-system): describe red fluid system + token naming convention reference`
+
+## Task 4 · 重写 theme.css runtime
+
+- 时间：2026-05-28 07:32 PDT
+- 改动：`src/renderer/src/theme.css`（完整重写）
+- 验证：
+  - `@theme inline` 块新增暴露：`--color-primary-hover`、`--color-brand-{red,magenta,ember}`、`--color-surface-{1,2,3,4}`、`--radius-3xl`、`--radius-4xl`、`--shadow-hero-{lift,fill,inset,edge}`、`--shadow-surface-inset`
+  - `@theme inline` 中所有 shadow 改为 `var(--shadow-X)` 引用（**这是行为变化**：旧实现的 `@theme inline` 用 literal value，Tailwind 生成静态 utility，dark mode 下 `[data-theme='dark']` 的 shadow 覆盖不生效；新实现让 utility 解析为 `var()`，dark 切换生效）
+  - `:root/[data-theme='light']` 段完整复制自 Task 2 variables.css，确保 runtime 与 design-system 源逐字一致
+  - `[data-theme='dark']` 段同样完整复制
+- 备注：**主动声明的行为变化**：shadow utility 现在 dark mode 下会切换值；旧实现是 latent bug（不切换）。本次顺手修正与命名规范是同一架构改动的一部分

@@ -7,6 +7,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -20,7 +21,15 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-brand-red: var(--brand-red);
+  --color-brand-magenta: var(--brand-magenta);
   --color-brand-ember: var(--brand-ember);
+
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
 
   --font-sans: 'Waldenburg', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -81,84 +90,137 @@
   --container-form: 720px;
 
   --radius: 16px;
-  --radius-sm: calc(var(--radius) - 8px);
-  --radius-md: calc(var(--radius) - 4px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 28px;
+  --radius-4xl: 32px;
   --radius-full: 9999px;
 
-  --shadow-float: 0 12px 32px rgb(0 0 0 / 0.08);
-  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.12);
+  --shadow-float: var(--shadow-float);
+  --shadow-modal: var(--shadow-modal);
+  --shadow-hero-lift: var(--shadow-hero-lift);
+  --shadow-hero-fill: var(--shadow-hero-fill);
+  --shadow-hero-inset: var(--shadow-hero-inset);
+  --shadow-hero-edge: var(--shadow-hero-edge);
+  --shadow-surface-inset: var(--shadow-surface-inset);
 }
 
 :root,
 [data-theme='light'] {
   color-scheme: light;
-  --background: #ffffff;
+
+  --brand-red: #dc2626;
+  --brand-magenta: #d946ef;
+  --brand-ember: #ff4704;
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-ember) 0%,
+    var(--brand-red) 50%,
+    var(--brand-magenta) 100%
+  );
+
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #ebebed;
+  --surface-4: #ffffff;
+
+  --background: var(--surface-1);
   --foreground: #18181b;
-  --card: #f4f4f5;
+  --card: var(--surface-2);
   --card-foreground: #18181b;
-  --popover: #ffffff;
+  --popover: var(--surface-4);
   --popover-foreground: #18181b;
-  --primary: #18181b;
+  --primary: var(--brand-red);
   --primary-foreground: #ffffff;
+  --primary-hover: color-mix(in oklab, var(--primary) 90%, var(--foreground));
   --secondary: #e5e7eb;
   --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
+  --muted: var(--surface-2);
   --muted-foreground: #71717a;
   --accent: #e5e7eb;
   --accent-foreground: #18181b;
-  --destructive: #dc2626;
+  --destructive: #b91c1c;
   --destructive-hover: color-mix(in oklab, var(--destructive) 82%, var(--destructive-foreground));
   --destructive-foreground: #ffffff;
-  --brand-ember: #ff4704;
   --scrim: rgb(24 24 27 / 0.32);
   --border: transparent;
-  --input: #f4f4f5;
-  --ring: #18181b;
-  --radius: 16px;
-  --radius-sm: calc(var(--radius) - 8px);
-  --radius-md: calc(var(--radius) - 4px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-full: 9999px;
+  --input: var(--surface-3);
+  --ring: var(--brand-red);
+
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.08);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.12);
+  --shadow-hero-lift:
+    0 24px 48px rgb(220 38 38 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-hero-fill:
+    0 12px 24px rgb(220 38 38 / 0.18),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 -8px 16px rgb(0 0 0 / 0.12);
+  --shadow-hero-edge:
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --shadow-surface-inset: inset 0 1px 0 rgb(0 0 0 / 0.02);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --background: #09090b;
+
+  --brand-red: #dc2626;
+  --brand-magenta: #d946ef;
+  --brand-ember: #ff4704;
+  --brand-gradient: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--brand-ember) 92%, #09090b) 0%,
+    color-mix(in oklab, var(--brand-red) 92%, #09090b) 50%,
+    color-mix(in oklab, var(--brand-magenta) 92%, #09090b) 100%
+  );
+
+  --surface-1: #09090b;
+  --surface-2: #18181b;
+  --surface-3: #1f1f23;
+  --surface-4: #27272a;
+
+  --background: var(--surface-1);
   --foreground: #fafafa;
-  --card: #18181b;
+  --card: var(--surface-2);
   --card-foreground: #fafafa;
-  --popover: #27272a;
+  --popover: var(--surface-4);
   --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #09090b;
+  --primary: var(--brand-red);
+  --primary-foreground: #ffffff;
+  --primary-hover: color-mix(in oklab, var(--primary) 90%, var(--foreground));
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
-  --muted: #18181b;
+  --muted: var(--surface-2);
   --muted-foreground: #a1a1aa;
   --accent: color-mix(in oklab, var(--foreground) 10%, var(--popover));
   --accent-foreground: #fafafa;
-  --destructive: #ef4444;
+  --destructive: #b91c1c;
   --destructive-hover: color-mix(in oklab, var(--destructive) 82%, var(--destructive-foreground));
   --destructive-foreground: #ffffff;
-  --brand-ember: #ff4704;
   --scrim: rgb(0 0 0 / 0.62);
   --border: transparent;
-  --input: #18181b;
-  --ring: #fafafa;
-  --radius: 16px;
-  --radius-sm: calc(var(--radius) - 8px);
-  --radius-md: calc(var(--radius) - 4px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-full: 9999px;
+  --input: var(--surface-3);
+  --ring: var(--brand-red);
+
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
+  --shadow-hero-lift:
+    0 24px 48px rgb(220 38 38 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-hero-fill:
+    0 12px 24px rgb(220 38 38 / 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    inset 0 -8px 16px rgb(0 0 0 / 0.18);
+  --shadow-hero-edge:
+    inset 0 0 0 1px rgb(255 255 255 / 0.05),
+    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  --shadow-surface-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
