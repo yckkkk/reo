@@ -28,6 +28,7 @@ import {
   type ReferenceType,
   FloatingDelayGroup,
 } from '@floating-ui/react';
+import { TIPTAP_FLOATING_LAYER_Z_INDEX } from '@/components/tiptap-ui-primitive/tiptap-floating-layer';
 import '@/components/tiptap-ui-primitive/tooltip/tooltip.scss';
 
 interface TooltipProviderProps {
@@ -204,6 +205,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
         style={{
           ...context.floatingStyles,
           ...style,
+          zIndex: TIPTAP_FLOATING_LAYER_Z_INDEX,
         }}
         {...context.getFloatingProps(props)}
         className="tiptap-tooltip"

@@ -1,0 +1,1 @@
+export const TIPTAP_FLOATING_LAYER_Z_INDEX = 100015;

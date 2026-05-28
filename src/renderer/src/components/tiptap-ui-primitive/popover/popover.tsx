@@ -1,5 +1,6 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { cn } from '@/lib/tiptap-utils';
+import { TIPTAP_FLOATING_LAYER_Z_INDEX } from '@/components/tiptap-ui-primitive/tiptap-floating-layer';
 import '@/components/tiptap-ui-primitive/popover/popover.scss';
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -14,6 +15,7 @@ function PopoverContent({
   className,
   align = 'center',
   sideOffset = 4,
+  style,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -22,6 +24,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn('tiptap-popover', className)}
+        style={{ ...style, zIndex: TIPTAP_FLOATING_LAYER_Z_INDEX }}
         {...props}
       />
     </PopoverPrimitive.Portal>

@@ -7,6 +7,10 @@ import {
   LightweightMarkdownEditorSurface,
   type LightweightMarkdownEditorHandle,
 } from './LightweightMarkdownEditorSurface';
+import {
+  IMMERSIVE_WORKSPACE_ALERT_OVERLAY_Z_CLASS,
+  IMMERSIVE_WORKSPACE_SURFACE_CONTENT_Z_CLASS,
+} from './immersiveWorkspaceLayers';
 
 function renderEditor(
   value: string,
@@ -78,6 +82,23 @@ function firstNodeOfType(
     }
   });
   return matched;
+}
+
+function zIndexNumber(value: string) {
+  return Number(value.match(/z-\[(\d+)]/)?.[1] ?? value);
+}
+
+function computedZIndex(element: HTMLElement) {
+  return zIndexNumber(window.getComputedStyle(element).zIndex);
+}
+
+function expectEditorFloatingLayerAboveImmersiveSurface(element: HTMLElement) {
+  expect(computedZIndex(element)).toBeGreaterThan(
+    zIndexNumber(IMMERSIVE_WORKSPACE_SURFACE_CONTENT_Z_CLASS)
+  );
+  expect(computedZIndex(element)).toBeLessThan(
+    zIndexNumber(IMMERSIVE_WORKSPACE_ALERT_OVERLAY_Z_CLASS)
+  );
 }
 
 describe('LightweightMarkdownEditorSurface', () => {
@@ -328,6 +349,24 @@ describe('LightweightMarkdownEditorSurface', () => {
     expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
+  });
+
+  it('layers toolbar dropdowns and popovers above immersive editor surfaces', async () => {
+    const user = userEvent.setup();
+    renderEditor('');
+
+    await user.click(screen.getByRole('button', { name: '标题' }));
+    const headingMenu = await screen.findByRole('menuitem', { name: '标题 1' });
+    const dropdownContent = headingMenu.closest('[data-slot="tiptap-dropdown-menu-content"]');
+    expect(dropdownContent).toBeInstanceOf(HTMLElement);
+    expectEditorFloatingLayerAboveImmersiveSurface(dropdownContent as HTMLElement);
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: '高亮' }));
+    const highlightButton = await screen.findByRole('button', { name: /绿色高亮/ });
+    const popoverContent = highlightButton.closest('.tiptap-popover');
+    expect(popoverContent).toBeInstanceOf(HTMLElement);
+    expectEditorFloatingLayerAboveImmersiveSurface(popoverContent as HTMLElement);
   });
 
   it('uses the official Simple Editor node styling for the editable content area', async () => {

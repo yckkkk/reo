@@ -1,6 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/lib/tiptap-utils';
 import { CheckIcon } from '@/components/tiptap-icons/check-icon';
+import { TIPTAP_FLOATING_LAYER_Z_INDEX } from '@/components/tiptap-ui-primitive/tiptap-floating-layer';
 
 import '@/components/tiptap-ui-primitive/dropdown-menu/dropdown-menu.scss';
 
@@ -24,6 +25,7 @@ function DropdownMenuContent({
   className,
   align = 'start',
   sideOffset = 4,
+  style,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -34,6 +36,7 @@ function DropdownMenuContent({
         align={align}
         className={cn('tiptap-dropdown-menu-content', className)}
         onCloseAutoFocus={(e) => e.preventDefault()}
+        style={{ ...style, zIndex: TIPTAP_FLOATING_LAYER_Z_INDEX }}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
@@ -205,12 +208,14 @@ function DropdownMenuSubTrigger({
 
 function DropdownMenuSubContent({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
   return (
     <DropdownMenuPrimitive.SubContent
       data-slot="tiptap-dropdown-menu-sub-content"
       className={cn('tiptap-dropdown-menu-sub-content', className)}
+      style={{ ...style, zIndex: TIPTAP_FLOATING_LAYER_Z_INDEX }}
       {...props}
     />
   );
