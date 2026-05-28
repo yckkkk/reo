@@ -32,9 +32,7 @@ function renderEditor(
       editorHandleRef={editorHandleRef}
       headerLabel="格式笔记"
       onChange={options.onChange ?? (() => undefined)}
-      onSave={() => undefined}
       placeholder="写下正文..."
-      saveLabel="保存"
       surfaceTestId="lightweight-editor"
       value={value}
       {...(options.onAttachmentUpload ? { onAttachmentUpload: options.onAttachmentUpload } : {})}
@@ -143,9 +141,7 @@ describe('LightweightMarkdownEditorSurface', () => {
         editorHandleRef={editorHandleRef}
         headerLabel="格式笔记"
         onChange={() => undefined}
-        onSave={() => undefined}
         placeholder="写下正文..."
-        saveLabel="保存"
         surfaceTestId="lightweight-editor"
         value={`# Codex 标题\n\n> Codex 引用\n\n\`\`\`ts\nconst source = 'markdown';\n\`\`\`\n\n- Codex 列表`}
       />
@@ -216,9 +212,7 @@ describe('LightweightMarkdownEditorSurface', () => {
         editorHandleRef={editorHandleRef}
         headerLabel="格式笔记"
         onChange={() => undefined}
-        onSave={() => undefined}
         placeholder="写下正文..."
-        saveLabel="保存"
         surfaceTestId="lightweight-editor"
         value="Stable body"
         valueTiptapJson={
@@ -247,9 +241,7 @@ describe('LightweightMarkdownEditorSurface', () => {
         editorTargetKey="target-one"
         headerLabel="格式笔记"
         onChange={onChange}
-        onSave={() => undefined}
         placeholder="写下正文..."
-        saveLabel="保存"
         surfaceTestId="targeted-editor"
         value="Old target"
       />
@@ -271,9 +263,7 @@ describe('LightweightMarkdownEditorSurface', () => {
         editorTargetKey="target-two"
         headerLabel="格式笔记"
         onChange={onChange}
-        onSave={() => undefined}
         placeholder="写下正文..."
-        saveLabel="保存"
         surfaceTestId="targeted-editor"
         value="New target"
       />
@@ -336,6 +326,8 @@ describe('LightweightMarkdownEditorSurface', () => {
     expect(screen.queryByRole('button', { name: '格式' })).not.toBeInTheDocument();
     expect(screen.queryByRole('toolbar', { name: 'Markdown 格式工具栏' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
   });
 
   it('uses the official Simple Editor node styling for the editable content area', async () => {
@@ -532,14 +524,15 @@ describe('LightweightMarkdownEditorSurface', () => {
     expect(editorHandleRef.current?.getMarkdown()).not.toContain('![first]');
   });
 
-  it('keeps editor save actions aligned away from the direct formatting buttons', () => {
+  it('does not render manual save actions inside the editor toolbar', () => {
     renderEditor('');
 
     const actionGroup = screen
       .getByTestId('lightweight-editor')
       .querySelector('[data-slot="lightweight-markdown-editor-actions"]');
-    expect(actionGroup).toBeInstanceOf(HTMLElement);
-    expect(actionGroup).toHaveClass('reo-lightweight-markdown-editor-actions', 'shrink-0');
+    expect(actionGroup).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
   });
 
   it('renders list toolbar results with visible list marker styling', async () => {
@@ -905,9 +898,7 @@ describe('LightweightMarkdownEditorSurface', () => {
         editorHandleRef={editorHandleRef}
         headerLabel="格式笔记"
         onChange={onChange}
-        onSave={() => undefined}
         placeholder="写下正文..."
-        saveLabel="保存"
         surfaceTestId="lightweight-editor"
         value=""
       />

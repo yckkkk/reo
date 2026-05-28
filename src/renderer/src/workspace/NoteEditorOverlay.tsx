@@ -308,7 +308,6 @@ export function NoteEditorOverlay({
           }}
           placeholder={bodyPlaceholder}
           readableWidth
-          showActions={false}
           surfaceTestId="note-editor-text-surface"
           toolbarDisabled={pending}
           value={bodyMarkdown}

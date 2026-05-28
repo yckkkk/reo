@@ -1,50 +1,31 @@
 import { Maximize, Minimize } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
 import { ImmersiveWorkspaceTitlebar } from './ImmersiveWorkspaceTitlebar';
 
 type EditorExpandShellProps = {
   readonly ariaLabelledBy: string;
-  readonly cancelButtonClassName?: string;
-  readonly cancelLabel?: string;
   readonly children: ReactNode;
-  readonly dirty: boolean;
   readonly expanded: boolean;
-  readonly onCancel: () => void;
   readonly onExpandedChange: (expanded: boolean) => void;
   readonly onReturn: () => void;
-  readonly onSave: () => void;
   readonly panelId: string;
   readonly pending: boolean;
   readonly renderAsPanel: boolean;
-  readonly saveButtonClassName?: string;
-  readonly saveDisabled: boolean;
-  readonly saveLabel: string;
   readonly title: string;
 };
 
 export function EditorExpandShell({
   ariaLabelledBy,
-  cancelButtonClassName,
-  cancelLabel = '取消',
   children,
-  dirty,
   expanded,
-  onCancel,
   onExpandedChange,
   onReturn,
-  onSave,
   panelId,
   pending,
   renderAsPanel,
-  saveButtonClassName,
-  saveDisabled,
-  saveLabel,
   title,
 }: EditorExpandShellProps) {
-  const showActions = dirty && !pending;
-
   return (
     <>
       {expanded ? null : (
@@ -79,31 +60,6 @@ export function EditorExpandShell({
         title={title}
       >
         <ImmersiveWorkspaceTitlebar
-          actions={
-            showActions ? (
-              <>
-                <Button
-                  className={cancelButtonClassName}
-                  disabled={saveDisabled}
-                  onClick={onCancel}
-                  size="compact"
-                  type="button"
-                >
-                  {cancelLabel}
-                </Button>
-                <Button
-                  className={saveButtonClassName}
-                  disabled={saveDisabled}
-                  onClick={onSave}
-                  size="compact"
-                  type="button"
-                >
-                  {saveLabel}
-                </Button>
-              </>
-            ) : null
-          }
-          actionsTestId="editor-expand-titlebar-actions"
           onReturn={onReturn}
           returnDisabled={pending}
           title={title}

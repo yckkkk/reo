@@ -148,6 +148,16 @@ const cssTokenFiles = [
 ] as const;
 
 const rendererGlobalCssEntry = 'src/renderer/src/index.css';
+const tiptapTemplateVariablesEntry = 'src/renderer/src/styles/tiptap-template-variables.scss';
+const tiptapChromeCssEntries = [
+  'src/renderer/src/components/tiptap-ui-primitive/card/card.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/dropdown-menu/dropdown-menu.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/input/input.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/popover/popover.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/separator/separator.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/toolbar/toolbar.scss',
+  'src/renderer/src/components/tiptap-ui-primitive/tooltip/tooltip.scss',
+] as const;
 
 type DesignTokens = {
   color: Record<string, { $value: string }>;
@@ -365,4 +375,27 @@ test('brand gradient is exposed as a CSS variable, not as a raw color', () => {
     assert.equal(lightGradient, tokens.gradient['brand-gradient-light']?.$value, path);
     assert.equal(darkGradient, tokens.gradient['brand-gradient-dark']?.$value, path);
   }
+});
+
+test('Tiptap template chrome is retokenized to Reo colors while durable highlight colors remain stable', () => {
+  const variablesCss = readProjectFile(tiptapTemplateVariablesEntry);
+
+  assert.match(variablesCss, /--tt-brand-color-500:\s*var\(--brand-red\);/);
+  assert.match(variablesCss, /--tt-cursor-color:\s*var\(--tt-brand-color-500\);/);
+  assert.match(variablesCss, /--tt-selection-color:\s*color-mix\(in oklab, var\(--brand-red\)/);
+  assert.doesNotMatch(variablesCss, /rgba\(98,\s*41,\s*255,\s*1\)/);
+  assert.doesNotMatch(variablesCss, /rgba\(122,\s*82,\s*255,\s*1\)/);
+  assert.doesNotMatch(variablesCss, /rgba\(157,\s*138,\s*255,\s*1\)/);
+  assert.doesNotMatch(variablesCss, /hsla\(257,\s*100%,\s*9%,\s*1\)/);
+  assert.match(variablesCss, /--tt-color-highlight-purple:\s*#f3e8ff;/);
+  assert.match(variablesCss, /--tt-color-highlight-purple:\s*#583e74;/);
+
+  const chromeCss = tiptapChromeCssEntries.map(readProjectFile).join('\n');
+  assert.match(chromeCss, /var\(--popover\)/);
+  assert.match(chromeCss, /var\(--popover-foreground\)/);
+  assert.match(chromeCss, /var\(--background\)/);
+  assert.match(chromeCss, /var\(--input\)/);
+  assert.match(chromeCss, /var\(--shadow-float\)/);
+  assert.doesNotMatch(chromeCss, /--tt-tooltip-bg:\s*var\(--tt-gray-light-900\)/);
+  assert.doesNotMatch(chromeCss, /--tt-dropdown-menu-bg-color:\s*var\(--white\)/);
 });

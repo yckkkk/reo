@@ -62,17 +62,17 @@
   --tt-gray-dark-900: rgba(245, 245, 245, 1);
 
   /* Brand colors */
-  --tt-brand-color-50: rgba(239, 238, 255, 1);
-  --tt-brand-color-100: rgba(222, 219, 255, 1);
-  --tt-brand-color-200: rgba(195, 189, 255, 1);
-  --tt-brand-color-300: rgba(157, 138, 255, 1);
-  --tt-brand-color-400: rgba(122, 82, 255, 1);
-  --tt-brand-color-500: rgba(98, 41, 255, 1);
-  --tt-brand-color-600: rgba(84, 0, 229, 1);
-  --tt-brand-color-700: rgba(75, 0, 204, 1);
-  --tt-brand-color-800: rgba(56, 0, 153, 1);
-  --tt-brand-color-900: rgba(43, 25, 102, 1);
-  --tt-brand-color-950: hsla(257, 100%, 9%, 1);
+  --tt-brand-color-50: color-mix(in oklab, var(--brand-red) 6%, white);
+  --tt-brand-color-100: color-mix(in oklab, var(--brand-red) 12%, white);
+  --tt-brand-color-200: color-mix(in oklab, var(--brand-red) 22%, white);
+  --tt-brand-color-300: color-mix(in oklab, var(--brand-red) 38%, white);
+  --tt-brand-color-400: color-mix(in oklab, var(--brand-red) 78%, white);
+  --tt-brand-color-500: var(--brand-red);
+  --tt-brand-color-600: color-mix(in oklab, var(--brand-red) 86%, black);
+  --tt-brand-color-700: color-mix(in oklab, var(--brand-red) 72%, black);
+  --tt-brand-color-800: color-mix(in oklab, var(--brand-red) 58%, black);
+  --tt-brand-color-900: color-mix(in oklab, var(--brand-red) 42%, black);
+  --tt-brand-color-950: color-mix(in oklab, var(--brand-red) 28%, black);
 
   /* Green */
   --tt-color-green-inc-5: hsla(129, 100%, 97%, 1);
@@ -180,28 +180,28 @@
   **************************************************/
 
   /* Global colors - Light mode */
-  --tt-bg-color: var(--white);
-  --tt-border-color: var(--tt-gray-light-a-200);
-  --tt-border-color-tint: var(--tt-gray-light-a-100);
-  --tt-sidebar-bg-color: var(--tt-gray-light-100);
-  --tt-scrollbar-color: var(--tt-gray-light-a-200);
+  --tt-bg-color: var(--background);
+  --tt-border-color: var(--secondary);
+  --tt-border-color-tint: color-mix(in oklab, var(--secondary) 54%, transparent);
+  --tt-sidebar-bg-color: var(--card);
+  --tt-scrollbar-color: var(--secondary);
   --tt-cursor-color: var(--tt-brand-color-500);
-  --tt-selection-color: rgba(157, 138, 255, 0.2);
-  --tt-card-bg-color: var(--white);
-  --tt-card-border-color: var(--tt-gray-light-a-100);
+  --tt-selection-color: color-mix(in oklab, var(--brand-red) 20%, transparent);
+  --tt-card-bg-color: var(--popover);
+  --tt-card-border-color: var(--border);
 }
 
 /* Global colors - Dark mode */
 .dark {
-  --tt-bg-color: var(--black);
-  --tt-border-color: var(--tt-gray-dark-a-200);
-  --tt-border-color-tint: var(--tt-gray-dark-a-100);
-  --tt-sidebar-bg-color: var(--tt-gray-dark-100);
-  --tt-scrollbar-color: var(--tt-gray-dark-a-200);
+  --tt-bg-color: var(--background);
+  --tt-border-color: var(--secondary);
+  --tt-border-color-tint: color-mix(in oklab, var(--secondary) 54%, transparent);
+  --tt-sidebar-bg-color: var(--card);
+  --tt-scrollbar-color: var(--secondary);
   --tt-cursor-color: var(--tt-brand-color-400);
-  --tt-selection-color: rgba(122, 82, 255, 0.2);
-  --tt-card-bg-color: var(--tt-gray-dark-50);
-  --tt-card-border-color: var(--tt-gray-dark-a-50);
+  --tt-selection-color: color-mix(in oklab, var(--brand-red) 24%, transparent);
+  --tt-card-bg-color: var(--popover);
+  --tt-card-border-color: var(--border);
 
   --tt-shadow-elevated-md:
     0px 16px 48px 0px rgba(0, 0, 0, 0.5), 0px 12px 24px 0px rgba(0, 0, 0, 0.24),

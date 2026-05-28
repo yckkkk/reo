@@ -205,10 +205,6 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 };
 const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
 const INLINE_MARKDOWN_AUTOSAVE_DELAY_MS = 300;
-const INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME =
-  'min-w-56 rounded-xl !bg-secondary px-12 text-foreground !transition-none hover:!bg-secondary active:!bg-secondary focus-visible:!bg-secondary disabled:!bg-secondary disabled:text-foreground';
-const INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME =
-  'min-w-56 rounded-xl !bg-foreground px-12 text-background !transition-none hover:!bg-foreground active:!bg-foreground focus-visible:!bg-foreground disabled:!bg-foreground disabled:text-background';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
@@ -2006,7 +2002,6 @@ function SegmentSupplementAudioPlayer({
           panelId={`${panelId}-transcript-editor`}
           placeholder="整理或修正补充录音转录..."
           renderAsPanel={false}
-          saveLabel="保存"
           surfaceTestId="memory-studio-inline-supplement-transcript-editor"
           targetKey={`segment-supplement-transcript:${supplement.segmentId}:${supplement.supplementId}`}
           title={supplement.title}
@@ -2168,7 +2163,6 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly panelId: string;
   readonly renderAsPanel?: boolean;
   readonly placeholder: string;
-  readonly saveLabel: string;
   readonly surfaceTestId: string;
   readonly targetKey: string;
   readonly title: string;
@@ -2211,7 +2205,6 @@ function InlineMarkdownContentEditor<TSaved>({
   panelId,
   renderAsPanel = true,
   placeholder,
-  saveLabel,
   surfaceTestId,
   targetKey,
   title,
@@ -2468,25 +2461,17 @@ function InlineMarkdownContentEditor<TSaved>({
     <>
       <EditorExpandShell
         ariaLabelledBy={ariaLabelledBy}
-        cancelButtonClassName={INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME}
-        dirty={false}
         expanded={expanded}
-        onCancel={cancelMarkdownEdit}
         onExpandedChange={setExpanded}
         onReturn={requestReturnFromExpandedEditor}
-        onSave={() => void saveMarkdown()}
         panelId={panelId}
         pending={disabled}
         renderAsPanel={renderAsPanel}
-        saveButtonClassName={INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME}
-        saveDisabled={disabled}
-        saveLabel={saveLabel}
         title={title}
       >
         <LightweightMarkdownEditorSurface
           attachmentContext={attachmentContext}
           bordered={!expanded}
-          cancelButtonClassName={INLINE_MARKDOWN_CANCEL_BUTTON_CLASS_NAME}
           disabled={disabled}
           editorHandleRef={editorHandleRef}
           headerLabel={headerLabel}
@@ -2509,14 +2494,8 @@ function InlineMarkdownContentEditor<TSaved>({
           onDrop={imageAttachment.handleDrop}
           onAttachmentUpload={imageAttachment.uploadFile}
           onPaste={imageAttachment.handlePaste}
-          onCancel={cancelMarkdownEdit}
-          onSave={() => void saveMarkdown()}
           placeholder={placeholder}
           readableWidth
-          saveButtonClassName={INLINE_MARKDOWN_SAVE_BUTTON_CLASS_NAME}
-          saveDisabled={disabled}
-          saveLabel={saveLabel}
-          showActions={false}
           showHeaderLabel={false}
           surfaceRef={surfaceRef}
           surfaceTestId={surfaceTestId}
@@ -2705,7 +2684,6 @@ function SegmentSupplementNotePanel({
         onSavedContent={onSavedContent}
         panelId={panelId}
         placeholder="写下补充笔记..."
-        saveLabel="保存"
         surfaceTestId="memory-studio-inline-supplement-note-editor"
         targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
         title={supplement.title}
@@ -4196,7 +4174,6 @@ export function MemoryStudio({
                     onSavedContent={onSegmentTranscriptSaved}
                     panelId={transcriptContentTab.panelId}
                     placeholder="整理或修正转录文本..."
-                    saveLabel="保存"
                     surfaceTestId="memory-studio-inline-transcript-editor"
                     targetKey={`segment-transcript:${selectedSegment.segmentId}`}
                     title={transcriptContentTab.title}
@@ -4288,7 +4265,6 @@ export function MemoryStudio({
                     onSavedContent={onNoteSegmentContentSaved}
                     panelId={transcriptContentTab.panelId}
                     placeholder="写下正文..."
-                    saveLabel="保存"
                     surfaceTestId="memory-studio-inline-note-editor"
                     targetKey={`segment:${selectedSegment.segmentId}`}
                     title={transcriptContentTab.title}

@@ -38,7 +38,6 @@ import { ListDropdownMenu } from '@/components/tiptap-ui/list-dropdown-menu';
 import { MarkButton } from '@/components/tiptap-ui/mark-button';
 import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { setTiptapInteractiveSelectionReady } from '@/hooks/use-tiptap-editor';
 import { cn } from '@/lib/utils';
@@ -83,8 +82,6 @@ type AttachmentUploadHandler = (
 
 export type LightweightMarkdownEditorSurfaceProps = {
   readonly bordered?: boolean;
-  readonly cancelButtonClassName?: string;
-  readonly cancelLabel?: string;
   readonly attachmentContext?: MarkdownAttachmentContext | undefined;
   readonly disabled?: boolean;
   readonly editorFocused?: boolean;
@@ -95,7 +92,6 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly headerLabel: string;
   readonly notice?: string | null;
   readonly onAttachmentUpload?: AttachmentUploadHandler;
-  readonly onCancel?: () => void;
   readonly onChange: (value: string) => void;
   readonly onRichChange?: (value: {
     readonly markdown: string;
@@ -105,14 +101,9 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly onDrop?: DragEventHandler<HTMLElement>;
   readonly onDragOver?: DragEventHandler<HTMLElement>;
   readonly onPaste?: ClipboardEventHandler<HTMLElement>;
-  readonly onSave?: () => void;
   readonly placeholder: string;
   readonly readableWidth?: boolean;
-  readonly saveDisabled?: boolean;
-  readonly saveButtonClassName?: string;
-  readonly saveLabel?: string;
   readonly showHeaderLabel?: boolean;
-  readonly showActions?: boolean;
   readonly surfaceRef?: Ref<HTMLDivElement>;
   readonly surfaceTestId: string;
   readonly onEditorFocusChange?: (editorFocused: boolean) => void;
@@ -199,8 +190,6 @@ export function LightweightMarkdownEditorSurface(props: LightweightMarkdownEdito
 function LightweightMarkdownEditorSurfaceContent({
   attachmentContext,
   bordered = true,
-  cancelButtonClassName,
-  cancelLabel = '取消',
   disabled = false,
   editorFocused,
   editorHandleRef,
@@ -209,20 +198,14 @@ function LightweightMarkdownEditorSurfaceContent({
   headerLabel,
   notice = null,
   onAttachmentUpload,
-  onCancel,
   onChange,
   onRichChange,
   onDragOver,
   onDrop,
   onPaste,
-  onSave,
   placeholder,
   readableWidth = false,
-  saveDisabled = false,
-  saveButtonClassName,
-  saveLabel,
   showHeaderLabel = false,
-  showActions = true,
   surfaceRef,
   surfaceTestId,
   onEditorFocusChange,
@@ -586,36 +569,6 @@ function LightweightMarkdownEditorSurfaceContent({
               </>
             ) : null}
             <Spacer />
-            {showActions && onSave ? (
-              <>
-                <ToolbarSeparator />
-                <ToolbarGroup
-                  className="reo-lightweight-markdown-editor-actions shrink-0"
-                  data-slot="lightweight-markdown-editor-actions"
-                >
-                  {onCancel ? (
-                    <Button
-                      type="button"
-                      size="compact"
-                      disabled={saveDisabled}
-                      className={cancelButtonClassName}
-                      onClick={onCancel}
-                    >
-                      {cancelLabel}
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="compact"
-                    disabled={saveDisabled}
-                    className={saveButtonClassName}
-                    onClick={onSave}
-                  >
-                    {saveLabel}
-                  </Button>
-                </ToolbarGroup>
-              </>
-            ) : null}
           </Toolbar>
         </div>
         <div

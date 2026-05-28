@@ -1,13 +1,15 @@
 :root {
-  --tt-input-placeholder: var(--tt-gray-light-a-400);
-  --tt-input-border: var(--tt-gray-light-a-200);
-  --tt-input-border-focus: var(--tt-gray-light-a-300);
+  --tt-input-placeholder: var(--muted-foreground);
+  --tt-input-border: var(--border);
+  --tt-input-border-focus: var(--ring);
+  --tt-input-bg: var(--input);
 }
 
 .dark {
-  --tt-input-placeholder: var(--tt-gray-dark-a-400);
-  --tt-input-border: var(--tt-gray-dark-a-200);
-  --tt-input-border-focus: var(--tt-gray-dark-a-300);
+  --tt-input-placeholder: var(--muted-foreground);
+  --tt-input-border: var(--border);
+  --tt-input-border-focus: var(--ring);
+  --tt-input-bg: var(--input);
 }
 
 .tiptap-input {
@@ -17,7 +19,7 @@
   padding: 0.25rem 0.625rem;
   border-radius: var(--tt-radius-md);
   border: 1px solid var(--tt-input-border);
-  background: transparent;
+  background: var(--tt-input-bg);
   font-size: 1rem;
   outline: none;
   transition:
