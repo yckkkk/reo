@@ -4617,6 +4617,65 @@ describe('App', () => {
     );
   });
 
+  it('does not replay the needs-review toast after returning from settings in the same workspace session', async () => {
+    const user = userEvent.setup();
+    const reviewSnapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: 'Private notes',
+      memories: [],
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+      },
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: reviewSnapshot,
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    expect(await screen.findByText('1个文件需要检查')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close toast' }));
+
+    await waitFor(() => expect(screen.queryByText('1个文件需要检查')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '返回应用' }));
+    expect(await screen.findByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('1个文件需要检查')).not.toBeInTheDocument();
+  });
+
   it('refreshes non-body workspace projections while a dirty Note editor stays open', async () => {
     const user = userEvent.setup();
     const originalMemory = {
@@ -8204,6 +8263,166 @@ describe('App', () => {
         workspaceHandle: 'workspace-handle-1',
       })
     );
+  });
+
+  it('requires a named Memory before starting a FAB Note when the workspace has no memories', async () => {
+    const user = userEvent.setup();
+    const createdMemory = {
+      memoryId: 'mem_note_target',
+      title: '第一条记忆',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const finalizedNoteSegment = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_note_target',
+      segmentId: 'seg_note_1',
+      type: 'note' as const,
+      title: '笔记1',
+      createdAt: '2026-05-08T14:45:00.000Z',
+      updatedAt: '2026-05-08T14:45:00.000Z',
+      bodyByteLength: 14,
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: createdMemory,
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...createdMemory,
+          workspaceId: 'ws_1',
+          segments: [],
+        },
+      },
+    }));
+    reoWorkspace.createNoteSegmentDraft.mockResolvedValue({
+      ok: true,
+      value: { segmentId: 'seg_note_1', revision: 0 },
+    });
+    reoWorkspace.writeNoteSegmentDraftBody.mockResolvedValue({
+      ok: true,
+      value: { revision: 1, saved: true },
+    });
+    reoWorkspace.finalizeNoteSegmentDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: {
+          ...createdMemory,
+          updatedAt: '2026-05-08T14:45:00.000Z',
+          segmentCount: 1,
+          noteSegmentCount: 1,
+          hasAnyNote: true,
+        },
+        segment: finalizedNoteSegment,
+      },
+    });
+    reoWorkspace.readSegmentContent.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_1',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        type: 'note',
+        title: '笔记1',
+        bodyMarkdown: '空空间笔记',
+        bodyByteLength: 14,
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await user.click(await screen.findByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '笔记' }));
+
+    expect(screen.queryByRole('dialog', { name: '笔记' })).not.toBeInTheDocument();
+    const createDialog = screen.getByRole('dialog', { name: '新建记忆' });
+    expect(createDialog).toHaveTextContent('创建记忆并开始笔记');
+    await user.type(within(createDialog).getByLabelText('记忆名称'), '第一条记忆');
+    await user.click(within(createDialog).getByRole('button', { name: '开始笔记' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '第一条记忆',
+      })
+    );
+    const noteDialog = await screen.findByRole('dialog', { name: '笔记' });
+    const noteBody = within(noteDialog).getByLabelText('笔记正文');
+    expect(noteBody).toBeInTheDocument();
+    expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
+    await replaceRichEditorMarkdown(noteBody, '空空间笔记');
+    await user.click(within(noteDialog).getByRole('button', { name: '保存笔记' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.finalizeNoteSegmentDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceHandle: 'workspace-handle-1',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_note_target',
+          segmentId: 'seg_note_1',
+          title: '笔记1',
+        })
+      )
+    );
+    expect(reoWorkspace.createNoteSegmentDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_note_target',
+        title: '笔记1',
+      })
+    );
+    expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceHandle: 'workspace-handle-1',
+        segmentId: 'seg_note_1',
+        bodyMarkdown: '空空间笔记',
+      })
+    );
+    expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
   });
 
   it('offers to save a recoverable unfinished recording after reopening a workspace', async () => {

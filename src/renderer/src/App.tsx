@@ -157,7 +157,8 @@ type TopLevelWorkspaceView = Extract<
 type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
 type MemoryCreateIntent =
   | { readonly afterCreate: 'stay-on-stage' }
-  | { readonly afterCreate: 'record-memory' };
+  | { readonly afterCreate: 'record-memory' }
+  | { readonly afterCreate: 'note-memory' };
 type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
@@ -173,6 +174,28 @@ type SegmentSupplementTranscriptionBackfillValue = Extract<
   Awaited<ReturnType<typeof requestSegmentSupplementTranscriptionBackfill>>,
   { readonly ok: true }
 >['value'];
+
+function memoryCreateDialogDescription(intent: MemoryCreateIntent | null) {
+  if (intent?.afterCreate === 'record-memory') {
+    return '创建记忆并开始录音';
+  }
+  if (intent?.afterCreate === 'note-memory') {
+    return '创建记忆并开始笔记';
+  }
+
+  return '保持简短且易识别';
+}
+
+function memoryCreateDialogSubmitLabel(intent: MemoryCreateIntent | null) {
+  if (intent?.afterCreate === 'record-memory') {
+    return '开始录音';
+  }
+  if (intent?.afterCreate === 'note-memory') {
+    return '开始笔记';
+  }
+
+  return '创建';
+}
 type SegmentSupplementRestoreContext = {
   readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
   readonly memoryId: string;
@@ -639,6 +662,7 @@ export function App() {
   const [recordingRecoveryActionPending, setRecordingRecoveryActionPending] = useState(false);
   const [recordingRecoveryDraft, setRecordingRecoveryDraft] =
     useState<RecordingRecoveryDraft | null>(null);
+  const [shownReviewToastSessionKey, setShownReviewToastSessionKey] = useState<string | null>(null);
   const [runningTranscriptionBackfills, setRunningTranscriptionBackfills] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -682,6 +706,15 @@ export function App() {
       const resolvedSession =
         typeof nextSession === 'function' ? nextSession(currentSession) : nextSession;
       if (resolvedSession !== currentSession) {
+        const currentReviewToastSessionKey = currentSession
+          ? `${currentSession.workspaceHandle}:${currentSession.workspaceId}`
+          : null;
+        const nextReviewToastSessionKey = resolvedSession
+          ? `${resolvedSession.workspaceHandle}:${resolvedSession.workspaceId}`
+          : null;
+        if (currentReviewToastSessionKey !== nextReviewToastSessionKey) {
+          setShownReviewToastSessionKey(null);
+        }
         workspaceSessionRevisionRef.current += 1;
         for (const [key, workspaceHandle] of runningTranscriptionBackfillsRef.current.entries()) {
           if (!resolvedSession || workspaceHandle !== resolvedSession.workspaceHandle) {
@@ -2640,6 +2673,10 @@ export function App() {
       if (memoryCreateIntent?.afterCreate === 'record-memory') {
         setMemoryCreateIntent(null);
         openRecording({ kind: 'existing-memory', memoryId: response.value.memoryId });
+      } else if (memoryCreateIntent?.afterCreate === 'note-memory') {
+        setMemoryCreateIntent(null);
+        setWorkspaceView(WORKSPACE_STAGE_VIEW);
+        openNoteEditorForMemory(response.value.memoryId, 1);
       } else {
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
         showReoToast({ type: 'success', title: '已新建记忆' });
@@ -4044,20 +4081,29 @@ export function App() {
     openMemoryCreateDialog({ afterCreate: 'record-memory' });
   }
 
-  function requestStartNote() {
-    if (blockWorkspaceFlowInterruption() || !currentMemoryId) {
-      return;
-    }
-
+  function openNoteEditorForMemory(memoryId: string, noteIndex: number) {
     setNoteEditorFlow({
       status: 'active',
       open: true,
       target: {
         kind: 'segment',
-        memoryId: currentMemoryId,
-        title: `笔记${(currentMemory?.noteSegmentCount ?? 0) + 1}`,
+        memoryId,
+        title: `笔记${noteIndex}`,
       },
     });
+  }
+
+  function requestStartNote() {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!currentMemoryId) {
+      openMemoryCreateDialog({ afterCreate: 'note-memory' });
+      return;
+    }
+
+    openNoteEditorForMemory(currentMemoryId, (currentMemory?.noteSegmentCount ?? 0) + 1);
   }
 
   function requestStartSegmentSupplementRecording(target: {
@@ -4360,12 +4406,14 @@ export function App() {
             onRenameSegmentContent={setSegmentContentRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
+            onShownReviewToastSessionKeyChange={setShownReviewToastSessionKey}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
             expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
             onStartNote={requestStartNote}
             onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
+            shownReviewToastSessionKey={shownReviewToastSessionKey}
           />
         )}
       </AppShell>
@@ -4495,15 +4543,11 @@ export function App() {
         open={segmentDeleteTarget !== null}
       />
       <MemoryCreateDialog
-        description={
-          memoryCreateIntent?.afterCreate === 'record-memory'
-            ? '创建记忆并开始录音'
-            : '保持简短且易识别'
-        }
+        description={memoryCreateDialogDescription(memoryCreateIntent)}
         onCreate={saveCreatedMemory}
         onOpenChange={handleMemoryCreateOpenChange}
         open={memoryCreateIntent !== null}
-        submitLabel={memoryCreateIntent?.afterCreate === 'record-memory' ? '开始录音' : '创建'}
+        submitLabel={memoryCreateDialogSubmitLabel(memoryCreateIntent)}
       />
       {workspaceDialogs}
     </>

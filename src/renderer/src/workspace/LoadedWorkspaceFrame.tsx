@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { showReoToast, toast } from '../components/ui/toaster';
 import { ExpressionDock } from './expression/ExpressionDock';
@@ -29,8 +29,6 @@ import { copyNeedsReviewAgentPrompt } from './workspaceApi';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 import { workspaceReviewToastId } from './workspaceReviewToast';
 
-const REVIEW_PROMPT_COPIED_FEEDBACK_MS = 1800;
-
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
   readonly expressionDockVisible?: boolean;
@@ -56,6 +54,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
+  readonly onShownReviewToastSessionKeyChange?: (sessionKey: string | null) => void;
   readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
@@ -64,6 +63,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly segmentFocusIntent?: string | null;
+  readonly shownReviewToastSessionKey?: string | null;
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
 };
@@ -85,6 +85,7 @@ export function LoadedWorkspaceFrame({
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
+  onShownReviewToastSessionKeyChange,
   onInlineMarkdownDirtyChange,
   transcriptionBackfill,
   onSegmentFocusConsumed,
@@ -94,29 +95,49 @@ export function LoadedWorkspaceFrame({
   onStartSegmentSupplementRecording,
   onStartRecording,
   segmentFocusIntent = null,
+  shownReviewToastSessionKey,
   workspaceSession,
 }: LoadedWorkspaceFrameProps) {
   const snapshotQuery = useQuery(workspaceSnapshotQueryOptions(workspaceSession));
   const snapshot = snapshotQuery.data ?? workspaceSession.snapshot;
   const needsReviewCount = snapshot.review?.needsReviewCount ?? 0;
   const reviewToastId = workspaceReviewToastId(snapshot.workspaceId);
+  const reviewToastSessionKey = `${workspaceSession.workspaceHandle}:${snapshot.workspaceId}`;
   const activeReviewToastIdRef = useRef<string | null>(null);
-  const copiedFeedbackTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const [reviewPromptCopied, setReviewPromptCopied] = useState(false);
-  const clearCopiedFeedbackTimeout = useCallback(() => {
-    if (copiedFeedbackTimeoutRef.current !== null) {
-      window.clearTimeout(copiedFeedbackTimeoutRef.current);
-      copiedFeedbackTimeoutRef.current = null;
-    }
-  }, []);
-  const showCopiedFeedback = useCallback(() => {
-    clearCopiedFeedbackTimeout();
-    setReviewPromptCopied(true);
-    copiedFeedbackTimeoutRef.current = window.setTimeout(() => {
-      copiedFeedbackTimeoutRef.current = null;
-      setReviewPromptCopied(false);
-    }, REVIEW_PROMPT_COPIED_FEEDBACK_MS);
-  }, [clearCopiedFeedbackTimeout]);
+  const fallbackShownReviewToastSessionKeyRef = useRef<string | null>(null);
+  const copyNeedsReviewPromptRef = useRef<() => void>(() => {});
+  const lastShownReviewToastCountRef = useRef<number | null>(null);
+  const currentShownReviewToastSessionKey =
+    shownReviewToastSessionKey === undefined
+      ? fallbackShownReviewToastSessionKeyRef.current
+      : shownReviewToastSessionKey;
+  const setShownReviewToastSessionKey = useCallback(
+    (sessionKey: string | null) => {
+      fallbackShownReviewToastSessionKeyRef.current = sessionKey;
+      onShownReviewToastSessionKeyChange?.(sessionKey);
+    },
+    [onShownReviewToastSessionKeyChange]
+  );
+  const showNeedsReviewToast = useCallback(
+    (copyState: 'idle' | 'copied' = 'idle') => {
+      showReoToast({
+        type: 'reo-doctor',
+        id: reviewToastId,
+        title: `${needsReviewCount}个文件需要检查`,
+        description: '复制提示词给您的Agent',
+        onCopyPrompt: () => copyNeedsReviewPromptRef.current(),
+        onDismiss: () => {
+          if (activeReviewToastIdRef.current === reviewToastId) {
+            activeReviewToastIdRef.current = null;
+          }
+        },
+        copyState,
+      });
+      activeReviewToastIdRef.current = reviewToastId;
+      lastShownReviewToastCountRef.current = needsReviewCount;
+    },
+    [needsReviewCount, reviewToastId]
+  );
   const copyNeedsReviewPrompt = useCallback(() => {
     void copyNeedsReviewAgentPrompt({
       workspaceHandle: workspaceSession.workspaceHandle,
@@ -128,55 +149,65 @@ export function LoadedWorkspaceFrame({
           showReoToast({ type: 'error', title: '无法复制提示词' });
           return;
         }
-        showCopiedFeedback();
+        if (activeReviewToastIdRef.current === reviewToastId) {
+          showNeedsReviewToast('copied');
+        }
       })
       .catch(() => {
         showReoToast({ type: 'error', title: '无法复制提示词' });
       });
   }, [
     needsReviewCount,
-    showCopiedFeedback,
+    reviewToastId,
+    showNeedsReviewToast,
     snapshot.workspaceId,
     workspaceSession.workspaceHandle,
   ]);
 
   useEffect(() => {
+    copyNeedsReviewPromptRef.current = copyNeedsReviewPrompt;
+  }, [copyNeedsReviewPrompt]);
+
+  useEffect(() => {
     if (needsReviewCount <= 0) {
-      clearCopiedFeedbackTimeout();
-      setReviewPromptCopied(false);
+      setShownReviewToastSessionKey(null);
       if (activeReviewToastIdRef.current === reviewToastId) {
         toast.dismiss(reviewToastId);
         activeReviewToastIdRef.current = null;
       }
+      lastShownReviewToastCountRef.current = null;
       return;
     }
 
-    showReoToast({
-      type: 'reo-doctor',
-      id: reviewToastId,
-      title: `${needsReviewCount}个文件需要检查`,
-      description: '复制提示词给您的Agent',
-      onCopyPrompt: copyNeedsReviewPrompt,
-      copyState: reviewPromptCopied ? 'copied' : 'idle',
-    });
-    activeReviewToastIdRef.current = reviewToastId;
+    if (currentShownReviewToastSessionKey === reviewToastSessionKey) {
+      if (
+        activeReviewToastIdRef.current === reviewToastId &&
+        lastShownReviewToastCountRef.current !== needsReviewCount
+      ) {
+        showNeedsReviewToast();
+      }
+      return;
+    }
+
+    showNeedsReviewToast();
+    setShownReviewToastSessionKey(reviewToastSessionKey);
   }, [
-    clearCopiedFeedbackTimeout,
-    copyNeedsReviewPrompt,
+    currentShownReviewToastSessionKey,
     needsReviewCount,
-    reviewPromptCopied,
     reviewToastId,
+    reviewToastSessionKey,
+    setShownReviewToastSessionKey,
+    showNeedsReviewToast,
   ]);
 
   useEffect(() => {
     return () => {
-      clearCopiedFeedbackTimeout();
       if (activeReviewToastIdRef.current === reviewToastId) {
         toast.dismiss(reviewToastId);
         activeReviewToastIdRef.current = null;
       }
     };
-  }, [clearCopiedFeedbackTimeout, reviewToastId]);
+  }, [reviewToastId]);
 
   return (
     <WorkspaceFrame
@@ -197,7 +228,7 @@ export function LoadedWorkspaceFrame({
       dock={
         expressionDockVisible ? (
           <ExpressionDock
-            {...(currentMemory && onStartNote ? { onStartNote } : {})}
+            {...(onStartNote ? { onStartNote } : {})}
             onStartRecording={onStartRecording}
           />
         ) : null

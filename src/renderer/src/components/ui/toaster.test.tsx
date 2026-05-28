@@ -169,6 +169,22 @@ describe('showReoToast — reo-doctor recovery', () => {
     expect(actionRoot?.children[1]?.tagName.toLowerCase()).toBe('svg');
     expect(actionRoot?.children[1]).toHaveClass('h-16', 'w-16', 'lucide-check');
   });
+
+  it('passes reo-doctor dismiss handling through to Sonner', () => {
+    const onDismiss = vi.fn();
+
+    showReoToast({
+      type: 'reo-doctor',
+      id: 'reo-needs-review:ws_1',
+      title: '1个文件需要检查',
+      description: '复制提示词给您的Agent',
+      onCopyPrompt: vi.fn(),
+      onDismiss,
+    });
+
+    const [, options] = toastFn.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(options['onDismiss']).toBe(onDismiss);
+  });
 });
 
 describe('ReoToaster', () => {

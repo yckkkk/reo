@@ -33,6 +33,7 @@ type ReoDoctorToastInput = {
   readonly onCopyPrompt: () => void;
   readonly copyState?: 'idle' | 'copied';
   readonly durationMs?: number;
+  readonly onDismiss?: (toast: ToastT) => void;
 };
 
 type ReoToastInput = ReoStatusToastInput | ReoDoctorToastInput;
@@ -111,6 +112,7 @@ function showReoDoctorToast(input: ReoDoctorToastInput): string | number {
     dismissible: true,
     duration: input.durationMs ?? Infinity,
     id: input.id,
+    ...(input.onDismiss ? { onDismiss: input.onDismiss } : {}),
   });
 }
 

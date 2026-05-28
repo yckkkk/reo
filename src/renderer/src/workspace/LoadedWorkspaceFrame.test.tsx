@@ -9,7 +9,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReoQueryClient } from '../queryClient';
 import { showReoToast, toast } from '../components/ui/toaster';
 import type {
@@ -45,6 +45,10 @@ vi.mock('../components/ui/toaster', () => ({
 beforeEach(() => {
   showReoToastMock.mockClear();
   toastMock.dismiss.mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}): WorkspaceSession {
@@ -747,6 +751,116 @@ describe('LoadedWorkspaceFrame', () => {
     );
   });
 
+  it('does not replay the needs-review toast after copy feedback is shown', async () => {
+    const copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    renderLoadedWorkspaceFrame({
+      copyNeedsReviewAgentPrompt,
+      session: workspaceSession({
+        review: {
+          needsReviewCount: 1,
+          markdownCandidateCount: 0,
+          tiptapSidecarCount: 1,
+        },
+      }),
+    });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalledTimes(1));
+    vi.useFakeTimers();
+    const reviewToastInput = vi.mocked(showReoToast).mock.calls[0]?.[0] as
+      | { readonly onCopyPrompt?: () => void }
+      | undefined;
+
+    reviewToastInput?.onCopyPrompt?.();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(showReoToast).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(showReoToast).mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        type: 'reo-doctor',
+        id: 'reo-needs-review:ws_1',
+        copyState: 'copied',
+      })
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    expect(showReoToast).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not show the needs-review toast again after manual dismiss in the same workspace session', async () => {
+    const session = workspaceSession({
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+      },
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({ session });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalledTimes(1));
+    const reviewToastInput = vi.mocked(showReoToast).mock.calls[0]?.[0] as
+      | { readonly onDismiss?: () => void }
+      | undefined;
+
+    expect(reviewToastInput?.onDismiss).toEqual(expect.any(Function));
+    reviewToastInput?.onDismiss?.();
+
+    act(() => {
+      seedWorkspaceSnapshot(queryClient, {
+        ...session,
+        snapshot: {
+          ...session.snapshot,
+          review: {
+            needsReviewCount: 2,
+            markdownCandidateCount: 1,
+            tiptapSidecarCount: 1,
+          },
+        },
+      });
+    });
+
+    expect(showReoToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates an active needs-review toast when the count changes', async () => {
+    const session = workspaceSession({
+      review: {
+        needsReviewCount: 1,
+        markdownCandidateCount: 0,
+        tiptapSidecarCount: 1,
+      },
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({ session });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      seedWorkspaceSnapshot(queryClient, {
+        ...session,
+        snapshot: {
+          ...session.snapshot,
+          review: {
+            needsReviewCount: 2,
+            markdownCandidateCount: 1,
+            tiptapSidecarCount: 1,
+          },
+        },
+      });
+    });
+
+    await waitFor(() => expect(showReoToast).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(showReoToast).mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        title: '2个文件需要检查',
+      })
+    );
+  });
+
   it('shows a safe copy failure toast without report entries when prompt copy fails', async () => {
     const copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({
       ok: false,
@@ -784,11 +898,12 @@ describe('LoadedWorkspaceFrame', () => {
     );
   });
 
-  it('renders the loaded workspace frame as a workspace stage with one real expression entry', async () => {
+  it('renders the loaded workspace frame as a workspace stage with recording and note expression entries', async () => {
     const user = userEvent.setup();
+    const onStartNote = vi.fn();
     const onStartRecording = vi.fn();
 
-    renderLoadedWorkspaceFrame({ onStartRecording });
+    renderLoadedWorkspaceFrame({ onStartNote, onStartRecording });
 
     expect(screen.queryByRole('region', { name: '记忆空间栏' })).not.toBeInTheDocument();
     expect(screen.queryByText('Daily memory')).not.toBeInTheDocument();
@@ -835,17 +950,14 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(recordingAction).not.toHaveClass('rounded-md', 'rounded-lg');
     expect(within(dock).getByRole('menu', { name: '表达方式' })).toBeInTheDocument();
-    expect(within(dock).queryByText('笔记')).not.toBeInTheDocument();
+    const noteAction = within(dock).getByRole('menuitem', { name: '笔记' });
+    expect(noteAction).toHaveClass('size-[var(--reo-speed-dial-action-size)]');
     expect(within(dock).queryByText('拍照')).not.toBeInTheDocument();
     expect(within(dock).queryByText('视频')).not.toBeInTheDocument();
     expect(within(dock).queryByText('上传')).not.toBeInTheDocument();
     expect(
       dock.querySelectorAll('[data-slot="floating-action-button-speed-dial-action-unavailable"]')
-    ).toHaveLength(4);
-    expect(within(dock).getByRole('menuitem', { name: '笔记暂不可用' })).toHaveAttribute(
-      'aria-disabled',
-      'true'
-    );
+    ).toHaveLength(3);
     expect(within(dock).getByRole('menuitem', { name: '拍照暂不可用' })).toHaveClass(
       'cursor-default',
       'focus-visible:ring-2',
@@ -855,6 +967,14 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.click(recordingAction);
     expect(onStartRecording).toHaveBeenCalledOnce();
+
+    let nextNoteAction = within(dock).queryByRole('menuitem', { name: '笔记' });
+    if (!nextNoteAction) {
+      await user.click(dialTrigger);
+      nextNoteAction = within(dock).getByRole('menuitem', { name: '笔记' });
+    }
+    await user.click(nextNoteAction);
+    expect(onStartNote).toHaveBeenCalledOnce();
   });
 
   it('keeps the red expression FAB mounted in Memory Studio without moving it into content controls', async () => {
