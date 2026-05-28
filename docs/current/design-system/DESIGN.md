@@ -52,13 +52,13 @@ Reo token 分为两层：
 
 Hero 不参与 elevation 阶梯（即不存在 `surface-5`），只挂在表达入口与身份载体上：
 
-| 表达 | Hero token 组合 | Owner |
-|---|---|---|
-| FAB SpeedDial trigger | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + 静态 specular | `components/ui/floating-action-button-speed-dial.tsx` |
-| FAB SpeedDial action | `--brand-ember` 实色（不上 gradient） | 同上 |
-| RecordingOverlay 主 CTA | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + pulse ring（录音中） | `RecordingHeroCta.tsx`（Phase 5 创建） |
-| RecordingOverlay surface | `--surface-1` + 顶部 30vh aurora mask | `RecordingAuroraOverlay.tsx`（Phase 5 创建） |
-| MemoryIcon primitive | 多层 CSS gradient + `--shadow-hero-inset` + `--shadow-hero-lift` + 静态/可 hover specular | `components/ui/memory-icon.tsx`（Phase 2 创建） |
+| 表达                     | Hero token 组合                                                                           | Owner                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| FAB SpeedDial trigger    | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + 静态 specular          | `components/ui/floating-action-button-speed-dial.tsx` |
+| FAB SpeedDial action     | `--brand-ember` 实色（不上 gradient）                                                     | 同上                                                  |
+| RecordingOverlay 主 CTA  | `--brand-gradient` + `--shadow-hero-fill` + `--shadow-hero-edge` + pulse ring（录音中）   | `RecordingHeroCta.tsx`（Phase 5 创建）                |
+| RecordingOverlay surface | `--surface-1` + 顶部 30vh aurora mask                                                     | `RecordingAuroraOverlay.tsx`（Phase 5 创建）          |
+| MemoryIcon primitive     | 多层 CSS gradient + `--shadow-hero-inset` + `--shadow-hero-lift` + 静态/可 hover specular | `components/ui/memory-icon.tsx`（Phase 2 创建）       |
 
 ## 命名规范关键约束
 

@@ -63,3 +63,16 @@
 - 验证：修订后该行准确描述 Red Fluid System，引用所有新 token（brand-red/magenta/ember/gradient、surface-1..4、destructive #b91c1c、shadow-float/modal），并指针 DESIGN.md 作为完整规范来源
 - 备注：frontend.md 其余段落（Hero 表面映射、组件清单等）涉及 Phase 2-5 的 TSX 改动，留到 Phase 6 文档收口阶段统一更新（写当前事实时实现已落地）
 - Commit: `c42b2017 docs(frontend): update design system tagline to red fluid system`（描述句改动单独 commit；本 notes 追加另开 commit）
+
+## Task 7 · verify:quick + 视觉 smoke
+
+- 时间：2026-05-28 07:43 PDT
+- 改动：
+  - `src/renderer/src/theme.css`：`:root/[data-theme='light']` 段补回 `--radius` ~ `--radius-full`（含新增 `--radius-3xl` 与 `--radius-4xl`），与原始模式一致（@theme inline + :root 双写）。原始 plan 漏了这点
+  - 新建 `docs/current/design-system/theme.css` 文件镜像（实际是已存在但 plan 漏改）：完整复制新版 src/theme.css 内容
+  - 重写 `test/main/designSystemTokens.test.ts`：把 token contract 从旧 Soft Flat 切到新 Red Fluid（含 brand-red/magenta/ember raw 层、surface-1..4、primary-hover、destructive #b91c1c、新 hero shadow、新 radius-3xl/4xl、brand-gradient 断言）；保留 brand-blue/brand-spectrum/brand-red-hover/brand-grad 负向断言以挡退役名
+  - prettier --write 修复 5 个文件格式（src/theme.css、test、DESIGN.md、design-system/theme.css、design-system/variables.css）：多行 shadow 被合并为单行，表格列宽对齐
+- 验证：
+  - `npm run verify:quick` 第二次运行 exit code 0；532 tests 全过；lint 无 warning；format:check pass（只 spec 文档剩 prettier warning，下一 commit 处理）
+  - **plan 缺口暴露与修补**：原 plan 没包含 `docs/current/design-system/theme.css` 镜像更新与 token contract 测试同步——这两个缺口让 verify:quick 第一次失败。本次以"修补 + 记录"方式收口，未来 phase 应在 plan 阶段就盘点所有镜像与契约测试
+- 备注：dev server 视觉 smoke 留待用户复核或单独 chrome browser session，因为 Electron app + claude-in-chrome 的接入需要 vite scenario URL，属于人眼判断而不是机器自动化。verify:quick 通过已满足 spec README 的 success criteria 第一条

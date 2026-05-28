@@ -57,18 +57,10 @@
   /* Layer 4 · effect tokens */
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.08);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.12);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.12),
-    inset 0 1px 0 rgb(255 255 255 / 0.6);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.18),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    inset 0 -8px 16px rgb(0 0 0 / 0.12);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -8px 16px rgb(0 0 0 / 0.12);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.4);
   --shadow-surface-inset: inset 0 1px 0 rgb(0 0 0 / 0.02);
 }
 
@@ -119,17 +111,9 @@
   /* Layer 4 · effect tokens (dark variants) */
   --shadow-float: 0 12px 32px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
-  --shadow-hero-lift:
-    0 24px 48px rgb(220 38 38 / 0.22),
-    inset 0 1px 0 rgb(255 255 255 / 0.06);
-  --shadow-hero-fill:
-    0 12px 24px rgb(220 38 38 / 0.28),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  --shadow-hero-inset:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
-    inset 0 -8px 16px rgb(0 0 0 / 0.18);
-  --shadow-hero-edge:
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  --shadow-hero-lift: 0 24px 48px rgb(220 38 38 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-hero-fill: 0 12px 24px rgb(220 38 38 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  --shadow-hero-inset: inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 -8px 16px rgb(0 0 0 / 0.18);
+  --shadow-hero-edge: inset 0 0 0 1px rgb(255 255 255 / 0.05), inset 0 1px 0 rgb(255 255 255 / 0.2);
   --shadow-surface-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
