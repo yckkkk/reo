@@ -50,7 +50,7 @@
 ## 当前数据决策
 
 - 当前用户内容真源是记忆空间文件夹；不引入 Drizzle schema、SQLite file、migration directory 或 DB-backed content truth。
-- Memory space registry 用于跨 app restart 保留已导入记忆空间。Registry 最多保留最近 100 个记忆空间；root path 只在 main-owned registry file 和 main process 内部存在。Renderer 通过 list/open/remove IPC 操作 registry projection，不读取真实路径。
+- Memory space registry 用于跨 app restart 保留已导入记忆空间。Registry 最多保留 100 个记忆空间；新增导入进入列表顶部，打开已有 entry 只更新 `lastOpenedAt` 和投影字段，不改变列表位置；root path 只在 main-owned registry file 和 main process 内部存在。Renderer 通过 list/open/remove IPC 操作 registry projection，不读取真实路径。
 - Memory space registry 不是记忆空间内容真源。记忆空间 root folder basename 是 title 文件真源；`.reo/workspace.json.title` 是 metadata mirror；description、memory summary 和 Segment truth 仍来自记忆空间文件。
 - Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空列表处理；不可读 IO 错误返回 typed error envelope。Open 已导入记忆空间时只 resolve 当前 `workspaceId`；stored root 缺失时才做有界 sibling scan。
 - Memory space rename 使用 `workspace:updateMemorySpaceTitle`。Active request 使用 `workspaceHandle` 和安全 title；inactive request 使用 `workspaceId` 和安全 title。Main 在 single-writer lock 下移动真实 root folder basename，并在 root move 成功后写入 `.reo/workspace.json.title` mirror。Response 不返回 root path 或 handle。

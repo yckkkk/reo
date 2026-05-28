@@ -304,6 +304,60 @@ test('workspace memory space registry updates title projections without changing
   ]);
 });
 
+test('workspace memory space registry updates existing memorySpace without moving it', async () => {
+  const registryPath = path.join(
+    await mkdtemp(path.join(os.tmpdir(), 'reo-memory-space-registry-open-order-')),
+    'registry.json'
+  );
+  let currentTime = '2026-05-08T07:48:00.000Z';
+  const registry = createWorkspaceMemorySpaceRegistry({
+    registryPath,
+    now: () => currentTime,
+  });
+
+  await registry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Runtime validated memory',
+    snapshot,
+  });
+  currentTime = '2026-05-08T07:49:00.000Z';
+  await registry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Product research',
+    snapshot: {
+      ...snapshot,
+      workspaceId: 'ws_product_research',
+      title: 'Product research',
+      description: '',
+    },
+  });
+  currentTime = '2026-05-08T07:50:00.000Z';
+
+  await registry.upsertMemorySpace({
+    canonicalRoot: '/Users/example/Runtime validated memory',
+    snapshot: {
+      ...snapshot,
+      title: 'Runtime validated memory',
+      description: 'Opened again.',
+    },
+  });
+
+  assert.deepEqual(await registry.listMemorySpaces(), [
+    {
+      workspaceId: 'ws_product_research',
+      title: 'Product research',
+      description: '',
+      addedAt: '2026-05-08T07:49:00.000Z',
+      lastOpenedAt: '2026-05-08T07:49:00.000Z',
+    },
+    {
+      workspaceId: 'ws_runtime_validated',
+      title: 'Runtime validated memory',
+      description: 'Opened again.',
+      addedAt: '2026-05-08T07:48:00.000Z',
+      lastOpenedAt: '2026-05-08T07:50:00.000Z',
+    },
+  ]);
+});
+
 test('workspace memory space registry keeps stale entries when Finder rename scan cannot read the parent', async () => {
   const parentPath = await mkdtemp(
     path.join(os.tmpdir(), 'reo-memory-space-registry-rename-unreadable-')

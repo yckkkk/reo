@@ -291,9 +291,10 @@ export function createWorkspaceMemorySpaceRegistry({
         }
         const registry = await readRegistry();
         const currentTime = now();
-        const existing = registry.memorySpaces.find(
+        const existingIndex = registry.memorySpaces.findIndex(
           (memorySpace) => memorySpace.workspaceId === snapshot.workspaceId
         );
+        const existing = registry.memorySpaces[existingIndex];
         const nextMemorySpace: WorkspaceMemorySpaceRegistryEntry = {
           workspaceId: snapshot.workspaceId,
           title: boundedRegistryText(snapshot.title),
@@ -302,15 +303,15 @@ export function createWorkspaceMemorySpaceRegistry({
           addedAt: existing?.addedAt ?? currentTime,
           lastOpenedAt: currentTime,
         };
-        const otherMemorySpaces = registry.memorySpaces.filter(
-          (memorySpace) => memorySpace.workspaceId !== snapshot.workspaceId
-        );
+        const memorySpaces =
+          existingIndex === -1
+            ? [nextMemorySpace, ...registry.memorySpaces].slice(0, MAX_REGISTRY_MEMORY_SPACES)
+            : registry.memorySpaces.map((memorySpace, index) =>
+                index === existingIndex ? nextMemorySpace : memorySpace
+              );
         await writeRegistry({
           schemaVersion: MEMORY_SPACE_REGISTRY_VERSION,
-          memorySpaces: [nextMemorySpace, ...otherMemorySpaces].slice(
-            0,
-            MAX_REGISTRY_MEMORY_SPACES
-          ),
+          memorySpaces,
         });
         return stripRootPath(nextMemorySpace);
       });
