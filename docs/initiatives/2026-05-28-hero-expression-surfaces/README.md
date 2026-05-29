@@ -1,7 +1,7 @@
 # Hero 表达入口建设
 
 - Started: 2026-05-28
-- Status: active（承接已归档 Red Fluid spec 的未建设 Hero 部分）
+- Status: active（下一产品/代码开发长期任务；任务尚未完成，保留在 initiatives/）
 - Type: 产品/代码开发 active initiative
 
 ## 目标
@@ -25,7 +25,7 @@ Red Fluid 设计系统的 token 层已落地：`--brand-gradient` 与 `--shadow-
 - 不重新引入品牌红到普通 `primary` / `ring` 控件——neutral 控件语义已收口，见 `DESIGN.md`。
 - 不使用 `backdrop-filter` / SVG `<filter>` / WebGL；Hero 效果走 CSS gradient + inset shadow。
 - 用户审美趋向克制（偏 Tiptap form，见 memory `user-aesthetic-clean-minimal`）；任何 Hero 效果以「融洽」为判据，可随时下调强度或退役 token。
-- 不与当前 active spec 并行执行：本 initiative 在 Tiptap 组件形态收敛 spec 之后排期。
+- 不与当前 active spec 并行执行；创建下一 Hero spec 前先确认 `docs/specs/*` 为空。
 
 ## 来源
 

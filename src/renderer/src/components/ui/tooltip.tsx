@@ -35,7 +35,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'reo-float-motion reo-squircle z-50 w-fit rounded-sm border-0 bg-popover px-8 py-[6px] text-caption font-medium leading-caption text-popover-foreground shadow-float',
+          'reo-float-motion reo-squircle z-50 w-fit overflow-hidden rounded-sm border-0 bg-popover px-8 py-[6px] text-center text-ui-sm font-medium leading-[1.2] text-popover-foreground shadow-float',
           className
         )}
         {...props}

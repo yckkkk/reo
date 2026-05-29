@@ -29,7 +29,7 @@ describe('SettingsShell', () => {
     );
     const voiceCategory = screen.getByRole('button', { name: '语音' });
     expect(voiceCategory).toHaveAttribute('aria-current', 'page');
-    expect(voiceCategory).toHaveClass('bg-secondary', '[-webkit-app-region:no-drag]');
+    expect(voiceCategory).toHaveClass('!bg-secondary', '[-webkit-app-region:no-drag]');
     expect(screen.getByRole('region', { name: '语音设置' })).toHaveTextContent('语音内容');
   });
 

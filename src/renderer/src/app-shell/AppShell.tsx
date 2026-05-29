@@ -43,8 +43,10 @@ const COLLAPSED_PANEL_TITLEBAR_LEFT =
   TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP - PANEL_TITLEBAR_X;
 const PANEL_MOTION_CLASS =
   'transition-[left,border-radius] duration-200 ease-out motion-reduce:transition-none';
+const SIDEBAR_ROW_STATE_CLASS =
+  'reo-squircle rounded-md bg-transparent text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-within:bg-secondary focus-within:text-foreground';
 const SIDEBAR_NAV_BUTTON_CLASS =
-  'w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground';
+  'w-full justify-start px-8 hover:bg-secondary hover:text-foreground';
 const HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS =
   'pointer-events-none size-28 rounded-sm text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100';
 const HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS =
@@ -93,7 +95,18 @@ export function clampSidebarWidth(width: number) {
 }
 
 function sidebarNavButtonClass(current: boolean) {
-  return cn(SIDEBAR_NAV_BUTTON_CLASS, current ? 'bg-secondary text-foreground' : 'bg-transparent');
+  return cn(
+    SIDEBAR_NAV_BUTTON_CLASS,
+    current ? '!bg-secondary !text-foreground' : '!bg-transparent !text-muted-foreground'
+  );
+}
+
+function sidebarMemorySpaceItemClass(current: boolean) {
+  return cn(
+    'group/memorySpace relative flex min-h-32 w-full items-center gap-4 pr-4',
+    SIDEBAR_ROW_STATE_CLASS,
+    current ? 'bg-secondary text-foreground' : null
+  );
 }
 
 export function AppShell({
@@ -374,17 +387,14 @@ export function AppShell({
                   <div
                     key={memorySpace.workspaceId}
                     data-slot="workspace-memory-space-item"
-                    className={cn(
-                      'group/memorySpace relative flex min-h-32 items-center gap-4 rounded-md bg-transparent pr-4 transition-colors duration-150 ease-out hover:bg-secondary focus-within:bg-secondary',
-                      memorySpaceCurrent ? 'bg-secondary' : null
-                    )}
+                    className={sidebarMemorySpaceItemClass(memorySpaceCurrent)}
                   >
                     <Button
                       type="button"
                       variant="ghostIcon"
                       size="compact"
                       aria-current={memorySpaceCurrent ? 'page' : undefined}
-                      className="min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                      className="min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-inherit hover:bg-transparent hover:text-inherit"
                       onClick={() => handleSelectMemorySpace(memorySpace.workspaceId)}
                     >
                       <Folder className="size-16" aria-hidden="true" />

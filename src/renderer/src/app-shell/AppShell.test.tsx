@@ -164,9 +164,17 @@ describe('AppShell', () => {
       '[data-slot="workspace-memory-space-item"]'
     );
     expect(activeWorkspaceButton).toHaveAttribute('aria-current', 'page');
+    expect(activeWorkspaceButton).toHaveClass('text-inherit', 'hover:text-inherit');
     expect(activeWorkspaceItem).toContainElement(activeWorkspaceButton);
     expect(activeWorkspaceItem).toContainElement(activeWorkspaceMoreButton);
-    expect(activeWorkspaceItem).toHaveClass('rounded-md', 'bg-secondary');
+    expect(activeWorkspaceItem).toHaveClass(
+      'reo-squircle',
+      'rounded-md',
+      'bg-secondary',
+      'text-foreground',
+      'hover:bg-secondary',
+      'focus-within:bg-secondary'
+    );
     expect(activeWorkspaceItem).not.toHaveClass('border', 'border-border', 'shadow-float');
     expect(activeWorkspaceMoreButton).toHaveClass(
       'opacity-0',
@@ -218,8 +226,13 @@ describe('AppShell', () => {
     });
     const createItem = screen.getByRole('menuitem', { name: '创建本地记忆空间' });
     const openLocalWorkspaceItem = screen.getByRole('menuitem', { name: '打开本地记忆空间' });
-    expect(createItem).toHaveClass('min-h-32', 'text-ui-xs', 'font-regular');
-    expect(openLocalWorkspaceItem).toHaveClass('min-h-32', 'text-ui-xs', 'font-regular');
+    expect(createItem).toHaveClass('min-h-32', 'text-ui-md', 'font-medium', 'leading-[1.15]');
+    expect(openLocalWorkspaceItem).toHaveClass(
+      'min-h-32',
+      'text-ui-md',
+      'font-medium',
+      'leading-[1.15]'
+    );
 
     await user.click(createItem);
     expect(onCreateWorkspace).toHaveBeenCalledOnce();
@@ -309,6 +322,13 @@ describe('AppShell', () => {
 
     const homeButton = screen.getByRole('button', { name: '首页' });
     expect(homeButton).toHaveAttribute('aria-current', 'page');
+    expect(homeButton).toHaveClass(
+      'reo-squircle',
+      'rounded-md',
+      '!bg-secondary',
+      '!text-foreground',
+      'px-8'
+    );
     fireEvent.click(homeButton);
     expect(onHome).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();

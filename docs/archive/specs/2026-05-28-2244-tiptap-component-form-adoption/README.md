@@ -1,7 +1,7 @@
 # Tiptap 组件形态收敛（Reo 浮层 + 按钮采用 Tiptap 组件设计）
 
 - Started: 2026-05-28
-- Status: design approved；implementation planning next
+- Status: completed；archived
 - 设计真源落点（收口时更新）：`docs/current/frontend.md`、`docs/current/design-system/DESIGN.md`、`docs/decisions/*`
 
 ## 目标
@@ -28,7 +28,7 @@
 **DropdownMenu**（`components/ui/dropdown-menu.tsx`）
 
 - 容器 chrome：内距 `6px`、圆角 `18px`（= item 圆角 12px + 内距 6px 的嵌套关系）、精细多层阴影。
-- 条目：圆角 `12px`（`rounded-md`，同时对齐 Reo 自己「菜单 action 用 rounded-md」规则，修当前 `rounded-lg` 不一致）、高 32px、内距 8px、gap 4px、14px/500、icon 16px、克制灰阶 hover（`bg-accent` / `bg-secondary` 阶梯）。
+- 条目：圆角 `12px`（`rounded-md`，同时对齐 Reo 自己「菜单 action 用 rounded-md」规则，修当前 `rounded-lg` 不一致）、高 32px、内距 8px、gap 4px、13px/500/1.15、icon 16px、克制灰阶 hover（`bg-accent` / `bg-secondary` 阶梯）。
 - 动效：`scale(.95) + 淡入 + 方向位移` 进入/退出，`cubic-bezier(.16,1,.3,1)`，reduced-motion 关闭。替换当前只有进入、无退出的 `reo-dropdown-menu-enter`。
 
 **Tooltip**（`components/ui/tooltip.tsx`）

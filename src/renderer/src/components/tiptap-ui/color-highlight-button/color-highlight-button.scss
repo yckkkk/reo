@@ -4,6 +4,7 @@
   height: 1.25rem;
   margin: 0 -0.175rem;
   border-radius: var(--tt-radius-xl);
+  corner-shape: squircle;
   background-color: var(--highlight-color);
   transition: transform 0.2s ease;
 
@@ -15,6 +16,7 @@
     left: 0;
     top: 0;
     border-radius: inherit;
+    corner-shape: squircle;
     box-sizing: border-box;
     border: 1px solid var(--highlight-color);
     filter: brightness(95%);

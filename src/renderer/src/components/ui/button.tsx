@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',
+  'reo-squircle inline-flex min-w-fit shrink-0 items-center justify-center gap-8 border-0 text-ui-md font-medium leading-ui-md shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',
   {
     defaultVariants: {
       size: 'default',
@@ -12,7 +12,7 @@ const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: 'min-h-40 rounded-lg px-16',
+        default: 'min-h-40 rounded-md px-16',
         compact: 'min-h-32 rounded-md px-12 text-ui-sm leading-ui-sm',
         icon: 'size-32 rounded-sm p-0',
         iconMedium: 'size-40 rounded-md p-0',

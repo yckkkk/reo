@@ -13,7 +13,7 @@ describe('Button primitive', () => {
     const button = screen.getByRole('button', { name: '记录记忆' });
     button.focus();
 
-    expect(button).toHaveClass('rounded-lg', 'font-medium', 'min-h-40');
+    expect(button).toHaveClass('reo-squircle', 'rounded-md', 'font-medium', 'min-h-40');
     expect(button).not.toHaveClass('rounded-full');
     expect(button).not.toHaveClass('font-bold');
     expect(button.className).toContain('focus-visible');
@@ -35,6 +35,7 @@ describe('Button primitive', () => {
     );
 
     const button = screen.getByRole('button', { name: '浏览' });
+    expect(button).toHaveClass('reo-squircle');
     expect(button).toHaveClass('min-h-32', 'rounded-md', 'px-12', 'text-ui-sm');
     expect(button).toHaveClass('bg-card', 'hover:bg-accent', 'hover:text-accent-foreground');
     expect(button).not.toHaveClass('hover:bg-secondary');
@@ -80,6 +81,7 @@ describe('Button primitive', () => {
     );
 
     const button = screen.getByRole('button', { name: '隐藏侧边栏' });
+    expect(button).toHaveClass('reo-squircle');
     expect(button).toHaveClass('size-32', 'rounded-sm', 'border-0', 'bg-transparent');
     expect(button).toHaveClass('hover:bg-accent', 'hover:text-accent-foreground');
     expect(button).not.toHaveClass('rounded-full', 'rounded-lg', 'rounded-md');

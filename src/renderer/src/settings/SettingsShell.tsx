@@ -67,7 +67,7 @@ export function SettingsShell({
             variant="ghostIcon"
             size="compact"
             aria-current="page"
-            className="w-full justify-start bg-secondary px-8 text-foreground hover:bg-secondary hover:text-foreground [-webkit-app-region:no-drag]"
+            className="w-full justify-start !bg-secondary px-8 !text-foreground hover:!bg-secondary hover:!text-foreground [-webkit-app-region:no-drag]"
           >
             <Mic className="size-16" aria-hidden="true" />
             {SETTINGS_VOICE_LABEL}

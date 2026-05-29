@@ -13,7 +13,7 @@ Reo 使用品牌红表达入口、黑白中性控件语义、Fluid 多层 surfac
 Reo token 分为两层：
 
 - **Layer 1 · raw 资产**：`--brand-{red,magenta,ember,gradient}`、`--surface-{1,2,3,4}`、`--shadow-{hero-lift,hero-fill,hero-inset,hero-edge,surface-inset}`。raw 层只在设计系统源文件、semantic 层或明确 owner primitive 内被引用。
-- **Layer 2 · semantic 角色**：shadcn 既有约定（`--background`、`--card`、`--popover`、`--primary`、`--ring`、`--input` 等），可引用 raw 层或承载稳定中性色。业务 TSX 只消费 semantic 层。
+- **Layer 2 · semantic 角色**：shadcn 既有约定（`--background`、`--card`、`--popover`、`--primary`、`--ring`、`--input`、`--shadow-float`、`--shadow-modal` 等），可引用 raw 层或承载稳定中性色。业务 TSX 只消费 semantic 层。
 
 本文件的命名规范关键约束是当前 token 维护判据。
 
@@ -36,15 +36,16 @@ Reo token 分为两层：
 ## 三条铁律
 
 1. **Zero Border Policy**：同一平面的 Card、Button、Input、列表项、tab 和内容区不用 border 分割。难以区分时增加间距或调整填充，不加线。新 surface 阶梯之间靠 inset highlight 与 tint 落差区分，不画 1px 描边。
-2. **Strict Z-Axis Elevation**：基础平面组件不使用 shadow。只有 Tooltip、Dropdown Menu、Dialog/Modal、Drawer 和 Toast 可使用 `shadow-float` 或 `shadow-modal`。Hero 表面通过 `shadow-hero-{lift,fill,inset,edge}` 表达"光"，不与 elevation 阶梯比较。
+2. **Strict Z-Axis Elevation**：基础平面组件不使用 shadow。只有 Tooltip、Dropdown Menu、Dialog/Modal、Drawer 和 Toast 可使用精细多层 `shadow-float` 或 `shadow-modal`。Hero 表面通过 `shadow-hero-{lift,fill,inset,edge}` 表达"光"，不与 elevation 阶梯比较。
 3. **Grayscale State Interaction**：hover、active、selected 默认通过 `card → secondary/accent` 灰度阶梯表达；Memory hue tint 仅出现在 MemoryRailCard 选中态、MemoryStudioSegmentCard 选中态与 MemoryIcon 内部，不渗到 chrome、不渗到文本色、不渗到 focus ring。
 
 ## 组件规则
 
-- Button 默认文本动作 `rounded-lg`，compact `rounded-md`；32px icon button `rounded-sm`，40px icon button + menu action `rounded-md`；titlebar Breadcrumb trigger `rounded-sm`；primary 使用中性 `bg-primary`，当前 Button primitive hover 使用 `bg-primary-hover`；secondary/ghost 灰度填充；destructive 使用 `bg-destructive`（深红 `#b91c1c`），hover 使用 `bg-destructive-hover`；当前 FAB trigger、FAB action、录音主 CTA 与 Segment strip overlay arrow 保持全圆，FAB trigger 和录音主 CTA 仍使用 `bg-brand-ember`。
+- Button 默认文本动作和 compact 动作使用 `rounded-md`；32px icon button `rounded-sm`，40px icon button + menu action `rounded-md`，56px icon button `rounded-lg`；titlebar Breadcrumb trigger `rounded-sm`；Button base 使用 `reo-squircle`；primary 使用中性 `bg-primary`，当前 Button primitive hover 使用 `bg-primary-hover`；secondary/ghost 灰度填充；destructive 使用 `bg-destructive`（深红 `#b91c1c`），hover 使用 `bg-destructive-hover`；当前 FAB trigger、FAB action、录音主 CTA 与 Segment strip overlay arrow 保持全圆，FAB trigger 和录音主 CTA 仍使用 `bg-brand-ember`。
 - Switch 使用 Radix mechanics；轨道默认 `bg-secondary`，checked 通过 `data-[state=checked]:bg-primary` 投影到中性 `--primary`，thumb 使用 `bg-background` 并通过 Radix checked state 位移，不使用描边或阴影。
 - Input 与 Textarea 使用 `bg-input` (= `surface-3`)、无边框、无阴影；focus 与 invalid 只用中性 ring。
-- Dropdown、Tooltip、Dialog、AlertDialog、Drawer 和 Toast 使用 `bg-popover` (= `surface-4`)，按浮层级别使用 `shadow-float` 或 `shadow-modal`。
+- Dropdown、Tooltip、Dialog、AlertDialog、Drawer 和 Toast 使用 `bg-popover` (= `surface-4`)，按浮层级别使用精细多层 `shadow-float` 或 `shadow-modal`。Tiptap `--tt-shadow-elevated-md` 派生自 `--shadow-float`。
+- DropdownMenu content 使用 `reo-float-motion reo-squircle`、`rounded-[18px]`、`p-[6px]`；menu item 使用 `reo-squircle rounded-md`、32px 最小高度、8px 横向内距、4px gap 和 13px/500/1.15 typography。Tiptap dropdown item 在 template primitive 内使用同一 13px/500/1.15 typography。Tooltip content 使用无箭头 pill，`reo-float-motion reo-squircle`、`rounded-sm`、8px/6px 内距和 12px/500/1.2 typography。Dialog 与 AlertDialog 使用 `reo-fade-motion`，不使用 transform-based float motion。
 - Tabs 使用 rounded segment button，不用 underline border。
 - Memory card 使用 `ReoCardSurface` 默认形态，Segment preview card 使用 `ReoCardSurface` 的 `segmentPreview` 形态；通过灰度填充表达状态（选中态另叠 Memory hue tint，由对应组件接入），不使用常态 border、blur 或 shadow。
 - `rounded-full` 只用于 FAB trigger、FAB action、录音主按钮、Segment strip overlay arrow、圆点、timeline marker 和 drawer/waveform handle；普通按钮、icon button、menu action 和 Breadcrumb trigger 使用方圆角。
@@ -59,8 +60,8 @@ Hero 不参与 elevation 阶梯（即不存在 `surface-5`）。当前 Hero raw 
 | `--brand-gradient` | Hero raw 资产；当前暂无 TSX consumer，owner 为 FAB、RecordingOverlay、MemoryIcon 或 Segment     |
 | `--shadow-hero-*`  | Hero effect token；当前暂无 TSX consumer，owner 为 FAB、RecordingOverlay、MemoryIcon 或 Segment |
 | `bg-brand-ember`   | 当前 FAB trigger、FAB action 和录音主 CTA 的实色品牌入口                                        |
-| `--shadow-float`   | Tooltip、DropdownMenu、Toast 等浮层                                                             |
-| `--shadow-modal`   | Dialog、AlertDialog、Drawer 等 modal surface                                                    |
+| `--shadow-float`   | Tooltip、DropdownMenu、Toast 等浮层的精细多层 elevation                                         |
+| `--shadow-modal`   | Dialog、AlertDialog、Drawer 等 modal surface 的精细多层 elevation                               |
 
 ## 命名规范关键约束
 
@@ -76,7 +77,7 @@ Hero 不参与 elevation 阶梯（即不存在 `surface-5`）。当前 Hero raw 
 - 标题栏拖拽区使用 `.drag-region`；交互控件使用 `.no-drag-region` 或等价 `-webkit-app-region: no-drag`。
 - 全局默认不可选中文本；输入、textarea、contenteditable、转录、日志、路径和其他需要复制的内容必须显式 `select-text` 或 `.selectable-text`。
 - 常规交互动效 `duration-150 ease-out`；结构动效上限 `duration-200 ease-out`；reduced motion 下关闭。
-- `edge-fade-y`、`edge-fade-x`、`scrollbar-hover`、`reo-card-squircle` 和 `reo-segment-card-squircle` 是 renderer root CSS 中的 Tailwind v4 `@utility`；它们属于设计系统级可复用 utility，不进入业务私有 class。
+- `edge-fade-y`、`edge-fade-x`、`scrollbar-hover`、`reo-squircle`、`reo-segment-card-squircle`、`reo-float-motion` 和 `reo-fade-motion` 是 renderer root CSS 中的 Tailwind v4 `@utility` 或全局 motion selector；它们属于设计系统级可复用 utility，不进入业务私有 class。
 
 ## Token 维护
 

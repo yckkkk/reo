@@ -15,6 +15,7 @@
   --border-width: 1px;
 
   border-radius: calc(var(--padding) + var(--tt-radius-lg));
+  corner-shape: squircle;
   box-shadow: var(--tt-shadow-elevated-md);
   background-color: var(--tiptap-card-bg-color);
   border: 1px solid var(--tiptap-card-border-color);

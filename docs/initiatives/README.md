@@ -10,7 +10,7 @@
 
 当前产品或代码开发 active initiative：
 
-- `2026-05-28-hero-expression-surfaces`（承接已归档 Red Fluid spec 的未建设 Hero 部分；在 Tiptap 组件形态收敛 spec 之后排期）
+- `2026-05-28-hero-expression-surfaces`（承接已归档 Red Fluid spec 的未建设 Hero 部分；当前无 active spec 时可创建下一工作单元）
 
 ## 使用规则
 

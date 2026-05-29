@@ -1,0 +1,176 @@
+{
+  "dark": {
+    "sidebarDropdown": {
+      "trigger": {
+        "borderRadius": "8px",
+        "cornerShape": "squircle",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "pointerEvents": "auto"
+      },
+      "menu": {
+        "text": "创建本地记忆空间\n打开本地记忆空间",
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "padding": "6px",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.5) 0px 16px 48px 0px, rgba(0, 0, 0, 0.24) 0px 12px 24px 0px, rgba(0, 0, 0, 0.22) 0px 6px 8px 0px, rgba(0, 0, 0, 0.12) 0px 2px 3px 0px"
+      },
+      "item": {
+        "text": "创建本地记忆空间",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "32px",
+        "backgroundColor": "oklab(0.345051 0.00137704 -0.00473072)"
+      }
+    },
+    "tiptapDropdown": {
+      "menu": {
+        "text": "标题 1\n标题 2\n标题 3\n标题 4",
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "padding": "6px",
+        "boxShadow": "rgba(0, 0, 0, 0.5) 0px 16px 48px 0px, rgba(0, 0, 0, 0.24) 0px 12px 24px 0px, rgba(0, 0, 0, 0.22) 0px 6px 8px 0px, rgba(0, 0, 0, 0.12) 0px 2px 3px 0px"
+      },
+      "item": {
+        "text": "标题 1",
+        "role": "menuitem",
+        "className": "tiptap-button tiptap-dropdown-menu-item",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "auto",
+        "backgroundColor": "rgb(45, 45, 47)"
+      }
+    },
+    "reoTooltip": {
+      "text": "展开记忆列表\n展开记忆列表",
+      "borderRadius": "8px",
+      "cornerShape": "squircle",
+      "padding": "6px 8px",
+      "fontSize": "12px",
+      "fontWeight": "500",
+      "lineHeight": "14.4px",
+      "textAlign": "center",
+      "arrowCount": 0,
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.5) 0px 16px 48px 0px, rgba(0, 0, 0, 0.24) 0px 12px 24px 0px, rgba(0, 0, 0, 0.22) 0px 6px 8px 0px, rgba(0, 0, 0, 0.12) 0px 2px 3px 0px"
+    },
+    "tiptapPopover": {
+      "popover": {
+        "ariaLabel": "高亮颜色",
+        "maxHeight": "561.5px"
+      },
+      "card": {
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "boxShadow": "rgba(0, 0, 0, 0.5) 0px 16px 48px 0px, rgba(0, 0, 0, 0.24) 0px 12px 24px 0px, rgba(0, 0, 0, 0.22) 0px 6px 8px 0px, rgba(0, 0, 0, 0.12) 0px 2px 3px 0px",
+        "backgroundColor": "rgb(39, 39, 42)"
+      },
+      "item": {
+        "text": "",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "auto",
+        "backgroundColor": "rgb(45, 45, 47)"
+      },
+      "swatch": {
+        "borderRadius": "16px",
+        "cornerShape": "squircle"
+      }
+    }
+  },
+  "light": {
+    "sidebarDropdown": {
+      "trigger": {
+        "borderRadius": "8px",
+        "cornerShape": "squircle",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "pointerEvents": "auto"
+      },
+      "menu": {
+        "text": "创建本地记忆空间\n打开本地记忆空间",
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "padding": "6px",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(17, 24, 39, 0.04) 0px 16px 48px 0px, rgba(17, 24, 39, 0.04) 0px 12px 24px 0px, rgba(17, 24, 39, 0.02) 0px 6px 8px 0px, rgba(17, 24, 39, 0.02) 0px 2px 3px 0px"
+      },
+      "item": {
+        "text": "创建本地记忆空间",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "32px",
+        "backgroundColor": "rgb(229, 231, 235)"
+      }
+    },
+    "tiptapDropdown": {
+      "menu": {
+        "text": "标题 1\n标题 2\n标题 3\n标题 4",
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "padding": "6px",
+        "boxShadow": "rgba(17, 24, 39, 0.04) 0px 16px 48px 0px, rgba(17, 24, 39, 0.04) 0px 12px 24px 0px, rgba(17, 24, 39, 0.02) 0px 6px 8px 0px, rgba(17, 24, 39, 0.02) 0px 2px 3px 0px"
+      },
+      "item": {
+        "text": "标题 1",
+        "role": "menuitem",
+        "className": "tiptap-button tiptap-dropdown-menu-item",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "auto",
+        "backgroundColor": "rgb(234, 234, 235)"
+      }
+    },
+    "reoTooltip": {
+      "text": "展开记忆列表\n展开记忆列表",
+      "borderRadius": "8px",
+      "cornerShape": "squircle",
+      "padding": "6px 8px",
+      "fontSize": "12px",
+      "fontWeight": "500",
+      "lineHeight": "14.4px",
+      "textAlign": "center",
+      "arrowCount": 0,
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(17, 24, 39, 0.04) 0px 16px 48px 0px, rgba(17, 24, 39, 0.04) 0px 12px 24px 0px, rgba(17, 24, 39, 0.02) 0px 6px 8px 0px, rgba(17, 24, 39, 0.02) 0px 2px 3px 0px"
+    },
+    "tiptapPopover": {
+      "popover": {
+        "ariaLabel": "高亮颜色",
+        "maxHeight": "561.5px"
+      },
+      "card": {
+        "borderRadius": "18px",
+        "cornerShape": "squircle",
+        "boxShadow": "rgba(17, 24, 39, 0.04) 0px 16px 48px 0px, rgba(17, 24, 39, 0.04) 0px 12px 24px 0px, rgba(17, 24, 39, 0.02) 0px 6px 8px 0px, rgba(17, 24, 39, 0.02) 0px 2px 3px 0px",
+        "backgroundColor": "rgb(255, 255, 255)"
+      },
+      "item": {
+        "text": "",
+        "borderRadius": "12px",
+        "cornerShape": "squircle",
+        "fontSize": "14px",
+        "fontWeight": "500",
+        "lineHeight": "16.1px",
+        "minHeight": "auto",
+        "backgroundColor": "rgb(234, 234, 235)"
+      },
+      "swatch": {
+        "borderRadius": "16px",
+        "cornerShape": "squircle"
+      }
+    }
+  }
+}

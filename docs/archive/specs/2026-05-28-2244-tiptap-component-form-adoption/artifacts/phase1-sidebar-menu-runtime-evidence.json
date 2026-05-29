@@ -1,0 +1,70 @@
+{
+  "tiptapDropdown": {
+    "text": "标题 1",
+    "className": "tiptap-button tiptap-dropdown-menu-item",
+    "backgroundColor": "rgba(255, 255, 255, 0)",
+    "color": "rgba(247, 247, 253, 0.64)",
+    "borderRadius": "12px",
+    "cornerShape": "squircle",
+    "fontSize": "13px",
+    "fontWeight": "500",
+    "lineHeight": "14.95px",
+    "textLineHeight": "14.95px",
+    "width": 116,
+    "height": 32
+  },
+  "activeMemory": {
+    "item": {
+      "className": "group/memorySpace relative flex min-h-32 w-full items-center gap-4 pr-4 reo-squircle rounded-md transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-within:bg-secondary focus-within:text-foreground bg-secondary text-foreground",
+      "text": "Reo UI 调试空间",
+      "backgroundColor": "rgb(39, 39, 42)",
+      "color": "rgb(250, 250, 250)",
+      "borderRadius": "12px",
+      "cornerShape": "squircle",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "lineHeight": "24px",
+      "width": 224,
+      "height": 32
+    },
+    "button": {
+      "className": "reo-squircle inline-flex items-center gap-8 border-0 font-medium shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 min-h-32 rounded-md text-ui-sm leading-ui-sm min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-inherit hover:bg-transparent hover:text-inherit",
+      "text": "Reo UI 调试空间",
+      "backgroundColor": "rgba(0, 0, 0, 0)",
+      "color": "rgb(250, 250, 250)",
+      "borderRadius": "12px",
+      "cornerShape": "squircle",
+      "fontSize": "12px",
+      "fontWeight": "500",
+      "lineHeight": "19.2px",
+      "width": 188,
+      "height": 32
+    }
+  },
+  "activeHome": {
+    "className": "reo-squircle inline-flex min-w-fit shrink-0 items-center gap-8 border-0 font-medium shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 min-h-32 rounded-md text-ui-sm leading-ui-sm bg-card text-card-foreground w-full justify-start px-8 hover:bg-secondary hover:text-foreground !bg-secondary !text-foreground",
+    "text": "首页",
+    "backgroundColor": "rgb(39, 39, 42)",
+    "color": "rgb(250, 250, 250)",
+    "borderRadius": "12px",
+    "cornerShape": "squircle",
+    "fontSize": "12px",
+    "fontWeight": "500",
+    "lineHeight": "19.2px",
+    "width": 224,
+    "height": 32
+  },
+  "reoDropdown": {
+    "className": "reo-squircle relative flex min-h-32 w-full cursor-default select-none items-center gap-4 rounded-md px-8 text-left text-ui-md font-medium leading-[1.15] outline-none transition-colors duration-150 ease-out text-popover-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:text-muted-foreground",
+    "text": "创建本地记忆空间",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "color": "rgb(250, 250, 250)",
+    "borderRadius": "12px",
+    "cornerShape": "squircle",
+    "fontSize": "13px",
+    "fontWeight": "500",
+    "lineHeight": "14.95px",
+    "width": 148,
+    "height": 32
+  }
+}
