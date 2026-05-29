@@ -14,7 +14,7 @@ export function ImmersiveWorkspaceReturnButton({
   return (
     <Button
       aria-label="返回"
-      className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100"
+      className="absolute z-10 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100 [-webkit-app-region:no-drag]"
       data-vaul-no-drag
       disabled={disabled}
       onClick={onReturn}

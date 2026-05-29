@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EditorExpandShell } from './EditorExpandShell';
@@ -74,6 +74,25 @@ describe('EditorExpandShell', () => {
 
     expect(props.onExpandedChange).toHaveBeenCalledWith(false);
     expect(props.onReturn).not.toHaveBeenCalled();
+  });
+
+  it('expanded: titlebar 非控件区域是编辑器外的命中区', () => {
+    const props = renderShell({ expanded: true });
+
+    const titlebarHitArea = screen.getByTestId('immersive-workspace-titlebar-hit-area');
+    expect(titlebarHitArea).toHaveClass(
+      'absolute',
+      'inset-x-0',
+      'top-0',
+      'z-[9]',
+      '[-webkit-app-region:no-drag]'
+    );
+    expect(titlebarHitArea).toHaveStyle({ height: '48px' });
+
+    fireEvent.pointerDown(titlebarHitArea);
+
+    expect(props.onReturn).not.toHaveBeenCalled();
+    expect(props.onExpandedChange).not.toHaveBeenCalled();
   });
 
   it('expanded + pending: 禁用返回和缩小', () => {

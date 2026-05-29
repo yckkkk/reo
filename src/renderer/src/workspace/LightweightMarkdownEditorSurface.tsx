@@ -7,6 +7,7 @@ import { EditorContent, EditorContext, useEditor, type Editor } from '@tiptap/re
 import StarterKit from '@tiptap/starter-kit';
 import type { JSONContent } from '@tiptap/core';
 import {
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -84,7 +85,6 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly bordered?: boolean;
   readonly attachmentContext?: MarkdownAttachmentContext | undefined;
   readonly disabled?: boolean;
-  readonly editorFocused?: boolean;
   readonly editorHandleRef?: Ref<LightweightMarkdownEditorHandle>;
   readonly editorId: string;
   readonly editorLabel: string;
@@ -106,7 +106,6 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly showHeaderLabel?: boolean;
   readonly surfaceRef?: Ref<HTMLDivElement>;
   readonly surfaceTestId: string;
-  readonly onEditorFocusChange?: (editorFocused: boolean) => void;
   readonly toolbarDisabled?: boolean;
   readonly value: string;
   readonly valueTiptapJson?: JSONContent | undefined;
@@ -191,7 +190,6 @@ function LightweightMarkdownEditorSurfaceContent({
   attachmentContext,
   bordered = true,
   disabled = false,
-  editorFocused,
   editorHandleRef,
   editorId,
   editorLabel,
@@ -208,14 +206,15 @@ function LightweightMarkdownEditorSurfaceContent({
   showHeaderLabel = false,
   surfaceRef,
   surfaceTestId,
-  onEditorFocusChange,
   toolbarDisabled = false,
   value,
   valueTiptapJson,
   resolvedAttachmentContextKey,
 }: LightweightMarkdownEditorSurfaceContentProps) {
-  const [uncontrolledEditorFocused, setUncontrolledEditorFocused] = useState(false);
+  const [toolbarRevealed, setToolbarRevealed] = useState(false);
   const [contentErrorMessage, setContentErrorMessage] = useState<string | null>(null);
+  const surfaceNodeRef = useRef<HTMLDivElement | null>(null);
+  const toolbarShellRef = useRef<HTMLDivElement | null>(null);
   const onAttachmentUploadRef = useRef(onAttachmentUpload);
   const onChangeRef = useRef(onChange);
   const onRichChangeRef = useRef(onRichChange);
@@ -225,8 +224,19 @@ function LightweightMarkdownEditorSurfaceContent({
     [valueTiptapJson]
   );
   const lastSyncedEditorTiptapJsonKeyRef = useRef(valueTiptapJsonKey);
-  const resolvedEditorFocused = editorFocused ?? uncontrolledEditorFocused;
   const attachmentContextKey = resolvedAttachmentContextKey;
+
+  const setSurfaceNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      surfaceNodeRef.current = node;
+      if (typeof surfaceRef === 'function') {
+        surfaceRef(node);
+      } else if (surfaceRef) {
+        (surfaceRef as { current: HTMLDivElement | null }).current = node;
+      }
+    },
+    [surfaceRef]
+  );
 
   useEffect(() => {
     onAttachmentUploadRef.current = onAttachmentUpload;
@@ -327,14 +337,12 @@ function LightweightMarkdownEditorSurfaceContent({
       immediatelyRender: false,
       onBlur: ({ editor: blurredEditor }) => {
         setTiptapInteractiveSelectionReady(blurredEditor, false);
-        setResolvedEditorFocused(false);
       },
       onContentError: () => {
         setContentErrorMessage('富文本结构无法按当前编辑器模型读取。');
       },
       onFocus: ({ editor: focusedEditor }) => {
         setTiptapInteractiveSelectionReady(focusedEditor, false);
-        setResolvedEditorFocused(true);
       },
       onSelectionUpdate: ({ editor: selectionEditor }) => {
         setTiptapInteractiveSelectionReady(selectionEditor, selectionEditor.isFocused);
@@ -466,12 +474,88 @@ function LightweightMarkdownEditorSurfaceContent({
     [editor]
   );
 
-  function setResolvedEditorFocused(nextEditorFocused: boolean) {
-    if (editorFocused === undefined) {
-      setUncontrolledEditorFocused(nextEditorFocused);
+  useEffect(() => {
+    const surfaceNode = surfaceNodeRef.current;
+    if (!surfaceNode) {
+      return;
     }
-    onEditorFocusChange?.(nextEditorFocused);
-  }
+    let pendingFocusExitFrame = 0;
+    const cancelPendingFocusExit = () => {
+      if (pendingFocusExitFrame) {
+        cancelAnimationFrame(pendingFocusExitFrame);
+        pendingFocusExitFrame = 0;
+      }
+    };
+    const withinEditingSession = (node: EventTarget | null) => {
+      if (!(node instanceof Node)) {
+        return false;
+      }
+      if (surfaceNode.contains(node)) {
+        return true;
+      }
+      // The toolbar's own dropdowns/popovers (heading, list, color, link) are
+      // Radix Popper content portalled outside the surface, rendered inside a
+      // popper-content-wrapper. Treat pointer/focus there as still editing.
+      return (
+        node instanceof Element && node.closest('[data-radix-popper-content-wrapper]') !== null
+      );
+    };
+    // Reveal whenever focus enters the editor (click, tab, or programmatic).
+    const reveal = () => {
+      cancelPendingFocusExit();
+      setToolbarRevealed(true);
+    };
+    const hideIfFocusOutside = () => {
+      if (!withinEditingSession(document.activeElement)) {
+        setToolbarRevealed(false);
+      }
+    };
+    const hideOnFocusOut = (event: FocusEvent) => {
+      if (withinEditingSession(event.relatedTarget)) {
+        return;
+      }
+      if (event.relatedTarget === null) {
+        cancelPendingFocusExit();
+        pendingFocusExitFrame = requestAnimationFrame(() => {
+          pendingFocusExitFrame = 0;
+          hideIfFocusOutside();
+        });
+        return;
+      }
+      setToolbarRevealed(false);
+    };
+    const hideOnOutsideFocusIn = (event: FocusEvent) => {
+      if (!withinEditingSession(event.target)) {
+        setToolbarRevealed(false);
+      }
+    };
+    // Hide whenever a pointer press lands outside the editing session — covers
+    // the immersive titlebar, empty areas, and clicks after a dropdown closes,
+    // none of which produce a reliable editor blur.
+    const hideOnOutsidePointer = (event: PointerEvent) => {
+      if (!withinEditingSession(event.target)) {
+        setToolbarRevealed(false);
+      }
+    };
+    surfaceNode.addEventListener('focusin', reveal);
+    surfaceNode.addEventListener('focusout', hideOnFocusOut);
+    document.addEventListener('focusin', hideOnOutsideFocusIn, true);
+    document.addEventListener('pointerdown', hideOnOutsidePointer, true);
+    return () => {
+      cancelPendingFocusExit();
+      surfaceNode.removeEventListener('focusin', reveal);
+      surfaceNode.removeEventListener('focusout', hideOnFocusOut);
+      document.removeEventListener('focusin', hideOnOutsideFocusIn, true);
+      document.removeEventListener('pointerdown', hideOnOutsidePointer, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    const toolbarShell = toolbarShellRef.current;
+    if (toolbarShell) {
+      toolbarShell.inert = !toolbarRevealed;
+    }
+  }, [toolbarRevealed]);
 
   const placeholderNode = useMemo(
     () =>
@@ -488,14 +572,11 @@ function LightweightMarkdownEditorSurfaceContent({
 
   return (
     <div
-      ref={surfaceRef}
+      ref={setSurfaceNode}
       className={cn(
-        'reo-lightweight-markdown-editor-surface grid h-full min-h-0 w-full grid-rows-[44px_minmax(0,1fr)] overflow-hidden bg-background',
-        bordered &&
-          cn(
-            'rounded-md border transition-[border-color] duration-150 ease-out',
-            resolvedEditorFocused ? 'border-ring' : 'border-secondary'
-          ),
+        'reo-lightweight-markdown-editor-surface grid h-full min-h-0 w-full overflow-hidden bg-background',
+        toolbarRevealed ? 'grid-rows-[44px_minmax(0,1fr)]' : 'grid-rows-[0px_minmax(0,1fr)]',
+        bordered && cn('rounded-md border', toolbarRevealed ? 'border-ring' : 'border-secondary'),
         toolbarLocked && 'reo-lightweight-markdown-editor-surface-disabled'
       )}
       data-slot="lightweight-markdown-editor-surface"
@@ -505,8 +586,13 @@ function LightweightMarkdownEditorSurfaceContent({
     >
       <EditorContext.Provider value={{ editor }}>
         <div
+          ref={toolbarShellRef}
           data-slot="lightweight-markdown-editor-toolbar"
-          className="flex h-[44px] min-h-[44px] min-w-0 items-center"
+          data-toolbar-revealed={toolbarRevealed ? 'true' : 'false'}
+          className={cn(
+            'flex h-[44px] min-h-[44px] min-w-0 items-center transition-opacity duration-150 ease-out motion-reduce:transition-none',
+            toolbarRevealed ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
         >
           {showHeaderLabel ? (
             <span className="flex min-w-fit items-center px-12 text-ui-sm leading-ui-sm text-muted-foreground">

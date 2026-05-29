@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { JSONContent } from '@tiptap/core';
 import { createRef } from 'react';
@@ -947,6 +947,86 @@ describe('LightweightMarkdownEditorSurface', () => {
     editorHandleRef.current?.insertMarkdown('**Codex** 编辑');
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(expect.stringContaining('**Codex** 编辑'));
+    });
+  });
+
+  describe('toolbar focus reveal', () => {
+    function toolbarShell() {
+      return screen
+        .getByTestId('lightweight-editor')
+        .querySelector('[data-slot="lightweight-markdown-editor-toolbar"]');
+    }
+
+    it('keeps the toolbar hidden until the editor enters an editing session', () => {
+      renderEditor('正文');
+
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'false');
+    });
+
+    it('reveals the toolbar when focus enters the editor surface', () => {
+      renderEditor('正文');
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+
+      fireEvent.focusIn(editor);
+
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'true');
+    });
+
+    it('hides the toolbar when a pointer press lands outside the editor surface', () => {
+      renderEditor('正文');
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      fireEvent.focusIn(editor);
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'true');
+      fireEvent.pointerDown(outside);
+
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'false');
+      outside.remove();
+    });
+
+    it('hides the toolbar when focus moves outside the editing session', () => {
+      renderEditor('正文');
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      fireEvent.focusIn(editor);
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'true');
+      fireEvent.focusOut(editor, { relatedTarget: outside });
+
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'false');
+      outside.remove();
+    });
+
+    it('hides the toolbar when editor focus is cleared programmatically', async () => {
+      renderEditor('正文');
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+
+      editor.focus();
+      fireEvent.focusIn(editor);
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'true');
+      editor.blur();
+      fireEvent.focusOut(editor, { relatedTarget: null });
+
+      await waitFor(() => expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'false'));
+    });
+
+    it('keeps the toolbar revealed while interacting with a toolbar popover or dropdown', () => {
+      renderEditor('正文');
+      const editor = screen.getByRole('textbox', { name: '笔记正文' });
+      const popperWrapper = document.createElement('div');
+      popperWrapper.setAttribute('data-radix-popper-content-wrapper', '');
+      const popoverControl = document.createElement('button');
+      popperWrapper.appendChild(popoverControl);
+      document.body.appendChild(popperWrapper);
+
+      fireEvent.focusIn(editor);
+      fireEvent.pointerDown(popoverControl);
+
+      expect(toolbarShell()).toHaveAttribute('data-toolbar-revealed', 'true');
+      popperWrapper.remove();
     });
   });
 });

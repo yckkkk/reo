@@ -7,6 +7,16 @@
   --tt-theme-text: var(--tt-gray-light-900);
   color: var(--foreground);
 
+  // Toolbar reveal: the toolbar row collapses (44px <-> 0px) and the focus
+  // border lights up together when the editor enters/leaves an editing session.
+  transition:
+    grid-template-rows 150ms ease-out,
+    border-color 150ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
   .dark & {
     --tt-theme-text: var(--tt-gray-dark-900);
   }

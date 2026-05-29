@@ -1362,9 +1362,10 @@ describe('LoadedWorkspaceFrame', () => {
     ).toBeNull();
     const editorSurface = within(bodyPanel).getByTestId('memory-studio-inline-note-editor');
     expect(editorSurface).toHaveClass('h-full', 'w-full');
-    expect(editorSurface).toHaveClass('grid-rows-[44px_minmax(0,1fr)]');
+    // Unfocused (reading) state collapses the toolbar row; focusing the editor
+    // expands it back to 44px. See LightweightMarkdownEditorSurface reveal tests.
+    expect(editorSurface).toHaveClass('grid-rows-[0px_minmax(0,1fr)]');
     expect(editorSurface).toHaveClass('rounded-md', 'border', 'border-secondary');
-    expect(editorSurface).toHaveClass('transition-[border-color]');
     expect(editorSurface).not.toHaveClass('transition-colors');
     expect(editorSurface).not.toHaveClass('border-ring');
     const editorToolbar = editorSurface.querySelector(
@@ -1429,10 +1430,11 @@ describe('LoadedWorkspaceFrame', () => {
       name: '粗体',
     });
     formatToolbarButton.focus();
-    fireEvent.blur(inlineBodyEditor, { relatedTarget: formatToolbarButton });
     expect(formatToolbarButton).toHaveFocus();
-    await waitFor(() => expect(editorSurface).toHaveClass('border-secondary'));
-    expect(editorSurface).not.toHaveClass('border-ring');
+    // A toolbar control stays within the editing session, so the toolbar/border
+    // remain revealed instead of flickering to the unfocused border.
+    expect(editorSurface).toHaveClass('border-ring');
+    expect(editorSurface).not.toHaveClass('border-secondary');
     await userEvent.click(inlineBodyEditor);
     expect(editorSurface).toHaveClass('border-ring');
     expect(within(content).queryByRole('button', { name: '取消' })).not.toBeInTheDocument();

@@ -19,7 +19,6 @@ export type InlineMarkdownEditorState = {
   readonly tiptapJson: JSONContent | null;
   readonly tiptapJsonKey: string;
   readonly pending: boolean;
-  readonly editorFocused: boolean;
 };
 
 type InlineMarkdownEditorStateInput = {
@@ -51,7 +50,6 @@ export type InlineMarkdownEditorAction =
       readonly tiptapJson?: JSONContent;
       readonly tiptapJsonKey?: string;
     }
-  | { readonly type: 'editor-focus-changed'; readonly editorFocused: boolean }
   | { readonly type: 'autosave-started' }
   | { readonly type: 'autosave-stale-session' }
   | {
@@ -104,7 +102,6 @@ export function createInlineMarkdownEditorState({
     tiptapJson,
     tiptapJsonKey: initialTiptapJsonKey,
     pending: false,
-    editorFocused: false,
   };
 }
 
@@ -187,7 +184,6 @@ export function inlineMarkdownEditorReducer(
         ...state,
         conflict: null,
         pending: false,
-        editorFocused: false,
       };
 
     case 'markdown-changed': {
@@ -200,12 +196,6 @@ export function inlineMarkdownEditorReducer(
         tiptapJsonKey: action.tiptapJsonKey ?? tiptapJsonKey(nextTiptapJson),
       };
     }
-
-    case 'editor-focus-changed':
-      return {
-        ...state,
-        editorFocused: action.editorFocused,
-      };
 
     case 'autosave-started':
       return {
@@ -244,7 +234,6 @@ export function inlineMarkdownEditorReducer(
         lastInputTiptapJson: savedTiptapJson,
         lastInputTiptapJsonKey: savedTiptapJsonKey,
         pending: false,
-        editorFocused: state.editorFocused,
       };
     }
 
@@ -283,7 +272,6 @@ export function inlineMarkdownEditorReducer(
         markdown: action.markdown,
         tiptapJson: nextTiptapJson,
         tiptapJsonKey: nextTiptapJsonKey,
-        editorFocused: false,
       };
     }
 
@@ -296,7 +284,6 @@ export function inlineMarkdownEditorReducer(
         markdown: state.cleanMarkdown,
         tiptapJson: state.cleanTiptapJson,
         tiptapJsonKey: state.cleanTiptapJsonKey,
-        editorFocused: false,
       };
 
     case 'conflict-dismissed':

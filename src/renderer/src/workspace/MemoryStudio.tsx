@@ -2499,13 +2499,9 @@ function InlineMarkdownContentEditor<TSaved>({
           showHeaderLabel={false}
           surfaceRef={surfaceRef}
           surfaceTestId={surfaceTestId}
-          editorFocused={editorState.editorFocused}
           editorId={editorId}
           editorLabel={editorLabel}
           editorTargetKey={targetKey}
-          onEditorFocusChange={(editorFocused) =>
-            dispatchEditorState({ type: 'editor-focus-changed', editorFocused })
-          }
           toolbarDisabled={disabled}
           value={editorState.markdown}
           valueTiptapJson={editorState.tiptapJson ?? undefined}
