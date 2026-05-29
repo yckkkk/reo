@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:is([data-theme='dark'] *, .dark *));
 
-@utility reo-card-squircle {
+@utility reo-squircle {
   corner-shape: squircle;
 }
 
@@ -146,14 +146,47 @@
   }
 }
 
-@keyframes reo-dropdown-menu-enter {
+/* Popper-positioned floats (Dropdown / Tooltip): transform is safe to animate —
+   Radix positions via the popper wrapper, so the content's own transform is free. */
+@keyframes reo-float-in {
   from {
     opacity: 0;
-    transform: translateY(-2px) scale(0.95);
+    transform: scale(0.96) translate(var(--reo-float-x, 0px), var(--reo-float-y, 0px));
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1) translate(0px, 0px);
+  }
+}
+
+@keyframes reo-float-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translate(0px, 0px);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translate(var(--reo-float-x, 0px), var(--reo-float-y, 0px));
+  }
+}
+
+/* Self-centered floats (Dialog / AlertDialog): they keep a translate(-50%,-50%)
+   centering transform, so entrance motion must touch opacity only. */
+@keyframes reo-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reo-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -248,7 +281,8 @@
     animation: none;
   }
 
-  .reo-dropdown-menu-enter {
+  .reo-float-motion[data-state],
+  .reo-fade-motion[data-state] {
     animation: none;
   }
 
@@ -263,9 +297,37 @@
   animation: reo-content-tab-panel-enter 300ms cubic-bezier(0.2, 0.9, 0.1, 1) both;
 }
 
-@utility reo-dropdown-menu-enter {
-  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
-  animation: reo-dropdown-menu-enter 150ms ease-out both;
+@utility reo-float-motion {
+  transform-origin: var(--radix-popper-transform-origin, center);
+}
+
+.reo-float-motion[data-side='bottom'] {
+  --reo-float-y: -4px;
+}
+.reo-float-motion[data-side='top'] {
+  --reo-float-y: 4px;
+}
+.reo-float-motion[data-side='left'] {
+  --reo-float-x: 4px;
+}
+.reo-float-motion[data-side='right'] {
+  --reo-float-x: -4px;
+}
+
+.reo-float-motion[data-state='open'],
+.reo-float-motion[data-state='delayed-open'],
+.reo-float-motion[data-state='instant-open'] {
+  animation: reo-float-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.reo-float-motion[data-state='closed'] {
+  animation: reo-float-out 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.reo-fade-motion[data-state='open'] {
+  animation: reo-fade-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.reo-fade-motion[data-state='closed'] {
+  animation: reo-fade-out 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .reo-immersive-workspace-surface-motion[data-vaul-drawer] {

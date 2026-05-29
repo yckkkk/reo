@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 export type ReoCardSurfaceShape = 'default' | 'segmentPreview';
 
 const reoCardSurfaceShapeClassNames = {
-  default: 'reo-card-squircle rounded-xl',
+  default: 'reo-squircle rounded-xl',
   segmentPreview: 'reo-segment-card-squircle',
 } satisfies Record<ReoCardSurfaceShape, string>;
 

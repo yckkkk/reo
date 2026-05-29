@@ -41,7 +41,7 @@ describe('MemoryRail', () => {
       .closest('[data-slot="memory-rail-empty-card"]');
 
     expect(emptyCard).toBeTruthy();
-    expect(emptyCard).toHaveClass('reo-card-squircle', 'rounded-xl', 'bg-card');
+    expect(emptyCard).toHaveClass('reo-squircle', 'rounded-xl', 'bg-card');
   });
 
   it('renders memories in upstream snapshot order without resorting in render', () => {

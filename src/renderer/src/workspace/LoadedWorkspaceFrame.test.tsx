@@ -1068,10 +1068,10 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(birthdayMemoryButton).toHaveClass('min-h-[68px]', 'px-12', 'py-12');
     expect(birthdayMemoryButton).toHaveAttribute('aria-current', 'page');
-    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'reo-card-squircle', 'bg-secondary');
+    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'reo-squircle', 'bg-secondary');
     expect(recitalMemoryCard).toHaveClass(
       'rounded-xl',
-      'reo-card-squircle',
+      'reo-squircle',
       'bg-card',
       'hover:bg-secondary'
     );
@@ -2083,7 +2083,7 @@ describe('LoadedWorkspaceFrame', () => {
       'min-h-[var(--memory-studio-segment-card-min-size)]',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
-    expect(firstSegmentCard).not.toHaveClass('rounded-xl', 'reo-card-squircle');
+    expect(firstSegmentCard).not.toHaveClass('rounded-xl', 'reo-squircle');
     expect(secondSegmentCard).toHaveClass('bg-card');
     expect(firstSegmentCard).not.toHaveClass(
       'border',

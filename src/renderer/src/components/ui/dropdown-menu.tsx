@@ -23,7 +23,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'reo-dropdown-menu-enter z-50 min-w-160 overflow-hidden rounded-lg border-0 bg-popover p-4 text-popover-foreground shadow-float outline-none',
+          'reo-float-motion reo-squircle z-50 min-w-160 overflow-hidden rounded-[18px] border-0 bg-popover p-[6px] text-popover-foreground shadow-float outline-none',
           className
         )}
         {...props}
@@ -40,7 +40,7 @@ function DropdownMenuItem({
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
       className={cn(
-        'relative flex min-h-32 w-full cursor-default select-none items-center gap-8 rounded-lg px-8 text-left text-ui-xs font-regular leading-ui-xs outline-none transition-colors duration-150 ease-out',
+        'reo-squircle relative flex min-h-32 w-full cursor-default select-none items-center gap-4 rounded-md px-8 text-left text-ui-xs font-regular leading-ui-xs outline-none transition-colors duration-150 ease-out',
         'text-popover-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:text-muted-foreground',
         className
       )}

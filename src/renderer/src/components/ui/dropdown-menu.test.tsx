@@ -21,18 +21,20 @@ describe('DropdownMenu primitive', () => {
     );
 
     expect(screen.getByRole('menu')).toHaveClass(
-      'rounded-lg',
+      'reo-float-motion',
+      'reo-squircle',
+      'rounded-[18px]',
       'border-0',
       'bg-popover',
       'text-popover-foreground',
       'shadow-float',
-      'p-4',
-      'reo-dropdown-menu-enter'
+      'p-[6px]'
     );
     expect(screen.getByRole('menu')).not.toHaveClass('border-border', 'bg-card');
     expect(screen.getByRole('menuitem', { name: '重命名记忆' })).toHaveClass(
       'min-h-32',
-      'rounded-lg',
+      'reo-squircle',
+      'rounded-md',
       'px-8',
       'text-ui-xs',
       'font-regular',
