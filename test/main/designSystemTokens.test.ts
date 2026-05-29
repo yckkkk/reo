@@ -90,8 +90,10 @@ const radiusContract = {
 } as const;
 
 const shadowContract = {
-  float: '0 12px 32px rgb(0 0 0 / 0.08)',
-  modal: '0 24px 64px rgb(0 0 0 / 0.12)',
+  float:
+    '0 16px 48px rgb(17 24 39 / 0.04), 0 12px 24px rgb(17 24 39 / 0.04), 0 6px 8px rgb(17 24 39 / 0.02), 0 2px 3px rgb(17 24 39 / 0.02)',
+  modal:
+    '0 32px 64px rgb(17 24 39 / 0.08), 0 16px 32px rgb(17 24 39 / 0.06), 0 8px 16px rgb(17 24 39 / 0.04), 0 2px 4px rgb(17 24 39 / 0.03)',
   'hero-lift': '0 24px 48px rgb(220 38 38 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6)',
   'hero-fill': '0 12px 24px rgb(220 38 38 / 0.18), inset 0 0 0 1px rgb(255 255 255 / 0.14)',
   'hero-inset': 'inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -8px 16px rgb(0 0 0 / 0.12)',
@@ -100,8 +102,10 @@ const shadowContract = {
 } as const;
 
 const darkShadowContract = {
-  float: '0 12px 32px rgb(0 0 0 / 0.4)',
-  modal: '0 24px 64px rgb(0 0 0 / 0.6)',
+  float:
+    '0 16px 48px rgb(0 0 0 / 0.5), 0 12px 24px rgb(0 0 0 / 0.24), 0 6px 8px rgb(0 0 0 / 0.22), 0 2px 3px rgb(0 0 0 / 0.12)',
+  modal:
+    '0 32px 64px rgb(0 0 0 / 0.6), 0 16px 32px rgb(0 0 0 / 0.32), 0 8px 16px rgb(0 0 0 / 0.28), 0 2px 4px rgb(0 0 0 / 0.16)',
   'hero-lift': '0 24px 48px rgb(220 38 38 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.06)',
   'hero-fill': '0 12px 24px rgb(220 38 38 / 0.28), inset 0 0 0 1px rgb(255 255 255 / 0.14)',
   'hero-inset': 'inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 -8px 16px rgb(0 0 0 / 0.18)',
