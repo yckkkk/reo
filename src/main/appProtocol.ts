@@ -55,15 +55,19 @@ function getRendererDistPath(): string {
   return path.join(app.getAppPath(), 'out/renderer');
 }
 
+function decodeUrlPathSegments(pathname: string): string[] {
+  return pathname
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map((segment) => decodeURIComponent(segment));
+}
+
 function resolveRendererAsset(parsed: URL): string | null {
   if (parsed.hostname !== APP_SHELL_HOST) {
     return null;
   }
 
-  const segments = parsed.pathname
-    .split('/')
-    .filter((segment) => segment.length > 0)
-    .map((segment) => decodeURIComponent(segment));
+  const segments = decodeUrlPathSegments(parsed.pathname);
   const relativePath = segments.length === 0 ? 'index.html' : path.join(...segments);
   const distPath = getRendererDistPath();
   const resolvedPath = path.normalize(path.join(distPath, relativePath));
@@ -197,10 +201,7 @@ export const resolveAttachmentProtocolRequestForTest = resolveAttachmentProtocol
 
 function decodeAttachmentPathSegments(pathname: string): string[] | null {
   try {
-    return pathname
-      .split('/')
-      .filter((segment) => segment.length > 0)
-      .map((segment) => decodeURIComponent(segment));
+    return decodeUrlPathSegments(pathname);
   } catch {
     return null;
   }
