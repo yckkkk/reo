@@ -19,14 +19,14 @@ export function buildRendererTestRuns(args) {
 }
 
 export function classifyRendererTestStderrLine(line, suppressNextTraceHint) {
+  if (line.includes(LOCAL_STORAGE_WARNING)) {
+    return {
+      nextSuppressTraceHint: true,
+      unexpectedExperimentalWarning: false,
+      write: false,
+    };
+  }
   if (line.includes('ExperimentalWarning:')) {
-    if (line.includes(LOCAL_STORAGE_WARNING)) {
-      return {
-        nextSuppressTraceHint: true,
-        unexpectedExperimentalWarning: false,
-        write: false,
-      };
-    }
     return {
       nextSuppressTraceHint: false,
       unexpectedExperimentalWarning: true,
