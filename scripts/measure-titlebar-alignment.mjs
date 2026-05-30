@@ -257,7 +257,7 @@ function findComponentsFromActive(active, width) {
     });
   }
 
-  return components.sort((a, b) => b.count - a.count);
+  return components;
 }
 
 function findComponents(pixels, width, predicate) {
@@ -272,7 +272,12 @@ function findComponents(pixels, width, predicate) {
 }
 
 function largestComponent(components, label) {
-  const component = components[0];
+  let component;
+  for (const current of components) {
+    if (!component || current.count > component.count) {
+      component = current;
+    }
+  }
   if (!component || component.count < 20) {
     fail(`Could not find ${label} traffic-light pixels.`);
   }
