@@ -57,10 +57,7 @@ function readPrivileges(expression: ts.Expression): ReadonlyMap<string, boolean>
     const name = propertyNameToText(property.name);
     assert.ok(name);
     const value = readBooleanLiteral(property.initializer);
-    assert.notEqual(value, null);
-    if (value === null) {
-      throw new Error(`Expected boolean privilege for ${name}`);
-    }
+    assert.ok(value !== null, `Expected boolean privilege for ${name}`);
     privileges.set(name, value);
   }
   return privileges;
