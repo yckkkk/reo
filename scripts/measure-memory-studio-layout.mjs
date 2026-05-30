@@ -309,13 +309,14 @@ function measurementExpression(maxItems) {
       };
     }
     const maxMeasuredItems = ${maxMeasuredItems};
+    const selectedItemIndex = items.findIndex((item) =>
+      Boolean(item.querySelector('[aria-current="true"]'))
+    );
+    const selectedItem = selectedItemIndex === -1 ? null : items[selectedItemIndex];
     const selectMeasuredItems = () => {
       if (maxMeasuredItems === null || items.length <= maxMeasuredItems) {
         return items.map((item, index) => ({ item, index }));
       }
-      const selectedIndex = items.findIndex((item) =>
-        Boolean(item.querySelector('[aria-current="true"]'))
-      );
       const indexes = new Set();
       const addIndex = (index) => {
         if (Number.isInteger(index) && index >= 0 && index < items.length) {
@@ -324,7 +325,7 @@ function measurementExpression(maxItems) {
       };
       addIndex(0);
       addIndex(items.length - 1);
-      addIndex(selectedIndex);
+      addIndex(selectedItemIndex);
       const visibleStart = scroll.scrollLeft;
       const visibleEnd = scroll.scrollLeft + scroll.clientWidth;
       for (let index = 0; index < items.length; index += 1) {
@@ -393,7 +394,6 @@ function measurementExpression(maxItems) {
     const activeContentTabSupplementType = activeContentTab
       ? activeContentTab.getAttribute('data-supplement-type')
       : null;
-    const selectedItem = items.find((item) => Boolean(item.querySelector('[aria-current="true"]')));
     const selectedSegmentKind = selectedItem
       ? selectedItem.querySelector('[data-slot="memory-studio-segment-card-duration"]')
         ? 'audio'
