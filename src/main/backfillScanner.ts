@@ -111,21 +111,6 @@ export function collectEligibleBackfillTargets(
   return selector.toArray();
 }
 
-export function limitBackfillTargets(
-  targets: readonly BackfillEligibleTarget[],
-  limit = Number.POSITIVE_INFINITY
-): BackfillEligibleTarget[] {
-  const normalizedLimit = normalizeBackfillTargetLimit(limit);
-  if (normalizedLimit === 0) {
-    return [];
-  }
-  const selector = createBackfillTargetSelector(normalizedLimit);
-  for (const target of targets) {
-    selector.add(target);
-  }
-  return selector.toArray();
-}
-
 export function normalizeBackfillTargetLimit(limit: number): number {
   if (!Number.isFinite(limit)) {
     return Number.POSITIVE_INFINITY;
@@ -139,6 +124,8 @@ type SequencedBackfillTarget = {
 };
 
 export function createBackfillTargetSelector(limit: number) {
+  const normalizedLimit = normalizeBackfillTargetLimit(limit);
+  const isBounded = Number.isFinite(normalizedLimit);
   const selected: SequencedBackfillTarget[] = [];
   let sequence = 0;
 
@@ -146,31 +133,31 @@ export function createBackfillTargetSelector(limit: number) {
     add(target: BackfillEligibleTarget) {
       const item = { sequence, target };
       sequence += 1;
-      if (!Number.isFinite(limit)) {
+      if (!isBounded) {
         selected.push(item);
         return;
       }
-      if (selected.length < limit) {
-        heapPushWorstFirst(selected, item);
+
+      if (normalizedLimit === 0) {
         return;
       }
-      const worst = selected[0];
-      if (worst && compareBackfillTargetPriority(item, worst) > 0) {
-        selected[0] = item;
-        heapifyWorstFirstDown(selected, 0);
+
+      insertSelectedBackfillTarget(selected, item);
+      if (selected.length > normalizedLimit) {
+        selected.pop();
       }
     },
     peekOldestSelected() {
-      return selected[0]?.target ?? null;
+      return selected.at(-1)?.target ?? null;
     },
     isFull() {
-      return Number.isFinite(limit) && selected.length >= limit;
+      return isBounded && selected.length >= normalizedLimit;
     },
     toArray() {
-      return selected
-        .slice()
-        .sort((left, right) => -compareBackfillTargetPriority(left, right))
-        .map((item) => item.target);
+      const ordered = isBounded
+        ? selected
+        : selected.slice().sort((left, right) => -compareBackfillTargetPriority(left, right));
+      return ordered.map((item) => item.target);
     },
   };
 }
@@ -186,52 +173,16 @@ function compareBackfillTargetPriority(
   return right.sequence - left.sequence;
 }
 
-function heapPushWorstFirst(heap: SequencedBackfillTarget[], item: SequencedBackfillTarget) {
-  heap.push(item);
-  heapifyWorstFirstUp(heap, heap.length - 1);
-}
-
-function heapifyWorstFirstUp(heap: SequencedBackfillTarget[], startIndex: number) {
-  let index = startIndex;
-  while (index > 0) {
-    const parentIndex = Math.floor((index - 1) / 2);
-    const parent = heap[parentIndex];
-    const item = heap[index];
-    if (!parent || !item || compareBackfillTargetPriority(item, parent) >= 0) {
-      return;
-    }
-    heap[parentIndex] = item;
-    heap[index] = parent;
-    index = parentIndex;
+function insertSelectedBackfillTarget(
+  selected: SequencedBackfillTarget[],
+  item: SequencedBackfillTarget
+) {
+  const insertIndex = selected.findIndex(
+    (selectedItem) => compareBackfillTargetPriority(item, selectedItem) > 0
+  );
+  if (insertIndex === -1) {
+    selected.push(item);
+    return;
   }
-}
-
-function heapifyWorstFirstDown(heap: SequencedBackfillTarget[], startIndex: number) {
-  let index = startIndex;
-  while (true) {
-    const leftIndex = index * 2 + 1;
-    const rightIndex = leftIndex + 1;
-    let worstIndex = index;
-    const left = heap[leftIndex];
-    const right = heap[rightIndex];
-    const worst = heap[worstIndex];
-    if (left && worst && compareBackfillTargetPriority(left, worst) < 0) {
-      worstIndex = leftIndex;
-    }
-    const currentWorst = heap[worstIndex];
-    if (right && currentWorst && compareBackfillTargetPriority(right, currentWorst) < 0) {
-      worstIndex = rightIndex;
-    }
-    if (worstIndex === index) {
-      return;
-    }
-    const item = heap[index];
-    const replacement = heap[worstIndex];
-    if (!item || !replacement) {
-      return;
-    }
-    heap[index] = replacement;
-    heap[worstIndex] = item;
-    index = worstIndex;
-  }
+  selected.splice(insertIndex, 0, item);
 }

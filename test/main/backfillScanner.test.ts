@@ -159,3 +159,29 @@ test('backfill scanner can add a large memory detail directly to a bounded selec
     workspaceId: 'workspace-a',
   });
 });
+
+test('backfill scanner keeps earlier same-time targets when the selector is capped', () => {
+  const selector = createBackfillTargetSelector(2);
+
+  for (const segmentId of ['seg_first', 'seg_second', 'seg_third']) {
+    selector.add({
+      kind: 'segment',
+      memoryId: 'mem_a',
+      segmentId,
+      updatedAt: '2026-05-16T10:00:00.000Z',
+      workspaceId: 'workspace-a',
+    });
+  }
+
+  assert.deepEqual(
+    selector.toArray().map((target) => (target.kind === 'segment' ? target.segmentId : '')),
+    ['seg_first', 'seg_second']
+  );
+  assert.deepEqual(selector.peekOldestSelected(), {
+    kind: 'segment',
+    memoryId: 'mem_a',
+    segmentId: 'seg_second',
+    updatedAt: '2026-05-16T10:00:00.000Z',
+    workspaceId: 'workspace-a',
+  });
+});
