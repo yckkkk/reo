@@ -450,44 +450,20 @@ export function createBackfillQueue<TResponse = unknown>({
     }
   }
 
-  function tripAutomaticBreaker(batchId: number, errorCode: BackfillQueueErrorCode) {
-    onEvent?.({
-      event: 'breaker-tripped',
-      fields: { errorCode },
-      level: 'warn',
-    });
-    const preserved: QueueEntry<TResponse>[] = [];
-    for (const entry of queuedEntries()) {
-      if (entry.task.source === 'auto' && entry.batchId === batchId) {
-        markEntryDequeued(entry);
-        markEntryComplete(entry);
-        activeTargets.delete(getBackfillTargetKey(entry.task));
-        entry.resolve(BREAKER_TRIPPED_RESULT);
-        rememberTerminalResult(entry.task, BREAKER_TRIPPED_RESULT);
-      } else {
-        preserved.push(entry);
-      }
-    }
-    queue.splice(0, queue.length, ...preserved);
-    queueHeadIndex = 0;
-    cleanupBatchIfIdle(batchId);
-  }
-
-  function cancelQueuedEntries(
+  function settleQueuedEntries(
     result: BackfillQueueRunResult<TResponse>,
-    predicate: (entry: QueueEntry<TResponse>) => boolean = () => true
+    predicate: (entry: QueueEntry<TResponse>) => boolean,
+    onSettled?: (entry: QueueEntry<TResponse>) => void
   ) {
     const preserved: QueueEntry<TResponse>[] = [];
-    const canceledBatchIds = new Set<number>();
-    let canceledCount = 0;
+    let settledCount = 0;
+
     for (const entry of queuedEntries()) {
       if (predicate(entry)) {
-        canceledCount += 1;
+        settledCount += 1;
         markEntryDequeued(entry);
         markEntryComplete(entry);
-        if (entry.batchId !== null) {
-          canceledBatchIds.add(entry.batchId);
-        }
+        onSettled?.(entry);
         activeTargets.delete(getBackfillTargetKey(entry.task));
         entry.resolve(result);
         rememberTerminalResult(entry.task, result);
@@ -495,12 +471,39 @@ export function createBackfillQueue<TResponse = unknown>({
         preserved.push(entry);
       }
     }
+
     queue.splice(0, queue.length, ...preserved);
     queueHeadIndex = 0;
-    for (const batchId of canceledBatchIds) {
+    return settledCount;
+  }
+
+  function tripAutomaticBreaker(batchId: number, errorCode: BackfillQueueErrorCode) {
+    onEvent?.({
+      event: 'breaker-tripped',
+      fields: { errorCode },
+      level: 'warn',
+    });
+    settleQueuedEntries(
+      BREAKER_TRIPPED_RESULT,
+      (entry) => entry.task.source === 'auto' && entry.batchId === batchId
+    );
+    cleanupBatchIfIdle(batchId);
+  }
+
+  function cancelQueuedEntries(
+    result: BackfillQueueRunResult<TResponse>,
+    predicate: (entry: QueueEntry<TResponse>) => boolean = () => true
+  ) {
+    const settledBatchIds = new Set<number>();
+    const settledCount = settleQueuedEntries(result, predicate, (entry) => {
+      if (entry.batchId !== null) {
+        settledBatchIds.add(entry.batchId);
+      }
+    });
+    for (const batchId of settledBatchIds) {
       cleanupBatchIfIdle(batchId);
     }
-    return canceledCount;
+    return settledCount;
   }
 
   function cancelAll(reason: BackfillQueueCancelReason) {
