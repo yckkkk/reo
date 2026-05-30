@@ -178,18 +178,10 @@ export function getBackfillTargetKey(task: BackfillQueueTask): string {
   return [task.kind, task.workspaceId, task.memoryId, task.segmentId].join(':');
 }
 
-export function createBackfillQueue({
-  automaticBatchLimit,
-  automaticBreakerThreshold,
-  onEvent,
-  runTask,
-}: CreateBackfillQueueInput): BackfillQueue;
-export function createBackfillQueue<TResponse>({
-  automaticBatchLimit,
-  automaticBreakerThreshold,
-  onEvent,
-  runTask,
-}: CreateBackfillQueueInput<TResponse>): BackfillQueue<TResponse>;
+export function createBackfillQueue(input: CreateBackfillQueueInput): BackfillQueue;
+export function createBackfillQueue<TResponse>(
+  input: CreateBackfillQueueInput<TResponse>
+): BackfillQueue<TResponse>;
 export function createBackfillQueue<TResponse = unknown>({
   automaticBatchLimit,
   automaticBreakerThreshold,
