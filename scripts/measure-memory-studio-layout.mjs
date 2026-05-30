@@ -1191,11 +1191,12 @@ async function main() {
 
     let after = await evaluate(client, measurementExpression(options.maxItems));
     if (options.interaction === 'click-scroll') {
+      const initialStripCanScroll = before.scroll.width > before.scroll.clientWidth;
       const scrollCenter = await evaluate(
         client,
         centerPointExpression('[data-slot="memory-studio-segment-strip-scroll"]')
       );
-      if (scrollCenter && before.scroll.width > before.scroll.clientWidth) {
+      if (scrollCenter && initialStripCanScroll) {
         await client.send('Input.dispatchMouseEvent', {
           type: 'mouseWheel',
           x: scrollCenter.x,
@@ -1208,10 +1209,7 @@ async function main() {
       }
 
       after = await evaluate(client, measurementExpression(options.maxItems));
-      if (
-        before.scroll.width > before.scroll.clientWidth &&
-        after.scroll.left === before.scroll.left
-      ) {
+      if (initialStripCanScroll && after.scroll.left === before.scroll.left) {
         await evaluate(
           client,
           `(() => {
