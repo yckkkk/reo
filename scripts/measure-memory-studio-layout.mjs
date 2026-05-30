@@ -644,6 +644,17 @@ function centerPointExpression(selector, index = 0) {
   })()`;
 }
 
+async function dispatchMouseClick(client, point) {
+  const event = {
+    x: point.x,
+    y: point.y,
+    button: 'left',
+    clickCount: 1,
+  };
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...event });
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...event });
+}
+
 async function probeEditorTextareaFocus(client) {
   const before = await evaluate(
     client,
@@ -672,20 +683,7 @@ async function probeEditorTextareaFocus(client) {
     return { focused: false, borderColor: null, actionButtonLabels: [], reason: before.reason };
   }
 
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x: before.x,
-    y: before.y,
-    button: 'left',
-    clickCount: 1,
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x: before.x,
-    y: before.y,
-    button: 'left',
-    clickCount: 1,
-  });
+  await dispatchMouseClick(client, before);
   await evaluate(client, `new Promise((resolve) => setTimeout(resolve, 220))`);
 
   return await evaluate(
@@ -1294,20 +1292,7 @@ async function main() {
         centerPointExpression('[data-slot="memory-studio-segment-item"]', 1)
       );
       if (secondItemCenter) {
-        await client.send('Input.dispatchMouseEvent', {
-          type: 'mousePressed',
-          x: secondItemCenter.x,
-          y: secondItemCenter.y,
-          button: 'left',
-          clickCount: 1,
-        });
-        await client.send('Input.dispatchMouseEvent', {
-          type: 'mouseReleased',
-          x: secondItemCenter.x,
-          y: secondItemCenter.y,
-          button: 'left',
-          clickCount: 1,
-        });
+        await dispatchMouseClick(client, secondItemCenter);
         clickedSecondItem = true;
         await evaluate(client, waitExpression());
       }
