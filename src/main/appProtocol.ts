@@ -19,6 +19,8 @@ type AttachmentRootResolution =
 
 type AttachmentRootResolver = (workspaceId: string) => AttachmentRootResolution;
 
+const denyAttachmentRoot: AttachmentRootResolver = () => ({ ok: false });
+
 export interface RegisterAppShellProtocolOptions {
   readonly resolveAttachmentRoot?: AttachmentRootResolver;
 }
@@ -120,7 +122,7 @@ export function registerAppShellProtocolWithOptions({
     }
     const resolved = await resolveAttachmentProtocolRequest(
       request.url,
-      resolveAttachmentRoot ?? (() => ({ ok: false }))
+      resolveAttachmentRoot ?? denyAttachmentRoot
     );
     if (!resolved.ok) {
       return new Response('Not found', { status: 404 });
