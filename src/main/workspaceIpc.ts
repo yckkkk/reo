@@ -1831,27 +1831,23 @@ function createWorkspaceId(): string {
 }
 
 function createSegmentId(): string {
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:TZ.]/g, '')
-    .slice(0, 14);
-  return `seg_${timestamp}_${randomUUID().slice(0, 8)}`;
+  return createTimestampedEntityId('seg');
 }
 
 function createSupplementId(): string {
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:TZ.]/g, '')
-    .slice(0, 14);
-  return `sup_${timestamp}_${randomUUID().slice(0, 8)}`;
+  return createTimestampedEntityId('sup');
 }
 
 function createMemoryId(): string {
+  return createTimestampedEntityId('mem');
+}
+
+function createTimestampedEntityId(prefix: 'mem' | 'seg' | 'sup'): string {
   const timestamp = new Date()
     .toISOString()
     .replace(/[-:TZ.]/g, '')
     .slice(0, 14);
-  return `mem_${timestamp}_${randomUUID().slice(0, 8)}`;
+  return `${prefix}_${timestamp}_${randomUUID().slice(0, 8)}`;
 }
 
 function nowIso(): string {
