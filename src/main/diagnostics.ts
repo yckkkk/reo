@@ -99,7 +99,12 @@ const SAFE_ERROR_NAMES = new Set([
   'WorkspacePathAborted',
   'ZodError',
 ]);
-const SAFE_MODE_VALUES = new Set(['development', 'production']);
+const SAFE_DIAGNOSTIC_MODE_VALUES = new Set([
+  'development',
+  'fill-missing',
+  'production',
+  'regenerate',
+]);
 const SAFE_PROCESS_TYPE_VALUES = new Set(['main']);
 const SAFE_RENDERER_GONE_REASONS = new Set([
   'abnormal-exit',
@@ -109,6 +114,13 @@ const SAFE_RENDERER_GONE_REASONS = new Set([
   'killed',
   'launch-failed',
   'oom',
+]);
+const SAFE_STRING_FIELD_VALUES = new Map<string, ReadonlySet<string>>([
+  ['channel', SAFE_CHANNELS],
+  ['dataRetention', SAFE_DATA_RETENTION_VALUES],
+  ['mode', SAFE_DIAGNOSTIC_MODE_VALUES],
+  ['processType', SAFE_PROCESS_TYPE_VALUES],
+  ['reason', SAFE_RENDERER_GONE_REASONS],
 ]);
 
 const DEFAULT_SINK: DiagnosticSink = {
@@ -159,12 +171,9 @@ export function sanitizeDiagnosticFields(
 }
 
 function sanitizeStringField(key: string, value: string): DiagnosticFieldValue {
-  if (key === 'channel') {
-    return SAFE_CHANNELS.has(value) ? value : `[string:${value.length}]`;
-  }
-
-  if (key === 'dataRetention') {
-    return SAFE_DATA_RETENTION_VALUES.has(value) ? value : `[string:${value.length}]`;
+  const safeValues = SAFE_STRING_FIELD_VALUES.get(key);
+  if (safeValues) {
+    return safeValues.has(value) ? value : `[string:${value.length}]`;
   }
 
   if (key === 'errorCode') {
@@ -179,18 +188,6 @@ function sanitizeStringField(key: string, value: string): DiagnosticFieldValue {
 
   if (key === 'status') {
     return sanitizeDiagnosticStatus(value);
-  }
-
-  if (key === 'mode') {
-    return SAFE_MODE_VALUES.has(value) ? value : `[string:${value.length}]`;
-  }
-
-  if (key === 'processType') {
-    return SAFE_PROCESS_TYPE_VALUES.has(value) ? value : `[string:${value.length}]`;
-  }
-
-  if (key === 'reason') {
-    return SAFE_RENDERER_GONE_REASONS.has(value) ? value : `[string:${value.length}]`;
   }
 
   return `[string:${value.length}]`;

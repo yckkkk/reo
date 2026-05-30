@@ -196,6 +196,7 @@ test('diagnostic field sanitizer bounds primitives and never expands objects', (
       channel: 'workspace:readWorkspaceSnapshot',
       count: 2,
       message: '/Users/yck/private/记忆空间/raw payload',
+      mode: 'regenerate',
       rawPayload: { nested: 'value' },
       values: ['a', 'b'],
     }),
@@ -203,6 +204,7 @@ test('diagnostic field sanitizer bounds primitives and never expands objects', (
       channel: 'workspace:readWorkspaceSnapshot',
       count: 2,
       message: '[string:35]',
+      mode: 'regenerate',
       rawPayload: '[redacted]',
       values: '[array:2]',
     }
