@@ -413,10 +413,9 @@ function measure(
   if (!title) {
     fail('Could not find the workspace title to the right of the sidebar toggle icon.');
   }
-  const rightIcon = clusters
-    .slice()
-    .reverse()
-    .find((cluster) => cluster.minX > title.maxX + 40 && cluster.count >= 8);
+  const rightIcon = clusters.findLast(
+    (cluster) => cluster.minX > title.maxX + 40 && cluster.count >= 8
+  );
   if (!rightIcon) {
     fail('Could not find the right MemoryRail toggle icon.');
   }
