@@ -96,18 +96,17 @@ export function filterMainTestFiles(testFiles, rawFilters) {
     return testFiles;
   }
   const allowed = new Set(filters.map(mainTestFileFilterToCompiledPath));
-  const matched = new Set();
+  const unmatched = new Set(allowed);
   const filtered = testFiles.filter((testFile) => {
     const normalized = normalizePathForMatch(testFile);
     if (!allowed.has(normalized)) {
       return false;
     }
-    matched.add(normalized);
+    unmatched.delete(normalized);
     return true;
   });
-  const unmatched = [...allowed].filter((compiledPath) => !matched.has(compiledPath));
-  if (unmatched.length > 0) {
-    throw new Error(`MAIN_TEST_FILES did not match compiled tests: ${unmatched.join(', ')}`);
+  if (unmatched.size > 0) {
+    throw new Error(`MAIN_TEST_FILES did not match compiled tests: ${[...unmatched].join(', ')}`);
   }
   return filtered;
 }
