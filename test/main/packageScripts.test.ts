@@ -456,19 +456,23 @@ test('vitest assigns each renderer test file to exactly one project', async () =
 });
 
 test('measurement scripts reject missing option values before treating flags as paths', () => {
-  const memoryStudio = spawnSync(
-    process.execPath,
-    ['scripts/measure-memory-studio-layout.mjs', '--metrics', '--json'],
-    { encoding: 'utf8' }
-  );
-  assert.notEqual(memoryStudio.status, 0);
-  assert.match(`${memoryStudio.stderr}${memoryStudio.stdout}`, /--metrics requires a value/);
+  const missingValueCases = [
+    {
+      args: ['scripts/measure-memory-studio-layout.mjs', '--metrics', '--json'],
+      expected: /--metrics requires a value/,
+      label: 'memory studio layout metrics path',
+    },
+    {
+      args: ['scripts/measure-titlebar-alignment.mjs', '--image', '--json'],
+      expected: /--image requires a value/,
+      label: 'titlebar image path',
+    },
+  ];
 
-  const titlebar = spawnSync(
-    process.execPath,
-    ['scripts/measure-titlebar-alignment.mjs', '--image', '--json'],
-    { encoding: 'utf8' }
-  );
-  assert.notEqual(titlebar.status, 0);
-  assert.match(`${titlebar.stderr}${titlebar.stdout}`, /--image requires a value/);
+  for (const { args, expected, label } of missingValueCases) {
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+
+    assert.notEqual(result.status, 0, label);
+    assert.match(`${result.stderr}${result.stdout}`, expected, label);
+  }
 });
