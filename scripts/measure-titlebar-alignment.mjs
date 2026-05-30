@@ -284,12 +284,12 @@ function largestComponent(components, label) {
   return component;
 }
 
-function unionComponents(components) {
-  const count = components.reduce((total, component) => total + component.count, 0);
-  const minX = Math.min(...components.map((component) => component.minX));
-  const maxX = Math.max(...components.map((component) => component.maxX));
-  const minY = Math.min(...components.map((component) => component.minY));
-  const maxY = Math.max(...components.map((component) => component.maxY));
+function mergeComponents(left, right) {
+  const count = left.count + right.count;
+  const minX = Math.min(left.minX, right.minX);
+  const maxX = Math.max(left.maxX, right.maxX);
+  const minY = Math.min(left.minY, right.minY);
+  const maxY = Math.max(left.maxY, right.maxY);
 
   return {
     count,
@@ -365,7 +365,7 @@ function foregroundClusters({ pixels, width, trafficCenterY, trafficRight }) {
   for (const component of components) {
     const previous = clusters.at(-1);
     if (previous && component.minX <= previous.maxX + 12) {
-      clusters[clusters.length - 1] = unionComponents([previous, component]);
+      clusters[clusters.length - 1] = mergeComponents(previous, component);
     } else {
       clusters.push(component);
     }
