@@ -6,6 +6,7 @@ import {
   readdirSync,
   rmdirSync,
   rmSync,
+  unlinkSync,
   type Dirent,
 } from 'node:fs';
 import {
@@ -127,6 +128,24 @@ export function removeWorkspaceFileInDirectory({
 }: WorkspaceDirectoryFileOperation): void {
   runInWorkspaceDirectorySync({ directory, directoryIdentity }, () => {
     rmSync(fileName, { force: true });
+  });
+}
+
+export function removeWorkspaceFileIfPresentInDirectory({
+  directory,
+  directoryIdentity,
+  fileName,
+}: WorkspaceDirectoryFileOperation): boolean {
+  return runInWorkspaceDirectorySync({ directory, directoryIdentity }, () => {
+    try {
+      unlinkSync(fileName);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
   });
 }
 

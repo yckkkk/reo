@@ -21,6 +21,7 @@ import {
   readWorkspaceDirectoryEntriesInDirectory,
   removeEmptyWorkspaceDirectoryInDirectory,
   removeWorkspaceDirectoryTreeInDirectory,
+  removeWorkspaceFileIfPresentInDirectory,
   removeWorkspaceFileInDirectory,
   runInWorkspaceDirectorySync,
 } from '../../src/main/workspaceDirectoryTransactions.js';
@@ -149,6 +150,35 @@ test('workspace directory transaction refuses file removal after parent identity
   } finally {
     await rm(root, { force: true, recursive: true });
     await rm(outsideDirectory, { force: true, recursive: true });
+  }
+});
+
+test('workspace directory transaction reports whether an optional file was removed', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-workspace-directory-remove-optional-'));
+
+  try {
+    const directoryIdentity = await readSafeDirectoryIdentity(root);
+    await writeFile(path.join(root, 'present.txt'), 'inside');
+
+    assert.equal(
+      removeWorkspaceFileIfPresentInDirectory({
+        directory: root,
+        directoryIdentity,
+        fileName: 'present.txt',
+      }),
+      true
+    );
+    assert.equal(
+      removeWorkspaceFileIfPresentInDirectory({
+        directory: root,
+        directoryIdentity,
+        fileName: 'missing.txt',
+      }),
+      false
+    );
+    assert.deepEqual(await readdir(root), []);
+  } finally {
+    await rm(root, { force: true, recursive: true });
   }
 });
 

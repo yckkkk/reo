@@ -1,18 +1,11 @@
-import {
-  closeSync,
-  constants,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-} from 'node:fs';
+import { closeSync, constants, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { writeWorkspaceFileAtomic, writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
 import { readSafeDirectoryIdentitySync, type DirectoryIdentity } from './directoryIdentity.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
   openExistingWorkspaceFileInDirectory,
+  removeWorkspaceFileIfPresentInDirectory,
   runInWorkspaceDirectorySync,
 } from './workspaceDirectoryTransactions.js';
 import type { WorkspaceReviewSummary } from '../workspace-contract/workspace-contract.js';
@@ -290,23 +283,27 @@ function clearNeedsReviewReport(rootPath: string, assertUsable?: AssertWorkspace
   if (!reviewDirectory) {
     return;
   }
+  assertUsable?.();
+  const removedJsonReport = removeWorkspaceFileIfPresentInDirectory({
+    directory: reviewDirectory.directory,
+    directoryIdentity: reviewDirectory.identity,
+    fileName: REVIEW_JSON_FILE,
+  });
+  const removedMarkdownReport = removeWorkspaceFileIfPresentInDirectory({
+    directory: reviewDirectory.directory,
+    directoryIdentity: reviewDirectory.identity,
+    fileName: REVIEW_MARKDOWN_FILE,
+  });
+  if (!removedJsonReport && !removedMarkdownReport) {
+    return;
+  }
   runInWorkspaceDirectorySync(
     {
       directory: reviewDirectory.directory,
       directoryIdentity: reviewDirectory.identity,
       validateDirectoryPath: true,
     },
-    () => {
-      assertUsable?.();
-      const hasJsonReport = existsSync(REVIEW_JSON_FILE);
-      const hasMarkdownReport = existsSync(REVIEW_MARKDOWN_FILE);
-      if (!hasJsonReport && !hasMarkdownReport) {
-        return;
-      }
-      rmSync(REVIEW_JSON_FILE, { force: true });
-      rmSync(REVIEW_MARKDOWN_FILE, { force: true });
-      fsyncCurrentWorkspaceDirectoryBestEffort();
-    }
+    () => fsyncCurrentWorkspaceDirectoryBestEffort()
   );
 }
 
