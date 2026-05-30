@@ -48,6 +48,7 @@ import {
   parseWorkspaceMarkdownObjectCandidate,
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
+  type ParsedWorkspaceMarkdownObjectCandidate,
 } from './workspaceMarkdownObjects.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
@@ -1239,6 +1240,126 @@ function pushReviewEntry(
   reviewEntries?.push(entry);
 }
 
+type MarkdownCandidateObjectType = 'segment' | 'supplement';
+type MarkdownCandidateFileName = 'segment.md' | 'supplement.md';
+type MarkdownCandidateReviewCategory = 'markdown-segment' | 'markdown-supplement';
+
+type MarkdownCandidateDescriptor = {
+  readonly candidate: ParsedWorkspaceMarkdownObjectCandidate;
+  readonly candidateDirectory: string;
+  readonly candidateIdentity: DirectoryIdentity;
+  readonly directoryName: string;
+};
+
+async function collectMarkdownCandidateDescriptorsForReview({
+  ambiguousFileName,
+  category,
+  entries,
+  idHintFromDirectoryName,
+  markdownFileName,
+  objectType,
+  parentDirectory,
+  rootPath,
+  unsafeDirectoryMessage,
+}: {
+  readonly ambiguousFileName: MarkdownCandidateFileName;
+  readonly category: MarkdownCandidateReviewCategory;
+  readonly entries: readonly Dirent[];
+  readonly idHintFromDirectoryName: (directoryName: string) => string | null;
+  readonly markdownFileName: MarkdownCandidateFileName;
+  readonly objectType: MarkdownCandidateObjectType;
+  readonly parentDirectory: string;
+  readonly rootPath: string;
+  readonly unsafeDirectoryMessage: string;
+}): Promise<{
+  readonly ambiguousCandidateCount: number;
+  readonly candidates: readonly MarkdownCandidateDescriptor[];
+  readonly duplicateIds: ReadonlySet<string>;
+  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
+}> {
+  const candidates: MarkdownCandidateDescriptor[] = [];
+  const idPaths = new Map<string, string[]>();
+  let ambiguousCandidateCount = 0;
+  const reviewEntries: WorkspaceReviewEntryInput[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    try {
+      const candidateDirectory = await resolveSafeWorkspaceChild(
+        rootPath,
+        path.join(parentDirectory, entry.name)
+      );
+      const candidateIdentity = await readDirectoryIdentity(
+        candidateDirectory,
+        unsafeDirectoryMessage
+      );
+      if (await exists(path.join(candidateDirectory, ambiguousFileName))) {
+        ambiguousCandidateCount += 1;
+        reviewEntries.push({
+          category,
+          objectType,
+          paths: [
+            path.join(candidateDirectory, 'segment.md'),
+            path.join(candidateDirectory, 'supplement.md'),
+          ],
+          reason: 'ambiguous-candidate',
+        });
+        continue;
+      }
+      const candidate = parseWorkspaceMarkdownObjectCandidate({
+        objectType,
+        markdown: readWorkspaceTextFileInKnownDirectory(
+          candidateDirectory,
+          candidateIdentity,
+          markdownFileName
+        ),
+      });
+      const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
+      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
+        continue;
+      }
+      candidates.push({
+        candidate,
+        candidateDirectory,
+        candidateIdentity,
+        directoryName: entry.name,
+      });
+      const candidateId =
+        ('id' in candidate.data ? candidate.data.id : undefined) ??
+        idHintFromDirectoryName(entry.name);
+      if (candidateId) {
+        const paths = idPaths.get(candidateId) ?? [];
+        paths.push(path.join(candidateDirectory, markdownFileName));
+        idPaths.set(candidateId, paths);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  const duplicateIds = new Set<string>();
+  for (const [id, paths] of idPaths) {
+    if (paths.length > 1) {
+      duplicateIds.add(id);
+      reviewEntries.push({
+        category,
+        objectType,
+        paths,
+        reason: 'duplicate-id',
+      });
+    }
+  }
+
+  return {
+    ambiguousCandidateCount,
+    candidates,
+    duplicateIds,
+    reviewEntries,
+  };
+}
+
 function pushTiptapSidecarReviewEntry({
   directory,
   kind,
@@ -1268,6 +1389,7 @@ function pushTiptapSidecarReviewEntry({
 
 async function reconcileNoteSegmentCandidate({
   blockedSegmentIds,
+  candidate,
   candidateDirectory,
   candidateIdentity,
   directoryName,
@@ -1277,6 +1399,7 @@ async function reconcileNoteSegmentCandidate({
   workspaceId,
 }: {
   readonly blockedSegmentIds: ReadonlySet<string>;
+  readonly candidate: ParsedWorkspaceMarkdownObjectCandidate;
   readonly candidateDirectory: string;
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
@@ -1288,15 +1411,6 @@ async function reconcileNoteSegmentCandidate({
   if (await exists(path.join(candidateDirectory, 'supplement.md'))) {
     return;
   }
-  const markdown = readWorkspaceTextFileInKnownDirectory(
-    candidateDirectory,
-    candidateIdentity,
-    'segment.md'
-  );
-  const candidate = parseWorkspaceMarkdownObjectCandidate({
-    objectType: 'segment',
-    markdown,
-  });
   const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
   if (candidateKind === 'audio') {
     const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
@@ -1490,92 +1604,6 @@ async function reconcileNoteSegmentCandidate({
   }
 }
 
-async function classifyNoteSegmentCandidatesForReview({
-  entries,
-  rootPath,
-  segmentsDirectory,
-}: {
-  readonly entries: readonly Dirent[];
-  readonly rootPath: string;
-  readonly segmentsDirectory: string;
-}): Promise<{
-  readonly ambiguousCandidateCount: number;
-  readonly duplicateSegmentIds: ReadonlySet<string>;
-  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
-}> {
-  const idPaths = new Map<string, string[]>();
-  let ambiguousCandidateCount = 0;
-  const reviewEntries: WorkspaceReviewEntryInput[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    try {
-      const candidateDirectory = await resolveSafeWorkspaceChild(
-        rootPath,
-        path.join(segmentsDirectory, entry.name)
-      );
-      await assertSafeExistingDirectory(candidateDirectory, 'Segment directory is not safe');
-      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
-      if (await exists(path.join(candidateDirectory, 'supplement.md'))) {
-        ambiguousCandidateCount += 1;
-        reviewEntries.push({
-          category: 'markdown-segment',
-          objectType: 'segment',
-          paths: [
-            path.join(candidateDirectory, 'segment.md'),
-            path.join(candidateDirectory, 'supplement.md'),
-          ],
-          reason: 'ambiguous-candidate',
-        });
-        continue;
-      }
-      const candidate = parseWorkspaceMarkdownObjectCandidate({
-        objectType: 'segment',
-        markdown: readWorkspaceTextFileInKnownDirectory(
-          candidateDirectory,
-          candidateIdentity,
-          'segment.md'
-        ),
-      });
-      const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
-      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
-        continue;
-      }
-      const candidateId =
-        ('id' in candidate.data ? candidate.data.id : undefined) ??
-        directorySegmentIdHint(entry.name);
-      if (candidateId) {
-        const paths = idPaths.get(candidateId) ?? [];
-        paths.push(path.join(candidateDirectory, 'segment.md'));
-        idPaths.set(candidateId, paths);
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  for (const paths of idPaths.values()) {
-    if (paths.length > 1) {
-      reviewEntries.push({
-        category: 'markdown-segment',
-        objectType: 'segment',
-        paths,
-        reason: 'duplicate-id',
-      });
-    }
-  }
-
-  return {
-    ambiguousCandidateCount,
-    duplicateSegmentIds: new Set(
-      [...idPaths.entries()].filter(([, paths]) => paths.length > 1).map(([id]) => id)
-    ),
-    reviewEntries,
-  };
-}
-
 async function reconcileNoteSegmentsInMemoryDirectory({
   memoryDirectoryPath,
   memoryId,
@@ -1593,18 +1621,24 @@ async function reconcileNoteSegmentsInMemoryDirectory({
     path.join(memoryDirectoryPath, 'segments')
   );
   const entries = await readExistingDirectoryEntries(segmentsDirectory);
-  const review = await classifyNoteSegmentCandidatesForReview({
+  const review = await collectMarkdownCandidateDescriptorsForReview({
+    ambiguousFileName: 'supplement.md',
+    category: 'markdown-segment',
     entries,
+    idHintFromDirectoryName: directorySegmentIdHint,
+    markdownFileName: 'segment.md',
+    objectType: 'segment',
+    parentDirectory: segmentsDirectory,
     rootPath,
-    segmentsDirectory,
+    unsafeDirectoryMessage: 'Segment directory is not safe',
   });
-  if (review.duplicateSegmentIds.size > 0 || review.ambiguousCandidateCount > 0) {
+  if (review.duplicateIds.size > 0 || review.ambiguousCandidateCount > 0) {
     recordDiagnosticEvent({
       area: 'workspace-files',
       event: 'markdown.segment.needs-review',
       fields: {
         ambiguousCandidateCount: review.ambiguousCandidateCount,
-        duplicateIdCount: review.duplicateSegmentIds.size,
+        duplicateIdCount: review.duplicateIds.size,
       },
       level: 'warn',
     });
@@ -1612,22 +1646,14 @@ async function reconcileNoteSegmentsInMemoryDirectory({
   for (const entry of review.reviewEntries) {
     pushReviewEntry(reviewEntries, entry);
   }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
+  for (const candidateDescriptor of review.candidates) {
     try {
-      const candidateDirectory = await resolveSafeWorkspaceChild(
-        rootPath,
-        path.join(segmentsDirectory, entry.name)
-      );
-      await assertSafeExistingDirectory(candidateDirectory, 'Segment directory is not safe');
-      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
       await reconcileNoteSegmentCandidate({
-        blockedSegmentIds: review.duplicateSegmentIds,
-        candidateDirectory,
-        candidateIdentity,
-        directoryName: entry.name,
+        blockedSegmentIds: review.duplicateIds,
+        candidate: candidateDescriptor.candidate,
+        candidateDirectory: candidateDescriptor.candidateDirectory,
+        candidateIdentity: candidateDescriptor.candidateIdentity,
+        directoryName: candidateDescriptor.directoryName,
         memoryId,
         ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
@@ -1641,6 +1667,7 @@ async function reconcileNoteSegmentsInMemoryDirectory({
 
 async function reconcileNoteSupplementCandidate({
   blockedSupplementIds,
+  candidate,
   candidateDirectory,
   candidateIdentity,
   directoryName,
@@ -1651,6 +1678,7 @@ async function reconcileNoteSupplementCandidate({
   workspaceId,
 }: {
   readonly blockedSupplementIds: ReadonlySet<string>;
+  readonly candidate: ParsedWorkspaceMarkdownObjectCandidate;
   readonly candidateDirectory: string;
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
@@ -1663,15 +1691,6 @@ async function reconcileNoteSupplementCandidate({
   if (await exists(path.join(candidateDirectory, 'segment.md'))) {
     return;
   }
-  const markdown = readWorkspaceTextFileInKnownDirectory(
-    candidateDirectory,
-    candidateIdentity,
-    'supplement.md'
-  );
-  const candidate = parseWorkspaceMarkdownObjectCandidate({
-    objectType: 'supplement',
-    markdown,
-  });
   const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
   if (candidateKind === 'audio') {
     const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
@@ -1874,95 +1893,6 @@ async function reconcileNoteSupplementCandidate({
   }
 }
 
-async function classifyNoteSupplementCandidatesForReview({
-  entries,
-  rootPath,
-  supplementsDirectory,
-}: {
-  readonly entries: readonly Dirent[];
-  readonly rootPath: string;
-  readonly supplementsDirectory: string;
-}): Promise<{
-  readonly ambiguousCandidateCount: number;
-  readonly duplicateSupplementIds: ReadonlySet<string>;
-  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
-}> {
-  const idPaths = new Map<string, string[]>();
-  let ambiguousCandidateCount = 0;
-  const reviewEntries: WorkspaceReviewEntryInput[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    try {
-      const candidateDirectory = await resolveSafeWorkspaceChild(
-        rootPath,
-        path.join(supplementsDirectory, entry.name)
-      );
-      await assertSafeExistingDirectory(
-        candidateDirectory,
-        'Segment supplement directory is not safe'
-      );
-      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
-      if (await exists(path.join(candidateDirectory, 'segment.md'))) {
-        ambiguousCandidateCount += 1;
-        reviewEntries.push({
-          category: 'markdown-supplement',
-          objectType: 'supplement',
-          paths: [
-            path.join(candidateDirectory, 'segment.md'),
-            path.join(candidateDirectory, 'supplement.md'),
-          ],
-          reason: 'ambiguous-candidate',
-        });
-        continue;
-      }
-      const candidate = parseWorkspaceMarkdownObjectCandidate({
-        objectType: 'supplement',
-        markdown: readWorkspaceTextFileInKnownDirectory(
-          candidateDirectory,
-          candidateIdentity,
-          'supplement.md'
-        ),
-      });
-      const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
-      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
-        continue;
-      }
-      const candidateId =
-        ('id' in candidate.data ? candidate.data.id : undefined) ??
-        directorySupplementIdHint(entry.name);
-      if (candidateId) {
-        const paths = idPaths.get(candidateId) ?? [];
-        paths.push(path.join(candidateDirectory, 'supplement.md'));
-        idPaths.set(candidateId, paths);
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  for (const paths of idPaths.values()) {
-    if (paths.length > 1) {
-      reviewEntries.push({
-        category: 'markdown-supplement',
-        objectType: 'supplement',
-        paths,
-        reason: 'duplicate-id',
-      });
-    }
-  }
-
-  return {
-    ambiguousCandidateCount,
-    duplicateSupplementIds: new Set(
-      [...idPaths.entries()].filter(([, paths]) => paths.length > 1).map(([id]) => id)
-    ),
-    reviewEntries,
-  };
-}
-
 async function reconcileNoteSupplementsInSegmentDirectory({
   memoryId,
   recordingDirectory,
@@ -1983,18 +1913,24 @@ async function reconcileNoteSupplementsInSegmentDirectory({
     path.join(recordingDirectory, 'supplements')
   );
   const entries = await readExistingDirectoryEntries(supplementsDirectory);
-  const review = await classifyNoteSupplementCandidatesForReview({
+  const review = await collectMarkdownCandidateDescriptorsForReview({
+    ambiguousFileName: 'segment.md',
+    category: 'markdown-supplement',
     entries,
+    idHintFromDirectoryName: directorySupplementIdHint,
+    markdownFileName: 'supplement.md',
+    objectType: 'supplement',
+    parentDirectory: supplementsDirectory,
     rootPath,
-    supplementsDirectory,
+    unsafeDirectoryMessage: 'Segment supplement directory is not safe',
   });
-  if (review.duplicateSupplementIds.size > 0 || review.ambiguousCandidateCount > 0) {
+  if (review.duplicateIds.size > 0 || review.ambiguousCandidateCount > 0) {
     recordDiagnosticEvent({
       area: 'workspace-files',
       event: 'markdown.supplement.needs-review',
       fields: {
         ambiguousCandidateCount: review.ambiguousCandidateCount,
-        duplicateIdCount: review.duplicateSupplementIds.size,
+        duplicateIdCount: review.duplicateIds.size,
       },
       level: 'warn',
     });
@@ -2002,25 +1938,14 @@ async function reconcileNoteSupplementsInSegmentDirectory({
   for (const entry of review.reviewEntries) {
     pushReviewEntry(reviewEntries, entry);
   }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
+  for (const candidateDescriptor of review.candidates) {
     try {
-      const candidateDirectory = await resolveSafeWorkspaceChild(
-        rootPath,
-        path.join(supplementsDirectory, entry.name)
-      );
-      await assertSafeExistingDirectory(
-        candidateDirectory,
-        'Segment supplement directory is not safe'
-      );
-      const candidateIdentity = await readDirectoryIdentity(candidateDirectory);
       await reconcileNoteSupplementCandidate({
-        blockedSupplementIds: review.duplicateSupplementIds,
-        candidateDirectory,
-        candidateIdentity,
-        directoryName: entry.name,
+        blockedSupplementIds: review.duplicateIds,
+        candidate: candidateDescriptor.candidate,
+        candidateDirectory: candidateDescriptor.candidateDirectory,
+        candidateIdentity: candidateDescriptor.candidateIdentity,
+        directoryName: candidateDescriptor.directoryName,
         memoryId,
         ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,

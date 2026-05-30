@@ -26,6 +26,8 @@ const scannerArgs = [
   '--exclude',
   '.claude',
   '--exclude',
+  '.reference',
+  '--exclude',
   'out',
   '--exclude',
   'archive',

@@ -84,7 +84,7 @@ npm run verify:strict
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config、Vitest config 和脚本，并跳过非产品输入目录。
 - `lint:strict`：运行 `eslint . --max-warnings=0`，同一 flat config 下把 warning 作为失败。
 - `format:check`：运行 quick active-scope Prettier check，覆盖 `AGENTS.md`、`.claude/CLAUDE.md`、`README.md`、配置文件、scripts、src、test、`docs/README.md`、`docs/current`、`docs/decisions`、`docs/initiatives` 和 active `docs/specs`，不扫描 `docs/archive`；必需路径使用严格 Prettier check，只有 optional active `docs/specs` 路径使用 unmatched pattern 容错，允许没有 active spec 时 `docs/specs` 目录不存在；全量格式检查入口是 `format:check:all`。
-- `complexity:scan`：通过 repo-local `scripts/run-complexity-scan.mjs` 调用 agent-local `$complexity-optimizer` scanner；默认路径是 `~/.codex/skills/complexity-optimizer/scripts/analyze_complexity.py`，也可以用 `COMPLEXITY_OPTIMIZER_SCANNER` 指向其它 scanner。scanner 缺失时命令必须给出可行动错误；scanner 返回非 0 退出码时 wrapper 必须用同一退出码失败。wrapper 默认排除 `.tmp`、`.agents`、`.claude`、`out` 和归档目录，避免 generated output、技能示例、归档证据和构建产物污染当前复杂度审查；wrapper 参数行为和失败传播由 main test 的 fake scanner 覆盖。
+- `complexity:scan`：通过 repo-local `scripts/run-complexity-scan.mjs` 调用 agent-local `$complexity-optimizer` scanner；默认路径是 `~/.codex/skills/complexity-optimizer/scripts/analyze_complexity.py`，也可以用 `COMPLEXITY_OPTIMIZER_SCANNER` 指向其它 scanner。scanner 缺失时命令必须给出可行动错误；scanner 返回非 0 退出码时 wrapper 必须用同一退出码失败。wrapper 默认排除 `.tmp`、`.agents`、`.claude`、`.reference`、`out` 和归档目录，避免 generated output、外部参考资料、技能示例、归档证据和构建产物污染当前复杂度审查；wrapper 参数行为和失败传播由 main test 的 fake scanner 覆盖。
 
 当前本地视觉测量：
 

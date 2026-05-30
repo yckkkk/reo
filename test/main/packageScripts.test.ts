@@ -140,6 +140,7 @@ test('complexity scanner script uses the Reo scoped wrapper and excludes generat
   assert.match(script, /'\.tmp'/);
   assert.match(script, /'\.agents'/);
   assert.match(script, /'\.claude'/);
+  assert.match(script, /'\.reference'/);
   assert.match(script, /'out'/);
   assert.match(script, /'archive'/);
 });
@@ -183,6 +184,8 @@ test('complexity scanner wrapper passes scoped excludes to the configured scanne
       '.agents',
       '--exclude',
       '.claude',
+      '--exclude',
+      '.reference',
       '--exclude',
       'out',
       '--exclude',
