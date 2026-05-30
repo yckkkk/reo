@@ -1079,8 +1079,8 @@ async function selectBackfillTargetsFromSnapshot({
   readonly workspaceId: string;
 }): Promise<readonly BackfillEligibleTarget[]> {
   const selector = createBackfillTargetSelector(targetLimit);
-  const canStopEarly = backfillMemorySummariesAreSortedForScan(snapshot.memories);
-  for (const memory of orderedBackfillMemorySummaries(snapshot.memories)) {
+  const { candidates, canStopEarly } = collectBackfillMemorySummaryCandidates(snapshot.memories);
+  for (const memory of candidates) {
     if (isCurrent?.() === false) {
       return [];
     }
@@ -1159,20 +1159,22 @@ function backfillMemorySummaryOrder(
   return right.createdAt.localeCompare(left.createdAt);
 }
 
-function backfillMemorySummariesAreSortedForScan(
-  memories: readonly WorkspaceMemorySummary[]
-): boolean {
+function collectBackfillMemorySummaryCandidates(memories: readonly WorkspaceMemorySummary[]) {
+  const candidates: WorkspaceMemorySummary[] = [];
+  let canStopEarly = true;
   let previous: WorkspaceMemorySummary | null = null;
+
   for (const memory of memories) {
     if (!isBackfillMemorySummaryCandidate(memory)) {
       continue;
     }
     if (previous && backfillMemorySummaryOrder(previous, memory) > 0) {
-      return false;
+      canStopEarly = false;
     }
+    candidates.push(memory);
     previous = memory;
   }
-  return true;
+  return { candidates, canStopEarly };
 }
 
 export class BackfillScanError extends Error {
@@ -1182,15 +1184,5 @@ export class BackfillScanError extends Error {
     super('Backfill scan failed');
     this.name = 'BackfillScanError';
     this.envelope = envelope;
-  }
-}
-
-function* orderedBackfillMemorySummaries(
-  memories: readonly WorkspaceMemorySummary[]
-): Generator<WorkspaceMemorySummary> {
-  for (const memory of memories) {
-    if (isBackfillMemorySummaryCandidate(memory)) {
-      yield memory;
-    }
   }
 }
