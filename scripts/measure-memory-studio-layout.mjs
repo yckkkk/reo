@@ -811,55 +811,17 @@ function assertMetrics(metrics, options) {
     );
   }
 
-  assertRectInsideViewport(
-    failures,
-    'AppShell root',
-    metrics.appShell.rootRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'AppShell panel',
-    metrics.appShell.panelRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'AppShell panel content',
-    metrics.appShell.panelContentRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'WorkspaceFrame',
-    metrics.workspace.frameRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Workspace stage shell',
-    metrics.workspace.stageShellRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Workspace stage content',
-    metrics.workspace.stageContentRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Workspace expression FAB track',
-    metrics.workspace.fabTrackRect,
-    metrics.viewport,
-    tolerance
-  );
+  for (const [label, rect] of [
+    ['AppShell root', metrics.appShell.rootRect],
+    ['AppShell panel', metrics.appShell.panelRect],
+    ['AppShell panel content', metrics.appShell.panelContentRect],
+    ['WorkspaceFrame', metrics.workspace.frameRect],
+    ['Workspace stage shell', metrics.workspace.stageShellRect],
+    ['Workspace stage content', metrics.workspace.stageContentRect],
+    ['Workspace expression FAB track', metrics.workspace.fabTrackRect],
+  ]) {
+    assertRectInsideViewport(failures, label, rect, metrics.viewport, tolerance);
+  }
   if (
     metrics.workspace.stageContentLeftGutter === null ||
     metrics.workspace.stageContentRightGutter === null ||
@@ -908,55 +870,17 @@ function assertMetrics(metrics, options) {
     );
   }
 
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio region',
-    metrics.studioRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio content panel',
-    metrics.contentPanelRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio content tab rail row',
-    metrics.editor.contentTabRailRowRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Memory Studio inline markdown editor',
-    metrics.editor.inlineRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Lightweight markdown editor toolbar',
-    metrics.editor.toolbarRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Lightweight markdown editor body',
-    metrics.editor.bodyRect,
-    metrics.viewport,
-    tolerance
-  );
-  assertRectInsideViewport(
-    failures,
-    'Lightweight markdown editor textarea',
-    metrics.editor.textareaRect,
-    metrics.viewport,
-    tolerance
-  );
+  for (const [label, rect] of [
+    ['Memory Studio region', metrics.studioRect],
+    ['Memory Studio content panel', metrics.contentPanelRect],
+    ['Memory Studio content tab rail row', metrics.editor.contentTabRailRowRect],
+    ['Memory Studio inline markdown editor', metrics.editor.inlineRect],
+    ['Lightweight markdown editor toolbar', metrics.editor.toolbarRect],
+    ['Lightweight markdown editor body', metrics.editor.bodyRect],
+    ['Lightweight markdown editor textarea', metrics.editor.textareaRect],
+  ]) {
+    assertRectInsideViewport(failures, label, rect, metrics.viewport, tolerance);
+  }
   if (metrics.editor.activeContentTabSupplementType === 'audio') {
     assertRectInsideViewport(
       failures,
