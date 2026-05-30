@@ -960,52 +960,20 @@ function assertMetrics(metrics, options) {
   ]) {
     assertApprox(failures, `Editor ${label} border width`, width, 1, tolerance);
   }
-  assertApprox(failures, 'Editor border radius', metrics.editor.surfaceBorderRadius, 12, tolerance);
-  assertApprox(failures, 'Editor toolbar height', metrics.editor.toolbarHeight, 44, tolerance);
-  assertApprox(
-    failures,
-    'Editor toolbar left padding',
-    metrics.editor.toolbarPaddingLeft,
-    12,
-    tolerance
-  );
-  assertApprox(
-    failures,
-    'Editor toolbar right padding',
-    metrics.editor.toolbarPaddingRight,
-    12,
-    tolerance
-  );
-  assertApprox(failures, 'Editor body left padding', metrics.editor.bodyPaddingLeft, 20, tolerance);
-  assertApprox(
-    failures,
-    'Editor body right padding',
-    metrics.editor.bodyPaddingRight,
-    20,
-    tolerance
-  );
-  assertApprox(failures, 'Editor body top padding', metrics.editor.bodyPaddingTop, 16, tolerance);
-  assertApprox(
-    failures,
-    'Editor body bottom padding',
-    metrics.editor.bodyPaddingBottom,
-    16,
-    tolerance
-  );
-  assertApprox(
-    failures,
-    'Editor textarea font size',
-    metrics.editor.textareaFontSize,
-    14,
-    tolerance
-  );
-  assertApprox(
-    failures,
-    'Editor textarea line height',
-    metrics.editor.textareaLineHeight,
-    23.1,
-    tolerance
-  );
+  for (const [label, actual, expected] of [
+    ['Editor border radius', metrics.editor.surfaceBorderRadius, 12],
+    ['Editor toolbar height', metrics.editor.toolbarHeight, 44],
+    ['Editor toolbar left padding', metrics.editor.toolbarPaddingLeft, 12],
+    ['Editor toolbar right padding', metrics.editor.toolbarPaddingRight, 12],
+    ['Editor body left padding', metrics.editor.bodyPaddingLeft, 20],
+    ['Editor body right padding', metrics.editor.bodyPaddingRight, 20],
+    ['Editor body top padding', metrics.editor.bodyPaddingTop, 16],
+    ['Editor body bottom padding', metrics.editor.bodyPaddingBottom, 16],
+    ['Editor textarea font size', metrics.editor.textareaFontSize, 14],
+    ['Editor textarea line height', metrics.editor.textareaLineHeight, 23.1],
+  ]) {
+    assertApprox(failures, label, actual, expected, tolerance);
+  }
   if (!metrics.editor.textareaFontFamily?.toLowerCase().includes('mono')) {
     failures.push(
       `Expected editor textarea to use mono font family; received ${metrics.editor.textareaFontFamily ?? 'missing'}.`
