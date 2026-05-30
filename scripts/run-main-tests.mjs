@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { rmSync, readdirSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const outDir = '.tmp/test-main';
@@ -68,6 +68,10 @@ function normalizePathForMatch(filePath) {
   return normalize(filePath).split('\\').join('/');
 }
 
+function toCompiledMainTestPath(filePath) {
+  return normalizePathForMatch(filePath).replace(/\.ts$/, '.js');
+}
+
 export function parseMainTestFiles(raw) {
   if (!raw) {
     return [];
@@ -82,12 +86,12 @@ export function parseMainTestFiles(raw) {
 export function mainTestFileFilterToCompiledPath(filePath) {
   const normalized = normalizePathForMatch(filePath).replace(/^\.\//, '');
   if (normalized.startsWith(`${outDir}/`)) {
-    return extname(normalized) === '.ts' ? normalized.replace(/\.ts$/, '.js') : normalized;
+    return toCompiledMainTestPath(normalized);
   }
   if (normalized.startsWith('test/main/')) {
-    return join(outDir, normalized).replace(/\.ts$/, '.js').split('\\').join('/');
+    return toCompiledMainTestPath(join(outDir, normalized));
   }
-  return join(testDir, normalized).replace(/\.ts$/, '.js').split('\\').join('/');
+  return toCompiledMainTestPath(join(testDir, normalized));
 }
 
 export function filterMainTestFiles(testFiles, rawFilters) {

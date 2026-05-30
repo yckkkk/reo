@@ -309,6 +309,14 @@ test('main test runner batch helpers preserve node args and reject invalid batch
     runner.mainTestFileFilterToCompiledPath('test/main/packageScripts.test.ts'),
     '.tmp/test-main/test/main/packageScripts.test.js'
   );
+  assert.equal(
+    runner.mainTestFileFilterToCompiledPath('.tmp/test-main/test/main/packageScripts.test.ts'),
+    '.tmp/test-main/test/main/packageScripts.test.js'
+  );
+  assert.equal(
+    runner.mainTestFileFilterToCompiledPath('packageScripts.test.ts'),
+    '.tmp/test-main/test/main/packageScripts.test.js'
+  );
   assert.deepEqual(
     runner.filterMainTestFiles(
       [
