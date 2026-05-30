@@ -375,21 +375,20 @@ function measurementExpression(maxItems) {
       ? inlineEditor.querySelector('[data-slot="lightweight-markdown-editor-body"]')
       : null;
     const editorTextarea = inlineEditor ? inlineEditor.querySelector('textarea') : null;
-    const editorActionButtonLabels = editorToolbar
-      ? Array.from(editorToolbar.querySelectorAll('button')).map((button) =>
-          (button.textContent || button.getAttribute('aria-label') || '').trim()
-        )
+    const editorToolbarButtons = editorToolbar
+      ? Array.from(editorToolbar.querySelectorAll('button'))
       : [];
-    const editorToolbarButtonStyles = editorToolbar
-      ? Array.from(editorToolbar.querySelectorAll('button')).map((button) => {
-          const style = getComputedStyle(button);
-          return {
-            label: (button.textContent || button.getAttribute('aria-label') || '').trim(),
-            backgroundColor: style.getPropertyValue('background-color'),
-            transitionProperty: style.getPropertyValue('transition-property'),
-          };
-        })
-      : [];
+    const buttonLabel = (button) =>
+      (button.textContent || button.getAttribute('aria-label') || '').trim();
+    const editorActionButtonLabels = editorToolbarButtons.map(buttonLabel);
+    const editorToolbarButtonStyles = editorToolbarButtons.map((button) => {
+      const style = getComputedStyle(button);
+      return {
+        label: buttonLabel(button),
+        backgroundColor: style.getPropertyValue('background-color'),
+        transitionProperty: style.getPropertyValue('transition-property'),
+      };
+    });
     const activeContentTab = studio.querySelector('[role="tab"][aria-selected="true"]');
     const activeContentTabSupplementType = activeContentTab
       ? activeContentTab.getAttribute('data-supplement-type')
