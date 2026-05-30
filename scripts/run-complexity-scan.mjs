@@ -7,6 +7,7 @@ import path from 'node:path';
 const scanner =
   process.env.COMPLEXITY_OPTIMIZER_SCANNER ??
   path.join(os.homedir(), '.codex/skills/complexity-optimizer/scripts/analyze_complexity.py');
+const excludedPaths = ['.tmp', '.agents', '.claude', '.reference', 'out', 'archive'];
 
 if (!existsSync(scanner)) {
   console.error(
@@ -19,18 +20,7 @@ if (!existsSync(scanner)) {
 const scannerArgs = [
   scanner,
   '.',
-  '--exclude',
-  '.tmp',
-  '--exclude',
-  '.agents',
-  '--exclude',
-  '.claude',
-  '--exclude',
-  '.reference',
-  '--exclude',
-  'out',
-  '--exclude',
-  'archive',
+  ...excludedPaths.flatMap((excludedPath) => ['--exclude', excludedPath]),
   ...process.argv.slice(2),
 ];
 
