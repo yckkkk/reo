@@ -37,4 +37,4 @@ npm run build
 npm run verify:quick
 ```
 
-`npm run dev` 会先加载本机 `.env.local`，再启动 `electron-vite dev`。`.env.local` 不进入 git，用于放置仅 main process 消费的本地开发密钥。
+`npm run dev` 会先加载本机 `.env.local`，再启动 `electron-vite dev`。`.env.local` 不进入 git，用于放置仅 main process 消费的本地开发密钥；语法遵循 Node DotEnv，值里包含 `#` 时必须加引号。

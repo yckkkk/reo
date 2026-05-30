@@ -25,7 +25,14 @@ test('local env loader injects ignored main-process variables without exposing t
   const directory = await mkdtemp(join(tmpdir(), 'reo-local-env-'));
   await writeFile(
     join(directory, '.env.local'),
-    ['REO_MAIN_ONLY_TOKEN=dev-token', 'REO_MAIN_ONLY_SECRET="dev secret"', ''].join('\n')
+    [
+      '\uFEFFREO_MAIN_ONLY_TOKEN=dev-token',
+      'export REO_MAIN_ONLY_SECRET="dev secret"',
+      'REO_MAIN_ONLY_HASH="dev#token"',
+      'REO_MAIN_ONLY_COMMENTED=value # local comment',
+      'BAD-KEY=ignored',
+      '',
+    ].join('\n')
   );
 
   const { loadLocalEnvFiles } = await importLocalEnvModule();
@@ -34,6 +41,9 @@ test('local env loader injects ignored main-process variables without exposing t
   assert.deepEqual(result.loadedFiles, ['.env.local']);
   assert.equal(result.env['REO_MAIN_ONLY_TOKEN'], 'dev-token');
   assert.equal(result.env['REO_MAIN_ONLY_SECRET'], 'dev secret');
+  assert.equal(result.env['REO_MAIN_ONLY_HASH'], 'dev#token');
+  assert.equal(result.env['REO_MAIN_ONLY_COMMENTED'], 'value');
+  assert.equal(result.env['BAD-KEY'], undefined);
 });
 
 test('local env loader keeps explicit shell values ahead of .env.local', async () => {

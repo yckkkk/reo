@@ -74,7 +74,7 @@ npm run verify:strict
 
 当前命令边界：
 
-- `dev`：运行 `scripts/run-dev.mjs`，加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
+- `dev`：运行 `scripts/run-dev.mjs`，按 Node DotEnv 语法加载本机 ignored `.env.local` 后启动 `electron-vite dev --ignoreConfigWarning`。该加载逻辑由 main test 覆盖，已有 shell env 优先于本地 env 文件。
 - `build`：先运行 `typecheck`，再运行 `build:app`，保持 standalone build 的类型检查边界。
 - `build:app`：运行 `electron-vite build --ignoreConfigWarning`，供已完成 typecheck 的严格验证复用。
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
