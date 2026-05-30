@@ -120,6 +120,16 @@ function isAudioMemoryDetailSupplementProjection(
   return supplement.type === 'audio';
 }
 
+function toBackfillScannerAudioProjection(
+  target: BackfillScannerProjection
+): BackfillScannerProjection {
+  return {
+    audioByteLength: target.audioByteLength,
+    lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+    transcript: target.transcript,
+  };
+}
+
 function toBackfillScannerSegmentProjection(segment: MemoryDetailSegmentProjection) {
   const base = {
     memoryId: segment.memoryId,
@@ -133,9 +143,7 @@ function toBackfillScannerSegmentProjection(segment: MemoryDetailSegmentProjecti
   }
   return {
     ...base,
-    audioByteLength: segment.audioByteLength,
-    lastTranscriptionAttempt: segment.lastTranscriptionAttempt,
-    transcript: segment.transcript,
+    ...toBackfillScannerAudioProjection(segment),
   };
 }
 
@@ -791,11 +799,7 @@ async function readBackfillTargetProjectionFromFileTruth(
       }
       return {
         ok: true,
-        value: {
-          audioByteLength: target.audioByteLength,
-          lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-          transcript: target.transcript,
-        },
+        value: toBackfillScannerAudioProjection(target),
       };
     }
 
@@ -815,11 +819,7 @@ async function readBackfillTargetProjectionFromFileTruth(
     }
     return {
       ok: true,
-      value: {
-        audioByteLength: target.audioByteLength,
-        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript: target.transcript,
-      },
+      value: toBackfillScannerAudioProjection(target),
     };
   } catch {
     return workspaceError('ERR_RECORDING_NOT_FOUND', 'Backfill target was not found');
@@ -857,11 +857,7 @@ async function readBackfillTargetProjectionFromMemoryDetail(
   }
   return {
     ok: true,
-    value: {
-      audioByteLength: target.audioByteLength,
-      lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-      transcript: target.transcript,
-    },
+    value: toBackfillScannerAudioProjection(target),
   };
 }
 
