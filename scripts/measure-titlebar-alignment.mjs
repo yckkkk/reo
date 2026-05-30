@@ -44,17 +44,6 @@ function fail(message, code = 1) {
 }
 
 function run(command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (result.error) {
-    fail(`${command} failed to start: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    fail(`${command} failed:\n${result.stderr || result.stdout}`);
-  }
-  return result.stdout;
-}
-
-function runBuffer(command, args) {
   const result = spawnSync(command, args, { maxBuffer: 64 * 1024 * 1024 });
   if (result.error) {
     fail(`${command} failed to start: ${result.error.message}`);
@@ -162,14 +151,16 @@ function parseArgs(argv) {
 }
 
 function readPixels(image, crop) {
-  const sizeText = run('magick', [image, '-crop', crop, '-format', '%w %h', 'info:']).trim();
+  const sizeText = run('magick', [image, '-crop', crop, '-format', '%w %h', 'info:'])
+    .toString('utf8')
+    .trim();
   const sizeMatch = sizeText.match(/^(\d+) (\d+)$/);
   if (!sizeMatch) {
     fail(`Could not read cropped image size: ${sizeText}`);
   }
   const width = Number(sizeMatch[1]);
   const height = Number(sizeMatch[2]);
-  const raw = runBuffer('magick', [image, '-crop', crop, '-depth', '8', 'rgba:-']);
+  const raw = run('magick', [image, '-crop', crop, '-depth', '8', 'rgba:-']);
   const expectedBytes = width * height * 4;
   if (raw.byteLength !== expectedBytes) {
     fail(
