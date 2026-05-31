@@ -142,6 +142,15 @@ export function createBackfillTargetSelector(limit: number) {
         return;
       }
 
+      const oldestSelected = selected.at(-1);
+      if (
+        selected.length >= normalizedLimit &&
+        oldestSelected &&
+        compareBackfillTargetPriority(item, oldestSelected) <= 0
+      ) {
+        return;
+      }
+
       insertSelectedBackfillTarget(selected, item);
       if (selected.length > normalizedLimit) {
         selected.pop();

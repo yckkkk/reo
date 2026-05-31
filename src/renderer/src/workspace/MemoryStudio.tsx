@@ -14,6 +14,7 @@ import {
   type PointerEvent,
   type ReactElement,
   type ReactNode,
+  type SyntheticEvent,
 } from 'react';
 import { flushSync } from 'react-dom';
 import {
@@ -218,31 +219,21 @@ type TranscriptProjection =
   | null
   | undefined;
 type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
-type SegmentAudioResource = {
+type MemoryStudioAudioResource = {
   audioUrl: string;
   decodePromise: Promise<void>;
   decodeStarted: boolean;
   memoryId: string;
   requestId: string;
   segmentId: string;
+  supplementId?: string;
   waveformData: readonly number[];
   waveformSource: PlaybackWaveformSource;
   workspaceHandle: string;
   workspaceId: string;
 };
-type SegmentSupplementAudioResource = {
-  supplementId: string;
-  audioUrl: string;
-  decodePromise: Promise<void>;
-  decodeStarted: boolean;
-  memoryId: string;
-  requestId: string;
-  segmentId: string;
-  waveformData: readonly number[];
-  waveformSource: PlaybackWaveformSource;
-  workspaceHandle: string;
-  workspaceId: string;
-};
+type SegmentAudioResource = MemoryStudioAudioResource;
+type SegmentSupplementAudioResource = MemoryStudioAudioResource;
 type SavedSegmentTranscriptContent = {
   readonly expectedSession: WorkspaceSession;
   readonly baselineTranscriptHash: string;
@@ -487,52 +478,34 @@ function insertContentTabValue(
   return nextValues;
 }
 
-function segmentSupplementAudioResourceKey(
+function memoryStudioAudioResourceKey(
   input: Pick<
-    SegmentSupplementAudioResource,
-    'supplementId' | 'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
-  > & {
-    readonly audioByteLength: number;
-  }
-) {
-  return [
-    input.workspaceHandle,
-    input.workspaceId,
-    input.memoryId,
-    input.segmentId,
-    input.supplementId,
-    input.requestId,
-    input.audioByteLength,
-  ].join('\0');
-}
-
-function segmentAudioResourceKey(
-  input: Pick<
-    SegmentAudioResource,
+    MemoryStudioAudioResource,
     'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
   > & {
     readonly audioByteLength: number;
+    readonly supplementId?: string;
   }
 ) {
-  return [
-    input.workspaceHandle,
-    input.workspaceId,
-    input.memoryId,
-    input.segmentId,
-    input.requestId,
-    input.audioByteLength,
-  ].join('\0');
+  const parts = [input.workspaceHandle, input.workspaceId, input.memoryId, input.segmentId];
+  if (input.supplementId !== undefined) {
+    parts.push(input.supplementId);
+  }
+  parts.push(input.requestId, String(input.audioByteLength));
+  return parts.join('\0');
 }
 
-function clearSegmentAudioResources(audioResourceCache: Map<string, SegmentAudioResource>) {
+function clearMemoryStudioAudioResources<TResource extends MemoryStudioAudioResource>(
+  audioResourceCache: Map<string, TResource>
+) {
   for (const resource of audioResourceCache.values()) {
     URL.revokeObjectURL(resource.audioUrl);
   }
   audioResourceCache.clear();
 }
 
-function revokeSegmentAudioResource(
-  audioResourceCache: Map<string, SegmentAudioResource>,
+function revokeMemoryStudioAudioResource<TResource extends MemoryStudioAudioResource>(
+  audioResourceCache: Map<string, TResource>,
   resourceKey: string
 ) {
   const resource = audioResourceCache.get(resourceKey);
@@ -544,46 +517,13 @@ function revokeSegmentAudioResource(
   audioResourceCache.delete(resourceKey);
 }
 
-function pruneSegmentAudioResources(
-  audioResourceCache: Map<string, SegmentAudioResource>,
-  shouldKeep: (resource: SegmentAudioResource, resourceKey: string) => boolean
+function pruneMemoryStudioAudioResources<TResource extends MemoryStudioAudioResource>(
+  audioResourceCache: Map<string, TResource>,
+  shouldKeep: (resource: TResource, resourceKey: string) => boolean
 ) {
   for (const [resourceKey, resource] of audioResourceCache) {
     if (!shouldKeep(resource, resourceKey)) {
-      revokeSegmentAudioResource(audioResourceCache, resourceKey);
-    }
-  }
-}
-
-function clearSegmentSupplementAudioResources(
-  audioResourceCache: Map<string, SegmentSupplementAudioResource>
-) {
-  for (const resource of audioResourceCache.values()) {
-    URL.revokeObjectURL(resource.audioUrl);
-  }
-  audioResourceCache.clear();
-}
-
-function revokeSegmentSupplementAudioResource(
-  audioResourceCache: Map<string, SegmentSupplementAudioResource>,
-  resourceKey: string
-) {
-  const resource = audioResourceCache.get(resourceKey);
-  if (!resource) {
-    return;
-  }
-
-  URL.revokeObjectURL(resource.audioUrl);
-  audioResourceCache.delete(resourceKey);
-}
-
-function pruneSegmentSupplementAudioResources(
-  audioResourceCache: Map<string, SegmentSupplementAudioResource>,
-  shouldKeep: (resource: SegmentSupplementAudioResource, resourceKey: string) => boolean
-) {
-  for (const [resourceKey, resource] of audioResourceCache) {
-    if (!shouldKeep(resource, resourceKey)) {
-      revokeSegmentSupplementAudioResource(audioResourceCache, resourceKey);
+      revokeMemoryStudioAudioResource(audioResourceCache, resourceKey);
     }
   }
 }
@@ -686,6 +626,474 @@ function MemoryStudioAudioPlaybackRow({
         {loading ? '载入中' : `${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
       </span>
     </div>
+  );
+}
+
+type MemoryStudioAudioBytes =
+  | WorkspaceFinalizedAudioSegmentContent['audio']
+  | WorkspaceFinalizedAudioSegmentSupplementContent['audio'];
+
+type MemoryStudioAudioPlaybackInput = {
+  readonly audio: MemoryStudioAudioBytes | null;
+  readonly audioByteLength: number | null;
+  readonly audioResourceCache: Map<string, MemoryStudioAudioResource>;
+  readonly durationMs: number;
+  readonly memoryId: string;
+  readonly playbackErrorMessage: string;
+  readonly playbackResetKey: string;
+  readonly requestId: string | null;
+  readonly segmentId: string;
+  readonly supplementId?: string;
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
+};
+
+type MemoryStudioAudioPlaybackTarget = Pick<
+  MemoryStudioAudioResource,
+  'memoryId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
+> & {
+  readonly supplementId?: string;
+};
+
+function memoryStudioAudioResourceBelongsToTarget(
+  resource: MemoryStudioAudioResource,
+  target: MemoryStudioAudioPlaybackTarget
+) {
+  return (
+    resource.workspaceHandle === target.workspaceHandle &&
+    resource.workspaceId === target.workspaceId &&
+    resource.memoryId === target.memoryId &&
+    resource.segmentId === target.segmentId &&
+    resource.supplementId === target.supplementId
+  );
+}
+
+function useMemoryStudioAudioPlayback({
+  audio,
+  audioByteLength,
+  audioResourceCache,
+  durationMs,
+  memoryId,
+  playbackErrorMessage,
+  playbackResetKey,
+  requestId,
+  segmentId,
+  supplementId,
+  workspaceHandle,
+  workspaceId,
+}: MemoryStudioAudioPlaybackInput) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioResourceKeyRef = useRef<string | null>(null);
+  const waveformDecodeQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const waveformDecodeGenerationRef = useRef(0);
+  const pointerScrubbingRef = useRef(false);
+  const playingRef = useRef(false);
+  const playbackTimeMsRef = useRef(0);
+  const lastPlaybackTimePublishAtRef = useRef(0);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [waveformData, setWaveformData] = useState<readonly number[]>([]);
+  const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
+  const playbackProgress = durationMs > 0 ? Math.min(1, playbackTimeMs / durationMs) : 0;
+
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  useEffect(() => {
+    playbackTimeMsRef.current = playbackTimeMs;
+  }, [playbackTimeMs]);
+
+  function publishPlaybackTime(nextPlaybackTimeMs: number, force = false) {
+    const now = performance.now();
+    if (
+      !force &&
+      Math.abs(nextPlaybackTimeMs - playbackTimeMsRef.current) < 100 &&
+      now - lastPlaybackTimePublishAtRef.current < 100
+    ) {
+      return;
+    }
+    playbackTimeMsRef.current = nextPlaybackTimeMs;
+    lastPlaybackTimePublishAtRef.current = now;
+    setPlaybackTimeMs(nextPlaybackTimeMs);
+  }
+
+  useEffect(() => {
+    const audioElement = audioRef.current;
+
+    return () => {
+      pointerScrubbingRef.current = false;
+      if (playingRef.current) {
+        playingRef.current = false;
+        audioElement?.pause();
+      }
+    };
+  }, [playbackResetKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (audio === null || audioByteLength === null || requestId === null) {
+      currentAudioResourceKeyRef.current = null;
+      setAudioUrl(null);
+      setPlaybackTimeMs(0);
+      setWaveformData([]);
+      setWaveformSource('pending');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const audioResourceKey = memoryStudioAudioResourceKey({
+      ...(supplementId !== undefined ? { supplementId } : {}),
+      audioByteLength,
+      memoryId,
+      requestId,
+      segmentId,
+      workspaceHandle,
+      workspaceId,
+    });
+    const target: MemoryStudioAudioPlaybackTarget = {
+      ...(supplementId !== undefined ? { supplementId } : {}),
+      memoryId,
+      segmentId,
+      workspaceHandle,
+      workspaceId,
+    };
+    const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
+    currentAudioResourceKeyRef.current = audioResourceKey;
+    const cachedResource = audioResourceCache.get(audioResourceKey);
+
+    if (cachedResource) {
+      setAudioUrl(cachedResource.audioUrl);
+      if (resourceChanged) {
+        setPlaybackTimeMs(0);
+      }
+      setWaveformData(cachedResource.waveformData);
+      setWaveformSource(cachedResource.waveformSource);
+
+      if (cachedResource.waveformSource === 'pending') {
+        void cachedResource.decodePromise.finally(() => {
+          if (cancelled) {
+            return;
+          }
+
+          setWaveformData(cachedResource.waveformData);
+          setWaveformSource(cachedResource.waveformSource);
+        });
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const nextAudioUrl = URL.createObjectURL(new Blob([audio as BlobPart], { type: 'audio/webm' }));
+    const nextResource: MemoryStudioAudioResource = {
+      ...(supplementId !== undefined ? { supplementId } : {}),
+      audioUrl: nextAudioUrl,
+      decodePromise: Promise.resolve(),
+      decodeStarted: false,
+      memoryId,
+      requestId,
+      segmentId,
+      waveformData: [],
+      waveformSource: 'pending',
+      workspaceHandle,
+      workspaceId,
+    };
+    pruneMemoryStudioAudioResources(
+      audioResourceCache,
+      (resource, resourceKey) =>
+        resourceKey === audioResourceKey ||
+        !memoryStudioAudioResourceBelongsToTarget(resource, target)
+    );
+    audioResourceCache.set(audioResourceKey, nextResource);
+
+    setAudioUrl(nextAudioUrl);
+    setPlaybackTimeMs(0);
+    setWaveformData(nextResource.waveformData);
+    setWaveformSource(nextResource.waveformSource);
+
+    if (!canDecodeAudioBytesToWaveformData(audioByteLength)) {
+      nextResource.waveformData = [];
+      nextResource.waveformSource = 'unavailable';
+      setWaveformData(nextResource.waveformData);
+      setWaveformSource(nextResource.waveformSource);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const decodeGeneration = (waveformDecodeGenerationRef.current += 1);
+    const decodeTimeoutId = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+      const decodeTask = waveformDecodeQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (cancelled || waveformDecodeGenerationRef.current !== decodeGeneration) {
+            return;
+          }
+          nextResource.decodeStarted = true;
+          return decodeAudioBytesToWaveformData(audio, MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT);
+        });
+      waveformDecodeQueueRef.current = decodeTask.then(
+        () => undefined,
+        () => undefined
+      );
+      nextResource.decodePromise = decodeTask
+        .then((nextWaveformData) => {
+          if (!nextWaveformData) {
+            return;
+          }
+          if (
+            currentAudioResourceKeyRef.current !== audioResourceKey ||
+            audioResourceCache.get(audioResourceKey) !== nextResource
+          ) {
+            return;
+          }
+          nextResource.waveformData = nextWaveformData;
+          nextResource.waveformSource = 'decoded-audio';
+
+          if (cancelled) {
+            return;
+          }
+
+          setWaveformData(nextResource.waveformData);
+          setWaveformSource(nextResource.waveformSource);
+        })
+        .catch(() => {
+          if (
+            currentAudioResourceKeyRef.current !== audioResourceKey ||
+            audioResourceCache.get(audioResourceKey) !== nextResource
+          ) {
+            return;
+          }
+          nextResource.waveformData = [];
+          nextResource.waveformSource = 'unavailable';
+
+          if (cancelled) {
+            return;
+          }
+
+          setWaveformData(nextResource.waveformData);
+          setWaveformSource(nextResource.waveformSource);
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      waveformDecodeGenerationRef.current += 1;
+      window.clearTimeout(decodeTimeoutId);
+    };
+  }, [
+    audio,
+    audioByteLength,
+    audioResourceCache,
+    memoryId,
+    requestId,
+    segmentId,
+    supplementId,
+    workspaceHandle,
+    workspaceId,
+  ]);
+
+  function setPlaybackPosition(nextPlaybackTimeMs: number) {
+    if (!audioUrl) {
+      return;
+    }
+
+    const nextTimeMs = Math.min(durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
+    if (audioRef.current) {
+      audioRef.current.currentTime = nextTimeMs / 1000;
+    }
+    publishPlaybackTime(nextTimeMs, true);
+  }
+
+  function seekFromPointer(event: PointerEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    setPlaybackPosition(progress * durationMs);
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
+    if (typeof event.currentTarget.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    pointerScrubbingRef.current = true;
+    seekFromPointer(event);
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!pointerScrubbingRef.current) {
+      return;
+    }
+    seekFromPointer(event);
+  }
+
+  function endPointerScrub() {
+    pointerScrubbingRef.current = false;
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!audioUrl) {
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setPlaybackPosition(playbackTimeMs - 5_000);
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setPlaybackPosition(playbackTimeMs + 5_000);
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setPlaybackPosition(0);
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setPlaybackPosition(durationMs);
+    }
+  }
+
+  async function togglePlayback() {
+    const audioElement = audioRef.current;
+
+    if (!audioElement || !audioUrl) {
+      return;
+    }
+
+    if (playing) {
+      audioElement.pause();
+      playingRef.current = false;
+      setPlaying(false);
+      return;
+    }
+
+    try {
+      setPlaybackError(null);
+      await audioElement.play();
+      playingRef.current = true;
+      setPlaying(true);
+    } catch {
+      playingRef.current = false;
+      setPlaying(false);
+      setPlaybackError(playbackErrorMessage);
+    }
+  }
+
+  function handleEnded() {
+    playingRef.current = false;
+    setPlaying(false);
+    publishPlaybackTime(durationMs, true);
+  }
+
+  function handlePause() {
+    playingRef.current = false;
+    setPlaying(false);
+  }
+
+  function handleTimeUpdate(event: SyntheticEvent<HTMLAudioElement>) {
+    publishPlaybackTime(Math.min(durationMs, Math.round(event.currentTarget.currentTime * 1000)));
+  }
+
+  return {
+    audioAvailable: audioUrl !== null,
+    audioRef,
+    audioUrl,
+    handleEnded,
+    handleKeyDown,
+    handlePause,
+    handlePointerDown,
+    handlePointerMove,
+    handleTimeUpdate,
+    endPointerScrub,
+    playbackError,
+    playbackProgress,
+    playbackTimeMs,
+    playing,
+    togglePlayback,
+    waveformData,
+    waveformSource,
+  };
+}
+
+type MemoryStudioAudioPlaybackController = ReturnType<typeof useMemoryStudioAudioPlayback>;
+
+function MemoryStudioAudioPlayback({
+  controller,
+  durationMs,
+  errorClassName,
+  loading,
+  playButtonLabel,
+  rowSlot,
+  showPlaybackError = true,
+  waveformLabel,
+  waveformSlot,
+}: {
+  readonly controller: MemoryStudioAudioPlaybackController;
+  readonly durationMs: number;
+  readonly errorClassName: string;
+  readonly loading: boolean;
+  readonly playButtonLabel: string;
+  readonly rowSlot: string;
+  readonly showPlaybackError?: boolean;
+  readonly waveformLabel: string;
+  readonly waveformSlot: string;
+}) {
+  return (
+    <>
+      <MemoryStudioAudioPlaybackRow
+        audioAvailable={controller.audioAvailable}
+        durationMs={durationMs}
+        loading={loading}
+        onKeyDown={controller.handleKeyDown}
+        onPointerCancel={controller.endPointerScrub}
+        onPointerDown={controller.handlePointerDown}
+        onPointerMove={controller.handlePointerMove}
+        onPointerUp={controller.endPointerScrub}
+        onTogglePlayback={controller.togglePlayback}
+        playButtonLabel={playButtonLabel}
+        playbackTimeMs={controller.playbackTimeMs}
+        playbackProgress={controller.playbackProgress}
+        playing={controller.playing}
+        rowSlot={rowSlot}
+        waveformData={controller.waveformData}
+        waveformLabel={waveformLabel}
+        waveformSlot={waveformSlot}
+        waveformSource={controller.waveformSource}
+      />
+      <audio
+        ref={controller.audioRef}
+        src={controller.audioUrl ?? undefined}
+        onEnded={controller.handleEnded}
+        onPause={controller.handlePause}
+        onTimeUpdate={controller.handleTimeUpdate}
+      />
+      {showPlaybackError && controller.playbackError ? (
+        <p role="status" className={errorClassName}>
+          {controller.playbackError}
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -1074,372 +1482,31 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
   readonly segment: AudioMemorySegment;
   readonly workspaceSession: WorkspaceSession;
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const currentAudioResourceKeyRef = useRef<string | null>(null);
-  const waveformDecodeQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const waveformDecodeGenerationRef = useRef(0);
-  const pointerScrubbingRef = useRef(false);
-  const playingRef = useRef(false);
-  const playbackTimeMsRef = useRef(0);
-  const lastPlaybackTimePublishAtRef = useRef(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [waveformData, setWaveformData] = useState<readonly number[]>([]);
-  const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
-  const segmentAudio = content?.audio ?? null;
-  const segmentAudioByteLength = content?.audioByteLength ?? null;
-  const segmentRequestId = content?.requestId ?? null;
-  const playbackProgress =
-    segment.durationMs > 0 ? Math.min(1, playbackTimeMs / segment.durationMs) : 0;
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-
-  useEffect(() => {
-    playbackTimeMsRef.current = playbackTimeMs;
-  }, [playbackTimeMs]);
-
-  function publishPlaybackTime(nextPlaybackTimeMs: number, force = false) {
-    const now = performance.now();
-    if (
-      !force &&
-      Math.abs(nextPlaybackTimeMs - playbackTimeMsRef.current) < 100 &&
-      now - lastPlaybackTimePublishAtRef.current < 100
-    ) {
-      return;
-    }
-    playbackTimeMsRef.current = nextPlaybackTimeMs;
-    lastPlaybackTimePublishAtRef.current = now;
-    setPlaybackTimeMs(nextPlaybackTimeMs);
-  }
-
-  useEffect(() => {
-    const audio = audioRef.current;
-
-    return () => {
-      pointerScrubbingRef.current = false;
-      if (playingRef.current) {
-        playingRef.current = false;
-        audio?.pause();
-      }
-    };
-  }, [segment.segmentId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (segmentAudio === null || segmentAudioByteLength === null || segmentRequestId === null) {
-      currentAudioResourceKeyRef.current = null;
-      setAudioUrl(null);
-      setPlaybackTimeMs(0);
-      setWaveformData([]);
-      setWaveformSource('pending');
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const audioResourceKey = segmentAudioResourceKey({
-      audioByteLength: segmentAudioByteLength,
-      memoryId: segment.memoryId,
-      requestId: segmentRequestId,
-      segmentId: segment.segmentId,
-      workspaceHandle: workspaceSession.workspaceHandle,
-      workspaceId: workspaceSession.workspaceId,
-    });
-    const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
-    currentAudioResourceKeyRef.current = audioResourceKey;
-    const cachedResource = audioResourceCache.get(audioResourceKey);
-
-    if (cachedResource) {
-      setAudioUrl(cachedResource.audioUrl);
-      if (resourceChanged) {
-        setPlaybackTimeMs(0);
-      }
-      setWaveformData(cachedResource.waveformData);
-      setWaveformSource(cachedResource.waveformSource);
-
-      if (cachedResource.waveformSource === 'pending') {
-        void cachedResource.decodePromise.finally(() => {
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(cachedResource.waveformData);
-          setWaveformSource(cachedResource.waveformSource);
-        });
-      }
-
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const nextAudioUrl = URL.createObjectURL(
-      new Blob([segmentAudio as BlobPart], { type: 'audio/webm' })
-    );
-    const nextResource: SegmentAudioResource = {
-      audioUrl: nextAudioUrl,
-      decodePromise: Promise.resolve(),
-      decodeStarted: false,
-      memoryId: segment.memoryId,
-      requestId: segmentRequestId,
-      segmentId: segment.segmentId,
-      waveformData: [],
-      waveformSource: 'pending',
-      workspaceHandle: workspaceSession.workspaceHandle,
-      workspaceId: workspaceSession.workspaceId,
-    };
-    pruneSegmentAudioResources(
-      audioResourceCache,
-      (resource, resourceKey) =>
-        resourceKey === audioResourceKey ||
-        resource.workspaceHandle !== workspaceSession.workspaceHandle ||
-        resource.workspaceId !== workspaceSession.workspaceId ||
-        resource.memoryId !== segment.memoryId ||
-        resource.segmentId !== segment.segmentId
-    );
-    audioResourceCache.set(audioResourceKey, nextResource);
-
-    setAudioUrl(nextAudioUrl);
-    setPlaybackTimeMs(0);
-    setWaveformData(nextResource.waveformData);
-    setWaveformSource(nextResource.waveformSource);
-
-    if (!canDecodeAudioBytesToWaveformData(segmentAudioByteLength)) {
-      nextResource.waveformData = [];
-      nextResource.waveformSource = 'unavailable';
-      setWaveformData(nextResource.waveformData);
-      setWaveformSource(nextResource.waveformSource);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const decodeGeneration = (waveformDecodeGenerationRef.current += 1);
-    const decodeTimeoutId = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-      const decodeTask = waveformDecodeQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          if (cancelled || waveformDecodeGenerationRef.current !== decodeGeneration) {
-            return;
-          }
-          nextResource.decodeStarted = true;
-          return decodeAudioBytesToWaveformData(
-            segmentAudio,
-            MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
-          );
-        });
-      waveformDecodeQueueRef.current = decodeTask.then(
-        () => undefined,
-        () => undefined
-      );
-      nextResource.decodePromise = decodeTask
-        .then((nextWaveformData) => {
-          if (!nextWaveformData) {
-            return;
-          }
-          if (
-            currentAudioResourceKeyRef.current !== audioResourceKey ||
-            audioResourceCache.get(audioResourceKey) !== nextResource
-          ) {
-            return;
-          }
-          nextResource.waveformData = nextWaveformData;
-          nextResource.waveformSource = 'decoded-audio';
-
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(nextResource.waveformData);
-          setWaveformSource(nextResource.waveformSource);
-        })
-        .catch(() => {
-          if (
-            currentAudioResourceKeyRef.current !== audioResourceKey ||
-            audioResourceCache.get(audioResourceKey) !== nextResource
-          ) {
-            return;
-          }
-          nextResource.waveformData = [];
-          nextResource.waveformSource = 'unavailable';
-
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(nextResource.waveformData);
-          setWaveformSource(nextResource.waveformSource);
-        });
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      waveformDecodeGenerationRef.current += 1;
-      window.clearTimeout(decodeTimeoutId);
-    };
-  }, [
+  const playback = useMemoryStudioAudioPlayback({
+    audio: content?.audio ?? null,
+    audioByteLength: content?.audioByteLength ?? null,
     audioResourceCache,
-    segment.memoryId,
-    segment.segmentId,
-    segmentAudio,
-    segmentAudioByteLength,
-    segmentRequestId,
-    workspaceSession.workspaceHandle,
-    workspaceSession.workspaceId,
-  ]);
-
-  function setPlaybackPosition(nextPlaybackTimeMs: number) {
-    if (!audioUrl) {
-      return;
-    }
-
-    const nextTimeMs = Math.min(segment.durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
-    if (audioRef.current) {
-      audioRef.current.currentTime = nextTimeMs / 1000;
-    }
-    publishPlaybackTime(nextTimeMs, true);
-  }
-
-  function seekFromPointer(event: PointerEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width <= 0) {
-      return;
-    }
-
-    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setPlaybackPosition(progress * segment.durationMs);
-  }
-
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    if (typeof event.currentTarget.setPointerCapture === 'function') {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    pointerScrubbingRef.current = true;
-    seekFromPointer(event);
-  }
-
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!pointerScrubbingRef.current) {
-      return;
-    }
-    seekFromPointer(event);
-  }
-
-  function endPointerScrub() {
-    pointerScrubbingRef.current = false;
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setPlaybackPosition(playbackTimeMs - 5_000);
-    }
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setPlaybackPosition(playbackTimeMs + 5_000);
-    }
-    if (event.key === 'Home') {
-      event.preventDefault();
-      setPlaybackPosition(0);
-    }
-    if (event.key === 'End') {
-      event.preventDefault();
-      setPlaybackPosition(segment.durationMs);
-    }
-  }
-
-  async function togglePlayback() {
-    const audio = audioRef.current;
-
-    if (!audio || !audioUrl) {
-      return;
-    }
-
-    if (playing) {
-      audio.pause();
-      playingRef.current = false;
-      setPlaying(false);
-      return;
-    }
-
-    try {
-      setPlaybackError(null);
-      await audio.play();
-      playingRef.current = true;
-      setPlaying(true);
-    } catch {
-      playingRef.current = false;
-      setPlaying(false);
-      setPlaybackError('片段无法播放，请稍后重试。');
-    }
-  }
+    durationMs: segment.durationMs,
+    memoryId: segment.memoryId,
+    playbackErrorMessage: '片段无法播放，请稍后重试。',
+    playbackResetKey: segment.segmentId,
+    requestId: content?.requestId ?? null,
+    segmentId: segment.segmentId,
+    workspaceHandle: workspaceSession.workspaceHandle,
+    workspaceId: workspaceSession.workspaceId,
+  });
 
   return (
-    <>
-      <MemoryStudioAudioPlaybackRow
-        audioAvailable={audioUrl !== null}
-        durationMs={segment.durationMs}
-        loading={loading}
-        onKeyDown={handleKeyDown}
-        onPointerCancel={endPointerScrub}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endPointerScrub}
-        onTogglePlayback={togglePlayback}
-        playButtonLabel={`${playing ? '暂停' : '播放'}片段 ${segment.title}`}
-        playbackTimeMs={playbackTimeMs}
-        playbackProgress={playbackProgress}
-        playing={playing}
-        rowSlot="memory-studio-player"
-        waveformData={waveformData}
-        waveformLabel="片段播放进度"
-        waveformSlot="memory-studio-playback-waveform"
-        waveformSource={waveformSource}
-      />
-      <audio
-        ref={audioRef}
-        src={audioUrl ?? undefined}
-        onEnded={() => {
-          playingRef.current = false;
-          setPlaying(false);
-          publishPlaybackTime(segment.durationMs, true);
-        }}
-        onPause={() => {
-          playingRef.current = false;
-          setPlaying(false);
-        }}
-        onTimeUpdate={(event) => {
-          publishPlaybackTime(
-            Math.min(segment.durationMs, Math.round(event.currentTarget.currentTime * 1000))
-          );
-        }}
-      />
-      {playbackError ? (
-        <p role="status" className="mt-8 shrink-0 text-ui-sm leading-ui-sm text-muted-foreground">
-          {playbackError}
-        </p>
-      ) : null}
-    </>
+    <MemoryStudioAudioPlayback
+      controller={playback}
+      durationMs={segment.durationMs}
+      errorClassName="mt-8 shrink-0 text-ui-sm leading-ui-sm text-muted-foreground"
+      loading={loading}
+      playButtonLabel={`${playback.playing ? '暂停' : '播放'}片段 ${segment.title}`}
+      rowSlot="memory-studio-player"
+      waveformLabel="片段播放进度"
+      waveformSlot="memory-studio-playback-waveform"
+    />
   );
 });
 
@@ -1542,20 +1609,6 @@ function SegmentSupplementAudioPlayer({
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly workspaceSession: WorkspaceSession;
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const currentAudioResourceKeyRef = useRef<string | null>(null);
-  const waveformDecodeQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const waveformDecodeGenerationRef = useRef(0);
-  const pointerScrubbingRef = useRef(false);
-  const playingRef = useRef(false);
-  const playbackTimeMsRef = useRef(0);
-  const lastPlaybackTimePublishAtRef = useRef(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [waveformData, setWaveformData] = useState<readonly number[]>([]);
-  const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
   const supplementContentQuery = useQuery(
     segmentSupplementContentQueryOptions(
       workspaceSession,
@@ -1574,6 +1627,23 @@ function SegmentSupplementAudioPlayer({
   const supplementSegmentId = supplement.segmentId;
   const supplementAudio = audioSupplementContent?.audio ?? null;
   const supplementAudioByteLength = audioSupplementContent?.audioByteLength ?? null;
+  const supplementRequestId = audioSupplementContent?.requestId ?? null;
+  const workspaceHandle = workspaceSession.workspaceHandle;
+  const workspaceId = workspaceSession.workspaceId;
+  const playback = useMemoryStudioAudioPlayback({
+    audio: supplementAudio,
+    audioByteLength: supplementAudioByteLength,
+    audioResourceCache,
+    durationMs: supplement.durationMs,
+    memoryId: supplementMemoryId,
+    playbackErrorMessage: '补充录音无法播放，请稍后重试。',
+    playbackResetKey: supplementId,
+    requestId: supplementRequestId,
+    segmentId: supplementSegmentId,
+    supplementId,
+    workspaceHandle,
+    workspaceId,
+  });
   const retrySupplementTranscription = transcriptionBackfill?.retrySupplement
     ? () =>
         transcriptionBackfill.retrySupplement?.({
@@ -1591,319 +1661,6 @@ function SegmentSupplementAudioPlayer({
       segmentId: supplement.segmentId,
       supplementId: supplement.supplementId,
     }) === true;
-  const supplementRequestId = audioSupplementContent?.requestId ?? null;
-  const workspaceHandle = workspaceSession.workspaceHandle;
-  const workspaceId = workspaceSession.workspaceId;
-  const playbackProgress =
-    supplement.durationMs > 0 ? Math.min(1, playbackTimeMs / supplement.durationMs) : 0;
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-
-  useEffect(() => {
-    playbackTimeMsRef.current = playbackTimeMs;
-  }, [playbackTimeMs]);
-
-  function publishPlaybackTime(nextPlaybackTimeMs: number, force = false) {
-    const now = performance.now();
-    if (
-      !force &&
-      Math.abs(nextPlaybackTimeMs - playbackTimeMsRef.current) < 100 &&
-      now - lastPlaybackTimePublishAtRef.current < 100
-    ) {
-      return;
-    }
-    playbackTimeMsRef.current = nextPlaybackTimeMs;
-    lastPlaybackTimePublishAtRef.current = now;
-    setPlaybackTimeMs(nextPlaybackTimeMs);
-  }
-
-  useEffect(() => {
-    const audio = audioRef.current;
-
-    return () => {
-      pointerScrubbingRef.current = false;
-      if (playingRef.current) {
-        playingRef.current = false;
-        audio?.pause();
-      }
-    };
-  }, [supplementId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (
-      supplementAudio === null ||
-      supplementAudioByteLength === null ||
-      supplementRequestId === null
-    ) {
-      currentAudioResourceKeyRef.current = null;
-      setAudioUrl(null);
-      setPlaybackTimeMs(0);
-      setWaveformData([]);
-      setWaveformSource('pending');
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const audioResourceKey = segmentSupplementAudioResourceKey({
-      supplementId,
-      audioByteLength: supplementAudioByteLength,
-      memoryId: supplementMemoryId,
-      requestId: supplementRequestId,
-      segmentId: supplementSegmentId,
-      workspaceHandle,
-      workspaceId,
-    });
-    const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
-    currentAudioResourceKeyRef.current = audioResourceKey;
-    const cachedResource = audioResourceCache.get(audioResourceKey);
-
-    if (cachedResource) {
-      setAudioUrl(cachedResource.audioUrl);
-      if (resourceChanged) {
-        setPlaybackTimeMs(0);
-      }
-      setWaveformData(cachedResource.waveformData);
-      setWaveformSource(cachedResource.waveformSource);
-
-      if (cachedResource.waveformSource === 'pending') {
-        void cachedResource.decodePromise.finally(() => {
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(cachedResource.waveformData);
-          setWaveformSource(cachedResource.waveformSource);
-        });
-      }
-
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const nextAudioUrl = URL.createObjectURL(
-      new Blob([supplementAudio as BlobPart], { type: 'audio/webm' })
-    );
-    const nextResource: SegmentSupplementAudioResource = {
-      supplementId,
-      audioUrl: nextAudioUrl,
-      decodePromise: Promise.resolve(),
-      decodeStarted: false,
-      memoryId: supplementMemoryId,
-      requestId: supplementRequestId,
-      segmentId: supplementSegmentId,
-      waveformData: [],
-      waveformSource: 'pending',
-      workspaceHandle,
-      workspaceId,
-    };
-    pruneSegmentSupplementAudioResources(
-      audioResourceCache,
-      (resource, resourceKey) =>
-        resourceKey === audioResourceKey ||
-        resource.workspaceHandle !== workspaceHandle ||
-        resource.workspaceId !== workspaceId ||
-        resource.memoryId !== supplementMemoryId ||
-        resource.segmentId !== supplementSegmentId ||
-        resource.supplementId !== supplementId
-    );
-    audioResourceCache.set(audioResourceKey, nextResource);
-
-    setAudioUrl(nextAudioUrl);
-    setPlaybackTimeMs(0);
-    setWaveformData(nextResource.waveformData);
-    setWaveformSource(nextResource.waveformSource);
-
-    if (!canDecodeAudioBytesToWaveformData(supplementAudioByteLength)) {
-      nextResource.waveformData = [];
-      nextResource.waveformSource = 'unavailable';
-      setWaveformData(nextResource.waveformData);
-      setWaveformSource(nextResource.waveformSource);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const decodeGeneration = (waveformDecodeGenerationRef.current += 1);
-    const decodeTimeoutId = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-      const decodeTask = waveformDecodeQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          if (cancelled || waveformDecodeGenerationRef.current !== decodeGeneration) {
-            return;
-          }
-          nextResource.decodeStarted = true;
-          return decodeAudioBytesToWaveformData(
-            supplementAudio,
-            MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
-          );
-        });
-      waveformDecodeQueueRef.current = decodeTask.then(
-        () => undefined,
-        () => undefined
-      );
-      nextResource.decodePromise = decodeTask
-        .then((nextWaveformData) => {
-          if (!nextWaveformData) {
-            return;
-          }
-          if (
-            currentAudioResourceKeyRef.current !== audioResourceKey ||
-            audioResourceCache.get(audioResourceKey) !== nextResource
-          ) {
-            return;
-          }
-          nextResource.waveformData = nextWaveformData;
-          nextResource.waveformSource = 'decoded-audio';
-
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(nextResource.waveformData);
-          setWaveformSource(nextResource.waveformSource);
-        })
-        .catch(() => {
-          if (
-            currentAudioResourceKeyRef.current !== audioResourceKey ||
-            audioResourceCache.get(audioResourceKey) !== nextResource
-          ) {
-            return;
-          }
-          nextResource.waveformData = [];
-          nextResource.waveformSource = 'unavailable';
-
-          if (cancelled) {
-            return;
-          }
-
-          setWaveformData(nextResource.waveformData);
-          setWaveformSource(nextResource.waveformSource);
-        });
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      waveformDecodeGenerationRef.current += 1;
-      window.clearTimeout(decodeTimeoutId);
-    };
-  }, [
-    supplementAudio,
-    supplementAudioByteLength,
-    supplementId,
-    supplementMemoryId,
-    supplementRequestId,
-    supplementSegmentId,
-    audioResourceCache,
-    workspaceHandle,
-    workspaceId,
-  ]);
-
-  function setPlaybackPosition(nextPlaybackTimeMs: number) {
-    if (!audioUrl) {
-      return;
-    }
-
-    const nextTimeMs = Math.min(supplement.durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
-    if (audioRef.current) {
-      audioRef.current.currentTime = nextTimeMs / 1000;
-    }
-    publishPlaybackTime(nextTimeMs, true);
-  }
-
-  function seekFromPointer(event: PointerEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width <= 0) {
-      return;
-    }
-
-    const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setPlaybackPosition(progress * supplement.durationMs);
-  }
-
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    if (typeof event.currentTarget.setPointerCapture === 'function') {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    pointerScrubbingRef.current = true;
-    seekFromPointer(event);
-  }
-
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!pointerScrubbingRef.current) {
-      return;
-    }
-    seekFromPointer(event);
-  }
-
-  function endPointerScrub() {
-    pointerScrubbingRef.current = false;
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!audioUrl) {
-      return;
-    }
-
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setPlaybackPosition(playbackTimeMs - 5_000);
-    }
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setPlaybackPosition(playbackTimeMs + 5_000);
-    }
-    if (event.key === 'Home') {
-      event.preventDefault();
-      setPlaybackPosition(0);
-    }
-    if (event.key === 'End') {
-      event.preventDefault();
-      setPlaybackPosition(supplement.durationMs);
-    }
-  }
-
-  async function togglePlayback() {
-    const audio = audioRef.current;
-
-    if (!audio || !audioUrl) {
-      return;
-    }
-
-    if (playing) {
-      audio.pause();
-      playingRef.current = false;
-      setPlaying(false);
-      return;
-    }
-
-    try {
-      setPlaybackError(null);
-      await audio.play();
-      playingRef.current = true;
-      setPlaying(true);
-    } catch {
-      playingRef.current = false;
-      setPlaying(false);
-      setPlaybackError('补充录音无法播放，请稍后重试。');
-    }
-  }
 
   async function saveInlineSegmentSupplementTranscriptMarkdown(
     markdown: string,
@@ -1955,34 +1712,25 @@ function SegmentSupplementAudioPlayer({
 
   return (
     <article aria-label={supplement.title} className="flex min-h-0 flex-1 flex-col pt-12">
-      <MemoryStudioAudioPlaybackRow
-        audioAvailable={audioUrl !== null}
+      <MemoryStudioAudioPlayback
+        controller={playback}
         durationMs={supplement.durationMs}
+        errorClassName="mt-8 text-ui-xs leading-ui-xs text-muted-foreground"
         loading={supplementContentQuery.isLoading}
-        onKeyDown={handleKeyDown}
-        onPointerCancel={endPointerScrub}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endPointerScrub}
-        onTogglePlayback={togglePlayback}
-        playButtonLabel={`${playing ? '暂停' : '播放'}补充录音 ${supplement.title}`}
-        playbackTimeMs={playbackTimeMs}
-        playbackProgress={playbackProgress}
-        playing={playing}
+        playButtonLabel={`${playback.playing ? '暂停' : '播放'}补充录音 ${supplement.title}`}
         rowSlot="memory-studio-supplement-player"
-        waveformData={waveformData}
+        showPlaybackError={false}
         waveformLabel="补充录音播放进度"
         waveformSlot="memory-studio-supplement-waveform"
-        waveformSource={waveformSource}
       />
       {supplementContentQuery.isError ? (
         <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-muted-foreground">
           补充录音加载失败。
         </p>
       ) : null}
-      {playbackError ? (
+      {playback.playbackError ? (
         <p role="status" className="mt-8 text-ui-xs leading-ui-xs text-muted-foreground">
-          {playbackError}
+          {playback.playbackError}
         </p>
       ) : null}
       {audioSupplementTranscript ? (
@@ -2044,24 +1792,6 @@ function SegmentSupplementAudioPlayer({
           />
         </div>
       )}
-      <audio
-        ref={audioRef}
-        src={audioUrl ?? undefined}
-        onEnded={() => {
-          playingRef.current = false;
-          setPlaying(false);
-          publishPlaybackTime(supplement.durationMs, true);
-        }}
-        onPause={() => {
-          playingRef.current = false;
-          setPlaying(false);
-        }}
-        onTimeUpdate={(event) => {
-          publishPlaybackTime(
-            Math.min(supplement.durationMs, Math.round(event.currentTarget.currentTime * 1000))
-          );
-        }}
-      />
     </article>
   );
 }
@@ -3324,8 +3054,8 @@ export function MemoryStudio({
     const segmentAudioResourceCache = segmentAudioResourceCacheRef.current;
 
     return () => {
-      clearSegmentSupplementAudioResources(audioResourceCache);
-      clearSegmentAudioResources(segmentAudioResourceCache);
+      clearMemoryStudioAudioResources(audioResourceCache);
+      clearMemoryStudioAudioResources(segmentAudioResourceCache);
       void closeAudioWaveformDecoder().catch(() => {});
     };
   }, [memory.memoryId, workspaceSession.workspaceHandle, workspaceSession.workspaceId]);
@@ -3334,7 +3064,7 @@ export function MemoryStudio({
     const selectedSegmentId = selectedSegment?.segmentId ?? null;
     const liveSupplementIds = new Set(selectedSegmentSupplementIds);
 
-    pruneSegmentAudioResources(
+    pruneMemoryStudioAudioResources(
       segmentAudioResourceCacheRef.current,
       (resource) =>
         resource.workspaceHandle !== workspaceSession.workspaceHandle ||
@@ -3342,14 +3072,14 @@ export function MemoryStudio({
         resource.memoryId !== memory.memoryId ||
         resource.segmentId === selectedSegmentId
     );
-    pruneSegmentSupplementAudioResources(
+    pruneMemoryStudioAudioResources(
       supplementAudioResourceCacheRef.current,
       (resource) =>
         resource.workspaceHandle !== workspaceSession.workspaceHandle ||
         resource.workspaceId !== workspaceSession.workspaceId ||
         resource.memoryId !== memory.memoryId ||
         resource.segmentId !== selectedSegmentId ||
-        liveSupplementIds.has(resource.supplementId)
+        (resource.supplementId !== undefined && liveSupplementIds.has(resource.supplementId))
     );
   }, [
     memory.memoryId,
