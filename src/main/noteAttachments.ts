@@ -213,7 +213,7 @@ function readExistingAttachmentBytesInDirectory({
   readonly attachmentsDirectory: string;
   readonly directoryIdentity: DirectoryIdentity;
   readonly filename: string;
-}): { readonly ok: true; readonly bytes: Uint8Array; readonly byteLength: number } {
+}): { readonly bytes: Uint8Array; readonly byteLength: number } {
   let fileDescriptor: number | null = null;
   try {
     fileDescriptor = openExistingWorkspaceFileInDirectory({
@@ -230,7 +230,7 @@ function readExistingAttachmentBytesInDirectory({
       throw workspaceError('ERR_ATTACHMENT_TOO_LARGE', 'Attachment is too large');
     }
     const bytes = readFileSync(fileDescriptor);
-    return { ok: true, bytes, byteLength: stats.size };
+    return { bytes, byteLength: stats.size };
   } finally {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
@@ -268,7 +268,7 @@ function readExistingAttachmentMetadataInDirectory({
   readonly attachmentsDirectory: string;
   readonly directoryIdentity: DirectoryIdentity;
   readonly filename: string;
-}): { readonly ok: true; readonly byteLength: number } {
+}): { readonly byteLength: number } {
   let fileDescriptor: number | null = null;
   try {
     fileDescriptor = openExistingWorkspaceFileInDirectory({
@@ -281,7 +281,7 @@ function readExistingAttachmentMetadataInDirectory({
     if (!stats.isFile()) {
       throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Attachment leaf is unsafe');
     }
-    return { ok: true, byteLength: stats.size };
+    return { byteLength: stats.size };
   } finally {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
