@@ -653,6 +653,7 @@ describe('RecordingOverlay', () => {
     expect(primaryPrompt.parentElement).not.toHaveClass('text-heading-sm', 'font-regular');
     expect(screen.getByRole('button', { name: '开始录音' })).toHaveClass(
       'rounded-full',
+      '![corner-shape:round]',
       'bg-brand-ember',
       'text-destructive-foreground'
     );

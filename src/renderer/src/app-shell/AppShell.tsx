@@ -97,7 +97,7 @@ export function clampSidebarWidth(width: number) {
 function sidebarNavButtonClass(current: boolean) {
   return cn(
     SIDEBAR_NAV_BUTTON_CLASS,
-    current ? '!bg-secondary !text-foreground' : '!bg-transparent !text-muted-foreground'
+    current ? '!bg-secondary !text-foreground' : 'bg-transparent text-muted-foreground'
   );
 }
 

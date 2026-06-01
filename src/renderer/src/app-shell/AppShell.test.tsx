@@ -152,8 +152,24 @@ describe('AppShell', () => {
     expect(panelContent).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
     expect(sidebar).toHaveClass('pt-[48px]');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '首页' })).not.toHaveAttribute('aria-current');
-    expect(screen.getByRole('button', { name: '资料库' })).not.toHaveAttribute('aria-current');
+    const homeNavButton = screen.getByRole('button', { name: '首页' });
+    const libraryNavButton = screen.getByRole('button', { name: '资料库' });
+    expect(homeNavButton).not.toHaveAttribute('aria-current');
+    expect(libraryNavButton).not.toHaveAttribute('aria-current');
+    expect(homeNavButton).toHaveClass(
+      'bg-transparent',
+      'text-muted-foreground',
+      'hover:bg-secondary',
+      'hover:text-foreground'
+    );
+    expect(homeNavButton).not.toHaveClass('!bg-transparent', '!text-muted-foreground');
+    expect(libraryNavButton).toHaveClass(
+      'bg-transparent',
+      'text-muted-foreground',
+      'hover:bg-secondary',
+      'hover:text-foreground'
+    );
+    expect(libraryNavButton).not.toHaveClass('!bg-transparent', '!text-muted-foreground');
     expect(screen.queryByRole('button', { name: '记忆' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();

@@ -80,7 +80,7 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full bg-brand-ember p-0 text-destructive-foreground shadow-none hover:bg-brand-ember disabled:bg-muted"
+        className="size-[88px] rounded-full ![corner-shape:round] bg-brand-ember p-0 text-destructive-foreground shadow-none hover:bg-brand-ember disabled:bg-muted"
         disabled={disabled}
         onClick={onStart}
         size="iconLarge"
@@ -96,7 +96,7 @@ export function RecordingControls({
     return (
       <Button
         aria-label={label}
-        className="size-[88px] rounded-full bg-muted p-0 text-muted-foreground"
+        className="size-[88px] rounded-full ![corner-shape:round] bg-muted p-0 text-muted-foreground"
         disabled
         size="iconLarge"
         type="button"
