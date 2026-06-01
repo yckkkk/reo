@@ -934,10 +934,11 @@ describe('LoadedWorkspaceFrame', () => {
     });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
     expect(dialTrigger).toHaveClass(
-      '!bg-brand-ember',
+      '!shadow-[var(--shadow-hero-fill),var(--shadow-hero-edge)]',
       '!rounded-full',
       '!size-[var(--reo-speed-dial-diameter)]'
     );
+    expect(dialTrigger).not.toHaveClass('!bg-brand-ember');
     expect(within(dock).queryByRole('menuitem', { name: '录音' })).not.toBeInTheDocument();
     expect(dock.querySelector('[role="menu"]')).toHaveAttribute('aria-hidden', 'true');
     expect(within(dock).queryByRole('menuitem', { name: '上传图片' })).not.toBeInTheDocument();
@@ -994,7 +995,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     const dock = screen.getByRole('region', { name: '表达入口' });
     const dialTrigger = within(dock).getByRole('button', { name: '打开表达入口' });
-    expect(dialTrigger).toHaveClass('!bg-brand-ember');
+    expect(dialTrigger).toHaveClass('!shadow-[var(--shadow-hero-fill),var(--shadow-hero-edge)]');
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const strip = within(studio).getByRole('region', { name: '片段预览流' });
     const stripActions = strip.querySelector('[data-slot="memory-studio-segment-strip-actions"]');

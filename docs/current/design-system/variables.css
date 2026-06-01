@@ -6,11 +6,14 @@
   --brand-red: #dc2626;
   --brand-magenta: #d946ef;
   --brand-ember: #ff4704;
+  --brand-gradient-from: #ff6a33;
+  --brand-gradient-via: #ef4444;
+  --brand-gradient-to: #e879f9;
   --brand-gradient: linear-gradient(
     135deg,
-    var(--brand-ember) 0%,
-    var(--brand-red) 50%,
-    var(--brand-magenta) 100%
+    var(--brand-gradient-from) 0%,
+    var(--brand-gradient-via) 50%,
+    var(--brand-gradient-to) 100%
   );
 
   /* Layer 1 · raw surface elevation */
@@ -75,11 +78,14 @@
   --brand-red: #dc2626;
   --brand-magenta: #d946ef;
   --brand-ember: #ff4704;
+  --brand-gradient-from: color-mix(in oklab, var(--brand-ember) 92%, var(--surface-1));
+  --brand-gradient-via: color-mix(in oklab, var(--brand-red) 92%, var(--surface-1));
+  --brand-gradient-to: color-mix(in oklab, var(--brand-magenta) 92%, var(--surface-1));
   --brand-gradient: linear-gradient(
     135deg,
-    color-mix(in oklab, var(--brand-ember) 92%, #09090b) 0%,
-    color-mix(in oklab, var(--brand-red) 92%, #09090b) 50%,
-    color-mix(in oklab, var(--brand-magenta) 92%, #09090b) 100%
+    var(--brand-gradient-from) 0%,
+    var(--brand-gradient-via) 50%,
+    var(--brand-gradient-to) 100%
   );
 
   /* Layer 1 · raw surface elevation */

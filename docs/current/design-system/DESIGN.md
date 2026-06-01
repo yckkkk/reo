@@ -12,7 +12,7 @@ Reo 使用品牌红表达入口、黑白中性控件语义、Fluid 多层 surfac
 
 Reo token 分为两层：
 
-- **Layer 1 · raw 资产**：`--brand-{red,magenta,ember,gradient}`、`--surface-{1,2,3,4}`、`--shadow-{hero-lift,hero-fill,hero-inset,hero-edge,surface-inset}`。raw 层只在设计系统源文件、semantic 层或明确 owner primitive 内被引用。
+- **Layer 1 · raw 资产**：`--brand-{red,magenta,ember,gradient}`、`--brand-gradient-{from,via,to}`、`--surface-{1,2,3,4}`、`--shadow-{hero-lift,hero-fill,hero-inset,hero-edge,surface-inset}`。raw 层只在设计系统源文件、semantic 层或明确 owner primitive 内被引用。
 - **Layer 2 · semantic 角色**：shadcn 既有约定（`--background`、`--card`、`--popover`、`--primary`、`--ring`、`--input`、`--shadow-float`、`--shadow-modal` 等），可引用 raw 层或承载稳定中性色。业务 TSX 只消费 semantic 层。
 
 本文件的命名规范关键约束是当前 token 维护判据。
@@ -29,7 +29,7 @@ Reo token 分为两层：
 - `ring`：focus ring，跟随 `primary`，不使用品牌红。
 - `destructive` (`#b91c1c`)：删除、清空、放弃；红色只表达危险，不承担普通主动作。
 - `brand-ember` (`#ff4704`)：Reo 既有品牌身份名，保留作为 FAB action 实色与 brand-gradient 暖头。
-- `brand-gradient`：Hero 表达入口的"火"渐变 ember → red → magenta。
+- `brand-gradient`：Hero 表达入口的"火"渐变 ember → red → magenta；浅色用提亮色相、深色用 brand raw 混底色，浅亮深沉适配各自背景。
 - `muted-foreground`：次级文本、弱 icon、placeholder 与 disabled 文案。
 - `border`：透明。默认不使用线条表达同平面分割。
 
@@ -41,7 +41,7 @@ Reo token 分为两层：
 
 ## 组件规则
 
-- Button 默认文本动作和 compact 动作使用 `rounded-md`；32px icon button `rounded-sm`，40px icon button + menu action `rounded-md`，56px icon button `rounded-lg`；titlebar Breadcrumb trigger `rounded-sm`；Button base 使用 `reo-squircle`；primary 使用中性 `bg-primary`，当前 Button primitive hover 使用 `bg-primary-hover`；secondary/ghost 灰度填充；destructive 使用 `bg-destructive`（深红 `#b91c1c`），hover 使用 `bg-destructive-hover`；当前 FAB trigger、FAB action、录音主 CTA 与 Segment strip overlay arrow 保持全圆，FAB trigger 和录音主 CTA 仍使用 `bg-brand-ember`。
+- Button 默认文本动作和 compact 动作使用 `rounded-md`；32px icon button `rounded-sm`，40px icon button + menu action `rounded-md`，56px icon button `rounded-lg`；titlebar Breadcrumb trigger `rounded-sm`；Button base 使用 `reo-squircle`；primary 使用中性 `bg-primary`，当前 Button primitive hover 使用 `bg-primary-hover`；secondary/ghost 灰度填充；destructive 使用 `bg-destructive`（深红 `#b91c1c`），hover 使用 `bg-destructive-hover`；当前 FAB trigger、FAB action、录音主 CTA 与 Segment strip overlay arrow 保持全圆，FAB trigger 使用 Hero `--brand-gradient`，录音主 CTA 仍使用 `bg-brand-ember`。
 - Switch 使用 Radix mechanics；轨道默认 `bg-secondary`，checked 通过 `data-[state=checked]:bg-primary` 投影到中性 `--primary`，thumb 使用 `bg-background` 并通过 Radix checked state 位移，不使用描边或阴影。
 - Input 与 Textarea 使用 `bg-input` (= `surface-3`)、无边框、无阴影；focus 与 invalid 只用中性 ring。
 - Dropdown、Tooltip、Dialog、AlertDialog、Drawer 和 Toast 使用 `bg-popover` (= `surface-4`)，按浮层级别使用精细多层 `shadow-float` 或 `shadow-modal`。Tiptap `--tt-shadow-elevated-md` 派生自 `--shadow-float`。
@@ -55,13 +55,13 @@ Reo token 分为两层：
 
 Hero 不参与 elevation 阶梯（即不存在 `surface-5`）。当前 Hero raw asset 已落 token；组件接入以源码当前形态为准：
 
-| 资产或 utility     | 当前规则                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| `--brand-gradient` | Hero raw 资产；当前暂无 TSX consumer，owner 为 FAB、RecordingOverlay、MemoryIcon 或 Segment     |
-| `--shadow-hero-*`  | Hero effect token；当前暂无 TSX consumer，owner 为 FAB、RecordingOverlay、MemoryIcon 或 Segment |
-| `bg-brand-ember`   | 当前 FAB trigger、FAB action 和录音主 CTA 的实色品牌入口                                        |
-| `--shadow-float`   | Tooltip、DropdownMenu、Toast 等浮层的精细多层 elevation                                         |
-| `--shadow-modal`   | Dialog、AlertDialog、Drawer 等 modal surface 的精细多层 elevation                               |
+| 资产或 utility     | 当前规则                                                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--brand-gradient` | Hero raw 资产；FAB trigger 已接入；其余 owner（RecordingOverlay、MemoryIcon、Segment）待接入                                                          |
+| `--shadow-hero-*`  | Hero effect token；`--shadow-hero-{fill,edge}` FAB trigger 已接入；`--shadow-hero-{lift,inset}` 待 owner（MemoryIcon、RecordingOverlay、Segment）接入 |
+| `bg-brand-ember`   | 当前 FAB action 与录音主 CTA 的实色品牌入口（FAB trigger 已改 Hero 渐变）                                                                             |
+| `--shadow-float`   | Tooltip、DropdownMenu、Toast 等浮层的精细多层 elevation                                                                                               |
+| `--shadow-modal`   | Dialog、AlertDialog、Drawer 等 modal surface 的精细多层 elevation                                                                                     |
 
 ## 命名规范关键约束
 

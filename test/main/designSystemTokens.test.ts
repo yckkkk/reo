@@ -8,6 +8,9 @@ const lightColorContract = {
   'brand-red': '#dc2626',
   'brand-magenta': '#d946ef',
   'brand-ember': '#ff4704',
+  'brand-gradient-from': '#ff6a33',
+  'brand-gradient-via': '#ef4444',
+  'brand-gradient-to': '#e879f9',
 
   // Layer 1 · raw surface elevation
   'surface-1': '#ffffff',
@@ -45,6 +48,9 @@ const darkColorContract = {
   'brand-red': '#dc2626',
   'brand-magenta': '#d946ef',
   'brand-ember': '#ff4704',
+  'brand-gradient-from': 'color-mix(in oklab, var(--brand-ember) 92%, var(--surface-1))',
+  'brand-gradient-via': 'color-mix(in oklab, var(--brand-red) 92%, var(--surface-1))',
+  'brand-gradient-to': 'color-mix(in oklab, var(--brand-magenta) 92%, var(--surface-1))',
 
   // Layer 1 · raw surface elevation (dark values)
   'surface-1': '#09090b',
@@ -115,9 +121,9 @@ const darkShadowContract = {
 
 const gradientContract = {
   'brand-gradient-light':
-    'linear-gradient(135deg, var(--brand-ember) 0%, var(--brand-red) 50%, var(--brand-magenta) 100%)',
+    'linear-gradient(135deg, var(--brand-gradient-from) 0%, var(--brand-gradient-via) 50%, var(--brand-gradient-to) 100%)',
   'brand-gradient-dark':
-    'linear-gradient(135deg, color-mix(in oklab, var(--brand-ember) 92%, #09090b) 0%, color-mix(in oklab, var(--brand-red) 92%, #09090b) 50%, color-mix(in oklab, var(--brand-magenta) 92%, #09090b) 100%)',
+    'linear-gradient(135deg, var(--brand-gradient-from) 0%, var(--brand-gradient-via) 50%, var(--brand-gradient-to) 100%)',
 } as const;
 
 const semanticColorRoles = new Set([
@@ -371,10 +377,15 @@ test('brand gradient is exposed as a CSS variable, not as a raw color', () => {
       /^linear-gradient\(/,
       `${path} dark --brand-gradient must be a linear-gradient`
     );
-    assert.notEqual(
+    assert.doesNotMatch(
       lightGradient,
-      darkGradient,
-      `${path} dark gradient must reduce saturation vs light`
+      /#[0-9a-f]|rgb|oklch|color-mix/i,
+      `${path} --brand-gradient must compose from stop tokens, not raw colors`
+    );
+    assert.notEqual(
+      cssVariableValue(lightVariables, 'brand-gradient-from', 'light'),
+      cssVariableValue(darkVariables, 'brand-gradient-from', 'dark'),
+      `${path} dark gradient stops must reduce saturation vs light`
     );
     assert.equal(lightGradient, tokens.gradient['brand-gradient-light']?.$value, path);
     assert.equal(darkGradient, tokens.gradient['brand-gradient-dark']?.$value, path);
