@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { ReoCardSurface } from '@/components/ui/card-surface';
 import {
+  coverToneRequiresImageSampling,
   coverToneStyle,
   fallbackCoverToneForSource,
   resolveCoverToneForImageSource,
@@ -27,6 +28,14 @@ type MemoryStudioSegmentStripStyle = CSSProperties & {
 };
 
 const SEGMENT_PREVIEW_SPECTRUM_DATA = [10, 46, 64, 82, 36, 76, 92, 52, 14];
+
+type WindowWithIdleCallback = Window & {
+  readonly requestIdleCallback?: (
+    callback: () => void,
+    options?: { readonly timeout: number }
+  ) => number;
+  readonly cancelIdleCallback?: (handle: number) => void;
+};
 
 export const MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX = 160;
 export const MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS =
@@ -112,13 +121,32 @@ export function MemoryStudioSegmentCard({
   useEffect(() => {
     let cancelled = false;
     setCoverTone(fallbackCoverToneForSource(coverSource));
-    void resolveCoverToneForImageSource(coverSource).then((nextTone) => {
-      if (!cancelled) {
-        setCoverTone(nextTone);
-      }
-    });
+    if (!coverToneRequiresImageSampling(coverSource)) {
+      return undefined;
+    }
+    let idleCallbackHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+    const loadTone = () => {
+      void resolveCoverToneForImageSource(coverSource).then((nextTone) => {
+        if (!cancelled) {
+          setCoverTone(nextTone);
+        }
+      });
+    };
+    const idleWindow = window as WindowWithIdleCallback;
+    if (idleWindow.requestIdleCallback) {
+      idleCallbackHandle = idleWindow.requestIdleCallback(loadTone, { timeout: 600 });
+    } else {
+      timeoutHandle = window.setTimeout(loadTone, 0);
+    }
     return () => {
       cancelled = true;
+      if (idleCallbackHandle !== null) {
+        idleWindow.cancelIdleCallback?.(idleCallbackHandle);
+      }
+      if (timeoutHandle !== null) {
+        window.clearTimeout(timeoutHandle);
+      }
     };
   }, [coverSource]);
 

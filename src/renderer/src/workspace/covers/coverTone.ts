@@ -22,61 +22,62 @@ const DEFAULT_COVER_TONE: CoverTone = {
   bottom: { text: [250, 250, 250], protect: [0, 0, 0], scrimStart: 0.2, scrimMid: 0.1 },
 };
 
-const FALLBACK_TONES: Record<string, CoverTone> = {
-  'cover-01.png': {
+const STATIC_DEFAULT_COVER_TONES: Record<string, CoverTone> = {
+  'cover-01': {
     title: { text: [248, 245, 242], protect: [0, 0, 0] },
     bottom: { text: [224, 200, 203], protect: [0, 0, 0] },
   },
-  'cover-02.png': {
+  'cover-02': {
     title: { text: [248, 245, 242], protect: [0, 0, 0] },
     bottom: { text: [248, 245, 242], protect: [0, 0, 0] },
   },
-  'cover-03.png': {
+  'cover-03': {
     title: { text: [88, 54, 50], protect: [255, 255, 255] },
     bottom: { text: [248, 244, 242], protect: [0, 0, 0] },
   },
-  'cover-04.png': {
+  'cover-04': {
     title: { text: [60, 52, 76], protect: [255, 255, 255] },
     bottom: { text: [243, 246, 247], protect: [0, 0, 0] },
   },
-  'cover-05.png': {
+  'cover-05': {
     title: { text: [50, 79, 88], protect: [255, 255, 255] },
     bottom: { text: [59, 67, 78], protect: [255, 255, 255] },
   },
-  'cover-06.png': {
+  'cover-06': {
     title: { text: [38, 61, 67], protect: [255, 255, 255] },
     bottom: { text: [50, 85, 88], protect: [255, 255, 255] },
   },
-  'cover-07.png': {
+  'cover-07': {
     title: { text: [73, 50, 88], protect: [255, 255, 255] },
     bottom: { text: [50, 61, 88], protect: [255, 255, 255] },
   },
-  'cover-08.png': {
+  'cover-08': {
     title: { text: [242, 245, 248], protect: [0, 0, 0] },
     bottom: { text: [242, 245, 248], protect: [0, 0, 0] },
   },
-  'cover-09.png': {
+  'cover-09': {
     title: { text: [196, 222, 217], protect: [0, 0, 0] },
     bottom: { text: [238, 243, 239], protect: [0, 0, 0] },
   },
-  'cover-10.png': {
+  'cover-10': {
     title: { text: [67, 86, 52], protect: [255, 255, 255] },
     bottom: { text: [38, 66, 49], protect: [255, 255, 255] },
   },
-  'cover-11.png': {
+  'cover-11': {
     title: { text: [246, 243, 245], protect: [0, 0, 0] },
     bottom: { text: [247, 242, 243], protect: [0, 0, 0] },
   },
-  'cover-12.png': {
+  'cover-12': {
     title: { text: [50, 72, 88], protect: [255, 255, 255] },
     bottom: { text: [242, 246, 248], protect: [0, 0, 0] },
   },
-  'cover-13.png': {
+  'cover-13': {
     title: { text: [78, 60, 78], protect: [255, 255, 255] },
     bottom: { text: [88, 60, 50], protect: [255, 255, 255] },
   },
 };
 
+const MAX_CUSTOM_COVER_TONE_CACHE_ENTRIES = 64;
 const coverToneCache = new Map<string, Promise<CoverTone>>();
 
 function clamp(value: number, min: number, max: number): number {
@@ -179,8 +180,20 @@ function sourceFilename(source: string): string {
   return withoutQuery.slice(withoutQuery.lastIndexOf('/') + 1);
 }
 
+function staticDefaultCoverToneForSource(source: string): CoverTone | null {
+  if (source.startsWith('reo-attachment://')) {
+    return null;
+  }
+  const match = /^cover-(0[1-9]|1[0-3])(?:[.-][\w-]+)?\.png$/u.exec(sourceFilename(source));
+  return match ? (STATIC_DEFAULT_COVER_TONES[`cover-${match[1]}`] ?? null) : null;
+}
+
 export function fallbackCoverToneForSource(source: string): CoverTone {
-  return FALLBACK_TONES[sourceFilename(source)] ?? DEFAULT_COVER_TONE;
+  return staticDefaultCoverToneForSource(source) ?? DEFAULT_COVER_TONE;
+}
+
+export function coverToneRequiresImageSampling(source: string): boolean {
+  return staticDefaultCoverToneForSource(source) === null;
 }
 
 export function coverToneStyle(tone: CoverTone): CoverToneStyle {
@@ -280,11 +293,24 @@ async function deriveCoverToneFromImage(source: string): Promise<CoverTone> {
 }
 
 export function resolveCoverToneForImageSource(source: string): Promise<CoverTone> {
+  const staticTone = staticDefaultCoverToneForSource(source);
+  if (staticTone) {
+    return Promise.resolve(staticTone);
+  }
   const cached = coverToneCache.get(source);
   if (cached) {
+    coverToneCache.delete(source);
+    coverToneCache.set(source, cached);
     return cached;
   }
   const pending = deriveCoverToneFromImage(source).catch(() => fallbackCoverToneForSource(source));
   coverToneCache.set(source, pending);
+  while (coverToneCache.size > MAX_CUSTOM_COVER_TONE_CACHE_ENTRIES) {
+    const oldest = coverToneCache.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    coverToneCache.delete(oldest);
+  }
   return pending;
 }

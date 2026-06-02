@@ -4952,14 +4952,17 @@ async function finalizedSegmentProjectionFromFileTruth({
   if (metadata.workspaceId !== workspaceId) {
     return null;
   }
-  const supplements = await listValidSegmentSupplementsFromDirectory({
-    rootPath,
-    workspaceId,
-    memoryId: metadata.memoryId,
-    segmentId,
-    recordingDirectory,
-    repairFileSpaceCandidates,
-  });
+  const [supplements, coverProjection] = await Promise.all([
+    listValidSegmentSupplementsFromDirectory({
+      rootPath,
+      workspaceId,
+      memoryId: metadata.memoryId,
+      segmentId,
+      recordingDirectory,
+      repairFileSpaceCandidates,
+    }),
+    readFileSpaceNodeCoverProjectionFromDirectory(recordingDirectory),
+  ]);
   const updatedAt = latestIsoTimestamp(
     metadata.updatedAt ?? metadata.finalizedAt,
     ...supplements.map((supplement) => supplement.updatedAt)
@@ -4976,7 +4979,7 @@ async function finalizedSegmentProjectionFromFileTruth({
     ...(metadata.contentTitle !== undefined ? { contentTitle: metadata.contentTitle } : {}),
     createdAt: metadata.createdAt,
     updatedAt,
-    cover: await readFileSpaceNodeCoverProjectionFromDirectory(recordingDirectory),
+    cover: coverProjection,
     supplementCount: supplements.length,
     supplements,
     contentTabOrder: normalizeContentTabOrder(metadata.contentTabOrder, supplements),

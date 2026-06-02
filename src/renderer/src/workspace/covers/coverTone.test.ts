@@ -44,7 +44,30 @@ describe('cover tone', () => {
 
   it('keeps the approved fallback tones for default gradient assets', () => {
     expect(fallbackCoverToneForSource('/assets/cover-05.png').title.text).toEqual([50, 79, 88]);
+    expect(fallbackCoverToneForSource('/assets/cover-05-B9xY_q2.png').title.text).toEqual([
+      50, 79, 88,
+    ]);
     expect(fallbackCoverToneForSource('/assets/cover-12.png').bottom.text).toEqual([242, 246, 248]);
+  });
+
+  it('does not decode or canvas-sample default gradient assets', async () => {
+    const createdImages: HTMLImageElement[] = [];
+    const OriginalImage = globalThis.Image;
+    class TestImage {
+      constructor() {
+        createdImages.push(this as unknown as HTMLImageElement);
+      }
+    }
+    globalThis.Image = TestImage as unknown as typeof Image;
+
+    try {
+      const tone = await resolveCoverToneForImageSource('/assets/cover-05-B9xY_q2.png');
+      expect(tone.title.text).toEqual([50, 79, 88]);
+    } finally {
+      globalThis.Image = OriginalImage;
+    }
+
+    expect(createdImages).toHaveLength(0);
   });
 
   it('loads custom protocol covers with anonymous CORS so canvas sampling can read pixels', async () => {
@@ -74,5 +97,48 @@ describe('cover tone', () => {
     }
 
     expect(createdImages[0]?.crossOrigin).toBe('anonymous');
+  });
+
+  it('bounds custom cover tone cache so old versioned sources can be released', async () => {
+    const createdSources: string[] = [];
+    const OriginalImage = globalThis.Image;
+    class TestImage {
+      crossOrigin: string | null = null;
+      decoding: 'async' | 'auto' | 'sync' = 'auto';
+      naturalHeight = 0;
+      naturalWidth = 0;
+      private source = '';
+
+      set src(value: string) {
+        this.source = value;
+        createdSources.push(value);
+      }
+
+      get src(): string {
+        return this.source;
+      }
+
+      decode(): Promise<void> {
+        return Promise.resolve();
+      }
+    }
+    globalThis.Image = TestImage as unknown as typeof Image;
+
+    try {
+      for (let index = 0; index < 70; index += 1) {
+        await resolveCoverToneForImageSource(
+          `reo-attachment://ws_1/segments/seg_${index}/cover/a.png?v=${index}`
+        );
+      }
+      await resolveCoverToneForImageSource('reo-attachment://ws_1/segments/seg_0/cover/a.png?v=0');
+    } finally {
+      globalThis.Image = OriginalImage;
+    }
+
+    expect(
+      createdSources.filter(
+        (source) => source === 'reo-attachment://ws_1/segments/seg_0/cover/a.png?v=0'
+      )
+    ).toHaveLength(2);
   });
 });
