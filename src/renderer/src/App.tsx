@@ -48,6 +48,7 @@ import type {
   SegmentSupplementRenameTarget,
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
+  SegmentCoverResetTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './workspace/segmentActionTargets';
@@ -95,10 +96,12 @@ import {
   readWorkspaceSnapshot,
   removeMemorySpace,
   resetMemoryCover,
+  resetSegmentCover,
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
   restoreMemoryCover,
+  restoreSegmentCover,
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
   saveTranscript,
@@ -239,6 +242,8 @@ const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
 const MEMORY_COVER_RESET_ERROR = '无法恢复随机默认图片。';
 const MEMORY_COVER_RESTORE_ERROR = '无法恢复原封面。';
+const SEGMENT_COVER_RESET_ERROR = '无法恢复随机默认图片。';
+const SEGMENT_COVER_RESTORE_ERROR = '无法恢复原封面。';
 const SEGMENT_DELETE_ERROR = '无法删除片段。';
 const SEGMENT_SUPPLEMENT_DELETE_ERROR = '无法删除补充内容。';
 const SEGMENT_SUPPLEMENT_RESTORE_ERROR = '无法恢复补充内容。';
@@ -3208,6 +3213,35 @@ export function App() {
     );
   }
 
+  function applySegmentCoverUpdate({
+    memory,
+    segment,
+    session,
+  }: {
+    readonly memory: WorkspaceMemorySummary;
+    readonly segment: WorkspaceMemoryDetail['segments'][number];
+    readonly session: WorkspaceSession;
+  }) {
+    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: session.workspaceId,
+      memoryId: memory.memoryId,
+    });
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) => mergeMemoryIntoSnapshot(currentSnapshot ?? session.snapshot, memory)
+    );
+    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
+      mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, session.workspaceId)
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
+        ? mergeMemoryIntoSession(currentSession, memory)
+        : currentSession
+    );
+  }
+
   function openMemoryDeleteDialog(memory: WorkspaceMemorySummary) {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -3499,6 +3533,123 @@ export function App() {
         type: 'error',
         title: MEMORY_COVER_RESET_ERROR,
         description: unknownErrorDisplayMessage(error, MEMORY_COVER_RESET_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function restoreSegmentCoverFromUndo(
+    memoryId: string,
+    segmentId: string,
+    restoreToken: string
+  ) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await restoreSegmentCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        workspaceId: mutationSession.workspaceId,
+        memoryId,
+        segmentId,
+        restoreToken,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_COVER_RESTORE_ERROR,
+          description: workspaceErrorDisplayMessage(response.error, SEGMENT_COVER_RESTORE_ERROR),
+        });
+        return;
+      }
+
+      applySegmentCoverUpdate({
+        memory: response.value.memory,
+        segment: response.value.segment,
+        session: mutationSession,
+      });
+      showReoToast({ type: 'success', title: '已恢复原封面' });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: SEGMENT_COVER_RESTORE_ERROR,
+        description: unknownErrorDisplayMessage(error, SEGMENT_COVER_RESTORE_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function resetSegmentCoverToDefault(target: SegmentCoverResetTarget) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await resetSegmentCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        workspaceId: mutationSession.workspaceId,
+        memoryId: target.memoryId,
+        segmentId: target.segment.segmentId,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_COVER_RESET_ERROR,
+          description: workspaceErrorDisplayMessage(response.error, SEGMENT_COVER_RESET_ERROR),
+        });
+        return;
+      }
+
+      applySegmentCoverUpdate({
+        memory: response.value.memory,
+        segment: response.value.segment,
+        session: mutationSession,
+      });
+      showReoToast({
+        title: '已恢复随机默认图片',
+        description: target.segment.title,
+        undo: {
+          onUndo: () => {
+            void restoreSegmentCoverFromUndo(
+              target.memoryId,
+              target.segment.segmentId,
+              response.value.restoreToken
+            );
+          },
+        },
+      });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: SEGMENT_COVER_RESET_ERROR,
+        description: unknownErrorDisplayMessage(error, SEGMENT_COVER_RESET_ERROR),
       });
     } finally {
       finishWorkspaceAction();
@@ -4508,6 +4659,9 @@ export function App() {
             onDeleteMemory={openMemoryDeleteDialog}
             onResetMemoryCover={(memory) => {
               void resetMemoryCoverToDefault(memory);
+            }}
+            onResetSegmentCover={(target) => {
+              void resetSegmentCoverToDefault(target);
             }}
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}

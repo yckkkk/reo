@@ -1,4 +1,7 @@
-import type { WorkspaceMemorySummary } from '../../../../workspace-contract/workspace-contract';
+import type {
+  WorkspaceMemorySummary,
+  WorkspaceSegmentProjection,
+} from '../../../../workspace-contract/workspace-contract';
 
 const DEFAULT_COVER_TEMPLATES = [
   new URL('./defaults/cover-01.png', import.meta.url).toString(),
@@ -7,6 +10,13 @@ const DEFAULT_COVER_TEMPLATES = [
   new URL('./defaults/cover-04.png', import.meta.url).toString(),
   new URL('./defaults/cover-05.png', import.meta.url).toString(),
   new URL('./defaults/cover-06.png', import.meta.url).toString(),
+  new URL('./defaults/cover-07.png', import.meta.url).toString(),
+  new URL('./defaults/cover-08.png', import.meta.url).toString(),
+  new URL('./defaults/cover-09.png', import.meta.url).toString(),
+  new URL('./defaults/cover-10.png', import.meta.url).toString(),
+  new URL('./defaults/cover-11.png', import.meta.url).toString(),
+  new URL('./defaults/cover-12.png', import.meta.url).toString(),
+  new URL('./defaults/cover-13.png', import.meta.url).toString(),
 ] as const;
 
 function stableHash(input: string): number {
@@ -39,4 +49,22 @@ export function resolveMemoryCoverImageSource({
   }
 
   return resolveDefaultCoverTemplate(memory.memoryId);
+}
+
+export function resolveSegmentCoverImageSource({
+  segment,
+  workspaceId,
+}: {
+  readonly segment: WorkspaceSegmentProjection;
+  readonly workspaceId: string;
+}): string {
+  if (segment.cover?.source === 'custom') {
+    return `reo-attachment://${workspaceId}/segments/${
+      segment.segmentId
+    }/cover/${encodeURIComponent(segment.cover.filename)}?v=${encodeURIComponent(
+      segment.cover.version
+    )}`;
+  }
+
+  return resolveDefaultCoverTemplate(segment.segmentId);
 }

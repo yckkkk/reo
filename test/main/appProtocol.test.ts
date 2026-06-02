@@ -156,6 +156,17 @@ test('attachment protocol response keeps attachments no-store and caches version
   assert.equal(sourceText.includes('net.fetch(pathToFileURL(resolved'), false);
 });
 
+test('cover protocol responses allow canvas sampling without widening ordinary attachments', () => {
+  const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
+
+  assert.match(sourceText, /coverCanvasAccess: true/);
+  assert.match(sourceText, /coverCanvasAccess: false/);
+  assert.match(sourceText, /resolveCoverCanvasAccessOrigin/);
+  assert.match(sourceText, /'Access-Control-Allow-Origin'/);
+  assert.match(sourceText, /origin === APP_SHELL_ORIGIN/);
+  assert.match(sourceText, /origin === devServerOrigin/);
+});
+
 test('attachment protocol path decoding safely denies malformed percent escapes', () => {
   const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
 
@@ -171,4 +182,16 @@ test('attachment protocol has an explicit Memory cover route without broadening 
   assert.match(sourceText, /segments\[0\]\s*===\s*'memories'/);
   assert.match(sourceText, /resolveMemoryCoverFile/);
   assert.equal(sourceText.includes('connect-src reo-attachment'), false);
+});
+
+test('attachment protocol has an explicit Segment cover route before note attachments', () => {
+  const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
+  const segmentCoverRoute = sourceText.indexOf("segments.length === 4 && segments[2] === 'cover'");
+  const noteAttachmentRoute = sourceText.indexOf('segments.length === 3');
+
+  assert.notEqual(segmentCoverRoute, -1);
+  assert.notEqual(noteAttachmentRoute, -1);
+  assert.ok(segmentCoverRoute < noteAttachmentRoute);
+  assert.match(sourceText, /resolveSegmentCoverFile/);
+  assert.match(sourceText, /cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL/);
 });

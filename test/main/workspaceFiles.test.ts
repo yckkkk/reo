@@ -22,9 +22,9 @@ import test from 'node:test';
 import type { JSONContent } from '@tiptap/core';
 import {
   DEFAULT_REO_COVER_AESTHETIC_SKILL_MD,
+  DEFAULT_REO_COVER_IMAGE_SKILL_MD,
   DEFAULT_REO_DOCTOR_SKILL_MD,
   DEFAULT_REO_EDIT_SKILL_MD,
-  DEFAULT_REO_MEMORY_COVER_SKILL_MD,
   DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
@@ -611,7 +611,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(agentsText, /核心实体/);
   assert.match(agentsText, /不需要离开当前记忆空间查询 Reo 仓库源码/);
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-memory-cover\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
   assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
@@ -620,15 +620,15 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.doesNotMatch(agentsText, /source\.hash/);
   assert.deepEqual((await readdir(path.join(root, 'skills'))).sort(), [
     'reo-cover-aesthetic',
+    'reo-cover-image',
     'reo-doctor',
     'reo-edit',
-    'reo-memory-cover',
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-cover-aesthetic'))).sort(), [
     'SKILL.md',
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-edit'))).sort(), ['SKILL.md']);
-  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-memory-cover'))).sort(), [
+  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-cover-image'))).sort(), [
     'SKILL.md',
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-doctor'))).sort(), [
@@ -646,19 +646,20 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(editSkillText, /Rename/);
   assert.match(editSkillText, /Verify direct file effects, then stop/);
   const coverSkillText = await readFile(
-    path.join(root, 'skills', 'reo-memory-cover', 'SKILL.md'),
+    path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'),
     'utf8'
   );
-  assert.match(coverSkillText, /^name: reo-memory-cover/m);
+  assert.match(coverSkillText, /^name: reo-cover-image/m);
   assert.match(coverSkillText, /封面图片任务/);
   assert.match(coverSkillText, /memories\/<memory-directory>\/cover\//);
+  assert.match(coverSkillText, /segments\/<segment-directory>\/cover\//);
   assert.match(coverSkillText, /不要编辑 `.reo\/index\.json`/);
   const aestheticSkillText = await readFile(
     path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'),
     'utf8'
   );
   assert.match(aestheticSkillText, /^name: reo-cover-aesthetic/m);
-  assert.match(aestheticSkillText, /基于开源 `aesthetic` skill 优化后的 Reo Memory 封面审美 skill/);
+  assert.match(aestheticSkillText, /基于开源 `aesthetic` skill 优化后的 Reo 封面审美 skill/);
   assert.match(aestheticSkillText, /## 核心框架：四阶段方法/);
   assert.match(aestheticSkillText, /## Reo 封面规则/);
   assert.doesNotMatch(aestheticSkillText, /\$aesthetic/);
@@ -704,7 +705,7 @@ test('managed AGENTS block presents ordinary file editing before Reo internals',
     DEFAULT_WORKSPACE_AGENTS_MD,
     /Markdown、同节点 `content\.tiptap\.json`、附件和普通对象文件/
   );
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-memory-cover\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-aesthetic\/SKILL\.md/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /验证直接文件效果后停止/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /Reo 明确提示 needs-review/);
@@ -736,20 +737,26 @@ test('managed reo-edit skill keeps stop rules explicit and keeps Tiptap JSON non
   assert.doesNotMatch(DEFAULT_REO_EDIT_SKILL_MD, /only edit Markdown/i);
 });
 
-test('managed reo-memory-cover skill keeps cover file operations explicit', () => {
-  assertIncludesInOrder(DEFAULT_REO_MEMORY_COVER_SKILL_MD, [
+test('managed reo-cover-image skill keeps cover file operations explicit', () => {
+  assertIncludesInOrder(DEFAULT_REO_COVER_IMAGE_SKILL_MD, [
     '## 快速开始',
+    '## 目标路径',
     '## 替换或创建自定义封面',
     '## 生成封面',
     '## 恢复默认封面',
     '## 验证',
   ]);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /memories\/<memory-directory>\/cover\//);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /PNG、JPEG 和 WebP/);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /不要编辑 `.reo\/index\.json`/);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /不要创建 symlink/);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /自然铺满整个画布/);
-  assert.match(DEFAULT_REO_MEMORY_COVER_SKILL_MD, /不要在图片内部绘制边框/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /memories\/<memory-directory>\/cover\//);
+  assert.match(
+    DEFAULT_REO_COVER_IMAGE_SKILL_MD,
+    /memories\/<memory-directory>\/segments\/<segment-directory>\/cover\//
+  );
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /PNG、JPEG 和 WebP/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要编辑 `.reo\/index\.json`/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要创建 symlink/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /自然铺满整个画布/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要在图片内部绘制边框/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要在图中预留文字胶囊/);
 });
 
 test('managed reo-cover-aesthetic skill is a Reo-adapted aesthetic workflow', () => {
@@ -764,6 +771,8 @@ test('managed reo-cover-aesthetic skill is a Reo-adapted aesthetic workflow', ()
   assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /BEAUTIFUL：理解审美/);
   assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /RIGHT：适配 Reo 封面/);
   assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /图片内容必须自然铺满整个画布/);
+  assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /Memory 或 Segment/);
+  assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /no border, no frame, no white margin/);
   assert.doesNotMatch(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /\$aesthetic/);
   assert.doesNotMatch(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /npx skills add/);
@@ -809,8 +818,8 @@ test('open workspace silently restores missing Reo agent managed config', async 
     true
   );
   assert.equal(
-    (await readFile(path.join(root, 'skills', 'reo-memory-cover', 'SKILL.md'), 'utf8')).includes(
-      'name: reo-memory-cover'
+    (await readFile(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), 'utf8')).includes(
+      'name: reo-cover-image'
     ),
     true
   );
@@ -843,11 +852,11 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
   assert.match(agentsText, /保留我的长期偏好/);
   assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-memory-cover\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
   assert.equal((agentsText.match(/reo-managed:agent-entry:start/g) ?? []).length, 1);
   await stat(path.join(root, 'skills', 'reo-edit', 'SKILL.md'));
-  await stat(path.join(root, 'skills', 'reo-memory-cover', 'SKILL.md'));
+  await stat(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
 });
@@ -900,7 +909,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   await writeFile(path.join(root, 'AGENTS.md'), '# 用户规则\n\n只修改当前任务需要的文件。\n');
   await rm(path.join(root, 'skills', 'reo-doctor', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), { force: true });
-  await rm(path.join(root, 'skills', 'reo-memory-cover', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), { force: true });
 
   const result = spawnSync(
@@ -916,7 +925,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       readonly agentsMd: boolean;
       readonly doctorSkill: boolean;
       readonly editSkill: boolean;
-      readonly memoryCoverSkill: boolean;
+      readonly coverImageSkill: boolean;
       readonly coverAestheticSkill: boolean;
     };
   };
@@ -924,7 +933,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   assert.equal(report.repaired.agentsMd, true);
   assert.equal(report.repaired.doctorSkill, true);
   assert.equal(report.repaired.editSkill, true);
-  assert.equal(report.repaired.memoryCoverSkill, true);
+  assert.equal(report.repaired.coverImageSkill, true);
   assert.equal(report.repaired.coverAestheticSkill, true);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.match(agentsText, /只修改当前任务需要的文件/);
@@ -938,8 +947,8 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     /^name: reo-edit/m
   );
   assert.match(
-    await readFile(path.join(root, 'skills', 'reo-memory-cover', 'SKILL.md'), 'utf8'),
-    /^name: reo-memory-cover/m
+    await readFile(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), 'utf8'),
+    /^name: reo-cover-image/m
   );
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), 'utf8'),

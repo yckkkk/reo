@@ -50,8 +50,12 @@ describe('App', () => {
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
+    resetMemoryCover: vi.fn(),
+    restoreMemoryCover: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
+    resetSegmentCover: vi.fn(),
+    restoreSegmentCover: vi.fn(),
     deleteSegmentSupplement: vi.fn(),
     restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
@@ -327,6 +331,17 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_MEMORY_RESTORE_FAILED', message: 'Memory could not be restored' },
     });
+    reoWorkspace.resetMemoryCover.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_COVER_RESET_FAILED', message: 'Memory cover could not be reset' },
+    });
+    reoWorkspace.restoreMemoryCover.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_MEMORY_COVER_RESTORE_FAILED',
+        message: 'Memory cover could not be restored',
+      },
+    });
     reoWorkspace.deleteSegment.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_SEGMENT_DELETE_FAILED', message: 'Segment could not be deleted' },
@@ -334,6 +349,20 @@ describe('App', () => {
     reoWorkspace.restoreDeletedSegment.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_SEGMENT_RESTORE_FAILED', message: 'Segment could not be restored' },
+    });
+    reoWorkspace.resetSegmentCover.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_COVER_RESET_FAILED',
+        message: 'Segment cover could not be reset',
+      },
+    });
+    reoWorkspace.restoreSegmentCover.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_COVER_RESTORE_FAILED',
+        message: 'Segment cover could not be restored',
+      },
     });
     reoWorkspace.deleteSegmentSupplement.mockResolvedValue({
       ok: false,
@@ -4574,6 +4603,198 @@ describe('App', () => {
           workspaceSnapshotQueryKey({ workspaceId: 'ws_1' })
         )?.memories[0]?.cover
       ).toEqual({ source: 'custom', filename: 'cover.png', version: '177-42' })
+    );
+  });
+
+  it('refreshes a Segment poster cover from file truth events while Memory Studio is open', async () => {
+    const user = userEvent.setup();
+    const queryClient = createReoQueryClient();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const noteWorkspace = createNoteSegmentFixture();
+    const initialSegment = {
+      ...noteWorkspace.segment,
+      title: '片段封面同步',
+      cover: { source: 'default' as const },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    const refreshedSegment = {
+      ...initialSegment,
+      cover: { source: 'custom' as const, filename: 'poster.webp', version: '177-42' },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: noteWorkspace.snapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: noteWorkspace.snapshot,
+    });
+    let detailReadCount = 0;
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => {
+      const segment = detailReadCount === 0 ? initialSegment : refreshedSegment;
+      detailReadCount += 1;
+      return {
+        ok: true,
+        value: {
+          requestId: payload.requestId,
+          detail: {
+            ...noteWorkspace.memory,
+            workspaceId: 'ws_1',
+            segments: [segment],
+          },
+        },
+      };
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await screen.findByRole('button', { name: '选择片段 片段封面同步' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(1));
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: noteWorkspace.memory.memoryId,
+    });
+    expect(
+      queryClient.getQueryData<{ readonly detail: WorkspaceMemoryDetail }>(detailQueryKey)?.detail
+        .segments[0]?.cover
+    ).toEqual({ source: 'default' });
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 3,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(reoWorkspace.readMemoryDetail).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly detail: WorkspaceMemoryDetail }>(detailQueryKey)?.detail
+          .segments[0]?.cover
+      ).toEqual({ source: 'custom', filename: 'poster.webp', version: '177-42' })
+    );
+    expect(
+      screen
+        .getByRole('button', { name: '选择片段 片段封面同步' })
+        .querySelector('[data-slot="memory-studio-segment-card-cover"]')
+    ).toHaveAttribute(
+      'src',
+      'reo-attachment://ws_1/segments/seg_note_1/cover/poster.webp?v=177-42'
+    );
+  });
+
+  it('patches Segment cover reset and undo restore into the active Memory detail cache', async () => {
+    const user = userEvent.setup();
+    const queryClient = createReoQueryClient();
+    const noteWorkspace = createNoteSegmentFixture();
+    const customSegment = {
+      ...noteWorkspace.segment,
+      title: '片段封面菜单',
+      cover: { source: 'custom' as const, filename: 'poster.webp', version: 'old-1' },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    const defaultSegment = {
+      ...customSegment,
+      cover: { source: 'default' as const },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    mockLoadedNoteWorkspace({ ...noteWorkspace, segment: customSegment });
+    reoWorkspace.resetSegmentCover.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: noteWorkspace.memory,
+        segment: defaultSegment,
+        restoreToken: 'cover__mem_birthday__seg_note_1__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+    reoWorkspace.restoreSegmentCover.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: noteWorkspace.memory,
+        segment: customSegment,
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 片段封面菜单' });
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: noteWorkspace.memory.memoryId,
+    });
+
+    await user.click(screen.getByRole('button', { name: '片段 片段封面菜单 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '恢复随机默认图片' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.resetSegmentCover).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_note_1',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly detail: WorkspaceMemoryDetail }>(detailQueryKey)?.detail
+          .segments[0]?.cover
+      ).toEqual({ source: 'default' })
+    );
+    expect(screen.getByText('已恢复随机默认图片')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '恢复' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.restoreSegmentCover).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_note_1',
+        restoreToken: 'cover__mem_birthday__seg_note_1__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly detail: WorkspaceMemoryDetail }>(detailQueryKey)?.detail
+          .segments[0]?.cover
+      ).toEqual({ source: 'custom', filename: 'poster.webp', version: 'old-1' })
     );
   });
 

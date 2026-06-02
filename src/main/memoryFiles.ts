@@ -51,7 +51,10 @@ import {
   type ParsedWorkspaceMarkdownObjectCandidate,
 } from './workspaceMarkdownObjects.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
-import { readMemoryCoverProjectionFromDirectory } from './memoryCovers.js';
+import {
+  readFileSpaceNodeCoverProjectionFromDirectory,
+  readMemoryCoverProjectionFromDirectory,
+} from './memoryCovers.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
@@ -2922,6 +2925,18 @@ async function ensureMemoryCoverTrashDirectory(
   });
 }
 
+async function ensureSegmentCoverTrashDirectory(
+  rootPath: string,
+  assertUsable?: AssertWorkspaceUsable
+): Promise<string> {
+  return ensureTrashNodeDirectory({
+    directoryName: 'segment-covers',
+    directoryUnsafeMessage: 'Workspace segment cover trash directory is not safe',
+    rootPath,
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+}
+
 async function ensureSegmentTrashDirectory(
   rootPath: string,
   assertUsable?: AssertWorkspaceUsable
@@ -4961,6 +4976,7 @@ async function finalizedSegmentProjectionFromFileTruth({
     ...(metadata.contentTitle !== undefined ? { contentTitle: metadata.contentTitle } : {}),
     createdAt: metadata.createdAt,
     updatedAt,
+    cover: await readFileSpaceNodeCoverProjectionFromDirectory(recordingDirectory),
     supplementCount: supplements.length,
     supplements,
     contentTabOrder: normalizeContentTabOrder(metadata.contentTabOrder, supplements),
@@ -5096,6 +5112,29 @@ export async function resolveFinalizedNoteSegmentDirectoryFromManifest(input: {
     manifest.segmentId !== input.segmentId
   ) {
     throw new Error('Finalized note segment manifest does not match attachment owner');
+  }
+  return {
+    memoryId: manifest.memoryId,
+    segmentDirectory: await memorySegmentDirectory(
+      input.rootPath,
+      manifest.memoryId,
+      input.segmentId
+    ),
+  };
+}
+
+export async function resolveFinalizedSegmentDirectoryFromManifest(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly segmentId: string;
+}): Promise<{ readonly memoryId: string; readonly segmentDirectory: string }> {
+  const manifest = segmentObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(await segmentObjectManifestPath(input.rootPath, input.segmentId))
+    )
+  );
+  if (manifest.workspaceId !== input.workspaceId || manifest.segmentId !== input.segmentId) {
+    throw new Error('Finalized segment manifest does not match cover owner');
   }
   return {
     memoryId: manifest.memoryId,
@@ -7367,6 +7406,230 @@ export async function restoreMemoryCoverFromTrash(input: {
       error,
       'ERR_MEMORY_COVER_RESTORE_FAILED',
       'Memory cover could not be restored',
+      rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
+    );
+  }
+}
+
+function createSegmentCoverRestoreToken(memoryId: string, segmentId: string): string {
+  return `cover__${memoryId}__${segmentId}__${randomUUID().replaceAll('-', '')}`;
+}
+
+function segmentCoverRestoreTokenMatches({
+  memoryId,
+  restoreToken,
+  segmentId,
+}: {
+  readonly memoryId: string;
+  readonly restoreToken: string;
+  readonly segmentId: string;
+}): boolean {
+  const prefix = `cover__${memoryId}__${segmentId}__`;
+  if (!restoreToken.startsWith(prefix)) {
+    return false;
+  }
+  return /^[a-f0-9]{32}$/.test(restoreToken.slice(prefix.length));
+}
+
+async function readCurrentMemoryAndSegmentForSegmentCover(input: SegmentTargetInput): Promise<{
+  readonly memory: MemorySummary;
+  readonly segment: WorkspaceSegmentProjection;
+}> {
+  const currentMemory = await readMemoryFileTruth(input.rootPath, input.memoryId);
+  const fileTruth = await readValidFinalizedSegmentFileTruth(
+    input.rootPath,
+    input.memoryId,
+    input.segmentId
+  );
+  if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+    throw new Error('Finalized segment projection does not match file truth');
+  }
+  const segment = await finalizedSegmentProjectionFromFileTruth({
+    rootPath: input.rootPath,
+    workspaceId: input.workspaceId,
+    fileTruth,
+  });
+  if (!segment || segment.segmentId !== input.segmentId) {
+    throw new Error('Finalized segment projection does not match file truth');
+  }
+  return {
+    memory: await summarizeMemory(input.rootPath, currentMemory),
+    segment,
+  };
+}
+
+export async function resetSegmentCoverToDefaultFromFileTruth(input: SegmentTargetInput): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+    readonly restoreToken: string;
+  }>
+> {
+  const restoreToken = createSegmentCoverRestoreToken(input.memoryId, input.segmentId);
+  let movedToTrash = false;
+  let segmentDirectoryPath: string | null = null;
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const fileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
+      );
+      if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+      segmentDirectoryPath = fileTruth.recordingDirectory;
+      await assertSafeExistingDirectory(
+        segmentDirectoryPath,
+        'Workspace segment directory is not safe'
+      );
+      const currentCover =
+        await readFileSpaceNodeCoverProjectionFromDirectory(segmentDirectoryPath);
+      if (currentCover.source !== 'custom') {
+        return workspaceError(
+          'ERR_WORKSPACE_SEGMENT_COVER_NOT_FOUND',
+          'Segment cover was not found',
+          'none-written'
+        );
+      }
+      const sourceDirectory = await resolveSafeWorkspaceChild(
+        input.rootPath,
+        path.join(segmentDirectoryPath, 'cover')
+      );
+      await assertSafeExistingDirectory(sourceDirectory, 'Workspace segment cover path is unsafe');
+      const trashDirectory = await ensureSegmentCoverTrashDirectory(
+        input.rootPath,
+        input.assertWorkspaceUsable
+      );
+      await moveFileSpaceNodeDirectory({
+        sourceName: 'cover',
+        sourceParentDirectory: segmentDirectoryPath,
+        targetName: restoreToken,
+        targetParentDirectory: trashDirectory,
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      movedToTrash = true;
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const refreshed = await readCurrentMemoryAndSegmentForSegmentCover(input);
+      return {
+        ok: true,
+        value: {
+          ...refreshed,
+          restoreToken,
+        },
+      };
+    });
+  } catch (error) {
+    let rollbackSucceeded = !movedToTrash;
+    if (movedToTrash && segmentDirectoryPath && !(error instanceof WorkspaceHandleLost)) {
+      try {
+        const trashDirectory = await ensureSegmentCoverTrashDirectory(input.rootPath);
+        await moveFileSpaceNodeDirectory({
+          sourceName: restoreToken,
+          sourceParentDirectory: trashDirectory,
+          targetName: 'cover',
+          targetParentDirectory: segmentDirectoryPath,
+        });
+        rollbackSucceeded = true;
+      } catch {
+        rollbackSucceeded = false;
+      }
+    }
+    return memoryFilesError(
+      error,
+      'ERR_SEGMENT_COVER_RESET_FAILED',
+      'Segment cover could not be reset',
+      rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
+    );
+  }
+}
+
+export async function restoreSegmentCoverFromTrash(
+  input: SegmentTargetInput & {
+    readonly restoreToken: string;
+  }
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+  }>
+> {
+  let movedToActive = false;
+  let segmentDirectoryPath: string | null = null;
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      if (
+        !segmentCoverRestoreTokenMatches({
+          memoryId: input.memoryId,
+          restoreToken: input.restoreToken,
+          segmentId: input.segmentId,
+        })
+      ) {
+        throw new Error('Invalid segment cover restore token');
+      }
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const fileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
+      );
+      if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+      segmentDirectoryPath = fileTruth.recordingDirectory;
+      await assertSafeExistingDirectory(
+        segmentDirectoryPath,
+        'Workspace segment directory is not safe'
+      );
+      const currentCover =
+        await readFileSpaceNodeCoverProjectionFromDirectory(segmentDirectoryPath);
+      if (currentCover.source === 'custom') {
+        throw new Error('Segment already has a custom cover');
+      }
+      const trashDirectory = await ensureSegmentCoverTrashDirectory(
+        input.rootPath,
+        input.assertWorkspaceUsable
+      );
+      await moveFileSpaceNodeDirectory({
+        sourceName: input.restoreToken,
+        sourceParentDirectory: trashDirectory,
+        targetName: 'cover',
+        targetParentDirectory: segmentDirectoryPath,
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      movedToActive = true;
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const refreshed = await readCurrentMemoryAndSegmentForSegmentCover(input);
+      return {
+        ok: true,
+        value: refreshed,
+      };
+    });
+  } catch (error) {
+    let rollbackSucceeded = !movedToActive;
+    if (movedToActive && segmentDirectoryPath && !(error instanceof WorkspaceHandleLost)) {
+      try {
+        const trashDirectory = await ensureSegmentCoverTrashDirectory(input.rootPath);
+        await moveFileSpaceNodeDirectory({
+          sourceName: 'cover',
+          sourceParentDirectory: segmentDirectoryPath,
+          targetName: input.restoreToken,
+          targetParentDirectory: trashDirectory,
+        });
+        rollbackSucceeded = true;
+      } catch {
+        rollbackSucceeded = false;
+      }
+    }
+    return memoryFilesError(
+      error,
+      'ERR_SEGMENT_COVER_RESTORE_FAILED',
+      'Segment cover could not be restored',
       rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
     );
   }

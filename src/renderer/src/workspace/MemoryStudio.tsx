@@ -88,6 +88,7 @@ import type {
   SegmentSupplementRenameTarget,
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
+  SegmentCoverResetTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -141,6 +142,7 @@ type MemoryStudioProps = {
   readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
+  readonly onResetSegmentCover: (target: SegmentCoverResetTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
@@ -450,6 +452,75 @@ function orderContentTabs(
   }
 
   return [...orderedTabs, ...remainingTabs.values()];
+}
+
+const MEMORY_STUDIO_SEGMENT_SKELETON_ITEMS = [0, 1, 2, 3] as const;
+const MEMORY_STUDIO_SEGMENT_SKELETON_WAVEFORM = [4, 15, 20, 26, 12, 24, 29, 17, 4] as const;
+
+function MemoryStudioSegmentStripSkeleton() {
+  return (
+    <section
+      aria-label="片段预览流"
+      className="relative min-w-0 shrink-0 pt-4"
+      data-slot="memory-studio-segment-strip-loading"
+      style={MEMORY_STUDIO_SEGMENT_STRIP_STYLE}
+    >
+      <div role="status" className="sr-only">
+        正在载入记忆内容。
+      </div>
+      <div
+        aria-hidden="true"
+        className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-slot="memory-studio-segment-strip-scroll"
+      >
+        {MEMORY_STUDIO_SEGMENT_SKELETON_ITEMS.map((item) => (
+          <div
+            key={item}
+            className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none"
+            data-slot="memory-studio-segment-item"
+          >
+            <span
+              className="relative flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden bg-transparent p-12 text-left reo-segment-card-squircle"
+              data-slot="memory-studio-segment-card-skeleton"
+            >
+              <span
+                className="pointer-events-none absolute inset-[-1px] z-0 block"
+                style={{
+                  background:
+                    'linear-gradient(135deg, color-mix(in oklab, var(--secondary) 84%, var(--background)), color-mix(in oklab, var(--secondary) 42%, var(--background)) 48%, color-mix(in oklab, var(--secondary) 70%, var(--background)))',
+                }}
+              />
+              <span className="relative z-[2] block max-w-[88px]">
+                <span className="block h-[18px] w-[84px] rounded-[6px] bg-background/55" />
+                <span className="mt-6 block h-[15px] w-[58px] rounded-[6px] bg-background/42" />
+              </span>
+              <span className="relative z-[2] flex min-w-0 items-center justify-between gap-6">
+                <span className="inline-flex h-32 w-[52px] shrink-0 items-center gap-2 text-background/70">
+                  {MEMORY_STUDIO_SEGMENT_SKELETON_WAVEFORM.map((height, index) => (
+                    <span
+                      key={`${height}-${index}`}
+                      className={[height <= 4 ? 'size-4' : 'w-4', 'rounded-full bg-current'].join(
+                        ' '
+                      )}
+                      style={height > 4 ? { height: `${height}px` } : undefined}
+                    />
+                  ))}
+                </span>
+                <span className="block h-[13px] w-[38px] rounded-[5px] bg-background/55" />
+              </span>
+            </span>
+            <span
+              className="relative mt-10 flex h-48 w-full flex-col items-center before:absolute before:left-[-12px] before:right-[-12px] before:top-[3px] before:h-px before:bg-secondary"
+              data-slot="memory-studio-segment-timeline-anchor"
+            >
+              <span className="relative z-[1] block size-[7px] min-h-[7px] min-w-[7px] rounded-full bg-muted-foreground/70" />
+              <span className="mt-12 block h-[11px] w-[32px] rounded-[5px] bg-secondary" />
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function insertContentTabValue(
@@ -2452,6 +2523,7 @@ export function MemoryStudio({
   onNoteSegmentSupplementContentSaved,
   onRenameSegmentSupplement,
   onRenameSegmentContent,
+  onResetSegmentCover,
   onRenameSegment,
   transcriptionBackfill,
   onInlineMarkdownDirtyChange,
@@ -3527,6 +3599,7 @@ export function MemoryStudio({
                               workspaceId: workspaceSession.workspaceId,
                             }}
                             contentAlign="end"
+                            cover={segment.cover}
                             onDelete={() => {
                               setOpenSegmentMenuId(null);
                               onDeleteSegment({ memoryId: memory.memoryId, segment });
@@ -3539,6 +3612,10 @@ export function MemoryStudio({
                               setOpenSegmentMenuId(null);
                               onRenameSegment({ memoryId: memory.memoryId, segment });
                             }}
+                            onResetCover={() => {
+                              setOpenSegmentMenuId(null);
+                              onResetSegmentCover({ memoryId: memory.memoryId, segment });
+                            }}
                             open={openSegmentMenuId === segment.segmentId}
                             segmentTitle={segment.title}
                             transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
@@ -3549,9 +3626,11 @@ export function MemoryStudio({
                             triggerLabel={`片段 ${segment.title} 更多操作`}
                           />
                         }
+                        menuOpen={openSegmentMenuId === segment.segmentId}
                         onSelect={() => requestSelectedSegment(segment.segmentId)}
                         segment={segment}
                         selected={isSelected}
+                        workspaceId={workspaceSession.workspaceId}
                       />
                     );
                   })}
@@ -4102,9 +4181,7 @@ export function MemoryStudio({
             </p>
           </div>
         ) : (
-          <div className="mt-32 max-w-[420px]">
-            <p className="text-body leading-body text-muted-foreground">正在载入记忆内容。</p>
-          </div>
+          <MemoryStudioSegmentStripSkeleton />
         )}
       </section>
       <WorkspaceDangerConfirmDialog

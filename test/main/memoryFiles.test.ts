@@ -55,10 +55,12 @@ import {
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   resetMemoryCoverToDefaultFromFileTruth,
+  resetSegmentCoverToDefaultFromFileTruth,
   restoreDeletedMemoryFromFileTruth,
   restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   restoreMemoryCoverFromTrash,
+  restoreSegmentCoverFromTrash,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
   setBeforeMemoryDirectoryCandidateScanForTest,
@@ -572,6 +574,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       audioByteLength: 3,
       lastTranscriptionAttempt: 'never',
       transcript: { exists: false },
+      cover: defaultMemoryCover,
       supplementCount: 0,
       supplements: [],
       contentTabOrder: ['segment'],
@@ -4881,6 +4884,120 @@ test('Memory cover restore token cannot be reused for another Memory', async () 
     assert.equal(restored.error.code, 'ERR_MEMORY_COVER_RESTORE_FAILED');
   }
   await stat(path.join(rootPath, '.reo', 'trash', 'memory-covers', reset.value.restoreToken));
+  await assert.rejects(stat(targetCoverDirectory), /ENOENT/);
+});
+
+test('Segment cover projects through Memory detail and resets from its own trash', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_cover_reset';
+  const segmentId = 'seg_segment_cover_reset';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '片段封面',
+  });
+  const segmentDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '片段封面',
+  });
+  const coverDirectory = path.join(segmentDirectory, 'cover');
+  await mkdir(coverDirectory);
+  await writeFile(path.join(coverDirectory, 'poster.webp'), new Uint8Array([7, 8, 9]));
+  await rebuildMemoryIndex(rootPath);
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true, JSON.stringify(detail));
+  if (!detail.ok) {
+    throw new Error('memory detail should succeed');
+  }
+  assert.equal(detail.value.segments[0]?.cover?.source, 'custom');
+
+  const reset = await resetSegmentCoverToDefaultFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+
+  assert.equal(reset.ok, true, JSON.stringify(reset));
+  if (!reset.ok) {
+    throw new Error('segment cover reset should succeed');
+  }
+  assert.equal(reset.value.segment.cover?.source, 'default');
+  assert.equal(reset.value.restoreToken.includes(memoryId), true);
+  assert.equal(reset.value.restoreToken.includes(segmentId), true);
+  await assert.rejects(stat(coverDirectory), /ENOENT/);
+  await stat(path.join(rootPath, '.reo', 'trash', 'segment-covers', reset.value.restoreToken));
+
+  const restored = await restoreSegmentCoverFromTrash({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    restoreToken: reset.value.restoreToken,
+  });
+
+  assert.equal(restored.ok, true, JSON.stringify(restored));
+  if (!restored.ok) {
+    throw new Error('segment cover restore should succeed');
+  }
+  assert.equal(restored.value.segment.cover?.source, 'custom');
+  await readFile(path.join(coverDirectory, 'poster.webp'));
+});
+
+test('Segment cover restore token cannot be reused for another Segment', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_cover_scope';
+  const sourceSegmentId = 'seg_segment_cover_source';
+  const targetSegmentId = 'seg_segment_cover_target';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '片段封面作用域',
+  });
+  const sourceDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: sourceSegmentId,
+    title: '源片段',
+  });
+  const targetDirectory = await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId: targetSegmentId,
+    title: '目标片段',
+  });
+  const sourceCoverDirectory = path.join(sourceDirectory, 'cover');
+  const targetCoverDirectory = path.join(targetDirectory, 'cover');
+  await mkdir(sourceCoverDirectory);
+  await writeFile(path.join(sourceCoverDirectory, 'source.webp'), new Uint8Array([1, 2, 3]));
+  await rebuildMemoryIndex(rootPath);
+
+  const reset = await resetSegmentCoverToDefaultFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId: sourceSegmentId,
+  });
+  assert.equal(reset.ok, true, JSON.stringify(reset));
+  if (!reset.ok) {
+    throw new Error('source segment cover reset should succeed');
+  }
+
+  const restored = await restoreSegmentCoverFromTrash({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId: targetSegmentId,
+    restoreToken: reset.value.restoreToken,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_SEGMENT_COVER_RESTORE_FAILED');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'segment-covers', reset.value.restoreToken));
   await assert.rejects(stat(targetCoverDirectory), /ENOENT/);
 });
 

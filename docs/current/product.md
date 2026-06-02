@@ -141,7 +141,7 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 - **AGENTS.md**（项目 / Workspace 真源）：记忆空间 root 与每个 Memory root 的 AGENTS.md 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
 - **users.md**（用户个人 context）：Workspace root 的 users.md 描述用户是谁、长期目标、当前关注、表达偏好、agent 输出风格偏好；agent 每次操作前读取，让所有 skill 输出根据用户个性化。Memory level users.md override 由未来 spec 决定。
 
-当前记忆空间托管 skills 包括 `reo-edit`、`reo-memory-cover`、`reo-cover-aesthetic` 和 `reo-doctor`。`reo-memory-cover` 负责 Memory cover 的生成、替换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流。
+当前记忆空间托管 skills 包括 `reo-edit`、`reo-cover-image`、`reo-cover-aesthetic` 和 `reo-doctor`。`reo-cover-image` 负责 Memory 与 Segment cover 的生成、替换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流。
 
 长期 Reo skills 分两层：
 

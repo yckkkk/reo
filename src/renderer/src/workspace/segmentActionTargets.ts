@@ -7,6 +7,8 @@ export type SegmentActionTarget = {
 
 export type SegmentDeleteTarget = SegmentActionTarget;
 
+export type SegmentCoverResetTarget = SegmentActionTarget;
+
 export type SegmentRenameTarget = SegmentActionTarget;
 
 export type SegmentContentRenameTarget = SegmentActionTarget & {

@@ -47,8 +47,10 @@ const segmentActionPayload = {
 function renderMenu(
   props: {
     onDelete?: () => void;
+    onResetCover?: () => void;
     onRename?: () => void;
     onRequestTranscriptionBackfill?: () => void;
+    cover?: Parameters<typeof SegmentActionsMenu>[0]['cover'];
     transcriptExists?: boolean;
     transcriptionBackfillDisabledReason?: string | null;
   } = {}
@@ -56,8 +58,10 @@ function renderMenu(
   render(
     <SegmentActionsMenu
       actionIdentity={segmentActionPayload}
+      cover={props.cover}
       onDelete={props.onDelete ?? vi.fn()}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
+      onResetCover={props.onResetCover ?? vi.fn()}
       onRename={props.onRename ?? vi.fn()}
       segmentTitle="My Segment"
       transcriptExists={props.transcriptExists ?? false}
@@ -87,6 +91,7 @@ describe('SegmentActionsMenu', () => {
         contentAlign="start"
         onDelete={onDelete}
         onOpenChange={onOpenChange}
+        onResetCover={vi.fn()}
         onRename={onRename}
         open={false}
         segmentTitle="My Segment"
@@ -115,6 +120,7 @@ describe('SegmentActionsMenu', () => {
         contentAlign="start"
         onDelete={onDelete}
         onOpenChange={onOpenChange}
+        onResetCover={vi.fn()}
         onRename={onRename}
         open
         segmentTitle="My Segment"
@@ -190,6 +196,33 @@ describe('SegmentActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'My Segment 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds restore-random-default cover action only when the Segment has a custom cover', async () => {
+    const onResetCover = vi.fn();
+    renderMenu({
+      cover: { source: 'custom', filename: 'poster.webp', version: '1-2' },
+      onResetCover,
+    });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '恢复随机默认图片' }));
+
+    expect(onResetCover).toHaveBeenCalledOnce();
+  });
+
+  it('disables restore-random-default cover action for default Segment covers', async () => {
+    const onResetCover = vi.fn();
+    renderMenu({
+      cover: { source: 'default' },
+      onResetCover,
+    });
+
+    await openEntityActionMenu('My Segment 更多操作');
+    const item = screen.getByRole('menuitem', { name: '恢复随机默认图片' });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(onResetCover).not.toHaveBeenCalled();
   });
 
   it('shows the generate transcript action when the segment has no transcript', async () => {

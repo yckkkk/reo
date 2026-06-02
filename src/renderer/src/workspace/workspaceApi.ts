@@ -174,6 +174,18 @@ export function restoreMemoryCover(
   return window.reoWorkspace.restoreMemoryCover(payload);
 }
 
+export function resetSegmentCover(
+  payload: Parameters<Window['reoWorkspace']['resetSegmentCover']>[0]
+) {
+  return window.reoWorkspace.resetSegmentCover(payload);
+}
+
+export function restoreSegmentCover(
+  payload: Parameters<Window['reoWorkspace']['restoreSegmentCover']>[0]
+) {
+  return window.reoWorkspace.restoreSegmentCover(payload);
+}
+
 export function deleteSegment(payload: Parameters<Window['reoWorkspace']['deleteSegment']>[0]) {
   return window.reoWorkspace.deleteSegment(payload);
 }

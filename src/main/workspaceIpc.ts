@@ -62,8 +62,10 @@ import {
   WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
@@ -164,12 +166,16 @@ import {
   workspaceRemoveMemorySpaceResponseSchema,
   workspaceResetMemoryCoverRequestSchema,
   workspaceResetMemoryCoverResponseSchema,
+  workspaceResetSegmentCoverRequestSchema,
+  workspaceResetSegmentCoverResponseSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAppendResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceRestoreMemoryCoverRequestSchema,
   workspaceRestoreMemoryCoverResponseSchema,
+  workspaceRestoreSegmentCoverRequestSchema,
+  workspaceRestoreSegmentCoverResponseSchema,
   workspaceRestoreDeletedSegmentSupplementRequestSchema,
   workspaceRestoreDeletedSegmentSupplementResponseSchema,
   workspaceRestoreDeletedSegmentRequestSchema,
@@ -318,10 +324,12 @@ import {
   deleteSegmentFromFileTruth,
   readMemoryDetailFromFileTruth,
   resetMemoryCoverToDefaultFromFileTruth,
+  resetSegmentCoverToDefaultFromFileTruth,
   restoreDeletedMemoryFromFileTruth,
   restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
   restoreMemoryCoverFromTrash,
+  restoreSegmentCoverFromTrash,
   updateMemoryTitleFromFileTruth,
   updateSegmentContentTabOrderFromFileTruth,
   updateSegmentContentTitleFromFileTruth,
@@ -4040,6 +4048,69 @@ function handleRestoreMemoryCoverCore(
   });
 }
 
+function handleResetSegmentCoverCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceResetSegmentCoverResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceResetSegmentCoverRequestSchema,
+    invalidMessage: 'resetSegmentCover request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Workspace handle does not match workspace'
+          );
+        }
+        const result = await resetSegmentCoverToDefaultFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceResetSegmentCoverResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
+function handleRestoreSegmentCoverCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreSegmentCoverResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRestoreSegmentCoverRequestSchema,
+    invalidMessage: 'restoreSegmentCover request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Workspace handle does not match workspace'
+          );
+        }
+        const result = await restoreSegmentCoverFromTrash({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          restoreToken: request.restoreToken,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceRestoreSegmentCoverResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
 function handleDeleteSegmentCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceDeleteSegmentResponseSchema>> {
@@ -4515,6 +4586,30 @@ export async function handleRestoreMemoryCoverForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceRestoreMemoryCoverResponseSchema>> {
   return handleRestoreMemoryCoverCore(options);
+}
+
+export async function handleResetSegmentCover(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceResetSegmentCoverResponseSchema>> {
+  return handleResetSegmentCoverCore(options);
+}
+
+export async function handleResetSegmentCoverForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceResetSegmentCoverResponseSchema>> {
+  return handleResetSegmentCoverCore(options);
+}
+
+export async function handleRestoreSegmentCover(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreSegmentCoverResponseSchema>> {
+  return handleRestoreSegmentCoverCore(options);
+}
+
+export async function handleRestoreSegmentCoverForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreSegmentCoverResponseSchema>> {
+  return handleRestoreSegmentCoverCore(options);
 }
 
 export async function handleDeleteSegment(
@@ -6327,6 +6422,26 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL, (event, input) =>
     handleRestoreMemoryCover({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_RESET_SEGMENT_COVER_CHANNEL, (event, input) =>
+    handleResetSegmentCover({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL, (event, input) =>
+    handleRestoreSegmentCover({
       event,
       input,
       expectedSession,

@@ -13,14 +13,16 @@ import {
 } from './imagePayloads.js';
 import {
   workspaceError,
+  type WorkspaceCoverProjection,
+  type WorkspaceErrorCode,
   type WorkspaceErrorEnvelope,
   type WorkspaceMemoryCoverProjection,
 } from '../workspace-contract/workspace-contract.js';
 
-const MAX_MEMORY_COVER_BYTES = 25 * 1024 * 1024;
-const MAX_MEMORY_COVER_BYTES_BIGINT = BigInt(MAX_MEMORY_COVER_BYTES);
+const MAX_COVER_BYTES = 25 * 1024 * 1024;
+const MAX_COVER_BYTES_BIGINT = BigInt(MAX_COVER_BYTES);
 
-type MemoryCoverProtocolResolution =
+type CoverProtocolResolution =
   | {
       readonly ok: true;
       readonly bytes: Uint8Array;
@@ -37,27 +39,28 @@ function hasErrorCode(error: unknown, code: string): boolean {
   );
 }
 
-function memoryCoverDirectory(memoryDirectoryPath: string): string {
-  return path.join(memoryDirectoryPath, 'cover');
+function fileSpaceNodeCoverDirectory(ownerDirectoryPath: string): string {
+  return path.join(ownerDirectoryPath, 'cover');
 }
 
 async function readExistingSafeCoverDirectory(
-  memoryDirectoryPath: string
+  ownerDirectoryPath: string,
+  unsafeMessage: string
 ): Promise<{ readonly coverDirectory: string; readonly directoryIdentity: DirectoryIdentity }> {
-  const coverDirectory = memoryCoverDirectory(memoryDirectoryPath);
-  const directoryIdentity = await readSafeDirectoryIdentity(
-    coverDirectory,
-    'Memory cover directory is unsafe'
-  );
+  const coverDirectory = fileSpaceNodeCoverDirectory(ownerDirectoryPath);
+  const directoryIdentity = await readSafeDirectoryIdentity(coverDirectory, unsafeMessage);
   return { coverDirectory, directoryIdentity };
 }
 
-export async function readMemoryCoverProjectionFromDirectory(
-  memoryDirectoryPath: string
-): Promise<WorkspaceMemoryCoverProjection> {
+export async function readFileSpaceNodeCoverProjectionFromDirectory(
+  ownerDirectoryPath: string
+): Promise<WorkspaceCoverProjection> {
   let safeCoverDirectory: Awaited<ReturnType<typeof readExistingSafeCoverDirectory>>;
   try {
-    safeCoverDirectory = await readExistingSafeCoverDirectory(memoryDirectoryPath);
+    safeCoverDirectory = await readExistingSafeCoverDirectory(
+      ownerDirectoryPath,
+      'Cover directory is unsafe'
+    );
   } catch {
     return { source: 'default' };
   }
@@ -86,14 +89,14 @@ export async function readMemoryCoverProjectionFromDirectory(
       if (
         !selected.isFile() ||
         selected.isSymbolicLink() ||
-        selected.size > MAX_MEMORY_COVER_BYTES_BIGINT
+        selected.size > MAX_COVER_BYTES_BIGINT
       ) {
         continue;
       }
       await assertSameDirectoryIdentity(
         coverDirectory,
         directoryIdentity,
-        'Memory cover directory changed during read'
+        'Cover directory changed during read'
       );
       return {
         source: 'custom',
@@ -107,40 +110,90 @@ export async function readMemoryCoverProjectionFromDirectory(
   }
 }
 
+export async function readMemoryCoverProjectionFromDirectory(
+  memoryDirectoryPath: string
+): Promise<WorkspaceMemoryCoverProjection> {
+  return readFileSpaceNodeCoverProjectionFromDirectory(memoryDirectoryPath);
+}
+
+export async function resolveFileSpaceNodeCoverFile({
+  filename,
+  ownerDirectoryPath,
+  notFoundErrorCode = 'ERR_WORKSPACE_SEGMENT_COVER_NOT_FOUND',
+  notFoundMessage = 'Segment cover was not found',
+  unsafeMessage = 'Cover path is unsafe',
+  unsafeLeafMessage = 'Cover leaf is unsafe',
+}: {
+  readonly filename: string;
+  readonly ownerDirectoryPath: string;
+  readonly notFoundErrorCode?: WorkspaceErrorCode;
+  readonly notFoundMessage?: string;
+  readonly unsafeMessage?: string;
+  readonly unsafeLeafMessage?: string;
+}): Promise<CoverProtocolResolution> {
+  if (!isSafeImageFilename(filename, MEMORY_COVER_IMAGE_EXTENSIONS)) {
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', unsafeMessage);
+  }
+
+  try {
+    const { coverDirectory, directoryIdentity } = await readExistingSafeCoverDirectory(
+      ownerDirectoryPath,
+      unsafeMessage
+    );
+    const existing = await readExistingImagePayloadInDirectory({
+      allowedExtensions: MEMORY_COVER_IMAGE_EXTENSIONS,
+      directory: coverDirectory,
+      directoryIdentity,
+      filename,
+      maxBytes: MAX_COVER_BYTES,
+      tooLargeErrorCode: 'ERR_WORKSPACE_UNSAFE_PATH',
+      tooLargeMessage: unsafeLeafMessage,
+      unsafeMessage,
+    });
+    await assertSameDirectoryIdentity(
+      coverDirectory,
+      directoryIdentity,
+      'Cover directory changed during read'
+    );
+    return { ok: true, bytes: existing.bytes, mimeType: existing.mimeType };
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
+      return workspaceError(notFoundErrorCode, notFoundMessage);
+    }
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', unsafeMessage);
+  }
+}
+
 export async function resolveMemoryCoverFile({
   filename,
   memoryDirectoryPath,
 }: {
   readonly filename: string;
   readonly memoryDirectoryPath: string;
-}): Promise<MemoryCoverProtocolResolution> {
-  if (!isSafeImageFilename(filename, MEMORY_COVER_IMAGE_EXTENSIONS)) {
-    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Memory cover path is unsafe');
-  }
+}): Promise<CoverProtocolResolution> {
+  return resolveFileSpaceNodeCoverFile({
+    filename,
+    ownerDirectoryPath: memoryDirectoryPath,
+    notFoundErrorCode: 'ERR_WORKSPACE_MEMORY_COVER_NOT_FOUND',
+    notFoundMessage: 'Memory cover was not found',
+    unsafeLeafMessage: 'Memory cover leaf is unsafe',
+    unsafeMessage: 'Memory cover path is unsafe',
+  });
+}
 
-  try {
-    const { coverDirectory, directoryIdentity } =
-      await readExistingSafeCoverDirectory(memoryDirectoryPath);
-    const existing = await readExistingImagePayloadInDirectory({
-      allowedExtensions: MEMORY_COVER_IMAGE_EXTENSIONS,
-      directory: coverDirectory,
-      directoryIdentity,
-      filename,
-      maxBytes: MAX_MEMORY_COVER_BYTES,
-      tooLargeErrorCode: 'ERR_WORKSPACE_UNSAFE_PATH',
-      tooLargeMessage: 'Memory cover leaf is unsafe',
-      unsafeMessage: 'Memory cover path is unsafe',
-    });
-    await assertSameDirectoryIdentity(
-      coverDirectory,
-      directoryIdentity,
-      'Memory cover directory changed during read'
-    );
-    return { ok: true, bytes: existing.bytes, mimeType: existing.mimeType };
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
-      return workspaceError('ERR_WORKSPACE_MEMORY_COVER_NOT_FOUND', 'Memory cover was not found');
-    }
-    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Memory cover path is unsafe');
-  }
+export async function resolveSegmentCoverFile({
+  filename,
+  segmentDirectoryPath,
+}: {
+  readonly filename: string;
+  readonly segmentDirectoryPath: string;
+}): Promise<CoverProtocolResolution> {
+  return resolveFileSpaceNodeCoverFile({
+    filename,
+    ownerDirectoryPath: segmentDirectoryPath,
+    notFoundErrorCode: 'ERR_WORKSPACE_SEGMENT_COVER_NOT_FOUND',
+    notFoundMessage: 'Segment cover was not found',
+    unsafeLeafMessage: 'Segment cover leaf is unsafe',
+    unsafeMessage: 'Segment cover path is unsafe',
+  });
 }

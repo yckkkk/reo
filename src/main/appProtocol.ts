@@ -2,8 +2,12 @@ import { app, net, protocol } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { APP_SHELL_HOST, APP_SHELL_SCHEME, ATTACHMENT_SCHEME } from './appShellConstants.js';
-import { resolveMemoryCoverFile } from './memoryCovers.js';
-import { resolveMemoryDirectory } from './memoryFiles.js';
+import { resolveDevServerUrl } from './devServerUrl.js';
+import { resolveMemoryCoverFile, resolveSegmentCoverFile } from './memoryCovers.js';
+import {
+  resolveFinalizedSegmentDirectoryFromManifest,
+  resolveMemoryDirectory,
+} from './memoryFiles.js';
 import {
   resolveNoteSegmentAttachmentFile,
   resolveNoteSegmentSupplementAttachmentFile,
@@ -14,6 +18,7 @@ let protocolRegistered = false;
 
 const ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL = 'no-store';
 const MEMORY_COVER_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable';
+const APP_SHELL_ORIGIN = `${APP_SHELL_SCHEME}://${APP_SHELL_HOST}`;
 
 type AttachmentRootResolution =
   | {
@@ -133,11 +138,19 @@ export function registerAppShellProtocolWithOptions({
       return new Response('Not found', { status: 404 });
     }
     try {
+      const headers: Record<string, string> = {
+        'Cache-Control': resolved.cacheControl,
+        'Content-Type': resolved.mimeType,
+      };
+      if (resolved.coverCanvasAccess) {
+        const allowedOrigin = resolveCoverCanvasAccessOrigin(request);
+        if (allowedOrigin) {
+          headers['Access-Control-Allow-Origin'] = allowedOrigin;
+          headers['Vary'] = 'Origin';
+        }
+      }
       return new Response(resolved.bytes, {
-        headers: {
-          'Cache-Control': resolved.cacheControl,
-          'Content-Type': resolved.mimeType,
-        },
+        headers,
         status: 200,
       });
     } catch {
@@ -156,6 +169,7 @@ async function resolveAttachmentProtocolRequest(
       readonly ok: true;
       readonly bytes: Uint8Array;
       readonly cacheControl: string;
+      readonly coverCanvasAccess: boolean;
       readonly mimeType: string;
     }
   | { readonly ok: false }
@@ -195,6 +209,7 @@ async function resolveAttachmentProtocolRequest(
             ok: true,
             bytes: resolved.bytes,
             cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL,
+            coverCanvasAccess: true,
             mimeType: resolved.mimeType,
           }
         : { ok: false };
@@ -204,6 +219,30 @@ async function resolveAttachmentProtocolRequest(
   }
   if (segments[0] !== 'segments') {
     return { ok: false };
+  }
+  if (segments.length === 4 && segments[2] === 'cover') {
+    try {
+      const { segmentDirectory } = await resolveFinalizedSegmentDirectoryFromManifest({
+        rootPath: root.canonicalRoot,
+        workspaceId,
+        segmentId: segments[1] ?? '',
+      });
+      const resolved = await resolveSegmentCoverFile({
+        segmentDirectoryPath: segmentDirectory,
+        filename: segments[3] ?? '',
+      });
+      return resolved.ok
+        ? {
+            ok: true,
+            bytes: resolved.bytes,
+            cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL,
+            coverCanvasAccess: true,
+            mimeType: resolved.mimeType,
+          }
+        : { ok: false };
+    } catch {
+      return { ok: false };
+    }
   }
   if (segments.length === 3) {
     const resolved = await resolveNoteSegmentAttachmentFile({
@@ -217,6 +256,7 @@ async function resolveAttachmentProtocolRequest(
           ok: true,
           bytes: resolved.bytes,
           cacheControl: ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL,
+          coverCanvasAccess: false,
           mimeType: resolved.mimeType,
         }
       : { ok: false };
@@ -234,6 +274,7 @@ async function resolveAttachmentProtocolRequest(
           ok: true,
           bytes: resolved.bytes,
           cacheControl: ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL,
+          coverCanvasAccess: false,
           mimeType: resolved.mimeType,
         }
       : { ok: false };
@@ -242,6 +283,23 @@ async function resolveAttachmentProtocolRequest(
 }
 
 export const resolveAttachmentProtocolRequestForTest = resolveAttachmentProtocolRequest;
+
+function resolveCoverCanvasAccessOrigin(request: Request): string | null {
+  const origin = request.headers.get('Origin');
+  if (!origin) {
+    return null;
+  }
+  if (origin === APP_SHELL_ORIGIN) {
+    return origin;
+  }
+
+  const devServerOrigin = resolveDevServerUrl({
+    rawUrl: process.env['ELECTRON_RENDERER_URL'],
+    isPackaged: app.isPackaged,
+    warn: () => {},
+  });
+  return origin === devServerOrigin ? origin : null;
+}
 
 function decodeAttachmentPathSegments(pathname: string): string[] | null {
   try {

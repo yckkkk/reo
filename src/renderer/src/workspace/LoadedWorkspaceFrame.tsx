@@ -15,6 +15,7 @@ import type {
   SegmentSupplementRenameTarget,
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
+  SegmentCoverResetTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -52,6 +53,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onResetMemoryCover: (memory: WorkspaceMemorySummary) => void;
+  readonly onResetSegmentCover?: ((target: SegmentCoverResetTarget) => void) | undefined;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
@@ -84,6 +86,7 @@ export function LoadedWorkspaceFrame({
   onNoteSegmentSupplementContentSaved,
   onRenameMemory,
   onResetMemoryCover,
+  onResetSegmentCover,
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
@@ -250,6 +253,7 @@ export function LoadedWorkspaceFrame({
           onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegmentContent={onRenameSegmentContent}
+          onResetSegmentCover={onResetSegmentCover ?? (() => {})}
           onRenameSegment={onRenameSegment}
           {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}

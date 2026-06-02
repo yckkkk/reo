@@ -26,7 +26,9 @@ import {
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -145,8 +147,12 @@ import {
   workspaceMemorySummarySchema,
   workspaceResetMemoryCoverRequestSchema,
   workspaceResetMemoryCoverResponseSchema,
+  workspaceResetSegmentCoverRequestSchema,
+  workspaceResetSegmentCoverResponseSchema,
   workspaceRestoreMemoryCoverRequestSchema,
   workspaceRestoreMemoryCoverResponseSchema,
+  workspaceRestoreSegmentCoverRequestSchema,
+  workspaceRestoreSegmentCoverResponseSchema,
   workspaceSegmentProjectionSchema,
   workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
@@ -268,6 +274,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
+    'workspace:resetSegmentCover',
+    'workspace:restoreSegmentCover',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
@@ -354,6 +362,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
     [WORKSPACE_RESET_MEMORY_COVER_CHANNEL, 'workspace:resetMemoryCover'],
     [WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL, 'workspace:restoreMemoryCover'],
+    [WORKSPACE_RESET_SEGMENT_COVER_CHANNEL, 'workspace:resetSegmentCover'],
+    [WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL, 'workspace:restoreSegmentCover'],
     [WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment'],
     [WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment'],
     [WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement'],
@@ -2378,6 +2388,117 @@ test('memory cover reset contract keeps restore token explicit and pathless', ()
   );
 });
 
+test('segment cover reset contract keeps restore token explicit and pathless', () => {
+  const audioSegment = {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    type: 'audio',
+    title: 'Segment',
+    createdAt: '2026-05-10T13:00:00.000Z',
+    updatedAt: '2026-05-10T13:00:00.000Z',
+    durationMs: 1000,
+    audioByteLength: 2048,
+    lastTranscriptionAttempt: 'never',
+    transcript: { exists: false },
+    supplementCount: 0,
+    supplements: [],
+    cover: { source: 'default' },
+  } as const;
+
+  assert.deepEqual(
+    workspaceResetSegmentCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceResetSegmentCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      filename: 'poster.png',
+    })
+  );
+  assert.deepEqual(
+    workspaceResetSegmentCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
+          audioByteLength: 2048,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default' },
+        },
+        segment: audioSegment,
+        restoreToken: 'cover__mem_1__seg_1__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    }).ok,
+    true
+  );
+  assert.deepEqual(
+    workspaceRestoreSegmentCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      restoreToken: 'cover__mem_1__seg_1__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      restoreToken: 'cover__mem_1__seg_1__aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    }
+  );
+  assert.deepEqual(
+    workspaceRestoreSegmentCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
+          audioByteLength: 2048,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default' },
+        },
+        segment: {
+          ...audioSegment,
+          cover: { source: 'custom', filename: 'poster.webp', version: '1770000000000-512' },
+        },
+      },
+    }).ok,
+    true
+  );
+});
+
 test('workspace segment projection contract accepts note kind without audio fields', () => {
   assert.deepEqual(
     workspaceSegmentProjectionSchema.parse({
@@ -2455,6 +2576,30 @@ test('workspace segment projection contract accepts note kind without audio fiel
       updatedAt: '2026-05-08T14:45:00.000Z',
       bodyByteLength: 64,
     }
+  );
+});
+
+test('workspace segment projection contract accepts pathless cover metadata', () => {
+  const parsed = workspaceSegmentProjectionSchema.parse({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_cover_projection',
+    type: 'note',
+    title: '封面片段',
+    createdAt: '2026-05-08T14:42:00.000Z',
+    updatedAt: '2026-05-08T14:42:00.000Z',
+    bodyByteLength: 120,
+    supplementCount: 0,
+    supplements: [],
+    cover: { source: 'custom', filename: 'poster.webp', version: '1770000000000-512' },
+  });
+
+  assert.equal(parsed.cover?.source, 'custom');
+  assert.throws(() =>
+    workspaceSegmentProjectionSchema.parse({
+      ...parsed,
+      cover: { source: 'custom', filename: '../secret.webp', version: '1-2' },
+    })
   );
 });
 

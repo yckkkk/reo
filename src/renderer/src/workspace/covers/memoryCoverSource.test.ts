@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { resolveMemoryCoverImageSource, resolveDefaultCoverTemplate } from './memoryCoverSource';
-import type { WorkspaceMemorySummary } from '../../../../workspace-contract/workspace-contract';
+import {
+  resolveMemoryCoverImageSource,
+  resolveDefaultCoverTemplate,
+  resolveSegmentCoverImageSource,
+} from './memoryCoverSource';
+import type {
+  WorkspaceMemorySummary,
+  WorkspaceSegmentProjection,
+} from '../../../../workspace-contract/workspace-contract';
+
+type WorkspaceAudioSegmentProjection = Extract<
+  WorkspaceSegmentProjection,
+  { readonly type: 'audio' }
+>;
 
 function memory(overrides: Partial<WorkspaceMemorySummary>): WorkspaceMemorySummary {
   return {
@@ -21,13 +33,42 @@ function memory(overrides: Partial<WorkspaceMemorySummary>): WorkspaceMemorySumm
   };
 }
 
-describe('memory cover image sources', () => {
+function audioSegment(
+  overrides: Partial<WorkspaceAudioSegmentProjection>
+): WorkspaceAudioSegmentProjection {
+  return {
+    audioByteLength: 1024,
+    createdAt: '2026-06-01T00:00:00.000Z',
+    durationMs: 1000,
+    lastTranscriptionAttempt: 'never',
+    memoryId: 'mem_default_cover',
+    segmentId: 'seg_default_cover',
+    supplementCount: 0,
+    supplements: [],
+    title: 'Default segment cover',
+    transcript: { exists: false },
+    type: 'audio',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    workspaceId: 'ws_1',
+    ...overrides,
+  };
+}
+
+describe('cover image sources', () => {
   it('maps default covers deterministically from memory id without persisting random state', () => {
     const first = resolveDefaultCoverTemplate('mem_same_default');
     const second = resolveDefaultCoverTemplate('mem_same_default');
 
     expect(first).toBe(second);
-    expect(first).toMatch(/cover-0[1-6]\.png/);
+    expect(first).toMatch(/cover-(0[1-9]|1[0-3])\.png/);
+  });
+
+  it('shares all thirteen default cover templates across Memory and Segment cards', () => {
+    const templates = new Set(
+      Array.from({ length: 260 }, (_, index) => resolveDefaultCoverTemplate(`seg_pool_${index}`))
+    );
+
+    expect(templates.size).toBe(13);
   });
 
   it('builds a safe custom cover protocol URL with encoded filename and version', () => {
@@ -45,6 +86,24 @@ describe('memory cover image sources', () => {
       })
     ).toBe(
       'reo-attachment://ws_1/memories/mem_custom_cover/cover/garden%20bloom%231.webp?v=177-42'
+    );
+  });
+
+  it('builds a safe custom Segment cover protocol URL with encoded filename and version', () => {
+    expect(
+      resolveSegmentCoverImageSource({
+        segment: audioSegment({
+          cover: {
+            source: 'custom',
+            filename: 'session poster#1.webp',
+            version: '177-42',
+          },
+          segmentId: 'seg_custom_cover',
+        }),
+        workspaceId: 'ws_1',
+      })
+    ).toBe(
+      'reo-attachment://ws_1/segments/seg_custom_cover/cover/session%20poster%231.webp?v=177-42'
     );
   });
 });

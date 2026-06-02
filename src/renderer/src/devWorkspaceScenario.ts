@@ -352,6 +352,8 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     restoreDeletedMemory: () => unsupported(),
     resetMemoryCover: () => unsupported(),
     restoreMemoryCover: () => unsupported(),
+    resetSegmentCover: () => unsupported(),
+    restoreSegmentCover: () => unsupported(),
     deleteSegment: () => unsupported(),
     restoreDeletedSegment: () => unsupported(),
     deleteSegmentSupplement: () => unsupported(),

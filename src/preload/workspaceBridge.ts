@@ -52,12 +52,14 @@ import {
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
@@ -234,6 +236,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     restoreMemoryCover: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreMemoryCover'>>(
         WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
+        payload
+      ),
+    resetSegmentCover: (payload) =>
+      invoke<WorkspaceBridgeResponse<'resetSegmentCover'>>(
+        WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
+        payload
+      ),
+    restoreSegmentCover: (payload) =>
+      invoke<WorkspaceBridgeResponse<'restoreSegmentCover'>>(
+        WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
         payload
       ),
     deleteSegment: (payload) =>

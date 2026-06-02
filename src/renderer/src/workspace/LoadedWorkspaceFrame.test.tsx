@@ -380,7 +380,7 @@ function expectSoftFlatClass(element: Element | null) {
   expect(className).not.toMatch(/(^|\s)(hover:|active:)?-?translate-/);
   expect(className).not.toMatch(/(^|\s)(hover:|active:)?scale-/);
   expect(className).not.toMatch(/(^|\s)(hover:|active:)?opacity-/);
-  expect(className).not.toMatch(/\b(?:bg|border|text)-[^\s/]+\/\d/);
+  expect(className).not.toMatch(/\b(?:bg|border|text)-(?!\[)[^\s/]+\/\d/);
   expect(className).not.toMatch(/card-white|text-card-white|border-card-white/);
   expect(className).not.toMatch(/shadow-none-\d/);
 }
@@ -2036,6 +2036,34 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onNoteSegmentContentSaved).not.toHaveBeenCalled();
   });
 
+  it('renders poster-shaped Segment skeletons while Memory detail is loading', async () => {
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const skeletonStrip = studio.querySelector('[data-slot="memory-studio-segment-strip-loading"]');
+    const skeletonCards = skeletonStrip?.querySelectorAll(
+      '[data-slot="memory-studio-segment-card-skeleton"]'
+    );
+
+    expect(within(studio).getByRole('status')).toHaveClass('sr-only');
+    expect(skeletonCards).toHaveLength(4);
+    for (const card of Array.from(skeletonCards ?? [])) {
+      expect(card).toHaveClass(
+        'aspect-square',
+        'reo-segment-card-squircle',
+        'bg-transparent',
+        'p-12',
+        'min-h-[var(--memory-studio-segment-card-min-size)]',
+        'min-w-[var(--memory-studio-segment-card-min-size)]'
+      );
+      expect(card).not.toHaveClass('bg-card', 'bg-secondary', 'border', 'shadow-float');
+    }
+  });
+
   it('keeps Memory Studio as a first-viewport studio surface instead of a centered card list', async () => {
     const session = workspaceSession({ memories: [birthdayMemory] });
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -2089,14 +2117,22 @@ describe('LoadedWorkspaceFrame', () => {
     expect(firstSegmentCard).toHaveClass(
       'aspect-square',
       'reo-segment-card-squircle',
-      'bg-secondary',
+      'bg-transparent',
       'p-12',
       'min-h-[var(--memory-studio-segment-card-min-size)]',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
     expect(firstSegmentCard).not.toHaveClass('rounded-xl', 'reo-squircle');
-    expect(secondSegmentCard).toHaveClass('bg-card');
+    expect(secondSegmentCard).toHaveClass('bg-transparent');
+    expect(
+      firstSegmentCard?.querySelector('[data-slot="memory-studio-segment-card-cover"]')
+    ).toBeTruthy();
+    expect(
+      firstSegmentCard?.querySelector('[data-slot="memory-studio-segment-card-tone-scrim"]')
+    ).toBeTruthy();
     expect(firstSegmentCard).not.toHaveClass(
+      'bg-secondary',
+      'bg-card',
       'border',
       'border-2',
       'border-primary',
@@ -2244,15 +2280,15 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(activeCard).queryByText('已有转录')).toBeNull();
     expect(within(inactiveCard).queryByText('本地音频')).toBeNull();
     expect(within(activeCard).getByText('Birthday candles')).toHaveClass(
-      'text-body',
-      'font-bold',
-      'leading-body',
+      'text-[15px]',
+      'font-[750]',
+      'leading-[1.42]',
       'max-w-[88px]',
       'whitespace-normal'
     );
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-duration"]')
-    ).toHaveClass('shrink-0', 'font-mono', 'text-ui-sm', 'font-bold', 'tracking-wide');
+    ).toHaveClass('shrink-0', 'font-mono', 'text-[13px]', 'font-[700]', 'tracking-[0.05em]');
     expect(
       activeCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
     ).toHaveClass('w-[52px]');
@@ -2264,13 +2300,14 @@ describe('LoadedWorkspaceFrame', () => {
       '[data-slot="memory-studio-segment-card-waveform"]'
     );
 
-    expect(activeWaveform).toHaveAttribute('data-waveform-mode', 'bars');
-    expect(activeWaveform).toHaveAttribute('data-waveform-bar-width', '4');
-    expect(activeWaveform).toHaveAttribute('data-waveform-bar-radius', '4');
-    expect(activeWaveform).toHaveAttribute('data-waveform-tone', 'neutral');
-    expect(activeWaveform?.querySelector('span')).toBeNull();
-    expect(inactiveWaveform).toHaveAttribute('data-waveform-tone', 'muted');
-    expect(inactiveWaveform?.querySelector('span')).toBeNull();
+    expect(activeWaveform).toHaveClass(
+      'h-32',
+      'w-[52px]',
+      'text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.76)]'
+    );
+    expect(activeWaveform?.querySelectorAll('span').length).toBe(9);
+    expect(inactiveWaveform).toHaveClass('h-32', 'w-[52px]');
+    expect(inactiveWaveform?.querySelectorAll('span').length).toBe(9);
   });
 
   it('does not repeat selected Segment summary above the player', async () => {
@@ -2371,7 +2408,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(birthdayItem).toHaveAttribute('aria-current', 'true');
     expect(
       birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toHaveClass('bg-primary');
+    ).toHaveClass('bg-foreground');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday candles' })
     ).toBeInTheDocument();
@@ -2387,10 +2424,10 @@ describe('LoadedWorkspaceFrame', () => {
     ).not.toHaveAttribute('aria-current');
     expect(
       birthdaySongItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toHaveClass('bg-primary');
+    ).toHaveClass('bg-foreground');
     expect(
       birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).not.toHaveClass('bg-primary');
+    ).not.toHaveClass('bg-foreground');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday song' })
     ).toBeInTheDocument();

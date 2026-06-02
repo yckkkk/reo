@@ -6,12 +6,14 @@ import path from 'node:path';
 import test from 'node:test';
 import { setBeforeImagePayloadReadForTest } from '../../src/main/imagePayloads.js';
 import {
+  readFileSpaceNodeCoverProjectionFromDirectory,
   readMemoryCoverProjectionFromDirectory,
+  resolveFileSpaceNodeCoverFile,
   resolveMemoryCoverFile,
 } from '../../src/main/memoryCovers.js';
 
 async function memoryDirectory(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-cover-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-cover-image-'));
   const directory = path.join(root, 'memories', 'mem_cover');
   await mkdir(directory, { recursive: true });
   return directory;
@@ -121,6 +123,55 @@ test('memory cover protocol resolution returns bytes without raw filesystem path
   assert.equal(jpeg.ok, true, JSON.stringify(jpeg));
   if (jpeg.ok) {
     assert.equal(jpeg.mimeType, 'image/jpeg');
+  }
+});
+
+test('file-space node cover projection can be shared by Segment directories', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-cover-'));
+  const segmentDirectory = path.join(
+    root,
+    'memories',
+    'mem_segment_cover',
+    'segments',
+    'seg_cover'
+  );
+  const coverDirectory = path.join(segmentDirectory, 'cover');
+  await mkdir(coverDirectory, { recursive: true });
+  await writeFile(path.join(coverDirectory, 'b-late.png'), new Uint8Array([9, 9, 9]));
+  await writeFile(path.join(coverDirectory, 'a-first.webp'), new Uint8Array([1, 2, 3, 4]));
+
+  const selected = await stat(path.join(coverDirectory, 'a-first.webp'), { bigint: true });
+
+  assert.deepEqual(await readFileSpaceNodeCoverProjectionFromDirectory(segmentDirectory), {
+    source: 'custom',
+    filename: 'a-first.webp',
+    version: `${selected.mtimeNs.toString()}-${selected.size.toString()}`,
+  });
+});
+
+test('file-space node cover protocol resolver is pathless and reusable for Segment covers', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-segment-cover-resolve-'));
+  const segmentDirectory = path.join(
+    root,
+    'memories',
+    'mem_segment_cover',
+    'segments',
+    'seg_cover'
+  );
+  const coverDirectory = path.join(segmentDirectory, 'cover');
+  await mkdir(coverDirectory, { recursive: true });
+  await writeFile(path.join(coverDirectory, 'poster.png'), new Uint8Array([4, 5, 6]));
+
+  const resolved = await resolveFileSpaceNodeCoverFile({
+    filename: 'poster.png',
+    ownerDirectoryPath: segmentDirectory,
+  });
+
+  assert.equal(resolved.ok, true, JSON.stringify(resolved));
+  if (resolved.ok) {
+    assert.deepEqual(Buffer.from(resolved.bytes), Buffer.from([4, 5, 6]));
+    assert.equal(resolved.mimeType, 'image/png');
+    assert.equal('absolutePath' in resolved, false);
   }
 });
 

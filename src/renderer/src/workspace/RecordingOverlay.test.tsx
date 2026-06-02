@@ -163,6 +163,8 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     restoreDeletedMemory: vi.fn(),
     resetMemoryCover: vi.fn(),
     restoreMemoryCover: vi.fn(),
+    resetSegmentCover: vi.fn(),
+    restoreSegmentCover: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
     deleteSegmentSupplement: vi.fn(),

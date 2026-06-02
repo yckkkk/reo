@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Segment Poster Cover Design</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: #ffffff;
+        --foreground: #18181b;
+        --secondary: #dfe3e8;
+        --muted-foreground: #71717a;
+        --ring: #18181b;
+        --font-sans: 'Waldenburg', 'Inter', ui-sans-serif, system-ui, sans-serif;
+        --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --memory-studio-segment-card-min-size: 136px;
+        --memory-studio-segment-card-size: 148px;
+        --memory-studio-segment-gap: 12px;
+        --cover-title-r: 255;
+        --cover-title-g: 255;
+        --cover-title-b: 255;
+        --cover-bottom-r: 255;
+        --cover-bottom-g: 255;
+        --cover-bottom-b: 255;
+        --cover-title-protect-r: 0;
+        --cover-title-protect-g: 0;
+        --cover-title-protect-b: 0;
+        --cover-bottom-protect-r: 0;
+        --cover-bottom-protect-g: 0;
+        --cover-bottom-protect-b: 0;
+      }
+
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --background: #09090b;
+        --foreground: #fafafa;
+        --secondary: #27272a;
+        --muted-foreground: #a1a1aa;
+        --ring: #fafafa;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .page {
+        display: grid;
+        gap: 48px;
+        padding: 48px;
+      }
+
+      .section {
+        display: grid;
+        gap: 18px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 16px;
+        line-height: 1.5;
+        letter-spacing: 0;
+      }
+
+      .note {
+        max-width: 720px;
+        color: var(--muted-foreground);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .strip {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--memory-studio-segment-gap);
+        overflow: visible;
+      }
+
+      .template-strip {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--memory-studio-segment-gap);
+        overflow: visible;
+      }
+
+      .template-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px 12px;
+        align-items: start;
+      }
+
+      .template-unit {
+        display: grid;
+        width: var(--memory-studio-segment-card-size);
+        flex: 0 0 var(--memory-studio-segment-card-size);
+        gap: 10px;
+      }
+
+      .compact-grid {
+        --memory-studio-segment-card-size: 136px;
+      }
+
+      .template-label {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        line-height: 1.5;
+      }
+
+      .segment-item {
+        position: relative;
+        display: flex;
+        width: var(--memory-studio-segment-card-size);
+        min-width: var(--memory-studio-segment-card-min-size);
+        max-width: var(--memory-studio-segment-card-size);
+        flex: 0 0 var(--memory-studio-segment-card-size);
+        flex-direction: column;
+        text-align: left;
+        outline: none;
+      }
+
+      .segment-button {
+        display: flex;
+        width: var(--memory-studio-segment-card-size);
+        max-width: var(--memory-studio-segment-card-size);
+        flex-direction: column;
+        border: 0;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+      }
+
+      .card-wrap {
+        display: block;
+        width: var(--memory-studio-segment-card-size);
+        max-width: var(--memory-studio-segment-card-size);
+        min-width: 0;
+      }
+
+      .segment-card {
+        position: relative;
+        display: flex;
+        width: var(--memory-studio-segment-card-size);
+        height: var(--memory-studio-segment-card-size);
+        min-width: var(--memory-studio-segment-card-min-size);
+        min-height: var(--memory-studio-segment-card-min-size);
+        max-width: var(--memory-studio-segment-card-size);
+        max-height: var(--memory-studio-segment-card-size);
+        aspect-ratio: 1;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+        padding: 12px;
+        border: 0;
+        border-radius: clamp(33px, 4.34vw, 36px);
+        background: transparent;
+        box-shadow: none;
+        color: rgb(var(--cover-title-r) var(--cover-title-g) var(--cover-title-b) / 0.96);
+        text-align: left;
+        transition: filter 150ms ease-out;
+        corner-shape: squircle;
+      }
+
+      .segment-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        background-image: var(--cover);
+        background-position: center;
+        background-size: cover;
+        filter: brightness(var(--cover-brightness, 0.86)) saturate(var(--cover-saturation, 1.08))
+          contrast(var(--cover-contrast, 1.02));
+        transform: scale(var(--cover-scale, 1.02));
+        transition:
+          filter 150ms ease-out,
+          transform 150ms ease-out;
+      }
+
+      .segment-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: none;
+        pointer-events: none;
+        transition: opacity 150ms ease-out;
+      }
+
+      .segment-card > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .state-hover .segment-card,
+      .segment-item:hover .segment-card {
+        --cover-brightness: 0.94;
+        --cover-scale: 1.035;
+        --top-scrim-start: 0.54;
+        --bottom-scrim-start: 0.6;
+      }
+
+      .state-selected .segment-card {
+        --cover-brightness: 1;
+        --cover-saturation: 1.14;
+        --cover-contrast: 1.04;
+        --top-scrim-start: 0.64;
+        --top-scrim-mid: 0.42;
+        --bottom-scrim-start: 0.7;
+        --bottom-scrim-mid: 0.42;
+      }
+
+      .state-menu .segment-card {
+        --cover-brightness: 0.97;
+        --top-scrim-start: 0.62;
+        --bottom-scrim-start: 0.68;
+      }
+
+      .state-compact {
+        --memory-studio-segment-card-size: 136px;
+      }
+
+      .title-wrap {
+        display: block;
+        min-width: 0;
+        padding-right: 24px;
+      }
+
+      .title {
+        display: block;
+        max-width: 88px;
+        color: rgb(var(--cover-title-r) var(--cover-title-g) var(--cover-title-b) / 0.97);
+        font-size: 15px;
+        font-weight: 750;
+        letter-spacing: 0;
+        line-height: 1.42;
+        white-space: normal;
+      }
+
+      .bottom-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+
+      .state-cover-tone .segment-card {
+        --cover-brightness: 0.98;
+        --cover-saturation: 1.04;
+        --cover-contrast: 1.01;
+        --top-scrim-start: 0.22;
+        --top-scrim-mid: 0.12;
+        --bottom-scrim-start: 0.24;
+        --bottom-scrim-mid: 0.12;
+      }
+
+      .state-cover-tone .segment-card::after {
+        background:
+          radial-gradient(
+            ellipse 74px 42px at 50px 30px,
+            rgb(
+                var(--cover-title-protect-r) var(--cover-title-protect-g)
+                  var(--cover-title-protect-b) / var(--top-scrim-start)
+              )
+              0%,
+            rgb(
+                var(--cover-title-protect-r) var(--cover-title-protect-g)
+                  var(--cover-title-protect-b) / var(--top-scrim-mid)
+              )
+              42%,
+            transparent 80%
+          ),
+          radial-gradient(
+            ellipse 64px 34px at 44px calc(100% - 24px),
+            rgb(
+                var(--cover-bottom-protect-r) var(--cover-bottom-protect-g)
+                  var(--cover-bottom-protect-b) / var(--bottom-scrim-start)
+              )
+              0%,
+            rgb(
+                var(--cover-bottom-protect-r) var(--cover-bottom-protect-g)
+                  var(--cover-bottom-protect-b) / var(--bottom-scrim-mid)
+              )
+              42%,
+            transparent 80%
+          ),
+          radial-gradient(
+            ellipse 56px 32px at calc(100% - 30px) calc(100% - 24px),
+            rgb(
+                var(--cover-bottom-protect-r) var(--cover-bottom-protect-g)
+                  var(--cover-bottom-protect-b) / var(--bottom-scrim-start)
+              )
+              0%,
+            rgb(
+                var(--cover-bottom-protect-r) var(--cover-bottom-protect-g)
+                  var(--cover-bottom-protect-b) / var(--bottom-scrim-mid)
+              )
+              42%,
+            transparent 80%
+          );
+      }
+
+      .state-cover-tone.state-hover .segment-card,
+      .segment-item.state-cover-tone:hover .segment-card {
+        --cover-brightness: 1.04;
+        --cover-scale: 1.035;
+        --top-scrim-start: 0.26;
+        --bottom-scrim-start: 0.3;
+      }
+
+      [data-theme='dark'] .state-cover-tone .segment-card {
+        --cover-brightness: 0.92;
+        --cover-saturation: 1.02;
+        --top-scrim-start: 0.34;
+        --top-scrim-mid: 0.2;
+        --bottom-scrim-start: 0.38;
+        --bottom-scrim-mid: 0.22;
+      }
+
+      [data-theme='dark'] .state-cover-tone.state-hover .segment-card,
+      [data-theme='dark'] .segment-item.state-cover-tone:hover .segment-card {
+        --cover-brightness: 0.98;
+        --top-scrim-start: 0.3;
+        --bottom-scrim-start: 0.34;
+      }
+
+      .state-cover-tone .more {
+        color: rgb(var(--cover-title-r) var(--cover-title-g) var(--cover-title-b) / 0.78);
+      }
+
+      .waveform {
+        display: inline-flex;
+        width: 52px;
+        height: 32px;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 2px;
+        color: rgb(var(--cover-bottom-r) var(--cover-bottom-g) var(--cover-bottom-b) / 0.76);
+      }
+
+      .bar {
+        width: 4px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .dot {
+        width: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .meta {
+        flex-shrink: 0;
+        color: rgb(var(--cover-bottom-r) var(--cover-bottom-g) var(--cover-bottom-b) / 0.82);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        line-height: 1;
+      }
+
+      .file-icon {
+        width: 28px;
+        height: 28px;
+        color: rgb(var(--cover-bottom-r) var(--cover-bottom-g) var(--cover-bottom-b) / 0.78);
+      }
+
+      .more {
+        position: absolute;
+        z-index: 3;
+        top: 8px;
+        right: 8px;
+        display: inline-flex;
+        width: 28px;
+        height: 28px;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 8px;
+        background: rgb(0 0 0 / 0);
+        color: rgb(255 255 255 / 0.82);
+        opacity: 0;
+        transition:
+          opacity 150ms ease-out,
+          background 150ms ease-out,
+          color 150ms ease-out;
+      }
+
+      .state-hover .more,
+      .state-menu .more,
+      .segment-item:hover .more {
+        opacity: 1;
+      }
+
+      .state-menu .more {
+        background: rgb(255 255 255 / 0.18);
+        color: rgb(255 255 255 / 0.96);
+      }
+
+      .more-dot {
+        position: relative;
+        display: inline-flex;
+        width: 4px;
+        height: 4px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .more-dot::before,
+      .more-dot::after {
+        content: '';
+        position: absolute;
+        display: block;
+        width: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: currentColor;
+        top: 0;
+      }
+
+      .more-dot::before {
+        left: -7px;
+      }
+
+      .more-dot::after {
+        left: 7px;
+      }
+
+      .timeline {
+        position: relative;
+        display: flex;
+        width: 100%;
+        height: 48px;
+        margin-top: 10px;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .timeline::before {
+        content: '';
+        position: absolute;
+        top: 3px;
+        right: -12px;
+        left: -12px;
+        height: 1px;
+        background: var(--secondary);
+      }
+
+      .timeline-dot {
+        position: relative;
+        z-index: 1;
+        display: block;
+        width: 7px;
+        height: 7px;
+        min-width: 7px;
+        min-height: 7px;
+        border-radius: 999px;
+        background: var(--timeline-dot, var(--muted-foreground));
+      }
+
+      .state-selected {
+        --timeline-dot: var(--foreground);
+      }
+
+      .timeline-time {
+        display: block;
+        margin-top: 12px;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        line-height: 1.5;
+      }
+
+      .menu-pop {
+        position: absolute;
+        z-index: 5;
+        top: 36px;
+        right: -74px;
+        width: 138px;
+        border-radius: 18px;
+        background: rgb(255 255 255 / 0.94);
+        padding: 6px;
+        color: #18181b;
+        box-shadow:
+          0 16px 48px rgb(17 24 39 / 0.08),
+          0 6px 12px rgb(17 24 39 / 0.06);
+      }
+
+      [data-theme='dark'] .menu-pop {
+        background: rgb(39 39 42 / 0.96);
+        color: #fafafa;
+      }
+
+      .menu-item {
+        height: 32px;
+        border-radius: 12px;
+        padding: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.15;
+      }
+
+      .menu-item:first-child {
+        background: rgb(24 24 27 / 0.08);
+      }
+
+      [data-theme='dark'] .menu-item:first-child {
+        background: rgb(250 250 250 / 0.1);
+      }
+
+      .grid-pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 28px;
+      }
+
+      .stage {
+        overflow: visible;
+        border-radius: 28px;
+        background: color-mix(in oklab, var(--secondary) 42%, var(--background));
+        padding: 28px;
+      }
+
+      @media (max-width: 860px) {
+        .page {
+          padding: 28px;
+        }
+
+        .grid-pair {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="section">
+        <div class="section-header">
+          <h1>Segment poster cover states</h1>
+          <p class="note">
+            只保留当前选定方向：封面保持清晰，文本、waveform、file icon 直接使用 on-cover
+            颜色与局部保护层；hover 通过轻微曝光变化和 More reveal 表达。
+          </p>
+        </div>
+        <div class="stage">
+          <div id="state-strip" class="template-strip"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>All default cover templates</h2>
+          <p class="note">
+            13 张默认渐变封面全部应用同一套清晰封面规则，用来检查不同明暗、色相和噪声分布下的标题、
+            录音 waveform、笔记 file icon 和 meta 可读性。
+          </p>
+        </div>
+        <div class="stage">
+          <div id="template-grid" class="template-grid"></div>
+        </div>
+      </section>
+
+      <section class="section" data-theme="dark">
+        <div class="section-header">
+          <h2>Dark compact templates</h2>
+          <p class="note">
+            同一套封面和 on-cover 处理放到深色模式，并按 136px compact card 检查真实窄 rail 尺寸。
+          </p>
+        </div>
+        <div class="stage">
+          <div id="dark-template-grid" class="template-grid compact-grid"></div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const waveformMarkup = `
+        <span class="waveform" aria-hidden="true">
+          <span class="dot"></span><span class="bar" style="height: 15px"></span
+          ><span class="bar" style="height: 20px"></span><span class="bar" style="height: 26px"></span
+          ><span class="bar" style="height: 12px"></span><span class="bar" style="height: 24px"></span
+          ><span class="bar" style="height: 29px"></span><span class="bar" style="height: 17px"></span
+          ><span class="dot"></span>
+        </span>`;
+
+      const fileIconMarkup = `
+        <svg class="file-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          <path d="M8 13h8M8 17h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>`;
+
+      const fallbackTones = {
+        'gradient-01.png': {
+          title: { text: [248, 245, 242], protect: [0, 0, 0] },
+          bottom: { text: [224, 200, 203], protect: [0, 0, 0] },
+        },
+        'gradient-02.png': {
+          title: { text: [248, 245, 242], protect: [0, 0, 0] },
+          bottom: { text: [248, 245, 242], protect: [0, 0, 0] },
+        },
+        'gradient-03.png': {
+          title: { text: [88, 54, 50], protect: [255, 255, 255] },
+          bottom: { text: [248, 244, 242], protect: [0, 0, 0] },
+        },
+        'gradient-04.png': {
+          title: { text: [60, 52, 76], protect: [255, 255, 255] },
+          bottom: { text: [243, 246, 247], protect: [0, 0, 0] },
+        },
+        'gradient-05.png': {
+          title: { text: [50, 79, 88], protect: [255, 255, 255] },
+          bottom: { text: [59, 67, 78], protect: [255, 255, 255] },
+        },
+        'gradient-06.png': {
+          title: { text: [38, 61, 67], protect: [255, 255, 255] },
+          bottom: { text: [50, 85, 88], protect: [255, 255, 255] },
+        },
+        'gradient-07.png': {
+          title: { text: [73, 50, 88], protect: [255, 255, 255] },
+          bottom: { text: [50, 61, 88], protect: [255, 255, 255] },
+        },
+        'gradient-08.png': {
+          title: { text: [242, 245, 248], protect: [0, 0, 0] },
+          bottom: { text: [242, 245, 248], protect: [0, 0, 0] },
+        },
+        'gradient-09.png': {
+          title: { text: [196, 222, 217], protect: [0, 0, 0] },
+          bottom: { text: [238, 243, 239], protect: [0, 0, 0] },
+        },
+        'gradient-10.png': {
+          title: { text: [67, 86, 52], protect: [255, 255, 255] },
+          bottom: { text: [38, 66, 49], protect: [255, 255, 255] },
+        },
+        'gradient-11.png': {
+          title: { text: [246, 243, 245], protect: [0, 0, 0] },
+          bottom: { text: [247, 242, 243], protect: [0, 0, 0] },
+        },
+        'gradient-12.png': {
+          title: { text: [50, 72, 88], protect: [255, 255, 255] },
+          bottom: { text: [242, 246, 248], protect: [0, 0, 0] },
+        },
+        'gradient-13.png': {
+          title: { text: [78, 60, 78], protect: [255, 255, 255] },
+          bottom: { text: [88, 60, 50], protect: [255, 255, 255] },
+        },
+      };
+
+      const defaultTone = {
+        title: { text: [250, 250, 250], protect: [0, 0, 0] },
+        bottom: { text: [250, 250, 250], protect: [0, 0, 0] },
+      };
+
+      const templates = [
+        {
+          label: 'GRADIENT 01',
+          cover: 'gradient-01.png',
+          title: '碎片整理',
+          type: 'audio',
+          meta: '02:18',
+          time: '09:00',
+        },
+        {
+          label: 'GRADIENT 02',
+          cover: 'gradient-02.png',
+          title: '花园里的七分钟',
+          type: 'audio',
+          meta: '07:04',
+          time: '09:14',
+        },
+        {
+          label: 'GRADIENT 03',
+          cover: 'gradient-03.png',
+          title: '资料散落的一天',
+          type: 'note',
+          meta: '8.2K',
+          time: '09:31',
+        },
+        {
+          label: 'GRADIENT 04',
+          cover: 'gradient-04.png',
+          title: '餐桌旁的夜谈',
+          type: 'note',
+          meta: '4.8K',
+          time: '22:14',
+        },
+        {
+          label: 'GRADIENT 05',
+          cover: 'gradient-05.png',
+          title: 'E2E 自动记录',
+          type: 'audio',
+          meta: '03:26',
+          time: '18:59',
+        },
+        {
+          label: 'GRADIENT 06',
+          cover: 'gradient-06.png',
+          title: 'Agent Live Session',
+          type: 'audio',
+          meta: '11:06',
+          time: '09:02',
+        },
+        {
+          label: 'GRADIENT 07',
+          cover: 'gradient-07.png',
+          title: '生活',
+          type: 'note',
+          meta: '1.2K',
+          time: '20:34',
+        },
+        {
+          label: 'GRADIENT 08',
+          cover: 'gradient-08.png',
+          title: '早晨问题清单',
+          type: 'note',
+          meta: '3.4K',
+          time: '08:47',
+        },
+        {
+          label: 'GRADIENT 09',
+          cover: 'gradient-09.png',
+          title: '资料散落的一天',
+          type: 'audio',
+          meta: '05:41',
+          time: '23:24',
+        },
+        {
+          label: 'GRADIENT 10',
+          cover: 'gradient-10.png',
+          title: '自动化验证补记',
+          type: 'note',
+          meta: '6.1K',
+          time: '18:21',
+        },
+        {
+          label: 'GRADIENT 11',
+          cover: 'gradient-11.png',
+          title: '与 Levon 讨论 Take a Flower',
+          type: 'audio',
+          meta: '12:48',
+          time: '10:42',
+        },
+        {
+          label: 'GRADIENT 12',
+          cover: 'gradient-12.png',
+          title: 'Codex Dogfood Review',
+          type: 'note',
+          meta: '9.6K',
+          time: '23:18',
+        },
+        {
+          label: 'GRADIENT 13',
+          cover: 'gradient-13.png',
+          title: '回看今天的线索',
+          type: 'audio',
+          meta: '04:12',
+          time: '21:05',
+        },
+      ];
+
+      const escapeHtml = (value) =>
+        String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;');
+
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+      const srgbToLinear = (value) => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+      };
+
+      const relativeLuminance = ([red, green, blue]) =>
+        0.2126 * srgbToLinear(red) + 0.7152 * srgbToLinear(green) + 0.0722 * srgbToLinear(blue);
+
+      const contrastRatio = (foreground, background) => {
+        const foregroundLuminance = relativeLuminance(foreground);
+        const backgroundLuminance = relativeLuminance(background);
+        const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+        const darker = Math.min(foregroundLuminance, backgroundLuminance);
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+
+      function rgbToHsl([red, green, blue]) {
+        const r = red / 255;
+        const g = green / 255;
+        const b = blue / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let hue = 0;
+        let saturation = 0;
+        const lightness = (max + min) / 2;
+        const delta = max - min;
+
+        if (delta !== 0) {
+          saturation = delta / (1 - Math.abs(2 * lightness - 1));
+          if (max === r) hue = ((g - b) / delta) % 6;
+          if (max === g) hue = (b - r) / delta + 2;
+          if (max === b) hue = (r - g) / delta + 4;
+          hue *= 60;
+          if (hue < 0) hue += 360;
+        }
+
+        return [hue, saturation, lightness];
+      }
+
+      function hslToRgb(hue, saturation, lightness) {
+        const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+        const huePrime = hue / 60;
+        const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+        const match = lightness - chroma / 2;
+        let rgb = [0, 0, 0];
+
+        if (huePrime >= 0 && huePrime < 1) rgb = [chroma, x, 0];
+        else if (huePrime < 2) rgb = [x, chroma, 0];
+        else if (huePrime < 3) rgb = [0, chroma, x];
+        else if (huePrime < 4) rgb = [0, x, chroma];
+        else if (huePrime < 5) rgb = [x, 0, chroma];
+        else rgb = [chroma, 0, x];
+
+        return rgb.map((channel) => Math.round((channel + match) * 255));
+      }
+
+      function deriveForeground(background) {
+        const [hue, saturation] = rgbToHsl(background);
+        const luminance = relativeLuminance(background);
+        const chroma = clamp(saturation * 0.5, 0.06, 0.32);
+        const lightText = hslToRgb(hue, chroma, 0.94);
+        const darkText = hslToRgb(hue, clamp(saturation * 0.55, 0.08, 0.34), 0.2);
+        const lightContrast = contrastRatio(lightText, background);
+        const darkContrast = contrastRatio(darkText, background);
+        const useDarkText =
+          luminance > 0.72 || (luminance > 0.58 && darkContrast > lightContrast + 1.4);
+        let text = useDarkText ? darkText : lightText;
+
+        if (contrastRatio(text, background) < 4.5) {
+          text = useDarkText ? [24, 24, 27] : [250, 250, 250];
+        }
+
+        const contrast = contrastRatio(text, background);
+        const protect = useDarkText ? [255, 255, 255] : [0, 0, 0];
+        const scrimStart = clamp(0.12 + Math.max(0, 5.2 - contrast) * 0.055, 0.12, 0.34);
+
+        return {
+          text,
+          protect,
+          scrimStart,
+          scrimMid: clamp(scrimStart * 0.55, 0.06, 0.2),
+        };
+      }
+
+      function sampleRegion(context, size, rect) {
+        const x = Math.round(rect.x * size);
+        const y = Math.round(rect.y * size);
+        const width = Math.round(rect.width * size);
+        const height = Math.round(rect.height * size);
+        const data = context.getImageData(x, y, width, height).data;
+        const pixels = [];
+
+        for (let index = 0; index < data.length; index += 4) {
+          if (data[index + 3] < 16) continue;
+          pixels.push([data[index], data[index + 1], data[index + 2]]);
+        }
+
+        pixels.sort((a, b) => relativeLuminance(a) - relativeLuminance(b));
+        const start = Math.floor(pixels.length * 0.1);
+        const end = Math.ceil(pixels.length * 0.9);
+        const trimmed = pixels.slice(start, end);
+        const total = trimmed.reduce(
+          (sum, pixel) => [sum[0] + pixel[0], sum[1] + pixel[1], sum[2] + pixel[2]],
+          [0, 0, 0]
+        );
+
+        return total.map((channel) => Math.round(channel / Math.max(1, trimmed.length)));
+      }
+
+      function applyTone(element, tone) {
+        const title = tone.title;
+        const bottom = tone.bottom;
+        element.style.setProperty('--cover-title-r', title.text[0]);
+        element.style.setProperty('--cover-title-g', title.text[1]);
+        element.style.setProperty('--cover-title-b', title.text[2]);
+        element.style.setProperty('--cover-bottom-r', bottom.text[0]);
+        element.style.setProperty('--cover-bottom-g', bottom.text[1]);
+        element.style.setProperty('--cover-bottom-b', bottom.text[2]);
+        element.style.setProperty('--cover-title-protect-r', title.protect[0]);
+        element.style.setProperty('--cover-title-protect-g', title.protect[1]);
+        element.style.setProperty('--cover-title-protect-b', title.protect[2]);
+        element.style.setProperty('--cover-bottom-protect-r', bottom.protect[0]);
+        element.style.setProperty('--cover-bottom-protect-g', bottom.protect[1]);
+        element.style.setProperty('--cover-bottom-protect-b', bottom.protect[2]);
+        element.style.setProperty('--top-scrim-start', title.scrimStart ?? 0.18);
+        element.style.setProperty('--top-scrim-mid', title.scrimMid ?? 0.1);
+        element.style.setProperty('--bottom-scrim-start', bottom.scrimStart ?? 0.2);
+        element.style.setProperty('--bottom-scrim-mid', bottom.scrimMid ?? 0.1);
+      }
+
+      function fallbackToneFor(cover) {
+        return fallbackTones[cover] ?? defaultTone;
+      }
+
+      function toneStyleFor(cover) {
+        const tone = fallbackToneFor(cover);
+        return [
+          `--cover-title-r: ${tone.title.text[0]}`,
+          `--cover-title-g: ${tone.title.text[1]}`,
+          `--cover-title-b: ${tone.title.text[2]}`,
+          `--cover-bottom-r: ${tone.bottom.text[0]}`,
+          `--cover-bottom-g: ${tone.bottom.text[1]}`,
+          `--cover-bottom-b: ${tone.bottom.text[2]}`,
+          `--cover-title-protect-r: ${tone.title.protect[0]}`,
+          `--cover-title-protect-g: ${tone.title.protect[1]}`,
+          `--cover-title-protect-b: ${tone.title.protect[2]}`,
+          `--cover-bottom-protect-r: ${tone.bottom.protect[0]}`,
+          `--cover-bottom-protect-g: ${tone.bottom.protect[1]}`,
+          `--cover-bottom-protect-b: ${tone.bottom.protect[2]}`,
+        ].join('; ');
+      }
+
+      async function applyImageTone(element) {
+        const coverSrc = element.dataset.coverSrc;
+        if (!coverSrc) return;
+
+        const image = new Image();
+        image.decoding = 'async';
+        image.src = coverSrc;
+        await image.decode();
+
+        const size = 72;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+
+        const imageRatio = image.naturalWidth / image.naturalHeight;
+        let sx = 0;
+        let sy = 0;
+        let sw = image.naturalWidth;
+        let sh = image.naturalHeight;
+
+        if (imageRatio > 1) {
+          sw = image.naturalHeight;
+          sx = (image.naturalWidth - sw) / 2;
+        } else if (imageRatio < 1) {
+          sh = image.naturalWidth;
+          sy = (image.naturalHeight - sh) / 2;
+        }
+
+        context.drawImage(image, sx, sy, sw, sh, 0, 0, size, size);
+        applyTone(element, {
+          title: deriveForeground(
+            sampleRegion(context, size, { x: 0.08, y: 0.08, width: 0.76, height: 0.34 })
+          ),
+          bottom: deriveForeground(
+            sampleRegion(context, size, { x: 0.08, y: 0.68, width: 0.84, height: 0.24 })
+          ),
+        });
+      }
+
+      function renderSegmentCard(card, options = {}) {
+        const coverSrc = `assets/gradients/${card.cover}`;
+        const classes = ['segment-item', 'state-cover-tone', options.className]
+          .filter(Boolean)
+          .join(' ');
+        const title = escapeHtml(card.title);
+        const meta = escapeHtml(card.meta);
+        const time = escapeHtml(card.time);
+        const selected = classes.includes('state-selected');
+        const menu = options.menu
+          ? `<div class="menu-pop">
+              <div class="menu-item">重命名</div>
+              <div class="menu-item">恢复默认封面</div>
+              <div class="menu-item">删除</div>
+            </div>`
+          : '';
+
+        return `
+          <article class="${classes}" data-cover-src="${coverSrc}" style="--cover: url('${coverSrc}'); ${toneStyleFor(card.cover)}">
+            <button
+              class="segment-button"
+              type="button"
+              ${selected ? 'aria-current="true"' : ''}
+              aria-label="选择片段 ${title}"
+            >
+              <span class="card-wrap">
+                <span class="segment-card">
+                  <span class="title-wrap"><span class="title">${title}</span></span>
+                  <span class="bottom-row">
+                    ${card.type === 'audio' ? waveformMarkup : fileIconMarkup}
+                    <span class="meta">${meta}</span>
+                  </span>
+                </span>
+              </span>
+              <span class="timeline"><span class="timeline-dot"></span><span class="timeline-time">${time}</span></span>
+            </button>
+            <button class="more" aria-label="更多操作"><span class="more-dot"></span></button>
+            ${menu}
+          </article>`;
+      }
+
+      function renderTemplateUnit(card, options = {}) {
+        return `
+          <div class="template-unit">
+            <span class="template-label">${escapeHtml(card.label)}</span>
+            ${renderSegmentCard(card, options)}
+          </div>`;
+      }
+
+      const stateCards = [
+        renderSegmentCard(templates[0]),
+        renderSegmentCard(templates[1], { className: 'state-hover' }),
+        renderSegmentCard(templates[10], { className: 'state-selected' }),
+        renderSegmentCard(templates[3], { className: 'state-menu', menu: true }),
+      ];
+
+      document.getElementById('state-strip').innerHTML = stateCards.join('');
+      document.getElementById('template-grid').innerHTML = templates
+        .map(renderTemplateUnit)
+        .join('');
+      document.getElementById('dark-template-grid').innerHTML = templates
+        .map((card, index) =>
+          renderTemplateUnit(card, {
+            className: [
+              'state-compact',
+              index === 1 ? 'state-hover' : '',
+              index === 10 ? 'state-selected' : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+          })
+        )
+        .join('');
+
+      document.querySelectorAll('.segment-item[data-cover-src]').forEach((element) => {
+        applyImageTone(element).catch(() => {
+          applyTone(element, fallbackToneFor(element.dataset.coverSrc.split('/').at(-1)));
+        });
+      });
+    </script>
+  </body>
+</html>
