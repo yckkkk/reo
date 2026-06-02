@@ -159,3 +159,12 @@ test('attachment protocol path decoding safely denies malformed percent escapes'
   assert.match(sourceText, /decodeURIComponent/);
   assert.match(sourceText, /catch\s*{\s*return null;\s*}/);
 });
+
+test('attachment protocol has an explicit Memory cover route without broadening fetch access', () => {
+  const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
+
+  assert.match(sourceText, /segments\[0\]\s*!==\s*'segments'/);
+  assert.match(sourceText, /segments\[0\]\s*===\s*'memories'/);
+  assert.match(sourceText, /resolveMemoryCoverFile/);
+  assert.equal(sourceText.includes('connect-src reo-attachment'), false);
+});

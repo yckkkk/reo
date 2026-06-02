@@ -44,6 +44,7 @@ describe('forbidden first-slice capabilities', () => {
             onNoteSegmentContentSaved={() => {}}
             onNoteSegmentSupplementContentSaved={() => {}}
             onRenameMemory={() => {}}
+            onResetMemoryCover={() => {}}
             onRenameSegmentContent={() => {}}
             onRenameSegment={() => {}}
             onRenameSegmentSupplement={() => {}}

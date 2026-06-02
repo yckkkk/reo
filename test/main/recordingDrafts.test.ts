@@ -1094,6 +1094,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: { source: 'default' },
       },
     }
   );
@@ -1130,6 +1131,7 @@ test('recording draft enforces sequence, 1 MiB chunk limit, and finalize waits f
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: { source: 'default' },
     },
   ]);
 
@@ -3452,6 +3454,7 @@ test('recording finalize rejects non-file draft audio before deleting the draft'
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: { source: 'default' },
       },
     ],
   });
@@ -4196,6 +4199,7 @@ test('recording finalize returns only the appended recording byte length for exi
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: { source: 'default' },
       },
     }
   );

@@ -1,4 +1,4 @@
-import { MoreHorizontal, PencilLine, RefreshCw, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PencilLine, RefreshCw, Trash2, type LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +24,13 @@ export type EntityActionMenuTranscriptionAction = {
   readonly onSelect: EntityActionMenuSyncAction;
 };
 
+export type EntityActionMenuExtraAction = {
+  readonly disabledReason?: string | null;
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly onSelect: EntityActionMenuSyncAction;
+};
+
 export type EntityActionMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly deleteLabel?: '删除' | '移除';
@@ -39,20 +46,17 @@ export type EntityActionMenuProps = {
   readonly onRename: () => void;
   readonly onRevealInFinder: EntityPathAction;
   readonly open?: boolean | undefined;
+  readonly extraActions?: readonly EntityActionMenuExtraAction[] | undefined;
   readonly transcriptionAction?: EntityActionMenuTranscriptionAction | undefined;
   readonly trigger?: ReactElement | undefined;
   readonly triggerClassName?: string | undefined;
 };
 
-function EntityActionMenuIcon({ icon: Icon }: { readonly icon: typeof RefreshCw }) {
+function EntityActionMenuIcon({ icon: Icon }: { readonly icon: LucideIcon }) {
   return <Icon className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />;
 }
 
-function EntityActionTranscriptionItem({
-  action,
-}: {
-  readonly action: EntityActionMenuTranscriptionAction;
-}) {
+function EntityActionSyncItem({ action }: { readonly action: EntityActionMenuExtraAction }) {
   const disabled = action.disabledReason !== null && action.disabledReason !== undefined;
   const item = (
     <DropdownMenuItem
@@ -66,7 +70,7 @@ function EntityActionTranscriptionItem({
         action.onSelect();
       }}
     >
-      <EntityActionMenuIcon icon={RefreshCw} />
+      <EntityActionMenuIcon icon={action.icon} />
       {action.label}
     </DropdownMenuItem>
   );
@@ -85,6 +89,14 @@ function EntityActionTranscriptionItem({
   );
 }
 
+function EntityActionTranscriptionItem({
+  action,
+}: {
+  readonly action: EntityActionMenuTranscriptionAction;
+}) {
+  return <EntityActionSyncItem action={{ ...action, icon: RefreshCw }} />;
+}
+
 export function EntityActionMenu({
   contentAlign = 'end',
   deleteLabel = '删除',
@@ -98,6 +110,7 @@ export function EntityActionMenu({
   onRename,
   onRevealInFinder,
   open,
+  extraActions,
   transcriptionAction,
   trigger,
   triggerClassName,
@@ -138,6 +151,16 @@ export function EntityActionMenu({
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
               <EntityActionTranscriptionItem action={transcriptionAction} />
+            </DropdownMenuGroup>
+          </>
+        ) : null}
+        {extraActions && extraActions.length > 0 ? (
+          <>
+            <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
+            <DropdownMenuGroup>
+              {extraActions.map((action) => (
+                <EntityActionSyncItem key={action.label} action={action} />
+              ))}
             </DropdownMenuGroup>
           </>
         ) : null}

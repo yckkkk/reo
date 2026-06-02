@@ -1,7 +1,7 @@
 # FAB SpeedDial Trigger Hero 化
 
 - Created: 2026-06-01 07:20 PDT (UTC-0700)
-- Initiative: `docs/initiatives/2026-05-28-hero-expression-surfaces`（里程碑 1）
+- Initiative: `docs/archive/initiatives/2026-05-28-hero-expression-surfaces`（里程碑 1，后续已归档为失效方向）
 - 设计真源: `docs/current/design-system/DESIGN.md` Hero Token 规则
 
 ## 目标

@@ -1,8 +1,8 @@
 # Hero 表达入口建设
 
 - Started: 2026-05-28
-- Status: active（下一产品/代码开发长期任务；任务尚未完成，保留在 initiatives/）
-- Type: 产品/代码开发 active initiative
+- Status: archived 2026-06-02 — superseded by Memory cover-based list item direction
+- Type: 产品/代码开发 archived initiative
 
 ## 目标
 

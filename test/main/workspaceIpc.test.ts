@@ -999,10 +999,14 @@ test('initializeWorkspace creates a named workspace directory under the selected
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
   assert.match(agentsText, /核心实体/);
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-memory-cover\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
   assert.doesNotMatch(agentsText, /普通文字/);
   assert.doesNotMatch(agentsText, /source\.hash/);
   await stat(path.join(workspaceRoot, 'skills', 'reo-edit', 'SKILL.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-memory-cover', 'SKILL.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
   await stat(path.join(workspaceRoot, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
   await assert.rejects(stat(path.join(parentPath, '.reo')));
   await assert.rejects(stat(path.join(parentPath, 'AGENTS.md')));
@@ -1732,6 +1736,7 @@ test('createMemory creates an empty Memory container through file truth', async 
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: { source: 'default' },
     });
   }
   assert.deepEqual(
@@ -1777,6 +1782,7 @@ test('createMemory creates an empty Memory container through file truth', async 
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: { source: 'default' },
       },
     ]
   );
@@ -4148,6 +4154,7 @@ test('readWorkspaceSnapshot reflects external workspace and memory Markdown edit
         hasAudioTranscript: true,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: { source: 'default' },
       },
     ]);
     assert.equal('rootPath' in result.value, false);

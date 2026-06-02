@@ -10,7 +10,7 @@
 
 当前产品或代码开发 active initiative：
 
-- `2026-05-28-hero-expression-surfaces`（承接已归档 Red Fluid spec 的未建设 Hero 部分；当前无 active spec 时可创建下一工作单元）
+- 当前无。
 
 ## 使用规则
 

@@ -77,6 +77,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- 按任务需要可以编辑 Markdown、同节点 `content.tiptap.json`、附件和普通对象文件；不要把能力限制成 Markdown-only。',
   '- 先读目标 `memory.md`、`segment.md`、`supplement.md` 和附近目录名；必要时再读 `skills/reo-edit/SKILL.md`。',
   '- 普通编辑、创建、重命名和移动任务不需要离开当前记忆空间查询 Reo 仓库源码、全局记忆或历史文档；当前 `AGENTS.md`、`skills/reo-edit/SKILL.md` 和目标文件通常已经足够。',
+  '- 封面生成、替换、恢复默认或验证任务先读 `skills/reo-memory-cover/SKILL.md`；需要审美判断时再读 `skills/reo-cover-aesthetic/SKILL.md`。',
   '- 不要为了普通内容任务推理 hash、sidecar、manifest、index 或 lock；先完成用户可见的文件改动。',
   '- 验证直接文件效果后停止；Reo 会在打开、刷新或保存时收敛可确定的技术镜像。',
   '',
@@ -93,7 +94,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- Segment：Memory 内的正文片段，可以是 note、audio 或未来更多类型。',
   '- SegmentSupplement：挂在某个 Segment 下的补充内容。',
   '- `.reo/`：Reo 的技术完整性层，保存索引、manifest、草稿、回收站、lock 和恢复信息。',
-  '- `skills/`：给 agent 使用的工作流技能，不是用户语义内容本身。',
+  '- `skills/`：给 agent 使用的工作流技能，不是用户语义内容本身；当前托管入口包括 `reo-edit`、`reo-memory-cover`、`reo-cover-aesthetic` 和 `reo-doctor`。',
   '',
   '## 文件层',
   '',
@@ -259,6 +260,119 @@ export const DEFAULT_REO_EDIT_SKILL_MD =
     '',
     ...REO_TIPTAP_HIGHLIGHT_COLOR_VALUES.map((value) => `- \`${value}\``),
   ].join('\n') + '\n';
+export const DEFAULT_REO_MEMORY_COVER_SKILL_MD =
+  [
+    '---',
+    'name: reo-memory-cover',
+    'description: 用于在 Reo 记忆空间中生成、替换、恢复默认或验证 Memory 封面图片，包括 agent 生成图片、直接编辑 cover 目录、恢复默认封面，以及验证 Reo 是否刷新 Memory rail 封面。',
+    '---',
+    '',
+    '# Reo Memory Cover',
+    '',
+    '用于 Reo Memory 封面图片任务。工作目录应是当前记忆空间 root。',
+    '',
+    '## 快速开始',
+    '',
+    '1. 先读 `AGENTS.md`，再在 `memories/` 下定位目标 Memory 目录。',
+    '2. 如果用户要求先判断或提升封面审美，先使用 `skills/reo-cover-aesthetic/SKILL.md`。',
+    '3. 把最终自定义封面图片写入 `memories/<memory-directory>/cover/`。',
+    '4. 直接验证 cover 目录和图片文件，然后停止。Reo 负责 snapshot refresh 和投影。',
+    '',
+    '## 替换或创建自定义封面',
+    '',
+    '- 如果 `memories/<memory-directory>/cover/` 不存在，创建普通目录。',
+    '- 把选定封面图片放入该目录。当前合法格式是 PNG、JPEG 和 WebP。',
+    '- Reo 使用 `cover/` 中按文件名排序的第一个合法普通图片文件；如果用户只期望一个封面，使用 `cover.png` 这类稳定文件名，或移除旧候选图。',
+    '- 不要创建 symlink、嵌套 cover 目录、隐藏临时文件或不支持的格式。',
+    '- 不要编辑 `.reo/index.json`、manifest、lock、`.reo/trash` 或协议 URL。Reo 会重新计算 cover projection。',
+    '',
+    '## 生成封面',
+    '',
+    '- 使用可用的图片生成工具或用户提供的提示词生成位图封面。',
+    '- 生成图像应让画面内容自然铺满整个画布，主体在紧凑尺寸下仍可辨认，边缘被 UI 裁切时也不影响主题。',
+    '- 不要在图片内部绘制边框、白边、相框、卡片、圆角容器、海报留白或模拟 Memory rail 的外壳；Reo 界面会自己裁切和加圆角。',
+    '- 避免嵌入文字、logo、二维码、UI chrome、路径名、凭证，或任何用户没有要求纪念的内容。',
+    '- 如果生成多个候选，除非用户明确要求保留变体，只把最终选定图片放入 `cover/`。',
+    '',
+    '## 恢复默认封面',
+    '',
+    '- 在 Reo app 中，优先使用 Memory More 菜单项 `恢复随机默认图片`。',
+    '- 纯文件操作时，只有用户明确要求恢复默认封面，才移除或移动当前 `memories/<memory-directory>/cover/` 目录。',
+    '- 不要写入默认封面文件。默认封面内置在 Reo，不存放在记忆空间内。',
+    '',
+    '## 验证',
+    '',
+    '- 确认 `cover/` 是普通目录。',
+    '- 确认被选中的文件是普通 PNG、JPEG 或 WebP 图片，并且在剩余合法图片中排序最靠前。',
+    '- 确认没有 symlink。',
+    '- 如果 Reo 正在打开该记忆空间，普通 workspace refresh 会通过文件真源重新加载封面；不要手动编辑 `.reo` 强制刷新。',
+  ].join('\n') + '\n';
+export const DEFAULT_REO_COVER_AESTHETIC_SKILL_MD =
+  [
+    '---',
+    'name: reo-cover-aesthetic',
+    'description: 用于创建、判断或改进 Reo Memory 封面提示词或生成图，尤其用于避免泛用、内嵌边框、文字过多、UI 化或低质量封面。',
+    '---',
+    '',
+    '# Reo Cover Aesthetic',
+    '',
+    '这是基于开源 `aesthetic` skill 优化后的 Reo Memory 封面审美 skill。它应该独立工作，不要求 agent 再安装其它 skill。',
+    '',
+    '## 使用场景',
+    '',
+    '适用：',
+    '- 为 Reo Memory 生成或重写封面提示词。',
+    '- 判断候选封面是否足够美观、是否适合紧凑 Memory rail。',
+    '- 发现封面像截图、海报、卡片、相框、白边图或泛用素材，需要重新收敛。',
+    '- 用户只给了 Memory 标题或简短上下文，需要把它转成有审美方向的视觉提示词。',
+    '',
+    '## 核心框架：四阶段方法',
+    '',
+    '### 1. BEAUTIFUL：理解审美',
+    '',
+    '审美标准来自高质量参考，不来自 agent 的第一反应。先从 Memory 标题、附近内容和用户意图提炼：主题、情绪、材质、光线、色彩、空间层次和视觉节奏。需要参考时，优先参考真实高质量摄影、插画、编辑视觉或产品内已有封面，而不是生成一个泛用背景。',
+    '',
+    '### 2. RIGHT：适配 Reo 封面',
+    '',
+    '封面是 Memory 的视觉身份，不是片段缩略图、UI 截图或装饰卡片。它必须在很小的 rail 尺寸下仍然成立：主体清楚，层次明确，边缘可被界面裁切，不能依赖可读文字、logo 或路径名。',
+    '',
+    '### 3. SATISFYING：紧凑尺寸的丰富度',
+    '',
+    '优秀封面在紧凑尺寸下仍有可感知的质感：明确的明暗关系、不过度均匀的背景、可识别的主体轮廓、克制但有变化的色彩。避免只用渐变、噪点、抽象线条或单一色块糊弄。',
+    '',
+    '### 4. PEAK：用记忆讲故事',
+    '',
+    '封面应该暗示这个 Memory 的独特语境。把抽象主题落到具体视觉：地点、物件、光线、材料、季节、动作痕迹或作品气质。不要把标题文字画进图里来解释主题。',
+    '',
+    '## Reo 封面规则',
+    '',
+    '- 图片内容必须自然铺满整个画布。不要生成画中画、内嵌边框、白边、相框、圆角矩形、卡片、海报留白、Polaroid、mockup 或任何模拟 UI 容器的外壳。',
+    '- 不要让提示词包含 `border`、`frame`、`framed`、`card`、`poster with margin`、`white background`、`polaroid`、`mockup`、`UI screenshot` 这类会诱导内嵌边框的词，除非用户明确要这种纪念物本身。',
+    '- 如果候选图里出现内部边框、白色留边、相框或卡片容器，直接判定不合格并重生成。',
+    '- 不要嵌入可读文字、logo、二维码、路径名、凭证、应用 UI chrome 或工具界面。',
+    '- 画面主体应位于中部可识别区域，但边缘也要有自然延展；Reo UI 会负责裁切、圆角和列表项外形。',
+    '- 文件落位和恢复默认仍然按 `skills/reo-memory-cover/SKILL.md` 执行。',
+    '',
+    '## 提示词结构',
+    '',
+    '最终提示词应包含：Memory 主题、情绪、视觉媒介、主体、环境、光线、材质、色彩关系、层次、full-bleed 约束和负面约束。',
+    '',
+    '推荐结构：',
+    '',
+    '`Full-bleed [medium] of [subject and setting], [mood], [lighting], [materials/textures], [color relationship], clear central subject, natural detail to every edge, no text, no logo, no border, no frame, no white margin, no card, no UI mockup.`',
+    '',
+    '## 评估清单',
+    '',
+    '- 审美质量至少达到 7/10；如果第一张只是可用但普通，继续优化提示词。',
+    '- 在 80px 左右仍能看出主体或氛围。',
+    '- 没有图片内部边框、白边、相框、卡片或 UI 容器。',
+    '- 不依赖文字解释主题。',
+    '- 色彩、光线和材质服务 Memory 的语义，而不是套一个通用风格。',
+    '',
+    '## 输出',
+    '',
+    '输出最终封面提示词或候选选择，并简短说明为什么它符合 Reo cover rules。之后使用 `skills/reo-memory-cover/SKILL.md` 完成文件落位。',
+  ].join('\n') + '\n';
 export const DEFAULT_REO_DOCTOR_SKILL_MD =
   [
     '---',
@@ -309,13 +423,15 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     `const MANAGED_BLOCK = ${JSON.stringify(DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK)};`,
     `const DOCTOR_SKILL_MD = ${JSON.stringify(DEFAULT_REO_DOCTOR_SKILL_MD)};`,
     `const EDIT_SKILL_MD = ${JSON.stringify(DEFAULT_REO_EDIT_SKILL_MD)};`,
+    `const MEMORY_COVER_SKILL_MD = ${JSON.stringify(DEFAULT_REO_MEMORY_COVER_SKILL_MD)};`,
+    `const COVER_AESTHETIC_SKILL_MD = ${JSON.stringify(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD)};`,
     `const RECOVERY_HINTS = ${JSON.stringify(WORKSPACE_REVIEW_RECOVERY_HINTS)};`,
     `const FALLBACK_RECOVERY_HINT = ${JSON.stringify(WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT)};`,
     'const NOFOLLOW = constants.O_NOFOLLOW ?? 0;',
     '',
     'const fix = process.argv.includes("--fix");',
     'const root = process.cwd();',
-    'const report = { ok: true, mode: fix ? "fix" : "check", repaired: { agentsMd: false, doctorSkill: false, editSkill: false }, issues: [] };',
+    'const report = { ok: true, mode: fix ? "fix" : "check", repaired: { agentsMd: false, doctorSkill: false, editSkill: false, memoryCoverSkill: false, coverAestheticSkill: false }, issues: [] };',
     '',
     'async function readRegularText(filePath) {',
     '  try {',
@@ -438,11 +554,17 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '  const skillsDir = path.join(root, "skills");',
     '  const doctorDir = path.join(skillsDir, "reo-doctor");',
     '  const editDir = path.join(skillsDir, "reo-edit");',
+    '  const memoryCoverDir = path.join(skillsDir, "reo-memory-cover");',
+    '  const coverAestheticDir = path.join(skillsDir, "reo-cover-aesthetic");',
     '  let doctorDirOk = false;',
     '  let editDirOk = false;',
+    '  let memoryCoverDirOk = false;',
+    '  let coverAestheticDirOk = false;',
     '  if (await ensureDirectory(skillsDir)) {',
     '    doctorDirOk = await ensureDirectory(doctorDir);',
     '    editDirOk = await ensureDirectory(editDir);',
+    '    memoryCoverDirOk = await ensureDirectory(memoryCoverDir);',
+    '    coverAestheticDirOk = await ensureDirectory(coverAestheticDir);',
     '  }',
     '',
     '  if (doctorDirOk) {',
@@ -460,6 +582,24 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '    if (currentEditSkill.status !== "unsafe" && (currentEditSkill.status !== "file" || currentEditSkill.text !== EDIT_SKILL_MD)) {',
     '      report.repaired.editSkill = true;',
     '      await writeRegularText(editSkillPath, currentEditSkill, EDIT_SKILL_MD);',
+    '    }',
+    '  }',
+    '',
+    '  if (memoryCoverDirOk) {',
+    '    const memoryCoverSkillPath = path.join(memoryCoverDir, "SKILL.md");',
+    '    const currentMemoryCoverSkill = await readRegularText(memoryCoverSkillPath);',
+    '    if (currentMemoryCoverSkill.status !== "unsafe" && (currentMemoryCoverSkill.status !== "file" || currentMemoryCoverSkill.text !== MEMORY_COVER_SKILL_MD)) {',
+    '      report.repaired.memoryCoverSkill = true;',
+    '      await writeRegularText(memoryCoverSkillPath, currentMemoryCoverSkill, MEMORY_COVER_SKILL_MD);',
+    '    }',
+    '  }',
+    '',
+    '  if (coverAestheticDirOk) {',
+    '    const coverAestheticSkillPath = path.join(coverAestheticDir, "SKILL.md");',
+    '    const currentCoverAestheticSkill = await readRegularText(coverAestheticSkillPath);',
+    '    if (currentCoverAestheticSkill.status !== "unsafe" && (currentCoverAestheticSkill.status !== "file" || currentCoverAestheticSkill.text !== COVER_AESTHETIC_SKILL_MD)) {',
+    '      report.repaired.coverAestheticSkill = true;',
+    '      await writeRegularText(coverAestheticSkillPath, currentCoverAestheticSkill, COVER_AESTHETIC_SKILL_MD);',
     '    }',
     '  }',
     '',
@@ -921,6 +1061,8 @@ function sameMemorySummaries(
 
   return first.every((memory, index) => {
     const other = second[index];
+    const memoryCover = memory.cover ?? { source: 'default' };
+    const otherCover = other?.cover ?? { source: 'default' };
     return (
       other !== undefined &&
       memory.memoryId === other.memoryId &&
@@ -934,7 +1076,12 @@ function sameMemorySummaries(
       memory.audioByteLength === other.audioByteLength &&
       memory.hasAudioTranscript === other.hasAudioTranscript &&
       memory.hasAnyNote === other.hasAnyNote &&
-      memory.supplementCount === other.supplementCount
+      memory.supplementCount === other.supplementCount &&
+      memoryCover.source === otherCover.source &&
+      (memoryCover.source === 'default' ||
+        (otherCover.source === 'custom' &&
+          memoryCover.filename === otherCover.filename &&
+          memoryCover.version === otherCover.version))
     );
   });
 }
@@ -1038,14 +1185,22 @@ async function ensureWorkspaceManagedAgentConfig(
   const skillsDirectory = path.join(canonicalRoot, 'skills');
   const editDirectory = path.join(skillsDirectory, 'reo-edit');
   const doctorDirectory = path.join(skillsDirectory, 'reo-doctor');
+  const memoryCoverDirectory = path.join(skillsDirectory, 'reo-memory-cover');
+  const coverAestheticDirectory = path.join(skillsDirectory, 'reo-cover-aesthetic');
   const scriptsDirectory = path.join(doctorDirectory, 'scripts');
   await ensureManagedDirectory(skillsDirectory, assertUsable);
   await ensureManagedDirectory(editDirectory, assertUsable);
   await ensureManagedDirectory(doctorDirectory, assertUsable);
+  await ensureManagedDirectory(memoryCoverDirectory, assertUsable);
+  await ensureManagedDirectory(coverAestheticDirectory, assertUsable);
   await ensureManagedDirectory(scriptsDirectory, assertUsable);
 
   const editSkillPath = path.join(editDirectory, 'SKILL.md');
   const currentEditSkill = await readOptionalRegularTextFile(editSkillPath);
+  const memoryCoverSkillPath = path.join(memoryCoverDirectory, 'SKILL.md');
+  const currentMemoryCoverSkill = await readOptionalRegularTextFile(memoryCoverSkillPath);
+  const coverAestheticSkillPath = path.join(coverAestheticDirectory, 'SKILL.md');
+  const currentCoverAestheticSkill = await readOptionalRegularTextFile(coverAestheticSkillPath);
   const skillPath = path.join(doctorDirectory, 'SKILL.md');
   const currentDoctorSkill = await readOptionalRegularTextFile(skillPath);
   const scriptPath = path.join(scriptsDirectory, 'reo-doctor.mjs');
@@ -1061,6 +1216,18 @@ async function ensureWorkspaceManagedAgentConfig(
     filePath: editSkillPath,
     current: currentEditSkill,
     next: DEFAULT_REO_EDIT_SKILL_MD,
+    assertUsable,
+  });
+  await writeManagedFileIfChanged({
+    filePath: memoryCoverSkillPath,
+    current: currentMemoryCoverSkill,
+    next: DEFAULT_REO_MEMORY_COVER_SKILL_MD,
+    assertUsable,
+  });
+  await writeManagedFileIfChanged({
+    filePath: coverAestheticSkillPath,
+    current: currentCoverAestheticSkill,
+    next: DEFAULT_REO_COVER_AESTHETIC_SKILL_MD,
     assertUsable,
   });
 

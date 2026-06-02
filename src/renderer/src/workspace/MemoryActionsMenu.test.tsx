@@ -50,6 +50,7 @@ function renderMenu(props: { onDelete?: () => void; onRename?: () => void } = {}
       memoryTitle="My Memory"
       onDelete={props.onDelete ?? vi.fn()}
       onRename={props.onRename ?? vi.fn()}
+      onResetCover={vi.fn()}
     />
   );
 }
@@ -73,6 +74,7 @@ describe('MemoryActionsMenu', () => {
         memoryTitle="My Memory"
         onDelete={vi.fn()}
         onRename={vi.fn()}
+        onResetCover={vi.fn()}
         trigger={
           <button type="button" aria-label="My Memory 记忆操作" className="custom-trigger-shape">
             <span>My Memory</span>

@@ -141,13 +141,15 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 - **AGENTS.md**（项目 / Workspace 真源）：记忆空间 root 与每个 Memory root 的 AGENTS.md 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
 - **users.md**（用户个人 context）：Workspace root 的 users.md 描述用户是谁、长期目标、当前关注、表达偏好、agent 输出风格偏好；agent 每次操作前读取，让所有 skill 输出根据用户个性化。Memory level users.md override 由未来 spec 决定。
 
-Reo skills 分两层：
+当前记忆空间托管 skills 包括 `reo-edit`、`reo-memory-cover`、`reo-cover-aesthetic` 和 `reo-doctor`。`reo-memory-cover` 负责 Memory cover 的生成、替换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流。
+
+长期 Reo skills 分两层：
 
 - **原子 skill**：单一职责的 prompt 模板。Day 1 出厂 8 项：引导、回顾（结合记忆曲线）、整理总结、widget 生成四类基础 skill，加默认洞察、价值澄清、二阶思考、逆向思考四类思考视角 skill。
 - **use-xxx 组合 skill**：use case 编排 skill。Day 1 出厂 3 项：`use-学习闭环`、`use-记忆回顾循环`、`use-内容创作支援`。**skill 组合是 agent 的责任，不是用户的责任**——用户体验是"帮我做学习闭环"，agent 自己决定按 use case 流程调用哪些原子 skill。
 
 Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单计划挂统一 `agent 操作 ▸` 子菜单。每条菜单项点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。
 
-Prompt-bridge UI、AGENTS.md 模板、users.md 模板、skills 目录、widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
+完整 Prompt-bridge UI、users.md 模板和 widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
 
 Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、audio segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。

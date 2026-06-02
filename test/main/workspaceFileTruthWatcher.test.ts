@@ -118,6 +118,39 @@ test('workspace file truth watcher ignores transient files without scheduling ev
   assert.equal(fakeWatcher.closeCalls, 0);
 });
 
+test('workspace file truth watcher emits for Memory cover directory and image changes', () => {
+  const timers = createManualTimerScheduler();
+  const fakeWatcher = new FakeWatcher();
+  const sent: WorkspaceFileTruthChangedEvent[] = [];
+  const registry = createWorkspaceFileTruthWatcherRegistry({
+    clearTimer: timers.clearTimer,
+    setTimer: timers.setTimer,
+    settlementDelayMs: 25,
+    watch: () => fakeWatcher,
+  });
+
+  registry.watchWorkspace({
+    rootPath: '/workspace/root',
+    sendEvent: (event) => sent.push(event),
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+  });
+
+  fakeWatcher.emit('all', 'addDir', '/workspace/root/memories/mem_live_cover/cover');
+  fakeWatcher.emit('all', 'add', '/workspace/root/memories/mem_live_cover/cover/cover.png');
+  timers.flush();
+
+  assert.deepEqual(sent, [
+    {
+      kind: 'changed',
+      reason: 'file-system',
+      sequence: 1,
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    },
+  ]);
+});
+
 test('workspace file truth watcher closes pending events', async () => {
   const timers = createManualTimerScheduler();
   const fakeWatcher = new FakeWatcher();

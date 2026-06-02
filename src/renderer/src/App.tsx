@@ -94,9 +94,11 @@ import {
   openMemorySpace,
   readWorkspaceSnapshot,
   removeMemorySpace,
+  resetMemoryCover,
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
+  restoreMemoryCover,
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
   saveTranscript,
@@ -235,6 +237,8 @@ const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
 const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
 const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
+const MEMORY_COVER_RESET_ERROR = '无法恢复随机默认图片。';
+const MEMORY_COVER_RESTORE_ERROR = '无法恢复原封面。';
 const SEGMENT_DELETE_ERROR = '无法删除片段。';
 const SEGMENT_SUPPLEMENT_DELETE_ERROR = '无法删除补充内容。';
 const SEGMENT_SUPPLEMENT_RESTORE_ERROR = '无法恢复补充内容。';
@@ -348,6 +352,21 @@ async function recoveryLastTranscriptionAttemptOnFinalize(
   return lastTranscriptionAttemptOnFinalize(voiceSettings.enabled);
 }
 
+function sameMemoryCover(
+  first: WorkspaceMemorySummary['cover'],
+  second: WorkspaceMemorySummary['cover']
+): boolean {
+  const firstCover = first ?? { source: 'default' };
+  const secondCover = second ?? { source: 'default' };
+  if (firstCover.source !== secondCover.source) {
+    return false;
+  }
+  if (firstCover.source !== 'custom' || secondCover.source !== 'custom') {
+    return true;
+  }
+  return firstCover.filename === secondCover.filename && firstCover.version === secondCover.version;
+}
+
 function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemorySummary): boolean {
   return (
     first.memoryId === second.memoryId &&
@@ -361,7 +380,8 @@ function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemor
     first.audioByteLength === second.audioByteLength &&
     first.hasAudioTranscript === second.hasAudioTranscript &&
     first.hasAnyNote === second.hasAnyNote &&
-    first.supplementCount === second.supplementCount
+    first.supplementCount === second.supplementCount &&
+    sameMemoryCover(first.cover, second.cover)
   );
 }
 
@@ -3388,6 +3408,103 @@ export function App() {
     }
   }
 
+  async function restoreMemoryCoverFromUndo(memoryId: string, restoreToken: string) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await restoreMemoryCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        memoryId,
+        restoreToken,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: MEMORY_COVER_RESTORE_ERROR,
+          description: workspaceErrorDisplayMessage(response.error, MEMORY_COVER_RESTORE_ERROR),
+        });
+        return;
+      }
+
+      applyMemoryListUpdate(response.value.memories, mutationSession);
+      showReoToast({ type: 'success', title: '已恢复原封面' });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: MEMORY_COVER_RESTORE_ERROR,
+        description: unknownErrorDisplayMessage(error, MEMORY_COVER_RESTORE_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function resetMemoryCoverToDefault(memory: WorkspaceMemorySummary) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await resetMemoryCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        memoryId: memory.memoryId,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: MEMORY_COVER_RESET_ERROR,
+          description: workspaceErrorDisplayMessage(response.error, MEMORY_COVER_RESET_ERROR),
+        });
+        return;
+      }
+
+      applyMemoryListUpdate(response.value.memories, mutationSession);
+      showReoToast({
+        title: '已恢复随机默认图片',
+        description: memory.title,
+        undo: {
+          onUndo: () => {
+            void restoreMemoryCoverFromUndo(memory.memoryId, response.value.restoreToken);
+          },
+        },
+      });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: MEMORY_COVER_RESET_ERROR,
+        description: unknownErrorDisplayMessage(error, MEMORY_COVER_RESET_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   async function confirmDeleteMemory() {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -4352,6 +4469,9 @@ export function App() {
               onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
               onDeleteMemory={openMemoryDeleteDialog}
               onRenameMemory={setMemoryRenameTarget}
+              onResetMemoryCover={(memory) => {
+                void resetMemoryCoverToDefault(memory);
+              }}
               onRenameMemorySpace={() =>
                 openMemorySpaceRenameDialog({
                   workspaceId: activeWorkspaceSession.workspaceId,
@@ -4386,6 +4506,9 @@ export function App() {
             memoryRailOpen={memoryRailOpen}
             memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
             onDeleteMemory={openMemoryDeleteDialog}
+            onResetMemoryCover={(memory) => {
+              void resetMemoryCoverToDefault(memory);
+            }}
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
             onClearSegmentContent={setSegmentContentClearTarget}

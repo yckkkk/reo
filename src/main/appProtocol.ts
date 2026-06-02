@@ -2,6 +2,8 @@ import { app, net, protocol } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { APP_SHELL_HOST, APP_SHELL_SCHEME, ATTACHMENT_SCHEME } from './appShellConstants.js';
+import { resolveMemoryCoverFile } from './memoryCovers.js';
+import { resolveMemoryDirectory } from './memoryFiles.js';
 import {
   resolveNoteSegmentAttachmentFile,
   resolveNoteSegmentSupplementAttachmentFile,
@@ -169,6 +171,23 @@ async function resolveAttachmentProtocolRequest(
   const segments = decodeAttachmentPathSegments(parsed.pathname);
   if (!segments) {
     return { ok: false };
+  }
+  if (segments[0] === 'memories' && segments.length === 4 && segments[2] === 'cover') {
+    try {
+      const memoryDirectoryPath = await resolveMemoryDirectory(
+        root.canonicalRoot,
+        segments[1] ?? ''
+      );
+      const resolved = await resolveMemoryCoverFile({
+        memoryDirectoryPath,
+        filename: segments[3] ?? '',
+      });
+      return resolved.ok
+        ? { ok: true, bytes: resolved.bytes, mimeType: resolved.mimeType }
+        : { ok: false };
+    } catch {
+      return { ok: false };
+    }
   }
   if (segments[0] !== 'segments') {
     return { ok: false };

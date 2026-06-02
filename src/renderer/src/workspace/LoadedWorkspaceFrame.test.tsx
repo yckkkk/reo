@@ -427,6 +427,7 @@ function renderLoadedWorkspaceFrame({
   onNoteSegmentContentSaved = vi.fn(),
   onNoteSegmentSupplementContentSaved = vi.fn(),
   onRenameMemory = vi.fn(),
+  onResetMemoryCover = vi.fn(),
   onRenameSegmentContent = vi.fn(),
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
@@ -532,6 +533,7 @@ function renderLoadedWorkspaceFrame({
   readonly onNoteSegmentContentSaved?: (saved: SavedNoteSegmentContent) => void;
   readonly onNoteSegmentSupplementContentSaved?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onResetMemoryCover?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onRenameSegmentContent?: Parameters<
     typeof LoadedWorkspaceFrame
   >[0]['onRenameSegmentContent'];
@@ -636,6 +638,7 @@ function renderLoadedWorkspaceFrame({
         onNoteSegmentContentSaved={onNoteSegmentContentSaved}
         onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
         onRenameMemory={onRenameMemory}
+        onResetMemoryCover={onResetMemoryCover}
         onRenameSegmentContent={onRenameSegmentContent}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
@@ -1067,11 +1070,12 @@ describe('LoadedWorkspaceFrame', () => {
     const birthdayMemoryCard = birthdayMemoryButton.closest('[data-slot="memory-rail-card"]');
     const recitalMemoryCard = recitalMemoryButton.closest('[data-slot="memory-rail-card"]');
 
-    expect(birthdayMemoryButton).toHaveClass('min-h-[68px]', 'px-12', 'py-12');
+    expect(birthdayMemoryButton).toHaveClass('grid', 'h-[80px]', 'grid-cols-[80px_minmax(0,1fr)]');
+    expect(birthdayMemoryButton).not.toHaveClass('p-8', 'gap-12', 'min-h-[96px]');
     expect(birthdayMemoryButton).toHaveAttribute('aria-current', 'page');
-    expect(birthdayMemoryCard).toHaveClass('rounded-xl', 'reo-squircle', 'bg-secondary');
+    expect(birthdayMemoryCard).toHaveClass('rounded-[14px]', 'reo-squircle', 'bg-secondary');
     expect(recitalMemoryCard).toHaveClass(
-      'rounded-xl',
+      'rounded-[14px]',
       'reo-squircle',
       'bg-card',
       'hover:bg-secondary'
@@ -1084,9 +1088,12 @@ describe('LoadedWorkspaceFrame', () => {
       'bg-card',
       'hover:bg-secondary'
     );
-    expect(within(rail).getByText('05/06 13:10 · 2 个片段')).toBeInTheDocument();
-    expect(within(rail).getByText('05/01 09:10 · 1 个片段')).toBeInTheDocument();
-    expect(within(rail).getByText('04/11 09:02 · 1 个片段')).toBeInTheDocument();
+    expect(within(rail).getByText('05/06 13:10')).toBeInTheDocument();
+    expect(within(rail).getByText('2 个片段')).toBeInTheDocument();
+    expect(within(rail).getByText('05/01 09:10')).toBeInTheDocument();
+    expect(within(rail).getByText('04/11 09:02')).toBeInTheDocument();
+    expect(within(rail).getAllByText('1 个片段')).toHaveLength(2);
+    expect(within(rail).queryByText(/·/)).not.toBeInTheDocument();
     expect(within(rail).queryByText(/更新/)).not.toBeInTheDocument();
     expect(within(rail).queryByText('转写')).not.toBeInTheDocument();
     expect(within(rail).queryByText('反思')).not.toBeInTheDocument();
@@ -2001,6 +2008,7 @@ describe('LoadedWorkspaceFrame', () => {
           onNoteSegmentContentSaved={onNoteSegmentContentSaved}
           onNoteSegmentSupplementContentSaved={vi.fn()}
           onRenameMemory={vi.fn()}
+          onResetMemoryCover={vi.fn()}
           onRenameSegment={vi.fn()}
           onRenameSegmentContent={vi.fn()}
           onRenameSegmentSupplement={vi.fn()}
@@ -4866,9 +4874,10 @@ describe('LoadedWorkspaceFrame', () => {
     const moreTrigger = screen.getByRole('button', { name: 'My seventh birthday 更多操作' });
     expect(moreTrigger).toHaveClass(
       'absolute',
-      'right-8',
-      'top-8',
-      'size-24',
+      'right-[7px]',
+      'top-[7px]',
+      'size-[30px]',
+      'rounded-[8px]',
       'text-muted-foreground',
       'hover:bg-accent',
       'data-[state=open]:bg-accent',
@@ -4882,7 +4891,15 @@ describe('LoadedWorkspaceFrame', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['用默认应用打开', '在访达中显示', '复制相对路径', '复制绝对路径', '重命名', '删除']);
+    ).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '恢复随机默认图片',
+      '重命名',
+      '删除',
+    ]);
     expect(within(menu).queryByText('重命名记忆')).not.toBeInTheDocument();
     expect(within(menu).queryByText('删除记忆')).not.toBeInTheDocument();
 

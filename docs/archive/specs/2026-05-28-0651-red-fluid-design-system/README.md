@@ -2,7 +2,7 @@
 
 - Timezone: America/Los_Angeles (PDT)
 - Started: 2026-05-28 06:51 PDT
-- Status: archived 2026-05-28 — Phase 1 (tokens) complete；durable 真源已压缩进 `docs/current/design-system/DESIGN.md`（含 neutral 控件语义收口）；未建设的 Hero 部分转入 `docs/initiatives/2026-05-28-hero-expression-surfaces/`。`phase-1-tokens/plan.md` 内残留的 red-primary 旧草案仅作归档历史，不代表当前事实。
+- Status: archived 2026-05-28 — Phase 1 (tokens) complete；durable 真源已压缩进 `docs/current/design-system/DESIGN.md`（含 neutral 控件语义收口）；未建设的 Hero 部分曾转入 `docs/archive/initiatives/2026-05-28-hero-expression-surfaces/`，该 initiative 后续已归档为失效方向。`phase-1-tokens/plan.md` 内残留的 red-primary 旧草案仅作归档历史，不代表当前事实。
 
 ## 目标
 

@@ -51,6 +51,7 @@ import {
   type ParsedWorkspaceMarkdownObjectCandidate,
 } from './workspaceMarkdownObjects.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
+import { readMemoryCoverProjectionFromDirectory } from './memoryCovers.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
@@ -78,6 +79,7 @@ import {
   workspaceSegmentContentTabOrderItemSchema,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
+  type WorkspaceMemoryCoverProjection,
   type WorkspaceMemoryDetailProjection,
   type WorkspaceSegmentContentTabOrderItem,
   type WorkspaceSegmentSupplementProjection,
@@ -245,6 +247,7 @@ export interface MemorySummary {
   readonly hasAudioTranscript: boolean;
   readonly hasAnyNote: boolean;
   readonly supplementCount: number;
+  readonly cover?: WorkspaceMemoryCoverProjection | undefined;
 }
 
 export interface MemorySegmentSummary {
@@ -2907,6 +2910,18 @@ async function ensureMemoryTrashDirectory(
   });
 }
 
+async function ensureMemoryCoverTrashDirectory(
+  rootPath: string,
+  assertUsable?: AssertWorkspaceUsable
+): Promise<string> {
+  return ensureTrashNodeDirectory({
+    directoryName: 'memory-covers',
+    directoryUnsafeMessage: 'Workspace memory cover trash directory is not safe',
+    rootPath,
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+}
+
 async function ensureSegmentTrashDirectory(
   rootPath: string,
   assertUsable?: AssertWorkspaceUsable
@@ -4718,12 +4733,14 @@ async function readValidFinalizedSegmentFileTruth(
 async function summarizeMemoryFromFileTruths({
   fileTruths,
   memory,
+  memoryDirectoryPath,
   repairFileSpaceCandidates = true,
   reviewEntries,
   rootPath,
 }: {
   readonly fileTruths: readonly FinalizedSegmentFileTruth[];
   readonly memory: MemoryFileTruth;
+  readonly memoryDirectoryPath?: string;
   readonly repairFileSpaceCandidates?: boolean;
   readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
@@ -4773,6 +4790,10 @@ async function summarizeMemoryFromFileTruths({
     }
   }
 
+  const cover = await readMemoryCoverProjectionFromDirectory(
+    memoryDirectoryPath ?? (await memoryDirectory(rootPath, memory.memoryId))
+  );
+
   return {
     memoryId: memory.memoryId,
     title: memory.title,
@@ -4786,6 +4807,7 @@ async function summarizeMemoryFromFileTruths({
     hasAudioTranscript,
     hasAnyNote,
     supplementCount,
+    cover,
   };
 }
 
@@ -4826,6 +4848,7 @@ async function summarizeMemoryFromDirectory({
         ...(reviewEntries ? { reviewEntries } : {}),
       })),
     memory,
+    memoryDirectoryPath,
     ...(reviewEntries ? { reviewEntries } : {}),
     rootPath,
   });
@@ -4833,7 +4856,8 @@ async function summarizeMemoryFromDirectory({
 
 function summarizeMemoryFromSegments(
   memory: MemoryFileTruth,
-  segments: readonly WorkspaceSegmentProjection[]
+  segments: readonly WorkspaceSegmentProjection[],
+  cover: WorkspaceMemoryCoverProjection = { source: 'default' }
 ): MemorySummary {
   let updatedAt = memory.updatedAt;
   let audioSegmentCount = 0;
@@ -4872,6 +4896,7 @@ function summarizeMemoryFromSegments(
     hasAudioTranscript,
     hasAnyNote,
     supplementCount,
+    cover,
   };
 }
 
@@ -5161,7 +5186,10 @@ export async function readMemoryDetailFromFileTruth(input: {
 
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const sortedSegments = sortByProjectedUpdatedAt(segments);
-    const summary = summarizeMemoryFromSegments(memory, sortedSegments);
+    const cover = await readMemoryCoverProjectionFromDirectory(
+      await memoryDirectory(input.rootPath, input.memoryId)
+    );
+    const summary = summarizeMemoryFromSegments(memory, sortedSegments, cover);
     return {
       ok: true,
       value: {
@@ -5374,7 +5402,10 @@ export async function refreshMemoryIndexEntryWithDetail(input: {
       }
     }
     const sortedSegments = sortByProjectedUpdatedAt(segments);
-    const summary = summarizeMemoryFromSegments(memory, sortedSegments);
+    const cover = await readMemoryCoverProjectionFromDirectory(
+      await memoryDirectory(input.rootPath, input.memoryId)
+    );
+    const summary = summarizeMemoryFromSegments(memory, sortedSegments, cover);
     assertWorkspaceUsable(input.assertUsable);
     const index = workspaceIndexSchema.parse(
       JSON.parse(await readWorkspaceTextFile(getWorkspaceIndexPath(input.rootPath)))
@@ -7151,6 +7182,191 @@ export async function restoreDeletedMemoryFromFileTruth(input: {
       error,
       'ERR_MEMORY_RESTORE_FAILED',
       'Deleted memory could not be restored',
+      rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
+    );
+  }
+}
+
+function createMemoryCoverRestoreToken(memoryId: string): string {
+  return `cover_${memoryId}_${randomUUID().replaceAll('-', '')}`;
+}
+
+function memoryIdFromMemoryCoverRestoreToken(restoreToken: string): string | null {
+  const match = /^cover_(.+)_([a-f0-9]{32})$/.exec(restoreToken);
+  return match?.[1] ?? null;
+}
+
+export async function resetMemoryCoverToDefaultFromFileTruth(input: MemoryTargetInput): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly memories: readonly MemorySummary[];
+    readonly restoreToken: string;
+  }>
+> {
+  const restoreToken = createMemoryCoverRestoreToken(input.memoryId);
+  let movedToTrash = false;
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
+      await assertSafeExistingDirectory(
+        memoryDirectoryPath,
+        'Workspace memory directory is not safe'
+      );
+      const currentCover = await readMemoryCoverProjectionFromDirectory(memoryDirectoryPath);
+      if (currentCover.source !== 'custom') {
+        return workspaceError(
+          'ERR_WORKSPACE_MEMORY_COVER_NOT_FOUND',
+          'Memory cover was not found',
+          'none-written'
+        );
+      }
+      const sourceDirectory = await resolveSafeWorkspaceChild(
+        input.rootPath,
+        path.join(memoryDirectoryPath, 'cover')
+      );
+      await assertSafeExistingDirectory(sourceDirectory, 'Workspace memory cover path is unsafe');
+      const trashDirectory = await ensureMemoryCoverTrashDirectory(
+        input.rootPath,
+        input.assertWorkspaceUsable
+      );
+      await moveFileSpaceNodeDirectory({
+        sourceName: 'cover',
+        sourceParentDirectory: memoryDirectoryPath,
+        targetName: restoreToken,
+        targetParentDirectory: trashDirectory,
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      movedToTrash = true;
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memories = await rebuildMemoryIndex(input.rootPath, {
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      const memory = memories.find((candidate) => candidate.memoryId === input.memoryId);
+      if (!memory) {
+        throw new Error('Memory summary missing after cover reset');
+      }
+      return {
+        ok: true,
+        value: {
+          memory,
+          memories,
+          restoreToken,
+        },
+      };
+    });
+  } catch (error) {
+    let rollbackSucceeded = !movedToTrash;
+    if (movedToTrash && !(error instanceof WorkspaceHandleLost)) {
+      try {
+        const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
+        const trashDirectory = await ensureMemoryCoverTrashDirectory(input.rootPath);
+        await moveFileSpaceNodeDirectory({
+          sourceName: restoreToken,
+          sourceParentDirectory: trashDirectory,
+          targetName: 'cover',
+          targetParentDirectory: memoryDirectoryPath,
+        });
+        await rebuildMemoryIndex(input.rootPath);
+        rollbackSucceeded = true;
+      } catch {
+        rollbackSucceeded = false;
+      }
+    }
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_COVER_RESET_FAILED',
+      'Memory cover could not be reset',
+      rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
+    );
+  }
+}
+
+export async function restoreMemoryCoverFromTrash(input: {
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly restoreToken: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly memories: readonly MemorySummary[];
+  }>
+> {
+  let movedToActive = false;
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      if (memoryIdFromMemoryCoverRestoreToken(input.restoreToken) !== input.memoryId) {
+        throw new Error('Invalid cover restore token');
+      }
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
+      await assertSafeExistingDirectory(
+        memoryDirectoryPath,
+        'Workspace memory directory is not safe'
+      );
+      const currentCover = await readMemoryCoverProjectionFromDirectory(memoryDirectoryPath);
+      if (currentCover.source === 'custom') {
+        throw new Error('Memory already has a custom cover');
+      }
+      const trashDirectory = await ensureMemoryCoverTrashDirectory(
+        input.rootPath,
+        input.assertWorkspaceUsable
+      );
+      await moveFileSpaceNodeDirectory({
+        sourceName: input.restoreToken,
+        sourceParentDirectory: trashDirectory,
+        targetName: 'cover',
+        targetParentDirectory: memoryDirectoryPath,
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      movedToActive = true;
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memories = await rebuildMemoryIndex(input.rootPath, {
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      const memory = memories.find((candidate) => candidate.memoryId === input.memoryId);
+      if (!memory) {
+        throw new Error('Memory summary missing after cover restore');
+      }
+      return {
+        ok: true,
+        value: {
+          memory,
+          memories,
+        },
+      };
+    });
+  } catch (error) {
+    let rollbackSucceeded = !movedToActive;
+    if (movedToActive && !(error instanceof WorkspaceHandleLost)) {
+      try {
+        const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
+        const trashDirectory = await ensureMemoryCoverTrashDirectory(input.rootPath);
+        await moveFileSpaceNodeDirectory({
+          sourceName: 'cover',
+          sourceParentDirectory: memoryDirectoryPath,
+          targetName: input.restoreToken,
+          targetParentDirectory: trashDirectory,
+        });
+        await rebuildMemoryIndex(input.rootPath);
+        rollbackSucceeded = true;
+      } catch {
+        rollbackSucceeded = false;
+      }
+    }
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_COVER_RESTORE_FAILED',
+      'Memory cover could not be restored',
       rollbackSucceeded ? 'previous-file-preserved' : 'file-written-index-stale'
     );
   }

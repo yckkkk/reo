@@ -25,6 +25,8 @@ import {
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
+  WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -139,7 +141,12 @@ import {
   workspaceErrorCodeSchema,
   workspaceErrorEnvelopeSchema,
   workspaceNoInputSchema,
+  workspaceMemoryCoverProjectionSchema,
   workspaceMemorySummarySchema,
+  workspaceResetMemoryCoverRequestSchema,
+  workspaceResetMemoryCoverResponseSchema,
+  workspaceRestoreMemoryCoverRequestSchema,
+  workspaceRestoreMemoryCoverResponseSchema,
   workspaceSegmentProjectionSchema,
   workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
@@ -259,6 +266,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
+    'workspace:resetMemoryCover',
+    'workspace:restoreMemoryCover',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
@@ -343,6 +352,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL, 'workspace:copyNeedsReviewAgentPrompt'],
     [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
+    [WORKSPACE_RESET_MEMORY_COVER_CHANNEL, 'workspace:resetMemoryCover'],
+    [WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL, 'workspace:restoreMemoryCover'],
     [WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment'],
     [WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment'],
     [WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement'],
@@ -2180,6 +2191,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: { source: 'default' },
     }),
     {
       memoryId: 'mem_1',
@@ -2194,7 +2206,46 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: { source: 'default' },
     }
+  );
+  assert.deepEqual(
+    workspaceMemoryCoverProjectionSchema.parse({
+      source: 'custom',
+      filename: 'garden.webp',
+      version: '1770000000000-512',
+    }),
+    {
+      source: 'custom',
+      filename: 'garden.webp',
+      version: '1770000000000-512',
+    }
+  );
+  const jpegCover = workspaceMemoryCoverProjectionSchema.parse({
+    source: 'custom',
+    filename: 'garden.jpeg',
+    version: '1770000000000-512',
+  });
+  assert.equal(jpegCover.source, 'custom');
+  if (jpegCover.source === 'custom') {
+    assert.equal(jpegCover.filename, 'garden.jpeg');
+  }
+  assert.throws(() =>
+    workspaceMemorySummarySchema.parse({
+      memoryId: 'mem_1',
+      title: '产品灵感',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      segmentCount: 1,
+      audioSegmentCount: 1,
+      noteSegmentCount: 0,
+      audioDurationMs: 1000,
+      audioByteLength: 2048,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      cover: { source: 'custom', filename: '../secret.webp', version: '1-2' },
+    })
   );
   assert.throws(() =>
     workspaceMemorySummarySchema.parse({
@@ -2210,6 +2261,7 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: { source: 'default' },
       staleRecordingProjection: ['seg_old'],
     })
   );
@@ -2228,6 +2280,101 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
       hasAnyNote: false,
       supplementCount: 0,
     })
+  );
+});
+
+test('memory cover reset contract keeps restore token explicit and pathless', () => {
+  assert.deepEqual(
+    workspaceResetMemoryCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceResetMemoryCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
+          audioByteLength: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default' },
+        },
+        memories: [],
+        restoreToken: 'cover_mem_1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
+          audioByteLength: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default' },
+        },
+        memories: [],
+        restoreToken: 'cover_mem_1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+    }
+  );
+  assert.deepEqual(
+    workspaceRestoreMemoryCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      restoreToken: 'cover_mem_1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      restoreToken: 'cover_mem_1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    }
+  );
+  assert.deepEqual(
+    workspaceRestoreMemoryCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
+          audioByteLength: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'custom', filename: 'garden.webp', version: '1770000000000-512' },
+        },
+        memories: [],
+      },
+    }).ok,
+    true
   );
 });
 

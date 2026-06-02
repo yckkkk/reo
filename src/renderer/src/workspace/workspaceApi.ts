@@ -162,6 +162,18 @@ export function restoreDeletedMemory(
   return window.reoWorkspace.restoreDeletedMemory(payload);
 }
 
+export function resetMemoryCover(
+  payload: Parameters<Window['reoWorkspace']['resetMemoryCover']>[0]
+) {
+  return window.reoWorkspace.resetMemoryCover(payload);
+}
+
+export function restoreMemoryCover(
+  payload: Parameters<Window['reoWorkspace']['restoreMemoryCover']>[0]
+) {
+  return window.reoWorkspace.restoreMemoryCover(payload);
+}
+
 export function deleteSegment(payload: Parameters<Window['reoWorkspace']['deleteSegment']>[0]) {
   return window.reoWorkspace.deleteSegment(payload);
 }

@@ -54,9 +54,11 @@ import {
   readFinalizedSegmentProjection,
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
+  resetMemoryCoverToDefaultFromFileTruth,
   restoreDeletedMemoryFromFileTruth,
   restoreDeletedSegmentSupplementFromFileTruth,
   restoreDeletedSegmentFromFileTruth,
+  restoreMemoryCoverFromTrash,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
   setBeforeMemoryDirectoryCandidateScanForTest,
@@ -516,6 +518,8 @@ async function readWorkspaceIndex(rootPath: string): Promise<unknown> {
   return readJson(path.join(rootPath, '.reo', 'index.json'));
 }
 
+const defaultMemoryCover = { source: 'default' } as const;
+
 test('finalizes a draft into a durable memory directory', async () => {
   const rootPath = await workspaceRoot();
   const draft = await createRecordingDraft({
@@ -585,6 +589,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: defaultMemoryCover,
     },
   });
   assert.deepEqual(
@@ -795,6 +800,7 @@ test('updates titles through file truth before rebuilding the index projection',
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -1053,6 +1059,7 @@ test('renames segment supplement file-space node and refreshes the parent memory
             hasAudioTranscript: false,
             hasAnyNote: false,
             supplementCount: 0,
+            cover: defaultMemoryCover,
           },
         ],
       },
@@ -1124,6 +1131,7 @@ test('renames segment supplement file-space node and refreshes the parent memory
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 1,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -1556,6 +1564,7 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -1594,6 +1603,7 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 1,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -1789,6 +1799,7 @@ test('delete and restore move Segment supplements with the parent Segment direct
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -4387,6 +4398,7 @@ test('supplement finalize checks parent by direct file truth without pre-scannin
           hasAudioTranscript: false,
           hasAnyNote: false,
           supplementCount: 1,
+          cover: defaultMemoryCover,
         },
       ],
     });
@@ -4545,6 +4557,7 @@ test('supplement finalize rolls back exposed directory when manifest write canno
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -4688,6 +4701,7 @@ test('Memory file truth uses memory directory basename as the title source of tr
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: defaultMemoryCover,
     },
   ]);
   const detail = await readMemoryDetailFromFileTruth({
@@ -4780,9 +4794,94 @@ test('delete and restore keep externally renamed memory directories addressable 
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
+});
+
+test('resetting a Memory cover moves cover directory to trash and restores from undo token', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_cover_reset';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '封面恢复',
+  });
+  const coverDirectory = path.join(rootPath, 'memories', memoryId, 'cover');
+  await mkdir(coverDirectory);
+  await writeFile(path.join(coverDirectory, 'garden.webp'), new Uint8Array([7, 8, 9]));
+  await rebuildMemoryIndex(rootPath);
+
+  const reset = await resetMemoryCoverToDefaultFromFileTruth({
+    rootPath,
+    memoryId,
+  });
+
+  assert.equal(reset.ok, true, JSON.stringify(reset));
+  if (!reset.ok) {
+    throw new Error('cover reset should succeed');
+  }
+  assert.ok(reset.value.memory.cover);
+  assert.equal(reset.value.memory.cover.source, 'default');
+  assert.equal(reset.value.restoreToken.includes(memoryId), true);
+  await assert.rejects(stat(coverDirectory), /ENOENT/);
+  await stat(path.join(rootPath, '.reo', 'trash', 'memory-covers', reset.value.restoreToken));
+
+  const restored = await restoreMemoryCoverFromTrash({
+    rootPath,
+    memoryId,
+    restoreToken: reset.value.restoreToken,
+  });
+
+  assert.equal(restored.ok, true, JSON.stringify(restored));
+  if (!restored.ok) {
+    throw new Error('cover restore should succeed');
+  }
+  assert.ok(restored.value.memory.cover);
+  assert.equal(restored.value.memory.cover.source, 'custom');
+  await readFile(path.join(coverDirectory, 'garden.webp'));
+});
+
+test('Memory cover restore token cannot be reused for another Memory', async () => {
+  const rootPath = await workspaceRoot();
+  const sourceMemoryId = 'mem_cover_source';
+  const targetMemoryId = 'mem_cover_target';
+  await writeMemoryForTest(rootPath, {
+    memoryId: sourceMemoryId,
+    title: '源封面',
+  });
+  await writeMemoryForTest(rootPath, {
+    memoryId: targetMemoryId,
+    title: '目标记忆',
+  });
+  const sourceCoverDirectory = path.join(rootPath, 'memories', sourceMemoryId, 'cover');
+  const targetCoverDirectory = path.join(rootPath, 'memories', targetMemoryId, 'cover');
+  await mkdir(sourceCoverDirectory);
+  await writeFile(path.join(sourceCoverDirectory, 'source.webp'), new Uint8Array([1, 2, 3]));
+  await rebuildMemoryIndex(rootPath);
+
+  const reset = await resetMemoryCoverToDefaultFromFileTruth({
+    rootPath,
+    memoryId: sourceMemoryId,
+  });
+
+  assert.equal(reset.ok, true, JSON.stringify(reset));
+  if (!reset.ok) {
+    throw new Error('source cover reset should succeed');
+  }
+
+  const restored = await restoreMemoryCoverFromTrash({
+    rootPath,
+    memoryId: targetMemoryId,
+    restoreToken: reset.value.restoreToken,
+  });
+
+  assert.equal(restored.ok, false);
+  if (!restored.ok) {
+    assert.equal(restored.error.code, 'ERR_MEMORY_COVER_RESTORE_FAILED');
+  }
+  await stat(path.join(rootPath, '.reo', 'trash', 'memory-covers', reset.value.restoreToken));
+  await assert.rejects(stat(targetCoverDirectory), /ENOENT/);
 });
 
 test('rebuild index rejects symlinked memory metadata leaf files', async () => {
@@ -4871,6 +4970,7 @@ test('rebuild skips finalized audio segment metadata with invalid projected fiel
       hasAudioTranscript: false,
       hasAnyNote: false,
       supplementCount: 0,
+      cover: defaultMemoryCover,
     },
   ]);
 });
@@ -7680,6 +7780,7 @@ test('rebuild skips finalized audio segment metadata missing detail-read require
       hasAnyNote: false,
       title: 'Incomplete metadata',
       updatedAt: '2026-05-06T13:08:00.000Z',
+      cover: defaultMemoryCover,
     },
   ]);
 });
@@ -7955,6 +8056,7 @@ test('recovery ignores stale memory segment id input when no finalize marker exi
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });
@@ -8148,6 +8250,7 @@ test('rebuilds index only from finalized audio segment metadata that matches aud
         hasAudioTranscript: false,
         hasAnyNote: false,
         supplementCount: 0,
+        cover: defaultMemoryCover,
       },
     ],
   });

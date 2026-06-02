@@ -40,6 +40,42 @@ const workspaceMemorySpaceTitleSchema = workspaceTitleTextSchema.refine(
 
 export const workspaceNoInputSchema = z.undefined();
 
+const memoryCoverFilenameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine((value) => !value.includes('/') && !value.includes('\\') && !value.includes('..'))
+  .refine((value) => {
+    const lower = value.toLowerCase();
+    return (
+      lower.endsWith('.png') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.webp')
+    );
+  });
+const memoryCoverVersionSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._-]+$/);
+const memoryCoverRestoreTokenSchema = z
+  .string()
+  .min(1)
+  .max(180)
+  .regex(/^cover_[A-Za-z0-9_-]+_[a-f0-9]{32}$/);
+
+export const workspaceMemoryCoverProjectionSchema = z.discriminatedUnion('source', [
+  z.strictObject({
+    source: z.literal('default'),
+  }),
+  z.strictObject({
+    source: z.literal('custom'),
+    filename: memoryCoverFilenameSchema,
+    version: memoryCoverVersionSchema,
+  }),
+]);
+
 export const workspaceChooseDirectoryResultSchema = z.discriminatedUnion('status', [
   z.strictObject({
     status: z.literal('selected'),
@@ -67,6 +103,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_ROOT_MISSING',
   'ERR_WORKSPACE_UNSAFE_PATH',
   'ERR_WORKSPACE_MEMORY_NOT_FOUND',
+  'ERR_WORKSPACE_MEMORY_COVER_NOT_FOUND',
   'ERR_WORKSPACE_SEGMENT_NOT_FOUND',
   'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
   'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING',
@@ -117,6 +154,8 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_MEMORY_CREATE_FAILED',
   'ERR_MEMORY_UPDATE_FAILED',
   'ERR_MEMORY_DELETE_FAILED',
+  'ERR_MEMORY_COVER_RESET_FAILED',
+  'ERR_MEMORY_COVER_RESTORE_FAILED',
   'ERR_MEMORY_RESTORE_FAILED',
   'ERR_SEGMENT_DELETE_FAILED',
   'ERR_SEGMENT_RESTORE_FAILED',
@@ -440,6 +479,7 @@ export const workspaceMemorySummarySchema = z.strictObject({
   hasAudioTranscript: z.boolean(),
   hasAnyNote: z.boolean(),
   supplementCount: z.number().int().nonnegative(),
+  cover: workspaceMemoryCoverProjectionSchema.optional(),
 });
 
 const workspaceAudioSegmentSupplementProjectionSchema = z.strictObject({
@@ -844,6 +884,14 @@ export const workspaceRestoreDeletedMemoryRequestSchema = workspaceHandleSchema
   })
   .strict();
 
+export const workspaceResetMemoryCoverRequestSchema = workspaceMemoryIdRequestSchema;
+
+export const workspaceRestoreMemoryCoverRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    restoreToken: memoryCoverRestoreTokenSchema,
+  })
+  .strict();
+
 export const workspaceDeleteSegmentRequestSchema = workspaceMemoryIdRequestSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -1138,6 +1186,29 @@ export const workspaceDeleteMemoryResponseSchema = z.discriminatedUnion('ok', [
 ]);
 
 export const workspaceRestoreDeletedMemoryResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      memories: z.array(workspaceMemorySummarySchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceResetMemoryCoverResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      memories: z.array(workspaceMemorySummarySchema),
+      restoreToken: memoryCoverRestoreTokenSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceRestoreMemoryCoverResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
     value: z.strictObject({
@@ -1705,6 +1776,7 @@ export type DraftSegmentMetadata = z.infer<typeof draftSegmentMetadataSchema>;
 export type DraftSegmentSupplementMetadata = z.infer<typeof draftSegmentSupplementMetadataSchema>;
 export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>;
 export type WorkspaceReviewSummary = z.infer<typeof workspaceReviewSummarySchema>;
+export type WorkspaceMemoryCoverProjection = z.infer<typeof workspaceMemoryCoverProjectionSchema>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
 export type WorkspaceSegmentProjection = z.infer<typeof workspaceSegmentProjectionSchema>;
 export type WorkspaceSegmentSupplementProjection = z.infer<
@@ -1901,6 +1973,12 @@ export type WorkspaceDeleteMemoryRequest = z.infer<typeof workspaceDeleteMemoryR
 export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
   typeof workspaceRestoreDeletedMemoryRequestSchema
 >;
+export type WorkspaceResetMemoryCoverRequest = z.infer<
+  typeof workspaceResetMemoryCoverRequestSchema
+>;
+export type WorkspaceRestoreMemoryCoverRequest = z.infer<
+  typeof workspaceRestoreMemoryCoverRequestSchema
+>;
 export type WorkspaceDeleteSegmentRequest = z.infer<typeof workspaceDeleteSegmentRequestSchema>;
 export type WorkspaceRestoreDeletedSegmentRequest = z.infer<
   typeof workspaceRestoreDeletedSegmentRequestSchema
@@ -1940,6 +2018,12 @@ export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemory
 export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;
 export type WorkspaceRestoreDeletedMemoryResponse = z.infer<
   typeof workspaceRestoreDeletedMemoryResponseSchema
+>;
+export type WorkspaceResetMemoryCoverResponse = z.infer<
+  typeof workspaceResetMemoryCoverResponseSchema
+>;
+export type WorkspaceRestoreMemoryCoverResponse = z.infer<
+  typeof workspaceRestoreMemoryCoverResponseSchema
 >;
 export type WorkspaceDeleteSegmentResponse = z.infer<typeof workspaceDeleteSegmentResponseSchema>;
 export type WorkspaceRestoreDeletedSegmentResponse = z.infer<

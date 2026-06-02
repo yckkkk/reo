@@ -37,7 +37,7 @@ Reo token 分为两层：
 
 1. **Zero Border Policy**：同一平面的 Card、Button、Input、列表项、tab 和内容区不用 border 分割。难以区分时增加间距或调整填充，不加线。新 surface 阶梯之间靠 inset highlight 与 tint 落差区分，不画 1px 描边。
 2. **Strict Z-Axis Elevation**：基础平面组件不使用 shadow。只有 Tooltip、Dropdown Menu、Dialog/Modal、Drawer 和 Toast 可使用精细多层 `shadow-float` 或 `shadow-modal`。Hero 表面通过 `shadow-hero-{lift,fill,inset,edge}` 表达"光"，不与 elevation 阶梯比较。
-3. **Grayscale State Interaction**：hover、active、selected 默认通过 `card → secondary/accent` 灰度阶梯表达；Memory hue tint 仅出现在 MemoryRailCard 选中态、MemoryStudioSegmentCard 选中态与 MemoryIcon 内部，不渗到 chrome、不渗到文本色、不渗到 focus ring。
+3. **Grayscale State Interaction**：hover、active、selected 默认通过 `card → secondary → accent` 灰度阶梯表达；品牌色不渗到普通 chrome、文本色或 focus ring。
 
 ## 组件规则
 
@@ -47,7 +47,7 @@ Reo token 分为两层：
 - Dropdown、Tooltip、Dialog、AlertDialog、Drawer 和 Toast 使用 `bg-popover` (= `surface-4`)，按浮层级别使用精细多层 `shadow-float` 或 `shadow-modal`。Tiptap `--tt-shadow-elevated-md` 派生自 `--shadow-float`。
 - DropdownMenu content 使用 `reo-float-motion reo-squircle`、`rounded-[18px]`、`p-[6px]`；menu item 使用 `reo-squircle rounded-md`、32px 最小高度、8px 横向内距、4px gap 和 13px/500/1.15 typography。Tiptap dropdown item 在 template primitive 内使用同一 13px/500/1.15 typography。Tooltip content 使用无箭头 pill，`reo-float-motion reo-squircle`、`rounded-sm`、8px/6px 内距和 12px/500/1.2 typography。Dialog 与 AlertDialog 使用 `reo-fade-motion`，不使用 transform-based float motion。
 - Tabs 使用 rounded segment button，不用 underline border。
-- Memory card 使用 `ReoCardSurface` 默认形态，Segment preview card 使用 `ReoCardSurface` 的 `segmentPreview` 形态；通过灰度填充表达状态（选中态另叠 Memory hue tint，由对应组件接入），不使用常态 border、blur 或 shadow。
+- Memory card 使用 `ReoCardSurface` 默认形态，Segment preview card 使用 `ReoCardSurface` 的 `segmentPreview` 形态；通过灰度填充表达状态，不使用常态 border、blur、shadow 或品牌色选中层。
 - `rounded-full` 只用于 FAB trigger、FAB action、录音主按钮、Segment strip overlay arrow、圆点、timeline marker 和 drawer/waveform handle；普通按钮、icon button、menu action 和 Breadcrumb trigger 使用方圆角。
 - 可滚动内容边缘裁切使用 `edge-fade-y` / `edge-fade-x`；纵向文本容器组合 `scrollbar-hover` 默认隐藏滚动条。
 

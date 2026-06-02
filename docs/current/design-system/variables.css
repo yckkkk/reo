@@ -32,11 +32,11 @@
   --primary: #18181b;
   --primary-foreground: var(--background);
   --primary-hover: color-mix(in oklab, var(--primary) 86%, var(--background));
-  --secondary: #e5e7eb;
+  --secondary: #dfe3e8;
   --secondary-foreground: #18181b;
   --muted: var(--surface-2);
   --muted-foreground: #71717a;
-  --accent: #e5e7eb;
+  --accent: #d4d9e0;
   --accent-foreground: #18181b;
   --destructive: #b91c1c;
   --destructive-hover: color-mix(in oklab, var(--destructive) 82%, var(--destructive-foreground));

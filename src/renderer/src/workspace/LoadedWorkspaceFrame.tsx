@@ -51,6 +51,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onNoteSegmentContentSaved: (saved: SavedNoteSegmentContent) => void;
   readonly onNoteSegmentSupplementContentSaved: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
+  readonly onResetMemoryCover: (memory: WorkspaceMemorySummary) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
@@ -82,6 +83,7 @@ export function LoadedWorkspaceFrame({
   onNoteSegmentContentSaved,
   onNoteSegmentSupplementContentSaved,
   onRenameMemory,
+  onResetMemoryCover,
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
@@ -220,6 +222,7 @@ export function LoadedWorkspaceFrame({
           memories={snapshot.memories}
           onDeleteMemory={onDeleteMemory}
           onRenameMemory={onRenameMemory}
+          onResetMemoryCover={onResetMemoryCover}
           onSelectMemory={onSelectMemory}
           workspaceHandle={workspaceSession.workspaceHandle}
           workspaceId={workspaceSession.workspaceId}

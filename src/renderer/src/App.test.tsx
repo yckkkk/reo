@@ -4028,6 +4028,7 @@ describe('App', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
+      '恢复随机默认图片',
       '重命名',
       '删除',
     ]);
@@ -4467,6 +4468,113 @@ describe('App', () => {
       within(titlebar).getByRole('button', { name: '外部空间 记忆空间操作' })
     ).toBeInTheDocument();
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('refreshes a Memory cover from file truth events without visibility or reselect', async () => {
+    const user = userEvent.setup();
+    const queryClient = createReoQueryClient();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const originalMemory = {
+      memoryId: 'mem_cover_live',
+      title: '封面测试',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      cover: { source: 'default' as const },
+    };
+    const refreshedMemory = {
+      ...originalMemory,
+      cover: { source: 'custom' as const, filename: 'cover.png', version: '177-42' },
+    };
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [originalMemory],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [refreshedMemory],
+        },
+      });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    expect(
+      queryClient.getQueryData<{ readonly memories: readonly WorkspaceMemorySummary[] }>(
+        workspaceSnapshotQueryKey({ workspaceId: 'ws_1' })
+      )?.memories[0]?.cover
+    ).toEqual({ source: 'default' });
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 2,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly memories: readonly WorkspaceMemorySummary[] }>(
+          workspaceSnapshotQueryKey({ workspaceId: 'ws_1' })
+        )?.memories[0]?.cover
+      ).toEqual({ source: 'custom', filename: 'cover.png', version: '177-42' })
+    );
   });
 
   it('ignores file truth events from stale workspace handles', async () => {
