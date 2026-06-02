@@ -59,6 +59,22 @@ const coverVersionSchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9._-]+$/);
+export const WORKSPACE_DEFAULT_COVER_TEMPLATE_IDS = [
+  'cover-01',
+  'cover-02',
+  'cover-03',
+  'cover-04',
+  'cover-05',
+  'cover-06',
+  'cover-07',
+  'cover-08',
+  'cover-09',
+  'cover-10',
+  'cover-11',
+  'cover-12',
+  'cover-13',
+] as const;
+export const workspaceDefaultCoverTemplateIdSchema = z.enum(WORKSPACE_DEFAULT_COVER_TEMPLATE_IDS);
 const memoryCoverRestoreTokenSchema = z
   .string()
   .min(1)
@@ -73,6 +89,7 @@ const segmentCoverRestoreTokenSchema = z
 export const workspaceCoverProjectionSchema = z.discriminatedUnion('source', [
   z.strictObject({
     source: z.literal('default'),
+    templateId: workspaceDefaultCoverTemplateIdSchema.optional(),
   }),
   z.strictObject({
     source: z.literal('custom'),
@@ -903,6 +920,12 @@ export const workspaceRestoreMemoryCoverRequestSchema = workspaceMemoryIdRequest
   })
   .strict();
 
+export const workspaceSwitchMemoryDefaultCoverRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    templateId: workspaceDefaultCoverTemplateIdSchema,
+  })
+  .strict();
+
 export const workspaceDeleteSegmentRequestSchema = workspaceMemoryIdRequestSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -1054,6 +1077,12 @@ export const workspaceResetSegmentCoverRequestSchema = workspaceSegmentEntityReq
 export const workspaceRestoreSegmentCoverRequestSchema = workspaceSegmentEntityRequestSchema
   .extend({
     restoreToken: segmentCoverRestoreTokenSchema,
+  })
+  .strict();
+
+export const workspaceSwitchSegmentDefaultCoverRequestSchema = workspaceSegmentEntityRequestSchema
+  .extend({
+    templateId: workspaceDefaultCoverTemplateIdSchema,
   })
   .strict();
 
@@ -1238,6 +1267,17 @@ export const workspaceRestoreMemoryCoverResponseSchema = z.discriminatedUnion('o
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceSwitchMemoryDefaultCoverResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      memories: z.array(workspaceMemorySummarySchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceResetSegmentCoverResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
@@ -1251,6 +1291,17 @@ export const workspaceResetSegmentCoverResponseSchema = z.discriminatedUnion('ok
 ]);
 
 export const workspaceRestoreSegmentCoverResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      memory: workspaceMemorySummarySchema,
+      segment: workspaceSegmentProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceSwitchSegmentDefaultCoverResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
     ok: z.literal(true),
     value: z.strictObject({
@@ -1818,6 +1869,7 @@ export type DraftSegmentMetadata = z.infer<typeof draftSegmentMetadataSchema>;
 export type DraftSegmentSupplementMetadata = z.infer<typeof draftSegmentSupplementMetadataSchema>;
 export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>;
 export type WorkspaceReviewSummary = z.infer<typeof workspaceReviewSummarySchema>;
+export type WorkspaceDefaultCoverTemplateId = z.infer<typeof workspaceDefaultCoverTemplateIdSchema>;
 export type WorkspaceCoverProjection = z.infer<typeof workspaceCoverProjectionSchema>;
 export type WorkspaceMemoryCoverProjection = z.infer<typeof workspaceMemoryCoverProjectionSchema>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
@@ -2022,11 +2074,17 @@ export type WorkspaceResetMemoryCoverRequest = z.infer<
 export type WorkspaceRestoreMemoryCoverRequest = z.infer<
   typeof workspaceRestoreMemoryCoverRequestSchema
 >;
+export type WorkspaceSwitchMemoryDefaultCoverRequest = z.infer<
+  typeof workspaceSwitchMemoryDefaultCoverRequestSchema
+>;
 export type WorkspaceResetSegmentCoverRequest = z.infer<
   typeof workspaceResetSegmentCoverRequestSchema
 >;
 export type WorkspaceRestoreSegmentCoverRequest = z.infer<
   typeof workspaceRestoreSegmentCoverRequestSchema
+>;
+export type WorkspaceSwitchSegmentDefaultCoverRequest = z.infer<
+  typeof workspaceSwitchSegmentDefaultCoverRequestSchema
 >;
 export type WorkspaceDeleteSegmentRequest = z.infer<typeof workspaceDeleteSegmentRequestSchema>;
 export type WorkspaceRestoreDeletedSegmentRequest = z.infer<
@@ -2074,11 +2132,17 @@ export type WorkspaceResetMemoryCoverResponse = z.infer<
 export type WorkspaceRestoreMemoryCoverResponse = z.infer<
   typeof workspaceRestoreMemoryCoverResponseSchema
 >;
+export type WorkspaceSwitchMemoryDefaultCoverResponse = z.infer<
+  typeof workspaceSwitchMemoryDefaultCoverResponseSchema
+>;
 export type WorkspaceResetSegmentCoverResponse = z.infer<
   typeof workspaceResetSegmentCoverResponseSchema
 >;
 export type WorkspaceRestoreSegmentCoverResponse = z.infer<
   typeof workspaceRestoreSegmentCoverResponseSchema
+>;
+export type WorkspaceSwitchSegmentDefaultCoverResponse = z.infer<
+  typeof workspaceSwitchSegmentDefaultCoverResponseSchema
 >;
 export type WorkspaceDeleteSegmentResponse = z.infer<typeof workspaceDeleteSegmentResponseSchema>;
 export type WorkspaceRestoreDeletedSegmentResponse = z.infer<

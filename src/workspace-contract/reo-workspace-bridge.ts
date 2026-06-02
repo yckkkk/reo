@@ -81,6 +81,10 @@ import type {
   WorkspaceRestoreMemoryCoverResponse,
   WorkspaceRestoreSegmentCoverRequest,
   WorkspaceRestoreSegmentCoverResponse,
+  WorkspaceSwitchMemoryDefaultCoverRequest,
+  WorkspaceSwitchMemoryDefaultCoverResponse,
+  WorkspaceSwitchSegmentDefaultCoverRequest,
+  WorkspaceSwitchSegmentDefaultCoverResponse,
   WorkspaceRestoreDeletedSegmentSupplementRequest,
   WorkspaceRestoreDeletedSegmentSupplementResponse,
   WorkspaceRestoreDeletedSegmentRequest,
@@ -227,12 +231,18 @@ export interface ReoWorkspaceBridge {
   readonly restoreMemoryCover: (
     payload: WorkspaceRestoreMemoryCoverRequest
   ) => Promise<WorkspaceRestoreMemoryCoverResponse>;
+  readonly switchMemoryDefaultCover: (
+    payload: WorkspaceSwitchMemoryDefaultCoverRequest
+  ) => Promise<WorkspaceSwitchMemoryDefaultCoverResponse>;
   readonly resetSegmentCover: (
     payload: WorkspaceResetSegmentCoverRequest
   ) => Promise<WorkspaceResetSegmentCoverResponse>;
   readonly restoreSegmentCover: (
     payload: WorkspaceRestoreSegmentCoverRequest
   ) => Promise<WorkspaceRestoreSegmentCoverResponse>;
+  readonly switchSegmentDefaultCover: (
+    payload: WorkspaceSwitchSegmentDefaultCoverRequest
+  ) => Promise<WorkspaceSwitchSegmentDefaultCoverResponse>;
   readonly deleteSegment: (
     payload: WorkspaceDeleteSegmentRequest
   ) => Promise<WorkspaceDeleteSegmentResponse>;

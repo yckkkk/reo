@@ -22,6 +22,7 @@ type WorkspaceTitlebarProps = {
   readonly onDeleteMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onRenameMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onResetMemoryCover: (memory: WorkspaceTitlebarMemory) => void;
+  readonly onSwitchMemoryDefaultCover: (memory: WorkspaceTitlebarMemory) => void;
   readonly onRenameMemorySpace: () => void;
   readonly onRemoveMemorySpace: () => void;
   readonly onToggleMemoryRail: () => void;
@@ -37,6 +38,7 @@ export function WorkspaceTitlebar({
   onDeleteMemory,
   onRenameMemory,
   onResetMemoryCover,
+  onSwitchMemoryDefaultCover,
   onRenameMemorySpace,
   onRemoveMemorySpace,
   onToggleMemoryRail,
@@ -93,6 +95,7 @@ export function WorkspaceTitlebar({
                     onDelete={() => onDeleteMemory(currentMemory)}
                     onRename={() => onRenameMemory(currentMemory)}
                     onResetCover={() => onResetMemoryCover(currentMemory)}
+                    onSwitchDefaultCover={() => onSwitchMemoryDefaultCover(currentMemory)}
                     trigger={
                       <button
                         type="button"

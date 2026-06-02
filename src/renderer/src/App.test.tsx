@@ -52,10 +52,12 @@ describe('App', () => {
     restoreDeletedMemory: vi.fn(),
     resetMemoryCover: vi.fn(),
     restoreMemoryCover: vi.fn(),
+    switchMemoryDefaultCover: vi.fn(),
     deleteSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
     resetSegmentCover: vi.fn(),
     restoreSegmentCover: vi.fn(),
+    switchSegmentDefaultCover: vi.fn(),
     deleteSegmentSupplement: vi.fn(),
     restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
@@ -2829,6 +2831,8 @@ describe('App', () => {
       '复制相对路径',
       '复制绝对路径',
       '生成转录',
+      '恢复随机默认图片',
+      '切换随机默认图片',
       '重命名',
       '删除',
     ]);
@@ -4058,6 +4062,7 @@ describe('App', () => {
       '复制相对路径',
       '复制绝对路径',
       '恢复随机默认图片',
+      '切换随机默认图片',
       '重命名',
       '删除',
     ]);
@@ -4796,6 +4801,67 @@ describe('App', () => {
           .segments[0]?.cover
       ).toEqual({ source: 'custom', filename: 'poster.webp', version: 'old-1' })
     );
+  });
+
+  it('switches a Segment default cover from the horizontal Segment card menu and patches active detail cache', async () => {
+    const user = userEvent.setup();
+    const queryClient = createReoQueryClient();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const noteWorkspace = createNoteSegmentFixture();
+    const currentSegment = {
+      ...noteWorkspace.segment,
+      title: '片段默认封面',
+      cover: { source: 'default' as const, templateId: 'cover-05' as const },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    const switchedSegment = {
+      ...currentSegment,
+      cover: { source: 'default' as const, templateId: 'cover-06' as const },
+    } satisfies WorkspaceMemoryDetail['segments'][number];
+    mockLoadedNoteWorkspace({ ...noteWorkspace, segment: currentSegment });
+    reoWorkspace.switchSegmentDefaultCover.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: noteWorkspace.memory,
+        segment: switchedSegment,
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('button', { name: '选择片段 片段默认封面' });
+    const detailQueryKey = memoryDetailQueryKey({
+      workspaceId: 'ws_1',
+      memoryId: noteWorkspace.memory.memoryId,
+    });
+
+    await user.click(screen.getByRole('button', { name: '片段 片段默认封面 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '切换随机默认图片' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.switchSegmentDefaultCover).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_note_1',
+        templateId: 'cover-06',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly detail: WorkspaceMemoryDetail }>(detailQueryKey)?.detail
+          .segments[0]?.cover
+      ).toEqual({ source: 'default', templateId: 'cover-06' })
+    );
+    expect(screen.getByText('已切换随机默认图片')).toBeInTheDocument();
   });
 
   it('ignores file truth events from stale workspace handles', async () => {
@@ -11330,6 +11396,97 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My seventh birthday' })).not.toBeInTheDocument();
     expect(screen.queryByText('1 个片段 · 02:15')).not.toBeInTheDocument();
+  });
+
+  it('switches a Memory default cover from the MemoryRail item menu and patches the workspace snapshot cache', async () => {
+    const user = userEvent.setup();
+    const queryClient = createReoQueryClient();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const originalMemory: WorkspaceMemorySummary = {
+      memoryId: 'mem_birthday',
+      title: 'My seventh birthday',
+      createdAt: '2026-04-12T09:00:00.000Z',
+      updatedAt: '2026-04-12T09:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 135_000,
+      audioByteLength: 4096,
+      hasAudioTranscript: true,
+      hasAnyNote: false,
+      supplementCount: 0,
+      cover: { source: 'default', templateId: 'cover-05' },
+    };
+    const switchedMemory: WorkspaceMemorySummary = {
+      ...originalMemory,
+      cover: { source: 'default', templateId: 'cover-06' },
+    };
+    const initialSnapshot = {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: '',
+      memories: [originalMemory],
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: initialSnapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: initialSnapshot,
+    });
+    reoWorkspace.switchMemoryDefaultCover.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: switchedMemory,
+        memories: [switchedMemory],
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await screen.findByRole('button', { name: '选择记忆 My seventh birthday' });
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '切换随机默认图片' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.switchMemoryDefaultCover).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        memoryId: 'mem_birthday',
+        templateId: 'cover-06',
+      })
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ readonly memories: readonly WorkspaceMemorySummary[] }>(
+          workspaceSnapshotQueryKey({ workspaceId: 'ws_1' })
+        )?.memories[0]?.cover
+      ).toEqual({ source: 'default', templateId: 'cover-06' })
+    );
+    expect(screen.getByText('已切换随机默认图片')).toBeInTheDocument();
   });
 
   it('returns from a loaded workspace to the starter home and releases the workspace handle', async () => {

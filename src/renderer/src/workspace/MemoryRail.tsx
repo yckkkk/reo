@@ -17,6 +17,7 @@ type MemoryRailProps = {
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
   readonly onResetMemoryCover: (memory: WorkspaceMemory) => void;
   readonly onSelectMemory: (memoryId: string) => void;
+  readonly onSwitchMemoryDefaultCover: (memory: WorkspaceMemory) => void;
   readonly workspaceHandle: string;
   readonly workspaceId: string;
 };
@@ -55,6 +56,7 @@ export function MemoryRail({
   onRenameMemory,
   onResetMemoryCover,
   onSelectMemory,
+  onSwitchMemoryDefaultCover,
   workspaceHandle,
   workspaceId,
 }: MemoryRailProps) {
@@ -81,6 +83,7 @@ export function MemoryRail({
                 onRenameMemory={onRenameMemory}
                 onResetMemoryCover={onResetMemoryCover}
                 onSelectMemory={onSelectMemory}
+                onSwitchMemoryDefaultCover={onSwitchMemoryDefaultCover}
                 updatedAtLabel={updatedAtLabel}
                 workspaceHandle={workspaceHandle}
                 workspaceId={workspaceId}

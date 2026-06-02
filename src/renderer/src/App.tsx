@@ -49,6 +49,7 @@ import type {
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
   SegmentCoverResetTarget,
+  SegmentDefaultCoverSwitchTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './workspace/segmentActionTargets';
@@ -105,6 +106,8 @@ import {
   restoreDeletedSegmentSupplement,
   saveSegmentSupplementTranscript,
   saveTranscript,
+  switchMemoryDefaultCover,
+  switchSegmentDefaultCover,
   updateMemorySpaceTitle,
   updateMemoryTitle,
   updateSegmentContentTitle,
@@ -122,6 +125,7 @@ import {
   type WorkspaceSession,
   type VoiceTranscriptionSettings,
 } from './workspace/workspaceApi';
+import { resolveNextDefaultCoverTemplateId } from './workspace/covers/memoryCoverSource';
 import {
   lastTranscriptionAttemptOnFinalize,
   type LastTranscriptionAttemptOnFinalize,
@@ -242,8 +246,10 @@ const MEMORY_DELETE_ERROR = '无法删除记忆。';
 const MEMORY_RESTORE_ERROR = '无法恢复记忆。';
 const MEMORY_COVER_RESET_ERROR = '无法恢复随机默认图片。';
 const MEMORY_COVER_RESTORE_ERROR = '无法恢复原封面。';
+const MEMORY_DEFAULT_COVER_SWITCH_ERROR = '无法切换随机默认图片。';
 const SEGMENT_COVER_RESET_ERROR = '无法恢复随机默认图片。';
 const SEGMENT_COVER_RESTORE_ERROR = '无法恢复原封面。';
+const SEGMENT_DEFAULT_COVER_SWITCH_ERROR = '无法切换随机默认图片。';
 const SEGMENT_DELETE_ERROR = '无法删除片段。';
 const SEGMENT_SUPPLEMENT_DELETE_ERROR = '无法删除补充内容。';
 const SEGMENT_SUPPLEMENT_RESTORE_ERROR = '无法恢复补充内容。';
@@ -366,8 +372,11 @@ function sameMemoryCover(
   if (firstCover.source !== secondCover.source) {
     return false;
   }
+  if (firstCover.source === 'default' && secondCover.source === 'default') {
+    return firstCover.templateId === secondCover.templateId;
+  }
   if (firstCover.source !== 'custom' || secondCover.source !== 'custom') {
-    return true;
+    return false;
   }
   return firstCover.filename === secondCover.filename && firstCover.version === secondCover.version;
 }
@@ -3539,6 +3548,65 @@ export function App() {
     }
   }
 
+  async function switchMemoryDefaultCoverTemplate(memory: WorkspaceMemorySummary) {
+    if (memory.cover?.source === 'custom') {
+      return;
+    }
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+    const templateId = resolveNextDefaultCoverTemplateId({
+      currentTemplateId: memory.cover?.source === 'default' ? memory.cover.templateId : undefined,
+      entityId: memory.memoryId,
+    });
+
+    try {
+      const response = await switchMemoryDefaultCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        memoryId: memory.memoryId,
+        templateId,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: MEMORY_DEFAULT_COVER_SWITCH_ERROR,
+          description: workspaceErrorDisplayMessage(
+            response.error,
+            MEMORY_DEFAULT_COVER_SWITCH_ERROR
+          ),
+        });
+        return;
+      }
+
+      applyMemoryListUpdate(response.value.memories, mutationSession);
+      showReoToast({
+        type: 'success',
+        title: '已切换随机默认图片',
+        description: memory.title,
+      });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: MEMORY_DEFAULT_COVER_SWITCH_ERROR,
+        description: unknownErrorDisplayMessage(error, MEMORY_DEFAULT_COVER_SWITCH_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   async function restoreSegmentCoverFromUndo(
     memoryId: string,
     segmentId: string,
@@ -3650,6 +3718,72 @@ export function App() {
         type: 'error',
         title: SEGMENT_COVER_RESET_ERROR,
         description: unknownErrorDisplayMessage(error, SEGMENT_COVER_RESET_ERROR),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function switchSegmentDefaultCoverTemplate(target: SegmentDefaultCoverSwitchTarget) {
+    if (target.segment.cover?.source === 'custom') {
+      return;
+    }
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+    const templateId = resolveNextDefaultCoverTemplateId({
+      currentTemplateId:
+        target.segment.cover?.source === 'default' ? target.segment.cover.templateId : undefined,
+      entityId: target.segment.segmentId,
+    });
+
+    try {
+      const response = await switchSegmentDefaultCover({
+        workspaceHandle: mutationSession.workspaceHandle,
+        workspaceId: mutationSession.workspaceId,
+        memoryId: target.memoryId,
+        segmentId: target.segment.segmentId,
+        templateId,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: SEGMENT_DEFAULT_COVER_SWITCH_ERROR,
+          description: workspaceErrorDisplayMessage(
+            response.error,
+            SEGMENT_DEFAULT_COVER_SWITCH_ERROR
+          ),
+        });
+        return;
+      }
+
+      applySegmentCoverUpdate({
+        memory: response.value.memory,
+        segment: response.value.segment,
+        session: mutationSession,
+      });
+      showReoToast({
+        type: 'success',
+        title: '已切换随机默认图片',
+        description: target.segment.title,
+      });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      showReoToast({
+        type: 'error',
+        title: SEGMENT_DEFAULT_COVER_SWITCH_ERROR,
+        description: unknownErrorDisplayMessage(error, SEGMENT_DEFAULT_COVER_SWITCH_ERROR),
       });
     } finally {
       finishWorkspaceAction();
@@ -4623,6 +4757,9 @@ export function App() {
               onResetMemoryCover={(memory) => {
                 void resetMemoryCoverToDefault(memory);
               }}
+              onSwitchMemoryDefaultCover={(memory) => {
+                void switchMemoryDefaultCoverTemplate(memory);
+              }}
               onRenameMemorySpace={() =>
                 openMemorySpaceRenameDialog({
                   workspaceId: activeWorkspaceSession.workspaceId,
@@ -4660,8 +4797,14 @@ export function App() {
             onResetMemoryCover={(memory) => {
               void resetMemoryCoverToDefault(memory);
             }}
+            onSwitchMemoryDefaultCover={(memory) => {
+              void switchMemoryDefaultCoverTemplate(memory);
+            }}
             onResetSegmentCover={(target) => {
               void resetSegmentCoverToDefault(target);
+            }}
+            onSwitchSegmentDefaultCover={(target) => {
+              void switchSegmentDefaultCoverTemplate(target);
             }}
             onDeleteSegment={openSegmentDeleteDialog}
             onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}

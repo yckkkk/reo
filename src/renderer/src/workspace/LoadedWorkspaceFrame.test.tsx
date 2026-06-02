@@ -428,6 +428,8 @@ function renderLoadedWorkspaceFrame({
   onNoteSegmentSupplementContentSaved = vi.fn(),
   onRenameMemory = vi.fn(),
   onResetMemoryCover = vi.fn(),
+  onSwitchMemoryDefaultCover = vi.fn(),
+  onSwitchSegmentDefaultCover = vi.fn(),
   onRenameSegmentContent = vi.fn(),
   onRenameSegment = vi.fn(),
   onRenameSegmentSupplement = vi.fn(),
@@ -534,6 +536,12 @@ function renderLoadedWorkspaceFrame({
   readonly onNoteSegmentSupplementContentSaved?: (saved: SavedNoteSegmentSupplementContent) => void;
   readonly onRenameMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onResetMemoryCover?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
+  readonly onSwitchMemoryDefaultCover?: (
+    memory: WorkspaceSession['snapshot']['memories'][number]
+  ) => void;
+  readonly onSwitchSegmentDefaultCover?: Parameters<
+    typeof LoadedWorkspaceFrame
+  >[0]['onSwitchSegmentDefaultCover'];
   readonly onRenameSegmentContent?: Parameters<
     typeof LoadedWorkspaceFrame
   >[0]['onRenameSegmentContent'];
@@ -639,6 +647,8 @@ function renderLoadedWorkspaceFrame({
         onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
         onRenameMemory={onRenameMemory}
         onResetMemoryCover={onResetMemoryCover}
+        onSwitchMemoryDefaultCover={onSwitchMemoryDefaultCover}
+        onSwitchSegmentDefaultCover={onSwitchSegmentDefaultCover}
         onRenameSegmentContent={onRenameSegmentContent}
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
@@ -2009,6 +2019,8 @@ describe('LoadedWorkspaceFrame', () => {
           onNoteSegmentSupplementContentSaved={vi.fn()}
           onRenameMemory={vi.fn()}
           onResetMemoryCover={vi.fn()}
+          onSwitchMemoryDefaultCover={vi.fn()}
+          onSwitchSegmentDefaultCover={vi.fn()}
           onRenameSegment={vi.fn()}
           onRenameSegmentContent={vi.fn()}
           onRenameSegmentSupplement={vi.fn()}
@@ -4934,6 +4946,7 @@ describe('LoadedWorkspaceFrame', () => {
       '复制相对路径',
       '复制绝对路径',
       '恢复随机默认图片',
+      '切换随机默认图片',
       '重命名',
       '删除',
     ]);

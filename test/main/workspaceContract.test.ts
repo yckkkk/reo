@@ -29,6 +29,8 @@ import {
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
+  WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
+  WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -153,6 +155,10 @@ import {
   workspaceRestoreMemoryCoverResponseSchema,
   workspaceRestoreSegmentCoverRequestSchema,
   workspaceRestoreSegmentCoverResponseSchema,
+  workspaceSwitchMemoryDefaultCoverRequestSchema,
+  workspaceSwitchMemoryDefaultCoverResponseSchema,
+  workspaceSwitchSegmentDefaultCoverRequestSchema,
+  workspaceSwitchSegmentDefaultCoverResponseSchema,
   workspaceSegmentProjectionSchema,
   workspaceSegmentSupplementProjectionSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
@@ -274,8 +280,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
+    'workspace:switchMemoryDefaultCover',
     'workspace:resetSegmentCover',
     'workspace:restoreSegmentCover',
+    'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
@@ -362,8 +370,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
     [WORKSPACE_RESET_MEMORY_COVER_CHANNEL, 'workspace:resetMemoryCover'],
     [WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL, 'workspace:restoreMemoryCover'],
+    [WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL, 'workspace:switchMemoryDefaultCover'],
     [WORKSPACE_RESET_SEGMENT_COVER_CHANNEL, 'workspace:resetSegmentCover'],
     [WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL, 'workspace:restoreSegmentCover'],
+    [WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL, 'workspace:switchSegmentDefaultCover'],
     [WORKSPACE_DELETE_SEGMENT_CHANNEL, 'workspace:deleteSegment'],
     [WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, 'workspace:restoreDeletedSegment'],
     [WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:deleteSegmentSupplement'],
@@ -2221,6 +2231,22 @@ test('workspace memory summary contract rejects unknown nested fields', () => {
   );
   assert.deepEqual(
     workspaceMemoryCoverProjectionSchema.parse({
+      source: 'default',
+      templateId: 'cover-05',
+    }),
+    {
+      source: 'default',
+      templateId: 'cover-05',
+    }
+  );
+  assert.throws(() =>
+    workspaceMemoryCoverProjectionSchema.parse({
+      source: 'default',
+      templateId: 'cover-99',
+    })
+  );
+  assert.deepEqual(
+    workspaceMemoryCoverProjectionSchema.parse({
       source: 'custom',
       filename: 'garden.webp',
       version: '1770000000000-512',
@@ -2388,6 +2414,52 @@ test('memory cover reset contract keeps restore token explicit and pathless', ()
   );
 });
 
+test('memory default cover switch contract persists only a built-in template id', () => {
+  assert.deepEqual(
+    workspaceSwitchMemoryDefaultCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      templateId: 'cover-05',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      templateId: 'cover-05',
+    }
+  );
+  assert.throws(() =>
+    workspaceSwitchMemoryDefaultCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      memoryId: 'mem_1',
+      templateId: 'cover-99',
+    })
+  );
+  assert.deepEqual(
+    workspaceSwitchMemoryDefaultCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 0,
+          audioSegmentCount: 0,
+          noteSegmentCount: 0,
+          audioDurationMs: 0,
+          audioByteLength: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default', templateId: 'cover-05' },
+        },
+        memories: [],
+      },
+    }).ok,
+    true
+  );
+});
+
 test('segment cover reset contract keeps restore token explicit and pathless', () => {
   const audioSegment = {
     workspaceId: 'ws_1',
@@ -2493,6 +2565,75 @@ test('segment cover reset contract keeps restore token explicit and pathless', (
           ...audioSegment,
           cover: { source: 'custom', filename: 'poster.webp', version: '1770000000000-512' },
         },
+      },
+    }).ok,
+    true
+  );
+});
+
+test('segment default cover switch contract persists only a built-in template id', () => {
+  const audioSegment = {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    type: 'audio',
+    title: 'Segment',
+    createdAt: '2026-05-10T13:00:00.000Z',
+    updatedAt: '2026-05-10T13:00:00.000Z',
+    durationMs: 1000,
+    audioByteLength: 2048,
+    lastTranscriptionAttempt: 'never',
+    transcript: { exists: false },
+    supplementCount: 0,
+    supplements: [],
+    cover: { source: 'default', templateId: 'cover-09' },
+  } as const;
+
+  assert.deepEqual(
+    workspaceSwitchSegmentDefaultCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      templateId: 'cover-09',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      templateId: 'cover-09',
+    }
+  );
+  assert.throws(() =>
+    workspaceSwitchSegmentDefaultCoverRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      templateId: 'cover-99',
+    })
+  );
+  assert.deepEqual(
+    workspaceSwitchSegmentDefaultCoverResponseSchema.parse({
+      ok: true,
+      value: {
+        memory: {
+          memoryId: 'mem_1',
+          title: 'Memory',
+          createdAt: '2026-05-10T13:00:00.000Z',
+          updatedAt: '2026-05-10T13:00:00.000Z',
+          segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          audioDurationMs: 1000,
+          audioByteLength: 2048,
+          hasAudioTranscript: false,
+          hasAnyNote: false,
+          supplementCount: 0,
+          cover: { source: 'default' },
+        },
+        segment: audioSegment,
       },
     }).ok,
     true

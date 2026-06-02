@@ -76,6 +76,8 @@ import {
   handleSaveSegmentSupplementTranscriptForTest,
   handleSaveVoiceTranscriptionApiKeyForTest,
   handleSetVoiceTranscriptionEnabledForTest,
+  handleSwitchMemoryDefaultCoverForTest,
+  handleSwitchSegmentDefaultCoverForTest,
   handleValidateVoiceTranscriptionCredentialsForTest,
   sendRecordingTranscriptionEventForTest,
   handleUpdateMemorySpaceTitleForTest,
@@ -741,7 +743,7 @@ async function writeFinalizedMemoryRecording({
 
 async function readObjectManifest(
   rootPath: string,
-  kind: 'segments' | 'supplements',
+  kind: 'memories' | 'segments' | 'supplements',
   objectId: string
 ): Promise<Record<string, unknown>> {
   return JSON.parse(
@@ -1891,6 +1893,109 @@ test('deleteMemory hides a Memory from the read model and restoreDeletedMemory r
   assert.equal(readRestored.ok, true);
 });
 
+test('switchMemoryDefaultCover persists a built-in template id and returns pathless projections', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-switch-memory-cover-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 默认封面',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_switch_cover',
+    segmentId: 'seg_switch_cover',
+    title: '默认封面',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleSwitchMemoryDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_switch_cover',
+      templateId: 'cover-06',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value.memory.cover, { source: 'default', templateId: 'cover-06' });
+    assert.deepEqual(result.value.memories[0]?.cover, {
+      source: 'default',
+      templateId: 'cover-06',
+    });
+    assert.equal('workspaceHandle' in result.value, false);
+    assert.equal('rootPath' in result.value, false);
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'memories', 'mem_switch_cover'))['defaultCoverTemplateId'],
+    'cover-06'
+  );
+});
+
+test('switchMemoryDefaultCover rejects invalid requests, untrusted senders, and missing handles', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-switch-memory-cover-boundary-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const invalid = await handleSwitchMemoryDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_switch_cover',
+      templateId: 'cover-99',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) {
+    assert.equal(invalid.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+
+  const untrusted = await handleSwitchMemoryDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      memoryId: 'mem_switch_cover',
+      templateId: 'cover-06',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: () => false,
+    handleStore,
+  });
+  assert.equal(untrusted.ok, false);
+  if (!untrusted.ok) {
+    assert.equal(untrusted.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+
+  const missingHandle = await handleSwitchMemoryDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'missing-handle',
+      memoryId: 'mem_switch_cover',
+      templateId: 'cover-06',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore: createWorkspaceHandleStore(),
+  });
+  assert.equal(missingHandle.ok, false);
+  if (!missingHandle.ok) {
+    assert.equal(missingHandle.error.code, 'ERR_WORKSPACE_HANDLE_NOT_FOUND');
+  }
+});
+
 test('deleteSegment hides a Segment from its Memory and restoreDeletedSegment restores it', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-delete-segment-'));
   await initializeWorkspaceFiles({
@@ -1992,6 +2097,99 @@ test('deleteSegment hides a Segment from its Memory and restoreDeletedSegment re
       markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
     }).data.title,
     'Segment delete'
+  );
+});
+
+test('switchSegmentDefaultCover persists a built-in template id and returns pathless projections', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-switch-segment-cover-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 片段默认封面',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_switch_segment_cover',
+    segmentId: 'seg_switch_segment_cover',
+    title: '片段默认封面',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleSwitchSegmentDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_switch_segment_cover',
+      segmentId: 'seg_switch_segment_cover',
+      templateId: 'cover-09',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value.segment.cover, { source: 'default', templateId: 'cover-09' });
+    assert.equal(result.value.memory.memoryId, 'mem_switch_segment_cover');
+    assert.equal('workspaceHandle' in result.value, false);
+    assert.equal('rootPath' in result.value, false);
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_switch_segment_cover'))[
+      'defaultCoverTemplateId'
+    ],
+    'cover-09'
+  );
+});
+
+test('switchSegmentDefaultCover rejects workspace mismatches before file writes', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-switch-segment-cover-mismatch-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC 片段默认封面不匹配',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  await writeFinalizedMemoryRecording({
+    root: rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_switch_segment_mismatch',
+    segmentId: 'seg_switch_segment_mismatch',
+    title: '片段默认封面不匹配',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const result = await handleSwitchSegmentDefaultCoverForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_other',
+      memoryId: 'mem_switch_segment_mismatch',
+      segmentId: 'seg_switch_segment_mismatch',
+      templateId: 'cover-09',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH');
+  }
+  assert.equal(
+    (await readObjectManifest(rootPath, 'segments', 'seg_switch_segment_mismatch'))[
+      'defaultCoverTemplateId'
+    ],
+    undefined
   );
 });
 

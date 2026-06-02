@@ -35,6 +35,7 @@ function renderWorkspaceTitlebar({
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onRenameMemorySpace={vi.fn()}
         onRemoveMemorySpace={vi.fn()}
         onToggleMemoryRail={vi.fn()}
@@ -72,6 +73,7 @@ describe('WorkspaceTitlebar', () => {
           onDeleteMemory={vi.fn()}
           onRenameMemory={vi.fn()}
           onResetMemoryCover={vi.fn()}
+          onSwitchMemoryDefaultCover={vi.fn()}
           onRenameMemorySpace={vi.fn()}
           onRemoveMemorySpace={vi.fn()}
           onToggleMemoryRail={vi.fn()}

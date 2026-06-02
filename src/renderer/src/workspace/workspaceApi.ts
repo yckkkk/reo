@@ -174,6 +174,12 @@ export function restoreMemoryCover(
   return window.reoWorkspace.restoreMemoryCover(payload);
 }
 
+export function switchMemoryDefaultCover(
+  payload: Parameters<Window['reoWorkspace']['switchMemoryDefaultCover']>[0]
+) {
+  return window.reoWorkspace.switchMemoryDefaultCover(payload);
+}
+
 export function resetSegmentCover(
   payload: Parameters<Window['reoWorkspace']['resetSegmentCover']>[0]
 ) {
@@ -184,6 +190,12 @@ export function restoreSegmentCover(
   payload: Parameters<Window['reoWorkspace']['restoreSegmentCover']>[0]
 ) {
   return window.reoWorkspace.restoreSegmentCover(payload);
+}
+
+export function switchSegmentDefaultCover(
+  payload: Parameters<Window['reoWorkspace']['switchSegmentDefaultCover']>[0]
+) {
+  return window.reoWorkspace.switchSegmentDefaultCover(payload);
 }
 
 export function deleteSegment(payload: Parameters<Window['reoWorkspace']['deleteSegment']>[0]) {

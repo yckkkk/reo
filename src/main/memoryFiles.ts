@@ -75,7 +75,10 @@ import {
   SEGMENT_ID_PATTERN,
   isSafeWorkspaceDirectoryName,
   lastTranscriptionAttemptSchema,
+  workspaceDefaultCoverTemplateIdSchema,
   workspaceError,
+  type WorkspaceCoverProjection,
+  type WorkspaceDefaultCoverTemplateId,
   type FinalizeTranscriptionAttempt,
   type LastTranscriptionAttempt,
   workspaceMemorySummarySchema,
@@ -137,6 +140,7 @@ export interface MemoryFileTruth {
   readonly memoryId: string;
   readonly title: string;
   readonly createdAt: string;
+  readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
   readonly updatedAt: string;
 }
 
@@ -145,6 +149,7 @@ interface MemoryObjectManifest {
   readonly objectType: 'memory';
   readonly memoryId: string;
   readonly createdAt: string;
+  readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
   readonly updatedAt: string;
 }
 
@@ -163,6 +168,7 @@ interface AudioSegmentObjectManifest {
   readonly audioByteLength: number;
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
   readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
+  readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
 }
 
 interface NoteSegmentObjectManifest {
@@ -177,6 +183,7 @@ interface NoteSegmentObjectManifest {
   readonly updatedAt: string;
   readonly bodyByteLength: number;
   readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
+  readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
 }
 
 type SegmentObjectManifest = AudioSegmentObjectManifest | NoteSegmentObjectManifest;
@@ -778,6 +785,7 @@ const memoryObjectManifestSchema = z
     objectType: z.literal('memory'),
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
     createdAt: z.string(),
+    defaultCoverTemplateId: workspaceDefaultCoverTemplateIdSchema.optional(),
     updatedAt: z.string(),
   })
   .strict();
@@ -802,6 +810,7 @@ const segmentObjectManifestBaseSchema = z
     memoryId: z.string().regex(MEMORY_ID_PATTERN),
     segmentId: z.string().regex(SEGMENT_ID_PATTERN),
     createdAt: z.string(),
+    defaultCoverTemplateId: workspaceDefaultCoverTemplateIdSchema.optional(),
     finalizedAt: z.string(),
     updatedAt: z.string(),
     contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
@@ -2079,6 +2088,37 @@ async function writeMemoryObjectManifestNoReplace({
   );
 }
 
+async function writeMemoryObjectManifest({
+  assertUsable,
+  memory,
+  rootPath,
+}: {
+  readonly assertUsable?: AssertWorkspaceUsable;
+  readonly memory: MemoryObjectManifest;
+  readonly rootPath: string;
+}): Promise<void> {
+  await ensureWorkspaceObjectKindDirectory({
+    rootPath,
+    kind: 'memories',
+    ...(assertUsable ? { assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceJsonAtomic(
+    await memoryObjectManifestPath(rootPath, memory.memoryId),
+    {
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId: memory.memoryId,
+      createdAt: memory.createdAt,
+      ...(memory.defaultCoverTemplateId
+        ? { defaultCoverTemplateId: memory.defaultCoverTemplateId }
+        : {}),
+      updatedAt: memory.updatedAt,
+    },
+    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
+  );
+}
+
 async function segmentObjectManifestPath(rootPath: string, segmentId: string): Promise<string> {
   return workspaceObjectManifestPath(rootPath, 'segments', segmentId);
 }
@@ -2096,6 +2136,73 @@ function renderMemoryMarkdown(title: string): string {
     data: { title },
     content: `# ${title}\n`,
   });
+}
+
+function memoryManifestFromFileTruth(memory: MemoryFileTruth): MemoryObjectManifest & {
+  readonly title: string;
+} {
+  return {
+    schemaVersion: 1,
+    objectType: 'memory',
+    memoryId: memory.memoryId,
+    title: memory.title,
+    createdAt: memory.createdAt,
+    ...(memory.defaultCoverTemplateId
+      ? { defaultCoverTemplateId: memory.defaultCoverTemplateId }
+      : {}),
+    updatedAt: memory.updatedAt,
+  };
+}
+
+function segmentManifestFromSemanticTruth(
+  metadata: FinalizedSegmentSemanticTruth
+): SegmentObjectManifest {
+  const base = {
+    schemaVersion: 1,
+    objectType: 'segment',
+    workspaceId: metadata.workspaceId,
+    memoryId: metadata.memoryId,
+    segmentId: metadata.segmentId,
+    createdAt: metadata.createdAt,
+    ...(metadata.defaultCoverTemplateId
+      ? { defaultCoverTemplateId: metadata.defaultCoverTemplateId }
+      : {}),
+    finalizedAt: metadata.finalizedAt,
+    updatedAt: metadata.updatedAt,
+    ...(metadata.contentTabOrder ? { contentTabOrder: metadata.contentTabOrder } : {}),
+  } as const;
+
+  if (metadata.kind === 'audio') {
+    return {
+      ...base,
+      kind: 'audio',
+      durationMs: metadata.durationMs,
+      nextSequence: metadata.nextSequence,
+      audioByteLength: metadata.audioByteLength,
+      ...(metadata.lastTranscriptionAttempt
+        ? { lastTranscriptionAttempt: metadata.lastTranscriptionAttempt }
+        : {}),
+    };
+  }
+
+  return {
+    ...base,
+    kind: 'note',
+    bodyByteLength: metadata.bodyByteLength,
+  };
+}
+
+function coverProjectionWithDefaultTemplate({
+  cover,
+  templateId,
+}: {
+  readonly cover: WorkspaceCoverProjection;
+  readonly templateId?: WorkspaceDefaultCoverTemplateId | undefined;
+}): WorkspaceCoverProjection {
+  if (cover.source === 'custom' || !templateId) {
+    return cover;
+  }
+  return { source: 'default', templateId };
 }
 
 function segmentMarkdownContent({
@@ -2203,17 +2310,11 @@ async function writeMemoryMarkdownAndManifest({
     assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
   );
   assertWorkspaceUsable(assertUsable);
-  await writeWorkspaceJsonAtomic(
-    await memoryObjectManifestPath(rootPath, memory.memoryId),
-    {
-      schemaVersion: 1,
-      objectType: 'memory',
-      memoryId: memory.memoryId,
-      createdAt: memory.createdAt,
-      updatedAt: memory.updatedAt,
-    },
-    assertUsable ? () => assertWorkspaceUsable(assertUsable) : undefined
-  );
+  await writeMemoryObjectManifest({
+    rootPath,
+    memory,
+    ...(assertUsable ? { assertUsable } : {}),
+  });
 }
 
 async function writeSegmentObjectManifest({
@@ -2583,6 +2684,9 @@ async function readMemoryFileTruthFromDirectory(
       nodeId: manifest.memoryId,
     }),
     createdAt: manifest.createdAt,
+    ...(manifest.defaultCoverTemplateId
+      ? { defaultCoverTemplateId: manifest.defaultCoverTemplateId }
+      : {}),
     updatedAt: manifest.updatedAt,
   };
 }
@@ -4808,6 +4912,10 @@ async function summarizeMemoryFromFileTruths({
   const cover = await readMemoryCoverProjectionFromDirectory(
     memoryDirectoryPath ?? (await memoryDirectory(rootPath, memory.memoryId))
   );
+  const projectedCover = coverProjectionWithDefaultTemplate({
+    cover,
+    templateId: memory.defaultCoverTemplateId,
+  });
 
   return {
     memoryId: memory.memoryId,
@@ -4822,7 +4930,7 @@ async function summarizeMemoryFromFileTruths({
     hasAudioTranscript,
     hasAnyNote,
     supplementCount,
-    cover,
+    cover: projectedCover,
   };
 }
 
@@ -4979,7 +5087,10 @@ async function finalizedSegmentProjectionFromFileTruth({
     ...(metadata.contentTitle !== undefined ? { contentTitle: metadata.contentTitle } : {}),
     createdAt: metadata.createdAt,
     updatedAt,
-    cover: coverProjection,
+    cover: coverProjectionWithDefaultTemplate({
+      cover: coverProjection,
+      templateId: metadata.defaultCoverTemplateId,
+    }),
     supplementCount: supplements.length,
     supplements,
     contentTabOrder: normalizeContentTabOrder(metadata.contentTabOrder, supplements),
@@ -5228,9 +5339,12 @@ export async function readMemoryDetailFromFileTruth(input: {
 
     assertWorkspaceUsable(input.assertWorkspaceUsable);
     const sortedSegments = sortByProjectedUpdatedAt(segments);
-    const cover = await readMemoryCoverProjectionFromDirectory(
-      await memoryDirectory(input.rootPath, input.memoryId)
-    );
+    const cover = coverProjectionWithDefaultTemplate({
+      cover: await readMemoryCoverProjectionFromDirectory(
+        await memoryDirectory(input.rootPath, input.memoryId)
+      ),
+      templateId: memory.defaultCoverTemplateId,
+    });
     const summary = summarizeMemoryFromSegments(memory, sortedSegments, cover);
     return {
       ok: true,
@@ -6514,14 +6628,7 @@ async function finishFinalizeTransaction({
     await writeMemoryMarkdownAndManifest({
       rootPath,
       memoryDirectoryPath: targetMemoryDirectory,
-      memory: {
-        schemaVersion: 1,
-        objectType: 'memory',
-        memoryId: nextMemory.memoryId,
-        title: nextMemory.title,
-        createdAt: nextMemory.createdAt,
-        updatedAt: nextMemory.updatedAt,
-      },
+      memory: memoryManifestFromFileTruth(nextMemory),
       ...(assertUsable ? { assertUsable } : {}),
     });
     assertWorkspaceUsable(assertUsable);
@@ -6584,14 +6691,7 @@ async function finishFinalizeTransaction({
           await writeMemoryMarkdownAndManifest({
             rootPath,
             memoryDirectoryPath: rollbackMemoryDirectory,
-            memory: {
-              schemaVersion: 1,
-              objectType: 'memory',
-              memoryId: previousMemory.memoryId,
-              title: previousMemory.title,
-              createdAt: previousMemory.createdAt,
-              updatedAt: previousMemory.updatedAt,
-            },
+            memory: memoryManifestFromFileTruth(previousMemory),
           }).catch(() => {});
         }
       } else {
@@ -6722,14 +6822,7 @@ async function finishSupplementFinalizeTransaction({
     await writeMemoryMarkdownAndManifest({
       rootPath,
       memoryDirectoryPath: currentMemoryDirectory,
-      memory: {
-        schemaVersion: 1,
-        objectType: 'memory',
-        memoryId: nextMemory.memoryId,
-        title: nextMemory.title,
-        createdAt: nextMemory.createdAt,
-        updatedAt: nextMemory.updatedAt,
-      },
+      memory: memoryManifestFromFileTruth(nextMemory),
       ...(assertUsable ? { assertUsable } : {}),
     });
     assertWorkspaceUsable(assertUsable);
@@ -6806,14 +6899,7 @@ async function finishSupplementFinalizeTransaction({
         await writeMemoryMarkdownAndManifest({
           rootPath,
           memoryDirectoryPath: rollbackMemoryDirectory,
-          memory: {
-            schemaVersion: 1,
-            objectType: 'memory',
-            memoryId: previousMemory.memoryId,
-            title: previousMemory.title,
-            createdAt: previousMemory.createdAt,
-            updatedAt: previousMemory.updatedAt,
-          },
+          memory: memoryManifestFromFileTruth(previousMemory),
         }).catch(() => {});
       }
       const rebuildAfterRollback = rebuildIndex
@@ -6956,14 +7042,7 @@ export async function createMemoryFromFileTruth(
       await writeMemoryMarkdownAndManifest({
         rootPath: input.rootPath,
         memoryDirectoryPath: createdDirectory,
-        memory: {
-          schemaVersion: 1,
-          objectType: 'memory',
-          memoryId: memory.memoryId,
-          title: memory.title,
-          createdAt: memory.createdAt,
-          updatedAt: memory.updatedAt,
-        },
+        memory: memoryManifestFromFileTruth(memory),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
       manifestPath = await memoryObjectManifestPath(input.rootPath, input.memoryId);
@@ -7414,6 +7493,61 @@ export async function restoreMemoryCoverFromTrash(input: {
   }
 }
 
+export async function switchMemoryDefaultCoverTemplateFromFileTruth(
+  input: MemoryTargetInput & {
+    readonly templateId: WorkspaceDefaultCoverTemplateId;
+  }
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly memories: readonly MemorySummary[];
+  }>
+> {
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const current = await readMemoryFileTruth(input.rootPath, input.memoryId, {
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      const next: MemoryFileTruth = {
+        ...current,
+        defaultCoverTemplateId: input.templateId,
+      };
+      await writeMemoryObjectManifest({
+        rootPath: input.rootPath,
+        memory: memoryManifestFromFileTruth(next),
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const memories = await rebuildMemoryIndex(input.rootPath, {
+        ...(input.assertWorkspaceUsable
+          ? { assertWorkspaceUsable: input.assertWorkspaceUsable }
+          : {}),
+      });
+      const memory = memories.find((candidate) => candidate.memoryId === input.memoryId);
+      if (!memory) {
+        throw new Error('Memory summary missing after default cover switch');
+      }
+      return {
+        ok: true,
+        value: {
+          memory,
+          memories,
+        },
+      };
+    });
+  } catch (error) {
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_UPDATE_FAILED',
+      'Memory default cover could not be switched',
+      'previous-file-preserved'
+    );
+  }
+}
+
 function createSegmentCoverRestoreToken(memoryId: string, segmentId: string): string {
   return `cover__${memoryId}__${segmentId}__${randomUUID().replaceAll('-', '')}`;
 }
@@ -7638,6 +7772,51 @@ export async function restoreSegmentCoverFromTrash(
   }
 }
 
+export async function switchSegmentDefaultCoverTemplateFromFileTruth(
+  input: SegmentTargetInput & {
+    readonly templateId: WorkspaceDefaultCoverTemplateId;
+  }
+): Promise<
+  MemoryFilesResult<{
+    readonly memory: MemorySummary;
+    readonly segment: WorkspaceSegmentProjection;
+  }>
+> {
+  try {
+    return await withMemoryWriteLock(input.rootPath, input.memoryId, async () => {
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      const fileTruth = await readValidFinalizedSegmentFileTruth(
+        input.rootPath,
+        input.memoryId,
+        input.segmentId
+      );
+      if (!fileTruth || fileTruth.metadata.workspaceId !== input.workspaceId) {
+        throw new Error('Finalized segment projection does not match file truth');
+      }
+      await writeSegmentObjectManifest({
+        rootPath: input.rootPath,
+        segment: segmentManifestFromSemanticTruth({
+          ...fileTruth.metadata,
+          defaultCoverTemplateId: input.templateId,
+        }),
+        ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
+      });
+      assertWorkspaceUsable(input.assertWorkspaceUsable);
+      return {
+        ok: true,
+        value: await readCurrentMemoryAndSegmentForSegmentCover(input),
+      };
+    });
+  } catch (error) {
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_UPDATE_FAILED',
+      'Segment default cover could not be switched',
+      'previous-file-preserved'
+    );
+  }
+}
+
 export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Promise<
   MemoryFilesResult<{
     readonly memory: MemorySummary;
@@ -7754,14 +7933,7 @@ export async function deleteSegmentFromFileTruth(input: SegmentTargetInput): Pro
         await writeMemoryMarkdownAndManifest({
           rootPath: input.rootPath,
           memoryDirectoryPath,
-          memory: {
-            schemaVersion: 1,
-            objectType: 'memory',
-            memoryId: rollbackMemory.memoryId,
-            title: rollbackMemory.title,
-            createdAt: rollbackMemory.createdAt,
-            updatedAt: rollbackMemory.updatedAt,
-          },
+          memory: memoryManifestFromFileTruth(rollbackMemory),
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
         await rebuildMemoryIndex(input.rootPath, {
@@ -7931,14 +8103,7 @@ export async function restoreDeletedSegmentFromFileTruth(input: {
         await writeMemoryMarkdownAndManifest({
           rootPath: input.rootPath,
           memoryDirectoryPath,
-          memory: {
-            schemaVersion: 1,
-            objectType: 'memory',
-            memoryId: rollbackMemory.memoryId,
-            title: rollbackMemory.title,
-            createdAt: rollbackMemory.createdAt,
-            updatedAt: rollbackMemory.updatedAt,
-          },
+          memory: memoryManifestFromFileTruth(rollbackMemory),
           ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
         });
         await rebuildMemoryIndex(input.rootPath, {
@@ -8561,14 +8726,7 @@ export async function updateMemoryTitleFromFileTruth(
       await writeMemoryMarkdownAndManifest({
         rootPath: input.rootPath,
         memoryDirectoryPath: directory,
-        memory: {
-          schemaVersion: 1,
-          objectType: 'memory',
-          memoryId: next.memoryId,
-          title: next.title,
-          createdAt: next.createdAt,
-          updatedAt: next.updatedAt,
-        },
+        memory: memoryManifestFromFileTruth(next),
         ...(input.assertWorkspaceUsable ? { assertUsable: input.assertWorkspaceUsable } : {}),
       });
       await touchWorkspacePathBestEffort(directory, renamedAt);

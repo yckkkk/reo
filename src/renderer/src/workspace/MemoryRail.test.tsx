@@ -33,6 +33,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_1"
@@ -65,6 +66,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_1"
@@ -85,6 +87,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_1"
@@ -119,6 +122,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_1"
@@ -163,6 +167,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_cover"
@@ -189,6 +194,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_cover"
@@ -217,6 +223,7 @@ describe('MemoryRail', () => {
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onResetMemoryCover={onResetMemoryCover}
+        onSwitchMemoryDefaultCover={vi.fn()}
         onSelectMemory={vi.fn()}
         workspaceHandle="workspace-handle-secret"
         workspaceId="ws_cover"
@@ -227,5 +234,32 @@ describe('MemoryRail', () => {
     await user.click(await screen.findByRole('menuitem', { name: '恢复随机默认图片' }));
 
     expect(onResetMemoryCover).toHaveBeenCalledWith(coveredMemory);
+  });
+
+  it('invokes Memory default cover switch from the rail item menu', async () => {
+    const user = userEvent.setup();
+    const onSwitchMemoryDefaultCover = vi.fn();
+    const defaultMemory = memory({
+      cover: { source: 'default' },
+      memoryId: 'mem_cover_switch',
+      title: 'Switch covered',
+    });
+    render(
+      <MemoryRail
+        memories={[defaultMemory]}
+        onDeleteMemory={vi.fn()}
+        onRenameMemory={vi.fn()}
+        onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={onSwitchMemoryDefaultCover}
+        onSelectMemory={vi.fn()}
+        workspaceHandle="workspace-handle-secret"
+        workspaceId="ws_cover"
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Switch covered 更多操作' }));
+    await user.click(await screen.findByRole('menuitem', { name: '切换随机默认图片' }));
+
+    expect(onSwitchMemoryDefaultCover).toHaveBeenCalledWith(defaultMemory);
   });
 });

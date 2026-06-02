@@ -51,6 +51,7 @@ function renderMenu(
     onRename?: () => void;
     onRequestTranscriptionBackfill?: () => void;
     cover?: Parameters<typeof SegmentActionsMenu>[0]['cover'];
+    onSwitchDefaultCover?: () => void;
     transcriptExists?: boolean;
     transcriptionBackfillDisabledReason?: string | null;
   } = {}
@@ -62,6 +63,7 @@ function renderMenu(
       onDelete={props.onDelete ?? vi.fn()}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onResetCover={props.onResetCover ?? vi.fn()}
+      onSwitchDefaultCover={props.onSwitchDefaultCover ?? vi.fn()}
       onRename={props.onRename ?? vi.fn()}
       segmentTitle="My Segment"
       transcriptExists={props.transcriptExists ?? false}
@@ -92,6 +94,7 @@ describe('SegmentActionsMenu', () => {
         onDelete={onDelete}
         onOpenChange={onOpenChange}
         onResetCover={vi.fn()}
+        onSwitchDefaultCover={vi.fn()}
         onRename={onRename}
         open={false}
         segmentTitle="My Segment"
@@ -121,6 +124,7 @@ describe('SegmentActionsMenu', () => {
         onDelete={onDelete}
         onOpenChange={onOpenChange}
         onResetCover={vi.fn()}
+        onSwitchDefaultCover={vi.fn()}
         onRename={onRename}
         open
         segmentTitle="My Segment"
@@ -223,6 +227,33 @@ describe('SegmentActionsMenu', () => {
 
     expect(item).toHaveAttribute('aria-disabled', 'true');
     expect(onResetCover).not.toHaveBeenCalled();
+  });
+
+  it('invokes switch-random-default cover action for default Segment covers', async () => {
+    const onSwitchDefaultCover = vi.fn();
+    renderMenu({
+      cover: { source: 'default' },
+      onSwitchDefaultCover,
+    });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '切换随机默认图片' }));
+
+    expect(onSwitchDefaultCover).toHaveBeenCalledOnce();
+  });
+
+  it('disables switch-random-default cover action for custom Segment covers', async () => {
+    const onSwitchDefaultCover = vi.fn();
+    renderMenu({
+      cover: { source: 'custom', filename: 'poster.webp', version: '1-2' },
+      onSwitchDefaultCover,
+    });
+
+    await openEntityActionMenu('My Segment 更多操作');
+    const item = screen.getByRole('menuitem', { name: '切换随机默认图片' });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(onSwitchDefaultCover).not.toHaveBeenCalled();
   });
 
   it('shows the generate transcript action when the segment has no transcript', async () => {

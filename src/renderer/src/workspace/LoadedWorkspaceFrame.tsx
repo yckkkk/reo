@@ -16,6 +16,7 @@ import type {
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
   SegmentCoverResetTarget,
+  SegmentDefaultCoverSwitchTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -54,6 +55,10 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onResetMemoryCover: (memory: WorkspaceMemorySummary) => void;
   readonly onResetSegmentCover?: ((target: SegmentCoverResetTarget) => void) | undefined;
+  readonly onSwitchMemoryDefaultCover: (memory: WorkspaceMemorySummary) => void;
+  readonly onSwitchSegmentDefaultCover?:
+    | ((target: SegmentDefaultCoverSwitchTarget) => void)
+    | undefined;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
@@ -87,6 +92,8 @@ export function LoadedWorkspaceFrame({
   onRenameMemory,
   onResetMemoryCover,
   onResetSegmentCover,
+  onSwitchMemoryDefaultCover,
+  onSwitchSegmentDefaultCover,
   onRenameSegmentContent,
   onRenameSegment,
   onRenameSegmentSupplement,
@@ -226,6 +233,7 @@ export function LoadedWorkspaceFrame({
           onDeleteMemory={onDeleteMemory}
           onRenameMemory={onRenameMemory}
           onResetMemoryCover={onResetMemoryCover}
+          onSwitchMemoryDefaultCover={onSwitchMemoryDefaultCover}
           onSelectMemory={onSelectMemory}
           workspaceHandle={workspaceSession.workspaceHandle}
           workspaceId={workspaceSession.workspaceId}
@@ -254,6 +262,7 @@ export function LoadedWorkspaceFrame({
           onRenameSegmentSupplement={onRenameSegmentSupplement}
           onRenameSegmentContent={onRenameSegmentContent}
           onResetSegmentCover={onResetSegmentCover ?? (() => {})}
+          onSwitchSegmentDefaultCover={onSwitchSegmentDefaultCover ?? (() => {})}
           onRenameSegment={onRenameSegment}
           {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}

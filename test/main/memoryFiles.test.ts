@@ -61,6 +61,8 @@ import {
   restoreDeletedSegmentFromFileTruth,
   restoreMemoryCoverFromTrash,
   restoreSegmentCoverFromTrash,
+  switchMemoryDefaultCoverTemplateFromFileTruth,
+  switchSegmentDefaultCoverTemplateFromFileTruth,
   setAfterReadModelReplaceReadForTest,
   setBeforeFileSpaceNodeMoveForTest,
   setBeforeMemoryDirectoryCandidateScanForTest,
@@ -4887,6 +4889,42 @@ test('Memory cover restore token cannot be reused for another Memory', async () 
   await assert.rejects(stat(targetCoverDirectory), /ENOENT/);
 });
 
+test('switching a Memory default cover persists the selected built-in template', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_cover_template_switch';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '默认封面切换',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const memoryMarkdownPath = path.join(rootPath, 'memories', memoryId, 'memory.md');
+  const memoryMarkdownBefore = await stat(memoryMarkdownPath);
+
+  const switched = await switchMemoryDefaultCoverTemplateFromFileTruth({
+    rootPath,
+    memoryId,
+    templateId: 'cover-05',
+  });
+
+  assert.equal(switched.ok, true, JSON.stringify(switched));
+  if (!switched.ok) {
+    throw new Error('memory cover template switch should succeed');
+  }
+  assert.deepEqual(switched.value.memory.cover, {
+    source: 'default',
+    templateId: 'cover-05',
+  });
+  const manifest = JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'objects', 'memories', `${memoryId}.json`), 'utf8')
+  ) as { readonly defaultCoverTemplateId?: string };
+  assert.equal(manifest.defaultCoverTemplateId, 'cover-05');
+  assert.equal((await stat(memoryMarkdownPath)).ino, memoryMarkdownBefore.ino);
+  assert.equal(
+    switched.value.memories.find((memory) => memory.memoryId === memoryId)?.cover?.source,
+    'default'
+  );
+});
+
 test('Segment cover projects through Memory detail and resets from its own trash', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_segment_cover_reset';
@@ -4947,6 +4985,51 @@ test('Segment cover projects through Memory detail and resets from its own trash
   }
   assert.equal(restored.value.segment.cover?.source, 'custom');
   await readFile(path.join(coverDirectory, 'poster.webp'));
+});
+
+test('switching a Segment default cover persists the selected built-in template', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_cover_template';
+  const segmentId = 'seg_segment_cover_template';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '片段默认封面',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '片段默认封面',
+  });
+
+  const switched = await switchSegmentDefaultCoverTemplateFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    templateId: 'cover-09',
+  });
+
+  assert.equal(switched.ok, true, JSON.stringify(switched));
+  if (!switched.ok) {
+    throw new Error('segment cover template switch should succeed');
+  }
+  assert.deepEqual(switched.value.segment.cover, {
+    source: 'default',
+    templateId: 'cover-09',
+  });
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true, JSON.stringify(detail));
+  if (!detail.ok) {
+    throw new Error('memory detail should succeed');
+  }
+  assert.deepEqual(detail.value.segments[0]?.cover, {
+    source: 'default',
+    templateId: 'cover-09',
+  });
 });
 
 test('Segment cover restore token cannot be reused for another Segment', async () => {

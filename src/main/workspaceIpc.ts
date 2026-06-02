@@ -68,6 +68,8 @@ import {
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
+  WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
+  WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
@@ -176,6 +178,10 @@ import {
   workspaceRestoreMemoryCoverResponseSchema,
   workspaceRestoreSegmentCoverRequestSchema,
   workspaceRestoreSegmentCoverResponseSchema,
+  workspaceSwitchMemoryDefaultCoverRequestSchema,
+  workspaceSwitchMemoryDefaultCoverResponseSchema,
+  workspaceSwitchSegmentDefaultCoverRequestSchema,
+  workspaceSwitchSegmentDefaultCoverResponseSchema,
   workspaceRestoreDeletedSegmentSupplementRequestSchema,
   workspaceRestoreDeletedSegmentSupplementResponseSchema,
   workspaceRestoreDeletedSegmentRequestSchema,
@@ -330,6 +336,8 @@ import {
   restoreDeletedSegmentFromFileTruth,
   restoreMemoryCoverFromTrash,
   restoreSegmentCoverFromTrash,
+  switchMemoryDefaultCoverTemplateFromFileTruth,
+  switchSegmentDefaultCoverTemplateFromFileTruth,
   updateMemoryTitleFromFileTruth,
   updateSegmentContentTabOrderFromFileTruth,
   updateSegmentContentTitleFromFileTruth,
@@ -4048,6 +4056,30 @@ function handleRestoreMemoryCoverCore(
   });
 }
 
+function handleSwitchMemoryDefaultCoverCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchMemoryDefaultCoverResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSwitchMemoryDefaultCoverRequestSchema,
+    invalidMessage: 'switchMemoryDefaultCover request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        const result = await switchMemoryDefaultCoverTemplateFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
+          templateId: request.templateId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceSwitchMemoryDefaultCoverResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
 function handleResetSegmentCoverCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceResetSegmentCoverResponseSchema>> {
@@ -4105,6 +4137,38 @@ function handleRestoreSegmentCoverCore(
           assertWorkspaceUsable: assertUsable,
         });
         return workspaceRestoreSegmentCoverResponseSchema.parse(
+          result.ok ? { ok: true, value: result.value } : result
+        );
+      }),
+  });
+}
+
+function handleSwitchSegmentDefaultCoverCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchSegmentDefaultCoverResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSwitchSegmentDefaultCoverRequestSchema,
+    invalidMessage: 'switchSegmentDefaultCover request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Workspace handle does not match workspace'
+          );
+        }
+        const result = await switchSegmentDefaultCoverTemplateFromFileTruth({
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          templateId: request.templateId,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceSwitchSegmentDefaultCoverResponseSchema.parse(
           result.ok ? { ok: true, value: result.value } : result
         );
       }),
@@ -4588,6 +4652,18 @@ export async function handleRestoreMemoryCoverForTest(
   return handleRestoreMemoryCoverCore(options);
 }
 
+export async function handleSwitchMemoryDefaultCover(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchMemoryDefaultCoverResponseSchema>> {
+  return handleSwitchMemoryDefaultCoverCore(options);
+}
+
+export async function handleSwitchMemoryDefaultCoverForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchMemoryDefaultCoverResponseSchema>> {
+  return handleSwitchMemoryDefaultCoverCore(options);
+}
+
 export async function handleResetSegmentCover(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceResetSegmentCoverResponseSchema>> {
@@ -4610,6 +4686,18 @@ export async function handleRestoreSegmentCoverForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceRestoreSegmentCoverResponseSchema>> {
   return handleRestoreSegmentCoverCore(options);
+}
+
+export async function handleSwitchSegmentDefaultCover(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchSegmentDefaultCoverResponseSchema>> {
+  return handleSwitchSegmentDefaultCoverCore(options);
+}
+
+export async function handleSwitchSegmentDefaultCoverForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSwitchSegmentDefaultCoverResponseSchema>> {
+  return handleSwitchSegmentDefaultCoverCore(options);
 }
 
 export async function handleDeleteSegment(
@@ -6430,6 +6518,16 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL, (event, input) =>
+    handleSwitchMemoryDefaultCover({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_RESET_SEGMENT_COVER_CHANNEL, (event, input) =>
     handleResetSegmentCover({
       event,
@@ -6442,6 +6540,16 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL, (event, input) =>
     handleRestoreSegmentCover({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL, (event, input) =>
+    handleSwitchSegmentDefaultCover({
       event,
       input,
       expectedSession,

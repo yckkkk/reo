@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { ImageOff } from 'lucide-react';
+import { ImageOff, Shuffle } from 'lucide-react';
 import type {
   WorkspaceCoverProjection,
   WorkspaceSegmentEntityActionRequest,
@@ -20,6 +20,7 @@ export type SegmentActionsMenuProps = {
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly onResetCover: () => void;
+  readonly onSwitchDefaultCover: () => void;
   readonly open?: boolean;
   readonly segmentTitle: string;
   readonly transcriptExists?: boolean | undefined;
@@ -38,6 +39,7 @@ export function SegmentActionsMenu({
   onRequestTranscriptionBackfill,
   onRename,
   onResetCover,
+  onSwitchDefaultCover,
   open,
   segmentTitle,
   transcriptExists = false,
@@ -58,6 +60,12 @@ export function SegmentActionsMenu({
           icon: ImageOff,
           label: '恢复随机默认图片',
           onSelect: onResetCover,
+        },
+        {
+          disabledReason: hasCustomCover ? '当前使用自定义封面，请先恢复随机默认图片。' : null,
+          icon: Shuffle,
+          label: '切换随机默认图片',
+          onSelect: onSwitchDefaultCover,
         },
       ]}
       onCloseAutoFocus={onCloseAutoFocus}

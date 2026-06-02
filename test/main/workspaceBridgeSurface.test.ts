@@ -34,8 +34,10 @@ const workspaceBridgeKeys = [
   'restoreDeletedMemory',
   'resetMemoryCover',
   'restoreMemoryCover',
+  'switchMemoryDefaultCover',
   'resetSegmentCover',
   'restoreSegmentCover',
+  'switchSegmentDefaultCover',
   'deleteSegment',
   'restoreDeletedSegment',
   'deleteSegmentSupplement',
@@ -172,6 +174,11 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     restoreToken: 'cover_mem_1_token',
   });
+  await bridge.switchMemoryDefaultCover({
+    workspaceHandle: 'wh_1',
+    memoryId: 'mem_1',
+    templateId: 'cover-05',
+  });
   await bridge.resetSegmentCover({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -184,6 +191,13 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     restoreToken: 'cover__mem_1__seg_1__token',
+  });
+  await bridge.switchSegmentDefaultCover({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    templateId: 'cover-09',
   });
   await bridge.deleteSegment({
     workspaceHandle: 'wh_1',
@@ -406,8 +420,10 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
+    'workspace:switchMemoryDefaultCover',
     'workspace:resetSegmentCover',
     'workspace:restoreSegmentCover',
+    'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',

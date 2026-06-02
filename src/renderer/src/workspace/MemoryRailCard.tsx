@@ -14,6 +14,7 @@ type MemoryRailCardProps = {
   readonly onDeleteMemory: (memory: WorkspaceMemory) => void;
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
   readonly onResetMemoryCover: (memory: WorkspaceMemory) => void;
+  readonly onSwitchMemoryDefaultCover: (memory: WorkspaceMemory) => void;
   readonly onSelectMemory: (memoryId: string) => void;
   readonly updatedAtLabel: string;
   readonly workspaceHandle: string;
@@ -26,6 +27,7 @@ export function MemoryRailCard({
   onDeleteMemory,
   onRenameMemory,
   onResetMemoryCover,
+  onSwitchMemoryDefaultCover,
   onSelectMemory,
   updatedAtLabel,
   workspaceHandle,
@@ -101,6 +103,7 @@ export function MemoryRailCard({
         onDelete={() => onDeleteMemory(memory)}
         onRename={() => onRenameMemory(memory)}
         onResetCover={() => onResetMemoryCover(memory)}
+        onSwitchDefaultCover={() => onSwitchMemoryDefaultCover(memory)}
         trigger={
           <Button
             variant="ghostIcon"

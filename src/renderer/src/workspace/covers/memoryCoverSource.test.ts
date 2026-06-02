@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveMemoryCoverImageSource,
   resolveDefaultCoverTemplate,
+  resolveNextDefaultCoverTemplateId,
   resolveSegmentCoverImageSource,
 } from './memoryCoverSource';
 import type {
@@ -69,6 +70,38 @@ describe('cover image sources', () => {
     );
 
     expect(templates.size).toBe(13);
+  });
+
+  it('uses persisted default cover template ids before the stable entity fallback', () => {
+    const defaultSource = resolveMemoryCoverImageSource({
+      memory: memory({
+        cover: { source: 'default', templateId: 'cover-05' },
+        memoryId: 'mem_selected_cover',
+      }),
+      workspaceId: 'ws_1',
+    });
+    const segmentSource = resolveSegmentCoverImageSource({
+      segment: audioSegment({
+        cover: { source: 'default', templateId: 'cover-09' },
+        segmentId: 'seg_selected_cover',
+      }),
+      workspaceId: 'ws_1',
+    });
+
+    expect(defaultSource).toMatch(/cover-05\.png/);
+    expect(segmentSource).toMatch(/cover-09\.png/);
+  });
+
+  it('selects a different built-in default cover template when switching', () => {
+    const current = 'cover-05';
+    const next = resolveNextDefaultCoverTemplateId({
+      currentTemplateId: current,
+      entityId: 'mem_switch_cover',
+      random: () => 0,
+    });
+
+    expect(next).not.toBe(current);
+    expect(next).toMatch(/^cover-(0[1-9]|1[0-3])$/);
   });
 
   it('builds a safe custom cover protocol URL with encoded filename and version', () => {

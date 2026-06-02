@@ -743,6 +743,7 @@ test('managed reo-cover-image skill keeps cover file operations explicit', () =>
     '## 目标路径',
     '## 替换或创建自定义封面',
     '## 生成封面',
+    '## 切换随机默认图片',
     '## 恢复默认封面',
     '## 验证',
   ]);
@@ -753,6 +754,8 @@ test('managed reo-cover-image skill keeps cover file operations explicit', () =>
   );
   assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /PNG、JPEG 和 WebP/);
   assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要编辑 `.reo\/index\.json`/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /切换随机默认图片/);
+  assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /defaultCoverTemplateId/);
   assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要创建 symlink/);
   assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /自然铺满整个画布/);
   assert.match(DEFAULT_REO_COVER_IMAGE_SKILL_MD, /不要在图片内部绘制边框/);

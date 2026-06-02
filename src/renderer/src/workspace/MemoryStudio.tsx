@@ -89,6 +89,7 @@ import type {
   SegmentContentClearTarget,
   SegmentContentRenameTarget,
   SegmentCoverResetTarget,
+  SegmentDefaultCoverSwitchTarget,
   SegmentDeleteTarget,
   SegmentRenameTarget,
 } from './segmentActionTargets';
@@ -143,6 +144,7 @@ type MemoryStudioProps = {
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onResetSegmentCover: (target: SegmentCoverResetTarget) => void;
+  readonly onSwitchSegmentDefaultCover: (target: SegmentDefaultCoverSwitchTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
@@ -2524,6 +2526,7 @@ export function MemoryStudio({
   onRenameSegmentSupplement,
   onRenameSegmentContent,
   onResetSegmentCover,
+  onSwitchSegmentDefaultCover,
   onRenameSegment,
   transcriptionBackfill,
   onInlineMarkdownDirtyChange,
@@ -3615,6 +3618,10 @@ export function MemoryStudio({
                             onResetCover={() => {
                               setOpenSegmentMenuId(null);
                               onResetSegmentCover({ memoryId: memory.memoryId, segment });
+                            }}
+                            onSwitchDefaultCover={() => {
+                              setOpenSegmentMenuId(null);
+                              onSwitchSegmentDefaultCover({ memoryId: memory.memoryId, segment });
                             }}
                             open={openSegmentMenuId === segment.segmentId}
                             segmentTitle={segment.title}

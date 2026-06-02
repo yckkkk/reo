@@ -62,6 +62,8 @@ import {
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
+  WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
+  WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
@@ -238,6 +240,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
         payload
       ),
+    switchMemoryDefaultCover: (payload) =>
+      invoke<WorkspaceBridgeResponse<'switchMemoryDefaultCover'>>(
+        WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
+        payload
+      ),
     resetSegmentCover: (payload) =>
       invoke<WorkspaceBridgeResponse<'resetSegmentCover'>>(
         WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
@@ -246,6 +253,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     restoreSegmentCover: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreSegmentCover'>>(
         WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
+        payload
+      ),
+    switchSegmentDefaultCover: (payload) =>
+      invoke<WorkspaceBridgeResponse<'switchSegmentDefaultCover'>>(
+        WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
         payload
       ),
     deleteSegment: (payload) =>

@@ -77,7 +77,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- 按任务需要可以编辑 Markdown、同节点 `content.tiptap.json`、附件和普通对象文件；不要把能力限制成 Markdown-only。',
   '- 先读目标 `memory.md`、`segment.md`、`supplement.md` 和附近目录名；必要时再读 `skills/reo-edit/SKILL.md`。',
   '- 普通编辑、创建、重命名和移动任务不需要离开当前记忆空间查询 Reo 仓库源码、全局记忆或历史文档；当前 `AGENTS.md`、`skills/reo-edit/SKILL.md` 和目标文件通常已经足够。',
-  '- 封面生成、替换、恢复默认或验证任务先读 `skills/reo-cover-image/SKILL.md`；需要审美判断时再读 `skills/reo-cover-aesthetic/SKILL.md`。',
+  '- 封面生成、替换、默认模板切换、恢复默认或验证任务先读 `skills/reo-cover-image/SKILL.md`；需要审美判断时再读 `skills/reo-cover-aesthetic/SKILL.md`。',
   '- 不要为了普通内容任务推理 hash、sidecar、manifest、index 或 lock；先完成用户可见的文件改动。',
   '- 验证直接文件效果后停止；Reo 会在打开、刷新或保存时收敛可确定的技术镜像。',
   '',
@@ -264,7 +264,7 @@ export const DEFAULT_REO_COVER_IMAGE_SKILL_MD =
   [
     '---',
     'name: reo-cover-image',
-    'description: 用于在 Reo 记忆空间中生成、替换、恢复默认或验证 Memory 与 Segment 封面图片，包括 agent 生成图片、直接编辑 cover 目录、恢复默认封面，以及验证 Reo 是否刷新对应封面。',
+    'description: 用于在 Reo 记忆空间中生成、替换、切换默认模板、恢复默认或验证 Memory 与 Segment 封面图片，包括 agent 生成图片、直接编辑 cover 目录、使用 App 切换随机默认图片、恢复默认封面，以及验证 Reo 是否刷新对应封面。',
     '---',
     '',
     '# Reo Cover Image',
@@ -301,6 +301,12 @@ export const DEFAULT_REO_COVER_IMAGE_SKILL_MD =
     '- 不要在图片内部绘制边框、白边、相框、卡片、圆角容器、海报留白或模拟 Memory rail 的外壳；Reo 界面会自己裁切和加圆角。',
     '- 避免嵌入文字、logo、二维码、UI chrome、路径名、凭证，或任何用户没有要求纪念的内容。',
     '- 如果生成多个候选，除非用户明确要求保留变体，只把最终选定图片放入 `cover/`。',
+    '',
+    '## 切换随机默认图片',
+    '',
+    '- 在 Reo app 中，优先使用对应对象 More 菜单项 `切换随机默认图片`。',
+    '- 纯文件操作不应为了切换随机默认图片写入图片文件或编辑 `.reo/index.json`。',
+    '- 如需通过文件表达已选默认模板，只能写对应对象 manifest 的 `defaultCoverTemplateId`，取值必须是 Reo 内置模板 id：`cover-01` 到 `cover-13`；自定义 `cover/` 仍会优先展示。',
     '',
     '## 恢复默认封面',
     '',
@@ -1087,8 +1093,11 @@ function sameMemorySummaries(
       memory.hasAnyNote === other.hasAnyNote &&
       memory.supplementCount === other.supplementCount &&
       memoryCover.source === otherCover.source &&
-      (memoryCover.source === 'default' ||
-        (otherCover.source === 'custom' &&
+      ((memoryCover.source === 'default' &&
+        otherCover.source === 'default' &&
+        memoryCover.templateId === otherCover.templateId) ||
+        (memoryCover.source === 'custom' &&
+          otherCover.source === 'custom' &&
           memoryCover.filename === otherCover.filename &&
           memoryCover.version === otherCover.version))
     );

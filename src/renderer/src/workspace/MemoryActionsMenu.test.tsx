@@ -43,14 +43,24 @@ const memoryActionPayload = {
   workspaceId: 'wsp-1',
 };
 
-function renderMenu(props: { onDelete?: () => void; onRename?: () => void } = {}) {
+function renderMenu(
+  props: {
+    cover?: Parameters<typeof MemoryActionsMenu>[0]['cover'];
+    onDelete?: () => void;
+    onRename?: () => void;
+    onResetCover?: () => void;
+    onSwitchDefaultCover?: () => void;
+  } = {}
+) {
   render(
     <MemoryActionsMenu
       actionIdentity={memoryActionPayload}
+      cover={props.cover}
       memoryTitle="My Memory"
       onDelete={props.onDelete ?? vi.fn()}
       onRename={props.onRename ?? vi.fn()}
-      onResetCover={vi.fn()}
+      onResetCover={props.onResetCover ?? vi.fn()}
+      onSwitchDefaultCover={props.onSwitchDefaultCover ?? vi.fn()}
     />
   );
 }
@@ -75,6 +85,7 @@ describe('MemoryActionsMenu', () => {
         onDelete={vi.fn()}
         onRename={vi.fn()}
         onResetCover={vi.fn()}
+        onSwitchDefaultCover={vi.fn()}
         trigger={
           <button type="button" aria-label="My Memory 记忆操作" className="custom-trigger-shape">
             <span>My Memory</span>
@@ -153,5 +164,32 @@ describe('MemoryActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'My Memory 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes switch-random-default cover action for default covers', async () => {
+    const onSwitchDefaultCover = vi.fn();
+    renderMenu({
+      cover: { source: 'default' },
+      onSwitchDefaultCover,
+    });
+
+    const { user } = await openEntityActionMenu('My Memory 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '切换随机默认图片' }));
+
+    expect(onSwitchDefaultCover).toHaveBeenCalledOnce();
+  });
+
+  it('disables switch-random-default cover action for custom covers', async () => {
+    const onSwitchDefaultCover = vi.fn();
+    renderMenu({
+      cover: { source: 'custom', filename: 'cover.webp', version: '1-2' },
+      onSwitchDefaultCover,
+    });
+
+    await openEntityActionMenu('My Memory 更多操作');
+    const item = screen.getByRole('menuitem', { name: '切换随机默认图片' });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(onSwitchDefaultCover).not.toHaveBeenCalled();
   });
 });
