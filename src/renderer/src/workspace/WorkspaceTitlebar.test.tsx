@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspaceTitlebar } from './WorkspaceTitlebar';
@@ -21,25 +21,21 @@ const currentMemory: WorkspaceMemorySummary = {
 
 function renderWorkspaceTitlebar({
   memory,
-  onStartNote = vi.fn(),
-  onStartRecording = vi.fn(),
+  onCreateMemory = vi.fn(),
 }: {
   readonly memory: WorkspaceMemorySummary | null;
-  readonly onStartNote?: () => void;
-  readonly onStartRecording?: () => void;
+  readonly onCreateMemory?: () => void;
 }) {
   return render(
     <TooltipProvider>
       <WorkspaceTitlebar
         currentMemory={memory}
         memoryRailOpen
-        onCreateMemory={vi.fn()}
+        onCreateMemory={onCreateMemory}
         onDeleteMemory={vi.fn()}
         onRenameMemory={vi.fn()}
         onRenameMemorySpace={vi.fn()}
         onRemoveMemorySpace={vi.fn()}
-        onStartNote={onStartNote}
-        onStartRecording={onStartRecording}
         onToggleMemoryRail={vi.fn()}
         title="测试"
         workspaceHandle="workspace-handle-secret"
@@ -50,33 +46,32 @@ function renderWorkspaceTitlebar({
 }
 
 describe('WorkspaceTitlebar', () => {
-  it('shows the global new-memory action at the memory-space level and the new-segment action beside the MemoryRail toggle inside a memory', () => {
-    const onStartNote = vi.fn();
-    const onStartRecording = vi.fn();
+  it('shows the global new-memory action beside the MemoryRail toggle across workspace-stage states', () => {
+    const onCreateMemory = vi.fn();
     const { rerender } = renderWorkspaceTitlebar({
       memory: null,
-      onStartNote,
-      onStartRecording,
+      onCreateMemory,
     });
 
     const memorySpaceActions = document.querySelector('[data-slot="workspace-titlebar-actions"]');
     expect(memorySpaceActions).toBeInstanceOf(HTMLElement);
-    expect(
-      within(memorySpaceActions as HTMLElement).getByRole('button', { name: '新建记忆' })
-    ).toBeInTheDocument();
+    const stageMemoryButton = within(memorySpaceActions as HTMLElement).getByRole('button', {
+      name: '新建记忆',
+    });
+    expect(stageMemoryButton).toHaveTextContent('新记忆');
+    fireEvent.click(stageMemoryButton);
+    expect(onCreateMemory).toHaveBeenCalledOnce();
 
     rerender(
       <TooltipProvider>
         <WorkspaceTitlebar
           currentMemory={currentMemory}
           memoryRailOpen
-          onCreateMemory={vi.fn()}
+          onCreateMemory={onCreateMemory}
           onDeleteMemory={vi.fn()}
           onRenameMemory={vi.fn()}
           onRenameMemorySpace={vi.fn()}
           onRemoveMemorySpace={vi.fn()}
-          onStartNote={onStartNote}
-          onStartRecording={onStartRecording}
           onToggleMemoryRail={vi.fn()}
           title="测试"
           workspaceHandle="workspace-handle-secret"
@@ -87,17 +82,24 @@ describe('WorkspaceTitlebar', () => {
 
     const currentMemoryActions = document.querySelector('[data-slot="workspace-titlebar-actions"]');
     expect(currentMemoryActions).toBeInstanceOf(HTMLElement);
-    expect(
-      within(currentMemoryActions as HTMLElement).queryByRole('button', { name: '新建记忆' })
-    ).not.toBeInTheDocument();
-    const segmentButton = within(currentMemoryActions as HTMLElement).getByRole('button', {
-      name: '打开新片段菜单',
+    const memoryButton = within(currentMemoryActions as HTMLElement).getByRole('button', {
+      name: '新建记忆',
     });
     const railButton = within(currentMemoryActions as HTMLElement).getByRole('button', {
       name: '折叠记忆列表',
     });
-    expect(segmentButton).toHaveTextContent('新片段');
-    expect(segmentButton.nextElementSibling).toBe(railButton);
+    expect(memoryButton).toHaveTextContent('新记忆');
+    expect(
+      within(currentMemoryActions as HTMLElement).queryByText('新片段')
+    ).not.toBeInTheDocument();
+    expect(
+      within(currentMemoryActions as HTMLElement).queryByRole('button', {
+        name: '打开新片段菜单',
+      })
+    ).not.toBeInTheDocument();
+    expect(memoryButton.nextElementSibling).toBe(railButton);
+    fireEvent.click(memoryButton);
+    expect(onCreateMemory).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('button', { name: '碎片记录 记忆操作' })).toBeInTheDocument();
   });
 });

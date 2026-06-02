@@ -4364,8 +4364,6 @@ export function App() {
                   title: activeWorkspaceSession.snapshot.title,
                 })
               }
-              onStartNote={requestStartNote}
-              onStartRecording={requestStartRecording}
               onToggleMemoryRail={toggleMemoryRail}
               title={activeWorkspaceSession.snapshot.title}
               workspaceHandle={activeWorkspaceSession.workspaceHandle}

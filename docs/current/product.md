@@ -85,7 +85,7 @@ Loaded Workspace 使用三面板结构：
 - 中间 Workspace Stage：默认表达舞台。未选中 Memory 时只表达“今天想记录些什么？”，不显示 workspace feed、全局时间线或文件流。
 - 右侧 Memory rail：当前 Workspace 的 Memory 容器列表，用于在 Memory 之间切换，不展示单个 Segment 详情。
 
-当前 Workspace 标题显示在 AppShell panel titlebar。右上角 icon-only control 控制 Memory rail 折叠和展开；`新建记忆` icon-only control 先打开命名弹层，创建成功后才产生 Memory。
+当前 Workspace 标题显示在 AppShell panel titlebar。右上角 `新记忆` control 先打开命名弹层，创建成功后才产生 Memory；相邻 icon-only control 控制 Memory rail 折叠和展开。
 
 ## 核心层级
 
@@ -124,7 +124,7 @@ Memory Studio 必须是首屏可理解的 studio surface：Segment card、timeli
 
 Audio Segment card 使用紧凑正方形比例、无描边填充状态、标题直入、静态 waveform bars 和 mono duration。Note Segment card 使用同一结构表达标题和正文 byte 投影，不展示音频 waveform 或 transcript 状态。卡片不展示补充、转录或本地音频状态标签；More 入口只在 hover、focus 或菜单打开时显示，并承载路径、转录、重命名和删除动作。Note Segment 不提供可操作播放器或不可播放文案，但保留与主 audio player 等高的不可见布局占位。
 
-当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，note Segment 始终有 `正文` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，视频和图片不会作为常驻禁用 tab 出现。Segment primary content tab 可被用户重命名；缺失自定义名称时 audio 显示 `转录`，note 显示 `正文`。Finalized 转录、正文、补充笔记和补充录音转录常态呈现就地 Tiptap-backed 轻量 Markdown 编辑容器，保存继续使用当前 baseline 防止外部修改被覆盖。内容 tab rail 支持 drag/drop 重排，顺序属于 parent Segment 的 durable presentation state，写入 Segment manifest `contentTabOrder`。Memory 顶层 `新片段` 菜单位于 Workspace titlebar 右侧；content tab rail 的 `+` 菜单只显示录音补充和笔记补充，二者都写入 selected Segment supplement。
+当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，note Segment 始终有 `正文` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，视频和图片不会作为常驻禁用 tab 出现。Segment primary content tab 可被用户重命名；缺失自定义名称时 audio 显示 `转录`，note 显示 `正文`。Finalized 转录、正文、补充笔记和补充录音转录常态呈现就地 Tiptap-backed 轻量 Markdown 编辑容器，保存继续使用当前 baseline 防止外部修改被覆盖。内容 tab rail 支持 drag/drop 重排，顺序属于 parent Segment 的 durable presentation state，写入 Segment manifest `contentTabOrder`。Workspace titlebar 右侧不承载 Memory 顶层 Segment 创建入口；content tab rail 的 `+` 菜单只显示录音补充和笔记补充，二者都写入 selected Segment supplement。
 
 Memory 删除是当前 Memory 容器的危险操作。用户只能从 Memory rail 的 More 菜单进入删除确认；确认后 main process 按 `.reo/objects/memories/<memoryId>.json` 找到当前 Memory 目录并移入 `.reo/trash/memories/`，再刷新 Workspace snapshot。删除成功后 renderer 移除该 Memory 的 detail cache，若当前 Memory 被删除则切换到剩余第一条 Memory 或回到 Workspace Stage，并通过 toast 提供本次恢复动作。恢复只把同一 `restoreToken` 对应的 Memory 从恢复区移回 active memories，不恢复为 Segment 或 SegmentSupplement，也不暴露本地路径。
 
