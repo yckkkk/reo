@@ -6,7 +6,7 @@
 
 - 当前已有 TypeScript、ESLint、Prettier、Node test runner、Vitest、Testing Library、`npm run verify:quick` 和 `npm run verify:strict`。
 - 当前 `test:main` 使用 Node test runner 覆盖 main process 和 preload 纯策略函数。
-- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用；纯 projection/query/state-machine 测试运行在 `renderer-node` project，browser API jsdom `.test.ts` 运行在可并行 `renderer-jsdom-browser` project，React component `.test.tsx` 运行在串行 `renderer-jsdom-components` project。
+- 当前 `test:renderer` 使用 Vitest + jsdom + Testing Library 覆盖 renderer/component 行为测试；jsdom 使用 `http://127.0.0.1/` 作为测试 URL，确保 `window.localStorage` 按浏览器同源存储可用；纯 projection/query/state-machine 测试运行在 `renderer-node` project，browser API jsdom `.test.ts` 运行在可并行 `renderer-jsdom-browser` project，React component `.test.tsx` 运行在串行 `renderer-jsdom-components` project，高层 App workflow 测试运行在串行 `renderer-jsdom-workflows` project。
 - 当前 `test/**/*.ts` 由 ESLint 覆盖。
 - 当前 `test:main` 使用 Node 脚本清理测试输出目录、编译测试并运行 main process 测试。
 - 当前 `typecheck` 分别检查 renderer TypeScript、main process TypeScript 和 preload TypeScript。
@@ -62,7 +62,7 @@
 npm run verify:quick
 ```
 
-`verify:quick` 当前包含 `typecheck:quick`、`test:main`、`test:renderer`、`lint:strict` 和 quick format check。`typecheck:quick` 检查 renderer TypeScript、Electron Vite config 和 Vitest config；main/preload source 由 main test 编译边界覆盖。Focused main test 通过 `MAIN_TEST_FILES` 选择文件，未匹配任何 compiled test file 时必须失败。Renderer Vitest project membership 由配置中的实际 include pattern 判定，React component `.test.tsx` 只归入 component project。
+`verify:quick` 当前由 `scripts/run-verify-quick.mjs` 执行：先单独运行 `typecheck:quick` 作为 fail-fast 边界，再并行运行 `test:main` 和 `test:renderer:quick`，最后并行运行 `lint:strict` 和 quick format check。`typecheck:quick` 检查 renderer TypeScript、Electron Vite config 和 Vitest config；main/preload source 由 main test 编译边界覆盖。Focused main test 通过 `MAIN_TEST_FILES` 选择文件，未匹配任何 compiled test file 时必须失败。`test:renderer:quick` 运行 `renderer-node`、`renderer-jsdom-browser` 和 `renderer-jsdom-components`，不运行高层 `renderer-jsdom-workflows`。Renderer Vitest project membership 由配置中的实际 include/exclude pattern 判定，React component `.test.tsx` 只归入一个 project。
 
 当前严格检查：
 
@@ -70,7 +70,7 @@ npm run verify:quick
 npm run verify:strict
 ```
 
-`verify:strict` 当前包含 typecheck、`test:main`、`test:renderer`、`lint:strict`、format check 和 `build:app`；`build:app` 不重复运行 typecheck。
+`verify:strict` 当前包含 typecheck、`test:main`、full `test:renderer`、`lint:strict`、format check 和 `build:app`；`build:app` 不重复运行 typecheck。
 
 当前命令边界：
 
@@ -80,7 +80,8 @@ npm run verify:strict
 - `typecheck`：运行 renderer `tsconfig.json` 和 main/preload `tsconfig.main.json`。
 - `test:main`：清理 `.tmp/test-main`，使用 `tsconfig.main.test.json` 编译测试，再用 Node test runner 运行编译后的 main/preload 测试；默认以 64 个 test files 为批次运行，`MAIN_TEST_BATCH_SIZE=0` 可显式关闭批处理，传给 `npm run test:main -- ...` 的 Node test 参数会转发给每个批次。
 - `test/main/workspaceFiles.test.ts` 覆盖记忆空间初始化、打开、managed `AGENTS.md` block、`skills/reo-edit` / `skills/reo-doctor` 生成、缺失配置静默补全和 doctor script 不覆盖用户 `AGENTS.md` 内容。
-- `test:renderer`：使用 `scripts/run-renderer-tests.mjs` 包裹 Vitest projects 运行 renderer 测试。无显式参数时按 `renderer-node`、`renderer-jsdom-browser`、`renderer-jsdom-components` 顺序运行，避免 full renderer suite 的跨 project 并发污染诊断；传入 `--project`、file filter 或 reporter 参数时保持单次 Vitest 透传。runner 只过滤 Node 当前 `localStorage` backing file 的已知 `ExperimentalWarning`；其它 warning 失败。Projection/query/state-machine 测试归入 Node project；browser-facing 测试归入 jsdom browser project；React component 测试归入 jsdom components project 并串行执行。jsdom setup 提供 DOM matcher、pointer capture、canvas、geometry APIs、`ResizeObserver` 和 localStorage 测试替身，并在每个测试后 cleanup。
+- `test:renderer`：使用 `scripts/run-renderer-tests.mjs` 包裹 Vitest projects 运行 renderer 测试。无显式参数时按 `renderer-node`、`renderer-jsdom-browser`、`renderer-jsdom-components`、`renderer-jsdom-workflows` 顺序运行，避免 full renderer suite 的跨 project 并发污染诊断；传入 `--project`、file filter 或 reporter 参数时保持单次 Vitest 透传。runner 只过滤 Node 当前 `localStorage` backing file 的已知 `ExperimentalWarning`；其它 warning 失败。Projection/query/state-machine 测试归入 Node project；browser-facing 测试归入 jsdom browser project；React component 测试归入 jsdom components project 并串行执行；高层 App workflow 测试归入 jsdom workflows project 并只由 full renderer/strict gate 运行。jsdom setup 提供 DOM matcher、pointer capture、canvas、geometry APIs、`ResizeObserver` 和 localStorage 测试替身，并在每个测试后 cleanup。
+- `test:renderer:quick`：运行 `scripts/run-renderer-tests.mjs --quick`，只展开 `renderer-node`、`renderer-jsdom-browser` 和 `renderer-jsdom-components`；用于 `verify:quick`，保留 renderer 组件和 browser API 合同，但把高层 App workflow suite 留给 full `test:renderer` / `verify:strict`。
 - `lint`：运行 `eslint .`，按 `eslint.config.js` 的 flat config 检查 renderer、main process、测试、Electron Vite config、Vitest config 和脚本，并跳过非产品输入目录。
 - `lint:strict`：运行 `eslint . --max-warnings=0`，同一 flat config 下把 warning 作为失败。
 - `format:check`：运行 quick active-scope Prettier check，覆盖 `AGENTS.md`、`.claude/CLAUDE.md`、`README.md`、配置文件、scripts、src、test、`docs/README.md`、`docs/current`、`docs/decisions`、`docs/initiatives` 和 active `docs/specs`，不扫描 `docs/archive`；必需路径使用严格 Prettier check，只有 optional active `docs/specs` 路径使用 unmatched pattern 容错，允许没有 active spec 时 `docs/specs` 目录不存在；全量格式检查入口是 `format:check:all`。

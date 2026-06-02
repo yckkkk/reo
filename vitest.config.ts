@@ -62,9 +62,26 @@ export default defineConfig({
             },
           },
           fileParallelism: false,
+          exclude: ['src/renderer/src/App.test.tsx'],
           include: ['src/renderer/src/**/*.test.tsx'],
           maxWorkers: 1,
           name: 'renderer-jsdom-components',
+          setupFiles: ['src/renderer/src/test/setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          environment: 'jsdom',
+          environmentOptions: {
+            jsdom: {
+              url: 'http://127.0.0.1/',
+            },
+          },
+          fileParallelism: false,
+          include: ['src/renderer/src/App.test.tsx'],
+          maxWorkers: 1,
+          name: 'renderer-jsdom-workflows',
           setupFiles: ['src/renderer/src/test/setup.ts'],
         },
       },

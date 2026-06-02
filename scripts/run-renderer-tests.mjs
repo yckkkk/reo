@@ -5,17 +5,22 @@ import { pathToFileURL } from 'node:url';
 const LOCAL_STORAGE_WARNING =
   'ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.';
 
-const defaultRendererProjects = [
+const quickRendererProjects = [
   'renderer-node',
   'renderer-jsdom-browser',
   'renderer-jsdom-components',
 ];
 
 export function buildRendererTestRuns(args) {
-  if (args.length > 0) {
-    return [args];
+  const quick = args[0] === '--quick';
+  const vitestArgs = quick ? args.slice(1) : args;
+  if (vitestArgs.length > 0) {
+    return [vitestArgs];
   }
-  return defaultRendererProjects.map((project) => ['--project', project]);
+  const projects = quick
+    ? quickRendererProjects
+    : [...quickRendererProjects, 'renderer-jsdom-workflows'];
+  return projects.map((project) => ['--project', project]);
 }
 
 export function classifyRendererTestStderrLine(line, suppressNextTraceHint) {

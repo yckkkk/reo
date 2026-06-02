@@ -34,6 +34,7 @@ function* findFiles(directory: string): Generator<string> {
 }
 
 type VitestProjectInclude = {
+  readonly excludes: readonly string[];
   readonly includes: readonly string[];
   readonly name: string;
 };
@@ -61,6 +62,7 @@ function vitestProjectIncludes(config: string): VitestProjectInclude[] {
   function visit(node: ts.Node) {
     if (ts.isObjectLiteralExpression(node)) {
       let name: string | null = null;
+      let excludes: readonly string[] = [];
       let includes: readonly string[] = [];
       for (const property of node.properties) {
         if (!ts.isPropertyAssignment(property)) {
@@ -73,9 +75,12 @@ function vitestProjectIncludes(config: string): VitestProjectInclude[] {
         if (propertyName === 'include') {
           includes = stringArrayLiteralValues(property.initializer);
         }
+        if (propertyName === 'exclude') {
+          excludes = stringArrayLiteralValues(property.initializer);
+        }
       }
       if (name && includes.length > 0) {
-        projects.push({ includes, name });
+        projects.push({ excludes, includes, name });
       }
     }
     ts.forEachChild(node, visit);
@@ -111,16 +116,21 @@ function includePatternMatchesPath(pattern: string, file: string): boolean {
   return new RegExp(source).test(file);
 }
 
-test('verify:quick uses the quick typecheck boundary before main tests compile main code', async () => {
+test('verify:quick uses the quick typecheck boundary before parallel quick gates', async () => {
   const scripts = await readPackageScripts();
-  const verifyQuickSteps = (scripts['verify:quick'] ?? '').split('&&').map((step) => step.trim());
+  const runner = (await import(
+    pathToFileURL(path.resolve('scripts/run-verify-quick.mjs')).href
+  )) as {
+    readonly buildVerifyQuickPhases: () => ReadonlyArray<
+      ReadonlyArray<{ readonly script: string }>
+    >;
+  };
 
-  assert.deepEqual(verifyQuickSteps, [
-    'npm run typecheck:quick',
-    'npm run test:main',
-    'npm run test:renderer',
-    'npm run lint:strict',
-    'npm run format:check',
+  assert.equal(scripts['verify:quick'], 'node scripts/run-verify-quick.mjs');
+  assert.deepEqual(runner.buildVerifyQuickPhases(), [
+    [{ script: 'typecheck:quick' }],
+    [{ script: 'test:main' }, { script: 'test:renderer:quick' }],
+    [{ script: 'lint:strict' }, { script: 'format:check' }],
   ]);
   assert.equal(
     scripts['typecheck:quick'],
@@ -128,6 +138,7 @@ test('verify:quick uses the quick typecheck boundary before main tests compile m
   );
   assert.match(scripts['test:main'] ?? '', /run-main-tests/);
   assert.equal(scripts['test:renderer'], 'node scripts/run-renderer-tests.mjs');
+  assert.equal(scripts['test:renderer:quick'], 'node scripts/run-renderer-tests.mjs --quick');
 });
 
 test('complexity scanner script uses the Reo scoped wrapper and excludes generated scopes', async () => {
@@ -394,6 +405,12 @@ test('renderer test runner splits the default full suite into stable project run
     ['--project', 'renderer-node'],
     ['--project', 'renderer-jsdom-browser'],
     ['--project', 'renderer-jsdom-components'],
+    ['--project', 'renderer-jsdom-workflows'],
+  ]);
+  assert.deepEqual(runner.buildRendererTestRuns(['--quick']), [
+    ['--project', 'renderer-node'],
+    ['--project', 'renderer-jsdom-browser'],
+    ['--project', 'renderer-jsdom-components'],
   ]);
   assert.deepEqual(runner.buildRendererTestRuns(['--project', 'renderer-node']), [
     ['--project', 'renderer-node'],
@@ -408,8 +425,11 @@ test('vitest separates parallel browser API jsdom tests from serial component js
 
   assert.match(config, /name: 'renderer-jsdom-browser'/);
   assert.match(config, /name: 'renderer-jsdom-components'/);
+  assert.match(config, /name: 'renderer-jsdom-workflows'/);
   assert.match(config, /src\/renderer\/src\/workspace\/audioWaveform\.test\.ts/);
   assert.match(config, /include: \['src\/renderer\/src\/\*\*\/\*\.test\.tsx'\]/);
+  assert.match(config, /exclude: \['src\/renderer\/src\/App\.test\.tsx'\]/);
+  assert.match(config, /include: \['src\/renderer\/src\/App\.test\.tsx'\]/);
 
   const includePaths = vitestProjectIncludes(config)
     .flatMap((project) => project.includes)
@@ -434,8 +454,10 @@ test('vitest assigns each renderer test file to exactly one project', async () =
   );
 
   const memberships = rendererTests.map((file) => {
-    const matchingProjects = projects.filter((project) =>
-      project.includes.some((include) => includePatternMatchesPath(include, file))
+    const matchingProjects = projects.filter(
+      (project) =>
+        project.includes.some((include) => includePatternMatchesPath(include, file)) &&
+        !project.excludes.some((exclude) => includePatternMatchesPath(exclude, file))
     );
     const count = matchingProjects.length;
     return { count, file };
