@@ -1,4 +1,3 @@
-import { closeSync, constants, fstatSync, readFileSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -6,10 +5,12 @@ import {
   readSafeDirectoryIdentity,
   type DirectoryIdentity,
 } from './directoryIdentity.js';
+import { readWorkspaceDirectoryEntriesInDirectory } from './workspaceDirectoryTransactions.js';
 import {
-  openExistingWorkspaceFileInDirectory,
-  readWorkspaceDirectoryEntriesInDirectory,
-} from './workspaceDirectoryTransactions.js';
+  isSafeImageFilename,
+  MEMORY_COVER_IMAGE_EXTENSIONS,
+  readExistingImagePayloadInDirectory,
+} from './imagePayloads.js';
 import {
   workspaceError,
   type WorkspaceErrorEnvelope,
@@ -17,13 +18,6 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 
 const MAX_MEMORY_COVER_BYTES = 25 * 1024 * 1024;
-
-const MEMORY_COVER_MIME_BY_EXTENSION = new Map([
-  ['.jpeg', 'image/jpeg'],
-  ['.jpg', 'image/jpeg'],
-  ['.png', 'image/png'],
-  ['.webp', 'image/webp'],
-]);
 const MAX_MEMORY_COVER_BYTES_BIGINT = BigInt(MAX_MEMORY_COVER_BYTES);
 
 type MemoryCoverProtocolResolution =
@@ -43,20 +37,6 @@ function hasErrorCode(error: unknown, code: string): boolean {
   );
 }
 
-function memoryCoverMimeType(filename: string): string | null {
-  return MEMORY_COVER_MIME_BY_EXTENSION.get(path.extname(filename).toLowerCase()) ?? null;
-}
-
-function isSafeCoverFilename(filename: string): boolean {
-  return (
-    filename.length > 0 &&
-    !filename.includes('/') &&
-    !filename.includes('\\') &&
-    !filename.includes('..') &&
-    memoryCoverMimeType(filename) !== null
-  );
-}
-
 function memoryCoverDirectory(memoryDirectoryPath: string): string {
   return path.join(memoryDirectoryPath, 'cover');
 }
@@ -70,35 +50,6 @@ async function readExistingSafeCoverDirectory(
     'Memory cover directory is unsafe'
   );
   return { coverDirectory, directoryIdentity };
-}
-
-function readExistingCoverBytesInDirectory({
-  coverDirectory,
-  directoryIdentity,
-  filename,
-}: {
-  readonly coverDirectory: string;
-  readonly directoryIdentity: DirectoryIdentity;
-  readonly filename: string;
-}): { readonly bytes: Uint8Array; readonly byteLength: number } {
-  let fd: number | null = null;
-  try {
-    fd = openExistingWorkspaceFileInDirectory({
-      directory: coverDirectory,
-      directoryIdentity,
-      fileName: filename,
-      flags: constants.O_RDONLY,
-    });
-    const stats = fstatSync(fd);
-    if (!stats.isFile() || stats.size > MAX_MEMORY_COVER_BYTES) {
-      throw new Error('Memory cover leaf is unsafe');
-    }
-    return { bytes: new Uint8Array(readFileSync(fd)), byteLength: stats.size };
-  } finally {
-    if (fd !== null) {
-      closeSync(fd);
-    }
-  }
 }
 
 export async function readMemoryCoverProjectionFromDirectory(
@@ -117,7 +68,12 @@ export async function readMemoryCoverProjectionFromDirectory(
     directoryIdentity,
   });
   const candidates = entries
-    .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && isSafeCoverFilename(entry.name))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        !entry.isSymbolicLink() &&
+        isSafeImageFilename(entry.name, MEMORY_COVER_IMAGE_EXTENSIONS)
+    )
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
   if (candidates.length === 0) {
@@ -158,25 +114,29 @@ export async function resolveMemoryCoverFile({
   readonly filename: string;
   readonly memoryDirectoryPath: string;
 }): Promise<MemoryCoverProtocolResolution> {
-  const mimeType = memoryCoverMimeType(filename);
-  if (!mimeType || !isSafeCoverFilename(filename)) {
+  if (!isSafeImageFilename(filename, MEMORY_COVER_IMAGE_EXTENSIONS)) {
     return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Memory cover path is unsafe');
   }
 
   try {
     const { coverDirectory, directoryIdentity } =
       await readExistingSafeCoverDirectory(memoryDirectoryPath);
-    const existing = readExistingCoverBytesInDirectory({
-      coverDirectory,
+    const existing = await readExistingImagePayloadInDirectory({
+      allowedExtensions: MEMORY_COVER_IMAGE_EXTENSIONS,
+      directory: coverDirectory,
       directoryIdentity,
       filename,
+      maxBytes: MAX_MEMORY_COVER_BYTES,
+      tooLargeErrorCode: 'ERR_WORKSPACE_UNSAFE_PATH',
+      tooLargeMessage: 'Memory cover leaf is unsafe',
+      unsafeMessage: 'Memory cover path is unsafe',
     });
     await assertSameDirectoryIdentity(
       coverDirectory,
       directoryIdentity,
       'Memory cover directory changed during read'
     );
-    return { ok: true, bytes: existing.bytes, mimeType };
+    return { ok: true, bytes: existing.bytes, mimeType: existing.mimeType };
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
       return workspaceError('ERR_WORKSPACE_MEMORY_COVER_NOT_FOUND', 'Memory cover was not found');

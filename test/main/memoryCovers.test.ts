@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { setBeforeImagePayloadReadForTest } from '../../src/main/imagePayloads.js';
 import {
   readMemoryCoverProjectionFromDirectory,
   resolveMemoryCoverFile,
@@ -119,5 +121,72 @@ test('memory cover protocol resolution returns bytes without raw filesystem path
   assert.equal(jpeg.ok, true, JSON.stringify(jpeg));
   if (jpeg.ok) {
     assert.equal(jpeg.mimeType, 'image/jpeg');
+  }
+});
+
+test('memory cover protocol resolution uses the shared async image payload reader', () => {
+  const coverSource = readFileSync('src/main/memoryCovers.ts', 'utf8');
+  const attachmentSource = readFileSync('src/main/noteAttachments.ts', 'utf8');
+
+  assert.match(coverSource, /MEMORY_COVER_IMAGE_EXTENSIONS/);
+  assert.match(coverSource, /readExistingImagePayloadInDirectory/);
+  assert.doesNotMatch(coverSource, /readFileSync|fstatSync/);
+  assert.match(attachmentSource, /NOTE_ATTACHMENT_IMAGE_EXTENSIONS/);
+  assert.doesNotMatch(coverSource, /MEMORY_COVER_MIME_BY_EXTENSION/);
+  assert.doesNotMatch(attachmentSource, /IMAGE_MIME_BY_EXTENSION/);
+});
+
+test('memory cover protocol reads can enter the async read gate concurrently', async () => {
+  const directory = await memoryDirectory();
+  const coverDirectory = path.join(directory, 'cover');
+  await mkdir(coverDirectory);
+  await writeFile(path.join(coverDirectory, 'first.png'), new Uint8Array([1, 2, 3]));
+  await writeFile(path.join(coverDirectory, 'second.png'), new Uint8Array([4, 5, 6]));
+
+  let entered = 0;
+  let resolveBothEntered!: () => void;
+  let releaseReads!: () => void;
+  const bothEntered = new Promise<void>((resolve) => {
+    resolveBothEntered = resolve;
+  });
+  const readGate = new Promise<void>((resolve) => {
+    releaseReads = resolve;
+  });
+
+  setBeforeImagePayloadReadForTest(async ({ filename }) => {
+    if (filename === 'first.png' || filename === 'second.png') {
+      entered += 1;
+      if (entered === 2) {
+        resolveBothEntered();
+      }
+      await readGate;
+    }
+  });
+
+  try {
+    const first = resolveMemoryCoverFile({
+      filename: 'first.png',
+      memoryDirectoryPath: directory,
+    });
+    const second = resolveMemoryCoverFile({
+      filename: 'second.png',
+      memoryDirectoryPath: directory,
+    });
+
+    await Promise.race([
+      bothEntered,
+      new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('cover reads did not overlap')), 250);
+      }),
+    ]);
+    releaseReads();
+
+    const resolved = await Promise.all([first, second]);
+    assert.deepEqual(
+      resolved.map((result) => result.ok),
+      [true, true]
+    );
+  } finally {
+    setBeforeImagePayloadReadForTest(null);
   }
 });

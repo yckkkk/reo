@@ -12,6 +12,9 @@ import {
 let schemeRegistered = false;
 let protocolRegistered = false;
 
+const ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL = 'no-store';
+const MEMORY_COVER_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable';
+
 type AttachmentRootResolution =
   | {
       readonly ok: true;
@@ -132,7 +135,7 @@ export function registerAppShellProtocolWithOptions({
     try {
       return new Response(resolved.bytes, {
         headers: {
-          'Cache-Control': 'no-store',
+          'Cache-Control': resolved.cacheControl,
           'Content-Type': resolved.mimeType,
         },
         status: 200,
@@ -149,7 +152,12 @@ async function resolveAttachmentProtocolRequest(
   requestUrl: string,
   resolveAttachmentRoot: AttachmentRootResolver
 ): Promise<
-  | { readonly ok: true; readonly bytes: Uint8Array; readonly mimeType: string }
+  | {
+      readonly ok: true;
+      readonly bytes: Uint8Array;
+      readonly cacheControl: string;
+      readonly mimeType: string;
+    }
   | { readonly ok: false }
 > {
   let parsed: URL;
@@ -183,7 +191,12 @@ async function resolveAttachmentProtocolRequest(
         filename: segments[3] ?? '',
       });
       return resolved.ok
-        ? { ok: true, bytes: resolved.bytes, mimeType: resolved.mimeType }
+        ? {
+            ok: true,
+            bytes: resolved.bytes,
+            cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL,
+            mimeType: resolved.mimeType,
+          }
         : { ok: false };
     } catch {
       return { ok: false };
@@ -200,7 +213,12 @@ async function resolveAttachmentProtocolRequest(
       filename: segments[2] ?? '',
     });
     return resolved.ok
-      ? { ok: true, bytes: resolved.bytes, mimeType: resolved.mimeType }
+      ? {
+          ok: true,
+          bytes: resolved.bytes,
+          cacheControl: ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL,
+          mimeType: resolved.mimeType,
+        }
       : { ok: false };
   }
   if (segments.length === 5 && segments[2] === 'supplements') {
@@ -212,7 +230,12 @@ async function resolveAttachmentProtocolRequest(
       filename: segments[4] ?? '',
     });
     return resolved.ok
-      ? { ok: true, bytes: resolved.bytes, mimeType: resolved.mimeType }
+      ? {
+          ok: true,
+          bytes: resolved.bytes,
+          cacheControl: ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL,
+          mimeType: resolved.mimeType,
+        }
       : { ok: false };
   }
   return { ok: false };

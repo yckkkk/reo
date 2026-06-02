@@ -29,6 +29,13 @@ import {
   runInWorkspaceDirectorySync,
 } from './workspaceDirectoryTransactions.js';
 import {
+  imageExtensionForMime,
+  imageMimeTypeForFilename,
+  isSafeImageFilename,
+  NOTE_ATTACHMENT_IMAGE_EXTENSIONS,
+  readExistingImagePayloadInDirectory,
+} from './imagePayloads.js';
+import {
   workspaceError,
   type WorkspaceErrorEnvelope,
 } from '../workspace-contract/workspace-contract.js';
@@ -38,14 +45,6 @@ import {
 } from './workspaceMarkdownObjects.js';
 
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-const IMAGE_MIME_BY_EXTENSION = new Map([
-  ['.gif', 'image/gif'],
-  ['.jpeg', 'image/jpeg'],
-  ['.jpg', 'image/jpeg'],
-  ['.png', 'image/png'],
-  ['.webp', 'image/webp'],
-]);
 
 type AttachmentSaveResult =
   | {
@@ -101,20 +100,6 @@ function hasErrorCode(error: unknown, code: string): boolean {
 function isContainedPath(parentAbsolute: string, candidateAbsolute: string): boolean {
   const relative = path.relative(path.resolve(parentAbsolute), path.resolve(candidateAbsolute));
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function extensionForMime(mimeType: string, originalFilename: string): string | null {
-  const normalizedMime = mimeType.toLowerCase();
-  const originalExtension = path.extname(originalFilename).toLowerCase();
-  if (IMAGE_MIME_BY_EXTENSION.get(originalExtension) === normalizedMime) {
-    return originalExtension;
-  }
-  for (const [extension, candidateMime] of IMAGE_MIME_BY_EXTENSION) {
-    if (candidateMime === normalizedMime) {
-      return extension;
-    }
-  }
-  return null;
 }
 
 function safeBasename(originalFilename: string, extension: string): string {
@@ -205,7 +190,7 @@ function writeAllToFileDescriptor(fileDescriptor: number, payload: Uint8Array): 
   }
 }
 
-function readExistingAttachmentBytesInDirectory({
+async function readExistingAttachmentBytesInDirectory({
   attachmentsDirectory,
   directoryIdentity,
   filename,
@@ -213,32 +198,24 @@ function readExistingAttachmentBytesInDirectory({
   readonly attachmentsDirectory: string;
   readonly directoryIdentity: DirectoryIdentity;
   readonly filename: string;
-}): { readonly bytes: Uint8Array; readonly byteLength: number } {
-  let fileDescriptor: number | null = null;
-  try {
-    fileDescriptor = openExistingWorkspaceFileInDirectory({
-      directory: attachmentsDirectory,
-      directoryIdentity,
-      fileName: filename,
-      flags: constants.O_RDONLY | constants.O_NOFOLLOW,
-    });
-    const stats = fstatSync(fileDescriptor);
-    if (!stats.isFile()) {
-      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Attachment leaf is unsafe');
-    }
-    if (stats.size > MAX_ATTACHMENT_BYTES) {
-      throw workspaceError('ERR_ATTACHMENT_TOO_LARGE', 'Attachment is too large');
-    }
-    const bytes = readFileSync(fileDescriptor);
-    return { bytes, byteLength: stats.size };
-  } finally {
-    if (fileDescriptor !== null) {
-      closeSync(fileDescriptor);
-    }
-  }
+}): Promise<{
+  readonly bytes: Uint8Array;
+  readonly byteLength: number;
+  readonly mimeType: string;
+}> {
+  return readExistingImagePayloadInDirectory({
+    allowedExtensions: NOTE_ATTACHMENT_IMAGE_EXTENSIONS,
+    directory: attachmentsDirectory,
+    directoryIdentity,
+    filename,
+    maxBytes: MAX_ATTACHMENT_BYTES,
+    tooLargeErrorCode: 'ERR_ATTACHMENT_TOO_LARGE',
+    tooLargeMessage: 'Attachment is too large',
+    unsafeMessage: 'Attachment leaf is unsafe',
+  });
 }
 
-function existingAttachmentBytesMatchPayload({
+async function existingAttachmentBytesMatchPayload({
   attachmentsDirectory,
   directoryIdentity,
   filename,
@@ -248,8 +225,8 @@ function existingAttachmentBytesMatchPayload({
   readonly directoryIdentity: DirectoryIdentity;
   readonly filename: string;
   readonly payload: Uint8Array;
-}): boolean {
-  const existing = readExistingAttachmentBytesInDirectory({
+}): Promise<boolean> {
+  const existing = await readExistingAttachmentBytesInDirectory({
     attachmentsDirectory,
     directoryIdentity,
     filename,
@@ -460,7 +437,11 @@ async function saveAttachmentFile({
   readonly mimeType: string;
   readonly payload: Uint8Array;
 }): Promise<AttachmentSaveResult> {
-  const extension = extensionForMime(mimeType, originalFilename);
+  const extension = imageExtensionForMime({
+    allowedExtensions: NOTE_ATTACHMENT_IMAGE_EXTENSIONS,
+    mimeType,
+    originalFilename,
+  });
   if (!extension) {
     return workspaceError('ERR_ATTACHMENT_UNSUPPORTED_MIME', 'Attachment MIME type is unsupported');
   }
@@ -503,7 +484,7 @@ async function saveAttachmentFile({
       }
       if (hasErrorCode(error, 'EEXIST')) {
         try {
-          const existingMatchesPayload = existingAttachmentBytesMatchPayload({
+          const existingMatchesPayload = await existingAttachmentBytesMatchPayload({
             attachmentsDirectory,
             directoryIdentity: attachmentsDirectoryIdentity,
             filename,
@@ -568,8 +549,7 @@ async function listAttachmentFiles(ownerDirectory: string): Promise<AttachmentLi
     if (!entry.isFile() || entry.isSymbolicLink()) {
       return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Attachment leaf is unsafe');
     }
-    const extension = path.extname(entry.name).toLowerCase();
-    const mimeType = IMAGE_MIME_BY_EXTENSION.get(extension);
+    const mimeType = imageMimeTypeForFilename(entry.name, NOTE_ATTACHMENT_IMAGE_EXTENSIONS);
     if (!mimeType) {
       continue;
     }
@@ -599,22 +579,14 @@ async function resolveAttachmentFile({
   readonly filename: string;
   readonly ownerDirectory: string;
 }): Promise<AttachmentProtocolResolution> {
-  const extension = path.extname(filename).toLowerCase();
-  const mimeType = IMAGE_MIME_BY_EXTENSION.get(extension);
-  if (
-    !mimeType ||
-    filename.length === 0 ||
-    filename.includes('/') ||
-    filename.includes('\\') ||
-    filename.includes('..')
-  ) {
+  if (!isSafeImageFilename(filename, NOTE_ATTACHMENT_IMAGE_EXTENSIONS)) {
     return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Attachment path is unsafe');
   }
 
   try {
     const { attachmentsDirectory, directoryIdentity } =
       await resolveExistingSafeAttachmentsDirectory(ownerDirectory);
-    const existing = readExistingAttachmentBytesInDirectory({
+    const existing = await readExistingAttachmentBytesInDirectory({
       attachmentsDirectory,
       directoryIdentity,
       filename,
@@ -624,7 +596,7 @@ async function resolveAttachmentFile({
       directoryIdentity,
       'Attachment directory changed during read'
     );
-    return { ok: true, bytes: existing.bytes, mimeType };
+    return { ok: true, bytes: existing.bytes, mimeType: existing.mimeType };
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
       return workspaceError('ERR_WORKSPACE_ATTACHMENT_NOT_FOUND', 'Attachment was not found');

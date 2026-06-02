@@ -143,11 +143,15 @@ test('privileged schemes register reo-app and reo-attachment before app ready', 
   assert.equal(attachmentScheme?.privileges.get('stream'), true);
 });
 
-test('attachment protocol response serves bytes directly with no-store caching', () => {
+test('attachment protocol response keeps attachments no-store and caches versioned covers', () => {
   const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
 
   assert.match(sourceText, /new Response\(resolved\.bytes,/);
-  assert.match(sourceText, /'Cache-Control': 'no-store'/);
+  assert.match(sourceText, /ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL = 'no-store'/);
+  assert.match(sourceText, /MEMORY_COVER_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable'/);
+  assert.match(sourceText, /cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL/);
+  assert.match(sourceText, /cacheControl: ATTACHMENT_PROTOCOL_NO_STORE_CACHE_CONTROL/);
+  assert.match(sourceText, /'Cache-Control': resolved\.cacheControl/);
   assert.equal(sourceText.includes('resolved.absolutePath'), false);
   assert.equal(sourceText.includes('net.fetch(pathToFileURL(resolved'), false);
 });
