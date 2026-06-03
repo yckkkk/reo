@@ -22,6 +22,20 @@ import type {
 
 const usable = () => ({ ok: true as const });
 const BASELINE_TIPTAP_CONTENT_HASH = 'c'.repeat(64);
+const missingSpeechSynthesis = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
 
 const validVoiceSettingsStore = {
   read: (): VoiceSettingsSnapshot => ({
@@ -2746,6 +2760,7 @@ test('scanWorkspaceBackfillTargets includes audio supplements under note segment
     createdAt: '2026-05-17T01:00:00.000Z',
     memoryId: 'mem_note_audio_supplement',
     segmentId: 'seg_note_parent',
+    speechSynthesis: missingSpeechSynthesis,
     supplementCount: 1,
     supplements: [audioSupplement],
     title: 'Note parent',

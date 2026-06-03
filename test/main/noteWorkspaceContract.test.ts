@@ -83,6 +83,7 @@ const noteSegment = {
   createdAt: timestamp,
   memoryId,
   segmentId,
+  speechSynthesis: missingSpeechSynthesis,
   supplementCount: 0,
   supplements: [],
   title: 'Note',

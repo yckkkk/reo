@@ -600,13 +600,14 @@ function MemoryStudioSegmentStripSkeleton() {
                 <span className="mt-6 block h-[15px] w-[58px] rounded-[6px] bg-background/42" />
               </span>
               <span className="relative z-[2] flex min-w-0 items-center justify-between gap-6">
-                <span className="inline-flex h-32 w-[52px] shrink-0 items-center gap-2 text-background/70">
+                <span className="inline-flex h-[32px] w-[52px] shrink-0 items-center gap-[2px] text-background/70">
                   {MEMORY_STUDIO_SEGMENT_SKELETON_WAVEFORM.map((height, index) => (
                     <span
                       key={`${height}-${index}`}
-                      className={[height <= 4 ? 'size-4' : 'w-4', 'rounded-full bg-current'].join(
-                        ' '
-                      )}
+                      className={[
+                        height <= 4 ? 'size-[4px]' : 'w-[4px]',
+                        'block rounded-full bg-current',
+                      ].join(' ')}
                       style={height > 4 ? { height: `${height}px` } : undefined}
                     />
                   ))}

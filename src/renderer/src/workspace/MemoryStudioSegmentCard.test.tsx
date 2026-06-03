@@ -7,6 +7,7 @@ import {
 } from './MemoryStudioSegmentCard';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
+type NoteSegment = Extract<MemorySegment, { readonly type: 'note' }>;
 
 function audioSegment(overrides: Partial<MemorySegment> = {}): MemorySegment {
   return {
@@ -30,6 +31,40 @@ function audioSegment(overrides: Partial<MemorySegment> = {}): MemorySegment {
     workspaceId: 'ws_1',
     ...overrides,
   } as MemorySegment;
+}
+
+function noteSegment(overrides: Partial<NoteSegment> = {}): NoteSegment {
+  return {
+    bodyByteLength: 32,
+    cover: {
+      source: 'default',
+      templateId: 'cover-01',
+    },
+    createdAt: '2026-06-01T09:00:00.000Z',
+    memoryId: 'mem_1',
+    segmentId: 'seg_note',
+    speechSynthesis: {
+      status: 'ready',
+      audioByteLength: 2048,
+      contentHash: 'f'.repeat(64),
+      format: 'mp3',
+      lastSynthesisAttempt: 'success',
+      mimeType: 'audio/mpeg',
+      model: 'seed-tts-2.0-expressive',
+      reason: null,
+      resourceId: 'seed-tts-2.0',
+      sampleRate: 24000,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-01T09:10:00.000Z',
+    },
+    supplementCount: 0,
+    supplements: [],
+    title: 'Spoken note',
+    type: 'note',
+    updatedAt: '2026-06-01T09:00:00.000Z',
+    workspaceId: 'ws_1',
+    ...overrides,
+  };
 }
 
 describe('MemoryStudioSegmentCard', () => {
@@ -68,7 +103,15 @@ describe('MemoryStudioSegmentCard', () => {
     const toneScrim = card.querySelector('[data-slot="memory-studio-segment-card-tone-scrim"]');
     expect(toneScrim).toBeTruthy();
     expect((toneScrim as HTMLElement).style.background).toContain('var(--top-state-start)');
-    expect(card.querySelector('[data-slot="memory-studio-segment-card-waveform"]')).toBeTruthy();
+    const waveform = card.querySelector('[data-slot="memory-studio-segment-card-waveform"]');
+    expect(waveform).toBeTruthy();
+    expect(waveform).toHaveClass(
+      'h-[32px]',
+      'w-[52px]',
+      'gap-[2px]',
+      'text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.92)]'
+    );
+    expect(waveform?.querySelector('span')).toHaveClass('block', 'size-[4px]');
     expect(card.querySelector('[data-slot="memory-studio-segment-card-duration"]')).toHaveClass(
       'text-[13px]',
       'font-[700]'
@@ -80,5 +123,31 @@ describe('MemoryStudioSegmentCard', () => {
       'data-[state=open]:bg-[rgb(var(--cover-title-r)_var(--cover-title-g)_var(--cover-title-b)/0.18)]'
     );
     expect((moreButton as HTMLButtonElement).className).not.toContain('hover:bg-white');
+  });
+
+  it('keeps note cards on the note icon and size treatment even when speech exists', () => {
+    render(
+      <MemoryStudioSegmentCard
+        actionMenu={<MemoryStudioSegmentCardActionButton segmentTitle="Spoken note" />}
+        onSelect={vi.fn()}
+        segment={noteSegment()}
+        selected={false}
+        workspaceId="ws_1"
+      />
+    );
+
+    const card = document.querySelector('[data-slot="memory-studio-segment-card"]');
+    expect(card).toBeInstanceOf(HTMLElement);
+    if (!(card instanceof HTMLElement)) {
+      throw new Error('segment card should render');
+    }
+    expect(card.querySelector('[data-slot="memory-studio-segment-card-waveform"]')).toBeNull();
+    expect(card.querySelector('[data-slot="memory-studio-segment-card-speech-label"]')).toBeNull();
+    expect(card.querySelector('[data-slot="memory-studio-segment-card-note-icon"]')).toBeInstanceOf(
+      SVGElement
+    );
+    expect(
+      card.querySelector('[data-slot="memory-studio-segment-card-note-size"]')
+    ).toHaveTextContent('32 字节');
   });
 });

@@ -55,7 +55,14 @@ import {
   readFileSpaceNodeCoverProjectionFromDirectory,
   readMemoryCoverProjectionFromDirectory,
 } from './memoryCovers.js';
-import { noteSpeechSynthesisManifestSchema } from './noteSpeechSynthesisManifest.js';
+import {
+  noteSpeechSynthesisManifestSchema,
+  type NoteSpeechSynthesisManifest,
+} from './noteSpeechSynthesisManifest.js';
+import {
+  noteContentHash,
+  readNoteSpeechSynthesisProjectionFromManifest,
+} from './noteSpeechSynthesisProjection.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
@@ -187,6 +194,7 @@ interface NoteSegmentObjectManifest {
   readonly bodyByteLength: number;
   readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
   readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
+  readonly speechSynthesis?: NoteSpeechSynthesisManifest | undefined;
 }
 
 type SegmentObjectManifest = AudioSegmentObjectManifest | NoteSegmentObjectManifest;
@@ -221,6 +229,7 @@ interface NoteSupplementObjectManifest {
   readonly finalizedAt: string;
   readonly updatedAt: string;
   readonly bodyByteLength: number;
+  readonly speechSynthesis?: NoteSpeechSynthesisManifest | undefined;
 }
 
 type SupplementObjectManifest = AudioSupplementObjectManifest | NoteSupplementObjectManifest;
@@ -2240,6 +2249,7 @@ function segmentManifestFromSemanticTruth(
     ...base,
     kind: 'note',
     bodyByteLength: metadata.bodyByteLength,
+    ...(metadata.speechSynthesis ? { speechSynthesis: metadata.speechSynthesis } : {}),
   };
 }
 
@@ -5225,10 +5235,16 @@ async function finalizedSegmentProjectionFromFileTruth({
   };
 
   if (!isAudioSegmentFileTruth(fileTruth)) {
+    const speechSynthesis = await readNoteSpeechSynthesisProjectionFromManifest({
+      currentContentHash: noteContentHash(fileTruth.metadata.markdownContent),
+      manifest: fileTruth.metadata,
+      objectDirectory: recordingDirectory,
+    });
     return {
       ...segmentBase,
       type: 'note',
       bodyByteLength: fileTruth.metadata.bodyByteLength,
+      speechSynthesis,
     };
   }
 

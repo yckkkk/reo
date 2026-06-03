@@ -88,16 +88,16 @@ function SegmentPreviewSpectrum() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-32 w-[52px] shrink-0 items-center gap-2 text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.76)]"
+      className="inline-flex h-[32px] w-[52px] shrink-0 items-center gap-[2px] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.92)]"
       data-slot="memory-studio-segment-card-waveform"
     >
       {SEGMENT_PREVIEW_SPECTRUM_DATA.map((level, index) =>
         level <= 14 ? (
-          <span key={index} className="size-4 rounded-full bg-current" />
+          <span key={index} className="block size-[4px] rounded-full bg-current" />
         ) : (
           <span
             key={index}
-            className="w-4 rounded-full bg-current"
+            className="block w-[4px] rounded-full bg-current"
             style={{ height: `${Math.round(32 * (level / 100))}px` }}
           />
         )
@@ -232,7 +232,8 @@ export function MemoryStudioSegmentCard({
                   <>
                     <FileText
                       aria-hidden="true"
-                      className="size-28 text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.78)]"
+                      className="size-[28px] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.92)]"
+                      data-slot="memory-studio-segment-card-note-icon"
                       strokeWidth={1.8}
                     />
                     <span

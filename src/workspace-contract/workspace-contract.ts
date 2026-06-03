@@ -637,6 +637,7 @@ const workspaceNoteSegmentProjectionSchema = z.strictObject({
   createdAt: z.string(),
   updatedAt: z.string(),
   bodyByteLength: z.number().int().nonnegative(),
+  speechSynthesis: workspaceNoteSpeechSynthesisProjectionSchema,
   cover: workspaceCoverProjectionSchema.optional(),
   supplementCount: z.number().int().nonnegative(),
   supplements: z.array(workspaceSegmentSupplementProjectionSchema),

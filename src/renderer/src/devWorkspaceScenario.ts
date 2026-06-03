@@ -232,6 +232,7 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
     createdAt: '2026-05-24T09:16:00.000Z',
     updatedAt: '2026-05-24T09:17:00.000Z',
     bodyByteLength: byteLength(NOTE_BODY),
+    speechSynthesis: MISSING_SPEECH_SYNTHESIS,
     supplementCount: 0,
     supplements: [],
   };

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -2920,6 +2921,67 @@ test('finalized segment projection keeps success without transcript heading as e
   assert.deepEqual(projection.transcript, { exists: false });
 });
 
+test('finalized note segment projection exposes ready speech synthesis metadata', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_segment_note_speech_projection';
+  const segmentId = 'seg_20260603_note_speech_projection';
+  const body = '# 语音笔记\n\n这条笔记已经生成了语音。\n';
+  const audio = new Uint8Array([1, 2, 3, 4]);
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '语音笔记投影',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    body,
+    memoryId,
+    segmentId,
+    title: '语音笔记',
+  });
+  const manifestPath = path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(path.join(segmentDirectory, 'speech.mp3'), audio);
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        ...manifest,
+        speechSynthesis: {
+          audioByteLength: audio.byteLength,
+          contentHash: createHash('sha256').update(body).digest('hex'),
+          format: 'mp3',
+          lastSynthesisAttempt: 'success',
+          mimeType: 'audio/mpeg',
+          model: 'seed-tts-2.0-expressive',
+          reason: null,
+          resourceId: 'seed-tts-2.0',
+          sampleRate: 24000,
+          speaker: 'zh_female_vv_uranus_bigtts',
+          updatedAt: '2026-06-03T10:00:00.000Z',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const projection = await readFinalizedSegmentProjection({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+  });
+  const noteProjection = projection as {
+    readonly speechSynthesis?: {
+      readonly audioByteLength: number | null;
+      readonly status: string;
+    };
+  };
+
+  assert.equal(projection.type, 'note');
+  assert.equal(noteProjection.speechSynthesis?.status, 'ready');
+  assert.equal(noteProjection.speechSynthesis?.audioByteLength, audio.byteLength);
+});
+
 test('finalized supplement projection exposes lastTranscriptionAttempt from manifest', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_supplement_transcription_status';
@@ -5031,6 +5093,76 @@ test('switching a Segment default cover persists the selected built-in template'
     source: 'default',
     templateId: 'cover-09',
   });
+});
+
+test('switching a note Segment default cover preserves speech synthesis metadata', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_note_segment_cover_template_speech';
+  const segmentId = 'seg_note_segment_cover_template_speech';
+  const body = '# 语音封面笔记\n\n切换封面不能丢失语音。\n';
+  const audio = new Uint8Array([5, 6, 7, 8]);
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '语音封面笔记',
+  });
+  const segmentDirectory = await writeFinalizedNoteSegmentForTest(rootPath, {
+    body,
+    memoryId,
+    segmentId,
+    title: '语音封面笔记',
+  });
+  const manifestPath = path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(path.join(segmentDirectory, 'speech.mp3'), audio);
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        ...manifest,
+        speechSynthesis: {
+          audioByteLength: audio.byteLength,
+          contentHash: createHash('sha256').update(body).digest('hex'),
+          format: 'mp3',
+          lastSynthesisAttempt: 'success',
+          mimeType: 'audio/mpeg',
+          model: 'seed-tts-2.0-expressive',
+          reason: null,
+          resourceId: 'seed-tts-2.0',
+          sampleRate: 24000,
+          speaker: 'zh_female_vv_uranus_bigtts',
+          updatedAt: '2026-06-03T10:10:00.000Z',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const switched = await switchSegmentDefaultCoverTemplateFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    templateId: 'cover-09',
+  });
+
+  assert.equal(switched.ok, true, JSON.stringify(switched));
+  if (!switched.ok) {
+    throw new Error('note segment cover template switch should succeed');
+  }
+  assert.deepEqual(switched.value.segment.cover, {
+    source: 'default',
+    templateId: 'cover-09',
+  });
+  if (switched.value.segment.type !== 'note') {
+    throw new Error('switched segment should be a note');
+  }
+  assert.equal(switched.value.segment.speechSynthesis.status, 'ready');
+  assert.equal(switched.value.segment.speechSynthesis.audioByteLength, audio.byteLength);
+  const writtenManifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    readonly speechSynthesis?: unknown;
+  };
+  assert.notEqual(writtenManifest.speechSynthesis, undefined);
 });
 
 test('Segment cover restore token cannot be reused for another Segment', async () => {

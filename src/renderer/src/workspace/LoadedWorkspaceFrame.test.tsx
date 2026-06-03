@@ -318,6 +318,7 @@ function noteSegment(overrides: Partial<NoteSegment> = {}): NoteSegment {
     createdAt: '2026-05-06T13:14:00.000',
     updatedAt: '2026-05-06T13:15:00.000',
     bodyByteLength: 32,
+    speechSynthesis: missingSpeechSynthesis,
     supplementCount: 0,
     supplements: [],
     ...overrides,
@@ -2739,13 +2740,65 @@ describe('LoadedWorkspaceFrame', () => {
     );
 
     expect(activeWaveform).toHaveClass(
-      'h-32',
+      'h-[32px]',
       'w-[52px]',
-      'text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.76)]'
+      'text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.92)]'
     );
     expect(activeWaveform?.querySelectorAll('span').length).toBe(9);
-    expect(inactiveWaveform).toHaveClass('h-32', 'w-[52px]');
+    expect(activeWaveform?.querySelector('span')).toHaveClass('block', 'size-[4px]');
+    expect(inactiveWaveform).toHaveClass('h-[32px]', 'w-[52px]');
     expect(inactiveWaveform?.querySelectorAll('span').length).toBe(9);
+  });
+
+  it('keeps generated note speech Segment cards on the note icon and size treatment', async () => {
+    const spokenNoteSegment = {
+      ...noteSegment({
+        segmentId: 'seg_spoken_note',
+        title: 'Spoken note',
+      }),
+      speechSynthesis: readySpeechSynthesis,
+    } as unknown as NoteSegment;
+    const memoryWithSpokenNote = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAnyNote: true,
+      hasAudioTranscript: false,
+    };
+    const detailWithSpokenNote: WorkspaceMemoryDetail = {
+      ...memoryWithSpokenNote,
+      segments: [spokenNoteSegment],
+    };
+    const session = workspaceSession({ memories: [memoryWithSpokenNote] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: memoryWithSpokenNote,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_spoken_note_card',
+      detail: detailWithSpokenNote,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const spokenNoteCard = within(studio).getByRole('button', { name: '选择片段 Spoken note' });
+
+    expect(
+      spokenNoteCard.querySelector('[data-slot="memory-studio-segment-card-waveform"]')
+    ).toBeNull();
+    expect(
+      spokenNoteCard.querySelector('[data-slot="memory-studio-segment-card-speech-label"]')
+    ).toBeNull();
+    expect(
+      spokenNoteCard.querySelector('[data-slot="memory-studio-segment-card-note-icon"]')
+    ).toBeInstanceOf(SVGElement);
+    expect(
+      spokenNoteCard.querySelector('[data-slot="memory-studio-segment-card-note-size"]')
+    ).toHaveTextContent('32 字节');
+    expect(within(spokenNoteCard).queryByText('语音')).toBeNull();
   });
 
   it('does not repeat selected Segment summary above the player', async () => {

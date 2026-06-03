@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { constants, lstatSync, mkdirSync } from 'node:fs';
 import { lstat, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -41,6 +40,15 @@ import {
   type NoteSpeechSynthesisManifest,
 } from './noteSpeechSynthesisManifest.js';
 import {
+  NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX,
+  NOTE_SPEECH_AUDIO_FILE_NAME,
+  noteContentHash,
+  noteSpeechAudioHash,
+  noteSpeechSynthesisProjectionFromManifest,
+  readNoteSpeechSynthesisProjectionFromManifest,
+  type NoteSpeechSynthesisProjection,
+} from './noteSpeechSynthesisProjection.js';
+import {
   createSafeSupplementId,
   createSafeSegmentId,
   ensureWorkspaceDraftsDirectory,
@@ -53,9 +61,9 @@ import {
   VOICE_SPEECH_SYNTHESIS_MODEL,
   VOICE_SPEECH_SYNTHESIS_RESOURCE_ID,
   VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE,
+  workspaceDefaultCoverTemplateIdSchema,
   workspaceSegmentContentTabOrderItemSchema,
   workspaceError,
-  workspaceNoteSpeechSynthesisProjectionSchema,
   type WorkspaceErrorEnvelope,
   type WorkspaceSegmentProjection,
 } from '../workspace-contract/workspace-contract.js';
@@ -63,14 +71,10 @@ import {
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
 type MaybePromise<T> = T | Promise<T>;
 
-const NOTE_SPEECH_AUDIO_FILE_NAME = 'speech.mp3';
-const NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX = '.speech-backup-';
-
 let beforeFinalizedNoteMarkdownWriteForTest: (() => MaybePromise<void>) | null = null;
 let beforeNoteFinalizeTargetDirectoryCreateForTest: (() => MaybePromise<void>) | null = null;
 let beforeNoteSpeechSynthesisWriteForTest: (() => MaybePromise<void>) | null = null;
 const finalizedNoteMarkdownSaveQueues = new Map<string, Promise<void>>();
-type NoteSpeechSynthesisProjection = z.infer<typeof workspaceNoteSpeechSynthesisProjectionSchema>;
 
 export function setBeforeFinalizedNoteMarkdownWriteForTest(
   hook: (() => MaybePromise<void>) | null
@@ -140,6 +144,7 @@ const finalizedNoteSegmentManifestSchema = z
     updatedAt: z.string().min(1),
     bodyByteLength: z.number().int().nonnegative(),
     contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
+    defaultCoverTemplateId: workspaceDefaultCoverTemplateIdSchema.optional(),
     speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
   })
   .strict();
@@ -201,14 +206,6 @@ function caughtWorkspaceError(error: unknown): WorkspaceErrorEnvelope | null {
   return typeof error === 'object' && error !== null && (error as { ok?: unknown }).ok === false
     ? (error as WorkspaceErrorEnvelope)
     : null;
-}
-
-function noteContentHash(bodyMarkdown: string): string {
-  return createHash('sha256').update(bodyMarkdown).digest('hex');
-}
-
-function noteSpeechAudioHash(audio: Uint8Array): string {
-  return createHash('sha256').update(audio).digest('hex');
 }
 
 function staleNoteContentError(current: {
@@ -330,46 +327,6 @@ function bodyByteLength(bodyMarkdown: string): number {
   return Buffer.byteLength(bodyMarkdown, 'utf8');
 }
 
-function missingSpeechSynthesisProjection(): NoteSpeechSynthesisProjection {
-  return {
-    status: 'missing',
-    audioByteLength: null,
-    contentHash: null,
-    format: null,
-    lastSynthesisAttempt: 'never',
-    mimeType: null,
-    model: null,
-    reason: null,
-    resourceId: null,
-    sampleRate: null,
-    speaker: null,
-    updatedAt: null,
-  };
-}
-
-function speechSynthesisProjectionFromManifest({
-  manifest,
-  status,
-}: {
-  readonly manifest: NoteSpeechSynthesisManifest;
-  readonly status: 'ready' | 'stale' | 'failed' | 'unsupported';
-}): NoteSpeechSynthesisProjection {
-  return {
-    status,
-    audioByteLength: manifest.audioByteLength,
-    contentHash: manifest.contentHash,
-    format: manifest.format,
-    lastSynthesisAttempt: manifest.lastSynthesisAttempt,
-    mimeType: manifest.mimeType,
-    model: manifest.model,
-    reason: manifest.reason ?? null,
-    resourceId: manifest.resourceId,
-    sampleRate: manifest.sampleRate,
-    speaker: manifest.speaker,
-    updatedAt: manifest.updatedAt,
-  };
-}
-
 type RenderedNoteMarkdown = {
   readonly baselineContentHash: string;
   readonly bodyByteLength: number;
@@ -438,36 +395,6 @@ async function readBinaryFileNoFollowBounded({
       throw workspaceError('ERR_SPEECH_SYNTHESIS_AUDIO_TOO_LARGE', 'Speech audio is too large');
     }
     return new Uint8Array(await file.readFile());
-  } finally {
-    await file.close().catch(() => {});
-  }
-}
-
-async function speechAudioFileExistsWithByteLength({
-  expectedByteLength,
-  filePath,
-}: {
-  readonly expectedByteLength: number;
-  readonly filePath: string;
-}): Promise<boolean> {
-  let file;
-  try {
-    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-    if (['ELOOP', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
-      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
-    }
-    throw error;
-  }
-  try {
-    const metadata = await file.stat();
-    if (!metadata.isFile()) {
-      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
-    }
-    return metadata.size === expectedByteLength;
   } finally {
     await file.close().catch(() => {});
   }
@@ -1522,31 +1449,11 @@ async function readNoteSpeechSynthesisContent({
 }): Promise<{
   readonly speechSynthesis: NoteSpeechSynthesisProjection;
 }> {
-  if (!manifest.speechSynthesis) {
-    return {
-      speechSynthesis: missingSpeechSynthesisProjection(),
-    };
-  }
-  const speechAudioExists = await speechAudioFileExistsWithByteLength({
-    expectedByteLength: manifest.speechSynthesis.audioByteLength,
-    filePath: path.join(objectDirectory, NOTE_SPEECH_AUDIO_FILE_NAME),
-  });
-  if (
-    !speechAudioExists ||
-    manifest.speechSynthesis.lastSynthesisAttempt !== 'success' ||
-    !manifest.speechSynthesis.audioHash
-  ) {
-    return {
-      speechSynthesis: speechSynthesisProjectionFromManifest({
-        manifest: manifest.speechSynthesis,
-        status: manifest.speechSynthesis.reason === 'text-too-long' ? 'unsupported' : 'failed',
-      }),
-    };
-  }
   return {
-    speechSynthesis: speechSynthesisProjectionFromManifest({
-      manifest: manifest.speechSynthesis,
-      status: manifest.speechSynthesis.contentHash === currentContentHash ? 'ready' : 'stale',
+    speechSynthesis: await readNoteSpeechSynthesisProjectionFromManifest({
+      currentContentHash,
+      manifest,
+      objectDirectory,
     }),
   };
 }
@@ -1570,7 +1477,6 @@ async function readNoteSpeechAudio({
   if (
     !speechSynthesis ||
     speechSynthesis.lastSynthesisAttempt !== 'success' ||
-    !speechSynthesis.audioHash ||
     speechSynthesis.contentHash !== contentHash ||
     speechSynthesis.audioByteLength !== expectedByteLength ||
     speechSynthesis.speaker !== speaker ||
@@ -1592,7 +1498,7 @@ async function readNoteSpeechAudio({
       'Speech synthesis audio is not available'
     );
   }
-  if (noteSpeechAudioHash(audio) !== speechSynthesis.audioHash) {
+  if (speechSynthesis.audioHash && noteSpeechAudioHash(audio) !== speechSynthesis.audioHash) {
     return workspaceError(
       'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
       'Speech synthesis audio is not available'
@@ -2348,7 +2254,7 @@ async function markNoteSpeechSynthesisFailed({
   );
   return {
     ok: true,
-    speechSynthesis: speechSynthesisProjectionFromManifest({
+    speechSynthesis: noteSpeechSynthesisProjectionFromManifest({
       manifest: updatedManifest.speechSynthesis,
       status: reason === 'text-too-long' ? 'unsupported' : 'failed',
     }),

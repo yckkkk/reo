@@ -825,6 +825,7 @@ describe('App', () => {
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: supplement ? '2026-05-06T13:11:00.000Z' : '2026-05-06T13:09:00.000Z',
       bodyByteLength: 12,
+      speechSynthesis: missingNoteSpeechSynthesis(),
       supplementCount: supplement ? 1 : 0,
       supplements: supplement ? [supplement] : [],
     } satisfies NoteSegmentFixture;

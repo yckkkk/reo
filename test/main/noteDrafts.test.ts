@@ -982,6 +982,66 @@ test('finalized note segment edit preserves previous markdown when index refresh
   }
 });
 
+test('finalized note segment content reads when the Segment manifest has a default cover template', async () => {
+  const rootPath = await workspaceRoot();
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_note',
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    title: 'Draft note',
+    createSegmentId: () => 'seg_default_cover_note_content',
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId: 'seg_default_cover_note_content',
+    bodyMarkdown: 'Default cover note body\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_default_cover_note_content',
+    title: 'Default cover note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+  const manifestPath = path.join(
+    rootPath,
+    '.reo',
+    'objects',
+    'segments',
+    'seg_default_cover_note_content.json'
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ ...manifest, defaultCoverTemplateId: 'cover-02' }, null, 2)}\n`
+  );
+
+  const content = await readFinalizedNoteSegmentContent({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_default_cover_note_content',
+  });
+
+  assert.equal(content.ok, true, JSON.stringify(content));
+  if (content.ok) {
+    assert.equal(content.bodyMarkdown, 'Default cover note body\n');
+  }
+});
+
 test('finalized note segment edit refreshes summary without full Memory detail projection', async () => {
   const rootPath = await workspaceRoot();
   const createdMemory = await createMemoryFromFileTruth({

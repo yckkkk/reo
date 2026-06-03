@@ -3555,7 +3555,6 @@ test('note content IPC creates drafts, finalizes, and reads and writes markdown 
   >;
   const segmentSpeechSynthesis = {
     audioByteLength: 4,
-    audioHash: testAudioHash(segmentSpeechAudio),
     contentHash: 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
     format: 'mp3',
     lastSynthesisAttempt: 'success',

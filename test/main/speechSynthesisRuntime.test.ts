@@ -76,6 +76,7 @@ function noteMemoryDetail(): WorkspaceMemoryDetailProjection {
         createdAt: '2026-06-02T13:01:00.000Z',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
+        speechSynthesis: missingSpeechSynthesis,
         supplementCount: 1,
         supplements: [
           {
@@ -828,6 +829,7 @@ test('speech synthesis runtime continues automatic note speech batches after the
           createdAt: '2026-06-02T13:01:00.000Z',
           memoryId: 'mem_1',
           segmentId,
+          speechSynthesis: saved.has(segmentId) ? readySpeechSynthesis : missingSpeechSynthesis,
           supplementCount: 0,
           supplements: [],
           title: `Segment note ${index + 1}`,

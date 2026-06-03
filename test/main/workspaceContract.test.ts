@@ -309,6 +309,21 @@ function assertSpeechSynthesisContracts(
   void _contracts;
 }
 
+const missingNoteSpeechSynthesisProjection = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
+
 function assertMarkdownExternalLinkContract(
   _request: WorkspaceOpenMarkdownExternalLinkRequest,
   _response: WorkspaceOpenMarkdownExternalLinkResponse
@@ -3209,6 +3224,7 @@ test('workspace segment projection contract accepts note kind without audio fiel
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:43:00.000Z',
       bodyByteLength: 128,
+      speechSynthesis: missingNoteSpeechSynthesisProjection,
       supplementCount: 1,
       supplements: [
         {
@@ -3234,6 +3250,7 @@ test('workspace segment projection contract accepts note kind without audio fiel
       createdAt: '2026-05-08T14:42:00.000Z',
       updatedAt: '2026-05-08T14:43:00.000Z',
       bodyByteLength: 128,
+      speechSynthesis: missingNoteSpeechSynthesisProjection,
       supplementCount: 1,
       supplements: [
         {
@@ -3287,6 +3304,7 @@ test('workspace segment projection contract accepts pathless cover metadata', ()
     createdAt: '2026-05-08T14:42:00.000Z',
     updatedAt: '2026-05-08T14:42:00.000Z',
     bodyByteLength: 120,
+    speechSynthesis: missingNoteSpeechSynthesisProjection,
     supplementCount: 0,
     supplements: [],
     cover: { source: 'custom', filename: 'poster.webp', version: '1770000000000-512' },
