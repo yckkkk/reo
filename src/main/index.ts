@@ -22,6 +22,7 @@ import { createWorkspaceSpeechSynthesisRuntime } from './speechSynthesisRuntime.
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
   getDevServerUrl,
+  isAllowedAppNavigationUrl,
   isTrustedAppUrl,
   setupContentSecurityPolicy,
   setupPermissionRequestHandler,
@@ -103,7 +104,7 @@ app.on('web-contents-created', (_event, contents) => {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   const handleNavigation = (event: Event<NavigationEventParams>): void => {
-    if (isTrustedAppUrl(event.url)) {
+    if (isAllowedAppNavigationUrl(event.url, { isMainFrame: event.isMainFrame })) {
       return;
     }
     event.preventDefault();
@@ -157,6 +158,7 @@ app
     });
     registerAppShellProtocolWithOptions({
       resolveAttachmentRoot: resolveActiveWorkspaceRootForProtocol,
+      resolveArtifactRoot: resolveActiveWorkspaceRootForProtocol,
     });
     createWindow();
 

@@ -35,6 +35,7 @@ export const workspaceSegmentMarkdownDataSchema = workspaceMarkdownSharedSemanti
   id: z.string().regex(SEGMENT_ID_PATTERN).optional(),
   content_title: z.string().optional(),
   kind: workspaceMarkdownObjectKindSchema.optional(),
+  format: z.literal('html').optional(),
   occurred_at: z.string().optional(),
   language: z.string().optional(),
 });
@@ -43,6 +44,7 @@ export const workspaceSupplementMarkdownDataSchema =
   workspaceMarkdownSharedSemanticDataSchema.extend({
     id: z.string().regex(SUPPLEMENT_ID_PATTERN).optional(),
     kind: workspaceMarkdownObjectKindSchema.optional(),
+    format: z.literal('html').optional(),
     occurred_at: z.string().optional(),
     language: z.string().optional(),
   });

@@ -28,7 +28,7 @@ Reo 的价值在跨模态主题容器中长期成立。典型 Memory 形态：
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio` 和 `note`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充和 `note` 笔记补充。`photo`、`video`、`imported_file`、`html` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note 是 enabling phase，不是 Reo 终局形态。
+当前已实现的 Segment 类型是 `audio`、`note` 和 `artifact`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充、`note` 笔记补充和 `artifact` 作品补充。`artifact` 的用户可见名是作品，首个格式是 `html`，创建和更新都通过 prompt-bridge 让外部 agent 写入文件。`photo`、`video`、`imported_file` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Widget runtime 与 Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note + artifact first slice 是 enabling phase，不是 Reo 终局形态。
 
 Reo 的核心目标是让 agent 与用户共同围绕主题积累跨模态材料，并把材料转化成只属于用户的作品。用户负责表达、思考、判断，agent 负责筛选、整理、深化、生成、引导用户用最合适的模态做下一步补充（补录音 / 拍照 / 写笔记 / 上传文件）。原始材料不被假设为资产，价值在 agent 与用户共同筛选、深化、转化成作品之后才出现。SegmentSupplement 既是用户主动的多模态补充，也是 agent 引导更深表达的载体。
 
@@ -91,30 +91,30 @@ Loaded Workspace 使用三面板结构：
 
 - Workspace 层级：当前本地记忆空间，右侧 Memory rail 展示这个空间里的所有 Memory。
 - Memory 层级：主题容器。选中 Memory 后只切换当前 Workspace Stage 的当前 Memory context；当前 runtime 不进入单独详情 route。
-- Segment 层级：Memory 内的主体记录。当前 runtime 实现 `audio` 和 `note` Segment；Memory 的 Segment 关系来自该 Memory 目录下合法 finalized Segment 文件空间节点、`segment.md` 和 `.reo/objects/segments/<segmentId>.json` manifest。
-- SegmentSupplement 层级：围绕某个 Segment 的补充内容。当前 Memory Studio 的 selected Segment `+` 菜单暴露录音补充和笔记补充；补充内容写入 selected Segment 的 supplement，不进入 Memory 顶层 Segment strip。
+- Segment 层级：Memory 内的主体记录。当前 runtime 实现 `audio`、`note` 和 `artifact` Segment；Memory 的 Segment 关系来自该 Memory 目录下合法 finalized Segment 文件空间节点、`segment.md` 和 `.reo/objects/segments/<segmentId>.json` manifest。
+- SegmentSupplement 层级：围绕某个 Segment 的补充内容。当前 Memory Studio 的 selected Segment `+` 菜单暴露录音补充、笔记补充和作品补充；补充内容写入 selected Segment 的 supplement，不进入 Memory 顶层 Segment strip。
 
 中间面板的横向片段时间线只属于当前选中的 Memory。它不能表示整个 Workspace 的全部内容，也不能演变成 workspace feed、日志流、文件流或社交动态流。
 
 ## 当前表达入口
 
-底部 Floating Action Button Speed Dial 是 loaded workspace 的表达入口，在 Workspace Stage 和 Memory Studio 中保持挂载。当前可执行 action 是录音和笔记；photo、video 和 imported_file 只保留不可用的 icon-only action 位置，用于表达已接受的信息架构，不触发 runtime surface。
+底部 Floating Action Button Speed Dial 是 loaded workspace 的表达入口，在 Workspace Stage 和 Memory Studio 中保持挂载。当前可执行 action 是录音、笔记和作品；photo、video 和 imported_file 只保留不可用的 icon-only action 位置，用于表达已接受的信息架构，不触发 runtime surface。
 
 录音流程使用浏览器 `MediaRecorder` 和 `getUserMedia` 的薄 adapter。Renderer 先通过 IPC 获得一次性 microphone intent，再请求 audio-only media stream。音频 chunk 通过 IPC 串行写入 main process 的 durable draft；stop 必须等待 MediaRecorder 最后的 `dataavailable` chunk 完成后再 finalize。
 
-点击底部 FAB 的录音优先使用当前 Memory context，并把录音 finalize 显式归属到该 Memory。只有当前 Workspace 没有任何 Memory、也没有可选当前 Memory 时，录音入口才先进入新建 Memory 命名流程，创建成功后再进入录音流程。
+点击底部 FAB 的录音优先使用当前 Memory context，并把录音 finalize 显式归属到该 Memory。只有当前 Workspace 没有任何 Memory、也没有可选当前 Memory 时，录音入口才先进入新建 Memory 命名流程，创建成功后再进入录音流程。点击作品只复制创建作品片段的 agent prompt；无当前 Memory 时作品 action 不可用，Reo 不创建空 artifact Segment。
 
 ## 当前 Memory Context
 
 当前点击右侧 Memory rail 只切换 loaded workspace frame 内的当前 Memory context，不进入独立详情 route。Memory rail 按 Memory 投影更新时间倒序排列，新增 Segment、保存转写或给 Segment 新增补充都会让相关 Memory 更新位置；重命名只改变可见名称，不改变 activity 排序。AppShell panel titlebar 的 Breadcrumb 显示当前记忆空间标题；选中 Memory 后 Breadcrumb 增加当前 Memory 标题。两个标题都提供统一 Entity More 菜单，支持用默认应用打开、在访达中显示、复制路径、重命名和移除或删除；titlebar 不显示额外下拉图标，两层之间只显示圆点 separator。
 
-选中 Memory 后中间区域显示 Memory Studio：空态、该 Memory 内按投影更新时间倒序排列的 finalized Segment 横向预览流、横向浏览按钮、时间轴、当前片段内容区、本地音频播放或笔记等高布局占位、已保存 transcript 或笔记正文、动态内容 tab 和 SegmentSupplement `+` 菜单。Memory Studio 不重复显示 Memory title、片段数量或总时长 meta。
+选中 Memory 后中间区域显示 Memory Studio：空态、该 Memory 内按投影更新时间倒序排列的 finalized Segment 横向预览流、横向浏览按钮、时间轴、当前片段内容区、本地音频播放或笔记等高布局占位、已保存 transcript、笔记正文或作品预览、动态内容 tab 和 SegmentSupplement `+` 菜单。Memory Studio 不重复显示 Memory title、片段数量或总时长 meta。
 
 Segment 选择只在当前 Memory 内同步 card、时间轴点、播放区、内容 tab 和内容区；普通录音完成后新 finalized audio Segment 以 `录音N` 命名，笔记完成后新 finalized note Segment 以 `笔记N` 命名，立即进入当前 Memory 的横向预览流并成为 selected Segment。横向浏览按钮只滚动 Segment 预览流，不改变当前 Segment。
 
 Segment card、时间轴圆点和时间标签属于同一个横向 scroll item，圆点和时间固定在对应卡片下方居中，并随 Segment strip 横向滚动；时间标签显示该 Segment 的创建时间，不显示片段时长。播放区 waveform 从 selected finalized audio Segment 的真实音频 bytes 解码峰值生成，音频无法解码时不展示固定占位波形；selected finalized note Segment 保留同一播放区位置作为不可见等高布局占位，不显示不可播放文案，不新增另一套 note-only content layout。
 
-selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
+selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，artifact Segment 始终带 `作品` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器；作品片段和作品补充使用隔离 iframe 预览，并可复用当前内容展开壳进入沉浸式查看。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；作品 HTML 入口和同目录 sibling asset 由 `reo-artifact://` 只读预览协议显示。其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
 
 Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement content，不聚合整个 Workspace。右侧 Memory rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。
 
@@ -124,7 +124,7 @@ Memory Studio 必须是首屏可理解的 studio surface：Segment card、timeli
 
 Audio Segment card 使用紧凑正方形比例、无描边填充状态、标题直入、静态 waveform bars 和 mono duration。Note Segment card 使用同一结构表达标题和正文 byte 投影，不展示音频 waveform 或 transcript 状态。卡片不展示补充、转录或本地音频状态标签；More 入口只在 hover、focus 或菜单打开时显示，并承载路径、转录、重命名和删除动作。Note Segment 不提供可操作播放器或不可播放文案，但保留与主 audio player 等高的不可见布局占位。
 
-当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，note Segment 始终有 `正文` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，视频和图片不会作为常驻禁用 tab 出现。Segment primary content tab 可被用户重命名；缺失自定义名称时 audio 显示 `转录`，note 显示 `正文`。Finalized 转录、正文、补充笔记和补充录音转录常态呈现就地 Tiptap-backed 轻量 Markdown 编辑容器，保存继续使用当前 baseline 防止外部修改被覆盖。内容 tab rail 支持 drag/drop 重排，顺序属于 parent Segment 的 durable presentation state，写入 Segment manifest `contentTabOrder`。Workspace titlebar 右侧不承载 Memory 顶层 Segment 创建入口；content tab rail 的 `+` 菜单只显示录音补充和笔记补充，二者都写入 selected Segment supplement。
+当前 Memory Studio 不是完整详情页。内容 tab rail 只展示 selected Segment 已存在的内容入口；audio Segment 始终有 `转录` tab，note Segment 始终有 `正文` tab，artifact Segment 始终有 `作品` tab，finalized SegmentSupplement 按真实投影作为独立 tab 出现，视频和图片不会作为常驻禁用 tab 出现。Segment primary content tab 可被用户重命名；缺失自定义名称时 audio 显示 `转录`，note 显示 `正文`，artifact 显示 `作品`。Finalized 转录、正文、补充笔记和补充录音转录常态呈现就地 Tiptap-backed 轻量 Markdown 编辑容器，保存继续使用当前 baseline 防止外部修改被覆盖；作品内容常态呈现隔离 iframe 预览，不进入 Markdown editor。内容 tab rail 支持 drag/drop 重排，顺序属于 parent Segment 的 durable presentation state，写入 Segment manifest `contentTabOrder`。Workspace titlebar 右侧不承载 Memory 顶层 Segment 创建入口；content tab rail 的 `+` 菜单显示录音补充、笔记补充和作品补充，三者都作用于 selected Segment supplement。
 
 Memory 删除是当前 Memory 容器的危险操作。用户只能从 Memory rail 的 More 菜单进入删除确认；确认后 main process 按 `.reo/objects/memories/<memoryId>.json` 找到当前 Memory 目录并移入 `.reo/trash/memories/`，再刷新 Workspace snapshot。删除成功后 renderer 移除该 Memory 的 detail cache，若当前 Memory 被删除则切换到剩余第一条 Memory 或回到 Workspace Stage，并通过 toast 提供本次恢复动作。恢复只把同一 `restoreToken` 对应的 Memory 从恢复区移回 active memories，不恢复为 Segment 或 SegmentSupplement，也不暴露本地路径。
 
@@ -141,15 +141,15 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 - **AGENTS.md**（项目 / Workspace 真源）：记忆空间 root 与每个 Memory root 的 AGENTS.md 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
 - **users.md**（用户个人 context）：Workspace root 的 users.md 描述用户是谁、长期目标、当前关注、表达偏好、agent 输出风格偏好；agent 每次操作前读取，让所有 skill 输出根据用户个性化。Memory level users.md override 由未来 spec 决定。
 
-当前记忆空间托管 skills 包括 `reo-edit`、`reo-cover-image`、`reo-cover-aesthetic` 和 `reo-doctor`。`reo-cover-image` 负责 Memory 与 Segment cover 的生成、替换、默认模板切换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流。
+当前记忆空间托管 skills 包括 `reo-edit`、`reo-cover-image`、`reo-cover-aesthetic`、`reo-works`、`reo-works-design` 和 `reo-doctor`。`reo-cover-image` 负责 Memory 与 Segment cover 的生成、替换、默认模板切换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流；`reo-works` 和 `reo-works-design` 负责作品片段与作品补充的创建、更新、文件合同和视觉/交互生成约束。
 
 长期 Reo skills 分两层：
 
 - **原子 skill**：单一职责的 prompt 模板。Day 1 出厂 8 项：引导、回顾（结合记忆曲线）、整理总结、widget 生成四类基础 skill，加默认洞察、价值澄清、二阶思考、逆向思考四类思考视角 skill。
 - **use-xxx 组合 skill**：use case 编排 skill。Day 1 出厂 3 项：`use-学习闭环`、`use-记忆回顾循环`、`use-内容创作支援`。**skill 组合是 agent 的责任，不是用户的责任**——用户体验是"帮我做学习闭环"，agent 自己决定按 use case 流程调用哪些原子 skill。
 
-Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单计划挂统一 `agent 操作 ▸` 子菜单。每条菜单项点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。
+当前 prompt-bridge runtime 已覆盖作品片段创建、作品补充创建和已有作品更新：点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。Workspace、Memory、Segment、SegmentSupplement 与未来 Widget 的 Entity More 菜单后续仍计划收敛到统一 `agent 操作 ▸` 子菜单。
 
 完整 Prompt-bridge UI、users.md 模板和 widget runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
 
-Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、Memory metadata、audio segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。
+Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、托管 skills、Memory metadata、audio/note/artifact Segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。

@@ -1,0 +1,2 @@
+export const MAX_ARTIFACT_ENTRY_BYTES = 1 * 1024 * 1024;
+export const MAX_ARTIFACT_ASSET_BYTES = 5 * 1024 * 1024;

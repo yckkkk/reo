@@ -8,6 +8,7 @@ import {
   createMicrophoneIntent,
   decideMediaPermissionCheck,
   decideMediaPermissionRequest,
+  isAllowedAppNavigationUrl,
   resetMicrophoneIntentsForTest,
 } from '../../src/main/security.js';
 import { createContentSecurityPolicy } from '../../src/main/securityPolicy.js';
@@ -43,6 +44,8 @@ test('production content security policy allows attachment images without wideni
   assert.ok(directives.get('img-src')?.includes('blob:'));
   assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
   assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
+  assert.equal(directives.get('connect-src')?.includes('reo-artifact:'), false);
+  assert.ok(directives.get('frame-src')?.includes('reo-artifact:'));
   assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
 });
 
@@ -56,6 +59,8 @@ test('development content security policy allows attachment images without widen
   assert.ok(directives.get('img-src')?.includes('blob:'));
   assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
   assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
+  assert.equal(directives.get('connect-src')?.includes('reo-artifact:'), false);
+  assert.ok(directives.get('frame-src')?.includes('reo-artifact:'));
   assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
 });
 
@@ -66,6 +71,27 @@ test('development content security policy allows Agentation MCP sync endpoint', 
   });
 
   assert.match(policy, /connect-src 'self' ws:\/\/127\.0\.0\.1:5173 http:\/\/localhost:4747/);
+});
+
+test('navigation policy allows artifact iframe navigations without trusting artifact top-level pages', () => {
+  const artifactUrl =
+    'reo-artifact://workspace/ws_1/segments/seg_1/segment.html?v=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+  assert.equal(isAllowedAppNavigationUrl(artifactUrl, { isMainFrame: false }), true);
+  assert.equal(isAllowedAppNavigationUrl(artifactUrl, { isMainFrame: true }), false);
+  assert.equal(
+    isAllowedAppNavigationUrl('reo-artifact://workspace/ws_1/segments/seg_1/style.css?v=1', {
+      isMainFrame: false,
+    }),
+    false
+  );
+  assert.equal(
+    isAllowedAppNavigationUrl('reo-artifact://workspace/ws_1/segments/seg_1/payload.html?v=1', {
+      isMainFrame: false,
+    }),
+    false
+  );
+  assert.equal(isAllowedAppNavigationUrl('https://example.com/', { isMainFrame: false }), false);
 });
 
 test('denies microphone permission without a one-shot renderer intent', () => {

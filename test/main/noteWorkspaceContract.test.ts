@@ -73,6 +73,7 @@ const memorySummary = {
   hasAudioTranscript: false,
   memoryId,
   noteSegmentCount: 1,
+  artifactSegmentCount: 0,
   segmentCount: 1,
   supplementCount: 1,
   title: 'Memory',

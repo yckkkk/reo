@@ -1,9 +1,10 @@
 import type { ComponentProps, ReactElement } from 'react';
+import { AppWindow } from 'lucide-react';
 import type { WorkspaceSegmentSupplementEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 import { bindSegmentSupplementEntityActions } from './entityActionBindings';
-import { EntityActionMenu } from './entityActionMenu';
+import { EntityActionMenu, type EntityActionMenuExtraAction } from './entityActionMenu';
 import { createSpeechSynthesisExtraAction } from './speechSynthesisMenuAction';
 
 export type SegmentSupplementActionIdentity = WorkspaceSegmentSupplementEntityActionRequest;
@@ -14,6 +15,7 @@ export type SegmentSupplementActionsMenuProps = {
   readonly onDelete: () => void;
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
@@ -32,6 +34,7 @@ export function SegmentSupplementActionsMenu({
   onDelete,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onRename,
@@ -45,6 +48,20 @@ export function SegmentSupplementActionsMenu({
 }: SegmentSupplementActionsMenuProps) {
   const menuLabel = triggerLabel ?? `${supplementTitle} 更多操作`;
   const actionBindings = bindSegmentSupplementEntityActions(actionIdentity);
+  const extraActions: readonly EntityActionMenuExtraAction[] = [
+    ...(onRequestArtifactUpdate
+      ? [
+          {
+            icon: AppWindow,
+            label: '让 Agent 更新作品',
+            onSelect: onRequestArtifactUpdate,
+          },
+        ]
+      : []),
+    ...(onRequestSpeechSynthesis
+      ? [createSpeechSynthesisExtraAction(onRequestSpeechSynthesis, speechSynthesisDisabledReason)]
+      : []),
+  ];
 
   return (
     <EntityActionMenu
@@ -59,16 +76,7 @@ export function SegmentSupplementActionsMenu({
       onRename={onRename}
       onRevealInFinder={actionBindings.onRevealInFinder}
       open={open}
-      extraActions={
-        onRequestSpeechSynthesis
-          ? [
-              createSpeechSynthesisExtraAction(
-                onRequestSpeechSynthesis,
-                speechSynthesisDisabledReason
-              ),
-            ]
-          : undefined
-      }
+      extraActions={extraActions}
       transcriptionAction={
         onRequestTranscriptionBackfill
           ? {

@@ -25,6 +25,7 @@ const workspaceBridgeKeys = [
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
+  'copyArtifactAgentPrompt',
   'copyNeedsReviewAgentPrompt',
   'updateMemorySpaceTitle',
   'closeWorkspace',
@@ -176,6 +177,12 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
     needsReviewCount: 1,
+  });
+  await bridge.copyArtifactAgentPrompt({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    action: 'create-segment',
+    memoryId: 'mem_1',
   });
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
@@ -488,6 +495,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:updateMemorySpaceTitle',
     'workspace:readWorkspaceSnapshot',
     'workspace:copyNeedsReviewAgentPrompt',
+    'workspace:copyArtifactAgentPrompt',
     'workspace:createMemory',
     'workspace:deleteMemory',
     'workspace:restoreDeletedMemory',
@@ -590,6 +598,14 @@ test('workspace preload bridge maps entity action and review prompt copy methods
   await bridge.copyMemoryRelativePath(memoryPayload);
   await bridge.copySegmentRelativePath(segmentPayload);
   await bridge.copySegmentSupplementRelativePath(supplementPayload);
+  await bridge.copyArtifactAgentPrompt({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    action: 'update-supplement',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+  });
   await bridge.copyNeedsReviewAgentPrompt({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -612,6 +628,17 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     { channel: 'workspace:copyMemoryRelativePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentRelativePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementRelativePath', payload: supplementPayload },
+    {
+      channel: 'workspace:copyArtifactAgentPrompt',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        action: 'update-supplement',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
+      },
+    },
     {
       channel: 'workspace:copyNeedsReviewAgentPrompt',
       payload: {

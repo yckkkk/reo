@@ -8,6 +8,7 @@ import {
   WORKSPACE_CLOSE_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
@@ -210,6 +211,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     copySegmentSupplementRelativePath: (payload) =>
       invoke<WorkspaceBridgeResponse<'copySegmentSupplementRelativePath'>>(
         WORKSPACE_COPY_SEGMENT_SUPPLEMENT_RELATIVE_PATH_CHANNEL,
+        payload
+      ),
+    copyArtifactAgentPrompt: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyArtifactAgentPrompt'>>(
+        WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
         payload
       ),
     copyNeedsReviewAgentPrompt: (payload) =>

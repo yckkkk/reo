@@ -6,7 +6,11 @@ import { ImmersiveWorkspaceTitlebar } from './ImmersiveWorkspaceTitlebar';
 type EditorExpandShellProps = {
   readonly ariaLabelledBy: string;
   readonly children: ReactNode;
+  readonly collapseLabel?: string;
+  readonly expandLabel?: string;
   readonly expanded: boolean;
+  readonly inlineClassName?: string;
+  readonly inlineDataSlot?: string;
   readonly onExpandedChange: (expanded: boolean) => void;
   readonly onReturn: () => void;
   readonly panelId: string;
@@ -18,7 +22,11 @@ type EditorExpandShellProps = {
 export function EditorExpandShell({
   ariaLabelledBy,
   children,
+  collapseLabel = '缩小编辑器',
+  expandLabel = '展开编辑器',
   expanded,
+  inlineClassName = 'relative mt-12 flex min-h-0 w-full flex-1',
+  inlineDataSlot = 'memory-studio-inline-markdown-editor',
   onExpandedChange,
   onReturn,
   panelId,
@@ -31,8 +39,8 @@ export function EditorExpandShell({
       {expanded ? null : (
         <div
           aria-labelledby={renderAsPanel ? ariaLabelledBy : undefined}
-          className="relative mt-12 flex min-h-0 w-full flex-1"
-          data-slot="memory-studio-inline-markdown-editor"
+          className={inlineClassName}
+          data-slot={inlineDataSlot}
           id={panelId}
           role={renderAsPanel ? 'tabpanel' : undefined}
         >
@@ -41,7 +49,7 @@ export function EditorExpandShell({
             arcVariant="inline"
             disabled={pending}
             icon="maximize"
-            label="展开编辑器"
+            label={expandLabel}
             onClick={() => onExpandedChange(true)}
           />
         </div>
@@ -80,7 +88,7 @@ export function EditorExpandShell({
             arcVariant="expanded"
             disabled={pending}
             icon="minimize"
-            label="缩小编辑器"
+            label={collapseLabel}
             onClick={() => onExpandedChange(false)}
           />
         </section>

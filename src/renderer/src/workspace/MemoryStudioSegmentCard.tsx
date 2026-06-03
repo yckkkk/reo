@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { Ellipsis, FileText } from 'lucide-react';
+import { AppWindow, Ellipsis, FileText } from 'lucide-react';
 import {
   forwardRef,
   useEffect,
@@ -21,6 +21,7 @@ import type { WorkspaceMemoryDetail } from './workspaceApi';
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type AudioMemorySegment = Extract<MemorySegment, { readonly type: 'audio' }>;
+type ArtifactMemorySegment = Extract<MemorySegment, { readonly type: 'artifact' }>;
 type MemoryStudioSegmentStripStyle = CSSProperties & {
   readonly '--memory-studio-segment-card-min-size': string;
   readonly '--memory-studio-segment-card-size': string;
@@ -95,6 +96,10 @@ function isAudioMemorySegment(segment: MemorySegment): segment is AudioMemorySeg
   return segment.type === 'audio';
 }
 
+function isArtifactMemorySegment(segment: MemorySegment): segment is ArtifactMemorySegment {
+  return segment.type === 'artifact';
+}
+
 function compactDurationLabel(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -153,6 +158,7 @@ export function MemoryStudioSegmentCard({
 }: MemoryStudioSegmentCardProps) {
   const selected = selectionPlacement === 'selected';
   const segmentIsAudio = isAudioMemorySegment(segment);
+  const segmentIsArtifact = isArtifactMemorySegment(segment);
   const coverSource = resolveSegmentCoverImageSource({ segment, workspaceId });
   const [coverTone, setCoverTone] = useState(() => fallbackCoverToneForSource(coverSource));
   const selectionX = segmentSelectionX(selectionPlacement);
@@ -245,7 +251,7 @@ export function MemoryStudioSegmentCard({
                 >
                   <img
                     alt=""
-                    className="size-full object-cover [backface-visibility:hidden] [transform-origin:center] will-change-[filter,transform]"
+                    className="size-full object-cover [backface-visibility:hidden] [transform-origin:center]"
                     crossOrigin="anonymous"
                     data-slot="memory-studio-segment-card-cover"
                     decoding="async"
@@ -285,6 +291,21 @@ export function MemoryStudioSegmentCard({
                         className="shrink-0 font-mono text-[13px] font-[700] leading-none tracking-[0.05em] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.82)]"
                       >
                         {compactDurationLabel(segment.durationMs)}
+                      </span>
+                    </>
+                  ) : segmentIsArtifact ? (
+                    <>
+                      <AppWindow
+                        aria-hidden="true"
+                        className="size-[28px] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.92)]"
+                        data-slot="memory-studio-segment-card-artifact-icon"
+                        strokeWidth={1.8}
+                      />
+                      <span
+                        data-slot="memory-studio-segment-card-artifact-size"
+                        className="shrink-0 font-mono text-[13px] font-[700] leading-none tracking-[0.05em] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.82)]"
+                      >
+                        {byteLengthLabel(segment.entryByteLength)}
                       </span>
                     </>
                   ) : (

@@ -120,7 +120,38 @@ function readPrivilegedSchemes(): ReadonlyMap<string, SchemeRegistration> {
   return registrations;
 }
 
-test('privileged schemes register reo-app and reo-attachment before app ready', () => {
+function readObjectArgumentPropertiesForCall(
+  filePath: string,
+  callName: string
+): ReadonlyMap<string, string> {
+  const sourceText = readFileSync(filePath, 'utf8');
+  const source = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const properties = new Map<string, string>();
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === callName
+    ) {
+      const firstArg = node.arguments[0];
+      assert.ok(firstArg && ts.isObjectLiteralExpression(firstArg));
+      for (const property of firstArg.properties) {
+        assert.ok(ts.isPropertyAssignment(property));
+        const name = propertyNameToText(property.name);
+        assert.ok(name);
+        assert.ok(ts.isIdentifier(property.initializer));
+        properties.set(name, property.initializer.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return properties;
+}
+
+test('privileged schemes register reo-app, reo-attachment, and reo-artifact before app ready', () => {
   const indexSource = readFileSync('src/main/index.ts', 'utf8');
   const schemeRegistrationIndex = indexSource.indexOf('registerAppShellScheme();');
   const readyIndex = indexSource.indexOf('whenReady()');
@@ -130,7 +161,7 @@ test('privileged schemes register reo-app and reo-attachment before app ready', 
   assert.ok(schemeRegistrationIndex < readyIndex);
 
   const schemes = readPrivilegedSchemes();
-  assert.deepEqual([...schemes.keys()].sort(), ['reo-app', 'reo-attachment']);
+  assert.deepEqual([...schemes.keys()].sort(), ['reo-app', 'reo-artifact', 'reo-attachment']);
 
   const appScheme = schemes.get('reo-app');
   assert.equal(appScheme?.privileges.get('secure'), true);
@@ -141,6 +172,25 @@ test('privileged schemes register reo-app and reo-attachment before app ready', 
   assert.equal(attachmentScheme?.privileges.get('supportFetchAPI'), true);
   assert.equal(attachmentScheme?.privileges.get('corsEnabled'), true);
   assert.equal(attachmentScheme?.privileges.get('stream'), true);
+
+  const artifactScheme = schemes.get('reo-artifact');
+  assert.equal(artifactScheme?.privileges.get('secure'), true);
+  assert.equal(artifactScheme?.privileges.get('standard'), true);
+  assert.equal(artifactScheme?.privileges.get('supportFetchAPI'), true);
+  assert.equal(artifactScheme?.privileges.get('stream'), true);
+});
+
+test('main bootstrap wires attachment and artifact protocol roots to the active workspace', () => {
+  const protocolOptions = readObjectArgumentPropertiesForCall(
+    'src/main/index.ts',
+    'registerAppShellProtocolWithOptions'
+  );
+
+  assert.equal(
+    protocolOptions.get('resolveAttachmentRoot'),
+    'resolveActiveWorkspaceRootForProtocol'
+  );
+  assert.equal(protocolOptions.get('resolveArtifactRoot'), 'resolveActiveWorkspaceRootForProtocol');
 });
 
 test('attachment protocol response keeps attachments no-store and caches versioned covers', () => {
@@ -194,4 +244,16 @@ test('attachment protocol has an explicit Segment cover route before note attach
   assert.ok(segmentCoverRoute < noteAttachmentRoute);
   assert.match(sourceText, /resolveSegmentCoverFile/);
   assert.match(sourceText, /cacheControl: MEMORY_COVER_PROTOCOL_CACHE_CONTROL/);
+});
+
+test('artifact protocol handler is isolated from attachment protocol and returns CSP headers', () => {
+  const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
+
+  assert.match(sourceText, /protocol\.handle\(ARTIFACT_SCHEME/);
+  assert.match(sourceText, /request\.method !== 'GET'/);
+  assert.match(sourceText, /resolveArtifactProtocolRequest/);
+  assert.match(sourceText, /'Cache-Control': resolved\.cacheControl/);
+  assert.match(sourceText, /'Content-Security-Policy': resolved\.contentSecurityPolicy/);
+  assert.match(sourceText, /'Content-Type': resolved\.mimeType/);
+  assert.equal(sourceText.includes('connect-src reo-artifact'), false);
 });

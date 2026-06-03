@@ -1,15 +1,20 @@
-import { Camera, Mic, PencilLine, Upload, Video } from 'lucide-react';
+import { AppWindow, Camera, Mic, PencilLine, Upload, Video } from 'lucide-react';
 import {
   FloatingActionButtonSpeedDial,
   type FloatingActionButtonSpeedDialAction,
 } from '@/components/ui/floating-action-button-speed-dial';
 
 type ExpressionDockProps = {
+  readonly onStartArtifact?: () => void;
   readonly onStartNote?: () => void;
   readonly onStartRecording: () => void;
 };
 
-export function ExpressionDock({ onStartNote, onStartRecording }: ExpressionDockProps) {
+export function ExpressionDock({
+  onStartArtifact,
+  onStartNote,
+  onStartRecording,
+}: ExpressionDockProps) {
   const actions: readonly FloatingActionButtonSpeedDialAction[] = [
     {
       disabled: true,
@@ -31,6 +36,19 @@ export function ExpressionDock({ onStartNote, onStartRecording }: ExpressionDock
       id: 'photo',
       icon: Camera,
       label: '拍照',
+    },
+    {
+      id: 'artifact',
+      icon: AppWindow,
+      label: '作品',
+      ...(onStartArtifact
+        ? {
+            onSelect: onStartArtifact,
+          }
+        : {
+            disabled: true,
+            disabledLabel: '作品暂不可用',
+          }),
     },
     {
       id: 'note',

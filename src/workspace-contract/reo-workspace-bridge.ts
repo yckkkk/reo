@@ -5,6 +5,7 @@ import type {
   WorkspaceClearVoiceTranscriptionApiKeyResponse,
   WorkspaceCloseRequest,
   WorkspaceCloseResponse,
+  WorkspaceCopyArtifactAgentPromptRequest,
   WorkspaceCopyMemoryAbsolutePathRequest,
   WorkspaceCopyMemoryRelativePathRequest,
   WorkspaceCopyMemorySpaceAbsolutePathRequest,
@@ -221,6 +222,9 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copySegmentSupplementRelativePath: (
     payload: WorkspaceCopySegmentSupplementRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyArtifactAgentPrompt: (
+    payload: WorkspaceCopyArtifactAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyNeedsReviewAgentPrompt: (
     payload: WorkspaceCopyNeedsReviewAgentPromptRequest

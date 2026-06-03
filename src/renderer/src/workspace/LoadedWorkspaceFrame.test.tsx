@@ -145,6 +145,7 @@ const birthdayMemory = {
   updatedAt: '2026-05-06T13:10:00.000',
   segmentCount: 2,
   noteSegmentCount: 0,
+  artifactSegmentCount: 0,
   audioSegmentCount: 2,
   audioDurationMs: 125_000,
   audioByteLength: 2048,
@@ -161,6 +162,7 @@ const birthdayDetail: WorkspaceMemoryDetail = {
   updatedAt: '2026-05-06T13:10:00.000',
   segmentCount: 2,
   noteSegmentCount: 0,
+  artifactSegmentCount: 0,
   audioSegmentCount: 2,
   audioDurationMs: 125_000,
   audioByteLength: 2048,
@@ -197,7 +199,12 @@ type NoteSegmentSupplement = Extract<
   WorkspaceMemoryDetail['segments'][number]['supplements'][number],
   { type: 'note' }
 >;
+type ArtifactSegmentSupplement = Extract<
+  WorkspaceMemoryDetail['segments'][number]['supplements'][number],
+  { type: 'artifact' }
+>;
 type NoteSegment = Extract<WorkspaceMemoryDetail['segments'][number], { type: 'note' }>;
+type ArtifactSegment = Extract<WorkspaceMemoryDetail['segments'][number], { type: 'artifact' }>;
 
 const birthdayVoiceSegment = birthdayDetail.segments[0] as AudioSegment | undefined;
 if (!birthdayVoiceSegment) {
@@ -285,6 +292,7 @@ const birthdayDetailWithTwoSegments: WorkspaceMemoryDetail = {
   ...birthdayDetail,
   segmentCount: 2,
   noteSegmentCount: 0,
+  artifactSegmentCount: 0,
   audioSegmentCount: 2,
   audioDurationMs: 190_000,
   audioByteLength: 3072,
@@ -343,6 +351,26 @@ function noteSupplement(overrides: Partial<NoteSegmentSupplement> = {}): NoteSeg
   };
 }
 
+function artifactSupplement(
+  overrides: Partial<ArtifactSegmentSupplement> = {}
+): ArtifactSegmentSupplement {
+  return {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_birthday',
+    segmentId: 'seg_birthday_voice',
+    supplementId: 'sup_birthday_artifact',
+    type: 'artifact',
+    format: 'html',
+    title: '作品补充',
+    createdAt: '2026-05-06T13:18:00.000',
+    updatedAt: '2026-05-06T13:18:30.000',
+    entryByteLength: 256,
+    entryHash: 'b'.repeat(64),
+    previewVersion: 'b'.repeat(64),
+    ...overrides,
+  };
+}
+
 function noteSegment(overrides: Partial<NoteSegment> = {}): NoteSegment {
   return {
     workspaceId: 'ws_1',
@@ -356,6 +384,26 @@ function noteSegment(overrides: Partial<NoteSegment> = {}): NoteSegment {
     speechSynthesis: missingSpeechSynthesis,
     supplementCount: 0,
     supplements: [],
+    ...overrides,
+  };
+}
+
+function artifactSegment(overrides: Partial<ArtifactSegment> = {}): ArtifactSegment {
+  return {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_birthday',
+    segmentId: 'seg_birthday_artifact',
+    type: 'artifact',
+    format: 'html',
+    title: '间隔复习表',
+    createdAt: '2026-05-06T13:20:00.000',
+    updatedAt: '2026-05-06T13:20:30.000',
+    entryByteLength: 512,
+    entryHash: 'a'.repeat(64),
+    previewVersion: 'a'.repeat(64),
+    supplementCount: 0,
+    supplements: [],
+    contentTabOrder: ['segment'],
     ...overrides,
   };
 }
@@ -501,6 +549,7 @@ const morningMemory = {
   updatedAt: '2026-04-11T09:02:00.000',
   segmentCount: 1,
   noteSegmentCount: 0,
+  artifactSegmentCount: 0,
   audioSegmentCount: 1,
   audioDurationMs: 30_000,
   audioByteLength: 512,
@@ -516,6 +565,7 @@ const recitalMemory = {
   updatedAt: '2026-05-01T09:10:00.000',
   segmentCount: 1,
   noteSegmentCount: 0,
+  artifactSegmentCount: 0,
   audioSegmentCount: 1,
   audioDurationMs: 60_000,
   audioByteLength: 1024,
@@ -561,6 +611,7 @@ function renderLoadedWorkspaceFrame({
   copySegmentSupplementRelativePath = vi.fn().mockResolvedValue({ ok: true }),
   copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
   copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
+  copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
   readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -736,6 +787,7 @@ function renderLoadedWorkspaceFrame({
   readonly copySegmentSupplementRelativePath?: ReturnType<typeof vi.fn>;
   readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly copyNeedsReviewAgentPrompt?: ReturnType<typeof vi.fn>;
+  readonly copyArtifactAgentPrompt?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplementAudio?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
@@ -758,6 +810,7 @@ function renderLoadedWorkspaceFrame({
       copyMemoryRelativePath,
       copySegmentSupplementAbsolutePath,
       copySegmentSupplementRelativePath,
+      copyArtifactAgentPrompt,
       copyNeedsReviewAgentPrompt,
       openMemoryDocument,
       openSegmentSupplementDocument,
@@ -1180,7 +1233,12 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(dock).queryByText('上传')).not.toBeInTheDocument();
     expect(
       dock.querySelectorAll('[data-slot="floating-action-button-speed-dial-action-unavailable"]')
-    ).toHaveLength(3);
+    ).toHaveLength(4);
+    expect(within(dock).getByRole('menuitem', { name: '作品暂不可用' })).toHaveClass(
+      'cursor-default',
+      'focus-visible:ring-2',
+      'p-disabled'
+    );
     expect(within(dock).getByRole('menuitem', { name: '拍照暂不可用' })).toHaveClass(
       'cursor-default',
       'focus-visible:ring-2',
@@ -1198,6 +1256,41 @@ describe('LoadedWorkspaceFrame', () => {
     }
     await user.click(nextNoteAction);
     expect(onStartNote).toHaveBeenCalledOnce();
+  });
+
+  it('copies an artifact segment prompt from the expression FAB without starting note or recording flows', async () => {
+    const user = userEvent.setup();
+    const onStartNote = vi.fn();
+    const onStartRecording = vi.fn();
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      copyArtifactAgentPrompt,
+      onStartNote,
+      onStartRecording,
+      session: workspaceSession({ memories: [birthdayMemory] }),
+    });
+
+    const dock = screen.getByRole('region', { name: '表达入口' });
+    await user.click(within(dock).getByRole('button', { name: '打开表达入口' }));
+    await user.click(within(dock).getByRole('menuitem', { name: '作品' }));
+
+    await waitFor(() =>
+      expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        action: 'create-segment',
+        memoryId: 'mem_birthday',
+      })
+    );
+    expect(onStartNote).not.toHaveBeenCalled();
+    expect(onStartRecording).not.toHaveBeenCalled();
+    expect(showReoToast).toHaveBeenLastCalledWith({
+      type: 'success',
+      title: '已复制作品提示词',
+      description: '交给您的 Agent 后，它会在当前记忆中创建作品文件。',
+    });
   });
 
   it('keeps the red expression FAB mounted in Memory Studio without moving it into content controls', async () => {
@@ -1348,6 +1441,7 @@ describe('LoadedWorkspaceFrame', () => {
         ...birthdayDetail,
         segmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
@@ -1438,6 +1532,7 @@ describe('LoadedWorkspaceFrame', () => {
       ...birthdayDetail,
       segmentCount: 1,
       noteSegmentCount: 1,
+      artifactSegmentCount: 0,
       audioSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
@@ -1451,6 +1546,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 1,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           hasAudioTranscript: false,
           hasAnyNote: true,
@@ -1735,6 +1831,92 @@ describe('LoadedWorkspaceFrame', () => {
     expect(railAddButton.parentElement).toBe(contentTabActions);
   });
 
+  it('renders artifact segments as sandboxed previews without reading note or audio content', async () => {
+    const user = userEvent.setup();
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const readSegmentContent = vi.fn();
+    const readFinalizedAudioSegment = vi.fn();
+    const work = artifactSegment();
+    const artifactMemory = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+    };
+    const detailWithArtifact: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      segments: [work],
+    };
+    const session = workspaceSession({ memories: [artifactMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: artifactMemory,
+      copyArtifactAgentPrompt,
+      readFinalizedAudioSegment,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_segment',
+      detail: detailWithArtifact,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const workTab = await within(content).findByRole('tab', { name: '作品' });
+    const workPanel = within(content).getByRole('tabpanel', { name: '作品' });
+    const iframe = workPanel.querySelector('iframe');
+
+    expect(workTab).toHaveAttribute('aria-selected', 'true');
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe).toHaveAttribute(
+      'src',
+      `reo-artifact://workspace/ws_1/segments/seg_birthday_artifact/segment.html?v=${'a'.repeat(64)}`
+    );
+    const workTabItem = workTab.closest('[data-slot="memory-studio-primary-tab-item"]');
+    expect(workTabItem).not.toBeNull();
+    fireEvent.pointerEnter(workTabItem as HTMLElement);
+    fireEvent.mouseEnter(workTabItem as HTMLElement);
+    await user.click(
+      await within(workTabItem as HTMLElement).findByRole('button', { name: '作品 更多操作' })
+    );
+    const workTabMenu = await screen.findByRole('menu', { name: '作品 更多操作' });
+    await user.click(within(workTabMenu).getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    await waitFor(() =>
+      expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        action: 'update-segment',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_artifact',
+      })
+    );
+    await user.click(within(workPanel).getByRole('button', { name: '展开作品预览' }));
+    const expandedPreview = await screen.findByRole('dialog', { name: '作品' });
+    const expandedFrame = within(expandedPreview).getByTitle('作品预览：作品');
+    expect(expandedFrame).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(expandedFrame).toHaveAttribute(
+      'src',
+      `reo-artifact://workspace/ws_1/segments/seg_birthday_artifact/segment.html?v=${'a'.repeat(64)}`
+    );
+    expect(readSegmentContent).not.toHaveBeenCalled();
+    expect(readFinalizedAudioSegment).not.toHaveBeenCalled();
+  });
+
   it('renders generated note speech as the segment player above the content tab rail', async () => {
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:note-speech');
     const readSegmentContent = vi.fn(async (request) => ({
@@ -1772,6 +1954,7 @@ describe('LoadedWorkspaceFrame', () => {
       ...birthdayMemory,
       segmentCount: 1,
       noteSegmentCount: 1,
+      artifactSegmentCount: 0,
       audioSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
@@ -1785,6 +1968,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 1,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           hasAudioTranscript: false,
           hasAnyNote: true,
@@ -1882,6 +2066,7 @@ describe('LoadedWorkspaceFrame', () => {
       ...birthdayMemory,
       segmentCount: 1,
       noteSegmentCount: 1,
+      artifactSegmentCount: 0,
       audioSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
@@ -1895,6 +2080,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 1,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           hasAudioTranscript: false,
           hasAnyNote: true,
@@ -1953,6 +2139,7 @@ describe('LoadedWorkspaceFrame', () => {
       ...birthdayMemory,
       segmentCount: 1,
       noteSegmentCount: 1,
+      artifactSegmentCount: 0,
       audioSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
@@ -1966,6 +2153,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 1,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           hasAudioTranscript: false,
           hasAnyNote: true,
@@ -2277,6 +2465,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 2,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           hasAnyNote: true,
         },
@@ -2341,6 +2530,7 @@ describe('LoadedWorkspaceFrame', () => {
           ...birthdayMemory,
           segmentCount: 1,
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           hasAnyNote: true,
         },
       ],
@@ -2877,6 +3067,7 @@ describe('LoadedWorkspaceFrame', () => {
       ...birthdayMemory,
       segmentCount: 1,
       noteSegmentCount: 1,
+      artifactSegmentCount: 0,
       audioSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
@@ -4077,6 +4268,98 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(tabs).getAllByRole('tab')).toHaveLength(1);
   });
 
+  it('copies an artifact supplement prompt from the content tab rail without creating a draft', async () => {
+    const user = userEvent.setup();
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const onStartSegmentSupplementNote = vi.fn();
+    const onStartSegmentSupplementRecording = vi.fn();
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      copyArtifactAgentPrompt,
+      onStartSegmentSupplementNote,
+      onStartSegmentSupplementRecording,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_supplement_prompt',
+      detail: birthdayDetail,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));
+    const menu = await screen.findByRole('menu', { name: '片段补充内容' });
+    await user.click(within(menu).getByRole('menuitem', { name: '作品补充' }));
+
+    await waitFor(() =>
+      expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        action: 'create-supplement',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_voice',
+      })
+    );
+    expect(onStartSegmentSupplementNote).not.toHaveBeenCalled();
+    expect(onStartSegmentSupplementRecording).not.toHaveBeenCalled();
+  });
+
+  it('copies an artifact update prompt from an existing artifact segment menu', async () => {
+    const user = userEvent.setup();
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const artifactMemory = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+    };
+    const detailWithArtifact: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      segments: [artifactSegment()],
+    };
+    const session = workspaceSession({ memories: [artifactMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: artifactMemory,
+      copyArtifactAgentPrompt,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_update_prompt',
+      detail: detailWithArtifact,
+    });
+
+    await screen.findByRole('region', { name: 'Memory Studio' });
+    await user.click(await screen.findByRole('button', { name: '片段 间隔复习表 更多操作' }));
+    const menu = await screen.findByRole('menu', { name: '片段 间隔复习表 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '让 Agent 更新作品' }));
+
+    await waitFor(() =>
+      expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        action: 'update-segment',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_artifact',
+      })
+    );
+  });
+
   it('shows finalized recording supplements as content rail tabs with visible supplement identity', async () => {
     const user = userEvent.setup();
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:supplement-audio');
@@ -4537,6 +4820,45 @@ describe('LoadedWorkspaceFrame', () => {
         supplementId: 'sup_birthday_note',
       })
     );
+  });
+
+  it('renders artifact supplements as sandboxed previews without reading note or audio content', async () => {
+    const readSegmentSupplementContent = vi.fn();
+    const readFinalizedAudioSegmentSupplement = vi.fn();
+    const supplement = artifactSupplement();
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([supplement]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readFinalizedAudioSegmentSupplement,
+      readSegmentSupplementContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_supplement_tab',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const supplementItem = await within(tabs).findByRole('tab', { name: '作品补充' });
+
+    expect(supplementItem).toHaveAttribute('data-supplement-type', 'artifact');
+    await userEvent.click(supplementItem);
+
+    const supplementPanel = await within(content).findByRole('tabpanel', { name: '作品补充' });
+    const iframe = supplementPanel.querySelector('iframe');
+
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe).toHaveAttribute(
+      'src',
+      `reo-artifact://workspace/ws_1/segments/seg_birthday_voice/supplements/sup_birthday_artifact/supplement.html?v=${'b'.repeat(64)}`
+    );
+    expect(readSegmentSupplementContent).not.toHaveBeenCalled();
+    expect(readFinalizedAudioSegmentSupplement).not.toHaveBeenCalled();
   });
 
   it('renders generated note supplement speech above the supplement note editor', async () => {

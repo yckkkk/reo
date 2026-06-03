@@ -15,6 +15,7 @@ function memory(overrides: Partial<WorkspaceMemory>): WorkspaceMemory {
     memoryId: 'mem_default',
     segmentCount: 0,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioSegmentCount: 0,
     cover: { source: 'default' },
     hasAnyNote: false,

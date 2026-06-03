@@ -1,4 +1,4 @@
-import { Ellipsis, Eraser, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react';
+import { AppWindow, Ellipsis, Eraser, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceSegmentEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
@@ -19,16 +19,17 @@ export type SegmentContentActionsMenuProps = {
   readonly actionIdentity: WorkspaceSegmentEntityActionRequest;
   readonly clearDisabled?: boolean;
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
-  readonly contentKind: 'body' | 'transcript';
+  readonly contentKind: 'artifact' | 'body' | 'transcript';
   readonly menuLabel: string;
-  readonly onClear: () => void;
+  readonly onClear?: (() => void) | undefined;
   readonly onCloseAutoFocus?:
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
-  readonly onRename: () => void;
+  readonly onRename?: (() => void) | undefined;
   readonly open?: boolean;
   readonly speechSynthesisDisabledReason?: string | null | undefined;
   readonly transcriptExists?: boolean | undefined;
@@ -53,6 +54,7 @@ export function SegmentContentActionsMenu({
   onClear,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onRename,
@@ -64,6 +66,7 @@ export function SegmentContentActionsMenu({
 }: SegmentContentActionsMenuProps) {
   const actionBindings = bindSegmentEntityActions(actionIdentity);
   const clearLabel = contentKind === 'transcript' ? '清空转录' : '清空正文';
+  const showArtifactUpdate = contentKind === 'artifact' && onRequestArtifactUpdate;
   const transcriptionBackfillDisabled = disabledReasonExists(transcriptionBackfillDisabledReason);
   const showSpeechSynthesis = contentKind === 'body' && onRequestSpeechSynthesis;
   const showTranscriptionBackfill = contentKind === 'transcript' && onRequestTranscriptionBackfill;
@@ -92,10 +95,15 @@ export function SegmentContentActionsMenu({
           onOpenDefault={actionBindings.onOpenDefault}
           onRevealInFinder={actionBindings.onRevealInFinder}
         />
-        {showSpeechSynthesis || showTranscriptionBackfill ? (
+        {showArtifactUpdate || showSpeechSynthesis || showTranscriptionBackfill ? (
           <>
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
+              {showArtifactUpdate ? (
+                <DropdownMenuItem onSelect={onRequestArtifactUpdate}>
+                  <SegmentContentActionIcon icon={AppWindow} />让 Agent 更新作品
+                </DropdownMenuItem>
+              ) : null}
               {showSpeechSynthesis ? (
                 <SpeechSynthesisSpeakerSubmenu
                   disabledReason={speechSynthesisDisabledReason}
@@ -123,21 +131,25 @@ export function SegmentContentActionsMenu({
             </DropdownMenuGroup>
           </>
         ) : null}
-        <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={onRename}>
-            <SegmentContentActionIcon icon={PencilLine} />
-            重命名
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive data-[disabled]:text-destructive/50 data-[highlighted]:text-destructive"
-            disabled={clearDisabled}
-            onSelect={onClear}
-          >
-            <SegmentContentActionIcon icon={Eraser} />
-            {clearLabel}
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        {contentKind !== 'artifact' && onClear && onRename ? (
+          <>
+            <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={onRename}>
+                <SegmentContentActionIcon icon={PencilLine} />
+                重命名
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive data-[disabled]:text-destructive/50 data-[highlighted]:text-destructive"
+                disabled={clearDisabled}
+                onSelect={onClear}
+              >
+                <SegmentContentActionIcon icon={Eraser} />
+                {clearLabel}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

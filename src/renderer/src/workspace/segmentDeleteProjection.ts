@@ -46,6 +46,7 @@ export function memorySummaryAfterSegmentRemoval({
   }
 
   const isAudioSegment = removedSegment.type === 'audio';
+  const isArtifactSegment = removedSegment.type === 'artifact';
   return {
     ...memory,
     audioByteLength: Math.max(
@@ -54,7 +55,11 @@ export function memorySummaryAfterSegmentRemoval({
     ),
     supplementCount: Math.max(0, memory.supplementCount - removedSegment.supplementCount),
     audioSegmentCount: Math.max(0, memory.audioSegmentCount - (isAudioSegment ? 1 : 0)),
-    noteSegmentCount: Math.max(0, memory.noteSegmentCount - (isAudioSegment ? 0 : 1)),
+    noteSegmentCount: Math.max(
+      0,
+      memory.noteSegmentCount - (removedSegment.type === 'note' ? 1 : 0)
+    ),
+    artifactSegmentCount: Math.max(0, memory.artifactSegmentCount - (isArtifactSegment ? 1 : 0)),
     audioDurationMs: Math.max(
       0,
       memory.audioDurationMs - (isAudioSegment ? removedSegment.durationMs : 0)
@@ -72,6 +77,7 @@ export function memorySummaryWithVisibleSegments(
   let supplementCount = 0;
   let audioSegmentCount = 0;
   let noteSegmentCount = 0;
+  let artifactSegmentCount = 0;
   let audioDurationMs = 0;
   let hasAudioTranscript = false;
   let hasAnyNote = false;
@@ -82,8 +88,10 @@ export function memorySummaryWithVisibleSegments(
       audioByteLength += segment.audioByteLength;
       audioDurationMs += segment.durationMs;
       hasAudioTranscript ||= segment.transcript.exists;
-    } else {
+    } else if (segment.type === 'note') {
       noteSegmentCount += 1;
+    } else {
+      artifactSegmentCount += 1;
     }
     hasAnyNote ||= segmentHasAnyNote(segment);
     supplementCount += segment.supplementCount;
@@ -95,6 +103,7 @@ export function memorySummaryWithVisibleSegments(
     supplementCount,
     audioSegmentCount,
     noteSegmentCount,
+    artifactSegmentCount,
     audioDurationMs,
     hasAudioTranscript,
     hasAnyNote,
@@ -117,6 +126,8 @@ export function memorySummaryAfterSegmentRestore({
     supplementCount: memory.supplementCount + restoredSegment.supplementCount,
     audioSegmentCount: memory.audioSegmentCount + (restoredSegment.type === 'audio' ? 1 : 0),
     noteSegmentCount: memory.noteSegmentCount + (restoredSegment.type === 'note' ? 1 : 0),
+    artifactSegmentCount:
+      memory.artifactSegmentCount + (restoredSegment.type === 'artifact' ? 1 : 0),
     audioDurationMs:
       memory.audioDurationMs + (restoredSegment.type === 'audio' ? restoredSegment.durationMs : 0),
     hasAudioTranscript:
@@ -162,6 +173,7 @@ export function memorySummaryWithPendingSegmentDelete(
     memory.supplementCount === projection.memoryBeforeDelete.supplementCount &&
     memory.audioSegmentCount === projection.memoryBeforeDelete.audioSegmentCount &&
     memory.noteSegmentCount === projection.memoryBeforeDelete.noteSegmentCount &&
+    memory.artifactSegmentCount === projection.memoryBeforeDelete.artifactSegmentCount &&
     memory.audioDurationMs === projection.memoryBeforeDelete.audioDurationMs &&
     memory.segmentCount === projection.memoryBeforeDelete.segmentCount &&
     memory.hasAnyNote === projection.memoryBeforeDelete.hasAnyNote &&

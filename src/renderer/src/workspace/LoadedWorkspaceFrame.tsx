@@ -6,7 +6,10 @@ import {
   clearMemoryStudioAudioResourceCaches,
   createMemoryStudioAudioResourceCaches,
   MemoryStudio,
+  type ArtifactSegmentTarget,
+  type ArtifactSupplementTarget,
   type SavedSegmentSupplementTranscriptContent,
+  type SegmentSupplementArtifactTarget,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type MemoryStudioAudioResourceCaches,
@@ -32,7 +35,7 @@ import type {
   SavedNoteSegmentContent,
   SavedNoteSegmentSupplementContent,
 } from './finalizedNoteContentSave';
-import { copyNeedsReviewAgentPrompt } from './workspaceApi';
+import { copyArtifactAgentPrompt, copyNeedsReviewAgentPrompt } from './workspaceApi';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 import { workspaceReviewToastId } from './workspaceReviewToast';
 
@@ -81,6 +84,38 @@ type LoadedWorkspaceFrameProps = {
   readonly workspaceSession: WorkspaceSession;
   readonly onStartRecording: () => void;
 };
+
+type ArtifactAgentPromptTarget =
+  | {
+      readonly action: 'create-segment';
+      readonly memoryId: string;
+    }
+  | {
+      readonly action: 'create-supplement';
+      readonly memoryId: string;
+      readonly segmentId: string;
+    }
+  | {
+      readonly action: 'update-segment';
+      readonly memoryId: string;
+      readonly segmentId: string;
+    }
+  | {
+      readonly action: 'update-supplement';
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly supplementId: string;
+    };
+
+function artifactPromptCopiedDescription(action: ArtifactAgentPromptTarget['action']): string {
+  if (action === 'create-segment') {
+    return '交给您的 Agent 后，它会在当前记忆中创建作品文件。';
+  }
+  if (action === 'create-supplement') {
+    return '交给您的 Agent 后，它会为当前片段创建作品补充。';
+  }
+  return '交给您的 Agent 后，它会更新这个作品文件。';
+}
 
 function useStableEventCallback<TArgs extends readonly unknown[], TResult>(
   callback: (...args: TArgs) => TResult
@@ -237,6 +272,75 @@ export function LoadedWorkspaceFrame({
     workspaceSession.workspaceHandle,
   ]);
 
+  const copyArtifactPrompt = useCallback(
+    (target: ArtifactAgentPromptTarget) => {
+      void copyArtifactAgentPrompt({
+        workspaceHandle: workspaceSession.workspaceHandle,
+        workspaceId: snapshot.workspaceId,
+        ...target,
+      })
+        .then((result) => {
+          if (!result.ok) {
+            showReoToast({ type: 'error', title: '无法复制作品提示词' });
+            return;
+          }
+          showReoToast({
+            type: 'success',
+            title: '已复制作品提示词',
+            description: artifactPromptCopiedDescription(target.action),
+          });
+        })
+        .catch(() => {
+          showReoToast({ type: 'error', title: '无法复制作品提示词' });
+        });
+    },
+    [snapshot.workspaceId, workspaceSession.workspaceHandle]
+  );
+
+  const startArtifact = useCallback(() => {
+    if (!currentMemory) {
+      return;
+    }
+    copyArtifactPrompt({
+      action: 'create-segment',
+      memoryId: currentMemory.memoryId,
+    });
+  }, [copyArtifactPrompt, currentMemory]);
+
+  const startSegmentSupplementArtifact = useCallback(
+    (target: SegmentSupplementArtifactTarget) => {
+      copyArtifactPrompt({
+        action: 'create-supplement',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+      });
+    },
+    [copyArtifactPrompt]
+  );
+
+  const updateArtifactSegment = useCallback(
+    (target: ArtifactSegmentTarget) => {
+      copyArtifactPrompt({
+        action: 'update-segment',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+      });
+    },
+    [copyArtifactPrompt]
+  );
+
+  const updateArtifactSegmentSupplement = useCallback(
+    (target: ArtifactSupplementTarget) => {
+      copyArtifactPrompt({
+        action: 'update-supplement',
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+        supplementId: target.supplementId,
+      });
+    },
+    [copyArtifactPrompt]
+  );
+
   useEffect(() => {
     copyNeedsReviewPromptRef.current = copyNeedsReviewPrompt;
   }, [copyNeedsReviewPrompt]);
@@ -320,11 +424,12 @@ export function LoadedWorkspaceFrame({
     () =>
       expressionDockVisible ? (
         <ExpressionDock
+          {...(currentMemory ? { onStartArtifact: startArtifact } : {})}
           {...(hasStartNote ? { onStartNote: startNote } : {})}
           onStartRecording={startRecording}
         />
       ) : null,
-    [expressionDockVisible, hasStartNote, startNote, startRecording]
+    [currentMemory, expressionDockVisible, hasStartNote, startArtifact, startNote, startRecording]
   );
   const workspaceStage = useMemo(
     () =>
@@ -354,7 +459,10 @@ export function LoadedWorkspaceFrame({
           {...(hasStartSegmentSupplementNote
             ? { onStartSegmentSupplementNote: startSegmentSupplementNote }
             : {})}
+          onStartSegmentSupplementArtifact={startSegmentSupplementArtifact}
           onStartSegmentSupplementRecording={startSegmentSupplementRecording}
+          onUpdateArtifactSegment={updateArtifactSegment}
+          onUpdateArtifactSegmentSupplement={updateArtifactSegmentSupplement}
           segmentFocusIntent={segmentFocusIntent}
           workspaceSession={workspaceSession}
         />
@@ -382,10 +490,13 @@ export function LoadedWorkspaceFrame({
       segmentSupplementTranscriptSaved,
       segmentTranscriptSaved,
       speechSynthesis,
+      startSegmentSupplementArtifact,
       startSegmentSupplementNote,
       startSegmentSupplementRecording,
       switchSegmentDefaultCover,
       transcriptionBackfill,
+      updateArtifactSegment,
+      updateArtifactSegmentSupplement,
       workspaceSession,
     ]
   );

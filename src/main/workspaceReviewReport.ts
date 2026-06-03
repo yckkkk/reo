@@ -20,14 +20,17 @@ export type WorkspaceReviewEntryReason =
   | 'content-conflict'
   | 'duplicate-id'
   | 'invalid-sidecar'
+  | 'missing-artifact-entry'
   | 'markdown-write-required'
+  | 'oversized-artifact-entry'
+  | 'unsupported-artifact-format'
   | 'unsupported-tiptap-content';
 
 export type WorkspaceReviewEntryInput = {
   readonly category: WorkspaceReviewEntryCategory;
   readonly reason: WorkspaceReviewEntryReason;
   readonly objectType?: 'segment' | 'supplement';
-  readonly kind?: 'audio' | 'note';
+  readonly kind?: 'audio' | 'note' | 'artifact';
   readonly paths: readonly string[];
 };
 
@@ -59,8 +62,14 @@ export const WORKSPACE_REVIEW_RECOVERY_HINTS = {
     'Keep exactly one object with this id in the reported parent scope. Move, rename, or assign a new id to duplicates while preserving user payload.',
   'invalid-sidecar':
     'Fix content.tiptap.json to valid Reo Tiptap sidecar JSON, or remove only that sidecar when Markdown should regenerate it.',
+  'missing-artifact-entry':
+    'Create the required segment.html or supplement.html entry file next to the reported Markdown file, or change this candidate back to a supported non-artifact kind.',
   'markdown-write-required':
     'The sidecar can serialize, but Reo could not write the Markdown mirror in this read path. Refresh through Reo or manually update Markdown and sidecar to match.',
+  'oversized-artifact-entry':
+    'Keep the artifact entry HTML under 1 MiB. Split large media or data into supported sibling assets, or simplify the entry before refreshing Reo.',
+  'unsupported-artifact-format':
+    'Use format: html for Reo artifact candidates, or change the object kind to a supported non-artifact kind.',
   'unsupported-tiptap-content':
     "Simplify content.tiptap.json to Reo's durable Tiptap profile or recreate the rich structure through Reo UI or Markdown.",
 } satisfies Record<WorkspaceReviewEntryReason, string>;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Session } from 'electron';
@@ -13,6 +14,7 @@ import {
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
+  WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
@@ -140,6 +142,7 @@ import {
   workspaceOpenMemorySpaceAgentsFileRequestSchema,
   workspaceOpenSegmentDocumentRequestSchema,
   workspaceOpenSegmentSupplementDocumentRequestSchema,
+  workspaceCopyArtifactAgentPromptRequestSchema,
   workspaceCopyMemoryAbsolutePathRequestSchema,
   workspaceCopyMemorySpaceAbsolutePathRequestSchema,
   workspaceCopyMemoryRelativePathRequestSchema,
@@ -270,6 +273,7 @@ import {
   workspaceWriteSegmentSupplementContentResponseSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema,
+  type WorkspaceCopyArtifactAgentPromptRequest,
   type WorkspaceEntityActionResponse,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
@@ -279,6 +283,7 @@ import {
 } from '../workspace-contract/workspace-contract.js';
 import { buildWorkspaceReviewAgentPrompt } from '../workspace-contract/workspace-review-prompt.js';
 import { parseReoMarkdownExternalLinkHref } from '../tiptap-markdown/tiptapLinkHref.js';
+import { parseWorkspaceMarkdownObject } from './workspaceMarkdownObjects.js';
 import { createWorkspaceHandleStore, type WorkspaceHandleStore } from './workspaceHandles.js';
 import {
   createWorkspaceFileTruthWatcherRegistry,
@@ -735,6 +740,10 @@ interface HandleCopyNeedsReviewAgentPromptOptions extends HandleWorkspaceRequest
   readonly writeText?: WriteClipboardText;
 }
 
+interface HandleCopyArtifactAgentPromptOptions extends HandleWorkspaceRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
 interface HandleRevealMemoryInFinderOptions extends HandleWorkspaceRequestOptions {
   readonly fs?: FsProbe;
   readonly resolver?: ResolveMemoryPaths;
@@ -1142,6 +1151,92 @@ export async function handleCopyNeedsReviewAgentPromptForTest(
   options: HandleCopyNeedsReviewAgentPromptOptions
 ): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
   return handleCopyNeedsReviewAgentPromptCore(options);
+}
+
+async function resolveArtifactAgentPromptTarget({
+  handle,
+  request,
+}: {
+  readonly handle: RequiredWorkspaceHandle;
+  readonly request: WorkspaceCopyArtifactAgentPromptRequest;
+}): Promise<
+  { readonly ok: true; readonly targetDirectoryRelative: string } | WorkspaceErrorEnvelope
+> {
+  try {
+    const resolved = await resolveArtifactPromptTargetDirectory({ handle, request });
+    if (!resolved.ok) {
+      return resolved;
+    }
+    return {
+      ok: true,
+      targetDirectoryRelative: workspaceRelativePosixPath(handle, resolved.directoryAbsolute),
+    };
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Artifact prompt target could not be resolved'
+    );
+  }
+}
+
+function handleCopyArtifactAgentPromptCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyArtifactAgentPromptOptions): Promise<
+  WorkspaceEntityActionResponse | WorkspaceErrorEnvelope
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCopyArtifactAgentPromptRequestSchema,
+    invalidMessage: 'copyArtifactAgentPrompt request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Artifact prompt copy workspace does not match the active handle'
+          );
+        }
+
+        const target = await resolveArtifactAgentPromptTarget({
+          handle,
+          request,
+        });
+        if (!target.ok) {
+          return target;
+        }
+
+        try {
+          writeText(
+            buildWorkspaceArtifactAgentPrompt({
+              request,
+              targetDirectoryRelative: target.targetDirectoryRelative,
+            })
+          );
+        } catch {
+          return workspaceError(
+            'ERR_CLIPBOARD_WRITE_FAILED',
+            'Artifact prompt could not be copied'
+          );
+        }
+
+        return workspaceEntityActionResponseSchema.parse({ ok: true });
+      }),
+  });
+}
+
+export async function handleCopyArtifactAgentPrompt(
+  options: HandleCopyArtifactAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyArtifactAgentPromptCore(options);
+}
+
+export async function handleCopyArtifactAgentPromptForTest(
+  options: HandleCopyArtifactAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyArtifactAgentPromptCore(options);
 }
 
 function handleCopyMemoryAbsolutePathCore({
@@ -3317,6 +3412,212 @@ async function handleMemorySpaceEntityActionRequest<
 
 function workspaceRelativePosixPath(handle: RequiredWorkspaceHandle, absolutePath: string): string {
   return path.relative(handle.canonicalRoot, absolutePath).split(path.sep).join('/');
+}
+
+async function resolveArtifactPromptTargetDirectory({
+  handle,
+  request,
+}: {
+  readonly handle: RequiredWorkspaceHandle;
+  readonly request: WorkspaceCopyArtifactAgentPromptRequest;
+}): Promise<{ readonly ok: true; readonly directoryAbsolute: string } | WorkspaceErrorEnvelope> {
+  const memoryPaths = await resolveMemoryPaths(handle, request.workspaceId, request.memoryId, {
+    fs: nodeFsProbe,
+  });
+  if (!memoryPaths.ok) {
+    return workspaceError(memoryPaths.code, 'Artifact prompt target could not be resolved');
+  }
+  if (request.action === 'create-segment') {
+    return { ok: true, directoryAbsolute: memoryPaths.value.directoryAbsolute };
+  }
+
+  const segmentPaths = await resolveSegmentPaths(
+    handle,
+    request.workspaceId,
+    request.memoryId,
+    request.segmentId,
+    { fs: nodeFsProbe, requireDocument: true }
+  );
+  if (!segmentPaths.ok) {
+    return workspaceError(segmentPaths.code, 'Artifact prompt target could not be resolved');
+  }
+  if (request.action === 'create-supplement') {
+    return { ok: true, directoryAbsolute: segmentPaths.value.directoryAbsolute };
+  }
+  if (request.action === 'update-segment') {
+    const validationError = await requireArtifactPromptTarget({
+      directoryAbsolute: segmentPaths.value.directoryAbsolute,
+      documentAbsolute: segmentPaths.value.documentAbsolute,
+      entryFileName: 'segment.html',
+      objectType: 'segment',
+    });
+    return validationError ?? { ok: true, directoryAbsolute: segmentPaths.value.directoryAbsolute };
+  }
+
+  const supplementPaths = await resolveSegmentSupplementPaths(
+    handle,
+    request.workspaceId,
+    request.memoryId,
+    request.segmentId,
+    request.supplementId,
+    { fs: nodeFsProbe, requireDocument: true }
+  );
+  if (!supplementPaths.ok) {
+    return workspaceError(supplementPaths.code, 'Artifact prompt target could not be resolved');
+  }
+
+  const validationError = await requireArtifactPromptTarget({
+    directoryAbsolute: supplementPaths.value.directoryAbsolute,
+    documentAbsolute: supplementPaths.value.documentAbsolute,
+    entryFileName: 'supplement.html',
+    objectType: 'supplement',
+  });
+  return (
+    validationError ?? { ok: true, directoryAbsolute: supplementPaths.value.directoryAbsolute }
+  );
+}
+
+async function requireArtifactPromptTarget({
+  directoryAbsolute,
+  documentAbsolute,
+  entryFileName,
+  objectType,
+}: {
+  readonly directoryAbsolute: string;
+  readonly documentAbsolute: string;
+  readonly entryFileName: 'segment.html' | 'supplement.html';
+  readonly objectType: 'segment' | 'supplement';
+}): Promise<WorkspaceErrorEnvelope | null> {
+  let markdown: string;
+  try {
+    markdown = await readFile(documentAbsolute, 'utf8');
+  } catch {
+    return workspaceError(
+      'ERR_ENTITY_DOCUMENT_MISSING',
+      'Artifact prompt target could not be resolved'
+    );
+  }
+
+  try {
+    const parsed = parseWorkspaceMarkdownObject({ markdown, objectType });
+    const kind = 'kind' in parsed.data ? parsed.data.kind : undefined;
+    const format = 'format' in parsed.data ? parsed.data.format : undefined;
+    if (kind !== 'artifact' || format !== 'html') {
+      return workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'Artifact prompt target is not a work'
+      );
+    }
+  } catch {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Artifact prompt target is not a work');
+  }
+
+  const entryState = await safeFileForAction(
+    nodeFsProbe,
+    path.join(directoryAbsolute, entryFileName)
+  );
+  if (entryState === 'present') {
+    return null;
+  }
+  return workspaceError(
+    entryState === 'missing' ? 'ERR_ENTITY_DOCUMENT_MISSING' : 'ERR_WORKSPACE_UNSAFE_PATH',
+    'Artifact prompt target could not be resolved'
+  );
+}
+
+function artifactPromptIdentityLines(request: WorkspaceCopyArtifactAgentPromptRequest): string[] {
+  return [
+    `- workspaceId: ${request.workspaceId}`,
+    `- memoryId: ${request.memoryId}`,
+    ...('segmentId' in request ? [`- segmentId: ${request.segmentId}`] : []),
+    ...('supplementId' in request ? [`- supplementId: ${request.supplementId}`] : []),
+  ];
+}
+
+function buildWorkspaceArtifactAgentPrompt({
+  request,
+  targetDirectoryRelative,
+}: {
+  readonly request: WorkspaceCopyArtifactAgentPromptRequest;
+  readonly targetDirectoryRelative: string;
+}): string {
+  const common = [
+    '请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；涉及视觉、信息布局、交互或数据表达时，同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
+    '',
+    '边界：',
+    '- 只使用下方 workspace-relative path，不要使用绝对路径。',
+    '- 不要编辑 `.reo/index.json`、`.reo/objects/**`、`.reo/review/**`、draft、trash 或 lock 文件。',
+    '- 不要调用 Reo IPC，不要创建录音或笔记 draft；直接写普通文件。',
+    '- 作品对象 frontmatter 必须包含 `kind: artifact` 和 `format: html`。',
+    '',
+    '目标身份：',
+    ...artifactPromptIdentityLines(request),
+    '',
+  ];
+
+  if (request.action === 'create-segment') {
+    return [
+      '# 创建一个 Reo 作品片段',
+      '',
+      ...common,
+      '目标 Memory：',
+      `- memory directory: \`${targetDirectoryRelative}\``,
+      '',
+      '创建要求：',
+      `- 在 \`${targetDirectoryRelative}/segments/\` 下创建一个新的片段目录，目录名使用新的 \`seg_...\` id 和可读标题。`,
+      '- 写入 `segment.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。',
+      '- 写入同目录 `segment.html`，它是轻量、可预览的完整 HTML 文档。',
+      '- 不要先创建空占位；一次性给出可用作品。',
+    ].join('\n');
+  }
+
+  if (request.action === 'create-supplement') {
+    return [
+      '# 创建一个 Reo 作品补充',
+      '',
+      ...common,
+      '目标 Segment：',
+      `- segment directory: \`${targetDirectoryRelative}\``,
+      '',
+      '创建要求：',
+      `- 在 \`${targetDirectoryRelative}/supplements/\` 下创建一个新的补充目录，目录名使用新的 \`sup_...\` id 和可读标题。`,
+      '- 写入 `supplement.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。',
+      '- 写入同目录 `supplement.html`，它是轻量、可预览的完整 HTML 文档。',
+      '- 不要先创建空占位；一次性给出可用作品补充。',
+    ].join('\n');
+  }
+
+  if (request.action === 'update-segment') {
+    return [
+      '# 更新一个已有 Reo 作品片段',
+      '',
+      ...common,
+      '目标作品片段：',
+      `- segment directory: \`${targetDirectoryRelative}\``,
+      `- metadata: \`${targetDirectoryRelative}/segment.md\``,
+      `- html: \`${targetDirectoryRelative}/segment.html\``,
+      '',
+      '更新要求：',
+      '- 不要创建新的作品对象。',
+      '- 保留 `segment.md` 中已有 `id`，继续保持 `kind: artifact` 与 `format: html`。',
+      '- 更新 `segment.html`，必要时同步 `segment.md` 的标题或摘要字段。',
+    ].join('\n');
+  }
+
+  return [
+    '# 更新一个已有 Reo 作品补充',
+    '',
+    ...common,
+    '目标作品补充：',
+    `- supplement directory: \`${targetDirectoryRelative}\``,
+    `- metadata: \`${targetDirectoryRelative}/supplement.md\``,
+    `- html: \`${targetDirectoryRelative}/supplement.html\``,
+    '',
+    '更新要求：',
+    '- 不要创建新的作品对象。',
+    '- 保留 `supplement.md` 中已有 `id`，继续保持 `kind: artifact` 与 `format: html`。',
+    '- 更新 `supplement.html`，必要时同步 `supplement.md` 的标题或摘要字段。',
+  ].join('\n');
 }
 
 async function copyEntityAbsoluteDirectoryPath({
@@ -6929,6 +7230,16 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_COPY_SEGMENT_RELATIVE_PATH_CHANNEL, (event, input) =>
     handleCopySegmentRelativePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL, (event, input) =>
+    handleCopyArtifactAgentPrompt({
       event,
       input,
       expectedSession,

@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { ImageOff, Shuffle } from 'lucide-react';
+import { AppWindow, ImageOff, Shuffle } from 'lucide-react';
 import type {
   WorkspaceCoverProjection,
   WorkspaceSegmentEntityActionRequest,
@@ -19,6 +19,7 @@ export type SegmentActionsMenuProps = {
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onDelete: () => void;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
@@ -40,6 +41,7 @@ export function SegmentActionsMenu({
   onCloseAutoFocus,
   onDelete,
   onOpenChange,
+  onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onRename,
@@ -57,6 +59,15 @@ export function SegmentActionsMenu({
   const actionBindings = bindSegmentEntityActions(actionIdentity);
   const hasCustomCover = cover?.source === 'custom';
   const extraActions: readonly EntityActionMenuExtraAction[] = [
+    ...(onRequestArtifactUpdate
+      ? [
+          {
+            icon: AppWindow,
+            label: '让 Agent 更新作品',
+            onSelect: onRequestArtifactUpdate,
+          },
+        ]
+      : []),
     ...(onRequestSpeechSynthesis
       ? [createSpeechSynthesisExtraAction(onRequestSpeechSynthesis, speechSynthesisDisabledReason)]
       : []),

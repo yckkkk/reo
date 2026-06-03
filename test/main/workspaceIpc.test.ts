@@ -66,6 +66,7 @@ import {
   handleCopyMemoryAbsolutePathForTest,
   handleCopyMemorySpaceAbsolutePathForTest,
   handleCopyMemoryRelativePathForTest,
+  handleCopyArtifactAgentPromptForTest,
   handleCopyNeedsReviewAgentPromptForTest,
   handleCopySegmentAbsolutePathForTest,
   handleCopySegmentRelativePathForTest,
@@ -1099,12 +1100,20 @@ test('initializeWorkspace creates a named workspace directory under the selected
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works\/references\//);
+  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works-design\/references\//);
   assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
   assert.doesNotMatch(agentsText, /普通文字/);
   assert.doesNotMatch(agentsText, /source\.hash/);
   await stat(path.join(workspaceRoot, 'skills', 'reo-edit', 'SKILL.md'));
   await stat(path.join(workspaceRoot, 'skills', 'reo-cover-image', 'SKILL.md'));
   await stat(path.join(workspaceRoot, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-works', 'SKILL.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-works-design', 'SKILL.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-works', 'references', 'file-contract.md'));
+  await stat(path.join(workspaceRoot, 'skills', 'reo-works-design', 'references', 'modules.md'));
   await stat(path.join(workspaceRoot, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
   await assert.rejects(stat(path.join(parentPath, '.reo')));
   await assert.rejects(stat(path.join(parentPath, 'AGENTS.md')));
@@ -1447,6 +1456,7 @@ test('request segment backfill IPC forwards mode through validated handle owners
               segmentCount: 1,
               audioSegmentCount: 1,
               noteSegmentCount: 0,
+              artifactSegmentCount: 0,
               hasAnyNote: false,
               supplementCount: 0,
               title: 'Memory',
@@ -1507,6 +1517,7 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
             segmentCount: 1,
             audioSegmentCount: 1,
             noteSegmentCount: 0,
+            artifactSegmentCount: 0,
             hasAnyNote: false,
             supplementCount: 1,
             title: 'Memory',
@@ -1996,6 +2007,7 @@ test('createMemory creates an empty Memory container through file truth', async 
       segmentCount: 0,
       audioSegmentCount: 0,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
       hasAudioTranscript: false,
@@ -2042,6 +2054,7 @@ test('createMemory creates an empty Memory container through file truth', async 
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,
@@ -5246,6 +5259,7 @@ test('readWorkspaceSnapshot reflects external workspace and memory Markdown edit
         segmentCount: 1,
         audioSegmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 1000,
         audioByteLength: 3,
         hasAudioTranscript: true,
@@ -7153,6 +7167,271 @@ test('copyNeedsReviewAgentPrompt returns clipboard-write failed when clipboard w
     assert.equal(result.error.code, 'ERR_CLIPBOARD_WRITE_FAILED');
   }
   assert.equal(copiedText.length, 1);
+});
+
+test('copyArtifactAgentPrompt rejects prompt/path payloads and does not write clipboard', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-invalid-'));
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'create-segment',
+      memoryId: 'mem_prompt',
+      prompt: 'renderer must not provide prompt text',
+      targetPath: '/tmp/reo-artifact-prompt-invalid/memories/mem_prompt',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyArtifactAgentPrompt writes a create segment prompt without creating files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-create-'));
+  const memoryDirectory = path.join(root, 'memories', 'mem_prompt--产品复盘');
+  await mkdir(memoryDirectory, { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'memories'), { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: '产品复盘' },
+      content: '# 产品复盘\n',
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'memories', 'mem_prompt.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId: 'mem_prompt',
+      createdAt: '2026-06-03T12:00:00.000Z',
+      updatedAt: '2026-06-03T12:00:00.000Z',
+    })}\n`
+  );
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'create-segment',
+      memoryId: 'mem_prompt',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  assert.match(copiedText[0] ?? '', /创建一个 Reo 作品片段/);
+  assert.match(copiedText[0] ?? '', /skills\/reo-works\/SKILL\.md/);
+  assert.match(copiedText[0] ?? '', /skills\/reo-works\/references\//);
+  assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
+  assert.match(copiedText[0] ?? '', /kind: artifact/);
+  assert.match(copiedText[0] ?? '', /format: html/);
+  assert.match(copiedText[0] ?? '', /segment\.html/);
+  assert.match(copiedText[0] ?? '', /memories\/mem_prompt--产品复盘/);
+  assert.equal((copiedText[0] ?? '').includes(root), false);
+  assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
+  await assert.rejects(stat(path.join(memoryDirectory, 'segments')));
+});
+
+test('copyArtifactAgentPrompt writes an update supplement prompt scoped to the target work', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-update-'));
+  const supplementDirectory = path.join(
+    root,
+    'memories',
+    'mem_prompt--产品复盘',
+    'segments',
+    'seg_artifact--复习表',
+    'supplements',
+    'sup_artifact--补充'
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'memories'), { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
+  await mkdir(path.join(root, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(root, 'memories', 'mem_prompt--产品复盘', 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: '产品复盘' },
+      content: '# 产品复盘\n',
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'memories', 'mem_prompt.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'memory',
+      memoryId: 'mem_prompt',
+      createdAt: '2026-06-03T12:00:00.000Z',
+      updatedAt: '2026-06-03T12:00:00.000Z',
+    })}\n`
+  );
+  await writeFile(
+    path.join(
+      root,
+      'memories',
+      'mem_prompt--产品复盘',
+      'segments',
+      'seg_artifact--复习表',
+      'segment.md'
+    ),
+    [
+      '---',
+      'id: seg_artifact',
+      'title: 复习表',
+      'kind: artifact',
+      'format: html',
+      '---',
+      '# 复习表',
+      '',
+    ].join('\n')
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', 'seg_artifact.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'segment',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_artifact',
+      kind: 'artifact',
+      format: 'html',
+      createdAt: '2026-06-03T12:00:00.000Z',
+      finalizedAt: '2026-06-03T12:00:00.000Z',
+      updatedAt: '2026-06-03T12:00:00.000Z',
+      entryByteLength: 1,
+      entryHash: 'a'.repeat(64),
+    })}\n`
+  );
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    [
+      '---',
+      'id: sup_artifact',
+      'title: 补充',
+      'kind: artifact',
+      'format: html',
+      '---',
+      '# 补充',
+      '',
+    ].join('\n')
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'supplements', 'sup_artifact.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      objectType: 'supplement',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_artifact',
+      supplementId: 'sup_artifact',
+      kind: 'artifact',
+      format: 'html',
+      createdAt: '2026-06-03T12:00:00.000Z',
+      finalizedAt: '2026-06-03T12:00:00.000Z',
+      updatedAt: '2026-06-03T12:00:00.000Z',
+      entryByteLength: 1,
+      entryHash: 'b'.repeat(64),
+    })}\n`
+  );
+  await writeFile(path.join(supplementDirectory, 'supplement.html'), '<!doctype html><p>Old</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-supplement',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_artifact',
+      supplementId: 'sup_artifact',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  assert.match(copiedText[0] ?? '', /更新一个已有 Reo 作品补充/);
+  assert.match(
+    copiedText[0] ?? '',
+    /memories\/mem_prompt--产品复盘\/segments\/seg_artifact--复习表\/supplements\/sup_artifact--补充/
+  );
+  assert.match(copiedText[0] ?? '', /supplement\.md/);
+  assert.match(copiedText[0] ?? '', /supplement\.html/);
+  assert.match(copiedText[0] ?? '', /skills\/reo-works\/references\//);
+  assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
+  assert.match(copiedText[0] ?? '', /不要创建新的作品对象/);
+  assert.equal((copiedText[0] ?? '').includes(root), false);
+  assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
+});
+
+test('copyArtifactAgentPrompt rejects update segment prompts for non-artifact targets', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-update-note-'));
+  const segmentDirectory = path.join(root, 'memories', 'mem_prompt', 'segments', 'seg_note');
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    ['---', 'id: seg_note', 'title: 普通笔记', 'kind: note', '---', '# 普通笔记', ''].join('\n')
+  );
+  await writeFile(path.join(segmentDirectory, 'segment.html'), '<!doctype html><p>Wrong</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-segment',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+  assert.deepEqual(copiedText, []);
 });
 
 test('copyMemoryAbsolutePath rejects untrusted sender and does not write clipboard', async () => {

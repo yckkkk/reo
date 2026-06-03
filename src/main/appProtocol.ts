@@ -1,7 +1,13 @@
 import { app, net, protocol } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { APP_SHELL_HOST, APP_SHELL_SCHEME, ATTACHMENT_SCHEME } from './appShellConstants.js';
+import {
+  APP_SHELL_HOST,
+  APP_SHELL_SCHEME,
+  ARTIFACT_SCHEME,
+  ATTACHMENT_SCHEME,
+} from './appShellConstants.js';
+import { resolveArtifactProtocolRequest, type ArtifactRootResolver } from './artifactProtocol.js';
 import { resolveDevServerUrl } from './devServerUrl.js';
 import { resolveMemoryCoverFile, resolveSegmentCoverFile } from './memoryCovers.js';
 import {
@@ -30,8 +36,10 @@ type AttachmentRootResolution =
 type AttachmentRootResolver = (workspaceId: string) => AttachmentRootResolution;
 
 const denyAttachmentRoot: AttachmentRootResolver = () => ({ ok: false });
+const denyArtifactRoot: ArtifactRootResolver = () => ({ ok: false });
 
 export interface RegisterAppShellProtocolOptions {
+  readonly resolveArtifactRoot?: ArtifactRootResolver;
   readonly resolveAttachmentRoot?: AttachmentRootResolver;
 }
 
@@ -55,6 +63,15 @@ export function registerAppShellScheme(): void {
         standard: true,
         supportFetchAPI: true,
         corsEnabled: true,
+        stream: true,
+      },
+    },
+    {
+      scheme: ARTIFACT_SCHEME,
+      privileges: {
+        secure: true,
+        standard: true,
+        supportFetchAPI: true,
         stream: true,
       },
     },
@@ -101,6 +118,7 @@ export function registerAppShellProtocol(): void {
 }
 
 export function registerAppShellProtocolWithOptions({
+  resolveArtifactRoot,
   resolveAttachmentRoot,
 }: RegisterAppShellProtocolOptions): void {
   if (protocolRegistered) {
@@ -158,7 +176,33 @@ export function registerAppShellProtocolWithOptions({
     }
   });
 
+  protocol.handle(ARTIFACT_SCHEME, async (request) => {
+    if (request.method !== 'GET') {
+      return new Response('Method not allowed', { status: 405 });
+    }
+    const resolved = await resolveArtifactProtocolRequest(
+      request.url,
+      resolveArtifactRoot ?? denyArtifactRoot,
+      { vendorRoot: getArtifactVendorRootPath() }
+    );
+    if (!resolved.ok) {
+      return new Response('Not found', { status: 404 });
+    }
+    return new Response(resolved.bytes, {
+      headers: {
+        'Cache-Control': resolved.cacheControl,
+        'Content-Security-Policy': resolved.contentSecurityPolicy,
+        'Content-Type': resolved.mimeType,
+      },
+      status: 200,
+    });
+  });
+
   protocolRegistered = true;
+}
+
+function getArtifactVendorRootPath(): string {
+  return path.join(app.getAppPath(), 'resources', 'artifact-vendor');
 }
 
 async function resolveAttachmentProtocolRequest(

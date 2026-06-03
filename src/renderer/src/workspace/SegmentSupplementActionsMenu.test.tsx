@@ -32,6 +32,7 @@ vi.mock('@/components/ui/toaster', () => {
 });
 
 const reoWorkspace = {
+  copyArtifactAgentPrompt: vi.fn(),
   copySegmentSupplementAbsolutePath: vi.fn(),
   copySegmentSupplementRelativePath: vi.fn(),
   openSegmentSupplementDocument: vi.fn(),

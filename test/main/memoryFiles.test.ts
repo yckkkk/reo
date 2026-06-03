@@ -53,6 +53,7 @@ import {
   fsyncWorkspaceDirectoryForTest,
   readMemoryDetailFromFileTruth,
   readFinalizedSegmentProjection,
+  rebuildWorkspaceReadModel,
   rebuildMemoryIndex,
   recoverRecordingFinalizeTransactions,
   resetMemoryCoverToDefaultFromFileTruth,
@@ -519,6 +520,94 @@ async function writeFinalizedNoteSupplementForTest(
   );
 }
 
+function sha256Text(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+async function writeArtifactSegmentCandidateForTest(
+  rootPath: string,
+  artifact: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly title: string;
+    readonly html?: string;
+    readonly includeEntry?: boolean;
+    readonly finalizedAt?: string;
+  }
+): Promise<string> {
+  const segmentDirectory = path.join(
+    rootPath,
+    'memories',
+    artifact.memoryId,
+    'segments',
+    artifact.segmentId
+  );
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    [
+      '---',
+      `id: ${artifact.segmentId}`,
+      `title: ${artifact.title}`,
+      'kind: artifact',
+      'format: html',
+      '---',
+      '',
+      '',
+    ].join('\n')
+  );
+  if (artifact.includeEntry ?? true) {
+    await writeFile(
+      path.join(segmentDirectory, 'segment.html'),
+      artifact.html ?? '<!doctype html><html><body><h1>作品</h1></body></html>\n'
+    );
+  }
+  return segmentDirectory;
+}
+
+async function writeArtifactSupplementCandidateForTest(
+  rootPath: string,
+  artifact: {
+    readonly memoryId: string;
+    readonly segmentId: string;
+    readonly supplementId: string;
+    readonly title: string;
+    readonly html?: string;
+    readonly includeEntry?: boolean;
+  }
+): Promise<string> {
+  const supplementDirectory = path.join(
+    rootPath,
+    'memories',
+    artifact.memoryId,
+    'segments',
+    artifact.segmentId,
+    'supplements',
+    artifact.supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    [
+      '---',
+      `id: ${artifact.supplementId}`,
+      `title: ${artifact.title}`,
+      'kind: artifact',
+      'format: html',
+      '---',
+      '',
+      '',
+    ].join('\n')
+  );
+  if (artifact.includeEntry ?? true) {
+    await writeFile(
+      path.join(supplementDirectory, 'supplement.html'),
+      artifact.html ?? '<!doctype html><html><body><h1>补充作品</h1></body></html>\n'
+    );
+  }
+  return supplementDirectory;
+}
+
 async function readWorkspaceIndex(rootPath: string): Promise<unknown> {
   return readJson(path.join(rootPath, '.reo', 'index.json'));
 }
@@ -590,6 +679,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       segmentCount: 1,
       audioSegmentCount: 1,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioDurationMs: 73_000,
       audioByteLength: 3,
       hasAudioTranscript: false,
@@ -802,6 +892,7 @@ test('updates titles through file truth before rebuilding the index projection',
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,
@@ -1061,6 +1152,7 @@ test('renames segment supplement file-space node and refreshes the parent memory
             segmentCount: 1,
             audioSegmentCount: 1,
             noteSegmentCount: 0,
+            artifactSegmentCount: 0,
             audioDurationMs: 1000,
             audioByteLength: 3,
             hasAudioTranscript: false,
@@ -1133,6 +1225,7 @@ test('renames segment supplement file-space node and refreshes the parent memory
         segmentCount: 1,
         audioSegmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 1000,
         audioByteLength: 3,
         hasAudioTranscript: false,
@@ -1566,6 +1659,7 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         segmentCount: 1,
         audioSegmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 1000,
         audioByteLength: 3,
         hasAudioTranscript: false,
@@ -1605,6 +1699,7 @@ test('delete and restore move SegmentSupplement files through the supplement tra
         segmentCount: 1,
         audioSegmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 1000,
         audioByteLength: 3,
         hasAudioTranscript: false,
@@ -1801,6 +1896,7 @@ test('delete and restore move Segment supplements with the parent Segment direct
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,
@@ -3209,6 +3305,355 @@ test('direct body-only note segment file creation is repaired and projected', as
   }
 });
 
+test('direct artifact html segment file creation is repaired and projected', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_artifact_segment';
+  const segmentId = 'seg_direct_artifact_segment';
+  const html = '<!doctype html><html><body><h1>间隔复习表</h1></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '直接作品创建',
+  });
+  await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '间隔复习表',
+    html,
+  });
+
+  const memories = await rebuildMemoryIndex(rootPath);
+  const memory = memories.find((candidate) => candidate.memoryId === memoryId) as
+    | (Record<string, unknown> & { readonly memoryId: string })
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 1);
+  assert.equal(memory['audioSegmentCount'], 0);
+  assert.equal(memory['noteSegmentCount'], 0);
+  assert.equal(memory['artifactSegmentCount'], 1);
+  assert.equal(memory['hasAnyNote'], false);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['schemaVersion'], 1);
+  assert.equal(manifest['objectType'], 'segment');
+  assert.equal(manifest['workspaceId'], 'ws_memory');
+  assert.equal(manifest['memoryId'], memoryId);
+  assert.equal(manifest['segmentId'], segmentId);
+  assert.equal(manifest['kind'], 'artifact');
+  assert.equal(manifest['format'], 'html');
+  assert.equal(manifest['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(manifest['entryHash'], sha256Text(html));
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const segment = detail.value.segments[0] as Record<string, unknown> | undefined;
+  assert.ok(segment);
+  assert.equal(segment['type'], 'artifact');
+  assert.equal(segment['segmentId'], segmentId);
+  assert.equal(segment['title'], '间隔复习表');
+  assert.equal(segment['format'], 'html');
+  assert.equal(segment['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(segment['entryHash'], sha256Text(html));
+  assert.equal(segment['previewVersion'], sha256Text(html));
+  assert.deepEqual(segment['contentTabOrder'], ['segment']);
+  assert.deepEqual(segment['supplements'], []);
+  assert.equal(segment['supplementCount'], 0);
+  assert.equal('bodyByteLength' in segment, false);
+  assert.equal('audioByteLength' in segment, false);
+  assert.equal('transcript' in segment, false);
+});
+
+test('direct artifact html segment replacement refreshes manifest and preview version', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_replace_artifact_segment';
+  const segmentId = 'seg_replace_artifact_segment';
+  const initialHtml = '<!doctype html><html><body><h1>初版作品</h1></body></html>\n';
+  const replacementHtml =
+    '<!doctype html><html><body><h1>用户替换后的作品</h1><p>新的本地 HTML。</p></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '替换作品',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '可替换作品',
+    html: initialHtml,
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  await writeFile(path.join(segmentDirectory, 'segment.html'), replacementHtml);
+  await rebuildMemoryIndex(rootPath);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
+  assert.equal(manifest['entryHash'], sha256Text(replacementHtml));
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const segment = detail.value.segments[0] as Record<string, unknown> | undefined;
+  assert.ok(segment);
+  assert.equal(segment['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
+  assert.equal(segment['entryHash'], sha256Text(replacementHtml));
+  assert.equal(segment['previewVersion'], sha256Text(replacementHtml));
+});
+
+test('direct artifact html supplement file creation is repaired under parent segment', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_direct_artifact_supplement';
+  const segmentId = 'seg_direct_artifact_supplement_parent';
+  const supplementId = 'sup_direct_artifact_supplement';
+  const html = '<!doctype html><html><body><canvas></canvas></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '作品补充',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '补充作品',
+    html,
+  });
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  assert.equal(detail.value.segmentCount, 1);
+  assert.equal(detail.value.noteSegmentCount, 1);
+  assert.equal(detail.value.supplementCount, 1);
+  assert.equal(detail.value.hasAnyNote, true);
+  const segment = detail.value.segments[0];
+  assert.ok(segment);
+  const supplement = segment.supplements[0] as Record<string, unknown> | undefined;
+  assert.ok(supplement);
+  assert.equal(supplement['type'], 'artifact');
+  assert.equal(supplement['supplementId'], supplementId);
+  assert.equal(supplement['format'], 'html');
+  assert.equal(supplement['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(supplement['entryHash'], sha256Text(html));
+  assert.equal(supplement['previewVersion'], sha256Text(html));
+  assert.deepEqual(segment.contentTabOrder, ['segment', `supplement:${supplementId}`]);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['kind'], 'artifact');
+  assert.equal(manifest['format'], 'html');
+  assert.equal(manifest['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(manifest['entryHash'], sha256Text(html));
+});
+
+test('direct artifact html supplement replacement refreshes manifest and preview version', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_replace_artifact_supplement';
+  const segmentId = 'seg_replace_artifact_supplement_parent';
+  const supplementId = 'sup_replace_artifact_supplement';
+  const initialHtml = '<!doctype html><html><body><h1>初版补充作品</h1></body></html>\n';
+  const replacementHtml =
+    '<!doctype html><html><body><h1>用户替换后的补充作品</h1><button>本地交互</button></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '替换补充作品',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const supplementDirectory = await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '可替换补充作品',
+    html: initialHtml,
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  await writeFile(path.join(supplementDirectory, 'supplement.html'), replacementHtml);
+  await rebuildMemoryIndex(rootPath);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
+  assert.equal(manifest['entryHash'], sha256Text(replacementHtml));
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const segment = detail.value.segments[0];
+  assert.ok(segment);
+  const supplement = segment.supplements[0] as Record<string, unknown> | undefined;
+  assert.ok(supplement);
+  assert.equal(supplement['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
+  assert.equal(supplement['entryHash'], sha256Text(replacementHtml));
+  assert.equal(supplement['previewVersion'], sha256Text(replacementHtml));
+});
+
+test('direct artifact html segment without entry is excluded and reported for review', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_missing_entry';
+  const segmentId = 'seg_artifact_missing_entry';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '缺入口作品',
+  });
+  await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '缺入口作品',
+    includeEntry: false,
+  });
+
+  const readModel = await rebuildWorkspaceReadModel(rootPath, { persist: false });
+  const memory = readModel.memories.find((candidate) => candidate.memoryId === memoryId) as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 0);
+  assert.equal(memory['artifactSegmentCount'], 0);
+  assert.deepEqual(
+    readModel.reviewEntries.map((entry) => ({
+      category: entry.category,
+      kind: entry.kind,
+      objectType: entry.objectType,
+      paths: entry.paths.map((filePath) => {
+        const expectedPath = `memories/${memoryId}/segments/${segmentId}/segment.md`;
+        const normalizedPath = filePath.split(path.sep).join('/');
+        return normalizedPath.endsWith(expectedPath) ? expectedPath : normalizedPath;
+      }),
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'markdown-segment',
+        kind: 'artifact',
+        objectType: 'segment',
+        paths: [`memories/${memoryId}/segments/${segmentId}/segment.md`],
+        reason: 'missing-artifact-entry',
+      },
+    ]
+  );
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`))
+  );
+});
+
+test('direct oversized artifact html segment is excluded before hashing and reported for review', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_oversized_entry';
+  const segmentId = 'seg_artifact_oversized_entry';
+  const oversizedHtml = `<!doctype html><html><body>${'x'.repeat(1024 * 1024)}</body></html>\n`;
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '超大入口作品',
+  });
+  await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '超大入口作品',
+    html: oversizedHtml,
+  });
+
+  const readModel = await rebuildWorkspaceReadModel(rootPath, { persist: false });
+  const memory = readModel.memories.find((candidate) => candidate.memoryId === memoryId) as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 0);
+  assert.equal(memory['artifactSegmentCount'], 0);
+  assert.equal(readModel.reviewEntries.length, 1);
+  assert.equal(readModel.reviewEntries[0]?.reason, 'oversized-artifact-entry');
+  assert.equal(readModel.reviewEntries[0]?.objectType, 'segment');
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`))
+  );
+});
+
+test('direct oversized artifact html supplement is excluded before hashing and reported for review', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_oversized_supplement';
+  const segmentId = 'seg_artifact_oversized_supplement_parent';
+  const supplementId = 'sup_artifact_oversized_entry';
+  const oversizedHtml = `<!doctype html><html><body>${'x'.repeat(1024 * 1024)}</body></html>\n`;
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '超大补充作品',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '超大补充作品',
+    html: oversizedHtml,
+  });
+
+  const readModel = await rebuildWorkspaceReadModel(rootPath, { persist: false });
+  const memory = readModel.memories.find((candidate) => candidate.memoryId === memoryId) as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 1);
+  assert.equal(memory['supplementCount'], 0);
+  assert.equal(readModel.reviewEntries.length, 1);
+  assert.equal(readModel.reviewEntries[0]?.reason, 'oversized-artifact-entry');
+  assert.equal(readModel.reviewEntries[0]?.objectType, 'supplement');
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`))
+  );
+});
+
 test('agent-created memory with frontmatter id remains a valid Memory candidate', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_agent_frontmatter_id';
@@ -4461,6 +4906,7 @@ test('supplement finalize checks parent by direct file truth without pre-scannin
           segmentCount: 1,
           audioSegmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioDurationMs: 1200,
           audioByteLength: 3,
           hasAudioTranscript: false,
@@ -4620,6 +5066,7 @@ test('supplement finalize rolls back exposed directory when manifest write canno
         segmentCount: 1,
         audioSegmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 1000,
         audioByteLength: 3,
         hasAudioTranscript: false,
@@ -4764,6 +5211,7 @@ test('Memory file truth uses memory directory basename as the title source of tr
       segmentCount: 0,
       audioSegmentCount: 0,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
       hasAudioTranscript: false,
@@ -4857,6 +5305,7 @@ test('delete and restore keep externally renamed memory directories addressable 
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,
@@ -5298,6 +5747,7 @@ test('rebuild skips finalized audio segment metadata with invalid projected fiel
       segmentCount: 0,
       audioSegmentCount: 0,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioDurationMs: 0,
       audioByteLength: 0,
       hasAudioTranscript: false,
@@ -8110,6 +8560,7 @@ test('rebuild skips finalized audio segment metadata missing detail-read require
       segmentCount: 0,
       audioSegmentCount: 0,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       hasAnyNote: false,
       title: 'Incomplete metadata',
       updatedAt: '2026-05-06T13:08:00.000Z',
@@ -8384,6 +8835,7 @@ test('recovery ignores stale memory segment id input when no finalize marker exi
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,
@@ -8578,6 +9030,7 @@ test('rebuilds index only from finalized audio segment metadata that matches aud
         segmentCount: 0,
         audioSegmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
         hasAudioTranscript: false,

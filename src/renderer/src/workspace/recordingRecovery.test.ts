@@ -22,6 +22,7 @@ const workspaceSession: WorkspaceSession = {
         memoryId: 'mem_1',
         segmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioSegmentCount: 0,
         title: 'Memory',
         updatedAt: '2026-05-09T10:00:00.000Z',
@@ -173,6 +174,7 @@ describe('recordingRecovery', () => {
           memoryId: 'mem_other',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: 'Wrong memory',
           updatedAt: '2026-05-09T10:00:00.000Z',
@@ -200,6 +202,58 @@ describe('recordingRecovery', () => {
       title: 'Recovered audio',
       workspaceId: 'ws_1',
     });
+
+    expect(readRecordingRecoveryDraft(workspaceSession)).toBeNull();
+    expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();
+  });
+
+  it('rejects finalized recovery audio without the required artifact segment count', () => {
+    window.localStorage.setItem(
+      'reo.recordingRecovery.v1.ws_1',
+      JSON.stringify({
+        schemaVersion: 1,
+        createdAt: '2026-05-09T10:00:00.000Z',
+        durationMs: 1000,
+        finalizedAudio: {
+          memory: {
+            audioByteLength: 3,
+            createdAt: '2026-05-09T10:00:00.000Z',
+            audioDurationMs: 1000,
+            supplementCount: 0,
+            hasAudioTranscript: false,
+            hasAnyNote: false,
+            memoryId: 'mem_1',
+            segmentCount: 1,
+            noteSegmentCount: 0,
+            audioSegmentCount: 1,
+            title: 'Memory',
+            updatedAt: '2026-05-09T10:00:00.000Z',
+          },
+          segment: {
+            workspaceId: 'ws_1',
+            memoryId: 'mem_1',
+            segmentId: 'seg_1',
+            type: 'audio',
+            title: 'Recovered audio',
+            createdAt: '2026-05-09T10:00:00.000Z',
+            updatedAt: '2026-05-09T10:00:00.000Z',
+            audioByteLength: 3,
+            durationMs: 1000,
+            lastTranscriptionAttempt: 'never',
+            transcript: { exists: false },
+            supplementCount: 0,
+            supplements: [],
+          },
+        },
+        memoryId: 'mem_1',
+        recordingSessionId: 'recording-1',
+        revisionId: 'recording-1-revision-0',
+        segmentId: 'seg_1',
+        title: 'Recovered audio',
+        updatedAt: '2026-05-09T10:00:00.000Z',
+        workspaceId: 'ws_1',
+      })
+    );
 
     expect(readRecordingRecoveryDraft(workspaceSession)).toBeNull();
     expect(window.localStorage.getItem('reo.recordingRecovery.v1.ws_1')).toBeNull();

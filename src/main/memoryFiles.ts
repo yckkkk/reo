@@ -50,6 +50,7 @@ import {
   renderWorkspaceMarkdownObject,
   type ParsedWorkspaceMarkdownObjectCandidate,
 } from './workspaceMarkdownObjects.js';
+import { MAX_ARTIFACT_ENTRY_BYTES } from './artifactLimits.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
 import {
   readFileSpaceNodeCoverProjectionFromDirectory,
@@ -197,7 +198,27 @@ interface NoteSegmentObjectManifest {
   readonly speechSynthesis?: NoteSpeechSynthesisManifest | undefined;
 }
 
-type SegmentObjectManifest = AudioSegmentObjectManifest | NoteSegmentObjectManifest;
+interface ArtifactSegmentObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'segment';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly kind: 'artifact';
+  readonly format: 'html';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly entryByteLength: number;
+  readonly entryHash: string;
+  readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
+  readonly defaultCoverTemplateId?: WorkspaceDefaultCoverTemplateId | undefined;
+}
+
+type SegmentObjectManifest =
+  | AudioSegmentObjectManifest
+  | NoteSegmentObjectManifest
+  | ArtifactSegmentObjectManifest;
 
 interface AudioSupplementObjectManifest {
   readonly schemaVersion: 1;
@@ -232,7 +253,26 @@ interface NoteSupplementObjectManifest {
   readonly speechSynthesis?: NoteSpeechSynthesisManifest | undefined;
 }
 
-type SupplementObjectManifest = AudioSupplementObjectManifest | NoteSupplementObjectManifest;
+interface ArtifactSupplementObjectManifest {
+  readonly schemaVersion: 1;
+  readonly objectType: 'supplement';
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly kind: 'artifact';
+  readonly format: 'html';
+  readonly createdAt: string;
+  readonly finalizedAt: string;
+  readonly updatedAt: string;
+  readonly entryByteLength: number;
+  readonly entryHash: string;
+}
+
+type SupplementObjectManifest =
+  | AudioSupplementObjectManifest
+  | NoteSupplementObjectManifest
+  | ArtifactSupplementObjectManifest;
 
 type FinalizedSegmentSemanticTruth = SegmentObjectManifest & {
   readonly title: string;
@@ -252,6 +292,12 @@ type FinalizedNoteSegmentSemanticTruth = NoteSegmentObjectManifest & {
   readonly markdownContent: string;
 };
 
+type FinalizedArtifactSegmentSemanticTruth = ArtifactSegmentObjectManifest & {
+  readonly title: string;
+  readonly contentTitle?: string;
+  readonly markdownContent: string;
+};
+
 type FinalizedSupplementSemanticTruth = SupplementObjectManifest & {
   readonly title: string;
   readonly markdownContent: string;
@@ -265,6 +311,7 @@ export interface MemorySummary {
   readonly segmentCount: number;
   readonly audioSegmentCount: number;
   readonly noteSegmentCount: number;
+  readonly artifactSegmentCount: number;
   readonly audioDurationMs: number;
   readonly audioByteLength: number;
   readonly hasAudioTranscript: boolean;
@@ -298,7 +345,16 @@ interface FinalizedNoteSegmentFileTruth extends FinalizedSegmentFileTruthBase {
   readonly metadata: FinalizedNoteSegmentSemanticTruth;
 }
 
-type FinalizedSegmentFileTruth = FinalizedAudioSegmentFileTruth | FinalizedNoteSegmentFileTruth;
+interface FinalizedArtifactSegmentFileTruth extends FinalizedSegmentFileTruthBase {
+  readonly metadata: FinalizedArtifactSegmentSemanticTruth;
+  readonly entryByteLength: number;
+  readonly entryHash: string;
+}
+
+type FinalizedSegmentFileTruth =
+  | FinalizedAudioSegmentFileTruth
+  | FinalizedNoteSegmentFileTruth
+  | FinalizedArtifactSegmentFileTruth;
 
 export interface SegmentSupplementSummary {
   readonly supplementId: string;
@@ -831,25 +887,42 @@ function hashWorkspaceFileDescriptor(fd: number, byteLength: number): string {
   }
 
   if (offset !== byteLength) {
-    throw new Error('Workspace audio hash read did not cover the full payload');
+    throw new Error('Workspace file hash read did not cover the full payload');
   }
 
   return hash.digest('hex');
+}
+
+function readWorkspaceFileDescriptor(
+  fd: number,
+  unsafeMessage: string
+): { readonly byteLength: number; readonly hash: string } {
+  const entry = fstatSync(fd);
+  if (!entry.isFile()) {
+    throw new Error(unsafeMessage);
+  }
+
+  return {
+    byteLength: entry.size,
+    hash: hashWorkspaceFileDescriptor(fd, entry.size),
+  };
 }
 
 function readWorkspaceAudioDescriptor(
   fd: number,
   unsafeMessage: string
 ): { readonly byteLength: number; readonly hash: string } {
-  const audio = fstatSync(fd);
-  if (!audio.isFile()) {
-    throw new Error(unsafeMessage);
-  }
+  return readWorkspaceFileDescriptor(fd, unsafeMessage);
+}
 
-  return {
-    byteLength: audio.size,
-    hash: hashWorkspaceFileDescriptor(fd, audio.size),
-  };
+class ArtifactEntryTooLargeError extends Error {
+  constructor() {
+    super('Artifact entry file is too large');
+  }
+}
+
+function isArtifactEntryTooLargeError(error: unknown): boolean {
+  return error instanceof ArtifactEntryTooLargeError;
 }
 
 function initialFinalizeTranscriptionAttempt(
@@ -888,9 +961,17 @@ const noteSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend({
   speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
 });
 
+const artifactSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend({
+  kind: z.literal('artifact'),
+  format: z.literal('html'),
+  entryByteLength: z.number().int().nonnegative(),
+  entryHash: workspaceContentHashSchema,
+});
+
 const segmentObjectManifestSchema = z.discriminatedUnion('kind', [
   audioSegmentObjectManifestSchema,
   noteSegmentObjectManifestSchema,
+  artifactSegmentObjectManifestSchema,
 ]);
 
 const supplementObjectManifestBaseSchema = z
@@ -922,9 +1003,17 @@ const noteSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.ex
   speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
 });
 
+const artifactSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.extend({
+  kind: z.literal('artifact'),
+  format: z.literal('html'),
+  entryByteLength: z.number().int().nonnegative(),
+  entryHash: workspaceContentHashSchema,
+});
+
 const supplementObjectManifestSchema = z.discriminatedUnion('kind', [
   audioSupplementObjectManifestSchema,
   noteSupplementObjectManifestSchema,
+  artifactSupplementObjectManifestSchema,
 ]);
 
 const workspaceIndexSchema = z
@@ -1392,7 +1481,12 @@ async function collectMarkdownCandidateDescriptorsForReview({
         ),
       });
       const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
-      if (candidateKind !== undefined && candidateKind !== 'note' && candidateKind !== 'audio') {
+      if (
+        candidateKind !== undefined &&
+        candidateKind !== 'note' &&
+        candidateKind !== 'audio' &&
+        candidateKind !== 'artifact'
+      ) {
         continue;
       }
       candidates.push({
@@ -1578,6 +1672,134 @@ async function reconcileNoteSegmentCandidate({
           audioByteLength,
           updatedAt: timestamp,
         },
+      });
+    }
+    return;
+  }
+  if (candidateKind === 'artifact') {
+    const candidateFormat = 'format' in candidate.data ? candidate.data.format : undefined;
+    const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+    const hintedId = directorySegmentIdHint(directoryName);
+    const segmentId = frontmatterId ?? hintedId ?? createReconciledSegmentId();
+    if (blockedSegmentIds.has(segmentId)) {
+      return;
+    }
+    if (candidateFormat !== 'html') {
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-segment',
+        kind: 'artifact',
+        objectType: 'segment',
+        paths: [path.join(candidateDirectory, 'segment.md')],
+        reason: 'unsupported-artifact-format',
+      });
+      return;
+    }
+    let entry: { readonly byteLength: number; readonly hash: string };
+    try {
+      entry = readArtifactEntryDescriptorInKnownDirectory(
+        candidateDirectory,
+        candidateIdentity,
+        'segment.html'
+      );
+    } catch (error) {
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-segment',
+        kind: 'artifact',
+        objectType: 'segment',
+        paths: [path.join(candidateDirectory, 'segment.md')],
+        reason: isArtifactEntryTooLargeError(error)
+          ? 'oversized-artifact-entry'
+          : 'missing-artifact-entry',
+      });
+      return;
+    }
+    const title = inferCandidateTitle({
+      content: candidate.content,
+      directoryName,
+      metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+      nodeId: segmentId,
+    });
+    const existingManifest = await readSegmentManifestOrNull(rootPath, segmentId);
+    const existingManifestMatchesIdentity =
+      existingManifest &&
+      existingManifest.objectType === 'segment' &&
+      existingManifest.workspaceId === workspaceId &&
+      existingManifest.segmentId === segmentId &&
+      existingManifest.kind === 'artifact' &&
+      existingManifest.format === 'html';
+    if (existingManifest && !existingManifestMatchesIdentity) {
+      return;
+    }
+    if (
+      existingManifestMatchesIdentity &&
+      existingManifest.memoryId !== memoryId &&
+      (await activeSegmentDirectoryStillExists({
+        memoryId: existingManifest.memoryId,
+        rootPath,
+        segmentId,
+      }))
+    ) {
+      recordDiagnosticEvent({
+        area: 'workspace-files',
+        event: 'markdown.segment.needs-review',
+        fields: {
+          ambiguousCandidateCount: 0,
+          duplicateIdCount: 1,
+        },
+        level: 'warn',
+      });
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-segment',
+        kind: 'artifact',
+        objectType: 'segment',
+        paths: [path.join(candidateDirectory, 'segment.md')],
+        reason: 'duplicate-id',
+      });
+      return;
+    }
+
+    const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+    if (frontmatterId !== segmentId || candidateTitle !== title) {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: candidateDirectory,
+        directoryIdentity: candidateIdentity,
+        fileName: 'segment.md',
+        data: renderWorkspaceMarkdownObject({
+          objectType: 'segment',
+          data: {
+            ...candidate.data,
+            id: segmentId,
+            title,
+            kind: 'artifact',
+            format: 'html',
+          },
+          content: candidate.content,
+        }),
+      });
+    }
+
+    if (
+      !existingManifest ||
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.entryByteLength !== entry.byteLength ||
+      existingManifest.entryHash !== entry.hash
+    ) {
+      await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'segments' });
+      const timestamp = new Date().toISOString();
+      await writeWorkspaceJsonAtomic(await segmentObjectManifestPath(rootPath, segmentId), {
+        ...(existingManifest ?? {}),
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId,
+        memoryId,
+        segmentId,
+        kind: 'artifact',
+        format: 'html',
+        createdAt: existingManifest?.createdAt ?? timestamp,
+        finalizedAt: existingManifest?.finalizedAt ?? timestamp,
+        updatedAt: timestamp,
+        entryByteLength: entry.byteLength,
+        entryHash: entry.hash,
       });
     }
     return;
@@ -1864,6 +2086,137 @@ async function reconcileNoteSupplementCandidate({
           audioByteLength,
           updatedAt: timestamp,
         },
+      });
+    }
+    return;
+  }
+  if (candidateKind === 'artifact') {
+    const candidateFormat = 'format' in candidate.data ? candidate.data.format : undefined;
+    const frontmatterId = 'id' in candidate.data ? candidate.data.id : undefined;
+    const hintedId = directorySupplementIdHint(directoryName);
+    const supplementId = frontmatterId ?? hintedId ?? createReconciledSupplementId();
+    if (blockedSupplementIds.has(supplementId)) {
+      return;
+    }
+    if (candidateFormat !== 'html') {
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-supplement',
+        kind: 'artifact',
+        objectType: 'supplement',
+        paths: [path.join(candidateDirectory, 'supplement.md')],
+        reason: 'unsupported-artifact-format',
+      });
+      return;
+    }
+    let entry: { readonly byteLength: number; readonly hash: string };
+    try {
+      entry = readArtifactEntryDescriptorInKnownDirectory(
+        candidateDirectory,
+        candidateIdentity,
+        'supplement.html'
+      );
+    } catch (error) {
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-supplement',
+        kind: 'artifact',
+        objectType: 'supplement',
+        paths: [path.join(candidateDirectory, 'supplement.md')],
+        reason: isArtifactEntryTooLargeError(error)
+          ? 'oversized-artifact-entry'
+          : 'missing-artifact-entry',
+      });
+      return;
+    }
+    const title = inferCandidateTitle({
+      content: candidate.content,
+      directoryName,
+      metadataTitle: 'title' in candidate.data ? candidate.data.title : undefined,
+      nodeId: supplementId,
+    });
+    const existingManifest = await readSupplementManifestOrNull(rootPath, supplementId);
+    const existingManifestMatchesIdentity =
+      existingManifest &&
+      existingManifest.objectType === 'supplement' &&
+      existingManifest.workspaceId === workspaceId &&
+      existingManifest.supplementId === supplementId &&
+      existingManifest.kind === 'artifact' &&
+      existingManifest.format === 'html';
+    if (existingManifest && !existingManifestMatchesIdentity) {
+      return;
+    }
+    if (
+      existingManifestMatchesIdentity &&
+      (existingManifest.memoryId !== memoryId || existingManifest.segmentId !== segmentId) &&
+      (await activeSupplementDirectoryStillExists({
+        memoryId: existingManifest.memoryId,
+        rootPath,
+        segmentId: existingManifest.segmentId,
+        supplementId,
+      }))
+    ) {
+      recordDiagnosticEvent({
+        area: 'workspace-files',
+        event: 'markdown.supplement.needs-review',
+        fields: {
+          ambiguousCandidateCount: 0,
+          duplicateIdCount: 1,
+        },
+        level: 'warn',
+      });
+      pushReviewEntry(reviewEntries, {
+        category: 'markdown-supplement',
+        kind: 'artifact',
+        objectType: 'supplement',
+        paths: [path.join(candidateDirectory, 'supplement.md')],
+        reason: 'duplicate-id',
+      });
+      return;
+    }
+
+    const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
+    if (frontmatterId !== supplementId || candidateTitle !== title) {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory: candidateDirectory,
+        directoryIdentity: candidateIdentity,
+        fileName: 'supplement.md',
+        data: renderWorkspaceMarkdownObject({
+          objectType: 'supplement',
+          data: {
+            ...candidate.data,
+            id: supplementId,
+            title,
+            kind: 'artifact',
+            format: 'html',
+          },
+          content: candidate.content,
+        }),
+      });
+    }
+
+    if (
+      !existingManifest ||
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.segmentId !== segmentId ||
+      existingManifest.entryByteLength !== entry.byteLength ||
+      existingManifest.entryHash !== entry.hash
+    ) {
+      await ensureWorkspaceObjectKindDirectory({ rootPath, kind: 'supplements' });
+      const timestamp = new Date().toISOString();
+      await writeWorkspaceJsonAtomic(await supplementObjectManifestPath(rootPath, supplementId), {
+        ...(existingManifest ?? {}),
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        kind: 'artifact',
+        format: 'html',
+        createdAt: existingManifest?.createdAt ?? timestamp,
+        finalizedAt: existingManifest?.finalizedAt ?? timestamp,
+        updatedAt: timestamp,
+        entryByteLength: entry.byteLength,
+        entryHash: entry.hash,
       });
     }
     return;
@@ -2242,6 +2595,16 @@ function segmentManifestFromSemanticTruth(
       ...(metadata.lastTranscriptionAttempt
         ? { lastTranscriptionAttempt: metadata.lastTranscriptionAttempt }
         : {}),
+    };
+  }
+
+  if (metadata.kind === 'artifact') {
+    return {
+      ...base,
+      kind: 'artifact',
+      format: 'html',
+      entryByteLength: metadata.entryByteLength,
+      entryHash: metadata.entryHash,
     };
   }
 
@@ -3773,6 +4136,36 @@ function readFileSizeInKnownDirectory(
   }
 }
 
+function readArtifactEntryDescriptorInKnownDirectory(
+  directory: string,
+  directoryIdentity: DirectoryIdentity,
+  fileName: 'segment.html' | 'supplement.html'
+): { readonly byteLength: number; readonly hash: string } {
+  const fd = openExistingWorkspaceFileInDirectory({
+    directory,
+    directoryIdentity,
+    fileName,
+    flags: constants.O_RDONLY | constants.O_NOFOLLOW,
+  });
+  try {
+    const entry = fstatSync(fd);
+    if (!entry.isFile()) {
+      throw new Error('Artifact entry file is not safe');
+    }
+    if (entry.size > MAX_ARTIFACT_ENTRY_BYTES) {
+      throw new ArtifactEntryTooLargeError();
+    }
+    const descriptor = {
+      byteLength: entry.size,
+      hash: hashWorkspaceFileDescriptor(fd, entry.size),
+    };
+    assertSameDirectoryPath(directory, directoryIdentity);
+    return descriptor;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function markdownBodyByteLength(markdownContent: string): number {
   return Buffer.byteLength(markdownContent, 'utf8');
 }
@@ -3781,6 +4174,12 @@ function isAudioSegmentFileTruth(
   fileTruth: FinalizedSegmentFileTruth | null
 ): fileTruth is FinalizedAudioSegmentFileTruth {
   return fileTruth?.metadata.kind === 'audio';
+}
+
+function isArtifactSegmentFileTruth(
+  fileTruth: FinalizedSegmentFileTruth | null
+): fileTruth is FinalizedArtifactSegmentFileTruth {
+  return fileTruth?.metadata.kind === 'artifact';
 }
 
 function hasNoteSupplement(supplements: readonly WorkspaceSegmentSupplementProjection[]): boolean {
@@ -3867,6 +4266,10 @@ async function readFinalizedSegmentMetadata(
   const markdownKind = 'kind' in markdown.data ? markdown.data.kind : undefined;
   if ((markdownKind ?? 'audio') !== manifest.kind) {
     throw new Error('Finalized segment markdown kind does not match manifest');
+  }
+  const markdownFormat = 'format' in markdown.data ? markdown.data.format : undefined;
+  if (manifest.kind === 'artifact' && markdownFormat !== manifest.format) {
+    throw new Error('Finalized segment markdown format does not match manifest');
   }
   return {
     ...manifest,
@@ -4030,6 +4433,10 @@ async function readFinalizedSegmentSupplementMetadata(
   if ((markdownKind ?? 'audio') !== manifest.kind) {
     throw new Error('Finalized supplement markdown kind does not match manifest');
   }
+  const markdownFormat = 'format' in markdown.data ? markdown.data.format : undefined;
+  if (manifest.kind === 'artifact' && markdownFormat !== manifest.format) {
+    throw new Error('Finalized supplement markdown format does not match manifest');
+  }
   return {
     ...manifest,
     title: markdown.data.title,
@@ -4185,6 +4592,31 @@ async function readValidFinalizedSupplementProjection({
       createdAt: supplement.createdAt,
       updatedAt: supplement.updatedAt ?? supplement.finalizedAt,
     };
+    if (supplement.kind === 'artifact') {
+      const entry = readArtifactEntryDescriptorInKnownDirectory(
+        supplementDirectory,
+        supplementDirectoryIdentity,
+        'supplement.html'
+      );
+      if (
+        supplement.workspaceId !== workspaceId ||
+        supplement.memoryId !== memoryId ||
+        supplement.segmentId !== segmentId ||
+        supplement.format !== 'html' ||
+        supplement.entryByteLength !== entry.byteLength ||
+        supplement.entryHash !== entry.hash
+      ) {
+        return null;
+      }
+      return {
+        ...supplementBase,
+        type: 'artifact',
+        format: 'html',
+        entryByteLength: entry.byteLength,
+        entryHash: entry.hash,
+        previewVersion: entry.hash,
+      };
+    }
     if (supplement.kind === 'note') {
       if (
         supplement.workspaceId !== workspaceId ||
@@ -4525,6 +4957,29 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
         recordingDirectory,
         recordingDirectoryIdentity,
         metadata: recording,
+      };
+    }
+    if (recording.kind === 'artifact') {
+      const entry = readArtifactEntryDescriptorInKnownDirectory(
+        recordingDirectory,
+        recordingDirectoryIdentity,
+        'segment.html'
+      );
+      if (
+        recording.memoryId !== memoryId ||
+        recording.format !== 'html' ||
+        recording.entryByteLength !== entry.byteLength ||
+        recording.entryHash !== entry.hash
+      ) {
+        return null;
+      }
+      return {
+        segmentId: recording.segmentId,
+        recordingDirectory,
+        recordingDirectoryIdentity,
+        metadata: recording,
+        entryByteLength: entry.byteLength,
+        entryHash: entry.hash,
       };
     }
     const audioByteLength = readFileSizeInKnownDirectory(
@@ -5005,6 +5460,7 @@ async function summarizeMemoryFromFileTruths({
   let segmentCount = 0;
   let audioSegmentCount = 0;
   let noteSegmentCount = 0;
+  let artifactSegmentCount = 0;
   let audioDurationMs = 0;
   let audioByteLength = 0;
   let hasAudioTranscript = false;
@@ -5036,6 +5492,8 @@ async function summarizeMemoryFromFileTruths({
         hasAudioTranscript =
           hasAudioTranscript ||
           extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0;
+      } else if (isArtifactSegmentFileTruth(fileTruth)) {
+        artifactSegmentCount += 1;
       } else {
         noteSegmentCount += 1;
         hasAnyNote = true;
@@ -5063,6 +5521,7 @@ async function summarizeMemoryFromFileTruths({
     segmentCount,
     audioSegmentCount,
     noteSegmentCount,
+    artifactSegmentCount,
     audioDurationMs,
     audioByteLength,
     hasAudioTranscript,
@@ -5123,6 +5582,7 @@ function summarizeMemoryFromSegments(
   let updatedAt = memory.updatedAt;
   let audioSegmentCount = 0;
   let noteSegmentCount = 0;
+  let artifactSegmentCount = 0;
   let audioDurationMs = 0;
   let audioByteLength = 0;
   let hasAudioTranscript = false;
@@ -5136,6 +5596,8 @@ function summarizeMemoryFromSegments(
       audioDurationMs += segment.durationMs;
       audioByteLength += segment.audioByteLength;
       hasAudioTranscript = hasAudioTranscript || segment.transcript.exists;
+    } else if (segment.type === 'artifact') {
+      artifactSegmentCount += 1;
     } else {
       noteSegmentCount += 1;
       hasAnyNote = true;
@@ -5152,6 +5614,7 @@ function summarizeMemoryFromSegments(
     segmentCount: segments.length,
     audioSegmentCount,
     noteSegmentCount,
+    artifactSegmentCount,
     audioDurationMs,
     audioByteLength,
     hasAudioTranscript,
@@ -5233,6 +5696,17 @@ async function finalizedSegmentProjectionFromFileTruth({
     supplements,
     contentTabOrder: normalizeContentTabOrder(metadata.contentTabOrder, supplements),
   };
+
+  if (isArtifactSegmentFileTruth(fileTruth)) {
+    return {
+      ...segmentBase,
+      type: 'artifact',
+      format: 'html',
+      entryByteLength: fileTruth.entryByteLength,
+      entryHash: fileTruth.entryHash,
+      previewVersion: fileTruth.entryHash,
+    };
+  }
 
   if (!isAudioSegmentFileTruth(fileTruth)) {
     const speechSynthesis = await readNoteSpeechSynthesisProjectionFromManifest({
@@ -5454,6 +5928,34 @@ export async function resolveFinalizedSegmentDirectoryFromManifest(input: {
   };
 }
 
+export async function resolveFinalizedArtifactSegmentDirectoryFromManifest(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly segmentId: string;
+}): Promise<{ readonly memoryId: string; readonly segmentDirectory: string }> {
+  const manifest = segmentObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(await segmentObjectManifestPath(input.rootPath, input.segmentId))
+    )
+  );
+  if (
+    manifest.kind !== 'artifact' ||
+    manifest.format !== 'html' ||
+    manifest.workspaceId !== input.workspaceId ||
+    manifest.segmentId !== input.segmentId
+  ) {
+    throw new Error('Finalized artifact segment manifest does not match preview owner');
+  }
+  return {
+    memoryId: manifest.memoryId,
+    segmentDirectory: await memorySegmentDirectory(
+      input.rootPath,
+      manifest.memoryId,
+      input.segmentId
+    ),
+  };
+}
+
 export async function resolveFinalizedNoteSupplementDirectoryFromManifest(input: {
   readonly rootPath: string;
   readonly workspaceId: string;
@@ -5478,6 +5980,50 @@ export async function resolveFinalizedNoteSupplementDirectoryFromManifest(input:
     manifest.supplementId !== input.supplementId
   ) {
     throw new Error('Finalized note supplement manifest does not match attachment owner');
+  }
+  const segmentDirectory = await memorySegmentDirectory(
+    input.rootPath,
+    manifest.memoryId,
+    input.segmentId
+  );
+  return {
+    memoryId: manifest.memoryId,
+    segmentId: manifest.segmentId,
+    supplementDirectory: await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath: input.rootPath,
+      memoryId: manifest.memoryId,
+      segmentDirectory,
+      segmentId: manifest.segmentId,
+      supplementId: input.supplementId,
+    }),
+  };
+}
+
+export async function resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<{
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementDirectory: string;
+}> {
+  const manifest = supplementObjectManifestSchema.parse(
+    JSON.parse(
+      await readWorkspaceTextFile(
+        await supplementObjectManifestPath(input.rootPath, input.supplementId)
+      )
+    )
+  );
+  if (
+    manifest.kind !== 'artifact' ||
+    manifest.format !== 'html' ||
+    manifest.workspaceId !== input.workspaceId ||
+    manifest.segmentId !== input.segmentId ||
+    manifest.supplementId !== input.supplementId
+  ) {
+    throw new Error('Finalized artifact supplement manifest does not match preview owner');
   }
   const segmentDirectory = await memorySegmentDirectory(
     input.rootPath,

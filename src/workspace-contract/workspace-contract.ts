@@ -44,7 +44,7 @@ export const DEFAULT_VOICE_SPEECH_SYNTHESIS_SPEAKER =
 export const VOICE_SPEECH_SYNTHESIS_MODEL = 'seed-tts-2.0-expressive' as const;
 export const VOICE_SPEECH_SYNTHESIS_RESOURCE_ID = 'seed-tts-2.0' as const;
 export const VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE = 24000 as const;
-export const WORKSPACE_CONTENT_KINDS = ['audio', 'note'] as const;
+export const WORKSPACE_CONTENT_KINDS = ['audio', 'note', 'artifact'] as const;
 export type WorkspaceContentKind = (typeof WORKSPACE_CONTENT_KINDS)[number];
 export const FINALIZE_TRANSCRIPTION_ATTEMPTS = [
   'failed',
@@ -541,6 +541,7 @@ export const workspaceMemorySummarySchema = z.strictObject({
   segmentCount: z.number().int().nonnegative(),
   audioSegmentCount: z.number().int().nonnegative(),
   noteSegmentCount: z.number().int().nonnegative(),
+  artifactSegmentCount: z.number().int().nonnegative(),
   audioDurationMs: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
   hasAudioTranscript: z.boolean(),
@@ -601,9 +602,25 @@ const workspaceNoteSegmentSupplementProjectionSchema = z.strictObject({
   bodyByteLength: z.number().int().nonnegative(),
 });
 
+const workspaceArtifactSegmentSupplementProjectionSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  supplementId: supplementIdSchema,
+  type: z.literal('artifact'),
+  format: z.literal('html'),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  entryByteLength: z.number().int().nonnegative(),
+  entryHash: workspaceContentHashSchema,
+  previewVersion: workspaceContentHashSchema,
+});
+
 export const workspaceSegmentSupplementProjectionSchema = z.discriminatedUnion('type', [
   workspaceAudioSegmentSupplementProjectionSchema,
   workspaceNoteSegmentSupplementProjectionSchema,
+  workspaceArtifactSegmentSupplementProjectionSchema,
 ]);
 
 const workspaceAudioSegmentProjectionSchema = z.strictObject({
@@ -644,9 +661,29 @@ const workspaceNoteSegmentProjectionSchema = z.strictObject({
   contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
 });
 
+const workspaceArtifactSegmentProjectionSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  type: z.literal('artifact'),
+  format: z.literal('html'),
+  title: z.string(),
+  contentTitle: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  entryByteLength: z.number().int().nonnegative(),
+  entryHash: workspaceContentHashSchema,
+  previewVersion: workspaceContentHashSchema,
+  cover: workspaceCoverProjectionSchema.optional(),
+  supplementCount: z.number().int().nonnegative(),
+  supplements: z.array(workspaceSegmentSupplementProjectionSchema),
+  contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
+});
+
 export const workspaceSegmentProjectionSchema = z.discriminatedUnion('type', [
   workspaceAudioSegmentProjectionSchema,
   workspaceNoteSegmentProjectionSchema,
+  workspaceArtifactSegmentProjectionSchema,
 ]);
 
 export const workspaceMemoryDetailProjectionSchema = workspaceMemorySummarySchema.extend({
@@ -1244,6 +1281,36 @@ export const workspaceCopyMemoryRelativePathRequestSchema = workspaceMemoryEntit
 export const workspaceCopySegmentRelativePathRequestSchema = workspaceSegmentEntityRequestSchema;
 export const workspaceCopySegmentSupplementRelativePathRequestSchema =
   workspaceSegmentSupplementEntityRequestSchema;
+const workspaceCopyArtifactAgentPromptBaseSchema = workspaceHandleSchema.extend({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+});
+export const workspaceCopyArtifactAgentPromptRequestSchema = z.discriminatedUnion('action', [
+  workspaceCopyArtifactAgentPromptBaseSchema
+    .extend({
+      action: z.literal('create-segment'),
+    })
+    .strict(),
+  workspaceCopyArtifactAgentPromptBaseSchema
+    .extend({
+      action: z.literal('create-supplement'),
+      segmentId: segmentIdSchema,
+    })
+    .strict(),
+  workspaceCopyArtifactAgentPromptBaseSchema
+    .extend({
+      action: z.literal('update-segment'),
+      segmentId: segmentIdSchema,
+    })
+    .strict(),
+  workspaceCopyArtifactAgentPromptBaseSchema
+    .extend({
+      action: z.literal('update-supplement'),
+      segmentId: segmentIdSchema,
+      supplementId: supplementIdSchema,
+    })
+    .strict(),
+]);
 export const workspaceCopyNeedsReviewAgentPromptRequestSchema = workspaceHandleSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -2209,6 +2276,9 @@ export type WorkspaceCopySegmentRelativePathRequest = z.infer<
 >;
 export type WorkspaceCopySegmentSupplementRelativePathRequest = z.infer<
   typeof workspaceCopySegmentSupplementRelativePathRequestSchema
+>;
+export type WorkspaceCopyArtifactAgentPromptRequest = z.infer<
+  typeof workspaceCopyArtifactAgentPromptRequestSchema
 >;
 export type WorkspaceCopyNeedsReviewAgentPromptRequest = z.infer<
   typeof workspaceCopyNeedsReviewAgentPromptRequestSchema

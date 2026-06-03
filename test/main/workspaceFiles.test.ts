@@ -25,6 +25,10 @@ import {
   DEFAULT_REO_COVER_IMAGE_SKILL_MD,
   DEFAULT_REO_DOCTOR_SKILL_MD,
   DEFAULT_REO_EDIT_SKILL_MD,
+  DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
+  DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES,
+  DEFAULT_REO_WORKS_SKILL_MD,
+  DEFAULT_REO_WORKS_REFERENCE_FILES,
   DEFAULT_WORKSPACE_AGENTS_MD,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
@@ -613,6 +617,10 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works\/references\//);
+  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works-design\/references\//);
   assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
   assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
   assert.doesNotMatch(agentsText, /普通文字/);
@@ -623,11 +631,37 @@ test('workspace init creates stable root files and Reo agent skill entry', async
     'reo-cover-image',
     'reo-doctor',
     'reo-edit',
+    'reo-works',
+    'reo-works-design',
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-cover-aesthetic'))).sort(), [
     'SKILL.md',
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-edit'))).sort(), ['SKILL.md']);
+  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works'))).sort(), [
+    'SKILL.md',
+    'references',
+  ]);
+  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
+    'SKILL.md',
+    'references',
+  ]);
+  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works', 'references'))).sort(), [
+    'file-contract.md',
+    'quality-check.md',
+    'workflows.md',
+  ]);
+  assert.deepEqual(
+    (await readdir(path.join(root, 'skills', 'reo-works-design', 'references'))).sort(),
+    [
+      'charts.md',
+      'core-design-system.md',
+      'interaction-patterns.md',
+      'mockups-and-art.md',
+      'modules.md',
+      'svg-and-diagrams.md',
+    ]
+  );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-cover-image'))).sort(), [
     'SKILL.md',
   ]);
@@ -645,6 +679,51 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(editSkillText, /^name: reo-edit/m);
   assert.match(editSkillText, /Rename/);
   assert.match(editSkillText, /Verify direct file effects, then stop/);
+  const worksSkillText = await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8');
+  assert.match(worksSkillText, /^name: reo-works/m);
+  assert.match(worksSkillText, /kind: artifact/);
+  assert.match(worksSkillText, /format: html/);
+  assert.match(worksSkillText, /segment\.html/);
+  assert.match(worksSkillText, /supplement\.html/);
+  assert.match(worksSkillText, /references\/file-contract\.md/);
+  assert.doesNotMatch(worksSkillText, /Michaelliv|pi-generative-ui|github\.com/);
+  const worksContractText = await readFile(
+    path.join(root, 'skills', 'reo-works', 'references', 'file-contract.md'),
+    'utf8'
+  );
+  assert.match(worksContractText, /complete HTML document/);
+  assert.match(worksContractText, /kind: artifact/);
+  assert.match(worksContractText, /format: html/);
+  assert.doesNotMatch(worksContractText, /Michaelliv|pi-generative-ui|github\.com/);
+  const worksDesignSkillText = await readFile(
+    path.join(root, 'skills', 'reo-works-design', 'SKILL.md'),
+    'utf8'
+  );
+  assert.match(worksDesignSkillText, /^name: reo-works-design/m);
+  assert.match(worksDesignSkillText, /references\/core-design-system\.md/);
+  assert.match(worksDesignSkillText, /--color-background-primary/);
+  assert.match(worksDesignSkillText, /--border-radius-md/);
+  assert.match(worksDesignSkillText, /c-purple/);
+  assert.match(worksDesignSkillText, /#EEEDFE/);
+  assert.doesNotMatch(worksDesignSkillText, /Michaelliv|pi-generative-ui|github\.com/);
+  const worksDesignCoreText = await readFile(
+    path.join(root, 'skills', 'reo-works-design', 'references', 'core-design-system.md'),
+    'utf8'
+  );
+  assert.match(worksDesignCoreText, /--color-background-primary/);
+  assert.match(worksDesignCoreText, /c-purple/);
+  assert.match(worksDesignCoreText, /#EEEDFE/);
+  assert.match(worksDesignCoreText, /No external network/);
+  assert.doesNotMatch(worksDesignCoreText, /Michaelliv|pi-generative-ui|github\.com/);
+  const worksDesignModulesText = await readFile(
+    path.join(root, 'skills', 'reo-works-design', 'references', 'modules.md'),
+    'utf8'
+  );
+  assert.match(worksDesignModulesText, /diagram/);
+  assert.match(worksDesignModulesText, /mockup/);
+  assert.match(worksDesignModulesText, /interactive/);
+  assert.match(worksDesignModulesText, /chart/);
+  assert.match(worksDesignModulesText, /art/);
   const coverSkillText = await readFile(
     path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'),
     'utf8'
@@ -707,6 +786,10 @@ test('managed AGENTS block presents ordinary file editing before Reo internals',
   );
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works\/references\//);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works-design\/references\//);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /验证直接文件效果后停止/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /Reo 明确提示 needs-review/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /workspace-relative 信息与 recovery hint/);
@@ -784,6 +867,78 @@ test('managed reo-cover-aesthetic skill is a Reo-adapted aesthetic workflow', ()
   assert.doesNotMatch(DEFAULT_REO_COVER_AESTHETIC_SKILL_MD, /npx skills add/);
 });
 
+test('managed reo-works skill defines artifact file creation without external references', () => {
+  assertIncludesInOrder(DEFAULT_REO_WORKS_SKILL_MD, [
+    '## 使用场景',
+    '## 创建作品片段',
+    '## 创建作品补充',
+    '## 更新作品',
+    '## 文件合同',
+    '## 验证',
+  ]);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /kind: artifact/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /format: html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /segment\.html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /supplement\.html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/quality-check\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /不要创建空白占位作品/);
+  assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'], /complete HTML document/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /Create from Reo prompt/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['quality-check.md'], /No `window\.top`/);
+  for (const text of Object.values(DEFAULT_REO_WORKS_REFERENCE_FILES)) {
+    assert.doesNotMatch(text, /Michaelliv|pi-generative-ui|github\.com/);
+  }
+});
+
+test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits', () => {
+  assertIncludesInOrder(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, [
+    '## 模块选择',
+    '## 输出顺序',
+    '## 核心设计规则',
+    '## Reo tokens',
+    '## 色阶',
+    '## 轻量性能规则',
+  ]);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-background-primary/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-text-primary/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--border-radius-md/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/core-design-system\.md/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/svg-and-diagrams\.md/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /c-purple/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#EEEDFE/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#1D9E75/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /禁止外部网络请求/);
+  assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /sendPrompt|CDN|cdnjs|unpkg|esm\.sh/);
+  assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /--color-background-primary/
+  );
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /#EEEDFE/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /diagram/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /mockup/);
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['interaction-patterns.md'],
+    /Allowed local interactions/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['svg-and-diagrams.md'],
+    /viewBox="0 0 680 H"/
+  );
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['charts.md'], /native SVG/);
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['mockups-and-art.md'],
+    /Creative and art works/
+  );
+  for (const text of Object.values(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES)) {
+    assert.doesNotMatch(text, /Michaelliv|pi-generative-ui|github\.com/);
+  }
+});
+
 test('managed reo-doctor skill remains recovery-only guidance', () => {
   assert.match(DEFAULT_REO_DOCTOR_SKILL_MD, /Recovery-only/);
   assert.match(DEFAULT_REO_DOCTOR_SKILL_MD, /Run it only after Reo reports needs-review/);
@@ -835,6 +990,21 @@ test('open workspace silently restores missing Reo agent managed config', async 
     ),
     true
   );
+  assert.equal(
+    (await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8')).includes(
+      'name: reo-works'
+    ),
+    true
+  );
+  assert.equal(
+    (await readFile(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), 'utf8')).includes(
+      'name: reo-works-design'
+    ),
+    true
+  );
+  await stat(path.join(root, 'skills', 'reo-works', 'references', 'file-contract.md'));
+  await stat(path.join(root, 'skills', 'reo-works-design', 'references', 'modules.md'));
+  await stat(path.join(root, 'skills', 'reo-works-design', 'references', 'svg-and-diagrams.md'));
   await stat(path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
 });
 
@@ -860,10 +1030,18 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
   assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
   assert.equal((agentsText.match(/reo-managed:agent-entry:start/g) ?? []).length, 1);
   await stat(path.join(root, 'skills', 'reo-edit', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
+  await stat(path.join(root, 'skills', 'reo-works', 'SKILL.md'));
+  await stat(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'));
+  await stat(path.join(root, 'skills', 'reo-works', 'references', 'quality-check.md'));
+  await stat(
+    path.join(root, 'skills', 'reo-works-design', 'references', 'interaction-patterns.md')
+  );
   await stat(path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
 });
 
@@ -917,6 +1095,15 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   await rm(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-works', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-works', 'references'), {
+    force: true,
+    recursive: true,
+  });
+  await rm(path.join(root, 'skills', 'reo-works-design', 'references', 'charts.md'), {
+    force: true,
+  });
 
   const result = spawnSync(
     process.execPath,
@@ -933,6 +1120,10 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       readonly editSkill: boolean;
       readonly coverImageSkill: boolean;
       readonly coverAestheticSkill: boolean;
+      readonly worksSkill: boolean;
+      readonly worksDesignSkill: boolean;
+      readonly worksReferences: readonly string[];
+      readonly worksDesignReferences: readonly string[];
     };
   };
   assert.equal(report.ok, true);
@@ -941,6 +1132,14 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   assert.equal(report.repaired.editSkill, true);
   assert.equal(report.repaired.coverImageSkill, true);
   assert.equal(report.repaired.coverAestheticSkill, true);
+  assert.equal(report.repaired.worksSkill, true);
+  assert.equal(report.repaired.worksDesignSkill, true);
+  assert.deepEqual([...report.repaired.worksReferences].sort(), [
+    'file-contract.md',
+    'quality-check.md',
+    'workflows.md',
+  ]);
+  assert.deepEqual(report.repaired.worksDesignReferences, ['charts.md']);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.match(agentsText, /只修改当前任务需要的文件/);
   assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
@@ -959,6 +1158,28 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), 'utf8'),
     /^name: reo-cover-aesthetic/m
+  );
+  assert.match(
+    await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8'),
+    /^name: reo-works/m
+  );
+  assert.match(
+    await readFile(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), 'utf8'),
+    /^name: reo-works-design/m
+  );
+  assert.match(
+    await readFile(
+      path.join(root, 'skills', 'reo-works', 'references', 'file-contract.md'),
+      'utf8'
+    ),
+    /kind: artifact/
+  );
+  assert.match(
+    await readFile(
+      path.join(root, 'skills', 'reo-works-design', 'references', 'charts.md'),
+      'utf8'
+    ),
+    /native SVG/
   );
 });
 
@@ -1327,6 +1548,7 @@ test('corrupt index rebuilds finalized memory summaries from workspace files', a
     segmentCount: 1,
     audioSegmentCount: 1,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioDurationMs: 12_000,
     audioByteLength: 3,
     hasAudioTranscript: false,
@@ -1401,6 +1623,7 @@ test('open workspace uses a valid index without scanning finalized memory files'
     segmentCount: 1,
     audioSegmentCount: 1,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioDurationMs: 3000,
     audioByteLength: 3,
     hasAudioTranscript: false,
@@ -1448,6 +1671,7 @@ test('workspace index snapshot reads a valid index without rebuilding finalized 
     segmentCount: 1,
     audioSegmentCount: 1,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioDurationMs: 3000,
     audioByteLength: 3,
     hasAudioTranscript: false,
@@ -1551,6 +1775,7 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     segmentCount: 1,
     audioSegmentCount: 1,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioDurationMs: 34_000,
     audioByteLength: 4,
     hasAudioTranscript: false,

@@ -74,6 +74,7 @@ function installWorkspaceBridge(overrides: Partial<Window['reoWorkspace']> = {})
           hasAudioTranscript: false,
           memoryId: 'memory_1',
           noteSegmentCount: 1,
+          artifactSegmentCount: 0,
           segmentCount: 1,
           supplementCount: 0,
           title: 'Memory',

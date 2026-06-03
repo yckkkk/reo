@@ -10,7 +10,7 @@
 
 当前产品或代码开发 active initiative：
 
-- 当前无。
+- `2026-06-03-agent-created-works`
 
 ## 使用规则
 

@@ -13,6 +13,7 @@ const currentMemory: WorkspaceMemorySummary = {
   hasAudioTranscript: false,
   memoryId: 'mem_1',
   noteSegmentCount: 1,
+  artifactSegmentCount: 0,
   segmentCount: 1,
   supplementCount: 0,
   title: '碎片记录',

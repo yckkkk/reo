@@ -26,6 +26,7 @@ function memory(overrides: Partial<WorkspaceMemorySummary>): WorkspaceMemorySumm
     hasAudioTranscript: false,
     memoryId: 'mem_default_cover',
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     segmentCount: 0,
     supplementCount: 0,
     title: 'Default cover',

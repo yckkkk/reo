@@ -397,6 +397,9 @@ function isWorkspaceMemorySummary(value: unknown): value is WorkspaceMemorySumma
     typeof memory.noteSegmentCount === 'number' &&
     Number.isInteger(memory.noteSegmentCount) &&
     memory.noteSegmentCount >= 0 &&
+    typeof memory.artifactSegmentCount === 'number' &&
+    Number.isInteger(memory.artifactSegmentCount) &&
+    memory.artifactSegmentCount >= 0 &&
     typeof memory.audioDurationMs === 'number' &&
     Number.isInteger(memory.audioDurationMs) &&
     memory.audioDurationMs >= 0 &&

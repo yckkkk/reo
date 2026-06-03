@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  memorySummaryAfterSegmentRestore,
   memorySummaryAfterSegmentRemoval,
+  memorySummaryWithVisibleSegments,
   memorySummaryWithPendingSegmentDelete,
   snapshotWithPendingSegmentDeletes,
   type PendingSegmentDeleteProjection,
 } from './segmentDeleteProjection';
 import type { WorkspaceMemoryDetail, WorkspaceMemorySummary } from './workspaceApi';
 
+type AnySegment = WorkspaceMemoryDetail['segments'][number];
 type AudioSegment = Extract<WorkspaceMemoryDetail['segments'][number], { type: 'audio' }>;
+type ArtifactSegment = Extract<WorkspaceMemoryDetail['segments'][number], { type: 'artifact' }>;
 type NoteSupplement = Extract<AudioSegment['supplements'][number], { type: 'note' }>;
 
 function memory(overrides: Partial<WorkspaceMemorySummary> = {}): WorkspaceMemorySummary {
@@ -20,6 +24,7 @@ function memory(overrides: Partial<WorkspaceMemorySummary> = {}): WorkspaceMemor
     memoryId: 'mem_projection',
     segmentCount: 3,
     noteSegmentCount: 0,
+    artifactSegmentCount: 0,
     audioSegmentCount: 3,
     hasAnyNote: false,
     title: 'Projection memory',
@@ -58,6 +63,24 @@ function segment({
   };
 }
 
+function artifactSegment(segmentId: string): ArtifactSegment {
+  return {
+    createdAt: '2026-05-06T13:08:00.000Z',
+    entryByteLength: 128,
+    entryHash: 'a'.repeat(64),
+    format: 'html',
+    memoryId: 'mem_projection',
+    previewVersion: 'a'.repeat(64),
+    segmentId,
+    supplementCount: 0,
+    supplements: [],
+    title: 'Artifact',
+    type: 'artifact',
+    updatedAt: '2026-05-06T13:09:00.000Z',
+    workspaceId: 'ws_projection',
+  };
+}
+
 function noteSupplement(supplementId: string): NoteSupplement {
   return {
     bodyByteLength: 64,
@@ -77,17 +100,31 @@ function pendingProjection({
   removedSegment,
 }: {
   readonly baseMemory: WorkspaceMemorySummary;
-  readonly removedSegment: AudioSegment;
+  readonly removedSegment: AnySegment;
 }): PendingSegmentDeleteProjection {
+  const isAudioSegment = removedSegment.type === 'audio';
   return {
     memoryBeforeDelete: baseMemory,
     memoryId: baseMemory.memoryId,
     optimisticMemory: memory({
-      audioByteLength: baseMemory.audioByteLength - removedSegment.audioByteLength,
-      audioDurationMs: baseMemory.audioDurationMs - removedSegment.durationMs,
+      audioByteLength: isAudioSegment
+        ? baseMemory.audioByteLength - removedSegment.audioByteLength
+        : baseMemory.audioByteLength,
+      audioDurationMs: isAudioSegment
+        ? baseMemory.audioDurationMs - removedSegment.durationMs
+        : baseMemory.audioDurationMs,
       segmentCount: baseMemory.segmentCount - 1,
-      noteSegmentCount: 0,
-      audioSegmentCount: baseMemory.segmentCount - 1,
+      noteSegmentCount:
+        removedSegment.type === 'note'
+          ? Math.max(0, baseMemory.noteSegmentCount - 1)
+          : baseMemory.noteSegmentCount,
+      artifactSegmentCount:
+        removedSegment.type === 'artifact'
+          ? Math.max(0, baseMemory.artifactSegmentCount - 1)
+          : baseMemory.artifactSegmentCount,
+      audioSegmentCount: isAudioSegment
+        ? Math.max(0, baseMemory.audioSegmentCount - 1)
+        : baseMemory.audioSegmentCount,
     }),
     segment: removedSegment,
     segmentId: removedSegment.segmentId,
@@ -114,6 +151,7 @@ describe('segment delete projection', () => {
       audioDurationMs: 4000,
       segmentCount: 2,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioSegmentCount: 2,
     });
 
@@ -124,6 +162,7 @@ describe('segment delete projection', () => {
       audioDurationMs: 3000,
       segmentCount: 1,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioSegmentCount: 1,
     });
   });
@@ -164,6 +203,7 @@ describe('segment delete projection', () => {
       audioDurationMs: 3000,
       segmentCount: 1,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioSegmentCount: 1,
     });
   });
@@ -190,6 +230,7 @@ describe('segment delete projection', () => {
       hasAnyNote: false,
       segmentCount: 3,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioSegmentCount: 3,
       updatedAt: '2026-05-06T13:20:00.000Z',
     });
@@ -201,6 +242,7 @@ describe('segment delete projection', () => {
       hasAnyNote: false,
       segmentCount: 2,
       noteSegmentCount: 0,
+      artifactSegmentCount: 0,
       audioSegmentCount: 2,
       updatedAt: '2026-05-06T13:20:00.000Z',
     });
@@ -257,6 +299,87 @@ describe('segment delete projection', () => {
       })
     ).toMatchObject({
       hasAnyNote: true,
+    });
+  });
+
+  it('updates artifact segment count without decrementing note count', () => {
+    expect(
+      memorySummaryAfterSegmentRemoval({
+        memory: memory({
+          audioByteLength: 0,
+          audioDurationMs: 0,
+          audioSegmentCount: 0,
+          artifactSegmentCount: 1,
+          noteSegmentCount: 1,
+          segmentCount: 2,
+        }),
+        removedSegment: artifactSegment('seg_projection_artifact_deleted'),
+      })
+    ).toMatchObject({
+      artifactSegmentCount: 0,
+      noteSegmentCount: 1,
+      segmentCount: 1,
+    });
+  });
+
+  it('recomputes and restores artifact counts explicitly', () => {
+    const visibleArtifact = artifactSegment('seg_projection_artifact_visible');
+
+    expect(
+      memorySummaryWithVisibleSegments(
+        memory({
+          audioByteLength: 0,
+          audioDurationMs: 0,
+          audioSegmentCount: 0,
+          artifactSegmentCount: 0,
+          noteSegmentCount: 0,
+          segmentCount: 0,
+        }),
+        [visibleArtifact]
+      )
+    ).toMatchObject({
+      artifactSegmentCount: 1,
+      noteSegmentCount: 0,
+      segmentCount: 1,
+    });
+
+    expect(
+      memorySummaryAfterSegmentRestore({
+        memory: memory({
+          audioByteLength: 0,
+          audioDurationMs: 0,
+          audioSegmentCount: 0,
+          artifactSegmentCount: 0,
+          noteSegmentCount: 0,
+          segmentCount: 0,
+        }),
+        restoredSegment: visibleArtifact,
+      })
+    ).toMatchObject({
+      artifactSegmentCount: 1,
+      noteSegmentCount: 0,
+      segmentCount: 1,
+    });
+  });
+
+  it('replays artifact pending deletes using artifact count as part of the base match', () => {
+    const baseMemory = memory({
+      audioByteLength: 0,
+      audioDurationMs: 0,
+      audioSegmentCount: 0,
+      artifactSegmentCount: 2,
+      noteSegmentCount: 0,
+      segmentCount: 2,
+    });
+    const pending = pendingProjection({
+      baseMemory,
+      removedSegment: artifactSegment('seg_projection_artifact_pending'),
+    });
+
+    expect(memorySummaryWithPendingSegmentDelete(baseMemory, pending)).toMatchObject({
+      artifactSegmentCount: 1,
+      noteSegmentCount: 0,
+      segmentCount: 1,
     });
   });
 });

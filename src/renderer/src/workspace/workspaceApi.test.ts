@@ -6,6 +6,7 @@ import {
   clearMicrophoneIntent,
   cloneRecordingDraftPrefix,
   closeWorkspace,
+  copyArtifactAgentPrompt,
   copyMemoryAbsolutePath,
   copyMemoryRelativePath,
   copyMemorySpaceAbsolutePath,
@@ -97,6 +98,7 @@ describe('workspace renderer API wrapper', () => {
     copyMemoryRelativePath: vi.fn(),
     copySegmentRelativePath: vi.fn(),
     copySegmentSupplementRelativePath: vi.fn(),
+    copyArtifactAgentPrompt: vi.fn(),
     closeWorkspace: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),
@@ -174,6 +176,7 @@ describe('workspace renderer API wrapper', () => {
       reoWorkspace.copyMemoryRelativePath,
       reoWorkspace.copySegmentRelativePath,
       reoWorkspace.copySegmentSupplementRelativePath,
+      reoWorkspace.copyArtifactAgentPrompt,
     ]) {
       action.mockResolvedValue(okResponse);
     }
@@ -210,6 +213,10 @@ describe('workspace renderer API wrapper', () => {
     await openSegmentSupplementDocument(supplementPayload);
     await copySegmentSupplementAbsolutePath(supplementPayload);
     await copySegmentSupplementRelativePath(supplementPayload);
+    await copyArtifactAgentPrompt({
+      ...segmentPayload,
+      action: 'update-segment',
+    });
     await openVoiceTranscriptionProviderConsole();
     await openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
 
@@ -228,6 +235,10 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.openSegmentSupplementDocument).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.copySegmentSupplementAbsolutePath).toHaveBeenCalledWith(supplementPayload);
     expect(reoWorkspace.copySegmentSupplementRelativePath).toHaveBeenCalledWith(supplementPayload);
+    expect(reoWorkspace.copyArtifactAgentPrompt).toHaveBeenCalledWith({
+      ...segmentPayload,
+      action: 'update-segment',
+    });
     expect(reoWorkspace.openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
     expect(reoWorkspace.openMarkdownExternalLink).toHaveBeenCalledWith({
       url: 'https://tiptap.dev/docs',
@@ -282,6 +293,7 @@ describe('workspace renderer API wrapper', () => {
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 0,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioSegmentCount: 0,
         audioDurationMs: 0,
         audioByteLength: 0,
@@ -304,6 +316,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           audioDurationMs: 0,
           audioByteLength: 0,
@@ -324,6 +337,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           audioDurationMs: 0,
           audioByteLength: 0,
@@ -345,6 +359,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           audioDurationMs: 1,
           audioByteLength: 1,
@@ -380,6 +395,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-08T14:42:00.000Z',
           segmentCount: 0,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 0,
           audioDurationMs: 0,
           audioByteLength: 0,
@@ -477,6 +493,7 @@ describe('workspace renderer API wrapper', () => {
           memoryId: 'mem_1',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
@@ -504,6 +521,7 @@ describe('workspace renderer API wrapper', () => {
           memoryId: 'mem_1',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:08:00.000Z',
@@ -565,6 +583,7 @@ describe('workspace renderer API wrapper', () => {
         updatedAt: '2026-05-08T14:42:00.000Z',
         segmentCount: 1,
         noteSegmentCount: 0,
+        artifactSegmentCount: 0,
         audioSegmentCount: 1,
         audioDurationMs: 0,
         audioByteLength: 1,
@@ -583,6 +602,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           audioDurationMs: 1000,
           audioByteLength: 1,
@@ -643,6 +663,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           audioDurationMs: 1000,
           audioByteLength: 1,
@@ -678,6 +699,7 @@ describe('workspace renderer API wrapper', () => {
           updatedAt: '2026-05-06T13:09:00.000Z',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           audioDurationMs: 1000,
           audioByteLength: 1,
@@ -741,6 +763,7 @@ describe('workspace renderer API wrapper', () => {
           memoryId: 'mem_1',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
@@ -762,6 +785,7 @@ describe('workspace renderer API wrapper', () => {
           memoryId: 'mem_1',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',
@@ -783,6 +807,7 @@ describe('workspace renderer API wrapper', () => {
           memoryId: 'mem_1',
           segmentCount: 1,
           noteSegmentCount: 0,
+          artifactSegmentCount: 0,
           audioSegmentCount: 1,
           title: '录音',
           updatedAt: '2026-05-06T13:09:00.000Z',

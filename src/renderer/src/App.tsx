@@ -445,6 +445,7 @@ function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemor
     first.segmentCount === second.segmentCount &&
     first.audioSegmentCount === second.audioSegmentCount &&
     first.noteSegmentCount === second.noteSegmentCount &&
+    first.artifactSegmentCount === second.artifactSegmentCount &&
     first.audioDurationMs === second.audioDurationMs &&
     first.audioByteLength === second.audioByteLength &&
     first.hasAudioTranscript === second.hasAudioTranscript &&

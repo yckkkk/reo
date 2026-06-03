@@ -59,7 +59,7 @@ Reo 是未发布的 Electron 产品。当前目标是建立干净、稳定、可
 
 产品本质由本地文件真源、agent-native 协作能力和极致交互气质支撑。记忆空间文件夹是真实产物源；DB 可以作为索引、关系、查询和处理状态层，但不替代记忆空间文件夹作为用户记忆内容真源。
 
-当前阶段按 `roadmap.md` P1-P6 建立 audio + note 基础表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证。P1-P6 是 enabling phase，不是 Reo 完整形态。
+当前阶段按 `roadmap.md` P1-P6 建立 audio + note + artifact first slice 基础表达主链、记忆空间管理、Memory Studio、Move Memory、Review 基础和 AI-ready 验证。P1-P6 是 enabling phase，不是 Reo 完整形态。
 
 产品定位、用户场景和页面模型见 `product.md`；阶段路线见 `roadmap.md`；长期产品本质决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`；文件真源底层决策见 `docs/decisions/0003-local-memory-workspace.md`。
 

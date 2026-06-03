@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import type { MediaAccessPermissionRequest } from 'electron';
-import { APP_SHELL_HOST, APP_SHELL_SCHEME } from './appShellConstants.js';
+import { APP_SHELL_HOST, APP_SHELL_SCHEME, ARTIFACT_SCHEME } from './appShellConstants.js';
+import { isArtifactWorkspaceEntryUrl } from './artifactUrl.js';
 import { getDevServerConnectSources, resolveDevServerUrl } from './devServerUrl.js';
 import { createContentSecurityPolicy } from './securityPolicy.js';
 import {
@@ -214,6 +215,27 @@ export function isTrustedAppUrl(rawUrl: string): boolean {
     }
 
     return getDevServerOrigins().has(parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
+function isArtifactPreviewUrl(url: URL): boolean {
+  return url.protocol === `${ARTIFACT_SCHEME}:` && isArtifactWorkspaceEntryUrl(url);
+}
+
+export function isAllowedAppNavigationUrl(
+  rawUrl: string,
+  { isMainFrame }: { readonly isMainFrame: boolean }
+): boolean {
+  if (isTrustedAppUrl(rawUrl)) {
+    return true;
+  }
+  if (isMainFrame) {
+    return false;
+  }
+  try {
+    return isArtifactPreviewUrl(new URL(rawUrl));
   } catch {
     return false;
   }
