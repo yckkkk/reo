@@ -38,6 +38,7 @@ export function EditorExpandShell({
         >
           {children}
           <EditorCornerGrip
+            arcVariant="inline"
             disabled={pending}
             icon="maximize"
             label="展开编辑器"
@@ -76,6 +77,7 @@ export function EditorExpandShell({
         >
           {children}
           <EditorCornerGrip
+            arcVariant="expanded"
             disabled={pending}
             icon="minimize"
             label="缩小编辑器"
@@ -88,37 +90,61 @@ export function EditorExpandShell({
 }
 
 type EditorCornerGripProps = {
+  readonly arcVariant: 'inline' | 'expanded';
   readonly disabled: boolean;
   readonly icon: 'maximize' | 'minimize';
   readonly label: string;
   readonly onClick: () => void;
 };
 
-function EditorCornerGrip({ disabled, icon, label, onClick }: EditorCornerGripProps) {
+function EditorCornerGrip({
+  arcVariant,
+  disabled,
+  icon,
+  label,
+  onClick,
+}: EditorCornerGripProps) {
   const Icon = icon === 'maximize' ? Maximize : Minimize;
+  const expandedArc = arcVariant === 'expanded';
 
   return (
     <button
       aria-label={label}
-      className="group absolute bottom-0 right-0 z-10 flex size-24 items-center justify-center rounded-tl-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-50"
+      className="group absolute bottom-0 right-0 z-10 flex size-24 items-center justify-center rounded-tl-lg text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-50"
       data-testid={`editor-${icon}-grip`}
       disabled={disabled}
       onClick={onClick}
       type="button"
     >
-      <svg
-        aria-hidden="true"
-        className="block size-14 group-hover:hidden group-focus-visible:hidden"
-        fill="none"
-        viewBox="0 0 14 14"
-      >
-        <path
-          d="M2 12 A 10 10 0 0 0 12 2"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth="1.5"
-        />
-      </svg>
+      {expandedArc ? (
+        <svg
+          aria-hidden="true"
+          className="block size-20 group-hover:hidden group-focus-visible:hidden"
+          fill="none"
+          viewBox="0 0 20 20"
+        >
+          <path
+            d="M4 18 A 16 16 0 0 0 18 4"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="2.5"
+          />
+        </svg>
+      ) : (
+        <svg
+          aria-hidden="true"
+          className="absolute bottom-0 right-0 block size-24 group-hover:hidden group-focus-visible:hidden"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <path
+            d="M9 20 A 11 11 0 0 0 20 9"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="2.5"
+          />
+        </svg>
+      )}
       <Icon
         aria-hidden="true"
         className="hidden size-14 group-hover:block group-focus-visible:block"

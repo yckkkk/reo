@@ -576,7 +576,8 @@ function LightweightMarkdownEditorSurfaceContent({
       className={cn(
         'reo-lightweight-markdown-editor-surface grid h-full min-h-0 w-full overflow-hidden bg-background',
         toolbarRevealed ? 'grid-rows-[44px_minmax(0,1fr)]' : 'grid-rows-[0px_minmax(0,1fr)]',
-        bordered && cn('rounded-md border', toolbarRevealed ? 'border-ring' : 'border-secondary'),
+        bordered &&
+          cn('reo-squircle rounded-xl border', toolbarRevealed ? 'border-ring' : 'border-secondary'),
         toolbarLocked && 'reo-lightweight-markdown-editor-surface-disabled'
       )}
       data-slot="lightweight-markdown-editor-surface"

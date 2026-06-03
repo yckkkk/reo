@@ -1545,7 +1545,12 @@ describe('LoadedWorkspaceFrame', () => {
     // Unfocused (reading) state collapses the toolbar row; focusing the editor
     // expands it back to 44px. See LightweightMarkdownEditorSurface reveal tests.
     expect(editorSurface).toHaveClass('grid-rows-[0px_minmax(0,1fr)]');
-    expect(editorSurface).toHaveClass('rounded-md', 'border', 'border-secondary');
+    expect(editorSurface).toHaveClass(
+      'reo-squircle',
+      'rounded-xl',
+      'border',
+      'border-secondary'
+    );
     expect(editorSurface).not.toHaveClass('transition-colors');
     expect(editorSurface).not.toHaveClass('border-ring');
     const editorToolbar = editorSurface.querySelector(
