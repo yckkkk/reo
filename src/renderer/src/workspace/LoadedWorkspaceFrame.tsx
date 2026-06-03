@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { showReoToast, toast } from '../components/ui/toaster';
 import { ExpressionDock } from './expression/ExpressionDock';
@@ -82,6 +82,24 @@ type LoadedWorkspaceFrameProps = {
   readonly onStartRecording: () => void;
 };
 
+function useStableEventCallback<TArgs extends readonly unknown[], TResult>(
+  callback: (...args: TArgs) => TResult
+) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  return useCallback((...args: TArgs) => callbackRef.current(...args), []);
+}
+
+function useStableOptionalEventCallback<TArgs extends readonly unknown[], TResult>(
+  callback: ((...args: TArgs) => TResult) | undefined
+) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  return useCallback((...args: TArgs) => callbackRef.current?.(...args), []);
+}
+
 export function LoadedWorkspaceFrame({
   currentMemory = null,
   expressionDockVisible = true,
@@ -131,6 +149,37 @@ export function LoadedWorkspaceFrame({
   const fallbackShownReviewToastSessionKeyRef = useRef<string | null>(null);
   const copyNeedsReviewPromptRef = useRef<() => void>(() => {});
   const lastShownReviewToastCountRef = useRef<number | null>(null);
+  const deleteMemory = useStableEventCallback(onDeleteMemory);
+  const deleteSegment = useStableEventCallback(onDeleteSegment);
+  const deleteSegmentSupplement = useStableEventCallback(onDeleteSegmentSupplement);
+  const clearSegmentContent = useStableEventCallback(onClearSegmentContent);
+  const segmentTranscriptSaved = useStableEventCallback(onSegmentTranscriptSaved);
+  const segmentSupplementTranscriptSaved = useStableEventCallback(
+    onSegmentSupplementTranscriptSaved
+  );
+  const noteSegmentContentSaved = useStableEventCallback(onNoteSegmentContentSaved);
+  const noteSegmentSupplementContentSaved = useStableEventCallback(
+    onNoteSegmentSupplementContentSaved
+  );
+  const renameMemory = useStableEventCallback(onRenameMemory);
+  const resetMemoryCover = useStableEventCallback(onResetMemoryCover);
+  const switchMemoryDefaultCover = useStableEventCallback(onSwitchMemoryDefaultCover);
+  const resetSegmentCover = useStableOptionalEventCallback(onResetSegmentCover);
+  const switchSegmentDefaultCover = useStableOptionalEventCallback(onSwitchSegmentDefaultCover);
+  const renameSegmentContent = useStableEventCallback(onRenameSegmentContent);
+  const renameSegment = useStableEventCallback(onRenameSegment);
+  const renameSegmentSupplement = useStableEventCallback(onRenameSegmentSupplement);
+  const inlineMarkdownDirtyChange = useStableOptionalEventCallback(onInlineMarkdownDirtyChange);
+  const segmentFocusConsumed = useStableOptionalEventCallback(onSegmentFocusConsumed);
+  const selectMemory = useStableEventCallback(onSelectMemory);
+  const startNote = useStableOptionalEventCallback(onStartNote);
+  const startSegmentSupplementNote = useStableOptionalEventCallback(onStartSegmentSupplementNote);
+  const startSegmentSupplementRecording = useStableEventCallback(onStartSegmentSupplementRecording);
+  const startRecording = useStableEventCallback(onStartRecording);
+  const hasInlineMarkdownDirtyChange = onInlineMarkdownDirtyChange !== undefined;
+  const hasSegmentFocusConsumed = onSegmentFocusConsumed !== undefined;
+  const hasStartNote = onStartNote !== undefined;
+  const hasStartSegmentSupplementNote = onStartSegmentSupplementNote !== undefined;
   const currentShownReviewToastSessionKey =
     shownReviewToastSessionKey === undefined
       ? fallbackShownReviewToastSessionKeyRef.current
@@ -240,62 +289,115 @@ export function LoadedWorkspaceFrame({
     };
   }, [audioResourceCaches, workspaceSession.workspaceHandle]);
 
-  return (
-    <WorkspaceFrame
-      memoryRailOpen={memoryRailOpen}
-      memoryRailMode={memoryRailMode}
-      rail={
-        <MemoryRail
-          id={WORKSPACE_MEMORY_RAIL_ID}
-          activeMemoryId={currentMemory?.memoryId ?? null}
-          memories={snapshot.memories}
-          onDeleteMemory={onDeleteMemory}
-          onRenameMemory={onRenameMemory}
-          onResetMemoryCover={onResetMemoryCover}
-          onSwitchMemoryDefaultCover={onSwitchMemoryDefaultCover}
-          onSelectMemory={onSelectMemory}
-          workspaceHandle={workspaceSession.workspaceHandle}
-          workspaceId={workspaceSession.workspaceId}
+  const memoryRail = useMemo(
+    () => (
+      <MemoryRail
+        id={WORKSPACE_MEMORY_RAIL_ID}
+        activeMemoryId={currentMemory?.memoryId ?? null}
+        memories={snapshot.memories}
+        onDeleteMemory={deleteMemory}
+        onRenameMemory={renameMemory}
+        onResetMemoryCover={resetMemoryCover}
+        onSwitchMemoryDefaultCover={switchMemoryDefaultCover}
+        onSelectMemory={selectMemory}
+        workspaceHandle={workspaceSession.workspaceHandle}
+        workspaceId={workspaceSession.workspaceId}
+      />
+    ),
+    [
+      currentMemory?.memoryId,
+      deleteMemory,
+      renameMemory,
+      resetMemoryCover,
+      selectMemory,
+      snapshot.memories,
+      switchMemoryDefaultCover,
+      workspaceSession.workspaceHandle,
+      workspaceSession.workspaceId,
+    ]
+  );
+  const expressionDock = useMemo(
+    () =>
+      expressionDockVisible ? (
+        <ExpressionDock
+          {...(hasStartNote ? { onStartNote: startNote } : {})}
+          onStartRecording={startRecording}
         />
-      }
-      dock={
-        expressionDockVisible ? (
-          <ExpressionDock
-            {...(onStartNote ? { onStartNote } : {})}
-            onStartRecording={onStartRecording}
-          />
-        ) : null
-      }
-    >
-      {currentMemory ? (
+      ) : null,
+    [expressionDockVisible, hasStartNote, startNote, startRecording]
+  );
+  const workspaceStage = useMemo(
+    () =>
+      currentMemory ? (
         <MemoryStudio
           key={currentMemory.memoryId}
           audioResourceCaches={audioResourceCaches}
           memory={currentMemory}
-          onDeleteSegment={onDeleteSegment}
-          onDeleteSegmentSupplement={onDeleteSegmentSupplement}
-          onClearSegmentContent={onClearSegmentContent}
-          onSegmentTranscriptSaved={onSegmentTranscriptSaved}
-          onSegmentSupplementTranscriptSaved={onSegmentSupplementTranscriptSaved}
-          onNoteSegmentContentSaved={onNoteSegmentContentSaved}
-          onNoteSegmentSupplementContentSaved={onNoteSegmentSupplementContentSaved}
-          onRenameSegmentSupplement={onRenameSegmentSupplement}
-          onRenameSegmentContent={onRenameSegmentContent}
-          onResetSegmentCover={onResetSegmentCover ?? (() => {})}
-          onSwitchSegmentDefaultCover={onSwitchSegmentDefaultCover ?? (() => {})}
-          onRenameSegment={onRenameSegment}
-          {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
+          onDeleteSegment={deleteSegment}
+          onDeleteSegmentSupplement={deleteSegmentSupplement}
+          onClearSegmentContent={clearSegmentContent}
+          onSegmentTranscriptSaved={segmentTranscriptSaved}
+          onSegmentSupplementTranscriptSaved={segmentSupplementTranscriptSaved}
+          onNoteSegmentContentSaved={noteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={noteSegmentSupplementContentSaved}
+          onRenameSegmentSupplement={renameSegmentSupplement}
+          onRenameSegmentContent={renameSegmentContent}
+          onResetSegmentCover={resetSegmentCover}
+          onSwitchSegmentDefaultCover={switchSegmentDefaultCover}
+          onRenameSegment={renameSegment}
+          {...(hasInlineMarkdownDirtyChange
+            ? { onInlineMarkdownDirtyChange: inlineMarkdownDirtyChange }
+            : {})}
           {...(speechSynthesis ? { speechSynthesis } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
-          {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
-          {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}
-          onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
+          {...(hasSegmentFocusConsumed ? { onSegmentFocusConsumed: segmentFocusConsumed } : {})}
+          {...(hasStartSegmentSupplementNote
+            ? { onStartSegmentSupplementNote: startSegmentSupplementNote }
+            : {})}
+          onStartSegmentSupplementRecording={startSegmentSupplementRecording}
           segmentFocusIntent={segmentFocusIntent}
           workspaceSession={workspaceSession}
         />
       ) : (
         <WorkspaceStage />
-      )}
+      ),
+    [
+      audioResourceCaches,
+      clearSegmentContent,
+      currentMemory,
+      deleteSegment,
+      deleteSegmentSupplement,
+      hasInlineMarkdownDirtyChange,
+      hasSegmentFocusConsumed,
+      hasStartSegmentSupplementNote,
+      inlineMarkdownDirtyChange,
+      noteSegmentContentSaved,
+      noteSegmentSupplementContentSaved,
+      renameSegment,
+      renameSegmentContent,
+      renameSegmentSupplement,
+      resetSegmentCover,
+      segmentFocusConsumed,
+      segmentFocusIntent,
+      segmentSupplementTranscriptSaved,
+      segmentTranscriptSaved,
+      speechSynthesis,
+      startSegmentSupplementNote,
+      startSegmentSupplementRecording,
+      switchSegmentDefaultCover,
+      transcriptionBackfill,
+      workspaceSession,
+    ]
+  );
+
+  return (
+    <WorkspaceFrame
+      memoryRailOpen={memoryRailOpen}
+      memoryRailMode={memoryRailMode}
+      rail={memoryRail}
+      dock={expressionDock}
+    >
+      {workspaceStage}
     </WorkspaceFrame>
   );
 }

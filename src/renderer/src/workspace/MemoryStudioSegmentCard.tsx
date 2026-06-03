@@ -37,7 +37,6 @@ type WindowWithIdleCallback = Window & {
   readonly cancelIdleCallback?: (handle: number) => void;
 };
 
-export const MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX = 160;
 export const MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS =
   'top-[calc(8px+(var(--memory-studio-segment-card-size)/2)-20px)]';
 export const MEMORY_STUDIO_SEGMENT_STRIP_STYLE: MemoryStudioSegmentStripStyle = {
@@ -55,15 +54,6 @@ type MemoryStudioSegmentCardProps = {
   readonly selected: boolean;
   readonly workspaceId: string;
 };
-
-export function memoryStudioSegmentStripSpacerStyle(count: number): CSSProperties {
-  return {
-    flexBasis:
-      count <= 1
-        ? 'var(--memory-studio-segment-card-size)'
-        : `calc(${count} * (var(--memory-studio-segment-card-size) + var(--memory-studio-segment-gap)) - var(--memory-studio-segment-gap))`,
-  };
-}
 
 function isAudioMemorySegment(segment: MemorySegment): segment is AudioMemorySegment {
   return segment.type === 'audio';
@@ -153,7 +143,7 @@ export function MemoryStudioSegmentCard({
   return (
     <div
       data-slot="memory-studio-segment-item"
-      className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none"
+      className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none [contain-intrinsic-size:var(--memory-studio-segment-card-size)_calc(var(--memory-studio-segment-card-size)+58px)] [content-visibility:auto]"
       style={coverToneStyle(coverTone)}
     >
       <button

@@ -45,11 +45,9 @@ import {
 import { CarouselArrowButton } from './CarouselArrowButton';
 import {
   MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS,
-  MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX,
   MEMORY_STUDIO_SEGMENT_STRIP_STYLE,
   MemoryStudioSegmentCard,
   MemoryStudioSegmentCardActionButton,
-  memoryStudioSegmentStripSpacerStyle,
 } from './MemoryStudioSegmentCard';
 import { SegmentActionsMenu } from './SegmentActionsMenu';
 import { SegmentContentActionsMenu } from './SegmentContentActionsMenu';
@@ -239,7 +237,6 @@ export type SegmentSupplementNoteTarget = {
   readonly title: string;
 };
 
-const CAROUSEL_SCROLL_RATIO = 0.8;
 const SCROLL_EDGE_EPSILON_PX = 24;
 
 type SegmentStripScrollState = {
@@ -2540,67 +2537,12 @@ function readSegmentStripScrollState(element: HTMLElement): SegmentStripScrollSt
   };
 }
 
-const SEGMENT_STRIP_WINDOW_OVERSCAN = 4;
-const SEGMENT_STRIP_MIN_WINDOW_SIZE = 12;
-
-type SegmentStripWindowRange = {
-  readonly end: number;
-  readonly start: number;
+type SegmentStripBlossomInstance = {
+  readonly destroy: () => void;
+  readonly init: () => void;
+  readonly next: (opts?: { readonly align?: 'start' | 'center' | 'end' }) => void;
+  readonly prev: (opts?: { readonly align?: 'start' | 'center' | 'end' }) => void;
 };
-
-function clampSegmentStripWindowRange(
-  range: SegmentStripWindowRange,
-  segmentCount: number
-): SegmentStripWindowRange {
-  if (segmentCount <= SEGMENT_STRIP_MIN_WINDOW_SIZE) {
-    return { start: 0, end: segmentCount };
-  }
-  const windowSize = Math.min(
-    segmentCount,
-    Math.max(SEGMENT_STRIP_MIN_WINDOW_SIZE, range.end - range.start)
-  );
-  const start = Math.min(Math.max(0, range.start), Math.max(0, segmentCount - windowSize));
-  return { start, end: Math.min(segmentCount, start + windowSize) };
-}
-
-function segmentStripWindowAroundIndex(
-  index: number,
-  segmentCount: number
-): SegmentStripWindowRange {
-  const safeIndex = Math.min(Math.max(0, index), Math.max(0, segmentCount - 1));
-  const start = safeIndex - Math.floor(SEGMENT_STRIP_MIN_WINDOW_SIZE / 2);
-  return clampSegmentStripWindowRange(
-    { start, end: start + SEGMENT_STRIP_MIN_WINDOW_SIZE },
-    segmentCount
-  );
-}
-
-function segmentStripWindowFromElement(
-  element: HTMLElement,
-  segmentCount: number,
-  itemStep: number
-): SegmentStripWindowRange {
-  if (segmentCount <= SEGMENT_STRIP_MIN_WINDOW_SIZE) {
-    return { start: 0, end: segmentCount };
-  }
-  const safeItemStep = itemStep > 0 ? itemStep : MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX;
-  const visibleCount = Math.max(
-    SEGMENT_STRIP_MIN_WINDOW_SIZE,
-    Math.ceil(element.clientWidth / safeItemStep) + SEGMENT_STRIP_WINDOW_OVERSCAN * 2
-  );
-  const start = Math.floor(element.scrollLeft / safeItemStep) - SEGMENT_STRIP_WINDOW_OVERSCAN;
-  return clampSegmentStripWindowRange({ start, end: start + visibleCount }, segmentCount);
-}
-
-function readSegmentStripItemStep(element: HTMLElement): number {
-  const firstItem = element.querySelector<HTMLElement>('[data-slot="memory-studio-segment-item"]');
-  const computedStyle = window.getComputedStyle(element);
-  const columnGap = Number.parseFloat(computedStyle.columnGap || computedStyle.gap || '0');
-  const itemWidth = firstItem?.getBoundingClientRect().width;
-  return itemWidth && itemWidth > 0
-    ? itemWidth + (Number.isFinite(columnGap) ? columnGap : 0)
-    : MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX;
-}
 
 type InlineMarkdownContentEditorProps<TSaved> = {
   readonly ariaLabelledBy: string;
@@ -3222,7 +3164,7 @@ export function MemoryStudio({
   const [hoveredSupplementActionId, setHoveredSupplementActionId] = useState<string | null>(null);
   const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
-  const segmentStripItemStepRef = useRef(MEMORY_STUDIO_SEGMENT_CARD_ESTIMATE_PX);
+  const segmentStripBlossomRef = useRef<SegmentStripBlossomInstance | null>(null);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
   const [inlineMarkdownDirty, setInlineMarkdownDirty] = useState(false);
   const [confirmingTranscriptionBackfill, setConfirmingTranscriptionBackfill] =
@@ -3241,10 +3183,6 @@ export function MemoryStudio({
   const [stripScrollState, setStripScrollState] = useState<SegmentStripScrollState>(
     hiddenSegmentStripScrollState
   );
-  const [segmentStripWindowRange, setSegmentStripWindowRange] = useState<SegmentStripWindowRange>({
-    start: 0,
-    end: SEGMENT_STRIP_MIN_WINDOW_SIZE,
-  });
 
   useEffect(() => {
     latestWorkspaceSessionRef.current = workspaceSession;
@@ -3270,7 +3208,6 @@ export function MemoryStudio({
     return { index: firstSegment ? 0 : -1, segment: firstSegment };
   }, [visibleSegments, selectedSegmentId]);
   const selectedSegment = selectedSegmentResolution.segment;
-  const selectedSegmentIndex = selectedSegmentResolution.index;
   const retrySelectedSegmentTranscription =
     selectedSegment && isAudioMemorySegment(selectedSegment) && transcriptionBackfill?.retrySegment
       ? () =>
@@ -3651,42 +3588,29 @@ export function MemoryStudio({
       return undefined;
     }
 
-    const syncScrollState = (refreshItemStep = false) => {
-      if (refreshItemStep) {
-        segmentStripItemStepRef.current = readSegmentStripItemStep(element);
-      }
+    const syncScrollState = () => {
       const nextScrollState = readSegmentStripScrollState(element);
-      const nextWindowRange = segmentStripWindowFromElement(
-        element,
-        visibleSegments.length,
-        segmentStripItemStepRef.current
-      );
       setStripScrollState((currentScrollState) =>
         currentScrollState.canScrollLeft === nextScrollState.canScrollLeft &&
         currentScrollState.canScrollRight === nextScrollState.canScrollRight
           ? currentScrollState
           : nextScrollState
       );
-      setSegmentStripWindowRange((currentRange) =>
-        currentRange.start === nextWindowRange.start && currentRange.end === nextWindowRange.end
-          ? currentRange
-          : nextWindowRange
-      );
     };
 
-    const scheduleSyncScrollState = (refreshItemStep = false) => {
+    const scheduleSyncScrollState = () => {
       if (animationFrameId !== null) {
         return;
       }
       animationFrameId = window.requestAnimationFrame(() => {
         animationFrameId = null;
-        syncScrollState(refreshItemStep);
+        syncScrollState();
       });
     };
-    const scheduleScrollSync = () => scheduleSyncScrollState(false);
-    const scheduleResizeSync = () => scheduleSyncScrollState(true);
+    const scheduleScrollSync = () => scheduleSyncScrollState();
+    const scheduleResizeSync = () => scheduleSyncScrollState();
 
-    syncScrollState(true);
+    syncScrollState();
     element.addEventListener('scroll', scheduleScrollSync, { passive: true });
     window.addEventListener('resize', scheduleResizeSync);
 
@@ -3705,27 +3629,33 @@ export function MemoryStudio({
   }, [visibleSegments.length]);
 
   useEffect(() => {
-    if (visibleSegments.length === 0) {
-      setSegmentStripWindowRange({ start: 0, end: 0 });
-      return;
+    const element = stripScrollRef.current;
+
+    segmentStripBlossomRef.current = null;
+    if (!element || visibleSegments.length <= 1) {
+      return undefined;
     }
-    if (selectedSegmentIndex < 0) {
-      setSegmentStripWindowRange((currentRange) =>
-        clampSegmentStripWindowRange(currentRange, visibleSegments.length)
-      );
-      return;
-    }
-    setSegmentStripWindowRange((currentRange) => {
-      if (
-        selectedSegmentIndex >= currentRange.start &&
-        selectedSegmentIndex < currentRange.end &&
-        currentRange.end <= visibleSegments.length
-      ) {
-        return currentRange;
+
+    let cancelled = false;
+    let blossom: SegmentStripBlossomInstance | null = null;
+
+    void import('@blossom-carousel/core').then(({ Blossom }) => {
+      if (cancelled || stripScrollRef.current !== element) {
+        return;
       }
-      return segmentStripWindowAroundIndex(selectedSegmentIndex, visibleSegments.length);
+      blossom = Blossom(element, {});
+      segmentStripBlossomRef.current = blossom;
+      blossom.init();
     });
-  }, [visibleSegments.length, selectedSegmentIndex]);
+
+    return () => {
+      cancelled = true;
+      if (segmentStripBlossomRef.current === blossom) {
+        segmentStripBlossomRef.current = null;
+      }
+      blossom?.destroy();
+    };
+  }, [visibleSegments.length]);
 
   useEffect(() => {
     if (!segmentFocusIntent) {
@@ -4172,29 +4102,11 @@ export function MemoryStudio({
   }
 
   function scrollSegmentStrip(direction: 'left' | 'right') {
-    const element = stripScrollRef.current;
-
-    if (!element) {
+    if (direction === 'left') {
+      segmentStripBlossomRef.current?.prev();
       return;
     }
-
-    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
-    const scrollDistance = Math.round(element.clientWidth * CAROUSEL_SCROLL_RATIO);
-    const nextScrollLeft =
-      direction === 'left'
-        ? Math.max(0, element.scrollLeft - scrollDistance)
-        : Math.min(maxScrollLeft, element.scrollLeft + scrollDistance);
-
-    if (typeof element.scrollTo === 'function') {
-      element.scrollTo({
-        behavior: 'instant',
-        left: nextScrollLeft,
-      });
-      return;
-    }
-
-    element.scrollLeft = nextScrollLeft;
-    setStripScrollState(readSegmentStripScrollState(element));
+    segmentStripBlossomRef.current?.next();
   }
 
   return (
@@ -4235,149 +4147,128 @@ export function MemoryStudio({
               ) : null}
               <div
                 ref={stripScrollRef}
+                data-reo-blossom-carousel="segment-strip"
                 data-slot="memory-studio-segment-strip-scroll"
-                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [contain:layout_paint] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
-                {segmentStripWindowRange.start > 0 ? (
-                  <div
-                    aria-hidden="true"
-                    data-slot="memory-studio-segment-strip-spacer"
-                    className="min-w-0 shrink-0"
-                    style={memoryStudioSegmentStripSpacerStyle(segmentStripWindowRange.start)}
-                  />
-                ) : null}
-                {visibleSegments
-                  .slice(segmentStripWindowRange.start, segmentStripWindowRange.end)
-                  .map((segment) => {
-                    const segmentIsAudio = isAudioMemorySegment(segment);
-                    const isSelected = segment.segmentId === selectedSegment.segmentId;
-                    const segmentSpeechSynthesisProjection =
-                      !segmentIsAudio && isSelected
-                        ? noteSegmentContent?.speechSynthesis
-                        : undefined;
-                    const segmentTranscriptionRunning =
-                      segmentIsAudio &&
-                      transcriptionBackfill?.isSegmentRunning?.({
-                        workspaceId: workspaceSession.workspaceId,
-                        memoryId: memory.memoryId,
-                        segmentId: segment.segmentId,
-                      }) === true;
-                    const segmentTranscriptionDisabledReason = transcriptionBackfillDisabledReason({
-                      baseReason: transcriptionBackfill?.disabledReason,
-                      running: segmentTranscriptionRunning,
-                    });
-                    const requestSegmentTranscriptionBackfill =
-                      segmentIsAudio && transcriptionBackfill?.retrySegment
-                        ? () => {
-                            setOpenSegmentMenuId(null);
-                            if (segment.transcript.exists) {
-                              setConfirmingTranscriptionBackfill({
-                                kind: 'segment',
-                                memoryId: memory.memoryId,
-                                segmentId: segment.segmentId,
-                                title: transcriptContentTabTitle(segment),
-                              });
-                              return;
-                            }
-                            void transcriptionBackfill.retrySegment?.({
-                              workspaceId: workspaceSession.workspaceId,
+                {visibleSegments.map((segment) => {
+                  const segmentIsAudio = isAudioMemorySegment(segment);
+                  const isSelected = segment.segmentId === selectedSegment.segmentId;
+                  const segmentSpeechSynthesisProjection =
+                    !segmentIsAudio && isSelected ? noteSegmentContent?.speechSynthesis : undefined;
+                  const segmentTranscriptionRunning =
+                    segmentIsAudio &&
+                    transcriptionBackfill?.isSegmentRunning?.({
+                      workspaceId: workspaceSession.workspaceId,
+                      memoryId: memory.memoryId,
+                      segmentId: segment.segmentId,
+                    }) === true;
+                  const segmentTranscriptionDisabledReason = transcriptionBackfillDisabledReason({
+                    baseReason: transcriptionBackfill?.disabledReason,
+                    running: segmentTranscriptionRunning,
+                  });
+                  const requestSegmentTranscriptionBackfill =
+                    segmentIsAudio && transcriptionBackfill?.retrySegment
+                      ? () => {
+                          setOpenSegmentMenuId(null);
+                          if (segment.transcript.exists) {
+                            setConfirmingTranscriptionBackfill({
+                              kind: 'segment',
                               memoryId: memory.memoryId,
                               segmentId: segment.segmentId,
-                              mode: 'fill-missing',
+                              title: transcriptContentTabTitle(segment),
                             });
+                            return;
                           }
-                        : undefined;
-                    const segmentSpeechSynthesisRunning =
-                      !segmentIsAudio &&
-                      speechSynthesis?.isSegmentRunning?.({
-                        workspaceId: workspaceSession.workspaceId,
-                        memoryId: memory.memoryId,
-                        segmentId: segment.segmentId,
-                      }) === true;
-                    const segmentSpeechSynthesisDisabledReason = !segmentIsAudio
-                      ? noteSpeechSynthesisDisabledReason({
-                          baseReason: speechSynthesis?.disabledReason,
-                          dirty: inlineMarkdownDirty,
-                          running: segmentSpeechSynthesisRunning,
-                          speechSynthesis: segmentSpeechSynthesisProjection,
-                        })
-                      : null;
-                    const requestSegmentSpeechSynthesis =
-                      !segmentIsAudio && speechSynthesis?.requestSegment
-                        ? (speaker: VoiceSpeechSynthesisSpeaker) => {
-                            setOpenSegmentMenuId(null);
-                            void speechSynthesis.requestSegment?.({
-                              workspaceId: workspaceSession.workspaceId,
-                              memoryId: memory.memoryId,
-                              segmentId: segment.segmentId,
-                              mode: 'regenerate',
-                              speaker,
-                            });
-                          }
-                        : undefined;
-                    return (
-                      <MemoryStudioSegmentCard
-                        key={segment.segmentId}
-                        actionMenu={
-                          <SegmentActionsMenu
-                            actionIdentity={{
-                              memoryId: memory.memoryId,
-                              segmentId: segment.segmentId,
-                              workspaceHandle: workspaceSession.workspaceHandle,
-                              workspaceId: workspaceSession.workspaceId,
-                            }}
-                            contentAlign="end"
-                            cover={segment.cover}
-                            onDelete={() => {
-                              setOpenSegmentMenuId(null);
-                              onDeleteSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                            onOpenChange={(open) =>
-                              setOpenSegmentMenuId(open ? segment.segmentId : null)
-                            }
-                            onRequestSpeechSynthesis={requestSegmentSpeechSynthesis}
-                            onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
-                            onRename={() => {
-                              setOpenSegmentMenuId(null);
-                              onRenameSegment({ memoryId: memory.memoryId, segment });
-                            }}
-                            onResetCover={() => {
-                              setOpenSegmentMenuId(null);
-                              onResetSegmentCover({ memoryId: memory.memoryId, segment });
-                            }}
-                            onSwitchDefaultCover={() => {
-                              setOpenSegmentMenuId(null);
-                              onSwitchSegmentDefaultCover({ memoryId: memory.memoryId, segment });
-                            }}
-                            open={openSegmentMenuId === segment.segmentId}
-                            segmentTitle={segment.title}
-                            speechSynthesisDisabledReason={segmentSpeechSynthesisDisabledReason}
-                            transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
-                            transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
-                            trigger={
-                              <MemoryStudioSegmentCardActionButton segmentTitle={segment.title} />
-                            }
-                            triggerLabel={`片段 ${segment.title} 更多操作`}
-                          />
+                          void transcriptionBackfill.retrySegment?.({
+                            workspaceId: workspaceSession.workspaceId,
+                            memoryId: memory.memoryId,
+                            segmentId: segment.segmentId,
+                            mode: 'fill-missing',
+                          });
                         }
-                        menuOpen={openSegmentMenuId === segment.segmentId}
-                        onSelect={() => requestSelectedSegment(segment.segmentId)}
-                        segment={segment}
-                        selected={isSelected}
-                        workspaceId={workspaceSession.workspaceId}
-                      />
-                    );
-                  })}
-                {segmentStripWindowRange.end < visibleSegments.length ? (
-                  <div
-                    aria-hidden="true"
-                    data-slot="memory-studio-segment-strip-spacer"
-                    className="min-w-0 shrink-0"
-                    style={memoryStudioSegmentStripSpacerStyle(
-                      visibleSegments.length - segmentStripWindowRange.end
-                    )}
-                  />
-                ) : null}
+                      : undefined;
+                  const segmentSpeechSynthesisRunning =
+                    !segmentIsAudio &&
+                    speechSynthesis?.isSegmentRunning?.({
+                      workspaceId: workspaceSession.workspaceId,
+                      memoryId: memory.memoryId,
+                      segmentId: segment.segmentId,
+                    }) === true;
+                  const segmentSpeechSynthesisDisabledReason = !segmentIsAudio
+                    ? noteSpeechSynthesisDisabledReason({
+                        baseReason: speechSynthesis?.disabledReason,
+                        dirty: inlineMarkdownDirty,
+                        running: segmentSpeechSynthesisRunning,
+                        speechSynthesis: segmentSpeechSynthesisProjection,
+                      })
+                    : null;
+                  const requestSegmentSpeechSynthesis =
+                    !segmentIsAudio && speechSynthesis?.requestSegment
+                      ? (speaker: VoiceSpeechSynthesisSpeaker) => {
+                          setOpenSegmentMenuId(null);
+                          void speechSynthesis.requestSegment?.({
+                            workspaceId: workspaceSession.workspaceId,
+                            memoryId: memory.memoryId,
+                            segmentId: segment.segmentId,
+                            mode: 'regenerate',
+                            speaker,
+                          });
+                        }
+                      : undefined;
+                  return (
+                    <MemoryStudioSegmentCard
+                      key={segment.segmentId}
+                      actionMenu={
+                        <SegmentActionsMenu
+                          actionIdentity={{
+                            memoryId: memory.memoryId,
+                            segmentId: segment.segmentId,
+                            workspaceHandle: workspaceSession.workspaceHandle,
+                            workspaceId: workspaceSession.workspaceId,
+                          }}
+                          contentAlign="end"
+                          cover={segment.cover}
+                          onDelete={() => {
+                            setOpenSegmentMenuId(null);
+                            onDeleteSegment({ memoryId: memory.memoryId, segment });
+                          }}
+                          onOpenChange={(open) =>
+                            setOpenSegmentMenuId(open ? segment.segmentId : null)
+                          }
+                          onRequestSpeechSynthesis={requestSegmentSpeechSynthesis}
+                          onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
+                          onRename={() => {
+                            setOpenSegmentMenuId(null);
+                            onRenameSegment({ memoryId: memory.memoryId, segment });
+                          }}
+                          onResetCover={() => {
+                            setOpenSegmentMenuId(null);
+                            onResetSegmentCover({ memoryId: memory.memoryId, segment });
+                          }}
+                          onSwitchDefaultCover={() => {
+                            setOpenSegmentMenuId(null);
+                            onSwitchSegmentDefaultCover({ memoryId: memory.memoryId, segment });
+                          }}
+                          open={openSegmentMenuId === segment.segmentId}
+                          segmentTitle={segment.title}
+                          speechSynthesisDisabledReason={segmentSpeechSynthesisDisabledReason}
+                          transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
+                          transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
+                          trigger={
+                            <MemoryStudioSegmentCardActionButton segmentTitle={segment.title} />
+                          }
+                          triggerLabel={`片段 ${segment.title} 更多操作`}
+                        />
+                      }
+                      menuOpen={openSegmentMenuId === segment.segmentId}
+                      onSelect={() => requestSelectedSegment(segment.segmentId)}
+                      segment={segment}
+                      selected={isSelected}
+                      workspaceId={workspaceSession.workspaceId}
+                    />
+                  );
+                })}
               </div>
               {stripScrollState.canScrollRight ? (
                 <div

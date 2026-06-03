@@ -34,19 +34,54 @@ import {
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 
-const { showReoToastMock, toastMock } = vi.hoisted(() => ({
-  showReoToastMock: vi.fn(() => 'toast-id'),
-  toastMock: {
-    dismiss: vi.fn(),
-  },
-}));
+const {
+  blossomDestroyMock,
+  blossomFactoryMock,
+  blossomInitMock,
+  blossomNextMock,
+  blossomPrevMock,
+  showReoToastMock,
+  toastMock,
+} = vi.hoisted(() => {
+  const blossomDestroyMock = vi.fn();
+  const blossomInitMock = vi.fn();
+  const blossomNextMock = vi.fn();
+  const blossomPrevMock = vi.fn();
+  const blossomFactoryMock = vi.fn(() => ({
+    destroy: blossomDestroyMock,
+    init: blossomInitMock,
+    next: blossomNextMock,
+    prev: blossomPrevMock,
+  }));
+
+  return {
+    blossomDestroyMock,
+    blossomFactoryMock,
+    blossomInitMock,
+    blossomNextMock,
+    blossomPrevMock,
+    showReoToastMock: vi.fn(() => 'toast-id'),
+    toastMock: {
+      dismiss: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../components/ui/toaster', () => ({
   showReoToast: showReoToastMock,
   toast: toastMock,
 }));
 
+vi.mock('@blossom-carousel/core', () => ({
+  Blossom: blossomFactoryMock,
+}));
+
 beforeEach(() => {
+  blossomDestroyMock.mockClear();
+  blossomFactoryMock.mockClear();
+  blossomInitMock.mockClear();
+  blossomNextMock.mockClear();
+  blossomPrevMock.mockClear();
   showReoToastMock.mockClear();
   toastMock.dismiss.mockClear();
 });
@@ -752,12 +787,6 @@ function renderLoadedWorkspaceFrame({
   });
   const queryClient = createReoQueryClient();
   seedWorkspaceSnapshot(queryClient, session);
-  const frameProps =
-    memoryRailOpen === undefined
-      ? {}
-      : {
-          memoryRailOpen,
-        };
   const transcriptionBackfill: TranscriptionBackfillController | undefined =
     onRetrySegmentTranscription || onRetrySupplementTranscription
       ? {
@@ -778,14 +807,22 @@ function renderLoadedWorkspaceFrame({
             : {}),
         }
       : undefined;
-  const renderFrame = (
-    nextCurrentMemory: WorkspaceSession['snapshot']['memories'][number] | null
-  ) => (
+  const renderFrame = ({
+    currentMemory: nextCurrentMemory,
+    memoryRailOpen: nextMemoryRailOpen = memoryRailOpen,
+    onDeleteMemory: nextOnDeleteMemory = onDeleteMemory,
+  }: {
+    readonly currentMemory: WorkspaceSession['snapshot']['memories'][number] | null;
+    readonly memoryRailOpen?: boolean | undefined;
+    readonly onDeleteMemory?:
+      | ((memory: WorkspaceSession['snapshot']['memories'][number]) => void)
+      | undefined;
+  }) => (
     <QueryClientProvider client={queryClient}>
       <LoadedWorkspaceFrame
         currentMemory={nextCurrentMemory}
         workspaceSession={session}
-        onDeleteMemory={onDeleteMemory}
+        onDeleteMemory={nextOnDeleteMemory}
         onDeleteSegment={onDeleteSegment}
         onDeleteSegmentSupplement={onDeleteSegmentSupplement}
         onClearSegmentContent={onClearSegmentContent}
@@ -808,17 +845,33 @@ function renderLoadedWorkspaceFrame({
         onStartSegmentSupplementNote={onStartSegmentSupplementNote}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}
-        {...frameProps}
+        {...(nextMemoryRailOpen === undefined ? {} : { memoryRailOpen: nextMemoryRailOpen })}
       />
     </QueryClientProvider>
   );
-  const renderResult = render(renderFrame(currentMemory));
+  const renderResult = render(renderFrame({ currentMemory, memoryRailOpen }));
 
   return {
     queryClient,
     rerenderCurrentMemory: (
       nextCurrentMemory: WorkspaceSession['snapshot']['memories'][number] | null
-    ) => renderResult.rerender(renderFrame(nextCurrentMemory)),
+    ) => renderResult.rerender(renderFrame({ currentMemory: nextCurrentMemory, memoryRailOpen })),
+    rerenderFrame: (overrides: {
+      readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
+      readonly memoryRailOpen?: boolean | undefined;
+      readonly onDeleteMemory?:
+        | ((memory: WorkspaceSession['snapshot']['memories'][number]) => void)
+        | undefined;
+    }) =>
+      renderResult.rerender(
+        renderFrame({
+          currentMemory:
+            overrides.currentMemory === undefined ? currentMemory : overrides.currentMemory,
+          memoryRailOpen:
+            overrides.memoryRailOpen === undefined ? memoryRailOpen : overrides.memoryRailOpen,
+          onDeleteMemory: overrides.onDeleteMemory,
+        })
+      ),
     ...renderResult,
   };
 }
@@ -1545,12 +1598,7 @@ describe('LoadedWorkspaceFrame', () => {
     // Unfocused (reading) state collapses the toolbar row; focusing the editor
     // expands it back to 44px. See LightweightMarkdownEditorSurface reveal tests.
     expect(editorSurface).toHaveClass('grid-rows-[0px_minmax(0,1fr)]');
-    expect(editorSurface).toHaveClass(
-      'reo-squircle',
-      'rounded-xl',
-      'border',
-      'border-secondary'
-    );
+    expect(editorSurface).toHaveClass('reo-squircle', 'rounded-xl', 'border', 'border-secondary');
     expect(editorSurface).not.toHaveClass('transition-colors');
     expect(editorSurface).not.toHaveClass('border-ring');
     const editorToolbar = editorSurface.querySelector(
@@ -2617,11 +2665,11 @@ describe('LoadedWorkspaceFrame', () => {
     );
   });
 
-  it('keeps large Segment strips from mounting every card interaction tree at once', async () => {
+  it('keeps every large Segment strip item as a real snap target without scroll spacers', async () => {
     const largeDetail: WorkspaceMemoryDetail = {
       ...birthdayDetail,
-      segmentCount: 40,
-      segments: Array.from({ length: 40 }, (_, index) => ({
+      segmentCount: 200,
+      segments: Array.from({ length: 200 }, (_, index) => ({
         ...birthdayVoiceSegment,
         segmentId: `seg_large_${index}`,
         title: `Long recording ${index + 1}`,
@@ -2644,17 +2692,15 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     expect(
-      studio.querySelectorAll('[data-slot="memory-studio-segment-item"]').length
-    ).toBeLessThanOrEqual(16);
-    expect(
       studio.querySelectorAll('[data-slot="memory-studio-segment-strip-spacer"]')
-    ).toHaveLength(1);
-    expect(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]').length).toBeLessThan(
-      40
+    ).toHaveLength(0);
+    const segmentItems = studio.querySelectorAll('[data-slot="memory-studio-segment-item"]');
+    expect(segmentItems).toHaveLength(200);
+    expect(segmentItems[0]).toHaveClass(
+      '[content-visibility:auto]',
+      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_calc(var(--memory-studio-segment-card-size)+58px)]'
     );
-    expect(
-      studio.querySelectorAll('[data-slot="memory-studio-segment-card"]').length
-    ).toBeGreaterThan(0);
+    expect(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')).toHaveLength(200);
   });
 
   it('keeps timeline marker and time inside the same horizontal Segment item', async () => {
@@ -2980,20 +3026,14 @@ describe('LoadedWorkspaceFrame', () => {
       within(strip).queryByRole('button', { name: '向左浏览片段卡片' })
     ).not.toBeInTheDocument();
 
-    const scrollTo = vi.fn((options?: ScrollToOptions | number) => {
-      const left = typeof options === 'number' ? options : Number(options?.left ?? 0);
-      setScrollMetrics(stripScroll as HTMLElement, {
-        clientWidth: 240,
-        scrollLeft: left,
-        scrollWidth: 640,
-      });
-      fireEvent.scroll(stripScroll as HTMLElement);
+    await waitFor(() => {
+      expect(blossomFactoryMock).toHaveBeenCalledWith(stripScroll, {});
     });
-    (stripScroll as HTMLElement).scrollTo = scrollTo as HTMLElement['scrollTo'];
+    expect(blossomInitMock).toHaveBeenCalledTimes(1);
 
     await user.click(rightButton);
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', left: 212 });
+    expect(blossomNextMock).toHaveBeenCalledTimes(1);
     expect(
       within(strip).getByRole('button', { name: '选择片段 Birthday candles' })
     ).toHaveAttribute('aria-current', 'true');
@@ -3021,9 +3061,50 @@ describe('LoadedWorkspaceFrame', () => {
       'ring-background',
       'shadow-float'
     );
+
+    await user.click(leftButton);
+
+    expect(blossomPrevMock).toHaveBeenCalledTimes(1);
   });
 
-  it('uses instant Segment strip scrolling', async () => {
+  it('enhances the native Segment strip scroller with Blossom mouse dragging', async () => {
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_drag_scroll',
+      detail: birthdayDetailWithTwoSegments,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const strip = within(studio).getByRole('region', { name: '片段预览流' });
+    const stripScroll = strip.querySelector('[data-slot="memory-studio-segment-strip-scroll"]');
+    expect(stripScroll).toBeInstanceOf(HTMLElement);
+    expect(stripScroll).toHaveAttribute('data-reo-blossom-carousel', 'segment-strip');
+    expect(stripScroll).toHaveClass(
+      'edge-fade-x',
+      'snap-x',
+      'overflow-x-auto',
+      '[contain:layout_paint]'
+    );
+    expect(stripScroll).not.toHaveClass('cursor-grab', 'cursor-grabbing');
+    setScrollMetrics(stripScroll as HTMLElement, {
+      clientWidth: 240,
+      scrollLeft: 120,
+      scrollWidth: 640,
+    });
+    fireEvent.scroll(stripScroll as HTMLElement);
+
+    await waitFor(() => {
+      expect(blossomFactoryMock).toHaveBeenCalledWith(stripScroll, {});
+    });
+    expect(blossomInitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('delegates Segment strip arrow navigation to Blossom instead of direct scrollTo', async () => {
     const user = userEvent.setup();
     const matchMedia = vi.fn((query: string) => ({
       matches: query === '(prefers-reduced-motion: reduce)',
@@ -3059,10 +3140,14 @@ describe('LoadedWorkspaceFrame', () => {
     fireEvent.scroll(stripScroll as HTMLElement);
     const scrollTo = vi.fn();
     (stripScroll as HTMLElement).scrollTo = scrollTo as HTMLElement['scrollTo'];
+    await waitFor(() => {
+      expect(blossomFactoryMock).toHaveBeenCalledWith(stripScroll, {});
+    });
 
     await user.click(await within(strip).findByRole('button', { name: '向右浏览片段卡片' }));
 
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'instant', left: 212 });
+    expect(blossomNextMock).toHaveBeenCalledTimes(1);
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('plays finalized audio and shows transcript content for the selected Segment', async () => {
@@ -5744,6 +5829,35 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(screen.getByRole('region', { name: '记忆空间舞台' })).toBeInTheDocument();
     expect(screen.queryByText('片段时间线')).not.toBeInTheDocument();
+  });
+
+  it('keeps Memory rail actions current after right rail collapse rerenders', async () => {
+    const user = userEvent.setup();
+    const firstDeleteMemory = vi.fn();
+    const secondDeleteMemory = vi.fn();
+    const { rerenderFrame } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      memoryRailOpen: true,
+      onDeleteMemory: firstDeleteMemory,
+      session: workspaceSession({
+        memories: [birthdayMemory],
+      }),
+    });
+
+    rerenderFrame({
+      memoryRailOpen: false,
+      onDeleteMemory: secondDeleteMemory,
+    });
+    rerenderFrame({
+      memoryRailOpen: true,
+      onDeleteMemory: secondDeleteMemory,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'My seventh birthday 更多操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '删除' }));
+
+    expect(firstDeleteMemory).not.toHaveBeenCalled();
+    expect(secondDeleteMemory).toHaveBeenCalledWith(birthdayMemory);
   });
 
   it('renders the Memory rail from the TanStack Query snapshot cache', async () => {

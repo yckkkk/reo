@@ -61,6 +61,29 @@
   .no-drag-region {
     -webkit-app-region: no-drag;
   }
+
+  [data-reo-blossom-carousel='segment-strip'][blossom-carousel][has-snap='true'] {
+    scroll-snap-type: var(--snap-type) !important;
+  }
+
+  [data-reo-blossom-carousel='segment-strip'][blossom-carousel][has-overflow='true'] {
+    cursor: grab;
+  }
+
+  [data-reo-blossom-carousel='segment-strip'][blossom-carousel][has-overflow='true']:active {
+    cursor: grabbing;
+  }
+
+  @media (pointer: fine) {
+    [data-reo-blossom-carousel='segment-strip'][blossom-carousel][has-overflow='true']:active {
+      scroll-snap-type: none !important;
+    }
+  }
+
+  [data-reo-blossom-carousel='segment-strip'][blossom-carousel] * {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+  }
 }
 
 /* Edge fade is a scroll affordance: each edge fades only while content is
@@ -231,33 +254,25 @@
   overflow: hidden;
 }
 
-.reo-toast-action {
-  background-color: transparent;
-  box-shadow: none;
-}
-
-.reo-toast-action:hover {
-  background-color: color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-
-.reo-toast-action:active {
-  background-color: color-mix(in oklab, var(--foreground) 24%, transparent);
-}
-
-.reo-toast-action:focus-visible {
-  background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
-}
-
-.reo-toast-close {
-  appearance: none;
-  background-color: transparent;
-  box-shadow: none;
-}
-
+/* Sonner ships un-gated dark-theme close-button rules ([data-sonner-theme='dark']
+   … [data-close-button]) that set both background and glyph color even under
+   `unstyled`. Reo owns the close affordance, so define its full surface here:
+   flat in every state, with the only hover cue a muted → foreground glyph color
+   change. */
+.reo-toast-close,
 .reo-toast-close:hover,
 .reo-toast-close:active,
 .reo-toast-close:focus-visible {
-  background-color: transparent;
+  appearance: none;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+  color: var(--muted-foreground) !important;
+}
+
+.reo-toast-close:hover,
+.reo-toast-close:focus-visible {
+  color: var(--popover-foreground) !important;
 }
 
 .reo-undo-toast::after {
