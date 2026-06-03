@@ -54,7 +54,7 @@ export function registerAppShellScheme(): void {
         secure: true,
         standard: true,
         supportFetchAPI: true,
-        corsEnabled: false,
+        corsEnabled: true,
         stream: true,
       },
     },

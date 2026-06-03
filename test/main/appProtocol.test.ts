@@ -139,7 +139,7 @@ test('privileged schemes register reo-app and reo-attachment before app ready', 
   const attachmentScheme = schemes.get('reo-attachment');
   assert.equal(attachmentScheme?.privileges.get('secure'), true);
   assert.equal(attachmentScheme?.privileges.get('supportFetchAPI'), true);
-  assert.equal(attachmentScheme?.privileges.get('corsEnabled'), false);
+  assert.equal(attachmentScheme?.privileges.get('corsEnabled'), true);
   assert.equal(attachmentScheme?.privileges.get('stream'), true);
 });
 

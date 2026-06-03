@@ -230,7 +230,7 @@ export function MemoryStudioSegmentCard({
               data-slot="memory-studio-segment-card"
               shape="segmentPreview"
               className={[
-                'relative flex size-full aspect-square min-h-[var(--memory-studio-segment-card-min-size)] min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between bg-transparent p-12 text-left text-[rgb(var(--cover-title-r)_var(--cover-title-g)_var(--cover-title-b)/0.96)] transition-[filter] duration-150 ease-out motion-reduce:transition-none [--bottom-scrim-mid:0.055] [--bottom-scrim-start:0.12] [--cover-brightness:0.98] [--cover-contrast:1.01] [--cover-saturation:1.04] [--cover-scale:1.02] [--top-scrim-mid:0.055] [--top-scrim-start:0.11] [--top-state-mid:0] [--top-state-start:0] group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background group-hover/segment-card:[--bottom-scrim-start:0.15] group-hover/segment-card:[--cover-brightness:1.04] group-hover/segment-card:[--cover-scale:1.035] group-hover/segment-card:[--top-scrim-start:0.14] group-hover/segment-card:[--top-state-mid:0.025] group-hover/segment-card:[--top-state-start:0.06]',
+                'relative isolate flex size-full aspect-square min-h-[var(--memory-studio-segment-card-min-size)] min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between bg-transparent p-12 text-left text-[rgb(var(--cover-title-r)_var(--cover-title-g)_var(--cover-title-b)/0.96)] transition-[filter] duration-150 ease-out motion-reduce:transition-none [--bottom-scrim-mid:0.055] [--bottom-scrim-start:0.12] [--cover-brightness:0.98] [--cover-contrast:1.01] [--cover-saturation:1.04] [--cover-scale:1.02] [--top-scrim-mid:0.055] [--top-scrim-start:0.11] [--top-state-mid:0] [--top-state-start:0] group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background group-hover/segment-card:[--bottom-scrim-start:0.15] group-hover/segment-card:[--cover-brightness:1.04] group-hover/segment-card:[--cover-scale:1.035] group-hover/segment-card:[--top-scrim-start:0.14] group-hover/segment-card:[--top-state-mid:0.025] group-hover/segment-card:[--top-state-start:0.06]',
                 'dark:[--bottom-scrim-mid:0.08] dark:[--bottom-scrim-start:0.16] dark:[--cover-brightness:0.92] dark:[--cover-saturation:1.02] dark:[--top-scrim-mid:0.08] dark:[--top-scrim-start:0.15] dark:group-hover/segment-card:[--bottom-scrim-start:0.18] dark:group-hover/segment-card:[--cover-brightness:0.98] dark:group-hover/segment-card:[--top-scrim-start:0.17]',
                 selected
                   ? '[--cover-brightness:1] [--cover-contrast:1.04] [--cover-saturation:1.12]'
@@ -241,11 +241,11 @@ export function MemoryStudioSegmentCard({
               <span>
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-[-1px] z-0 block overflow-hidden"
+                  className="pointer-events-none absolute inset-px z-0 block overflow-hidden [backface-visibility:hidden] [transform:translateZ(0)]"
                 >
                   <img
                     alt=""
-                    className="size-full object-cover"
+                    className="size-full object-cover [backface-visibility:hidden] [transform-origin:center] will-change-[filter,transform]"
                     crossOrigin="anonymous"
                     data-slot="memory-studio-segment-card-cover"
                     decoding="async"
