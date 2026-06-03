@@ -138,6 +138,10 @@ import {
   type WorkspaceModalLayer,
 } from './WorkspaceAlertDialogContent';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
+import {
+  artifactSegmentRuntimeUrl,
+  artifactSupplementRuntimeUrl,
+} from '../../../workspace-contract/artifact-runtime-url';
 
 type MemoryStudioProps = {
   readonly audioResourceCaches: MemoryStudioAudioResourceCaches;
@@ -576,14 +580,23 @@ function transcriptContentTabTitle(segment: MemorySegment | null) {
 }
 
 function artifactSegmentPreviewUrl(workspaceId: string, segment: ArtifactMemorySegment) {
-  return `reo-artifact://workspace/${encodeURIComponent(workspaceId)}/segments/${encodeURIComponent(segment.segmentId)}/segment.html?v=${encodeURIComponent(segment.previewVersion)}`;
+  return artifactSegmentRuntimeUrl({
+    previewVersion: segment.previewVersion,
+    segmentId: segment.segmentId,
+    workspaceId,
+  });
 }
 
 function artifactSupplementPreviewUrl(
   workspaceId: string,
   supplement: ArtifactMemorySegmentSupplement
 ) {
-  return `reo-artifact://workspace/${encodeURIComponent(workspaceId)}/segments/${encodeURIComponent(supplement.segmentId)}/supplements/${encodeURIComponent(supplement.supplementId)}/supplement.html?v=${encodeURIComponent(supplement.previewVersion)}`;
+  return artifactSupplementRuntimeUrl({
+    previewVersion: supplement.previewVersion,
+    segmentId: supplement.segmentId,
+    supplementId: supplement.supplementId,
+    workspaceId,
+  });
 }
 
 function orderContentTabs(
@@ -2319,7 +2332,7 @@ function ArtifactPreviewPanel({
       <iframe
         key={src}
         title={`作品预览：${title}`}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
         src={src}
         className="h-full w-full border-0 bg-background"
         data-slot="memory-studio-artifact-preview-frame"

@@ -1,11 +1,27 @@
 import path from 'node:path';
+import {
+  ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
+  ARTIFACT_RUNTIME_ENTRY_FILE,
+  ARTIFACT_RUNTIME_MANIFEST_FILE,
+  ARTIFACT_RUNTIME_STATE_FILE,
+  artifactSegmentRuntimeHost,
+  artifactSupplementRuntimeHost,
+} from '../workspace-contract/artifact-runtime-url.js';
 import { ARTIFACT_SCHEME } from './appShellConstants.js';
 
-export const ARTIFACT_WORKSPACE_HOST = 'workspace';
 export const ARTIFACT_VENDOR_HOST = 'vendor';
+export {
+  ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
+  ARTIFACT_RUNTIME_ENTRY_FILE,
+  ARTIFACT_RUNTIME_MANIFEST_FILE,
+  ARTIFACT_RUNTIME_STATE_FILE,
+  artifactSegmentRuntimeHost,
+  artifactSupplementRuntimeHost,
+} from '../workspace-contract/artifact-runtime-url.js';
 
 const ARTIFACT_MIME_BY_EXTENSION = new Map<string, string>([
   ['.html', 'text/html'],
+  ['.json', 'application/json'],
   ['.css', 'text/css'],
   ['.js', 'text/javascript'],
   ['.mjs', 'text/javascript'],
@@ -23,6 +39,7 @@ export type ArtifactRequestTarget =
   | {
       readonly kind: 'segment';
       readonly entry: boolean;
+      readonly fileScope: 'root' | 'asset';
       readonly fileName: string;
       readonly segmentId: string;
       readonly workspaceId: string;
@@ -30,6 +47,7 @@ export type ArtifactRequestTarget =
   | {
       readonly kind: 'supplement';
       readonly entry: boolean;
+      readonly fileScope: 'root' | 'asset';
       readonly fileName: string;
       readonly segmentId: string;
       readonly supplementId: string;
@@ -74,13 +92,52 @@ export function artifactMimeTypeForFileName(fileName: string): string | null {
   return ARTIFACT_MIME_BY_EXTENSION.get(path.extname(fileName).toLowerCase()) ?? null;
 }
 
+function parseArtifactRuntimeFile(
+  segments: readonly string[],
+  fileStartIndex: number
+): {
+  readonly entry: boolean;
+  readonly fileName: string;
+  readonly fileScope: 'root' | 'asset';
+} | null {
+  const fileName = segments[fileStartIndex] ?? '';
+  if (
+    segments.length === fileStartIndex + 1 &&
+    (fileName === ARTIFACT_RUNTIME_ENTRY_FILE ||
+      fileName === ARTIFACT_RUNTIME_MANIFEST_FILE ||
+      fileName === ARTIFACT_RUNTIME_STATE_FILE) &&
+    artifactMimeTypeForFileName(fileName)
+  ) {
+    return {
+      entry: fileName === ARTIFACT_RUNTIME_ENTRY_FILE,
+      fileName,
+      fileScope: 'root',
+    };
+  }
+
+  const assetFileName = segments[fileStartIndex + 1] ?? '';
+  if (
+    segments.length === fileStartIndex + 2 &&
+    fileName === ARTIFACT_RUNTIME_ASSETS_DIRECTORY &&
+    !isHtmlFileName(assetFileName) &&
+    artifactMimeTypeForFileName(assetFileName)
+  ) {
+    return {
+      entry: false,
+      fileName: assetFileName,
+      fileScope: 'asset',
+    };
+  }
+
+  return null;
+}
+
 export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget | null {
   if (parsed.protocol !== `${ARTIFACT_SCHEME}:`) {
     return null;
   }
-  const workspaceId = parsed.hostname;
   const segments = decodeArtifactPathSegments(parsed.pathname);
-  if (!segments || !workspaceId) {
+  if (!segments || !parsed.hostname) {
     return null;
   }
 
@@ -97,57 +154,51 @@ export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget |
     return { kind: 'vendor', packageName, fileName };
   }
 
-  if (parsed.hostname !== ARTIFACT_WORKSPACE_HOST) {
+  if (segments[0] !== 'workspaces') {
     return null;
   }
 
-  const requestWorkspaceId = segments[0] ?? '';
-  if (!isSafeSinglePathSegment(requestWorkspaceId) || segments[1] !== 'segments') {
+  const requestWorkspaceId = segments[1] ?? '';
+  if (
+    !isSafeSinglePathSegment(requestWorkspaceId) ||
+    segments[2] !== 'segments' ||
+    !isSafeSinglePathSegment(segments[3] ?? '')
+  ) {
     return null;
   }
 
-  if (segments.length === 4) {
-    const segmentId = segments[2] ?? '';
-    const fileName = segments[3] ?? '';
-    if (
-      !isSafeSinglePathSegment(segmentId) ||
-      !artifactMimeTypeForFileName(fileName) ||
-      (isHtmlFileName(fileName) && fileName !== 'segment.html')
-    ) {
+  if (segments[4] !== 'supplements') {
+    const segmentId = segments[3] ?? '';
+    const file = parseArtifactRuntimeFile(segments, 4);
+    if (!file || parsed.hostname !== artifactSegmentRuntimeHost(requestWorkspaceId, segmentId)) {
       return null;
     }
     return {
       kind: 'segment',
       workspaceId: requestWorkspaceId,
       segmentId,
-      fileName,
-      entry: fileName === 'segment.html',
+      ...file,
     };
   }
 
-  if (segments.length === 6 && segments[3] === 'supplements') {
-    const segmentId = segments[2] ?? '';
-    const supplementId = segments[4] ?? '';
-    const fileName = segments[5] ?? '';
-    if (
-      !isSafeSinglePathSegment(segmentId) ||
-      !isSafeSinglePathSegment(supplementId) ||
-      !artifactMimeTypeForFileName(fileName) ||
-      (isHtmlFileName(fileName) && fileName !== 'supplement.html')
-    ) {
-      return null;
-    }
-    return {
-      kind: 'supplement',
-      workspaceId: requestWorkspaceId,
-      segmentId,
-      supplementId,
-      fileName,
-      entry: fileName === 'supplement.html',
-    };
+  const segmentId = segments[3] ?? '';
+  const supplementId = segments[5] ?? '';
+  const file = parseArtifactRuntimeFile(segments, 6);
+  if (
+    !file ||
+    !isSafeSinglePathSegment(segmentId) ||
+    !isSafeSinglePathSegment(supplementId) ||
+    parsed.hostname !== artifactSupplementRuntimeHost(requestWorkspaceId, segmentId, supplementId)
+  ) {
+    return null;
   }
-
-  return null;
+  return {
+    kind: 'supplement',
+    workspaceId: requestWorkspaceId,
+    segmentId,
+    supplementId,
+    ...file,
+  };
 }
 
 export function isArtifactWorkspaceEntryUrl(url: URL): boolean {

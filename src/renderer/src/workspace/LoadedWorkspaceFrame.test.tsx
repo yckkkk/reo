@@ -33,6 +33,10 @@ import {
   segmentSupplementContentQueryKey,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
+import {
+  artifactSegmentRuntimeUrl,
+  artifactSupplementRuntimeUrl,
+} from '../../../workspace-contract/artifact-runtime-url';
 
 const {
   blossomDestroyMock,
@@ -1882,10 +1886,17 @@ describe('LoadedWorkspaceFrame', () => {
 
     expect(workTab).toHaveAttribute('aria-selected', 'true');
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
-    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe).toHaveAttribute(
+      'sandbox',
+      'allow-scripts allow-same-origin allow-forms allow-downloads'
+    );
     expect(iframe).toHaveAttribute(
       'src',
-      `reo-artifact://workspace/ws_1/segments/seg_birthday_artifact/segment.html?v=${'a'.repeat(64)}`
+      artifactSegmentRuntimeUrl({
+        workspaceId: 'ws_1',
+        segmentId: 'seg_birthday_artifact',
+        previewVersion: 'a'.repeat(64),
+      })
     );
     const workTabItem = workTab.closest('[data-slot="memory-studio-primary-tab-item"]');
     expect(workTabItem).not.toBeNull();
@@ -1908,10 +1919,17 @@ describe('LoadedWorkspaceFrame', () => {
     await user.click(within(workPanel).getByRole('button', { name: '展开作品预览' }));
     const expandedPreview = await screen.findByRole('dialog', { name: '作品' });
     const expandedFrame = within(expandedPreview).getByTitle('作品预览：作品');
-    expect(expandedFrame).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(expandedFrame).toHaveAttribute(
+      'sandbox',
+      'allow-scripts allow-same-origin allow-forms allow-downloads'
+    );
     expect(expandedFrame).toHaveAttribute(
       'src',
-      `reo-artifact://workspace/ws_1/segments/seg_birthday_artifact/segment.html?v=${'a'.repeat(64)}`
+      artifactSegmentRuntimeUrl({
+        workspaceId: 'ws_1',
+        segmentId: 'seg_birthday_artifact',
+        previewVersion: 'a'.repeat(64),
+      })
     );
     expect(readSegmentContent).not.toHaveBeenCalled();
     expect(readFinalizedAudioSegment).not.toHaveBeenCalled();
@@ -4852,10 +4870,18 @@ describe('LoadedWorkspaceFrame', () => {
     const iframe = supplementPanel.querySelector('iframe');
 
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
-    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe).toHaveAttribute(
+      'sandbox',
+      'allow-scripts allow-same-origin allow-forms allow-downloads'
+    );
     expect(iframe).toHaveAttribute(
       'src',
-      `reo-artifact://workspace/ws_1/segments/seg_birthday_voice/supplements/sup_birthday_artifact/supplement.html?v=${'b'.repeat(64)}`
+      artifactSupplementRuntimeUrl({
+        workspaceId: 'ws_1',
+        segmentId: 'seg_birthday_voice',
+        supplementId: 'sup_birthday_artifact',
+        previewVersion: 'b'.repeat(64),
+      })
     );
     expect(readSegmentSupplementContent).not.toHaveBeenCalled();
     expect(readFinalizedAudioSegmentSupplement).not.toHaveBeenCalled();

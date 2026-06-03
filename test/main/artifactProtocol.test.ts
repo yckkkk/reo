@@ -9,7 +9,13 @@ import {
   ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY,
   resolveArtifactProtocolRequest,
 } from '../../src/main/artifactProtocol.js';
+import { parseArtifactRequestTarget } from '../../src/main/artifactUrl.js';
 import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
+import {
+  artifactSegmentRuntimeHost,
+  artifactSegmentRuntimeUrl,
+  artifactSupplementRuntimeUrl,
+} from '../../src/workspace-contract/artifact-runtime-url.js';
 
 function sha256Text(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -25,6 +31,40 @@ function rootResolver(rootPath: string) {
       ? { ok: true as const, canonicalRoot: rootPath }
       : { ok: false as const };
 }
+
+test('artifact runtime URLs keep per-object hosts ASCII-safe without losing object identity', () => {
+  const segmentUrl = artifactSegmentRuntimeUrl({
+    workspaceId: 'ws_Mixed_空间',
+    segmentId: 'seg_Mixed_作品',
+    previewVersion: 'v1',
+  });
+  const supplementUrl = artifactSupplementRuntimeUrl({
+    workspaceId: 'ws_Mixed_空间',
+    segmentId: 'seg_Mixed_作品',
+    supplementId: 'sup_Mixed_补充',
+    previewVersion: 'v1',
+  });
+
+  assert.match(new URL(segmentUrl).hostname, /^[a-z0-9-]+$/);
+  assert.match(new URL(supplementUrl).hostname, /^[a-z0-9-]+$/);
+  assert.deepEqual(parseArtifactRequestTarget(new URL(segmentUrl)), {
+    kind: 'segment',
+    entry: true,
+    fileScope: 'root',
+    fileName: 'entry.html',
+    workspaceId: 'ws_Mixed_空间',
+    segmentId: 'seg_Mixed_作品',
+  });
+  assert.deepEqual(parseArtifactRequestTarget(new URL(supplementUrl)), {
+    kind: 'supplement',
+    entry: true,
+    fileScope: 'root',
+    fileName: 'entry.html',
+    workspaceId: 'ws_Mixed_空间',
+    segmentId: 'seg_Mixed_作品',
+    supplementId: 'sup_Mixed_补充',
+  });
+});
 
 async function writeArtifactSegmentForProtocolTest(
   rootPath: string,
@@ -62,8 +102,11 @@ async function writeArtifactSegmentForProtocolTest(
       objectType: 'segment',
     })
   );
-  await writeFile(path.join(segmentDirectory, 'segment.html'), html);
-  await writeFile(path.join(segmentDirectory, 'style.css'), 'body { color: red; }\n');
+  await mkdir(path.join(segmentDirectory, 'assets'), { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'entry.html'), html);
+  await writeFile(path.join(segmentDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(segmentDirectory, 'state.json'), '{"schemaVersion":1,"stores":{}}\n');
+  await writeFile(path.join(segmentDirectory, 'assets', 'style.css'), 'body { color: red; }\n');
   await writeFile(
     path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`),
     JSON.stringify(
@@ -115,7 +158,12 @@ async function writeArtifactSupplementForProtocolTest(rootPath: string): Promise
       objectType: 'supplement',
     })
   );
-  await writeFile(path.join(supplementDirectory, 'supplement.html'), html);
+  await writeFile(path.join(supplementDirectory, 'entry.html'), html);
+  await writeFile(path.join(supplementDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(
+    path.join(supplementDirectory, 'state.json'),
+    '{"schemaVersion":1,"stores":{}}\n'
+  );
   await writeFile(
     path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
     JSON.stringify(
@@ -142,12 +190,13 @@ async function writeArtifactSupplementForProtocolTest(rootPath: string): Promise
   return { entryHash: sha256Text(html), supplementDirectory };
 }
 
-test('artifact protocol resolves segment entry and same-directory assets with no-store CSP', async () => {
+test('artifact protocol resolves segment runtime bundle files with isolated-origin URLs and no-store CSP', async () => {
   const rootPath = await workspaceRoot();
   const { entryHash } = await writeArtifactSegmentForProtocolTest(rootPath);
+  const runtimeHost = artifactSegmentRuntimeHost('ws_artifact', 'seg_artifact_protocol');
 
   const entry = await resolveArtifactProtocolRequest(
-    `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/segment.html?v=${entryHash}`,
+    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(entry.ok, true);
@@ -157,16 +206,42 @@ test('artifact protocol resolves segment entry and same-directory assets with no
   assert.equal(Buffer.from(entry.bytes).toString('utf8').includes('Work'), true);
   assert.equal(entry.cacheControl, ARTIFACT_PROTOCOL_CACHE_CONTROL);
   assert.equal(entry.contentSecurityPolicy, ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY);
+  assert.match(entry.contentSecurityPolicy, /connect-src 'self' https: http: ws: wss:/);
+  assert.doesNotMatch(entry.contentSecurityPolicy, /connect-src 'none'/);
+  assert.doesNotMatch(entry.contentSecurityPolicy, /file:/);
   assert.equal(entry.mimeType, 'text/html');
 
   const asset = await resolveArtifactProtocolRequest(
-    `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/style.css?v=${entryHash}`,
+    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(asset.ok, true);
   if (asset.ok) {
     assert.equal(asset.mimeType, 'text/css');
     assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: red; }\n');
+  }
+
+  const runtimeManifest = await resolveArtifactProtocolRequest(
+    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/runtime.json?v=${entryHash}`,
+    rootResolver(rootPath)
+  );
+  assert.equal(runtimeManifest.ok, true);
+  if (runtimeManifest.ok) {
+    assert.equal(runtimeManifest.mimeType, 'application/json');
+    assert.equal(Buffer.from(runtimeManifest.bytes).toString('utf8'), '{"schemaVersion":1}\n');
+  }
+
+  const runtimeState = await resolveArtifactProtocolRequest(
+    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/state.json?v=${entryHash}`,
+    rootResolver(rootPath)
+  );
+  assert.equal(runtimeState.ok, true);
+  if (runtimeState.ok) {
+    assert.equal(runtimeState.mimeType, 'application/json');
+    assert.equal(
+      Buffer.from(runtimeState.bytes).toString('utf8'),
+      '{"schemaVersion":1,"stores":{}}\n'
+    );
   }
 });
 
@@ -175,7 +250,12 @@ test('artifact protocol resolves supplement entry under its parent segment', asy
   const { entryHash } = await writeArtifactSupplementForProtocolTest(rootPath);
 
   const entry = await resolveArtifactProtocolRequest(
-    `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/supplements/sup_artifact_protocol/supplement.html?v=${entryHash}`,
+    artifactSupplementRuntimeUrl({
+      workspaceId: 'ws_artifact',
+      segmentId: 'seg_artifact_protocol',
+      supplementId: 'sup_artifact_protocol',
+      previewVersion: entryHash,
+    }),
     rootResolver(rootPath)
   );
 
@@ -209,50 +289,67 @@ test('artifact protocol resolves versioned Reo vendor assets with immutable cach
 test('artifact protocol rejects inactive workspaces, traversal, symlinks, unsupported MIME, and byte caps', async () => {
   const rootPath = await workspaceRoot();
   const { entryHash, segmentDirectory } = await writeArtifactSegmentForProtocolTest(rootPath);
+  const runtimeHost = artifactSegmentRuntimeHost('ws_artifact', 'seg_artifact_protocol');
   const outsidePath = path.join(await workspaceRoot(), 'outside.png');
   await writeFile(outsidePath, 'outside');
-  await symlink(outsidePath, path.join(segmentDirectory, 'linked.png'));
+  await symlink(outsidePath, path.join(segmentDirectory, 'assets', 'linked.png'));
   await writeFile(path.join(segmentDirectory, 'notes.txt'), 'not allowed\n');
   await writeFile(path.join(segmentDirectory, 'payload.html'), '<!doctype html><p>Payload</p>');
+  await mkdir(path.join(segmentDirectory, 'assets', 'nested'), { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'assets', 'nested', 'style.css'), 'body{}\n');
 
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_other/segments/seg_artifact_protocol/segment.html?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_other/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/%2e%2e/secret.png?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/%2e%2e/secret.png?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/linked.png?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/linked.png?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/notes.txt?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/notes.txt?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/payload.html?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/payload.html?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/style.css?v=${entryHash}`,
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/nested/style.css?v=${entryHash}`,
+      rootResolver(rootPath)
+    ),
+    { ok: false }
+  );
+  assert.deepEqual(
+    await resolveArtifactProtocolRequest(
+      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/segment.html?v=${entryHash}`,
+      rootResolver(rootPath)
+    ),
+    { ok: false }
+  );
+  assert.deepEqual(
+    await resolveArtifactProtocolRequest(
+      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
       rootResolver(rootPath),
       { maxAssetBytes: 2 }
     ),

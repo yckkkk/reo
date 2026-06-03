@@ -6,7 +6,11 @@ import {
   type DirectoryIdentity,
 } from './directoryIdentity.js';
 import { MAX_ARTIFACT_ASSET_BYTES, MAX_ARTIFACT_ENTRY_BYTES } from './artifactLimits.js';
-import { artifactMimeTypeForFileName, parseArtifactRequestTarget } from './artifactUrl.js';
+import {
+  ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
+  artifactMimeTypeForFileName,
+  parseArtifactRequestTarget,
+} from './artifactUrl.js';
 import {
   resolveFinalizedArtifactSegmentDirectoryFromManifest,
   resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
@@ -16,7 +20,7 @@ import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransa
 export const ARTIFACT_PROTOCOL_CACHE_CONTROL = 'no-store';
 export const ARTIFACT_VENDOR_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable';
 export const ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY =
-  "default-src 'none'; script-src 'unsafe-inline' reo-artifact:; style-src 'unsafe-inline' reo-artifact:; img-src reo-artifact: data: blob:; font-src reo-artifact:; media-src reo-artifact: data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'";
+  "default-src 'self' https: http: data: blob: reo-artifact:; script-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob: reo-artifact:; style-src 'self' https: http: 'unsafe-inline' reo-artifact:; img-src 'self' https: http: data: blob: reo-artifact:; font-src 'self' https: http: data: reo-artifact:; media-src 'self' https: http: data: blob: reo-artifact:; connect-src 'self' https: http: ws: wss:; frame-src 'self' https: http:; worker-src 'self' https: http: blob: reo-artifact:; object-src 'none'; base-uri 'self'; form-action https: http:";
 
 export type ArtifactRootResolution =
   | {
@@ -84,11 +88,13 @@ function readArtifactFileInKnownDirectory({
 async function readArtifactFile({
   cacheControl,
   directory,
+  fileScope = 'root',
   fileName,
   maxBytes,
 }: {
   readonly cacheControl: string;
   readonly directory: string;
+  readonly fileScope?: 'root' | 'asset' | undefined;
   readonly fileName: string;
   readonly maxBytes: number;
 }): Promise<ArtifactProtocolResolution> {
@@ -97,14 +103,16 @@ async function readArtifactFile({
     return { ok: false };
   }
   try {
+    const fileDirectory =
+      fileScope === 'asset' ? path.join(directory, ARTIFACT_RUNTIME_ASSETS_DIRECTORY) : directory;
     const directoryIdentity = await readSafeDirectoryIdentity(
-      directory,
+      fileDirectory,
       'Artifact directory is unsafe'
     );
     return {
       ok: true,
       bytes: readArtifactFileInKnownDirectory({
-        directory,
+        directory: fileDirectory,
         directoryIdentity,
         fileName,
         maxBytes,
@@ -165,6 +173,7 @@ export async function resolveArtifactProtocolRequest(
       return readArtifactFile({
         cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
         directory: segmentDirectory,
+        fileScope: target.fileScope,
         fileName: target.fileName,
         maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
       });
@@ -180,6 +189,7 @@ export async function resolveArtifactProtocolRequest(
     return readArtifactFile({
       cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
       directory: supplementDirectory,
+      fileScope: target.fileScope,
       fileName: target.fileName,
       maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
     });

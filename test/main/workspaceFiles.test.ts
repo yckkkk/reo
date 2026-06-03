@@ -25,6 +25,8 @@ import {
   DEFAULT_REO_COVER_IMAGE_SKILL_MD,
   DEFAULT_REO_DOCTOR_SKILL_MD,
   DEFAULT_REO_EDIT_SKILL_MD,
+  DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES,
+  DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES,
   DEFAULT_REO_WORKS_SKILL_MD,
@@ -618,6 +620,8 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-generative-runtime\/SKILL\.md/);
+  assert.match(agentsText, /skills\/reo-generative-runtime\/scripts\//);
   assert.match(agentsText, /skills\/reo-works\/references\//);
   assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-works-design\/references\//);
@@ -631,6 +635,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
     'reo-cover-image',
     'reo-doctor',
     'reo-edit',
+    'reo-generative-runtime',
     'reo-works',
     'reo-works-design',
   ]);
@@ -642,6 +647,19 @@ test('workspace init creates stable root files and Reo agent skill entry', async
     'SKILL.md',
     'references',
   ]);
+  assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-generative-runtime'))).sort(), [
+    'SKILL.md',
+    'references',
+    'scripts',
+  ]);
+  assert.deepEqual(
+    (await readdir(path.join(root, 'skills', 'reo-generative-runtime', 'references'))).sort(),
+    ['bundle-contract.md', 'state-and-storage.md', 'templates.md', 'validation.md']
+  );
+  assert.deepEqual(
+    (await readdir(path.join(root, 'skills', 'reo-generative-runtime', 'scripts'))).sort(),
+    ['scaffold-runtime.mjs', 'validate-runtime.mjs']
+  );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
     'SKILL.md',
     'references',
@@ -683,10 +701,25 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(worksSkillText, /^name: reo-works/m);
   assert.match(worksSkillText, /kind: artifact/);
   assert.match(worksSkillText, /format: html/);
-  assert.match(worksSkillText, /segment\.html/);
-  assert.match(worksSkillText, /supplement\.html/);
+  assert.match(worksSkillText, /entry\.html/);
+  assert.match(worksSkillText, /runtime\.json/);
+  assert.match(worksSkillText, /state\.json/);
+  assert.doesNotMatch(worksSkillText, /segment\.html|supplement\.html/);
+  assert.match(worksSkillText, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(worksSkillText, /references\/file-contract\.md/);
   assert.doesNotMatch(worksSkillText, /Michaelliv|pi-generative-ui|github\.com/);
+  const runtimeSkillText = await readFile(
+    path.join(root, 'skills', 'reo-generative-runtime', 'SKILL.md'),
+    'utf8'
+  );
+  assert.match(runtimeSkillText, /^name: reo-generative-runtime/m);
+  assert.match(runtimeSkillText, /entry\.html/);
+  assert.match(runtimeSkillText, /runtime\.json/);
+  assert.match(runtimeSkillText, /state\.json/);
+  assert.match(runtimeSkillText, /普通 Web 网络/);
+  assert.match(runtimeSkillText, /scaffold-runtime\.mjs/);
+  assert.match(runtimeSkillText, /validate-runtime\.mjs/);
+  assert.doesNotMatch(runtimeSkillText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksContractText = await readFile(
     path.join(root, 'skills', 'reo-works', 'references', 'file-contract.md'),
     'utf8'
@@ -694,6 +727,10 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(worksContractText, /complete HTML document/);
   assert.match(worksContractText, /kind: artifact/);
   assert.match(worksContractText, /format: html/);
+  assert.match(worksContractText, /entry\.html/);
+  assert.match(worksContractText, /runtime\.json/);
+  assert.match(worksContractText, /state\.json/);
+  assert.doesNotMatch(worksContractText, /segment\.html|supplement\.html/);
   assert.doesNotMatch(worksContractText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksDesignSkillText = await readFile(
     path.join(root, 'skills', 'reo-works-design', 'SKILL.md'),
@@ -713,7 +750,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(worksDesignCoreText, /--color-background-primary/);
   assert.match(worksDesignCoreText, /c-purple/);
   assert.match(worksDesignCoreText, /#EEEDFE/);
-  assert.match(worksDesignCoreText, /No external network/);
+  assert.match(worksDesignCoreText, /普通 Web 网络/);
   assert.doesNotMatch(worksDesignCoreText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksDesignModulesText = await readFile(
     path.join(root, 'skills', 'reo-works-design', 'references', 'modules.md'),
@@ -878,8 +915,11 @@ test('managed reo-works skill defines artifact file creation without external re
   ]);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /kind: artifact/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /format: html/);
-  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /segment\.html/);
-  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /supplement\.html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /entry\.html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /runtime\.json/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /state\.json/);
+  assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /segment\.html|supplement\.html/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
@@ -887,11 +927,98 @@ test('managed reo-works skill defines artifact file creation without external re
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /不要创建空白占位作品/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
   assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'], /complete HTML document/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'], /entry\.html/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'], /runtime\.json/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'], /state\.json/);
+  assert.doesNotMatch(
+    DEFAULT_REO_WORKS_REFERENCE_FILES['file-contract.md'],
+    /segment\.html|supplement\.html/
+  );
   assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /Create from Reo prompt/);
-  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['quality-check.md'], /No `window\.top`/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['quality-check.md'], /validate-runtime\.mjs/);
   for (const text of Object.values(DEFAULT_REO_WORKS_REFERENCE_FILES)) {
     assert.doesNotMatch(text, /Michaelliv|pi-generative-ui|github\.com/);
   }
+});
+
+test('managed reo-generative-runtime skill defines bundle, state, network, templates, and scripts', () => {
+  assertIncludesInOrder(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, [
+    '## Runtime Bundle',
+    '## State',
+    '## Web Capability',
+    '## Templates',
+    '## Scripts',
+  ]);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /entry\.html/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /runtime\.json/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /state\.json/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /普通 Web 网络/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /scaffold-runtime\.mjs/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /validate-runtime\.mjs/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /dashboard/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /todo/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /spaced review/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'],
+    /state\.json/
+  );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'], /can run/);
+  for (const text of [
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+    ...Object.values(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES),
+  ]) {
+    assert.doesNotMatch(text, /Michaelliv|pi-generative-ui|github\.com/);
+  }
+});
+
+test('managed runtime scripts reject symlink targets outside the memory space', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-runtime-scripts-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-runtime-outside-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Runtime scripts',
+    description: '',
+    createWorkspaceId: () => 'ws_runtime_scripts',
+    now: () => '2026-06-03T13:20:00.000Z',
+  });
+  await symlink(outside, path.join(root, 'linked-outside'), 'dir');
+
+  const scaffold = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'scaffold-runtime.mjs'),
+      'linked-outside/work',
+      '--title',
+      'Escaped work',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(scaffold.status, 1, scaffold.stdout);
+  await assert.rejects(stat(path.join(outside, 'work')));
+
+  await writeFile(path.join(outside, 'entry.html'), '<!doctype html><html></html>\n');
+  await writeFile(path.join(outside, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(outside, 'state.json'), '{"schemaVersion":1}\n');
+  await mkdir(path.join(outside, 'assets'), { recursive: true });
+
+  const validate = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'linked-outside',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(validate.status, 1, validate.stderr || validate.stdout);
+  const report = JSON.parse(validate.stdout) as {
+    readonly ok: boolean;
+    readonly issues: ReadonlyArray<{ readonly code: string }>;
+  };
+  assert.equal(report.ok, false);
+  assert.deepEqual(
+    report.issues.map((issue) => issue.code),
+    ['target-not-directory']
+  );
 });
 
 test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits', () => {
@@ -911,8 +1038,9 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /c-purple/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#EEEDFE/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#1D9E75/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /禁止外部网络请求/);
-  assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /sendPrompt|CDN|cdnjs|unpkg|esm\.sh/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /普通 Web 网络/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /CDN/);
+  assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /sendPrompt|cdnjs|unpkg|esm\.sh/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
@@ -1095,8 +1223,17 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   await rm(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-generative-runtime', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-works', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), { force: true });
+  await rm(path.join(root, 'skills', 'reo-generative-runtime', 'references'), {
+    force: true,
+    recursive: true,
+  });
+  await rm(path.join(root, 'skills', 'reo-generative-runtime', 'scripts'), {
+    force: true,
+    recursive: true,
+  });
   await rm(path.join(root, 'skills', 'reo-works', 'references'), {
     force: true,
     recursive: true,
@@ -1120,6 +1257,9 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       readonly editSkill: boolean;
       readonly coverImageSkill: boolean;
       readonly coverAestheticSkill: boolean;
+      readonly runtimeSkill: boolean;
+      readonly runtimeReferences: readonly string[];
+      readonly runtimeScripts: readonly string[];
       readonly worksSkill: boolean;
       readonly worksDesignSkill: boolean;
       readonly worksReferences: readonly string[];
@@ -1132,6 +1272,17 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   assert.equal(report.repaired.editSkill, true);
   assert.equal(report.repaired.coverImageSkill, true);
   assert.equal(report.repaired.coverAestheticSkill, true);
+  assert.equal(report.repaired.runtimeSkill, true);
+  assert.deepEqual([...report.repaired.runtimeReferences].sort(), [
+    'bundle-contract.md',
+    'state-and-storage.md',
+    'templates.md',
+    'validation.md',
+  ]);
+  assert.deepEqual([...report.repaired.runtimeScripts].sort(), [
+    'scaffold-runtime.mjs',
+    'validate-runtime.mjs',
+  ]);
   assert.equal(report.repaired.worksSkill, true);
   assert.equal(report.repaired.worksDesignSkill, true);
   assert.deepEqual([...report.repaired.worksReferences].sort(), [
@@ -1160,8 +1311,19 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     /^name: reo-cover-aesthetic/m
   );
   assert.match(
+    await readFile(path.join(root, 'skills', 'reo-generative-runtime', 'SKILL.md'), 'utf8'),
+    /^name: reo-generative-runtime/m
+  );
+  assert.match(
     await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8'),
     /^name: reo-works/m
+  );
+  assert.match(
+    await readFile(
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'utf8'
+    ),
+    /validate-runtime/
   );
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), 'utf8'),

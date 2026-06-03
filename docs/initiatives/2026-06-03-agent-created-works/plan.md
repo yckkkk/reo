@@ -1,13 +1,14 @@
-# Plan：Agent-created Works
+# Plan：Agent-created Works 与 Shared Generative Runtime
 
 本文件只记录跨 session 排序。单个工作单元的执行细节留在 `docs/specs/*`。
 
 ## 排序原则
 
 - 从 Reo 产品模型出发：作品是 Memory-bound 或 Segment-bound 产物，不是通用 HTML 文件。
-- 隔离预览能力必须跟真实 consumer 一起落地；首个 consumer 是静态作品。
-- 创建和更新先保持 prompt-bridge：Reo 复制上下文，外部 agent 写文件。
-- 先静态作品，后活 Widget；Widget 需要数据桥和性能预算，不能塞进首个切片。
+- 作品和未来组件共享 runtime 能力层；区别在挂载位置和生命周期，不在能力等级。
+- Reo 是本地创作宿主，不是作品审查器；用户和用户 agent 承担作品内容、联网和 secret 使用风险。
+- Runtime 默认放大用户创作自由；Reo 只守宿主边界和文件真源边界。
+- 创建和更新优先保持 agent-native：Reo 复制上下文，外部 agent 写文件；M2 增加 runtime 内 agent prompt action。
 - 一次只推进一个可验证 spec。
 
 ## Milestones
@@ -18,14 +19,13 @@
 
 交付：
 
-- 锁定作品 vs Widget 生命周期边界。
-- 锁定用户可见命名与 durable 内部命名。
-- 定义首个切片的创建、更新、渲染和安全边界。
+- 锁定作品用户可见命名与 durable 内部命名。
+- 定义首个静态作品切片的创建、更新、渲染和边界。
 - 草拟 Reo 管理的作品 skill 群。
 - 将内部生成式 UI prompt / 模块 / 模板 / token / complexity budget 直接复制改写为 Reo-native skill 群；最终 skill 不暴露外部来源。
 - 吸收沙箱 preview、`reo-artifact://`、文件识别、visual verification 与 TDD 安全边界计划。
 
-完成门槛：后续可以直接执行 M1，不再重开产品命名、实体落点、prompt-bridge 语义或首个 runtime 深度。
+完成门槛：后续可以直接执行 M1，不再重开产品命名、实体落点、prompt-bridge 语义。
 
 ### M1 - 静态作品与沙箱预览（已完成 first slice）
 
@@ -39,22 +39,36 @@
 - 已有作品的“让 Agent 更新作品” prompt-copy action。
 - 最小作品 skill 群安装或更新到记忆空间。
 
-完成门槛：用户能复制 prompt，让外部 agent 生成作品，回到 Reo 安全查看、全屏、删除/恢复，并再次通过 prompt-bridge 更新。
+完成门槛：用户能复制 prompt，让外部 agent 生成作品，回到 Reo 查看、全屏、删除/恢复，并再次通过 prompt-bridge 更新。
 
-### M2 - Widget Runtime
+### M2 - Shared Generative Runtime（active spec）
+
+当前 spec：`docs/specs/2026-06-03-1205-shared-generative-runtime/`
 
 交付：
 
-- 独立 Widget 对象合同和 Workspace / Memory sibling placement。
-- read-scoped host data bridge，优先 typed `postMessage`。
-- 数据刷新模型和性能预算。
-- Widget 生成 skill 与示例。
+- 每对象 runtime URL / origin 模型。
+- Runtime bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
+- `window.reo` vendor bridge：state、workspace/content、mutations、secrets、ui、agent。
+- 可见 JSON state 真源、browser storage 兼容缓存和 state conflict 模型。
+- Runtime secret slots、Reo 托管 secret 值和 object+slot 绑定。
+- 普通 Web 网络和框架/CDN 支持，不做 Reo CORS proxy。
+- agent creation skill、宽模板矩阵、scaffold/validate/inspect/migrate 脚本。
+- 组件挂载点合同级预留。
+- 三类验证样例：todo/复习表、联网仪表盘、Reo 内容工具。
 
-完成门槛：Widget 能随 Reo-owned 数据变化更新，同时不获得 Node、Electron、raw path、IPC 或 uncontrolled network 能力。
+完成门槛：用户给一个想法，agent 能快速生成可运行、可交互、可持久化的作品；runtime 能证明 state、network、secret、bridge 和首批 product mutation 能力。
 
-### M3+ - 完整形态联动
+### M3+ - 组件挂载与完整形态联动
 
-按需单独排期：Gallery 走马灯、Workspace-level widget、回顾 mechanics、复习日历等。它们归 roadmap 产品本质长期轨道，不绑进 M1。
+按需单独排期：
+
+- Workspace/Home/Memory tab 等组件挂载 UI。
+- Gallery 走马灯。
+- Workspace-level runtime object。
+- 回顾 mechanics、复习日历、跨 Memory 工具等。
+
+它们复用 M2 Shared Generative Runtime，不重建一套能力层。
 
 ## 收口
 

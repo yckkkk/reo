@@ -1,4 +1,4 @@
-# Tasks：Agent-created Works
+# Tasks：Agent-created Works 与 Shared Generative Runtime
 
 只记录跨工作单元里程碑与状态，不复制 spec 执行清单。
 
@@ -8,12 +8,13 @@
   `docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
 - M1 静态作品与沙箱预览 - first slice 已完成：
   `docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
-- M2 Widget runtime - 未开始
-- M3+ 完整形态联动 - 未排期
+- M2 Shared Generative Runtime - active spec：
+  `docs/specs/2026-06-03-1205-shared-generative-runtime/`
+- M3+ 组件挂载与完整形态联动 - 未排期
 
 ## 下一步
 
-启动 M2 前先新建独立 spec，对齐 Widget 对象合同、Workspace / Memory sibling placement、只读数据桥、性能预算和验证路径。
+对 M2 active spec 执行 plan-eng-review，重点审查每对象 origin、bundle 合同、`window.reo` bridge、state/secret、product mutation、agent skills/templates/scripts 和三类验证样例。
 
 ## 已融合草稿
 

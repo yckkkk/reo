@@ -63,11 +63,11 @@ export const WORKSPACE_REVIEW_RECOVERY_HINTS = {
   'invalid-sidecar':
     'Fix content.tiptap.json to valid Reo Tiptap sidecar JSON, or remove only that sidecar when Markdown should regenerate it.',
   'missing-artifact-entry':
-    'Create the required segment.html or supplement.html entry file next to the reported Markdown file, or change this candidate back to a supported non-artifact kind.',
+    'Create the required entry.html runtime entry next to the reported Markdown file, or change this candidate back to a supported non-artifact kind.',
   'markdown-write-required':
     'The sidecar can serialize, but Reo could not write the Markdown mirror in this read path. Refresh through Reo or manually update Markdown and sidecar to match.',
   'oversized-artifact-entry':
-    'Keep the artifact entry HTML under 1 MiB. Split large media or data into supported sibling assets, or simplify the entry before refreshing Reo.',
+    'Keep the artifact entry HTML under 1 MiB. Split large media or data into assets/, or simplify the entry before refreshing Reo.',
   'unsupported-artifact-format':
     'Use format: html for Reo artifact candidates, or change the object kind to a supported non-artifact kind.',
   'unsupported-tiptap-content':

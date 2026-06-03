@@ -7247,10 +7247,16 @@ test('copyArtifactAgentPrompt writes a create segment prompt without creating fi
   assert.match(copiedText[0] ?? '', /创建一个 Reo 作品片段/);
   assert.match(copiedText[0] ?? '', /skills\/reo-works\/SKILL\.md/);
   assert.match(copiedText[0] ?? '', /skills\/reo-works\/references\//);
+  assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/SKILL\.md/);
+  assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/scripts\//);
   assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
   assert.match(copiedText[0] ?? '', /kind: artifact/);
   assert.match(copiedText[0] ?? '', /format: html/);
-  assert.match(copiedText[0] ?? '', /segment\.html/);
+  assert.match(copiedText[0] ?? '', /entry\.html/);
+  assert.match(copiedText[0] ?? '', /runtime\.json/);
+  assert.match(copiedText[0] ?? '', /state\.json/);
+  assert.match(copiedText[0] ?? '', /assets\//);
+  assert.doesNotMatch(copiedText[0] ?? '', /segment\.html|supplement\.html/);
   assert.match(copiedText[0] ?? '', /memories\/mem_prompt--产品复盘/);
   assert.equal((copiedText[0] ?? '').includes(root), false);
   assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
@@ -7358,7 +7364,7 @@ test('copyArtifactAgentPrompt writes an update supplement prompt scoped to the t
       entryHash: 'b'.repeat(64),
     })}\n`
   );
-  await writeFile(path.join(supplementDirectory, 'supplement.html'), '<!doctype html><p>Old</p>');
+  await writeFile(path.join(supplementDirectory, 'entry.html'), '<!doctype html><p>Old</p>');
   const handleStore = createRegisteredHandleStore(await realpath(root));
   const copiedText: string[] = [];
 
@@ -7389,8 +7395,13 @@ test('copyArtifactAgentPrompt writes an update supplement prompt scoped to the t
     /memories\/mem_prompt--产品复盘\/segments\/seg_artifact--复习表\/supplements\/sup_artifact--补充/
   );
   assert.match(copiedText[0] ?? '', /supplement\.md/);
-  assert.match(copiedText[0] ?? '', /supplement\.html/);
+  assert.match(copiedText[0] ?? '', /entry\.html/);
+  assert.match(copiedText[0] ?? '', /runtime\.json/);
+  assert.match(copiedText[0] ?? '', /state\.json/);
+  assert.match(copiedText[0] ?? '', /assets\//);
+  assert.doesNotMatch(copiedText[0] ?? '', /segment\.html|supplement\.html/);
   assert.match(copiedText[0] ?? '', /skills\/reo-works\/references\//);
+  assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/references\//);
   assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
   assert.match(copiedText[0] ?? '', /不要创建新的作品对象/);
   assert.equal((copiedText[0] ?? '').includes(root), false);
@@ -7405,7 +7416,7 @@ test('copyArtifactAgentPrompt rejects update segment prompts for non-artifact ta
     path.join(segmentDirectory, 'segment.md'),
     ['---', 'id: seg_note', 'title: 普通笔记', 'kind: note', '---', '# 普通笔记', ''].join('\n')
   );
-  await writeFile(path.join(segmentDirectory, 'segment.html'), '<!doctype html><p>Wrong</p>');
+  await writeFile(path.join(segmentDirectory, 'entry.html'), '<!doctype html><p>Wrong</p>');
   const handleStore = createRegisteredHandleStore(await realpath(root));
   const copiedText: string[] = [];
 

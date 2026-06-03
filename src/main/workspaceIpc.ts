@@ -281,6 +281,12 @@ import {
   type WorkspaceSpeechSynthesisBatchTarget,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
+import {
+  ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
+  ARTIFACT_RUNTIME_ENTRY_FILE,
+  ARTIFACT_RUNTIME_MANIFEST_FILE,
+  ARTIFACT_RUNTIME_STATE_FILE,
+} from '../workspace-contract/artifact-runtime-url.js';
 import { buildWorkspaceReviewAgentPrompt } from '../workspace-contract/workspace-review-prompt.js';
 import { parseReoMarkdownExternalLinkHref } from '../tiptap-markdown/tiptapLinkHref.js';
 import { parseWorkspaceMarkdownObject } from './workspaceMarkdownObjects.js';
@@ -3448,7 +3454,7 @@ async function resolveArtifactPromptTargetDirectory({
     const validationError = await requireArtifactPromptTarget({
       directoryAbsolute: segmentPaths.value.directoryAbsolute,
       documentAbsolute: segmentPaths.value.documentAbsolute,
-      entryFileName: 'segment.html',
+      entryFileName: ARTIFACT_RUNTIME_ENTRY_FILE,
       objectType: 'segment',
     });
     return validationError ?? { ok: true, directoryAbsolute: segmentPaths.value.directoryAbsolute };
@@ -3469,7 +3475,7 @@ async function resolveArtifactPromptTargetDirectory({
   const validationError = await requireArtifactPromptTarget({
     directoryAbsolute: supplementPaths.value.directoryAbsolute,
     documentAbsolute: supplementPaths.value.documentAbsolute,
-    entryFileName: 'supplement.html',
+    entryFileName: ARTIFACT_RUNTIME_ENTRY_FILE,
     objectType: 'supplement',
   });
   return (
@@ -3485,7 +3491,7 @@ async function requireArtifactPromptTarget({
 }: {
   readonly directoryAbsolute: string;
   readonly documentAbsolute: string;
-  readonly entryFileName: 'segment.html' | 'supplement.html';
+  readonly entryFileName: typeof ARTIFACT_RUNTIME_ENTRY_FILE;
   readonly objectType: 'segment' | 'supplement';
 }): Promise<WorkspaceErrorEnvelope | null> {
   let markdown: string;
@@ -3541,8 +3547,9 @@ function buildWorkspaceArtifactAgentPrompt({
   readonly request: WorkspaceCopyArtifactAgentPromptRequest;
   readonly targetDirectoryRelative: string;
 }): string {
+  const runtimeBundleLine = `- 写入同目录 runtime bundle：\`${ARTIFACT_RUNTIME_ENTRY_FILE}\`、\`${ARTIFACT_RUNTIME_MANIFEST_FILE}\`、\`${ARTIFACT_RUNTIME_STATE_FILE}\` 和 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\`。`;
   const common = [
-    '请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；涉及视觉、信息布局、交互或数据表达时，同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
+    '请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；作品运行时 bundle、状态和验证先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；涉及视觉、信息布局、交互或数据表达时，同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
     '',
     '边界：',
     '- 只使用下方 workspace-relative path，不要使用绝对路径。',
@@ -3566,7 +3573,7 @@ function buildWorkspaceArtifactAgentPrompt({
       '创建要求：',
       `- 在 \`${targetDirectoryRelative}/segments/\` 下创建一个新的片段目录，目录名使用新的 \`seg_...\` id 和可读标题。`,
       '- 写入 `segment.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。',
-      '- 写入同目录 `segment.html`，它是轻量、可预览的完整 HTML 文档。',
+      runtimeBundleLine,
       '- 不要先创建空占位；一次性给出可用作品。',
     ].join('\n');
   }
@@ -3582,7 +3589,7 @@ function buildWorkspaceArtifactAgentPrompt({
       '创建要求：',
       `- 在 \`${targetDirectoryRelative}/supplements/\` 下创建一个新的补充目录，目录名使用新的 \`sup_...\` id 和可读标题。`,
       '- 写入 `supplement.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。',
-      '- 写入同目录 `supplement.html`，它是轻量、可预览的完整 HTML 文档。',
+      runtimeBundleLine,
       '- 不要先创建空占位；一次性给出可用作品补充。',
     ].join('\n');
   }
@@ -3595,12 +3602,15 @@ function buildWorkspaceArtifactAgentPrompt({
       '目标作品片段：',
       `- segment directory: \`${targetDirectoryRelative}\``,
       `- metadata: \`${targetDirectoryRelative}/segment.md\``,
-      `- html: \`${targetDirectoryRelative}/segment.html\``,
+      `- entry: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ENTRY_FILE}\``,
+      `- runtime metadata: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_MANIFEST_FILE}\``,
+      `- state: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_STATE_FILE}\``,
+      `- assets: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\``,
       '',
       '更新要求：',
       '- 不要创建新的作品对象。',
       '- 保留 `segment.md` 中已有 `id`，继续保持 `kind: artifact` 与 `format: html`。',
-      '- 更新 `segment.html`，必要时同步 `segment.md` 的标题或摘要字段。',
+      '- 更新 runtime bundle，必要时同步 `segment.md` 的标题或摘要字段。',
     ].join('\n');
   }
 
@@ -3611,12 +3621,15 @@ function buildWorkspaceArtifactAgentPrompt({
     '目标作品补充：',
     `- supplement directory: \`${targetDirectoryRelative}\``,
     `- metadata: \`${targetDirectoryRelative}/supplement.md\``,
-    `- html: \`${targetDirectoryRelative}/supplement.html\``,
+    `- entry: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ENTRY_FILE}\``,
+    `- runtime metadata: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_MANIFEST_FILE}\``,
+    `- state: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_STATE_FILE}\``,
+    `- assets: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\``,
     '',
     '更新要求：',
     '- 不要创建新的作品对象。',
     '- 保留 `supplement.md` 中已有 `id`，继续保持 `kind: artifact` 与 `format: html`。',
-    '- 更新 `supplement.html`，必要时同步 `supplement.md` 的标题或摘要字段。',
+    '- 更新 runtime bundle，必要时同步 `supplement.md` 的标题或摘要字段。',
   ].join('\n');
 }
 

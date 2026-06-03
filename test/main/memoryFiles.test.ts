@@ -524,6 +524,13 @@ function sha256Text(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+function assertWorkspaceHash(value: unknown): asserts value is string {
+  if (typeof value !== 'string') {
+    assert.fail(`Expected workspace hash string, received ${typeof value}`);
+  }
+  assert.match(value, /^[a-f0-9]{64}$/);
+}
+
 async function writeArtifactSegmentCandidateForTest(
   rootPath: string,
   artifact: {
@@ -558,9 +565,11 @@ async function writeArtifactSegmentCandidateForTest(
   );
   if (artifact.includeEntry ?? true) {
     await writeFile(
-      path.join(segmentDirectory, 'segment.html'),
+      path.join(segmentDirectory, 'entry.html'),
       artifact.html ?? '<!doctype html><html><body><h1>作品</h1></body></html>\n'
     );
+    await writeFile(path.join(segmentDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+    await writeFile(path.join(segmentDirectory, 'state.json'), '{"schemaVersion":1,"stores":{}}\n');
   }
   return segmentDirectory;
 }
@@ -601,8 +610,13 @@ async function writeArtifactSupplementCandidateForTest(
   );
   if (artifact.includeEntry ?? true) {
     await writeFile(
-      path.join(supplementDirectory, 'supplement.html'),
+      path.join(supplementDirectory, 'entry.html'),
       artifact.html ?? '<!doctype html><html><body><h1>补充作品</h1></body></html>\n'
+    );
+    await writeFile(path.join(supplementDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+    await writeFile(
+      path.join(supplementDirectory, 'state.json'),
+      '{"schemaVersion":1,"stores":{}}\n'
     );
   }
   return supplementDirectory;
@@ -3363,7 +3377,7 @@ test('direct artifact html segment file creation is repaired and projected', asy
   assert.equal(segment['format'], 'html');
   assert.equal(segment['entryByteLength'], Buffer.byteLength(html, 'utf8'));
   assert.equal(segment['entryHash'], sha256Text(html));
-  assert.equal(segment['previewVersion'], sha256Text(html));
+  assertWorkspaceHash(segment['previewVersion']);
   assert.deepEqual(segment['contentTabOrder'], ['segment']);
   assert.deepEqual(segment['supplements'], []);
   assert.equal(segment['supplementCount'], 0);
@@ -3391,7 +3405,7 @@ test('direct artifact html segment replacement refreshes manifest and preview ve
   });
   await rebuildMemoryIndex(rootPath);
 
-  await writeFile(path.join(segmentDirectory, 'segment.html'), replacementHtml);
+  await writeFile(path.join(segmentDirectory, 'entry.html'), replacementHtml);
   await rebuildMemoryIndex(rootPath);
 
   const manifest = (await readJson(
@@ -3413,7 +3427,70 @@ test('direct artifact html segment replacement refreshes manifest and preview ve
   assert.ok(segment);
   assert.equal(segment['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
   assert.equal(segment['entryHash'], sha256Text(replacementHtml));
-  assert.equal(segment['previewVersion'], sha256Text(replacementHtml));
+  assertWorkspaceHash(segment['previewVersion']);
+});
+
+test('direct artifact runtime state, manifest and assets refresh preview without changing entry hash', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_runtime_refresh';
+  const segmentId = 'seg_artifact_runtime_refresh';
+  const html = '<!doctype html><html><body><h1>状态作品</h1></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '状态作品',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '状态作品',
+    html,
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  async function readSegmentProjection(): Promise<Record<string, unknown>> {
+    const detail = await readMemoryDetailFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+    });
+    assert.equal(detail.ok, true);
+    assert.equal(detail.ok ? detail.value.segments.length : 0, 1);
+    return detail.ok ? (detail.value.segments[0] as Record<string, unknown>) : {};
+  }
+
+  const initialSegment = await readSegmentProjection();
+  assert.equal(initialSegment['entryHash'], sha256Text(html));
+  assertWorkspaceHash(initialSegment['previewVersion']);
+
+  await writeFile(
+    path.join(segmentDirectory, 'state.json'),
+    '{"schemaVersion":1,"stores":{"progress":{"done":1}}}\n'
+  );
+  const afterState = await readSegmentProjection();
+  assert.equal(afterState['entryHash'], sha256Text(html));
+  assertWorkspaceHash(afterState['previewVersion']);
+  assert.notEqual(afterState['previewVersion'], initialSegment['previewVersion']);
+
+  await writeFile(
+    path.join(segmentDirectory, 'runtime.json'),
+    '{"schemaVersion":1,"title":"状态作品","entry":"entry.html"}\n'
+  );
+  const afterRuntimeManifest = await readSegmentProjection();
+  assert.equal(afterRuntimeManifest['entryHash'], sha256Text(html));
+  assertWorkspaceHash(afterRuntimeManifest['previewVersion']);
+  assert.notEqual(afterRuntimeManifest['previewVersion'], afterState['previewVersion']);
+
+  await mkdir(path.join(segmentDirectory, 'assets'), { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'assets', 'style.css'), 'body { color: #123456; }\n');
+  const afterAsset = await readSegmentProjection();
+  assert.equal(afterAsset['entryHash'], sha256Text(html));
+  assertWorkspaceHash(afterAsset['previewVersion']);
+  assert.notEqual(afterAsset['previewVersion'], afterRuntimeManifest['previewVersion']);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['entryHash'], sha256Text(html));
 });
 
 test('direct artifact html supplement file creation is repaired under parent segment', async () => {
@@ -3464,7 +3541,7 @@ test('direct artifact html supplement file creation is repaired under parent seg
   assert.equal(supplement['format'], 'html');
   assert.equal(supplement['entryByteLength'], Buffer.byteLength(html, 'utf8'));
   assert.equal(supplement['entryHash'], sha256Text(html));
-  assert.equal(supplement['previewVersion'], sha256Text(html));
+  assertWorkspaceHash(supplement['previewVersion']);
   assert.deepEqual(segment.contentTabOrder, ['segment', `supplement:${supplementId}`]);
 
   const manifest = (await readJson(
@@ -3504,7 +3581,7 @@ test('direct artifact html supplement replacement refreshes manifest and preview
   });
   await rebuildMemoryIndex(rootPath);
 
-  await writeFile(path.join(supplementDirectory, 'supplement.html'), replacementHtml);
+  await writeFile(path.join(supplementDirectory, 'entry.html'), replacementHtml);
   await rebuildMemoryIndex(rootPath);
 
   const manifest = (await readJson(
@@ -3528,7 +3605,7 @@ test('direct artifact html supplement replacement refreshes manifest and preview
   assert.ok(supplement);
   assert.equal(supplement['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
   assert.equal(supplement['entryHash'], sha256Text(replacementHtml));
-  assert.equal(supplement['previewVersion'], sha256Text(replacementHtml));
+  assertWorkspaceHash(supplement['previewVersion']);
 });
 
 test('direct artifact html segment without entry is excluded and reported for review', async () => {
@@ -3578,6 +3655,82 @@ test('direct artifact html segment without entry is excluded and reported for re
   );
   await assert.rejects(
     stat(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`))
+  );
+});
+
+test('direct artifact html segment with only the old segment.html entry is excluded', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_old_entry';
+  const segmentId = 'seg_artifact_old_entry';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '旧入口作品',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '旧入口作品',
+    includeEntry: false,
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.html'),
+    '<!doctype html><html><body>Old entry</body></html>\n'
+  );
+
+  const readModel = await rebuildWorkspaceReadModel(rootPath, { persist: false });
+  const memory = readModel.memories.find((candidate) => candidate.memoryId === memoryId) as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 0);
+  assert.equal(memory['artifactSegmentCount'], 0);
+  assert.equal(readModel.reviewEntries[0]?.reason, 'missing-artifact-entry');
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`))
+  );
+});
+
+test('direct artifact html supplement with only the old supplement.html entry is excluded', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_old_supplement_entry';
+  const segmentId = 'seg_artifact_old_supplement_parent';
+  const supplementId = 'sup_artifact_old_supplement_entry';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '旧补充入口作品',
+  });
+  await writeFinalizedNoteSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: 'Parent note',
+    body: '# Parent\n',
+  });
+  await rebuildMemoryIndex(rootPath);
+  const supplementDirectory = await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '旧补充入口作品',
+    includeEntry: false,
+  });
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.html'),
+    '<!doctype html><html><body>Old supplement entry</body></html>\n'
+  );
+
+  const readModel = await rebuildWorkspaceReadModel(rootPath, { persist: false });
+  const memory = readModel.memories.find((candidate) => candidate.memoryId === memoryId) as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.ok(memory);
+  assert.equal(memory['segmentCount'], 1);
+  assert.equal(memory['supplementCount'], 0);
+  assert.equal(readModel.reviewEntries[0]?.reason, 'missing-artifact-entry');
+  assert.equal(readModel.reviewEntries[0]?.objectType, 'supplement');
+  await assert.rejects(
+    stat(path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`))
   );
 });
 

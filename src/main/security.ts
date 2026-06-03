@@ -224,6 +224,10 @@ function isArtifactPreviewUrl(url: URL): boolean {
   return url.protocol === `${ARTIFACT_SCHEME}:` && isArtifactWorkspaceEntryUrl(url);
 }
 
+function isWebSubframeUrl(url: URL): boolean {
+  return url.protocol === 'https:' || url.protocol === 'http:';
+}
+
 export function isAllowedAppNavigationUrl(
   rawUrl: string,
   { isMainFrame }: { readonly isMainFrame: boolean }
@@ -235,7 +239,8 @@ export function isAllowedAppNavigationUrl(
     return false;
   }
   try {
-    return isArtifactPreviewUrl(new URL(rawUrl));
+    const parsed = new URL(rawUrl);
+    return isArtifactPreviewUrl(parsed) || isWebSubframeUrl(parsed);
   } catch {
     return false;
   }
