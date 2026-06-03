@@ -74,7 +74,7 @@ describe('MemoryStudioSegmentCard', () => {
         actionMenu={<MemoryStudioSegmentCardActionButton segmentTitle="E2E 自动记录" />}
         onSelect={vi.fn()}
         segment={audioSegment()}
-        selected={false}
+        selectionPlacement="after"
         workspaceId="ws_1"
       />
     );
@@ -137,7 +137,7 @@ describe('MemoryStudioSegmentCard', () => {
         actionMenu={<MemoryStudioSegmentCardActionButton segmentTitle="Spoken note" />}
         onSelect={vi.fn()}
         segment={noteSegment()}
-        selected={false}
+        selectionPlacement="after"
         workspaceId="ws_1"
       />
     );
@@ -164,7 +164,7 @@ describe('MemoryStudioSegmentCard', () => {
         menuOpen
         onSelect={vi.fn()}
         segment={noteSegment()}
-        selected
+        selectionPlacement="selected"
         workspaceId="ws_1"
       />
     );
@@ -180,5 +180,66 @@ describe('MemoryStudioSegmentCard', () => {
     expect(card.className).not.toContain('[--top-scrim-start:0.64]');
     expect(card.className).not.toContain('[--top-scrim-start:0.62]');
     expect(card.className).not.toContain('[--top-state-start:0.2]');
+    expect(card).toHaveClass('transition-[filter]', 'duration-150', 'ease-out');
+    expect(card).not.toHaveClass(
+      '-translate-y-5',
+      'scale-[1.035]',
+      'transition-[filter,transform]'
+    );
+    const item = document.querySelector('[data-slot="memory-studio-segment-item"]');
+    expect(item).toHaveAttribute('data-selected', 'true');
+    expect(item).toHaveAttribute('data-selection-placement', 'selected');
+    expect(item).toHaveAttribute(
+      'style',
+      expect.stringContaining('width: var(--memory-studio-segment-card-size)')
+    );
+    expect(item).toHaveAttribute(
+      'style',
+      expect.stringContaining('--memory-studio-segment-selection-x: 0px')
+    );
+    expect(item).toHaveAttribute(
+      'style',
+      expect.stringContaining(
+        '--memory-studio-segment-card-scale: var(--memory-studio-segment-selected-scale)'
+      )
+    );
+    const cluster = document.querySelector('[data-slot="memory-studio-segment-card-cluster"]');
+    expect(cluster).toBeInstanceOf(HTMLElement);
+    expect(cluster).toHaveClass(
+      'transition-transform',
+      '[content-visibility:auto]',
+      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_var(--memory-studio-segment-card-size)]'
+    );
+    expect(cluster).not.toHaveClass('transition-[width,transform]');
+    expect(cluster).toHaveAttribute(
+      'style',
+      expect.stringContaining(
+        'translateX(calc(-50% + var(--memory-studio-segment-selection-x))) translateY(var(--memory-studio-segment-card-y)) scale(var(--memory-studio-segment-card-scale))'
+      )
+    );
+    const moreButton = document.querySelector('[aria-label="片段 Spoken note 更多操作"]');
+    expect(cluster).toContainElement(moreButton as HTMLElement);
+    expect(
+      document.querySelector('[data-slot="memory-studio-segment-timeline-marker"]')
+    ).not.toHaveAttribute('style');
+    expect(document.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')).toHaveClass(
+      'transition-transform',
+      'duration-200'
+    );
+    expect(
+      document.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+    ).toHaveAttribute(
+      'style',
+      expect.stringContaining('translateX(var(--memory-studio-segment-selection-x))')
+    );
+    expect(
+      document.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
+    ).not.toHaveAttribute('style');
+    expect(document.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')).toBe(
+      item?.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    );
+    expect(document.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')).not.toBe(
+      cluster?.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    );
   });
 });

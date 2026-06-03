@@ -2591,21 +2591,34 @@ describe('LoadedWorkspaceFrame', () => {
     expect(segmentItems).toHaveLength(2);
     expect(segmentCards).toHaveLength(2);
     const firstSegmentItem = segmentItems[0];
+    const secondSegmentItem = segmentItems[1];
     const firstSegmentCard = segmentCards[0];
     const secondSegmentCard = segmentCards[1];
+    if (!(firstSegmentItem instanceof HTMLElement) || !(secondSegmentItem instanceof HTMLElement)) {
+      throw new Error('Segment item wrapper missing');
+    }
 
     expect(firstSegmentItem).toHaveClass(
-      'flex-[0_0_var(--memory-studio-segment-card-size)]',
+      'flex-none',
       'snap-start',
       'flex-col',
       'min-w-[var(--memory-studio-segment-card-min-size)]'
     );
-    expect(firstSegmentItem).not.toHaveClass(
-      '[content-visibility:auto]',
-      '[contain-intrinsic-size:184px_184px]'
+    expect(firstSegmentItem).toHaveAttribute(
+      'style',
+      expect.stringContaining('width: var(--memory-studio-segment-card-size)')
     );
+    expect(firstSegmentItem).toHaveAttribute('data-selection-placement', 'selected');
+    expect(secondSegmentItem).toHaveAttribute('data-selection-placement', 'after');
+    expect(firstSegmentItem).not.toHaveClass('[content-visibility:auto]');
     expect(firstSegmentItem).not.toHaveClass('rounded-xl');
     expect(firstSegmentCard?.closest('button')).not.toHaveClass('rounded-xl');
+    expect(
+      firstSegmentItem.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toHaveClass(
+      '[content-visibility:auto]',
+      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_var(--memory-studio-segment-card-size)]'
+    );
     expect(firstSegmentCard).toHaveClass(
       'aspect-square',
       'reo-segment-card-squircle',
@@ -2645,11 +2658,16 @@ describe('LoadedWorkspaceFrame', () => {
         '--memory-studio-segment-card-size: clamp(var(--memory-studio-segment-card-min-size), 18vw, 148px)'
       )
     );
-    expect(stripScroll).not.toHaveClass('px-44');
+    expect(stripScroll).toHaveClass('px-[var(--memory-studio-segment-selected-offset)]');
+    expect(stripScroll).not.toHaveClass('px-0', 'px-44');
     expect(stripScroll).toHaveClass('edge-fade-x');
     expect(stripScroll).not.toHaveClass('relative', 'before:left-0', 'before:right-0');
-    expect(stripScroll).toHaveClass('pt-8', 'pb-0');
-    expect(stripScroll).not.toHaveClass('py-8');
+    expect(stripScroll).toHaveClass(
+      'pt-[var(--memory-studio-segment-selected-top-outset)]',
+      '[scroll-padding-inline:var(--memory-studio-segment-selected-offset)]',
+      'pb-0'
+    );
+    expect(stripScroll).not.toHaveClass('pt-8', 'pt-16', 'py-8');
     expect(contentPanel).toHaveClass('flex-1', 'min-h-0');
     expect(contentPanel).not.toHaveClass('-mt-8', '-mt-4', 'mt-4', 'mt-12', 'mt-16', 'pt-12');
     expect(player).toBeInstanceOf(HTMLElement);
@@ -2696,9 +2714,17 @@ describe('LoadedWorkspaceFrame', () => {
     ).toHaveLength(0);
     const segmentItems = studio.querySelectorAll('[data-slot="memory-studio-segment-item"]');
     expect(segmentItems).toHaveLength(200);
-    expect(segmentItems[0]).toHaveClass(
+    const firstSegmentItem = segmentItems[0];
+    if (!(firstSegmentItem instanceof HTMLElement)) {
+      throw new Error('Segment item wrapper missing');
+    }
+
+    expect(firstSegmentItem).not.toHaveClass('[content-visibility:auto]');
+    expect(
+      firstSegmentItem.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toHaveClass(
       '[content-visibility:auto]',
-      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_calc(var(--memory-studio-segment-card-size)+58px)]'
+      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_var(--memory-studio-segment-card-size)]'
     );
     expect(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')).toHaveLength(200);
   });
@@ -2726,18 +2752,56 @@ describe('LoadedWorkspaceFrame', () => {
     }
 
     expect(activeItem).toHaveAttribute('data-slot', 'memory-studio-segment-item');
-    expect(activeItem).toHaveClass(
-      'flex-[0_0_var(--memory-studio-segment-card-size)]',
-      'snap-start',
-      'flex-col'
+    expect(activeItem).toHaveClass('flex-none', 'snap-start', 'flex-col');
+    expect(activeItem).toHaveAttribute('data-selection-placement', 'selected');
+    expect(activeItem).toHaveAttribute(
+      'style',
+      expect.stringContaining('width: var(--memory-studio-segment-card-size)')
+    );
+    expect(inactiveItem).toHaveAttribute('data-selection-placement', 'after');
+    expect(inactiveItem).toHaveAttribute(
+      'style',
+      expect.stringContaining('width: var(--memory-studio-segment-card-size)')
     );
     expect(activeItem.querySelector('[data-slot="memory-studio-segment-card"]')).toBeTruthy();
+    expect(activeItem.querySelector('[data-slot="memory-studio-segment-card-stage"]')).toBeTruthy();
+    expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toHaveClass(
+      '[content-visibility:auto]',
+      '[contain-intrinsic-size:var(--memory-studio-segment-card-size)_var(--memory-studio-segment-card-size)]'
+    );
+    expect(activeItem).not.toHaveClass('[content-visibility:auto]');
+    expect(activeItem.querySelector('[data-slot="memory-studio-segment-card"]')).toHaveClass(
+      'transition-[filter]',
+      'duration-150',
+      'ease-out'
+    );
+    expect(inactiveItem.querySelector('[data-slot="memory-studio-segment-card"]')).not.toHaveClass(
+      '-translate-y-5',
+      'scale-[1.035]',
+      'transition-[filter,transform]'
+    );
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
     ).toHaveClass('before:left-[-12px]', 'before:right-[-12px]', 'before:top-[3px]');
     expect(
+      activeItem.querySelector('[data-slot="memory-studio-segment-timeline-marker"]')
+    ).not.toHaveClass('transition-transform', 'duration-200');
+    expect(
+      activeButton.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    ).toBeNull();
+    expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
-    ).toHaveClass('block', 'size-[7px]', 'min-h-[7px]', 'min-w-[7px]', 'rounded-full');
+    ).toHaveClass(
+      'block',
+      'size-[7px]',
+      'min-h-[7px]',
+      'min-w-[7px]',
+      'rounded-full',
+      'transition-transform',
+      'duration-200'
+    );
     expect(
       activeItem.querySelector('[data-slot="memory-studio-segment-timeline-time"]')
     ).toHaveClass('mt-12', 'block', 'text-muted-foreground');
@@ -2889,7 +2953,6 @@ describe('LoadedWorkspaceFrame', () => {
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const softFlatElements = [
       studio,
-      ...Array.from(studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')),
       studio.querySelector('[data-slot="memory-studio-content-panel"]'),
       studio.querySelector('[data-slot="memory-studio-player"]'),
       studio.querySelector('[data-slot="memory-studio-playback-waveform"]'),
@@ -2899,6 +2962,11 @@ describe('LoadedWorkspaceFrame', () => {
     ];
 
     for (const element of softFlatElements) {
+      expectSoftFlatClass(element);
+    }
+    for (const element of Array.from(
+      studio.querySelectorAll('[data-slot="memory-studio-segment-card"]')
+    )) {
       expectSoftFlatClass(element);
     }
   });
@@ -2950,10 +3018,16 @@ describe('LoadedWorkspaceFrame', () => {
     const content = within(studio).getByRole('region', { name: '片段内容' });
     const birthdayItem = within(strip).getByRole('button', { name: '选择片段 Birthday candles' });
     const birthdaySongItem = within(strip).getByRole('button', { name: '选择片段 Birthday song' });
+    const birthdaySegmentItem = birthdayItem.closest('[data-slot="memory-studio-segment-item"]');
+    const birthdaySongSegmentItem = birthdaySongItem.closest(
+      '[data-slot="memory-studio-segment-item"]'
+    );
 
     expect(birthdayItem).toHaveAttribute('aria-current', 'true');
+    expect(birthdaySegmentItem).toHaveAttribute('data-selection-placement', 'selected');
+    expect(birthdaySongSegmentItem).toHaveAttribute('data-selection-placement', 'after');
     expect(
-      birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+      birthdaySegmentItem?.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
     ).toHaveClass('bg-foreground');
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday candles' })
@@ -2968,12 +3042,29 @@ describe('LoadedWorkspaceFrame', () => {
     expect(
       within(strip).getByRole('button', { name: '选择片段 Birthday candles' })
     ).not.toHaveAttribute('aria-current');
+    expect(birthdaySongSegmentItem).toHaveAttribute('data-selection-placement', 'selected');
+    expect(birthdaySegmentItem).toHaveAttribute('data-selection-placement', 'before');
     expect(
-      birthdaySongItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+      birthdaySongSegmentItem?.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
     ).toHaveClass('bg-foreground');
     expect(
-      birthdayItem.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
+      birthdaySegmentItem?.querySelector('[data-slot="memory-studio-segment-timeline-dot"]')
     ).not.toHaveClass('bg-foreground');
+    expect(
+      birthdaySongItem.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toBeNull();
+    expect(
+      birthdaySongSegmentItem?.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toBeTruthy();
+    expect(
+      birthdaySegmentItem?.querySelector('[data-slot="memory-studio-segment-card-cluster"]')
+    ).toBeTruthy();
+    expect(
+      birthdaySegmentItem?.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    ).toBeTruthy();
+    expect(
+      birthdaySongSegmentItem?.querySelector('[data-slot="memory-studio-segment-timeline-anchor"]')
+    ).toBeTruthy();
     expect(
       within(content).getByRole('button', { name: '播放片段 Birthday song' })
     ).toBeInTheDocument();

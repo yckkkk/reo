@@ -97,13 +97,7 @@ type EditorCornerGripProps = {
   readonly onClick: () => void;
 };
 
-function EditorCornerGrip({
-  arcVariant,
-  disabled,
-  icon,
-  label,
-  onClick,
-}: EditorCornerGripProps) {
+function EditorCornerGrip({ arcVariant, disabled, icon, label, onClick }: EditorCornerGripProps) {
   const Icon = icon === 'maximize' ? Maximize : Minimize;
   const expandedArc = arcVariant === 'expanded';
 

@@ -45,9 +45,11 @@ import {
 import { CarouselArrowButton } from './CarouselArrowButton';
 import {
   MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS,
+  MEMORY_STUDIO_SEGMENT_ITEM_STYLE,
   MEMORY_STUDIO_SEGMENT_STRIP_STYLE,
   MemoryStudioSegmentCard,
   MemoryStudioSegmentCardActionButton,
+  type MemoryStudioSegmentSelectionPlacement,
 } from './MemoryStudioSegmentCard';
 import { SegmentActionsMenu } from './SegmentActionsMenu';
 import { SegmentContentActionsMenu } from './SegmentContentActionsMenu';
@@ -572,14 +574,15 @@ function MemoryStudioSegmentStripSkeleton() {
       </div>
       <div
         aria-hidden="true"
-        className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-[var(--memory-studio-segment-selected-offset)] pb-0 pt-[var(--memory-studio-segment-selected-top-outset)] [scroll-padding-inline:var(--memory-studio-segment-selected-offset)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         data-slot="memory-studio-segment-strip-scroll"
       >
         {MEMORY_STUDIO_SEGMENT_SKELETON_ITEMS.map((item) => (
           <div
             key={item}
-            className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-[0_0_var(--memory-studio-segment-card-size)] snap-start flex-col text-left outline-none"
+            className="group relative flex min-w-[var(--memory-studio-segment-card-min-size)] flex-none snap-start flex-col text-left outline-none"
             data-slot="memory-studio-segment-item"
+            style={MEMORY_STUDIO_SEGMENT_ITEM_STYLE}
           >
             <span
               className="relative flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between overflow-hidden bg-transparent p-12 text-left reo-segment-card-squircle"
@@ -650,6 +653,19 @@ function insertContentTabValue(
   const nextValues = [...remainingValues];
   nextValues.splice(insertionIndex, 0, draggedValue);
   return nextValues;
+}
+
+function segmentSelectionPlacement(
+  index: number,
+  selectedIndex: number
+): MemoryStudioSegmentSelectionPlacement {
+  if (index < selectedIndex) {
+    return 'before';
+  }
+  if (index > selectedIndex) {
+    return 'after';
+  }
+  return 'selected';
 }
 
 function memoryStudioAudioResourceKey(
@@ -4149,9 +4165,9 @@ export function MemoryStudio({
                 ref={stripScrollRef}
                 data-reo-blossom-carousel="segment-strip"
                 data-slot="memory-studio-segment-strip-scroll"
-                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-0 pb-0 pt-8 [contain:layout_paint] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="edge-fade-x flex snap-x gap-12 overflow-x-auto px-[var(--memory-studio-segment-selected-offset)] pb-0 pt-[var(--memory-studio-segment-selected-top-outset)] [contain:layout_paint] [scroll-padding-inline:var(--memory-studio-segment-selected-offset)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
-                {visibleSegments.map((segment) => {
+                {visibleSegments.map((segment, segmentIndex) => {
                   const segmentIsAudio = isAudioMemorySegment(segment);
                   const isSelected = segment.segmentId === selectedSegment.segmentId;
                   const segmentSpeechSynthesisProjection =
@@ -4264,7 +4280,10 @@ export function MemoryStudio({
                       menuOpen={openSegmentMenuId === segment.segmentId}
                       onSelect={() => requestSelectedSegment(segment.segmentId)}
                       segment={segment}
-                      selected={isSelected}
+                      selectionPlacement={segmentSelectionPlacement(
+                        segmentIndex,
+                        selectedSegmentResolution.index
+                      )}
                       workspaceId={workspaceSession.workspaceId}
                     />
                   );
