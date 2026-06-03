@@ -7,6 +7,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -24,12 +27,26 @@ export type EntityActionMenuTranscriptionAction = {
   readonly onSelect: EntityActionMenuSyncAction;
 };
 
-export type EntityActionMenuExtraAction = {
+export type EntityActionMenuExtraItem = {
   readonly disabledReason?: string | null;
   readonly icon: LucideIcon;
+  readonly kind?: 'item';
   readonly label: string;
   readonly onSelect: EntityActionMenuSyncAction;
 };
+
+export type EntityActionMenuExtraSubmenu = {
+  readonly disabledReason?: string | null;
+  readonly icon: LucideIcon;
+  readonly items: readonly {
+    readonly label: string;
+    readonly onSelect: EntityActionMenuSyncAction;
+  }[];
+  readonly kind: 'submenu';
+  readonly label: string;
+};
+
+export type EntityActionMenuExtraAction = EntityActionMenuExtraItem | EntityActionMenuExtraSubmenu;
 
 export type EntityActionMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
@@ -56,7 +73,7 @@ function EntityActionMenuIcon({ icon: Icon }: { readonly icon: LucideIcon }) {
   return <Icon className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />;
 }
 
-function EntityActionSyncItem({ action }: { readonly action: EntityActionMenuExtraAction }) {
+function EntityActionSyncItem({ action }: { readonly action: EntityActionMenuExtraItem }) {
   const disabled = action.disabledReason !== null && action.disabledReason !== undefined;
   const item = (
     <DropdownMenuItem
@@ -95,6 +112,46 @@ function EntityActionTranscriptionItem({
   readonly action: EntityActionMenuTranscriptionAction;
 }) {
   return <EntityActionSyncItem action={{ ...action, icon: RefreshCw }} />;
+}
+
+function EntityActionSubmenu({ action }: { readonly action: EntityActionMenuExtraSubmenu }) {
+  const disabled = action.disabledReason !== null && action.disabledReason !== undefined;
+  if (disabled) {
+    return (
+      <EntityActionSyncItem
+        action={{
+          disabledReason: action.disabledReason,
+          icon: action.icon,
+          label: action.label,
+          onSelect: () => undefined,
+        }}
+      />
+    );
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <EntityActionMenuIcon icon={action.icon} />
+        {action.label}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {action.items.map((item) => (
+          <DropdownMenuItem key={item.label} onSelect={item.onSelect}>
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+function EntityActionExtraItem({ action }: { readonly action: EntityActionMenuExtraAction }) {
+  return action.kind === 'submenu' ? (
+    <EntityActionSubmenu action={action} />
+  ) : (
+    <EntityActionSyncItem action={action} />
+  );
 }
 
 export function EntityActionMenu({
@@ -159,7 +216,7 @@ export function EntityActionMenu({
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
               {extraActions.map((action) => (
-                <EntityActionSyncItem key={action.label} action={action} />
+                <EntityActionExtraItem key={action.label} action={action} />
               ))}
             </DropdownMenuGroup>
           </>

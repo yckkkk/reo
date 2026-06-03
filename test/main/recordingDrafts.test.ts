@@ -27,8 +27,10 @@ import {
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
   readFinalizedAudioSegmentBackfillSource,
+  readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentContent,
   readFinalizedAudioSegmentSupplementBackfillSource,
+  readFinalizedAudioSegmentSupplementAudio,
   readFinalizedAudioSegmentSupplementContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
@@ -620,7 +622,6 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
 
   const segment = await readFinalizedAudioSegmentContent({
     assertWorkspaceUsable: () => ({ ok: true }),
-    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
     memoryId,
     rootPath,
     segmentId,
@@ -629,8 +630,20 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
   assert.equal(segment.ok, true);
   if (segment.ok) {
     assert.equal(segment.audioByteLength, backfillReadableSize);
-    assert.equal(segment.audio.byteLength, backfillReadableSize);
+    assert.equal('audio' in segment, false);
     assert.equal(segment.lastTranscriptionAttempt, 'failed');
+  }
+  const segmentBackfill = await readFinalizedAudioSegmentBackfillSource({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+  assert.equal(segmentBackfill.ok, true);
+  if (segmentBackfill.ok) {
+    assert.equal(segmentBackfill.audioByteLength, backfillReadableSize);
+    segmentBackfill.dispose();
   }
 
   const supplementId = 'sup_backfill_large';
@@ -669,7 +682,6 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
 
   const supplement = await readFinalizedAudioSegmentSupplementContent({
     assertWorkspaceUsable: () => ({ ok: true }),
-    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
     memoryId,
     rootPath,
     segmentId,
@@ -680,8 +692,22 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
   assert.equal(supplement.ok, true);
   if (supplement.ok) {
     assert.equal(supplement.audioByteLength, backfillReadableSize);
-    assert.equal(supplement.audio.byteLength, backfillReadableSize);
+    assert.equal('audio' in supplement, false);
     assert.equal(supplement.lastTranscriptionAttempt, 'failed');
+  }
+  const supplementBackfill = await readFinalizedAudioSegmentSupplementBackfillSource({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+  assert.equal(supplementBackfill.ok, true);
+  if (supplementBackfill.ok) {
+    assert.equal(supplementBackfill.audioByteLength, backfillReadableSize);
+    supplementBackfill.dispose();
   }
 
   const tooLargeSegmentId = 'seg_backfill_too_large';
@@ -701,7 +727,7 @@ test('finalized audio backfill reads accept the Turbo 100MB limit without using 
     ...manifest,
     audioByteLength: MAX_BACKFILL_AUDIO_READ_BYTES + 1,
   }));
-  const tooLarge = await readFinalizedAudioSegmentContent({
+  const tooLarge = await readFinalizedAudioSegmentBackfillSource({
     assertWorkspaceUsable: () => ({ ok: true }),
     maxBytes: MAX_BACKFILL_AUDIO_READ_BYTES,
     memoryId,
@@ -823,6 +849,64 @@ test('finalized audio reads recheck duplicate segment validation on every public
     assert.equal(duplicateChecks, 2);
   } finally {
     setBeforeDuplicateRecordingCheckForTest(null);
+  }
+});
+
+test('finalized audio byte read repairs missing legacy audio hash after verifying bytes', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_legacy_audio_hash_repair';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+
+  const audio = await readFinalizedAudioSegmentAudio({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    expectedAudioByteLength: 1,
+    expectedAudioHash: null,
+    memoryId,
+    rootPath,
+    segmentId,
+  });
+
+  assert.equal(audio.ok, true);
+  if (audio.ok) {
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`),
+        'utf8'
+      )
+    ) as { readonly audioHash?: string };
+    assert.equal(manifest.audioHash, audio.audioHash);
+  }
+});
+
+test('finalized supplement audio byte read repairs missing legacy audio hash after verifying bytes', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_active_draft_clear';
+  const segmentId = 'seg_legacy_supplement_audio_hash_repair';
+  const supplementId = 'sup_legacy_audio_hash_repair';
+  await writeFinalizedAudioSegmentForTest(rootPath, segmentId);
+  await writeFinalizedAudioSupplementForTest({ rootPath, segmentId, supplementId });
+
+  const audio = await readFinalizedAudioSegmentSupplementAudio({
+    assertWorkspaceUsable: () => ({ ok: true }),
+    expectedAudioByteLength: 1,
+    expectedAudioHash: null,
+    memoryId,
+    rootPath,
+    segmentId,
+    supplementId,
+    workspaceId: 'ws_draft',
+  });
+
+  assert.equal(audio.ok, true);
+  if (audio.ok) {
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+        'utf8'
+      )
+    ) as { readonly audioHash?: string };
+    assert.equal(manifest.audioHash, audio.audioHash);
   }
 });
 

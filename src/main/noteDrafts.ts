@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants, lstatSync, mkdirSync } from 'node:fs';
-import { lstat, mkdir, open, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import type { JSONContent } from '@tiptap/core';
@@ -36,6 +36,11 @@ import {
 import { parseTiptapMarkdown } from './tiptapMarkdownCodec.js';
 import { withWorkspaceAsyncQueue } from './workspaceAsyncQueue.js';
 import {
+  noteSpeechSynthesisManifestSchema,
+  type NoteSpeechSynthesisFailureReason,
+  type NoteSpeechSynthesisManifest,
+} from './noteSpeechSynthesisManifest.js';
+import {
   createSafeSupplementId,
   createSafeSegmentId,
   ensureWorkspaceDraftsDirectory,
@@ -43,9 +48,14 @@ import {
   resolveWorkspaceDraftSegmentDirectory,
   resolveWorkspaceDraftSupplementDirectory,
 } from './workspacePaths.js';
+import { MAX_RECORDING_DRAFT_AUDIO_READ_BYTES } from '../workspace-contract/recording-audio.js';
 import {
+  VOICE_SPEECH_SYNTHESIS_MODEL,
+  VOICE_SPEECH_SYNTHESIS_RESOURCE_ID,
+  VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE,
   workspaceSegmentContentTabOrderItemSchema,
   workspaceError,
+  workspaceNoteSpeechSynthesisProjectionSchema,
   type WorkspaceErrorEnvelope,
   type WorkspaceSegmentProjection,
 } from '../workspace-contract/workspace-contract.js';
@@ -53,9 +63,14 @@ import {
 type AssertWorkspaceUsable = () => { readonly ok: true } | WorkspaceErrorEnvelope;
 type MaybePromise<T> = T | Promise<T>;
 
+const NOTE_SPEECH_AUDIO_FILE_NAME = 'speech.mp3';
+const NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX = '.speech-backup-';
+
 let beforeFinalizedNoteMarkdownWriteForTest: (() => MaybePromise<void>) | null = null;
 let beforeNoteFinalizeTargetDirectoryCreateForTest: (() => MaybePromise<void>) | null = null;
+let beforeNoteSpeechSynthesisWriteForTest: (() => MaybePromise<void>) | null = null;
 const finalizedNoteMarkdownSaveQueues = new Map<string, Promise<void>>();
+type NoteSpeechSynthesisProjection = z.infer<typeof workspaceNoteSpeechSynthesisProjectionSchema>;
 
 export function setBeforeFinalizedNoteMarkdownWriteForTest(
   hook: (() => MaybePromise<void>) | null
@@ -67,6 +82,12 @@ export function setBeforeNoteFinalizeTargetDirectoryCreateForTest(
   hook: (() => MaybePromise<void>) | null
 ): void {
   beforeNoteFinalizeTargetDirectoryCreateForTest = hook;
+}
+
+export function setBeforeNoteSpeechSynthesisWriteForTest(
+  hook: (() => MaybePromise<void>) | null
+): void {
+  beforeNoteSpeechSynthesisWriteForTest = hook;
 }
 
 const noteDraftMetadataSchema = z
@@ -119,6 +140,7 @@ const finalizedNoteSegmentManifestSchema = z
     updatedAt: z.string().min(1),
     bodyByteLength: z.number().int().nonnegative(),
     contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
+    speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
   })
   .strict();
 
@@ -147,6 +169,7 @@ const finalizedNoteSupplementManifestSchema = z
     finalizedAt: z.string().min(1),
     updatedAt: z.string().min(1),
     bodyByteLength: z.number().int().nonnegative(),
+    speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
   })
   .strict();
 
@@ -182,6 +205,10 @@ function caughtWorkspaceError(error: unknown): WorkspaceErrorEnvelope | null {
 
 function noteContentHash(bodyMarkdown: string): string {
   return createHash('sha256').update(bodyMarkdown).digest('hex');
+}
+
+function noteSpeechAudioHash(audio: Uint8Array): string {
+  return createHash('sha256').update(audio).digest('hex');
 }
 
 function staleNoteContentError(current: {
@@ -303,6 +330,46 @@ function bodyByteLength(bodyMarkdown: string): number {
   return Buffer.byteLength(bodyMarkdown, 'utf8');
 }
 
+function missingSpeechSynthesisProjection(): NoteSpeechSynthesisProjection {
+  return {
+    status: 'missing',
+    audioByteLength: null,
+    contentHash: null,
+    format: null,
+    lastSynthesisAttempt: 'never',
+    mimeType: null,
+    model: null,
+    reason: null,
+    resourceId: null,
+    sampleRate: null,
+    speaker: null,
+    updatedAt: null,
+  };
+}
+
+function speechSynthesisProjectionFromManifest({
+  manifest,
+  status,
+}: {
+  readonly manifest: NoteSpeechSynthesisManifest;
+  readonly status: 'ready' | 'stale' | 'failed' | 'unsupported';
+}): NoteSpeechSynthesisProjection {
+  return {
+    status,
+    audioByteLength: manifest.audioByteLength,
+    contentHash: manifest.contentHash,
+    format: manifest.format,
+    lastSynthesisAttempt: manifest.lastSynthesisAttempt,
+    mimeType: manifest.mimeType,
+    model: manifest.model,
+    reason: manifest.reason ?? null,
+    resourceId: manifest.resourceId,
+    sampleRate: manifest.sampleRate,
+    speaker: manifest.speaker,
+    updatedAt: manifest.updatedAt,
+  };
+}
+
 type RenderedNoteMarkdown = {
   readonly baselineContentHash: string;
   readonly bodyByteLength: number;
@@ -335,6 +402,111 @@ async function readTextFileNoFollow(filePath: string): Promise<string> {
     return await file.readFile('utf8');
   } finally {
     await file.close().catch(() => {});
+  }
+}
+
+async function readBinaryFileNoFollowBounded({
+  expectedByteLength,
+  filePath,
+  maxBytes,
+}: {
+  readonly expectedByteLength: number;
+  readonly filePath: string;
+  readonly maxBytes: number;
+}): Promise<Uint8Array | null> {
+  let file;
+  try {
+    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    if (['ELOOP', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
+    }
+    throw error;
+  }
+  try {
+    const metadata = await file.stat();
+    if (!metadata.isFile()) {
+      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
+    }
+    if (metadata.size !== expectedByteLength) {
+      return null;
+    }
+    if (metadata.size > maxBytes) {
+      throw workspaceError('ERR_SPEECH_SYNTHESIS_AUDIO_TOO_LARGE', 'Speech audio is too large');
+    }
+    return new Uint8Array(await file.readFile());
+  } finally {
+    await file.close().catch(() => {});
+  }
+}
+
+async function speechAudioFileExistsWithByteLength({
+  expectedByteLength,
+  filePath,
+}: {
+  readonly expectedByteLength: number;
+  readonly filePath: string;
+}): Promise<boolean> {
+  let file;
+  try {
+    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    if (['ELOOP', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
+    }
+    throw error;
+  }
+  try {
+    const metadata = await file.stat();
+    if (!metadata.isFile()) {
+      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
+    }
+    return metadata.size === expectedByteLength;
+  } finally {
+    await file.close().catch(() => {});
+  }
+}
+
+async function backupExistingSpeechAudio({
+  audioPath,
+  backupPath,
+}: {
+  readonly audioPath: string;
+  readonly backupPath: string;
+}): Promise<boolean> {
+  try {
+    const entry = await lstat(audioPath);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Workspace file path is unsafe');
+    }
+    await rename(audioPath, backupPath);
+    return true;
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function restoreSpeechAudioBackup({
+  audioPath,
+  backupCreated,
+  backupPath,
+}: {
+  readonly audioPath: string;
+  readonly backupCreated: boolean;
+  readonly backupPath: string;
+}): Promise<void> {
+  await rm(audioPath, { force: true });
+  if (backupCreated) {
+    await rename(backupPath, audioPath);
   }
 }
 
@@ -1216,6 +1388,33 @@ type ReadNoteSegmentContentResult =
       readonly bodyByteLength: number;
       readonly baselineContentHash: string;
       readonly baselineTiptapContentHash: string;
+      readonly speechSynthesis: NoteSpeechSynthesisProjection;
+    }
+  | WorkspaceErrorEnvelope;
+
+export type NoteSpeechSynthesisSourceResult =
+  | {
+      readonly bodyMarkdown: string;
+      readonly contentHash: string;
+      readonly ok: true;
+      readonly speechSynthesis: NoteSpeechSynthesisProjection;
+    }
+  | WorkspaceErrorEnvelope;
+
+export type NoteSpeechSynthesisSaveResult =
+  | {
+      readonly ok: true;
+      readonly speechSynthesis: NoteSpeechSynthesisProjection;
+    }
+  | WorkspaceErrorEnvelope;
+
+type ReadNoteSpeechAudioResult =
+  | {
+      readonly ok: true;
+      readonly audio: Uint8Array;
+      readonly audioByteLength: number;
+      readonly contentHash: string;
+      readonly mimeType: 'audio/mpeg';
     }
   | WorkspaceErrorEnvelope;
 
@@ -1279,6 +1478,135 @@ async function readNoteMarkdownContent({
   };
 }
 
+async function readNoteSpeechSynthesisMarkdownSource({
+  currentManifest,
+  filePath,
+  objectDirectory,
+  objectType,
+}: {
+  readonly currentManifest: FinalizedNoteSegmentManifest | FinalizedNoteSupplementManifest;
+  readonly filePath: string;
+  readonly objectDirectory: string;
+  readonly objectType: 'segment' | 'supplement';
+}): Promise<NoteSpeechSynthesisSourceResult> {
+  const rawMarkdown = await readTextFileNoFollow(filePath);
+  const parsed = parseWorkspaceMarkdownObject({
+    markdown: rawMarkdown,
+    objectType,
+  });
+  if (!('kind' in parsed.data) || parsed.data.kind !== 'note') {
+    throw workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'Workspace content is not a note');
+  }
+  const contentHash = noteContentHash(parsed.content);
+  const speechContent = await readNoteSpeechSynthesisContent({
+    currentContentHash: contentHash,
+    manifest: currentManifest,
+    objectDirectory,
+  });
+  return {
+    bodyMarkdown: parsed.content,
+    contentHash,
+    ok: true,
+    speechSynthesis: speechContent.speechSynthesis,
+  };
+}
+
+async function readNoteSpeechSynthesisContent({
+  currentContentHash,
+  manifest,
+  objectDirectory,
+}: {
+  readonly currentContentHash: string;
+  readonly manifest: FinalizedNoteSegmentManifest | FinalizedNoteSupplementManifest;
+  readonly objectDirectory: string;
+}): Promise<{
+  readonly speechSynthesis: NoteSpeechSynthesisProjection;
+}> {
+  if (!manifest.speechSynthesis) {
+    return {
+      speechSynthesis: missingSpeechSynthesisProjection(),
+    };
+  }
+  const speechAudioExists = await speechAudioFileExistsWithByteLength({
+    expectedByteLength: manifest.speechSynthesis.audioByteLength,
+    filePath: path.join(objectDirectory, NOTE_SPEECH_AUDIO_FILE_NAME),
+  });
+  if (
+    !speechAudioExists ||
+    manifest.speechSynthesis.lastSynthesisAttempt !== 'success' ||
+    !manifest.speechSynthesis.audioHash
+  ) {
+    return {
+      speechSynthesis: speechSynthesisProjectionFromManifest({
+        manifest: manifest.speechSynthesis,
+        status: manifest.speechSynthesis.reason === 'text-too-long' ? 'unsupported' : 'failed',
+      }),
+    };
+  }
+  return {
+    speechSynthesis: speechSynthesisProjectionFromManifest({
+      manifest: manifest.speechSynthesis,
+      status: manifest.speechSynthesis.contentHash === currentContentHash ? 'ready' : 'stale',
+    }),
+  };
+}
+
+async function readNoteSpeechAudio({
+  contentHash,
+  expectedByteLength,
+  manifest,
+  objectDirectory,
+  speaker,
+  updatedAt,
+}: {
+  readonly contentHash: string;
+  readonly expectedByteLength: number;
+  readonly manifest: FinalizedNoteSegmentManifest | FinalizedNoteSupplementManifest;
+  readonly objectDirectory: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly updatedAt: string;
+}): Promise<ReadNoteSpeechAudioResult> {
+  const speechSynthesis = manifest.speechSynthesis;
+  if (
+    !speechSynthesis ||
+    speechSynthesis.lastSynthesisAttempt !== 'success' ||
+    !speechSynthesis.audioHash ||
+    speechSynthesis.contentHash !== contentHash ||
+    speechSynthesis.audioByteLength !== expectedByteLength ||
+    speechSynthesis.speaker !== speaker ||
+    speechSynthesis.updatedAt !== updatedAt
+  ) {
+    return workspaceError(
+      'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+      'Speech synthesis audio is not available'
+    );
+  }
+  const audio = await readBinaryFileNoFollowBounded({
+    expectedByteLength,
+    filePath: path.join(objectDirectory, NOTE_SPEECH_AUDIO_FILE_NAME),
+    maxBytes: MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  });
+  if (!audio) {
+    return workspaceError(
+      'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+      'Speech synthesis audio is not available'
+    );
+  }
+  if (noteSpeechAudioHash(audio) !== speechSynthesis.audioHash) {
+    return workspaceError(
+      'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+      'Speech synthesis audio is not available'
+    );
+  }
+  return {
+    audio,
+    audioByteLength: audio.byteLength,
+    contentHash,
+    mimeType: 'audio/mpeg',
+    ok: true,
+  };
+}
+
 export async function readFinalizedNoteSegmentContent({
   rootPath,
   workspaceId,
@@ -1330,7 +1658,16 @@ export async function readFinalizedNoteSegmentContent({
     }
     const { bodyMarkdownChanged: _bodyMarkdownChanged, ...responseContent } = content;
     void _bodyMarkdownChanged;
-    return { ok: true, ...responseContent };
+    const speechContent = await readNoteSpeechSynthesisContent({
+      currentContentHash: content.baselineContentHash,
+      manifest,
+      objectDirectory: segmentDirectory,
+    });
+    return {
+      ok: true,
+      ...responseContent,
+      ...speechContent,
+    };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
@@ -1402,7 +1739,16 @@ export async function readFinalizedNoteSegmentSupplementContent({
     }
     const { bodyMarkdownChanged: _bodyMarkdownChanged, ...responseContent } = content;
     void _bodyMarkdownChanged;
-    return { ok: true, ...responseContent };
+    const speechContent = await readNoteSpeechSynthesisContent({
+      currentContentHash: content.baselineContentHash,
+      manifest,
+      objectDirectory: supplementDirectory,
+    });
+    return {
+      ok: true,
+      ...responseContent,
+      ...speechContent,
+    };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
@@ -1412,8 +1758,798 @@ export async function readFinalizedNoteSegmentSupplementContent({
   }
 }
 
+export async function readFinalizedNoteSegmentSpeechSynthesisSource(input: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly workspaceId: string;
+}): Promise<NoteSpeechSynthesisSourceResult> {
+  try {
+    const usable = checkWorkspaceUsable(input.assertWorkspaceUsable);
+    if (usable) {
+      return usable;
+    }
+    const manifest = await readNoteSegmentManifest(input.rootPath, input.segmentId);
+    assertFinalizedNoteSegmentManifestOwnership(manifest, {
+      workspaceId: input.workspaceId,
+      memoryId: input.memoryId,
+      segmentId: input.segmentId,
+    });
+    const segmentDirectory = await memorySegmentDirectory(
+      input.rootPath,
+      input.memoryId,
+      input.segmentId
+    );
+    return await readNoteSpeechSynthesisMarkdownSource({
+      currentManifest: manifest,
+      filePath: path.join(segmentDirectory, 'segment.md'),
+      objectDirectory: segmentDirectory,
+      objectType: 'segment',
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ??
+      workspaceError(
+        'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+        'Note speech source could not be read'
+      )
+    );
+  }
+}
+
+export async function readFinalizedNoteSegmentSpeechAudio({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  contentHash,
+  audioByteLength,
+  speaker,
+  updatedAt,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly contentHash: string;
+  readonly audioByteLength: number;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly updatedAt: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<ReadNoteSpeechAudioResult> {
+  try {
+    const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (usable) {
+      return usable;
+    }
+    const manifest = await readNoteSegmentManifest(rootPath, segmentId);
+    assertFinalizedNoteSegmentManifestOwnership(manifest, { workspaceId, memoryId, segmentId });
+    await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    return await readNoteSpeechAudio({
+      contentHash,
+      expectedByteLength: audioByteLength,
+      manifest,
+      objectDirectory: segmentDirectory,
+      speaker,
+      updatedAt,
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ??
+      workspaceError('ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE', 'Speech audio could not be read')
+    );
+  }
+}
+
+export async function readFinalizedNoteSegmentSupplementSpeechAudio({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  contentHash,
+  audioByteLength,
+  speaker,
+  updatedAt,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly contentHash: string;
+  readonly audioByteLength: number;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly updatedAt: string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<ReadNoteSpeechAudioResult> {
+  try {
+    const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (usable) {
+      return usable;
+    }
+    const manifest = await readNoteSupplementManifest(rootPath, supplementId);
+    assertFinalizedNoteSupplementManifestOwnership(manifest, {
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId,
+    });
+    await assertNoDuplicateSegmentDirectoryById(rootPath, memoryId, segmentId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath,
+      memoryId,
+      segmentDirectory,
+      segmentId,
+      supplementId,
+    });
+    return await readNoteSpeechAudio({
+      contentHash,
+      expectedByteLength: audioByteLength,
+      manifest,
+      objectDirectory: supplementDirectory,
+      speaker,
+      updatedAt,
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ??
+      workspaceError('ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE', 'Speech audio could not be read')
+    );
+  }
+}
+
+export async function readFinalizedNoteSegmentSupplementSpeechSynthesisSource(input: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly workspaceId: string;
+}): Promise<NoteSpeechSynthesisSourceResult> {
+  try {
+    const usable = checkWorkspaceUsable(input.assertWorkspaceUsable);
+    if (usable) {
+      return usable;
+    }
+    const manifest = await readNoteSupplementManifest(input.rootPath, input.supplementId);
+    assertFinalizedNoteSupplementManifestOwnership(manifest, {
+      workspaceId: input.workspaceId,
+      memoryId: input.memoryId,
+      segmentId: input.segmentId,
+      supplementId: input.supplementId,
+    });
+    const segmentDirectory = await memorySegmentDirectory(
+      input.rootPath,
+      input.memoryId,
+      input.segmentId
+    );
+    const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath: input.rootPath,
+      memoryId: input.memoryId,
+      segmentDirectory,
+      segmentId: input.segmentId,
+      supplementId: input.supplementId,
+    });
+    return await readNoteSpeechSynthesisMarkdownSource({
+      currentManifest: manifest,
+      filePath: path.join(supplementDirectory, 'supplement.md'),
+      objectDirectory: supplementDirectory,
+      objectType: 'supplement',
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ??
+      workspaceError(
+        'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+        'Note supplement speech source could not be read'
+      )
+    );
+  }
+}
+
+async function saveNoteSpeechSynthesis({
+  assertWorkspaceUsable,
+  audio,
+  contentHash,
+  expected,
+  manifest,
+  manifestPath,
+  now,
+  objectDirectory,
+  speaker,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly audio: Uint8Array;
+  readonly contentHash: string;
+  readonly expected:
+    | {
+        readonly objectType: 'segment';
+        readonly workspaceId: string;
+        readonly memoryId: string;
+        readonly segmentId: string;
+      }
+    | {
+        readonly objectType: 'supplement';
+        readonly workspaceId: string;
+        readonly memoryId: string;
+        readonly segmentId: string;
+        readonly supplementId: string;
+      };
+  readonly manifest: FinalizedNoteSegmentManifest | FinalizedNoteSupplementManifest;
+  readonly manifestPath: string;
+  readonly now: () => string;
+  readonly objectDirectory: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  if (expected.objectType === 'segment') {
+    assertFinalizedNoteSegmentManifestOwnership(manifest as FinalizedNoteSegmentManifest, expected);
+  } else {
+    assertFinalizedNoteSupplementManifestOwnership(
+      manifest as FinalizedNoteSupplementManifest,
+      expected
+    );
+  }
+  const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
+  const audioPath = path.join(objectDirectory, NOTE_SPEECH_AUDIO_FILE_NAME);
+  const backupPath = path.join(
+    objectDirectory,
+    `${NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX}${process.pid}-${Date.now()}-${process.hrtime.bigint()}.mp3`
+  );
+  const backupCreated = await backupExistingSpeechAudio({ audioPath, backupPath });
+  const updatedAt = now();
+  const updatedManifest = {
+    ...manifest,
+    speechSynthesis: {
+      audioByteLength: audio.byteLength,
+      audioHash: noteSpeechAudioHash(audio),
+      contentHash,
+      format: 'mp3' as const,
+      lastSynthesisAttempt: 'success' as const,
+      mimeType: 'audio/mpeg' as const,
+      model: VOICE_SPEECH_SYNTHESIS_MODEL,
+      resourceId: VOICE_SPEECH_SYNTHESIS_RESOURCE_ID,
+      sampleRate: VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE,
+      speaker,
+      updatedAt,
+    },
+    updatedAt,
+  };
+  try {
+    await writeWorkspaceFileAtomic(audioPath, audio, assertUsable);
+    await writeWorkspaceFileAtomic(
+      manifestPath,
+      `${JSON.stringify(updatedManifest, null, 2)}\n`,
+      assertUsable
+    );
+  } catch (error) {
+    await restoreSpeechAudioBackup({ audioPath, backupCreated, backupPath });
+    throw error;
+  }
+  if (backupCreated) {
+    await rm(backupPath, { force: true }).catch(() => {});
+  }
+  const speechContent = await readNoteSpeechSynthesisContent({
+    currentContentHash: contentHash,
+    manifest: updatedManifest,
+    objectDirectory,
+  });
+  return { ok: true, speechSynthesis: speechContent.speechSynthesis };
+}
+
+export async function saveFinalizedNoteSegmentSpeechSynthesis({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  expectedContentHash,
+  audio,
+  allowOverwrite = true,
+  speaker,
+  now = () => new Date().toISOString(),
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly expectedContentHash: string;
+  readonly audio: Uint8Array;
+  readonly allowOverwrite?: boolean;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly now?: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  return withFinalizedNoteMarkdownSaveQueue(`${rootPath}:${memoryId}:${segmentId}:segment.md`, () =>
+    saveFinalizedNoteSegmentSpeechSynthesisNow({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      expectedContentHash,
+      audio,
+      allowOverwrite,
+      speaker,
+      now,
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+    })
+  );
+}
+
+async function saveFinalizedNoteSegmentSpeechSynthesisNow({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  expectedContentHash,
+  audio,
+  allowOverwrite,
+  speaker,
+  now,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly expectedContentHash: string;
+  readonly audio: Uint8Array;
+  readonly allowOverwrite: boolean;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  try {
+    const manifestPath = noteSegmentManifestPath(rootPath, segmentId);
+    const manifest = await readNoteSegmentManifest(rootPath, segmentId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const content = await readNoteMarkdownContent({
+      filePath: path.join(segmentDirectory, 'segment.md'),
+      objectDirectory: segmentDirectory,
+      objectType: 'segment',
+      assertWorkspaceUsable,
+    });
+    if (content.baselineContentHash !== expectedContentHash) {
+      return workspaceError('ERR_SPEECH_SYNTHESIS_NOTE_CHANGED', 'Note changed before save');
+    }
+    if (!allowOverwrite) {
+      const currentSpeech = await readNoteSpeechSynthesisContent({
+        currentContentHash: content.baselineContentHash,
+        manifest,
+        objectDirectory: segmentDirectory,
+      });
+      if (
+        currentSpeech.speechSynthesis.status === 'ready' ||
+        currentSpeech.speechSynthesis.status === 'failed' ||
+        currentSpeech.speechSynthesis.status === 'unsupported'
+      ) {
+        return { ok: true, speechSynthesis: currentSpeech.speechSynthesis };
+      }
+    }
+    await beforeNoteSpeechSynthesisWriteForTest?.();
+    const saved = await saveNoteSpeechSynthesis({
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      audio,
+      contentHash: content.baselineContentHash,
+      expected: { objectType: 'segment', workspaceId, memoryId, segmentId },
+      manifest,
+      manifestPath,
+      now,
+      objectDirectory: segmentDirectory,
+      speaker,
+    });
+    await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable).catch(() => {});
+    return saved;
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ?? workspaceError('ERR_SPEECH_SYNTHESIS_WRITE_FAILED', 'Speech could not be saved')
+    );
+  }
+}
+
+export async function saveFinalizedNoteSegmentSupplementSpeechSynthesis({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  expectedContentHash,
+  audio,
+  allowOverwrite = true,
+  speaker,
+  now = () => new Date().toISOString(),
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly expectedContentHash: string;
+  readonly audio: Uint8Array;
+  readonly allowOverwrite?: boolean;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly now?: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  return withFinalizedNoteMarkdownSaveQueue(
+    `${rootPath}:${memoryId}:${segmentId}:${supplementId}:supplement.md`,
+    () =>
+      saveFinalizedNoteSegmentSupplementSpeechSynthesisNow({
+        rootPath,
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        expectedContentHash,
+        audio,
+        allowOverwrite,
+        speaker,
+        now,
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      })
+  );
+}
+
+async function saveFinalizedNoteSegmentSupplementSpeechSynthesisNow({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  expectedContentHash,
+  audio,
+  allowOverwrite,
+  speaker,
+  now,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly expectedContentHash: string;
+  readonly audio: Uint8Array;
+  readonly allowOverwrite: boolean;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  try {
+    const manifestPath = noteSupplementManifestPath(rootPath, supplementId);
+    const manifest = await readNoteSupplementManifest(rootPath, supplementId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath,
+      memoryId,
+      segmentDirectory,
+      segmentId,
+      supplementId,
+    });
+    const content = await readNoteMarkdownContent({
+      filePath: path.join(supplementDirectory, 'supplement.md'),
+      objectDirectory: supplementDirectory,
+      objectType: 'supplement',
+      assertWorkspaceUsable,
+    });
+    if (content.baselineContentHash !== expectedContentHash) {
+      return workspaceError('ERR_SPEECH_SYNTHESIS_NOTE_CHANGED', 'Note changed before save');
+    }
+    if (!allowOverwrite) {
+      const currentSpeech = await readNoteSpeechSynthesisContent({
+        currentContentHash: content.baselineContentHash,
+        manifest,
+        objectDirectory: supplementDirectory,
+      });
+      if (
+        currentSpeech.speechSynthesis.status === 'ready' ||
+        currentSpeech.speechSynthesis.status === 'failed' ||
+        currentSpeech.speechSynthesis.status === 'unsupported'
+      ) {
+        return { ok: true, speechSynthesis: currentSpeech.speechSynthesis };
+      }
+    }
+    await beforeNoteSpeechSynthesisWriteForTest?.();
+    const saved = await saveNoteSpeechSynthesis({
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      audio,
+      contentHash: content.baselineContentHash,
+      expected: { objectType: 'supplement', workspaceId, memoryId, segmentId, supplementId },
+      manifest,
+      manifestPath,
+      now,
+      objectDirectory: supplementDirectory,
+      speaker,
+    });
+    await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable).catch(() => {});
+    return saved;
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ?? workspaceError('ERR_SPEECH_SYNTHESIS_WRITE_FAILED', 'Speech could not be saved')
+    );
+  }
+}
+
+async function markNoteSpeechSynthesisFailed({
+  assertWorkspaceUsable,
+  contentHash,
+  expected,
+  manifest,
+  manifestPath,
+  now,
+  reason,
+  speaker,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly contentHash: string;
+  readonly expected:
+    | {
+        readonly objectType: 'segment';
+        readonly workspaceId: string;
+        readonly memoryId: string;
+        readonly segmentId: string;
+      }
+    | {
+        readonly objectType: 'supplement';
+        readonly workspaceId: string;
+        readonly memoryId: string;
+        readonly segmentId: string;
+        readonly supplementId: string;
+      };
+  readonly manifest: FinalizedNoteSegmentManifest | FinalizedNoteSupplementManifest;
+  readonly manifestPath: string;
+  readonly now: () => string;
+  readonly reason?: NoteSpeechSynthesisFailureReason;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  if (expected.objectType === 'segment') {
+    assertFinalizedNoteSegmentManifestOwnership(manifest as FinalizedNoteSegmentManifest, expected);
+  } else {
+    assertFinalizedNoteSupplementManifestOwnership(
+      manifest as FinalizedNoteSupplementManifest,
+      expected
+    );
+  }
+  const updatedAt = now();
+  const updatedManifest = {
+    ...manifest,
+    speechSynthesis: {
+      audioByteLength: 0,
+      audioHash: null,
+      contentHash,
+      format: 'mp3' as const,
+      lastSynthesisAttempt: 'failed' as const,
+      mimeType: 'audio/mpeg' as const,
+      model: VOICE_SPEECH_SYNTHESIS_MODEL,
+      reason: reason ?? null,
+      resourceId: VOICE_SPEECH_SYNTHESIS_RESOURCE_ID,
+      sampleRate: VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE,
+      speaker,
+      updatedAt,
+    },
+    updatedAt,
+  };
+  await writeWorkspaceJsonAtomic(
+    manifestPath,
+    updatedManifest,
+    workspaceWriteAssert(assertWorkspaceUsable)
+  );
+  return {
+    ok: true,
+    speechSynthesis: speechSynthesisProjectionFromManifest({
+      manifest: updatedManifest.speechSynthesis,
+      status: reason === 'text-too-long' ? 'unsupported' : 'failed',
+    }),
+  };
+}
+
+export async function markFinalizedNoteSegmentSpeechSynthesisFailed({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  expectedContentHash,
+  speaker,
+  reason,
+  now = () => new Date().toISOString(),
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly expectedContentHash: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly reason?: NoteSpeechSynthesisFailureReason;
+  readonly now?: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  return withFinalizedNoteMarkdownSaveQueue(`${rootPath}:${memoryId}:${segmentId}:segment.md`, () =>
+    markFinalizedNoteSegmentSpeechSynthesisFailedNow({
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      expectedContentHash,
+      speaker,
+      ...(reason ? { reason } : {}),
+      now,
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+    })
+  );
+}
+
+async function markFinalizedNoteSegmentSpeechSynthesisFailedNow({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  expectedContentHash,
+  speaker,
+  reason,
+  now,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly expectedContentHash: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly reason?: NoteSpeechSynthesisFailureReason;
+  readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  try {
+    const manifestPath = noteSegmentManifestPath(rootPath, segmentId);
+    const manifest = await readNoteSegmentManifest(rootPath, segmentId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const content = await readNoteMarkdownContent({
+      filePath: path.join(segmentDirectory, 'segment.md'),
+      objectDirectory: segmentDirectory,
+      objectType: 'segment',
+      assertWorkspaceUsable,
+    });
+    if (content.baselineContentHash !== expectedContentHash) {
+      return workspaceError('ERR_SPEECH_SYNTHESIS_NOTE_CHANGED', 'Note changed before save');
+    }
+    await beforeNoteSpeechSynthesisWriteForTest?.();
+    return await markNoteSpeechSynthesisFailed({
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      contentHash: content.baselineContentHash,
+      expected: { objectType: 'segment', workspaceId, memoryId, segmentId },
+      manifest,
+      manifestPath,
+      now,
+      ...(reason ? { reason } : {}),
+      speaker,
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ?? workspaceError('ERR_SPEECH_SYNTHESIS_WRITE_FAILED', 'Speech could not be saved')
+    );
+  }
+}
+
+export async function markFinalizedNoteSegmentSupplementSpeechSynthesisFailed({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  expectedContentHash,
+  speaker,
+  reason,
+  now = () => new Date().toISOString(),
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly expectedContentHash: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly reason?: NoteSpeechSynthesisFailureReason;
+  readonly now?: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  return withFinalizedNoteMarkdownSaveQueue(
+    `${rootPath}:${memoryId}:${segmentId}:${supplementId}:supplement.md`,
+    () =>
+      markFinalizedNoteSegmentSupplementSpeechSynthesisFailedNow({
+        rootPath,
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        expectedContentHash,
+        speaker,
+        ...(reason ? { reason } : {}),
+        now,
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      })
+  );
+}
+
+async function markFinalizedNoteSegmentSupplementSpeechSynthesisFailedNow({
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  expectedContentHash,
+  speaker,
+  reason,
+  now,
+  assertWorkspaceUsable,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly expectedContentHash: string;
+  readonly speaker: NoteSpeechSynthesisManifest['speaker'];
+  readonly reason?: NoteSpeechSynthesisFailureReason;
+  readonly now: () => string;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<NoteSpeechSynthesisSaveResult> {
+  try {
+    const manifestPath = noteSupplementManifestPath(rootPath, supplementId);
+    const manifest = await readNoteSupplementManifest(rootPath, supplementId);
+    const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
+    const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+      rootPath,
+      memoryId,
+      segmentDirectory,
+      segmentId,
+      supplementId,
+    });
+    const content = await readNoteMarkdownContent({
+      filePath: path.join(supplementDirectory, 'supplement.md'),
+      objectDirectory: supplementDirectory,
+      objectType: 'supplement',
+      assertWorkspaceUsable,
+    });
+    if (content.baselineContentHash !== expectedContentHash) {
+      return workspaceError('ERR_SPEECH_SYNTHESIS_NOTE_CHANGED', 'Note changed before save');
+    }
+    await beforeNoteSpeechSynthesisWriteForTest?.();
+    return await markNoteSpeechSynthesisFailed({
+      ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+      contentHash: content.baselineContentHash,
+      expected: { objectType: 'supplement', workspaceId, memoryId, segmentId, supplementId },
+      manifest,
+      manifestPath,
+      now,
+      ...(reason ? { reason } : {}),
+      speaker,
+    });
+  } catch (error) {
+    const envelope = caughtWorkspaceError(error);
+    return (
+      envelope ?? workspaceError('ERR_SPEECH_SYNTHESIS_WRITE_FAILED', 'Speech could not be saved')
+    );
+  }
+}
+
 async function updateManifestUpdatedAt({
   assertWorkspaceUsable,
+  clearSpeechSynthesis = false,
   expected,
   manifest,
   manifestPath,
@@ -1421,6 +2557,7 @@ async function updateManifestUpdatedAt({
   now,
 }: {
   readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
+  readonly clearSpeechSynthesis?: boolean;
   readonly expected:
     | {
         readonly objectType: 'segment';
@@ -1448,13 +2585,17 @@ async function updateManifestUpdatedAt({
       expected
     );
   }
+  const updatedManifest = {
+    ...manifest,
+    updatedAt: now(),
+    bodyByteLength,
+  };
+  if (clearSpeechSynthesis) {
+    delete updatedManifest.speechSynthesis;
+  }
   await writeWorkspaceJsonAtomic(
     manifestPath,
-    {
-      ...manifest,
-      updatedAt: now(),
-      bodyByteLength,
-    },
+    updatedManifest,
     workspaceWriteAssert(assertWorkspaceUsable)
   );
 }
@@ -1463,6 +2604,9 @@ async function restoreOriginalFinalizedNoteFiles({
   assertWorkspaceUsable,
   manifestPath,
   markdownPath,
+  speechAudioBackupCreated = false,
+  speechAudioBackupPath = null,
+  speechAudioPath = null,
   sidecarPath,
   originalManifest,
   originalMarkdown,
@@ -1471,6 +2615,9 @@ async function restoreOriginalFinalizedNoteFiles({
   readonly assertWorkspaceUsable: AssertWorkspaceUsable | undefined;
   readonly manifestPath: string;
   readonly markdownPath: string | null;
+  readonly speechAudioBackupCreated?: boolean;
+  readonly speechAudioBackupPath?: string | null;
+  readonly speechAudioPath?: string | null;
   readonly sidecarPath: string | null;
   readonly originalManifest: string | null;
   readonly originalMarkdown: string | null;
@@ -1490,6 +2637,13 @@ async function restoreOriginalFinalizedNoteFiles({
       }
     }
     await writeWorkspaceFileAtomic(manifestPath, originalManifest, assertUsable);
+    if (speechAudioPath !== null && speechAudioBackupPath !== null) {
+      await restoreSpeechAudioBackup({
+        audioPath: speechAudioPath,
+        backupCreated: speechAudioBackupCreated,
+        backupPath: speechAudioBackupPath,
+      });
+    }
   } catch {
     // The caller reports update failure; failed rollback means the file may be index-stale.
   }
@@ -1579,6 +2733,9 @@ async function writeFinalizedNoteSegmentContentNow({
   let originalManifest: string | null = null;
   let originalSidecar: string | null = null;
   let segmentPath: string | null = null;
+  let speechAudioBackupCreated = false;
+  let speechAudioBackupPath: string | null = null;
+  let speechAudioPath: string | null = null;
   let sidecarPath: string | null = null;
   let finalizedWriteStarted = false;
   try {
@@ -1620,6 +2777,18 @@ async function writeFinalizedNoteSegmentContentNow({
       title: current.title,
       bodyMarkdown,
     });
+    const clearSpeechSynthesis = rendered.bodyMarkdown.trim().length === 0;
+    if (clearSpeechSynthesis) {
+      speechAudioPath = path.join(segmentDirectory, NOTE_SPEECH_AUDIO_FILE_NAME);
+      speechAudioBackupPath = path.join(
+        segmentDirectory,
+        `${NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX}${process.pid}-${Date.now()}-${process.hrtime.bigint()}.mp3`
+      );
+      speechAudioBackupCreated = await backupExistingSpeechAudio({
+        audioPath: speechAudioPath,
+        backupPath: speechAudioBackupPath,
+      });
+    }
     await writeWorkspaceFileAtomic(segmentPath, rendered.markdown, assertUsable);
     const savedTiptapJson = bodyTiptapJson ?? parseTiptapMarkdown(bodyMarkdown);
     const savedSidecar = await writeTiptapContentSidecar({
@@ -1639,8 +2808,12 @@ async function writeFinalizedNoteSegmentContentNow({
       manifest,
       manifestPath,
       bodyByteLength: rendered.bodyByteLength,
+      clearSpeechSynthesis,
       now,
     });
+    if (speechAudioBackupCreated && speechAudioBackupPath !== null) {
+      await rm(speechAudioBackupPath, { force: true }).catch(() => {});
+    }
     await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
     return {
       ok: true,
@@ -1655,6 +2828,9 @@ async function writeFinalizedNoteSegmentContentNow({
         assertWorkspaceUsable,
         manifestPath: noteSegmentManifestPath(rootPath, segmentId),
         markdownPath: segmentPath,
+        speechAudioBackupCreated,
+        speechAudioBackupPath,
+        speechAudioPath,
         sidecarPath,
         originalManifest,
         originalMarkdown,
@@ -1759,6 +2935,9 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
   let originalMarkdown: string | null = null;
   let originalManifest: string | null = null;
   let originalSidecar: string | null = null;
+  let speechAudioBackupCreated = false;
+  let speechAudioBackupPath: string | null = null;
+  let speechAudioPath: string | null = null;
   let supplementPath: string | null = null;
   let sidecarPath: string | null = null;
   let finalizedWriteStarted = false;
@@ -1809,6 +2988,18 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
       title: current.title,
       bodyMarkdown,
     });
+    const clearSpeechSynthesis = rendered.bodyMarkdown.trim().length === 0;
+    if (clearSpeechSynthesis) {
+      speechAudioPath = path.join(supplementDirectory, NOTE_SPEECH_AUDIO_FILE_NAME);
+      speechAudioBackupPath = path.join(
+        supplementDirectory,
+        `${NOTE_SPEECH_AUDIO_BACKUP_FILE_PREFIX}${process.pid}-${Date.now()}-${process.hrtime.bigint()}.mp3`
+      );
+      speechAudioBackupCreated = await backupExistingSpeechAudio({
+        audioPath: speechAudioPath,
+        backupPath: speechAudioBackupPath,
+      });
+    }
     await writeWorkspaceFileAtomic(supplementPath, rendered.markdown, assertUsable);
     const savedTiptapJson = bodyTiptapJson ?? parseTiptapMarkdown(bodyMarkdown);
     const savedSidecar = await writeTiptapContentSidecar({
@@ -1829,8 +3020,12 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
       manifest,
       manifestPath,
       bodyByteLength: rendered.bodyByteLength,
+      clearSpeechSynthesis,
       now,
     });
+    if (speechAudioBackupCreated && speechAudioBackupPath !== null) {
+      await rm(speechAudioBackupPath, { force: true }).catch(() => {});
+    }
     await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
     return {
       ok: true,
@@ -1845,6 +3040,9 @@ async function writeFinalizedNoteSegmentSupplementContentNow({
         assertWorkspaceUsable,
         manifestPath: noteSupplementManifestPath(rootPath, supplementId),
         markdownPath: supplementPath,
+        speechAudioBackupCreated,
+        speechAudioBackupPath,
+        speechAudioPath,
         sidecarPath,
         originalManifest,
         originalMarkdown,

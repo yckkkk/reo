@@ -24,6 +24,26 @@ export type WorkspaceSegmentContentTabOrderItem = z.infer<
 export const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
 export type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
 export const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
+export const SPEECH_SYNTHESIS_ATTEMPTS = ['success', 'failed', 'never'] as const;
+export type SpeechSynthesisAttempt = (typeof SPEECH_SYNTHESIS_ATTEMPTS)[number];
+export const speechSynthesisAttemptSchema = z.enum(SPEECH_SYNTHESIS_ATTEMPTS);
+export const NOTE_SPEECH_SYNTHESIS_FAILURE_REASONS = ['text-too-long'] as const;
+export type NoteSpeechSynthesisFailureReason =
+  (typeof NOTE_SPEECH_SYNTHESIS_FAILURE_REASONS)[number];
+export const noteSpeechSynthesisFailureReasonSchema = z.enum(NOTE_SPEECH_SYNTHESIS_FAILURE_REASONS);
+export const VOICE_SPEECH_SYNTHESIS_SPEAKERS = [
+  'zh_female_vv_uranus_bigtts',
+  'zh_female_xiaohe_uranus_bigtts',
+  'zh_male_m191_uranus_bigtts',
+  'zh_male_shaonianzixin_uranus_bigtts',
+] as const;
+export type VoiceSpeechSynthesisSpeaker = (typeof VOICE_SPEECH_SYNTHESIS_SPEAKERS)[number];
+export const voiceSpeechSynthesisSpeakerSchema = z.enum(VOICE_SPEECH_SYNTHESIS_SPEAKERS);
+export const DEFAULT_VOICE_SPEECH_SYNTHESIS_SPEAKER =
+  'zh_female_vv_uranus_bigtts' as const satisfies VoiceSpeechSynthesisSpeaker;
+export const VOICE_SPEECH_SYNTHESIS_MODEL = 'seed-tts-2.0-expressive' as const;
+export const VOICE_SPEECH_SYNTHESIS_RESOURCE_ID = 'seed-tts-2.0' as const;
+export const VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE = 24000 as const;
 export const WORKSPACE_CONTENT_KINDS = ['audio', 'note'] as const;
 export type WorkspaceContentKind = (typeof WORKSPACE_CONTENT_KINDS)[number];
 export const FINALIZE_TRANSCRIPTION_ATTEMPTS = [
@@ -168,9 +188,19 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_BACKFILL_TARGET_NOT_ELIGIBLE',
   'ERR_BACKFILL_TRANSCRIPT_CHANGED',
   'ERR_BACKFILL_UNAVAILABLE',
+  'ERR_SPEECH_SYNTHESIS_ALREADY_RUNNING',
+  'ERR_SPEECH_SYNTHESIS_AUDIO_TOO_LARGE',
+  'ERR_SPEECH_SYNTHESIS_AUTH_FAILED',
+  'ERR_SPEECH_SYNTHESIS_NOTE_CHANGED',
+  'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+  'ERR_SPEECH_SYNTHESIS_TEXT_EMPTY',
+  'ERR_SPEECH_SYNTHESIS_TEXT_TOO_LONG',
+  'ERR_SPEECH_SYNTHESIS_UNAVAILABLE',
+  'ERR_SPEECH_SYNTHESIS_WRITE_FAILED',
   'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
   'ERR_VOICE_SETTINGS_WRITE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+  'ERR_VOICE_SPEECH_SYNTHESIS_PROBE_FAILED',
   'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
   'ERR_MARKDOWN_EXTERNAL_LINK_REJECTED',
   'ERR_WORKSPACE_INDEX_WRITE_FAILED',
@@ -405,9 +435,13 @@ export const voiceTranscriptionSettingsSnapshotSchema = z.strictObject({
   enabled: z.boolean(),
   apiKeyConfigured: z.boolean(),
   apiKeyLastFour: z.string().length(4).nullable(),
-  lastValidatedAt: z.string().nullable(),
-  lastValidationOk: z.boolean().nullable(),
-  lastValidationCode: z.enum(['ok', 'auth', 'network']).nullable(),
+  speechSynthesisSpeaker: voiceSpeechSynthesisSpeakerSchema,
+  lastTranscriptionValidatedAt: z.string().nullable(),
+  lastTranscriptionValidationOk: z.boolean().nullable(),
+  lastTranscriptionValidationCode: z.enum(['ok', 'auth', 'network']).nullable(),
+  lastSpeechSynthesisValidatedAt: z.string().nullable(),
+  lastSpeechSynthesisValidationOk: z.boolean().nullable(),
+  lastSpeechSynthesisValidationCode: z.enum(['ok', 'auth', 'network']).nullable(),
 });
 
 const voiceTranscriptionSettingsResponseValueSchema = z.strictObject({
@@ -429,6 +463,13 @@ export const workspaceSetVoiceTranscriptionEnabledRequestSchema = z.strictObject
 });
 
 export const workspaceSetVoiceTranscriptionEnabledResponseSchema =
+  workspaceReadVoiceTranscriptionSettingsResponseSchema;
+
+export const workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema = z.strictObject({
+  speaker: voiceSpeechSynthesisSpeakerSchema,
+});
+
+export const workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema =
   workspaceReadVoiceTranscriptionSettingsResponseSchema;
 
 export const workspaceSaveVoiceTranscriptionApiKeyRequestSchema = z.strictObject({
@@ -506,6 +547,29 @@ export const workspaceMemorySummarySchema = z.strictObject({
   hasAnyNote: z.boolean(),
   supplementCount: z.number().int().nonnegative(),
   cover: workspaceMemoryCoverProjectionSchema.optional(),
+});
+
+export const workspaceNoteSpeechSynthesisStatusSchema = z.enum([
+  'missing',
+  'ready',
+  'stale',
+  'failed',
+  'unsupported',
+]);
+
+export const workspaceNoteSpeechSynthesisProjectionSchema = z.strictObject({
+  status: workspaceNoteSpeechSynthesisStatusSchema,
+  audioByteLength: z.number().int().nonnegative().nullable(),
+  contentHash: workspaceContentHashSchema.nullable(),
+  format: z.literal('mp3').nullable(),
+  lastSynthesisAttempt: speechSynthesisAttemptSchema,
+  mimeType: z.literal('audio/mpeg').nullable(),
+  model: z.literal(VOICE_SPEECH_SYNTHESIS_MODEL).nullable(),
+  reason: noteSpeechSynthesisFailureReasonSchema.nullable(),
+  resourceId: z.literal(VOICE_SPEECH_SYNTHESIS_RESOURCE_ID).nullable(),
+  sampleRate: z.literal(VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE).nullable(),
+  speaker: voiceSpeechSynthesisSpeakerSchema.nullable(),
+  updatedAt: z.string().nullable(),
 });
 
 const workspaceAudioSegmentSupplementProjectionSchema = z.strictObject({
@@ -967,7 +1031,6 @@ export const workspaceReadFinalizedAudioSegmentRequestSchema = workspaceRecordin
   .extend({
     workspaceId: z.string().min(1),
     requestId: z.string().min(1),
-    maxBytes: z.number().int().positive().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES).optional(),
   })
   .strict();
 
@@ -977,6 +1040,28 @@ export const workspaceReadFinalizedAudioSegmentSupplementRequestSchema =
       workspaceId: z.string().min(1),
       supplementId: supplementIdSchema,
       requestId: z.string().min(1),
+    })
+    .strict();
+
+export const workspaceReadFinalizedAudioSegmentAudioRequestSchema =
+  workspaceRecordingReadRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      requestId: z.string().min(1),
+      audioByteLength: z.number().int().nonnegative(),
+      audioHash: workspaceContentHashSchema.nullable().optional(),
+      maxBytes: z.number().int().positive().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES).optional(),
+    })
+    .strict();
+
+export const workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema =
+  workspaceRecordingReadRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      supplementId: supplementIdSchema,
+      requestId: z.string().min(1),
+      audioByteLength: z.number().int().nonnegative(),
+      audioHash: workspaceContentHashSchema.nullable().optional(),
       maxBytes: z.number().int().positive().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES).optional(),
     })
     .strict();
@@ -1013,6 +1098,30 @@ export const workspaceReadSegmentSupplementContentRequestSchema =
       workspaceId: z.string().min(1),
       supplementId: supplementIdSchema,
       requestId: z.string().min(1),
+    })
+    .strict();
+
+export const workspaceReadSegmentSpeechAudioRequestSchema = workspaceRecordingReadRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    audioByteLength: z.number().int().nonnegative().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES),
+    contentHash: baselineContentHashSchema,
+    requestId: z.string().min(1),
+    speaker: voiceSpeechSynthesisSpeakerSchema,
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+export const workspaceReadSegmentSupplementSpeechAudioRequestSchema =
+  workspaceRecordingReadRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      supplementId: supplementIdSchema,
+      audioByteLength: z.number().int().nonnegative().max(MAX_RECORDING_DRAFT_AUDIO_READ_BYTES),
+      contentHash: baselineContentHashSchema,
+      requestId: z.string().min(1),
+      speaker: voiceSpeechSynthesisSpeakerSchema,
+      updatedAt: z.string().min(1),
     })
     .strict();
 
@@ -1387,8 +1496,8 @@ export const workspaceReadFinalizedAudioSegmentResponseSchema = z.discriminatedU
       workspaceId: z.string().min(1),
       memoryId: memoryIdSchema,
       segmentId: segmentIdSchema,
-      audio: z.instanceof(Uint8Array),
       audioByteLength: z.number().int().nonnegative(),
+      audioHash: workspaceContentHashSchema.nullable(),
       transcript: workspaceTranscriptContentSchema,
     }),
   }),
@@ -1406,9 +1515,45 @@ export const workspaceReadFinalizedAudioSegmentSupplementResponseSchema = z.disc
         memoryId: memoryIdSchema,
         segmentId: segmentIdSchema,
         supplementId: supplementIdSchema,
+        audioByteLength: z.number().int().nonnegative(),
+        audioHash: workspaceContentHashSchema.nullable(),
+        transcript: workspaceTranscriptContentSchema,
+      }),
+    }),
+    workspaceErrorEnvelopeSchema,
+  ]
+);
+
+export const workspaceReadFinalizedAudioSegmentAudioResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      requestId: z.string().min(1),
+      workspaceId: z.string().min(1),
+      memoryId: memoryIdSchema,
+      segmentId: segmentIdSchema,
+      audio: z.instanceof(Uint8Array),
+      audioByteLength: z.number().int().nonnegative(),
+      audioHash: workspaceContentHashSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema = z.discriminatedUnion(
+  'ok',
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      value: z.strictObject({
+        requestId: z.string().min(1),
+        workspaceId: z.string().min(1),
+        memoryId: memoryIdSchema,
+        segmentId: segmentIdSchema,
+        supplementId: supplementIdSchema,
         audio: z.instanceof(Uint8Array),
         audioByteLength: z.number().int().nonnegative(),
-        transcript: workspaceTranscriptContentSchema,
+        audioHash: workspaceContentHashSchema,
       }),
     }),
     workspaceErrorEnvelopeSchema,
@@ -1614,6 +1759,7 @@ const workspaceNoteSegmentContentSchema = z.strictObject({
   bodyByteLength: z.number().int().nonnegative(),
   baselineContentHash: baselineContentHashSchema,
   baselineTiptapContentHash: baselineContentHashSchema,
+  speechSynthesis: workspaceNoteSpeechSynthesisProjectionSchema,
 });
 
 const workspaceNoteSegmentSupplementContentSchema = workspaceNoteSegmentContentSchema.extend({
@@ -1632,6 +1778,33 @@ export const workspaceReadSegmentSupplementContentResponseSchema = z.discriminat
   z.strictObject({
     ok: z.literal(true),
     value: workspaceNoteSegmentSupplementContentSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+const workspaceNoteSpeechAudioSchema = z.strictObject({
+  requestId: z.string().min(1),
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  audio: z.instanceof(Uint8Array),
+  audioByteLength: z.number().int().nonnegative(),
+  contentHash: baselineContentHashSchema,
+  mimeType: z.literal('audio/mpeg'),
+});
+
+export const workspaceReadSegmentSpeechAudioResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: workspaceNoteSpeechAudioSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadSegmentSupplementSpeechAudioResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: workspaceNoteSpeechAudioSchema.extend({ supplementId: supplementIdSchema }),
   }),
   workspaceErrorEnvelopeSchema,
 ]);
@@ -1780,7 +1953,7 @@ export const workspaceRecordingMarkdownSaveRequestSchema = workspaceRecordingRea
 
 export const workspaceSegmentSupplementMarkdownSaveRequestSchema =
   workspaceReadFinalizedAudioSegmentSupplementRequestSchema
-    .omit({ requestId: true, maxBytes: true })
+    .omit({ requestId: true })
     .extend({
       markdown: workspaceEditableMarkdownBodySchema,
       baselineTranscriptHash: baselineContentHashSchema.optional(),
@@ -1802,6 +1975,78 @@ export const workspaceRequestSegmentTranscriptionBackfillResponseSchema =
   workspaceRecordingMarkdownSaveResponseSchema;
 export const workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema =
   workspaceSegmentSupplementMarkdownSaveResponseSchema;
+
+export const workspaceRequestSegmentSpeechSynthesisRequestSchema =
+  workspaceSegmentEntityRequestSchema
+    .extend({
+      mode: z.enum(['fill-missing', 'regenerate']),
+      speaker: voiceSpeechSynthesisSpeakerSchema.optional(),
+    })
+    .strict();
+export const workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema =
+  workspaceSegmentSupplementEntityRequestSchema
+    .extend({
+      mode: z.enum(['fill-missing', 'regenerate']),
+      speaker: voiceSpeechSynthesisSpeakerSchema.optional(),
+    })
+    .strict();
+const workspaceRegenerateImportedSpeechSynthesisActiveWorkspaceSchema = z.strictObject({
+  workspaceHandle: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
+export const workspaceSpeechSynthesisBatchTargetSchema = z.discriminatedUnion('kind', [
+  workspaceSegmentEntityRequestSchema
+    .omit({ workspaceHandle: true })
+    .extend({ kind: z.literal('segment') })
+    .strict(),
+  workspaceSegmentSupplementEntityRequestSchema
+    .omit({ workspaceHandle: true })
+    .extend({ kind: z.literal('supplement') })
+    .strict(),
+]);
+export const workspaceRegenerateImportedSpeechSynthesisRequestSchema = z.discriminatedUnion(
+  'mode',
+  [
+    z.strictObject({
+      activeWorkspace: workspaceRegenerateImportedSpeechSynthesisActiveWorkspaceSchema.optional(),
+      mode: z.literal('all'),
+      speaker: voiceSpeechSynthesisSpeakerSchema,
+    }),
+    z.strictObject({
+      activeWorkspace: workspaceRegenerateImportedSpeechSynthesisActiveWorkspaceSchema.optional(),
+      mode: z.literal('retry'),
+      speaker: voiceSpeechSynthesisSpeakerSchema,
+      targets: z.array(workspaceSpeechSynthesisBatchTargetSchema).min(1).max(500),
+    }),
+  ]
+);
+export const workspaceSpeechSynthesisResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      speechSynthesis: workspaceNoteSpeechSynthesisProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+export const workspaceRequestSegmentSpeechSynthesisResponseSchema =
+  workspaceSpeechSynthesisResponseSchema;
+export const workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema =
+  workspaceSpeechSynthesisResponseSchema;
+export const workspaceRegenerateImportedSpeechSynthesisResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      failed: z.number().int().min(0),
+      failedTargets: z.array(workspaceSpeechSynthesisBatchTargetSchema).max(500),
+      generated: z.number().int().min(0),
+      skipped: z.number().int().min(0),
+      speaker: voiceSpeechSynthesisSpeakerSchema,
+      total: z.number().int().min(0),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
 
 export const workspaceMicrophoneIntentResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -1830,6 +2075,12 @@ export type WorkspaceSetVoiceTranscriptionEnabledRequest = z.infer<
 >;
 export type WorkspaceSetVoiceTranscriptionEnabledResponse = z.infer<
   typeof workspaceSetVoiceTranscriptionEnabledResponseSchema
+>;
+export type WorkspaceSetVoiceSpeechSynthesisSpeakerRequest = z.infer<
+  typeof workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema
+>;
+export type WorkspaceSetVoiceSpeechSynthesisSpeakerResponse = z.infer<
+  typeof workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema
 >;
 export type WorkspaceSaveVoiceTranscriptionApiKeyRequest = z.infer<
   typeof workspaceSaveVoiceTranscriptionApiKeyRequestSchema
@@ -1860,6 +2111,27 @@ export type WorkspaceOpenMarkdownExternalLinkRequest = z.infer<
 >;
 export type WorkspaceOpenMarkdownExternalLinkResponse = z.infer<
   typeof workspaceOpenMarkdownExternalLinkResponseSchema
+>;
+export type WorkspaceRequestSegmentSpeechSynthesisRequest = z.infer<
+  typeof workspaceRequestSegmentSpeechSynthesisRequestSchema
+>;
+export type WorkspaceRequestSegmentSpeechSynthesisResponse = z.infer<
+  typeof workspaceRequestSegmentSpeechSynthesisResponseSchema
+>;
+export type WorkspaceRequestSegmentSupplementSpeechSynthesisRequest = z.infer<
+  typeof workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema
+>;
+export type WorkspaceRequestSegmentSupplementSpeechSynthesisResponse = z.infer<
+  typeof workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema
+>;
+export type WorkspaceSpeechSynthesisBatchTarget = z.infer<
+  typeof workspaceSpeechSynthesisBatchTargetSchema
+>;
+export type WorkspaceRegenerateImportedSpeechSynthesisRequest = z.infer<
+  typeof workspaceRegenerateImportedSpeechSynthesisRequestSchema
+>;
+export type WorkspaceRegenerateImportedSpeechSynthesisResponse = z.infer<
+  typeof workspaceRegenerateImportedSpeechSynthesisResponseSchema
 >;
 export type WorkspaceChooseDirectoryResult = z.infer<typeof workspaceChooseDirectoryResultSchema>;
 export type WorkspaceChooseDirectoryResponse = z.infer<
@@ -1999,6 +2271,12 @@ export type WorkspaceReadSegmentContentRequest = z.infer<
 export type WorkspaceReadSegmentSupplementContentRequest = z.infer<
   typeof workspaceReadSegmentSupplementContentRequestSchema
 >;
+export type WorkspaceReadSegmentSpeechAudioRequest = z.infer<
+  typeof workspaceReadSegmentSpeechAudioRequestSchema
+>;
+export type WorkspaceReadSegmentSupplementSpeechAudioRequest = z.infer<
+  typeof workspaceReadSegmentSupplementSpeechAudioRequestSchema
+>;
 export type WorkspaceWriteSegmentContentRequest = z.infer<
   typeof workspaceWriteSegmentContentRequestSchema
 >;
@@ -2105,6 +2383,12 @@ export type WorkspaceReadFinalizedAudioSegmentRequest = z.infer<
 export type WorkspaceReadFinalizedAudioSegmentSupplementRequest = z.infer<
   typeof workspaceReadFinalizedAudioSegmentSupplementRequestSchema
 >;
+export type WorkspaceReadFinalizedAudioSegmentAudioRequest = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentAudioRequestSchema
+>;
+export type WorkspaceReadFinalizedAudioSegmentSupplementAudioRequest = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema
+>;
 export type WorkspaceUpdateMemoryTitleResponse = z.infer<
   typeof workspaceUpdateMemoryTitleResponseSchema
 >;
@@ -2162,6 +2446,18 @@ export type WorkspaceReadFinalizedAudioSegmentResponse = z.infer<
 >;
 export type WorkspaceReadFinalizedAudioSegmentSupplementResponse = z.infer<
   typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema
+>;
+export type WorkspaceReadFinalizedAudioSegmentAudioResponse = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentAudioResponseSchema
+>;
+export type WorkspaceReadFinalizedAudioSegmentSupplementAudioResponse = z.infer<
+  typeof workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema
+>;
+export type WorkspaceReadSegmentSpeechAudioResponse = z.infer<
+  typeof workspaceReadSegmentSpeechAudioResponseSchema
+>;
+export type WorkspaceReadSegmentSupplementSpeechAudioResponse = z.infer<
+  typeof workspaceReadSegmentSupplementSpeechAudioResponseSchema
 >;
 export type WorkspaceCreateRecordingDraftResponse = z.infer<
   typeof workspaceCreateRecordingDraftResponseSchema

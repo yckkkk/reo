@@ -58,4 +58,25 @@ describe('workspaceErrorDisplayMessage', () => {
       })
     ).toBe('找不到这个补充内容。');
   });
+
+  it('maps note speech synthesis errors to specific recovery copy', () => {
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_SPEECH_SYNTHESIS_TEXT_TOO_LONG',
+        message: 'Note text is too long',
+      })
+    ).toBe('这条笔记正文过长，暂时无法生成语音。');
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_SPEECH_SYNTHESIS_NOTE_CHANGED',
+        message: 'Note changed before save',
+      })
+    ).toBe('笔记已在生成期间发生变化，已保留当前内容。请确认后重新生成。');
+    expect(
+      workspaceErrorDisplayMessage({
+        code: 'ERR_VOICE_SPEECH_SYNTHESIS_PROBE_FAILED',
+        message: 'TTS probe failed',
+      })
+    ).toBe('语音生成验证失败，请确认 X-Api-Key 和音色后重试。');
+  });
 });

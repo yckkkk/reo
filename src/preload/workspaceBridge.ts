@@ -43,11 +43,15 @@ import {
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
@@ -57,6 +61,7 @@ import {
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
+  WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
@@ -65,7 +70,9 @@ import {
   WORKSPACE_SWITCH_MEMORY_DEFAULT_COVER_CHANNEL,
   WORKSPACE_SWITCH_SEGMENT_DEFAULT_COVER_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
   WORKSPACE_LIST_SEGMENT_ATTACHMENTS_CHANNEL,
@@ -75,6 +82,7 @@ import {
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
@@ -292,6 +300,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
         payload
       ),
+    readFinalizedAudioSegmentAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readFinalizedAudioSegmentAudio'>>(
+        WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+        payload
+      ),
+    readFinalizedAudioSegmentSupplementAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readFinalizedAudioSegmentSupplementAudio'>>(
+        WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
+        payload
+      ),
     createRecordingDraft: (payload) =>
       invoke<WorkspaceBridgeResponse<'createRecordingDraft'>>(
         WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
@@ -340,6 +358,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     readSegmentSupplementContent: (payload) =>
       invoke<WorkspaceBridgeResponse<'readSegmentSupplementContent'>>(
         WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+        payload
+      ),
+    readSegmentSpeechAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readSegmentSpeechAudio'>>(
+        WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL,
+        payload
+      ),
+    readSegmentSupplementSpeechAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readSegmentSupplementSpeechAudio'>>(
+        WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
         payload
       ),
     writeSegmentContent: (payload) =>
@@ -454,6 +482,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
         payload
       ),
+    requestSegmentSpeechSynthesis: (payload) =>
+      invoke<WorkspaceBridgeResponse<'requestSegmentSpeechSynthesis'>>(
+        WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
+        payload
+      ),
+    requestSegmentSupplementSpeechSynthesis: (payload) =>
+      invoke<WorkspaceBridgeResponse<'requestSegmentSupplementSpeechSynthesis'>>(
+        WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
+        payload
+      ),
     beginMicrophoneIntent: (payload) =>
       invoke<WorkspaceBridgeResponse<'beginMicrophoneIntent'>>(
         WORKSPACE_BEGIN_MICROPHONE_INTENT_CHANNEL,
@@ -492,6 +530,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     setVoiceTranscriptionEnabled: (payload) =>
       invoke<WorkspaceBridgeResponse<'setVoiceTranscriptionEnabled'>>(
         WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+        payload
+      ),
+    setVoiceSpeechSynthesisSpeaker: (payload) =>
+      invoke<WorkspaceBridgeResponse<'setVoiceSpeechSynthesisSpeaker'>>(
+        WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
+        payload
+      ),
+    regenerateImportedSpeechSynthesis: (payload) =>
+      invoke<WorkspaceBridgeResponse<'regenerateImportedSpeechSynthesis'>>(
+        WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
         payload
       ),
     saveVoiceTranscriptionApiKey: (payload) =>

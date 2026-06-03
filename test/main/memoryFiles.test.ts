@@ -625,6 +625,7 @@ test('finalizes a draft into a durable memory directory', async () => {
       durationMs: 73_000,
       nextSequence: 1,
       audioByteLength: 3,
+      audioHash: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
       lastTranscriptionAttempt: 'never',
     }
   );

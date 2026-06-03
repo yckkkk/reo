@@ -18,10 +18,14 @@ import type {
 } from './finalizedNoteContentSave';
 import { LoadedWorkspaceFrame } from './LoadedWorkspaceFrame';
 import type {
+  SegmentSpeechSynthesisTarget,
+  SegmentSupplementSpeechSynthesisTarget,
   SegmentSupplementTranscriptionRetryTarget,
   SegmentTranscriptionRetryTarget,
+  SpeechSynthesisController,
   TranscriptionBackfillController,
 } from './MemoryStudio';
+import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import {
   seedWorkspaceSnapshot,
@@ -68,7 +72,38 @@ function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}):
 const BASELINE_TIPTAP_HASH_A = 'd'.repeat(64);
 const BASELINE_TIPTAP_HASH_B = 'e'.repeat(64);
 
+const missingSpeechSynthesis = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
+
+const readySpeechSynthesis = {
+  status: 'ready' as const,
+  audioByteLength: 3,
+  contentHash: 'f'.repeat(64),
+  format: 'mp3' as const,
+  lastSynthesisAttempt: 'success' as const,
+  mimeType: 'audio/mpeg' as const,
+  model: 'seed-tts-2.0-expressive' as const,
+  reason: null,
+  resourceId: 'seed-tts-2.0' as const,
+  sampleRate: 24000,
+  speaker: 'zh_female_vv_uranus_bigtts' as const,
+  updatedAt: '2026-06-02T14:00:00.000Z',
+};
+
 const birthdayMemory = {
+  workspaceId: 'ws_1',
   memoryId: 'mem_birthday',
   title: 'My seventh birthday',
   createdAt: '2026-05-06T13:08:00.000',
@@ -154,6 +189,44 @@ function plainParagraphTiptapDoc(text: string) {
           },
         ]
       : [],
+  };
+}
+
+type ReadFinalizedAudioSegmentSupplementRequest = Parameters<
+  Window['reoWorkspace']['readFinalizedAudioSegmentSupplement']
+>[0];
+
+function finalizedAudioSegmentSupplementContentResponse(
+  request: ReadFinalizedAudioSegmentSupplementRequest,
+  options: {
+    readonly audioByteLength?: number;
+    readonly audioHash?: string;
+    readonly baselineHash?: string;
+    readonly baselineTiptapContentHash?: string;
+    readonly text?: string;
+    readonly transcriptExists?: boolean;
+  } = {}
+) {
+  const text = options.text ?? '';
+
+  return {
+    ok: true as const,
+    value: {
+      requestId: request.requestId,
+      workspaceId: request.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      supplementId: request.supplementId,
+      audioByteLength: options.audioByteLength ?? 3,
+      audioHash: options.audioHash ?? 'a'.repeat(64),
+      transcript: {
+        exists: options.transcriptExists ?? text.length > 0,
+        text,
+        baselineHash: options.baselineHash ?? '0'.repeat(64),
+        tiptapJson: plainParagraphTiptapDoc(text),
+        baselineTiptapContentHash: options.baselineTiptapContentHash ?? BASELINE_TIPTAP_HASH_A,
+      },
+    },
   };
 }
 
@@ -436,6 +509,8 @@ function renderLoadedWorkspaceFrame({
   onInlineMarkdownDirtyChange = vi.fn(),
   onRetrySegmentTranscription,
   onRetrySupplementTranscription,
+  onRequestSegmentSpeechSynthesis,
+  onRequestSupplementSpeechSynthesis,
   onSelectMemory = vi.fn(),
   onStartNote = vi.fn(),
   onStartSegmentSupplementNote = vi.fn(),
@@ -457,6 +532,19 @@ function renderLoadedWorkspaceFrame({
       message: 'Supplement recording not found',
     },
   }),
+  readFinalizedAudioSegmentSupplementAudio = vi.fn(async (request) => ({
+    ok: true,
+    value: {
+      requestId: request.requestId,
+      workspaceId: request.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      supplementId: request.supplementId,
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: request.audioByteLength,
+      audioHash: request.audioHash ?? 'a'.repeat(64),
+    },
+  })),
   readFinalizedAudioSegment = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -464,6 +552,18 @@ function renderLoadedWorkspaceFrame({
       message: 'Recording not found',
     },
   }),
+  readFinalizedAudioSegmentAudio = vi.fn(async (request) => ({
+    ok: true,
+    value: {
+      requestId: request.requestId,
+      workspaceId: request.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: request.audioByteLength,
+      audioHash: request.audioHash ?? 'a'.repeat(64),
+    },
+  })),
   readSegmentContent = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -476,6 +576,20 @@ function renderLoadedWorkspaceFrame({
     error: {
       code: 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
       message: 'Note supplement not found',
+    },
+  }),
+  readSegmentSpeechAudio = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+      message: 'Speech audio not found',
+    },
+  }),
+  readSegmentSupplementSpeechAudio = vi.fn().mockResolvedValue({
+    ok: false,
+    error: {
+      code: 'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE',
+      message: 'Speech audio not found',
     },
   }),
   updateSegmentContentTabOrder = vi.fn().mockResolvedValue({
@@ -552,6 +666,18 @@ function renderLoadedWorkspaceFrame({
   readonly onRetrySupplementTranscription?: (
     target: SegmentSupplementTranscriptionRetryTarget
   ) => void;
+  readonly onRequestSegmentSpeechSynthesis?: (
+    target: SegmentSpeechSynthesisTarget & {
+      readonly mode: 'fill-missing' | 'regenerate';
+      readonly speaker: VoiceSpeechSynthesisSpeaker;
+    }
+  ) => void;
+  readonly onRequestSupplementSpeechSynthesis?: (
+    target: SegmentSupplementSpeechSynthesisTarget & {
+      readonly mode: 'fill-missing' | 'regenerate';
+      readonly speaker: VoiceSpeechSynthesisSpeaker;
+    }
+  ) => void;
   readonly onSelectMemory?: (memoryId: string) => void;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: {
@@ -575,9 +701,13 @@ function renderLoadedWorkspaceFrame({
   readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly copyNeedsReviewAgentPrompt?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
+  readonly readFinalizedAudioSegmentSupplementAudio?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
+  readonly readFinalizedAudioSegmentAudio?: ReturnType<typeof vi.fn>;
   readonly readSegmentContent?: ReturnType<typeof vi.fn>;
   readonly readSegmentSupplementContent?: ReturnType<typeof vi.fn>;
+  readonly readSegmentSpeechAudio?: ReturnType<typeof vi.fn>;
+  readonly readSegmentSupplementSpeechAudio?: ReturnType<typeof vi.fn>;
   readonly updateSegmentContentTabOrder?: ReturnType<typeof vi.fn>;
   readonly saveTranscript?: ReturnType<typeof vi.fn>;
   readonly saveSegmentSupplementTranscript?: ReturnType<typeof vi.fn>;
@@ -596,9 +726,13 @@ function renderLoadedWorkspaceFrame({
       openMemoryDocument,
       openSegmentSupplementDocument,
       readFinalizedAudioSegmentSupplement,
+      readFinalizedAudioSegmentSupplementAudio,
       readFinalizedAudioSegment,
+      readFinalizedAudioSegmentAudio,
       readSegmentContent,
       readSegmentSupplementContent,
+      readSegmentSpeechAudio,
+      readSegmentSupplementSpeechAudio,
       saveSegmentSupplementTranscript,
       saveTranscript,
       updateSegmentContentTabOrder,
@@ -632,10 +766,23 @@ function renderLoadedWorkspaceFrame({
             : {}),
         }
       : undefined;
-  const renderResult = render(
+  const speechSynthesis: SpeechSynthesisController | undefined =
+    onRequestSegmentSpeechSynthesis || onRequestSupplementSpeechSynthesis
+      ? {
+          ...(onRequestSegmentSpeechSynthesis
+            ? { requestSegment: onRequestSegmentSpeechSynthesis }
+            : {}),
+          ...(onRequestSupplementSpeechSynthesis
+            ? { requestSupplement: onRequestSupplementSpeechSynthesis }
+            : {}),
+        }
+      : undefined;
+  const renderFrame = (
+    nextCurrentMemory: WorkspaceSession['snapshot']['memories'][number] | null
+  ) => (
     <QueryClientProvider client={queryClient}>
       <LoadedWorkspaceFrame
-        currentMemory={currentMemory}
+        currentMemory={nextCurrentMemory}
         workspaceSession={session}
         onDeleteMemory={onDeleteMemory}
         onDeleteSegment={onDeleteSegment}
@@ -654,6 +801,7 @@ function renderLoadedWorkspaceFrame({
         onRenameSegmentSupplement={onRenameSegmentSupplement}
         onInlineMarkdownDirtyChange={onInlineMarkdownDirtyChange}
         {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
+        {...(speechSynthesis ? { speechSynthesis } : {})}
         onSelectMemory={onSelectMemory}
         onStartNote={onStartNote}
         onStartSegmentSupplementNote={onStartSegmentSupplementNote}
@@ -663,8 +811,15 @@ function renderLoadedWorkspaceFrame({
       />
     </QueryClientProvider>
   );
+  const renderResult = render(renderFrame(currentMemory));
 
-  return { queryClient, ...renderResult };
+  return {
+    queryClient,
+    rerenderCurrentMemory: (
+      nextCurrentMemory: WorkspaceSession['snapshot']['memories'][number] | null
+    ) => renderResult.rerender(renderFrame(nextCurrentMemory)),
+    ...renderResult,
+  };
 }
 
 describe('LoadedWorkspaceFrame', () => {
@@ -1249,6 +1404,7 @@ describe('LoadedWorkspaceFrame', () => {
       ],
     });
     const onNoteSegmentContentSaved = vi.fn();
+    const onRequestSegmentSpeechSynthesis = vi.fn();
     const pendingSave = createDeferred<void>();
     const writeSegmentContent = vi.fn(async (request) => {
       await pendingSave.promise;
@@ -1271,6 +1427,7 @@ describe('LoadedWorkspaceFrame', () => {
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       onNoteSegmentContentSaved,
+      onRequestSegmentSpeechSynthesis,
       readSegmentContent,
       session,
       writeSegmentContent,
@@ -1339,9 +1496,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(bodyMore).toHaveClass('data-[state=open]:scale-100');
     await userEvent.hover(bodyTabItem as HTMLElement);
     expect(bodyMore).not.toHaveAttribute('aria-hidden');
-    expect(bodyMore).not.toHaveClass('pointer-events-auto');
-    expect(bodyMore).not.toHaveClass('max-w-20');
-    expect(bodyMore).not.toHaveClass('opacity-100');
+    expect(bodyMore).toHaveClass('pointer-events-auto');
+    expect(bodyMore).toHaveClass('max-w-20');
+    expect(bodyMore).toHaveClass('opacity-100');
     await userEvent.click(bodyMore as HTMLButtonElement);
     const bodyMenu = await screen.findByRole('menu', { name: '正文 更多操作' });
     expect(
@@ -1353,6 +1510,7 @@ describe('LoadedWorkspaceFrame', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
+      '生成/重新生成语音',
       '重命名',
       '清空正文',
     ]);
@@ -1360,6 +1518,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(bodyMenu).queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
     expect(
       within(bodyMenu).queryByRole('menuitem', { name: '重新生成转录' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(bodyMenu).queryByRole('menuitem', { name: '重新生成语音' })
     ).not.toBeInTheDocument();
     expect(within(bodyMenu).queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
     expect(bodyTab).toHaveAttribute('aria-selected', 'true');
@@ -1518,6 +1679,271 @@ describe('LoadedWorkspaceFrame', () => {
     expect(railAddButton).toHaveClass('gap-[6px]', 'px-[10px]');
     expect(railAddButton).not.toHaveClass('gap-6', 'px-10');
     expect(railAddButton.parentElement).toBe(contentTabActions);
+  });
+
+  it('renders generated note speech as the segment player above the content tab rail', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:note-speech');
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: 'Cake plan',
+        bodyByteLength: 9,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+        bodyTiptapJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+        speechSynthesis: readySpeechSynthesis,
+      },
+    }));
+    const readSegmentSpeechAudio = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: request.audioByteLength,
+        contentHash: request.contentHash,
+        mimeType: 'audio/mpeg' as const,
+      },
+    }));
+    const note = noteSegment();
+    const detailWithNote: WorkspaceMemoryDetail = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: true,
+      segments: [note],
+    };
+    const session = workspaceSession({
+      memories: [
+        {
+          ...birthdayMemory,
+          segmentCount: 1,
+          noteSegmentCount: 1,
+          audioSegmentCount: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: true,
+        },
+      ],
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readSegmentContent,
+      readSegmentSpeechAudio,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_speech',
+      detail: detailWithNote,
+    });
+
+    const content = await screen.findByRole('region', { name: '片段内容' });
+    const player = await within(content).findByTestId('note-speech-player-row');
+    const tabRailRow = content.querySelector('[data-slot="memory-studio-content-tab-rail-row"]');
+
+    expect(
+      within(player).getByRole('button', { name: '播放笔记语音 Cake planning note' })
+    ).toBeInTheDocument();
+    expect(player).toHaveAttribute('data-component', 'memory-studio-audio-player');
+    const slider = within(player).getByRole('slider', { name: '笔记语音播放进度' });
+    expect(content.querySelector('[data-slot="memory-studio-player-placeholder"]')).toBeNull();
+    const audioElement = player.nextElementSibling as HTMLAudioElement | null;
+    expect(audioElement).toBeInstanceOf(HTMLAudioElement);
+    expect(audioElement?.nextElementSibling).toBe(tabRailRow);
+
+    await userEvent.click(
+      within(player).getByRole('button', { name: '播放笔记语音 Cake planning note' })
+    );
+    await waitFor(() => expect(readSegmentSpeechAudio).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    expect((createObjectURL.mock.calls[0]?.[0] as Blob).type).toBe('audio/mpeg');
+
+    if (!audioElement) {
+      throw new Error('Expected note speech playback audio element.');
+    }
+    Object.defineProperty(audioElement, 'duration', { configurable: true, value: 12 });
+    fireEvent.loadedMetadata(audioElement);
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('aria-valuemax', '12000');
+      expect(slider).toHaveAttribute('aria-valuetext', '00:00 / 00:12');
+    });
+
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({
+      bottom: 42,
+      height: 42,
+      left: 0,
+      right: 200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 200,
+      x: 0,
+      y: 0,
+    });
+
+    fireEvent.pointerDown(slider, { buttons: 1, clientX: 50, pointerId: 1 });
+    fireEvent.pointerMove(slider, { buttons: 1, clientX: 150, pointerId: 1 });
+
+    await waitFor(() => {
+      expect(slider).toHaveAttribute('aria-valuenow', '9000');
+      expect(slider).toHaveAttribute('aria-valuetext', '00:09 / 00:12');
+      expect(slider).toHaveAttribute('data-waveform-progress', '0.75');
+    });
+  });
+
+  it('requests note segment speech synthesis from the segment menu', async () => {
+    const user = userEvent.setup();
+    const requestSegmentSpeech = vi.fn();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: 'Cake plan',
+        bodyByteLength: 9,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+        bodyTiptapJson: plainParagraphTiptapDoc('Cake plan'),
+        speechSynthesis: missingSpeechSynthesis,
+      },
+    }));
+    const note = noteSegment();
+    const detailWithNote: WorkspaceMemoryDetail = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: true,
+      segments: [note],
+    };
+    const session = workspaceSession({
+      memories: [
+        {
+          ...birthdayMemory,
+          segmentCount: 1,
+          noteSegmentCount: 1,
+          audioSegmentCount: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: true,
+        },
+      ],
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onRequestSegmentSpeechSynthesis: requestSegmentSpeech,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_speech_menu',
+      detail: detailWithNote,
+    });
+
+    const more = await screen.findByRole('button', { name: '片段 Cake planning note 更多操作' });
+    await user.click(more);
+    const menu = await screen.findByRole('menu', { name: '片段 Cake planning note 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '生成/重新生成语音' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '云舟' }));
+
+    expect(requestSegmentSpeech).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_note',
+      mode: 'regenerate',
+      speaker: 'zh_male_m191_uranus_bigtts',
+    });
+  });
+
+  it('regenerates existing note segment speech with the selected speaker', async () => {
+    const user = userEvent.setup();
+    const requestSegmentSpeech = vi.fn();
+    const readSegmentContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        type: 'note',
+        title: 'Cake planning note',
+        bodyMarkdown: 'Cake plan',
+        bodyByteLength: 9,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+        bodyTiptapJson: plainParagraphTiptapDoc('Cake plan'),
+        speechSynthesis: readySpeechSynthesis,
+      },
+    }));
+    const note = noteSegment();
+    const detailWithNote: WorkspaceMemoryDetail = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: true,
+      segments: [note],
+    };
+    const session = workspaceSession({
+      memories: [
+        {
+          ...birthdayMemory,
+          segmentCount: 1,
+          noteSegmentCount: 1,
+          audioSegmentCount: 0,
+          hasAudioTranscript: false,
+          hasAnyNote: true,
+        },
+      ],
+    });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onRequestSegmentSpeechSynthesis: requestSegmentSpeech,
+      readSegmentContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_speech_regenerate_menu',
+      detail: detailWithNote,
+    });
+
+    const more = await screen.findByRole('button', { name: '片段 Cake planning note 更多操作' });
+    await user.click(more);
+    const menu = await screen.findByRole('menu', { name: '片段 Cake planning note 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '生成/重新生成语音' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '小荷' }));
+
+    expect(requestSegmentSpeech).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_note',
+      mode: 'regenerate',
+      speaker: 'zh_female_xiaohe_uranus_bigtts',
+    });
+    expect(screen.queryByRole('alertdialog', { name: '重新生成语音？' })).not.toBeInTheDocument();
   });
 
   it('autosaves finalized Note segment body edits without exposing manual save actions', async () => {
@@ -2387,6 +2813,7 @@ describe('LoadedWorkspaceFrame', () => {
 
     const studio = await screen.findByRole('region', { name: 'Memory Studio' });
     const player = studio.querySelector('[data-slot="memory-studio-player"]');
+    const waveform = studio.querySelector('[data-slot="memory-studio-playback-waveform"]');
     const time = studio.querySelector('[data-slot="memory-studio-audio-player-time"]');
 
     expect(player).toHaveClass(
@@ -2395,6 +2822,9 @@ describe('LoadedWorkspaceFrame', () => {
       'grid-cols-[40px_minmax(64px,1fr)_max-content]',
       'gap-12'
     );
+    expect(waveform).toHaveAttribute('data-waveform-bar-width', '2');
+    expect(waveform).toHaveAttribute('data-waveform-bar-gap', '3');
+    expect(waveform).toHaveAttribute('data-waveform-bar-radius', '2');
     expect(time).toHaveClass('whitespace-nowrap');
   });
 
@@ -2600,6 +3030,7 @@ describe('LoadedWorkspaceFrame', () => {
           segmentId: request.segmentId,
           audio: new Uint8Array([1, 2, 3]),
           audioByteLength: 3,
+          audioHash: 'a'.repeat(64),
           transcript: {
             exists: true,
             text: 'Grandma lit the candles and everyone started singing.',
@@ -2626,7 +3057,7 @@ describe('LoadedWorkspaceFrame', () => {
       await within(content).findByText('Grandma lit the candles and everyone started singing.')
     ).toBeInTheDocument();
     expect(within(content).getByRole('slider', { name: '片段播放进度' })).toBeInTheDocument();
-    expect(within(content).getByText('00:00 / 02:05')).toBeInTheDocument();
+    expect(await within(content).findByText('00:00 / 02:05')).toBeInTheDocument();
     expect(readFinalizedAudioSegment).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-secret',
@@ -2638,11 +3069,172 @@ describe('LoadedWorkspaceFrame', () => {
 
     await user.click(within(content).getByRole('button', { name: '播放片段 Birthday candles' }));
 
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(play).toHaveBeenCalledOnce();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob)));
+    await waitFor(() => expect(play).toHaveBeenCalledOnce());
     expect(
       within(content).getByRole('button', { name: '暂停片段 Birthday candles' })
     ).toBeInTheDocument();
+  });
+
+  it('reuses cached Segment content and decoded playback waveform when returning to a Segment', async () => {
+    const user = userEvent.setup();
+    const audioSamples = Float32Array.from([0.1, 0.4, -0.2, 0.7]);
+    const decodeAudioData = vi.fn(async () => ({
+      length: audioSamples.length,
+      numberOfChannels: 1,
+      getChannelData: () => audioSamples,
+    }));
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+    let objectUrlIndex = 0;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+      objectUrlIndex += 1;
+      return `blob:cached-segment-${objectUrlIndex}`;
+    });
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio:
+          request.segmentId === 'seg_birthday_voice'
+            ? new Uint8Array([1, 2, 3])
+            : new Uint8Array([4, 5, 6]),
+        audioByteLength: 3,
+        audioHash: request.segmentId === 'seg_birthday_voice' ? 'a'.repeat(64) : 'b'.repeat(64),
+        transcript: {
+          exists: true,
+          text:
+            request.segmentId === 'seg_birthday_voice'
+              ? 'Cached candles transcript.'
+              : 'Cached song transcript.',
+        },
+      },
+    }));
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_segment_cache',
+      detail: birthdayDetailWithTwoSegments,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    expect(await within(content).findByText('Cached candles transcript.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday song' }));
+    expect(await within(content).findByText('Cached song transcript.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(decodeAudioData).toHaveBeenCalledTimes(2);
+    });
+
+    await user.click(within(studio).getByRole('button', { name: '选择片段 Birthday candles' }));
+    expect(await within(content).findByText('Cached candles transcript.')).toBeInTheDocument();
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+
+    expect(readFinalizedAudioSegment).toHaveBeenCalledTimes(2);
+    expect(decodeAudioData).toHaveBeenCalledTimes(2);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps playback audio resources warm when switching memories in the same workspace', async () => {
+    let objectUrlIndex = 0;
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+      objectUrlIndex += 1;
+      return `blob:memory-switch-${objectUrlIndex}`;
+    });
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    const readFinalizedAudioSegment = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        audio:
+          request.memoryId === 'mem_birthday'
+            ? new Uint8Array([1, 2, 3])
+            : new Uint8Array([4, 5, 6]),
+        audioByteLength: 3,
+        audioHash: request.memoryId === 'mem_birthday' ? 'a'.repeat(64) : 'b'.repeat(64),
+        transcript: {
+          exists: true,
+          text:
+            request.memoryId === 'mem_birthday'
+              ? 'Birthday cached before memory switch.'
+              : 'Recital cached during memory switch.',
+        },
+      },
+    }));
+    const recitalDetail: WorkspaceMemoryDetail = {
+      workspaceId: 'ws_1',
+      ...recitalMemory,
+      segments: [
+        {
+          workspaceId: 'ws_1',
+          memoryId: 'mem_recital',
+          segmentId: 'seg_recital_voice',
+          type: 'audio',
+          title: 'Opening song',
+          createdAt: '2026-05-01T09:00:00.000',
+          updatedAt: '2026-05-01T09:10:00.000',
+          durationMs: 60_000,
+          audioByteLength: 1024,
+          lastTranscriptionAttempt: 'success' as const,
+          transcript: { exists: true },
+          supplementCount: 0,
+          supplements: [],
+        },
+      ],
+    };
+    const session = workspaceSession({ memories: [birthdayMemory, recitalMemory] });
+    const { queryClient, rerenderCurrentMemory, unmount } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      readFinalizedAudioSegment,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_warm_audio',
+      detail: birthdayDetail,
+    });
+    expect(await screen.findByText('Birthday cached before memory switch.')).toBeInTheDocument();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_recital'], {
+      requestId: 'request_mem_recital_warm_audio',
+      detail: recitalDetail,
+    });
+    rerenderCurrentMemory(recitalMemory);
+    expect(await screen.findByText('Recital cached during memory switch.')).toBeInTheDocument();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    rerenderCurrentMemory(birthdayMemory);
+    expect(await screen.findByText('Birthday cached before memory switch.')).toBeInTheDocument();
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    expect(readFinalizedAudioSegment).toHaveBeenCalledTimes(2);
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    unmount();
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it('keeps failed segment transcripts editable in the always-visible editor', async () => {
@@ -2659,6 +3251,7 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: request.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: {
           exists: false,
           text: '',
@@ -2722,6 +3315,7 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: request.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: {
           exists: true,
           text: 'Keyboard access should move the playback cursor.',
@@ -2747,6 +3341,7 @@ describe('LoadedWorkspaceFrame', () => {
     await waitFor(() => {
       expect(slider).toHaveAttribute('tabindex', '0');
     });
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob)));
 
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
 
@@ -2768,6 +3363,7 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: request.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: {
           exists: true,
           text: 'Pointer scrubbing should update continuously.',
@@ -2803,6 +3399,7 @@ describe('LoadedWorkspaceFrame', () => {
     await waitFor(() => {
       expect(slider).toHaveAttribute('tabindex', '0');
     });
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob)));
     fireEvent.pointerDown(slider, { buttons: 1, clientX: 50, pointerId: 1 });
     fireEvent.pointerMove(slider, { buttons: 1, clientX: 150, pointerId: 1 });
 
@@ -2825,6 +3422,7 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: request.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: {
           exists: true,
           text: 'Pointer movement without a waveform scrub should not seek.',
@@ -2893,6 +3491,7 @@ describe('LoadedWorkspaceFrame', () => {
           segmentId: request.segmentId,
           audio: new Uint8Array([8, 7, 6, 5]),
           audioByteLength: 4,
+          audioHash: 'a'.repeat(64),
           transcript: {
             exists: true,
             text: 'A decoded waveform belongs to the actual finalized audio bytes.',
@@ -2969,6 +3568,7 @@ describe('LoadedWorkspaceFrame', () => {
     });
     const contentQueryKey = segmentContentQueryKey({
       workspaceId: 'ws_1',
+      workspaceHandle: session.workspaceHandle,
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
     });
@@ -2979,6 +3579,7 @@ describe('LoadedWorkspaceFrame', () => {
       segmentId: 'seg_birthday_voice',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
       transcript: { exists: true, text: 'First finalized audio.', baselineHash: 'a'.repeat(64) },
     });
 
@@ -2993,8 +3594,9 @@ describe('LoadedWorkspaceFrame', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
-      audio: new Uint8Array([4, 5, 6]),
-      audioByteLength: 3,
+      audio: new Uint8Array([4, 5, 6, 7]),
+      audioByteLength: 4,
+      audioHash: 'b'.repeat(64),
       transcript: { exists: true, text: 'Second finalized audio.', baselineHash: 'a'.repeat(64) },
     });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -3071,6 +3673,7 @@ describe('LoadedWorkspaceFrame', () => {
     await userEvent.click(within(content).getByRole('tab', { name: '补充录音' }));
     const supplementContentQueryKey = segmentSupplementContentQueryKey({
       workspaceId: 'ws_1',
+      workspaceHandle: session.workspaceHandle,
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_followup',
@@ -3083,6 +3686,7 @@ describe('LoadedWorkspaceFrame', () => {
       supplementId: 'sup_birthday_followup',
       audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
       transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     const waveform = await within(content).findByRole('slider', { name: '补充录音播放进度' });
@@ -3096,8 +3700,9 @@ describe('LoadedWorkspaceFrame', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_followup',
-      audio: new Uint8Array([4, 5, 6]),
-      audioByteLength: 3,
+      audio: new Uint8Array([4, 5, 6, 7]),
+      audioByteLength: 4,
+      audioHash: 'b'.repeat(64),
       transcript: { exists: false, text: '', baselineHash: '0'.repeat(64) },
     });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -3146,6 +3751,7 @@ describe('LoadedWorkspaceFrame', () => {
           segmentId: request.segmentId,
           audio: new Uint8Array([8, 7, 6, 5]),
           audioByteLength: 21 * 1024 * 1024,
+          audioHash: 'a'.repeat(64),
           transcript: {
             exists: true,
             text: 'A large finalized audio file should remain playable without waveform decode.',
@@ -3164,7 +3770,7 @@ describe('LoadedWorkspaceFrame', () => {
     const waveform = await within(studio).findByRole('slider', { name: '片段播放进度' });
 
     await waitFor(() => {
-      expect(waveform).toHaveAttribute('data-waveform-source', 'unavailable');
+      expect(waveform).toHaveAttribute('data-waveform-source', 'generated-overview');
     });
     expect(AudioContextMock).not.toHaveBeenCalled();
     expect(decodeAudioData).not.toHaveBeenCalled();
@@ -3243,18 +3849,9 @@ describe('LoadedWorkspaceFrame', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue();
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request)
+    );
     const readFinalizedAudioSegment = vi.fn(async (request) => ({
       ok: true,
       value: {
@@ -3264,6 +3861,7 @@ describe('LoadedWorkspaceFrame', () => {
         segmentId: request.segmentId,
         audio: new Uint8Array([1, 2, 3]),
         audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: {
           exists: true,
           text: 'Birthday transcript',
@@ -3298,9 +3896,11 @@ describe('LoadedWorkspaceFrame', () => {
       });
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
+    const onRetrySegmentTranscription = vi.fn();
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
       onClearSegmentContent,
+      onRetrySegmentTranscription,
       onSegmentTranscriptSaved,
       readFinalizedAudioSegment,
       readFinalizedAudioSegmentSupplement,
@@ -3408,8 +4008,9 @@ describe('LoadedWorkspaceFrame', () => {
     expect(transcriptMore).toHaveClass('data-[state=open]:scale-100');
     await user.hover(transcriptTabItem as HTMLElement);
     expect(transcriptMore).not.toHaveAttribute('aria-hidden');
-    expect(transcriptMore).not.toHaveClass('pointer-events-auto');
-    expect(transcriptMore).not.toHaveClass('max-w-20');
+    expect(transcriptMore).toHaveClass('pointer-events-auto');
+    expect(transcriptMore).toHaveClass('max-w-20');
+    expect(transcriptMore).toHaveClass('opacity-100');
     await expectMoreTriggerIsIsolatedAndOpensMenu(
       user,
       transcriptMore as HTMLButtonElement,
@@ -3426,6 +4027,7 @@ describe('LoadedWorkspaceFrame', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
+      '重新生成转录',
       '重命名',
       '清空转录',
     ]);
@@ -3434,9 +4036,6 @@ describe('LoadedWorkspaceFrame', () => {
     ).not.toBeInTheDocument();
     expect(
       within(transcriptMenu).queryByRole('menuitem', { name: '生成转录' })
-    ).not.toBeInTheDocument();
-    expect(
-      within(transcriptMenu).queryByRole('menuitem', { name: '重新生成转录' })
     ).not.toBeInTheDocument();
     expect(
       within(transcriptMenu).queryByRole('menuitem', { name: '删除' })
@@ -3563,25 +4162,12 @@ describe('LoadedWorkspaceFrame', () => {
           baselineTiptapContentHash: 'f'.repeat(64),
         },
       });
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-        transcript: {
-          exists: true,
-          text: '这是一个补充的录音。',
-          baselineHash: 'c'.repeat(64),
-          tiptapJson: plainParagraphTiptapDoc('这是一个补充的录音。'),
-          baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
-        },
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request, {
+        baselineHash: 'c'.repeat(64),
+        text: '这是一个补充的录音。',
+      })
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([
       audioSupplement({ transcript: { exists: true } }),
@@ -3695,6 +4281,15 @@ describe('LoadedWorkspaceFrame', () => {
       'Follow-up',
       'Capture the cake idea',
     ]);
+    const supplementPlayerSlot = content.querySelector(
+      '[data-slot="memory-studio-supplement-player"]'
+    );
+    expect(supplementPlayerSlot).toBeInstanceOf(HTMLElement);
+    const supplementPlayer = supplementPlayerSlot as HTMLElement;
+    expect(supplementPlayer).not.toHaveAttribute('data-component', 'memory-studio-audio-player');
+    expect(supplementPlayer.compareDocumentPosition(supplementPanel)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
     expect(
       within(supplementPanel).queryByRole('button', { name: '编辑补充笔记 补充笔记' })
     ).toBeNull();
@@ -3708,6 +4303,135 @@ describe('LoadedWorkspaceFrame', () => {
         supplementId: 'sup_birthday_note',
       })
     );
+  });
+
+  it('renders generated note supplement speech above the supplement note editor', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:note-supplement-speech');
+    const readSegmentSupplementContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        type: 'note',
+        title: '补充笔记',
+        bodyMarkdown: 'Follow-up',
+        bodyByteLength: 9,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+        bodyTiptapJson: plainParagraphTiptapDoc('Follow-up'),
+        speechSynthesis: readySpeechSynthesis,
+      },
+    }));
+    const readSegmentSupplementSpeechAudio = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        audio: new Uint8Array([4, 5, 6]),
+        audioByteLength: request.audioByteLength,
+        contentHash: request.contentHash,
+        mimeType: 'audio/mpeg' as const,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([noteSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      readSegmentSupplementContent,
+      readSegmentSupplementSpeechAudio,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_supplement_speech',
+      detail: detailWithSupplement,
+    });
+
+    const content = await screen.findByRole('region', { name: '片段内容' });
+    const supplementItem = await within(content).findByRole('tab', { name: '补充笔记' });
+    await userEvent.click(supplementItem);
+
+    const player = await within(content).findByTestId('note-supplement-speech-player-row');
+    const editor = await within(content).findByLabelText('补充笔记正文');
+
+    expect(
+      within(player).getByRole('button', { name: '播放补充笔记语音 补充笔记' })
+    ).toBeInTheDocument();
+    expect(player).toHaveAttribute('data-component', 'memory-studio-audio-player');
+    expect(
+      within(player).getByRole('slider', { name: '补充笔记语音播放进度' })
+    ).toBeInTheDocument();
+    expect(player.compareDocumentPosition(editor)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      createObjectURL.mock.calls.some(
+        ([blob]) => blob instanceof Blob && blob.type === 'audio/mpeg'
+      )
+    ).toBe(true);
+  });
+
+  it('requests note supplement speech synthesis from the supplement tab menu', async () => {
+    const user = userEvent.setup();
+    const requestSupplementSpeech = vi.fn();
+    const readSegmentSupplementContent = vi.fn(async (request) => ({
+      ok: true,
+      value: {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        memoryId: request.memoryId,
+        segmentId: request.segmentId,
+        supplementId: request.supplementId,
+        type: 'note',
+        title: '补充笔记',
+        bodyMarkdown: 'Follow-up',
+        bodyByteLength: 9,
+        baselineContentHash: 'a'.repeat(64),
+        baselineTiptapContentHash: BASELINE_TIPTAP_HASH_A,
+        bodyTiptapJson: plainParagraphTiptapDoc('Follow-up'),
+        speechSynthesis: missingSpeechSynthesis,
+      },
+    }));
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([noteSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      onRequestSupplementSpeechSynthesis: requestSupplementSpeech,
+      readSegmentSupplementContent,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_note_supplement_speech_menu',
+      detail: detailWithSupplement,
+    });
+
+    const content = await screen.findByRole('region', { name: '片段内容' });
+    const supplementItem = await within(content).findByRole('tab', { name: '补充笔记' });
+    await user.click(supplementItem);
+    const tabItem = supplementItem.closest('[data-slot="memory-studio-supplement-tab-item"]');
+    expect(tabItem).toBeInstanceOf(HTMLElement);
+    await user.hover(tabItem as HTMLElement);
+    const more = within(content).getByRole('button', { name: '补充笔记 更多操作' });
+    await user.click(more);
+    const menu = await screen.findByRole('menu', { name: '补充笔记 更多操作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '生成/重新生成语音' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Vivi' }));
+
+    expect(requestSupplementSpeech).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_voice',
+      supplementId: 'sup_birthday_note',
+      mode: 'regenerate',
+      speaker: 'zh_female_vv_uranus_bigtts',
+    });
   });
 
   it('edits active note supplement content through the always-visible Memory Studio editor', async () => {
@@ -3877,18 +4601,9 @@ describe('LoadedWorkspaceFrame', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('blocked'));
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request)
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -3919,23 +4634,9 @@ describe('LoadedWorkspaceFrame', () => {
     const onRetrySupplementTranscription = vi.fn();
     const failedSupplement = audioSupplement({ lastTranscriptionAttempt: 'failed' });
     const detailWithFailedSupplement = birthdayDetailWithSupplements([failedSupplement]);
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([1, 2, 3]),
-        audioByteLength: 3,
-        transcript: {
-          exists: false,
-          text: '',
-          baselineHash: '0'.repeat(64),
-        },
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request, { transcriptExists: false })
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const { queryClient } = renderLoadedWorkspaceFrame({
       currentMemory: session.snapshot.memories[0] ?? null,
@@ -3965,18 +4666,11 @@ describe('LoadedWorkspaceFrame', () => {
       .mockImplementation(() => `blob:supplement-audio-${createObjectURL.mock.calls.length}`);
     createObjectURL.mockClear();
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request, {
+        audioByteLength: request.supplementId === 'sup_birthday_context' ? 5 : 3,
+      })
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
     const detailWithSupplements = birthdayDetailWithSupplements([
       audioSupplement(),
@@ -4405,10 +5099,10 @@ describe('LoadedWorkspaceFrame', () => {
     await user.hover(supplementTabItem);
     expect(moreButton).not.toHaveAttribute('aria-hidden');
     expect(moreButton).not.toHaveAttribute('tabindex', '-1');
-    expect(moreButton).not.toHaveClass('pointer-events-auto');
-    expect(moreButton).not.toHaveClass('ml-[6px]');
-    expect(moreButton).not.toHaveClass('max-w-20');
-    expect(moreButton).not.toHaveClass('opacity-100');
+    expect(moreButton).toHaveClass('pointer-events-auto');
+    expect(moreButton).toHaveClass('ml-[6px]');
+    expect(moreButton).toHaveClass('max-w-20');
+    expect(moreButton).toHaveClass('opacity-100');
 
     moreButton.focus();
     expect(moreButton).toHaveFocus();
@@ -4691,18 +5385,9 @@ describe('LoadedWorkspaceFrame', () => {
     createObjectURL.mockClear();
     const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     revokeObjectURL.mockClear();
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request)
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -4742,18 +5427,9 @@ describe('LoadedWorkspaceFrame', () => {
   it('ignores supplement waveform pointer movement until a scrub starts on the waveform', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:supplement-audio');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request)
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({
@@ -4796,18 +5472,9 @@ describe('LoadedWorkspaceFrame', () => {
       .mockReturnValue('blob:supplement-audio');
     createObjectURL.mockClear();
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) => ({
-      ok: true,
-      value: {
-        requestId: request.requestId,
-        workspaceId: request.workspaceId,
-        memoryId: request.memoryId,
-        segmentId: request.segmentId,
-        supplementId: request.supplementId,
-        audio: new Uint8Array([7, 8, 9]),
-        audioByteLength: 3,
-      },
-    }));
+    const readFinalizedAudioSegmentSupplement = vi.fn(async (request) =>
+      finalizedAudioSegmentSupplementContentResponse(request)
+    );
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
     const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
     const { queryClient } = renderLoadedWorkspaceFrame({

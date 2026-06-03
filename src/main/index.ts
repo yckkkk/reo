@@ -18,6 +18,7 @@ import { initializeElectronDiagnostics } from './electronDiagnostics.js';
 import { resolvePreloadPath } from './preloadPath.js';
 import { createWorkspaceBackfillRuntime } from './backfillRuntime.js';
 import { createRecordingTranscriptionSessionRegistry } from './recordingTranscriptionSessions.js';
+import { createWorkspaceSpeechSynthesisRuntime } from './speechSynthesisRuntime.js';
 import { createSecureWebPreferences } from './secureWebPreferences.js';
 import {
   getDevServerUrl,
@@ -138,8 +139,10 @@ app
       },
     });
     const backfillRuntime = createWorkspaceBackfillRuntime({ voiceSettingsStore });
+    const speechSynthesisRuntime = createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore });
     closeWorkspaceRuntime = async () => {
       await backfillRuntime.cancelAllAndDrain('app-quit');
+      await speechSynthesisRuntime.cancelAllAndDrain('app-quit');
       recordingTranscriptionSessions.closeAll();
       await closeAllWorkspaceHandles();
     };
@@ -149,6 +152,7 @@ app
       expectedSessionKey: 'default',
       isTrustedUrl: isTrustedAppUrl,
       recordingTranscriptionSessions,
+      speechSynthesisRuntime,
       voiceSettingsStore,
     });
     registerAppShellProtocolWithOptions({

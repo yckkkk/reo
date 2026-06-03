@@ -20,6 +20,7 @@ import {
   upsertByProjectedUpdatedAt,
 } from './appProjection';
 import { ReoToaster, showReoToast } from './components/ui/toaster';
+import type { VoiceSpeechSynthesisSpeaker } from './voiceSpeechSynthesisSpeakers';
 import {
   devWorkspaceScenarioMemorySpaceId,
   readAutoOpenDevWorkspaceScenarioName,
@@ -30,6 +31,9 @@ import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
 import type {
   SavedSegmentSupplementTranscriptContent,
+  SegmentSpeechSynthesisTarget,
+  SegmentSupplementSpeechSynthesisTarget,
+  SpeechSynthesisMode,
   SegmentSupplementTranscriptionRetryTarget,
   SegmentTranscriptionRetryTarget,
   TranscriptionBackfillMode,
@@ -98,6 +102,8 @@ import {
   removeMemorySpace,
   resetMemoryCover,
   resetSegmentCover,
+  requestSegmentSpeechSynthesis,
+  requestSegmentSupplementSpeechSynthesis,
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
@@ -147,12 +153,15 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  seedWorkspaceHandleScopedContentQueries,
   seedWorkspaceSnapshot,
   segmentSupplementContentQueryKey,
   segmentSupplementContentQueryPrefix,
   segmentContentQueryKey,
-  workspaceHandleScopedContentQueryBelongsToWorkspace,
   workspaceContentQueryBelongsToWorkspace,
+  workspacePlaybackAudioQueryBelongsToEntity,
+  workspacePlaybackAudioQueryBelongsToWorkspace,
+  workspaceProjectionQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
@@ -183,6 +192,7 @@ type SegmentSupplementTranscriptionBackfillValue = Extract<
   Awaited<ReturnType<typeof requestSegmentSupplementTranscriptionBackfill>>,
   { readonly ok: true }
 >['value'];
+type SpeechSynthesisResponse = Awaited<ReturnType<typeof requestSegmentSpeechSynthesis>>;
 
 function memoryCreateDialogDescription(intent: MemoryCreateIntent | null) {
   if (intent?.afterCreate === 'record-memory') {
@@ -269,12 +279,24 @@ const RECORDING_RECOVERY_SAVE_ERROR = '无法保存未完成录音。';
 const RECORDING_RECOVERY_DISCARD_ERROR = '无法放弃未完成录音。';
 const TRANSCRIPTION_BACKFILL_ERROR = '无法生成转录。';
 const TRANSCRIPTION_BACKFILL_SUCCESS = '已生成转录';
+const SPEECH_SYNTHESIS_ERROR = '无法生成语音。';
+const SPEECH_SYNTHESIS_SUCCESS = '已生成语音';
 
 function segmentBackfillKey(target: SegmentTranscriptionRetryTarget): string {
   return [target.workspaceId, target.memoryId, target.segmentId].join(':');
 }
 
 function segmentSupplementBackfillKey(target: SegmentSupplementTranscriptionRetryTarget): string {
+  return [target.workspaceId, target.memoryId, target.segmentId, target.supplementId].join(':');
+}
+
+function segmentSpeechSynthesisKey(target: SegmentSpeechSynthesisTarget): string {
+  return [target.workspaceId, target.memoryId, target.segmentId].join(':');
+}
+
+function segmentSupplementSpeechSynthesisKey(
+  target: SegmentSupplementSpeechSynthesisTarget
+): string {
   return [target.workspaceId, target.memoryId, target.segmentId, target.supplementId].join(':');
 }
 
@@ -292,19 +314,25 @@ function createPendingSegmentDeleteQueryGuard(
   }
 
   return (queryKey: readonly unknown[]) => {
-    const [scope, kind, workspaceId, memoryId, segmentId] = queryKey;
-    if (scope !== 'workspace' || typeof workspaceId !== 'string' || typeof memoryId !== 'string') {
+    const [scope, kind, workspaceId] = queryKey;
+    if (scope !== 'workspace' || typeof workspaceId !== 'string') {
       return false;
     }
 
     if (kind === 'memory-detail') {
+      const memoryId = queryKey[3];
+      if (typeof memoryId !== 'string') {
+        return false;
+      }
       return protectedMemoryDetailKeys.has(`${workspaceId}:${memoryId}`);
     }
 
-    if (
-      (kind === 'segment-content' || kind === 'segment-supplement-content') &&
-      typeof segmentId === 'string'
-    ) {
+    if (kind === 'segment-content' || kind === 'segment-supplement-content') {
+      const memoryId = queryKey[4];
+      const segmentId = queryKey[5];
+      if (typeof memoryId !== 'string' || typeof segmentId !== 'string') {
+        return false;
+      }
       return protectedSegmentContentKeys.has(`${workspaceId}:${memoryId}:${segmentId}`);
     }
 
@@ -349,7 +377,34 @@ function voiceBackfillDisabledReason({
   if (!settings.apiKeyConfigured) {
     return '先在设置里填写 X-Api-Key。';
   }
-  if (settings.lastValidationCode === 'auth') {
+  if (settings.lastTranscriptionValidationCode === 'auth') {
+    return 'X-Api-Key 验证失败，请在设置中更新。';
+  }
+  return null;
+}
+
+function voiceSpeechSynthesisDisabledReason({
+  recordingActive,
+  settings,
+  settingsLoading,
+}: {
+  readonly recordingActive: boolean;
+  readonly settings: VoiceTranscriptionSettings | undefined;
+  readonly settingsLoading: boolean;
+}): string | null {
+  if (recordingActive) {
+    return '当前录音尚未完成，请先完成或关闭录音。';
+  }
+  if (settingsLoading || !settings) {
+    return '正在载入语音设置。';
+  }
+  if (!settings.enabled) {
+    return '先在设置里启用豆包语音。';
+  }
+  if (!settings.apiKeyConfigured) {
+    return '先在设置里填写 X-Api-Key。';
+  }
+  if (settings.lastSpeechSynthesisValidationCode === 'auth') {
     return 'X-Api-Key 验证失败，请在设置中更新。';
   }
   return null;
@@ -700,6 +755,9 @@ export function App() {
   const [runningTranscriptionBackfills, setRunningTranscriptionBackfills] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [runningSpeechSyntheses, setRunningSpeechSyntheses] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [memoryStudioInlineMarkdownDirty, setMemoryStudioInlineMarkdownDirty] = useState(false);
   const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
@@ -729,6 +787,7 @@ export function App() {
   const workspaceSnapshotRefreshRequestRef = useRef(0);
   const recordingRecoveryActionIdRef = useRef(0);
   const runningTranscriptionBackfillsRef = useRef<Map<string, string>>(new Map());
+  const runningSpeechSynthesesRef = useRef<Map<string, string>>(new Map());
   const setWorkspaceSession = useCallback(
     (
       nextSession:
@@ -756,6 +815,12 @@ export function App() {
           }
         }
         setRunningTranscriptionBackfills(new Set(runningTranscriptionBackfillsRef.current.keys()));
+        for (const [key, workspaceHandle] of runningSpeechSynthesesRef.current.entries()) {
+          if (!resolvedSession || workspaceHandle !== resolvedSession.workspaceHandle) {
+            runningSpeechSynthesesRef.current.delete(key);
+          }
+        }
+        setRunningSpeechSyntheses(new Set(runningSpeechSynthesesRef.current.keys()));
       }
       workspaceSessionRef.current = resolvedSession;
       if (!resolvedSession) {
@@ -785,6 +850,11 @@ export function App() {
   const noteEditorOpen = activeNoteEditorFlow?.open ?? false;
   const noteEditorBlocking = noteEditorTarget !== null && noteEditorOpen;
   const transcriptionBackfillDisabledReason = voiceBackfillDisabledReason({
+    recordingActive: recordingTarget !== null,
+    settings: voiceSettingsQuery.data,
+    settingsLoading: voiceSettingsQuery.isLoading,
+  });
+  const speechSynthesisDisabledReason = voiceSpeechSynthesisDisabledReason({
     recordingActive: recordingTarget !== null,
     settings: voiceSettingsQuery.data,
     settingsLoading: voiceSettingsQuery.isLoading,
@@ -1049,7 +1119,7 @@ export function App() {
               typeof query.getObserversCount === 'function' ? query.getObserversCount() : 1;
             return (
               observerCount > 0 &&
-              workspaceHandleScopedContentQueryBelongsToWorkspace(
+              workspaceProjectionQueryBelongsToWorkspace(
                 query.queryKey,
                 response.value.workspaceId
               ) &&
@@ -1085,10 +1155,8 @@ export function App() {
       void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
       void queryClient.invalidateQueries({
         predicate: (query) =>
-          workspaceHandleScopedContentQueryBelongsToWorkspace(
-            query.queryKey,
-            response.value.workspaceId
-          ) && !queryKeyMatchesProtectedPendingDelete(query.queryKey),
+          workspaceProjectionQueryBelongsToWorkspace(query.queryKey, response.value.workspaceId) &&
+          !queryKeyMatchesProtectedPendingDelete(query.queryKey),
       });
     }
 
@@ -1133,15 +1201,17 @@ export function App() {
   }
 
   function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
-    queryClient.removeQueries({
+    void queryClient.invalidateQueries({
       predicate: (query) =>
         workspaceContentQueryBelongsToWorkspace(query.queryKey, nextWorkspaceSession.workspaceId),
+      refetchType: 'none',
     });
     void queryClient.invalidateQueries({
       predicate: (query) =>
         memoryDetailQueryBelongsToWorkspace(query.queryKey, nextWorkspaceSession.workspaceId),
       refetchType: 'none',
     });
+    seedWorkspaceHandleScopedContentQueries(queryClient, nextWorkspaceSession);
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     setWorkspaceCreateOpen(false);
@@ -1422,6 +1492,155 @@ export function App() {
     ]
   );
 
+  const runSpeechSynthesis = useCallback(
+    ({
+      key,
+      refreshContent,
+      request,
+      workspaceId,
+    }: {
+      readonly key: string;
+      readonly refreshContent: (session: WorkspaceSession) => Promise<unknown>;
+      readonly request: (session: WorkspaceSession) => Promise<SpeechSynthesisResponse>;
+      readonly workspaceId: string;
+    }) => {
+      const session = workspaceSessionRef.current;
+      if (!session || session.workspaceId !== workspaceId) {
+        return Promise.resolve();
+      }
+      if (runningSpeechSynthesesRef.current.get(key) === session.workspaceHandle) {
+        return Promise.resolve();
+      }
+      runningSpeechSynthesesRef.current.set(key, session.workspaceHandle);
+      setRunningSpeechSyntheses((current) => addRunningKey(current, key));
+      const operation = (async () => {
+        try {
+          const response = await request(session);
+          const currentSession = workspaceSessionRef.current;
+          if (
+            currentSession?.workspaceId !== workspaceId ||
+            currentSession.workspaceHandle !== session.workspaceHandle
+          ) {
+            return;
+          }
+          if (!response.ok) {
+            showReoToast({
+              type: 'error',
+              title: SPEECH_SYNTHESIS_ERROR,
+              description: workspaceErrorDisplayMessage(response.error, SPEECH_SYNTHESIS_ERROR),
+            });
+            return;
+          }
+          await refreshContent(session);
+          showReoToast({ type: 'success', title: SPEECH_SYNTHESIS_SUCCESS });
+        } catch (error) {
+          showReoToast({
+            type: 'error',
+            title: SPEECH_SYNTHESIS_ERROR,
+            description: unknownErrorDisplayMessage(error, SPEECH_SYNTHESIS_ERROR),
+          });
+        } finally {
+          if (runningSpeechSynthesesRef.current.get(key) === session.workspaceHandle) {
+            runningSpeechSynthesesRef.current.delete(key);
+            setRunningSpeechSyntheses((current) => removeRunningKey(current, key));
+          }
+        }
+      })();
+      return operation;
+    },
+    [queryClient]
+  );
+
+  const requestNoteSegmentSpeechSynthesis = useCallback(
+    (
+      target: SegmentSpeechSynthesisTarget & {
+        readonly mode: SpeechSynthesisMode;
+        readonly speaker: VoiceSpeechSynthesisSpeaker;
+      }
+    ) => {
+      return runSpeechSynthesis({
+        key: segmentSpeechSynthesisKey(target),
+        refreshContent: (session) =>
+          queryClient.invalidateQueries({
+            exact: true,
+            queryKey: segmentContentQueryKey({
+              workspaceId: target.workspaceId,
+              workspaceHandle: session.workspaceHandle,
+              memoryId: target.memoryId,
+              segmentId: target.segmentId,
+            }),
+            refetchType: 'active',
+          }),
+        request: (session) =>
+          requestSegmentSpeechSynthesis({
+            workspaceHandle: session.workspaceHandle,
+            workspaceId: target.workspaceId,
+            memoryId: target.memoryId,
+            segmentId: target.segmentId,
+            mode: target.mode,
+            speaker: target.speaker,
+          }),
+        workspaceId: target.workspaceId,
+      });
+    },
+    [queryClient, runSpeechSynthesis]
+  );
+
+  const requestNoteSupplementSpeechSynthesis = useCallback(
+    (
+      target: SegmentSupplementSpeechSynthesisTarget & {
+        readonly mode: SpeechSynthesisMode;
+        readonly speaker: VoiceSpeechSynthesisSpeaker;
+      }
+    ) => {
+      return runSpeechSynthesis({
+        key: segmentSupplementSpeechSynthesisKey(target),
+        refreshContent: (session) =>
+          queryClient.invalidateQueries({
+            exact: true,
+            queryKey: segmentSupplementContentQueryKey({
+              workspaceId: target.workspaceId,
+              workspaceHandle: session.workspaceHandle,
+              memoryId: target.memoryId,
+              segmentId: target.segmentId,
+              supplementId: target.supplementId,
+            }),
+            refetchType: 'active',
+          }),
+        request: (session) =>
+          requestSegmentSupplementSpeechSynthesis({
+            workspaceHandle: session.workspaceHandle,
+            workspaceId: target.workspaceId,
+            memoryId: target.memoryId,
+            segmentId: target.segmentId,
+            supplementId: target.supplementId,
+            mode: target.mode,
+            speaker: target.speaker,
+          }),
+        workspaceId: target.workspaceId,
+      });
+    },
+    [queryClient, runSpeechSynthesis]
+  );
+
+  const memoryStudioSpeechSynthesis = useMemo(
+    () => ({
+      disabledReason: speechSynthesisDisabledReason,
+      isSegmentRunning: (target: SegmentSpeechSynthesisTarget) =>
+        runningSpeechSyntheses.has(segmentSpeechSynthesisKey(target)),
+      isSupplementRunning: (target: SegmentSupplementSpeechSynthesisTarget) =>
+        runningSpeechSyntheses.has(segmentSupplementSpeechSynthesisKey(target)),
+      requestSegment: requestNoteSegmentSpeechSynthesis,
+      requestSupplement: requestNoteSupplementSpeechSynthesis,
+    }),
+    [
+      requestNoteSegmentSpeechSynthesis,
+      requestNoteSupplementSpeechSynthesis,
+      runningSpeechSyntheses,
+      speechSynthesisDisabledReason,
+    ]
+  );
+
   function openWorkspaceCreateDialog() {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -1479,9 +1698,17 @@ export function App() {
       setRecordingFlow({ status: 'closed' });
       clearWorkspaceScopedTargets();
       setSelectedMemoryId(null);
-      queryClient.removeQueries({
+      void queryClient.invalidateQueries({
         predicate: (query) =>
           workspaceContentQueryBelongsToWorkspace(query.queryKey, workspaceSession.workspaceId),
+        refetchType: 'none',
+      });
+      queryClient.removeQueries({
+        predicate: (query) =>
+          workspacePlaybackAudioQueryBelongsToWorkspace(
+            query.queryKey,
+            workspaceSession.workspaceId
+          ),
       });
       setWorkspaceSession(null);
       setTopLevelWorkspaceView(nextView);
@@ -1877,7 +2104,17 @@ export function App() {
         }
       }}
     >
-      <VoiceSettingsPanel onBusyChange={setSettingsBusy} />
+      <VoiceSettingsPanel
+        activeWorkspace={
+          workspaceSession
+            ? {
+                workspaceHandle: workspaceSession.workspaceHandle,
+                workspaceId: workspaceSession.workspaceId,
+              }
+            : undefined
+        }
+        onBusyChange={setSettingsBusy}
+      />
     </SettingsShell>
   );
   function openSettingsMode() {
@@ -2090,6 +2327,7 @@ export function App() {
         exact: true,
         queryKey: segmentSupplementContentQueryKey({
           workspaceId: activeSession.workspaceId,
+          workspaceHandle: activeSession.workspaceHandle,
           memoryId: finalized.memory.memoryId,
           segmentId: finalized.segment.segmentId,
           supplementId: finalized.supplement.supplementId,
@@ -2153,6 +2391,7 @@ export function App() {
       exact: true,
       queryKey: segmentContentQueryKey({
         workspaceId: activeWorkspaceSession.workspaceId,
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
         memoryId: finalized.segment.memoryId,
         segmentId: finalized.segment.segmentId,
       }),
@@ -2168,6 +2407,7 @@ export function App() {
     queryClient.setQueryData<WorkspaceNoteSegmentContent | undefined>(
       segmentContentQueryKey({
         workspaceId: session.workspaceId,
+        workspaceHandle: session.workspaceHandle,
         memoryId: saved.memoryId,
         segmentId: saved.segmentId,
       }),
@@ -2217,6 +2457,7 @@ export function App() {
     queryClient.setQueryData<WorkspaceNoteSegmentSupplementContent | undefined>(
       segmentSupplementContentQueryKey({
         workspaceId: session.workspaceId,
+        workspaceHandle: session.workspaceHandle,
         memoryId: saved.memoryId,
         segmentId: saved.segmentId,
         supplementId: saved.supplementId,
@@ -2306,6 +2547,7 @@ export function App() {
       exact: true,
       queryKey: segmentSupplementContentQueryKey({
         workspaceId: activeWorkspaceSession.workspaceId,
+        workspaceHandle: activeWorkspaceSession.workspaceHandle,
         memoryId: finalized.memory.memoryId,
         segmentId: finalized.segment.segmentId,
         supplementId: finalized.supplement.supplementId,
@@ -3830,6 +4072,14 @@ export function App() {
           memoryId: target.memoryId,
         }),
       });
+      queryClient.removeQueries({
+        predicate: (query) =>
+          workspacePlaybackAudioQueryBelongsToEntity(query.queryKey, {
+            workspaceId: mutationSession.workspaceId,
+            workspaceHandle: mutationSession.workspaceHandle,
+            memoryId: target.memoryId,
+          }),
+      });
       if (selectedMemoryAtRequest === target.memoryId) {
         setSelectedMemoryId(response.value.memories[0]?.memoryId ?? null);
       }
@@ -3966,10 +4216,24 @@ export function App() {
     });
     const supplementContentKey = segmentSupplementContentQueryKey({
       workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
       memoryId: target.memoryId,
       segmentId: target.segment.segmentId,
       supplementId: target.supplement.supplementId,
     });
+    const removeDeletedSegmentSupplementCaches = () => {
+      queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
+      queryClient.removeQueries({
+        predicate: (query) =>
+          workspacePlaybackAudioQueryBelongsToEntity(query.queryKey, {
+            workspaceId: session.workspaceId,
+            workspaceHandle: session.workspaceHandle,
+            memoryId: target.memoryId,
+            segmentId: target.segment.segmentId,
+            supplementId: target.supplement.supplementId,
+          }),
+      });
+    };
     const showDeletedSegmentSupplementToast = (restoreToken: string) => {
       showReoToast({
         title: '已删除补充内容',
@@ -3999,7 +4263,7 @@ export function App() {
       );
 
       if (!currentMemory) {
-        queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
+        removeDeletedSegmentSupplementCaches();
         setSegmentSupplementDeleteTarget(null);
         return;
       }
@@ -4036,7 +4300,7 @@ export function App() {
       queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (current) =>
         mergeSegmentIntoMemoryDetail(current, projectedMemory, nextSegment, session.workspaceId)
       );
-      queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
+      removeDeletedSegmentSupplementCaches();
       setWorkspaceSession((currentSession) =>
         currentSession?.workspaceHandle === session.workspaceHandle &&
         currentSession.workspaceId === session.workspaceId
@@ -4093,7 +4357,7 @@ export function App() {
           session.workspaceId
         )
       );
-      queryClient.removeQueries({ exact: true, queryKey: supplementContentKey });
+      removeDeletedSegmentSupplementCaches();
       setWorkspaceSession((currentSession) =>
         currentSession?.workspaceHandle === session.workspaceHandle &&
         currentSession.workspaceId === session.workspaceId
@@ -4177,6 +4441,7 @@ export function App() {
         exact: true,
         queryKey: segmentContentQueryKey({
           workspaceId: session.workspaceId,
+          workspaceHandle: session.workspaceHandle,
           memoryId: target.memoryId,
           segmentId: target.segment.segmentId,
         }),
@@ -4184,9 +4449,19 @@ export function App() {
       queryClient.removeQueries({
         queryKey: segmentSupplementContentQueryPrefix({
           workspaceId: session.workspaceId,
+          workspaceHandle: session.workspaceHandle,
           memoryId: target.memoryId,
           segmentId: target.segment.segmentId,
         }),
+      });
+      queryClient.removeQueries({
+        predicate: (query) =>
+          workspacePlaybackAudioQueryBelongsToEntity(query.queryKey, {
+            workspaceId: session.workspaceId,
+            workspaceHandle: session.workspaceHandle,
+            memoryId: target.memoryId,
+            segmentId: target.segment.segmentId,
+          }),
       });
     };
     const currentSessionPendingSegmentDeletes = () =>
@@ -4608,6 +4883,7 @@ export function App() {
       exact: true,
       queryKey: segmentContentQueryKey({
         workspaceId: session.workspaceId,
+        workspaceHandle: session.workspaceHandle,
         memoryId,
         segmentId,
       }),
@@ -4825,6 +5101,7 @@ export function App() {
             onRenameSegment={setSegmentRenameTarget}
             onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
             onShownReviewToastSessionKeyChange={setShownReviewToastSessionKey}
+            speechSynthesis={memoryStudioSpeechSynthesis}
             transcriptionBackfill={memoryStudioTranscriptionBackfill}
             expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
             onStartNote={requestStartNote}

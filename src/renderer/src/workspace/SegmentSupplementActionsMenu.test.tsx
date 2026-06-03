@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
@@ -8,6 +8,7 @@ import {
   openEntityActionMenu,
 } from './entityActionMenuTestHelpers';
 import { SegmentSupplementActionsMenu } from './SegmentSupplementActionsMenu';
+import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 
 vi.mock('@/components/ui/toaster', () => {
   const toast = Object.assign(vi.fn(), {
@@ -49,7 +50,9 @@ function renderMenu(
   props: {
     onDelete?: () => void;
     onRename?: () => void;
+    onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
     onRequestTranscriptionBackfill?: () => void;
+    speechSynthesisDisabledReason?: string | null;
     transcriptExists?: boolean;
     transcriptionBackfillDisabledReason?: string | null;
   } = {}
@@ -58,8 +61,10 @@ function renderMenu(
     <SegmentSupplementActionsMenu
       actionIdentity={segmentSupplementActionPayload}
       onDelete={props.onDelete ?? vi.fn()}
+      onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onRename={props.onRename ?? vi.fn()}
+      speechSynthesisDisabledReason={props.speechSynthesisDisabledReason ?? null}
       supplementTitle="My Supplement"
       transcriptExists={props.transcriptExists ?? false}
       transcriptionBackfillDisabledReason={props.transcriptionBackfillDisabledReason ?? null}
@@ -240,5 +245,32 @@ describe('SegmentSupplementActionsMenu', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('正在生成中');
     await user.click(item);
     expect(reoWorkspace.copySegmentSupplementAbsolutePath).not.toHaveBeenCalled();
+  });
+
+  it('requests note supplement speech synthesis from the speaker submenu', async () => {
+    const onRequestSpeechSynthesis = vi.fn();
+    renderMenu({ onRequestSpeechSynthesis });
+
+    const { user } = await openEntityActionMenu('My Supplement 更多操作');
+    const item = screen.getByRole('menuitem', { name: '生成/重新生成语音' });
+    await user.click(item);
+    fireEvent.click(await screen.findByRole('menuitem', { name: '云舟' }));
+
+    expect(onRequestSpeechSynthesis).toHaveBeenCalledWith('zh_male_m191_uranus_bigtts');
+    expect(screen.queryByRole('menuitem', { name: '重新生成语音' })).not.toBeInTheDocument();
+  });
+
+  it('disables the speech action with tooltip copy when synthesis is unavailable', async () => {
+    renderMenu({
+      onRequestSpeechSynthesis: vi.fn(),
+      speechSynthesisDisabledReason: '正文过长，暂不支持生成语音。',
+    });
+
+    const { user } = await openEntityActionMenu('My Supplement 更多操作');
+    const item = screen.getByRole('menuitem', { name: '生成/重新生成语音' });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    await user.hover(item);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('正文过长，暂不支持生成语音。');
   });
 });

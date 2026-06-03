@@ -38,13 +38,18 @@ import {
   openWorkspace,
   openMemorySpace,
   readFinalizedAudioSegment,
+  readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
+  readFinalizedAudioSegmentSupplementAudio,
   readMemoryDetail,
   readSegmentContent,
   readSegmentSupplementContent,
   readWorkspaceSnapshot,
   readRecordingDraftAudio,
+  regenerateImportedSpeechSynthesis,
   removeMemorySpace,
+  requestSegmentSpeechSynthesis,
+  requestSegmentSupplementSpeechSynthesis,
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   revealMemoryInFinder,
@@ -55,6 +60,7 @@ import {
   restoreDeletedSegmentSupplement,
   restoreDeletedSegment,
   saveTranscript,
+  setVoiceSpeechSynthesisSpeaker,
   updateMemorySpaceTitle,
   updateMemoryTitle,
   updateSegmentContentTabOrder,
@@ -103,6 +109,8 @@ describe('workspace renderer API wrapper', () => {
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
     readFinalizedAudioSegmentSupplement: vi.fn(),
+    readFinalizedAudioSegmentAudio: vi.fn(),
+    readFinalizedAudioSegmentSupplementAudio: vi.fn(),
     createNoteSegmentDraft: vi.fn(),
     createSegmentSupplementNoteDraft: vi.fn(),
     writeNoteSegmentDraftBody: vi.fn(),
@@ -132,6 +140,10 @@ describe('workspace renderer API wrapper', () => {
     saveTranscript: vi.fn(),
     requestSegmentTranscriptionBackfill: vi.fn(),
     requestSegmentSupplementTranscriptionBackfill: vi.fn(),
+    requestSegmentSpeechSynthesis: vi.fn(),
+    requestSegmentSupplementSpeechSynthesis: vi.fn(),
+    regenerateImportedSpeechSynthesis: vi.fn(),
+    setVoiceSpeechSynthesisSpeaker: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
   };
@@ -385,8 +397,8 @@ describe('workspace renderer API wrapper', () => {
         workspaceId: 'ws_1',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        audio: new Uint8Array([1]),
-        audioByteLength: 1,
+        audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
         transcript: { exists: true, text: '正文', baselineHash: 'a'.repeat(64) },
       },
     });
@@ -398,8 +410,34 @@ describe('workspace renderer API wrapper', () => {
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         supplementId: 'sup_1',
+        audioByteLength: 1,
+        audioHash: 'a'.repeat(64),
+        transcript: { exists: false, text: '', baselineHash: 'a'.repeat(64) },
+      },
+    });
+    reoWorkspace.readFinalizedAudioSegmentAudio.mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'request_seg_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        audio: new Uint8Array([1, 2, 3]),
+        audioByteLength: 3,
+        audioHash: 'a'.repeat(64),
+      },
+    });
+    reoWorkspace.readFinalizedAudioSegmentSupplementAudio.mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'request_sup_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
         audio: new Uint8Array([2]),
         audioByteLength: 1,
+        audioHash: 'a'.repeat(64),
       },
     });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
@@ -780,6 +818,42 @@ describe('workspace renderer API wrapper', () => {
         baselineTranscriptHash: 'b'.repeat(64),
       },
     });
+    reoWorkspace.requestSegmentSpeechSynthesis.mockResolvedValue({
+      ok: true,
+      value: { speechSynthesis: { status: 'missing' } },
+    });
+    reoWorkspace.requestSegmentSupplementSpeechSynthesis.mockResolvedValue({
+      ok: true,
+      value: { speechSynthesis: { status: 'missing' } },
+    });
+    reoWorkspace.regenerateImportedSpeechSynthesis.mockResolvedValue({
+      ok: true,
+      value: {
+        failed: 0,
+        failedTargets: [],
+        generated: 1,
+        skipped: 0,
+        speaker: 'zh_female_vv_uranus_bigtts',
+        total: 1,
+      },
+    });
+    reoWorkspace.setVoiceSpeechSynthesisSpeaker.mockResolvedValue({
+      ok: true,
+      value: {
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          speechSynthesisSpeaker: 'zh_male_m191_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
+        },
+      },
+    });
     reoWorkspace.beginMicrophoneIntent.mockResolvedValue({
       ok: true,
       value: { registered: true },
@@ -827,6 +901,15 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
     });
+    await readFinalizedAudioSegmentAudio({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      requestId: 'request_seg_audio_1',
+      audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
+    });
     await readFinalizedAudioSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -834,6 +917,16 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       requestId: 'request_sup_1',
+    });
+    await readFinalizedAudioSegmentSupplementAudio({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_audio_1',
+      audioByteLength: 1,
+      audioHash: 'a'.repeat(64),
     });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await createSegmentSupplementRecordingDraft({
@@ -938,6 +1031,27 @@ describe('workspace renderer API wrapper', () => {
       supplementId: 'sup_1',
       mode: 'regenerate',
     });
+    await requestSegmentSpeechSynthesis({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'fill-missing',
+    });
+    await requestSegmentSupplementSpeechSynthesis({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
+    });
+    await setVoiceSpeechSynthesisSpeaker({ speaker: 'zh_male_m191_uranus_bigtts' });
+    await regenerateImportedSpeechSynthesis({
+      activeWorkspace: { workspaceHandle: 'wh_1', workspaceId: 'ws_1' },
+      mode: 'all',
+      speaker: 'zh_female_vv_uranus_bigtts',
+    });
     await beginMicrophoneIntent({
       workspaceHandle: 'wh_1',
       recordingFlowSessionId: 'recording_flow_1',
@@ -1000,6 +1114,15 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       requestId: 'request_seg_1',
     });
+    expect(reoWorkspace.readFinalizedAudioSegmentAudio).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      requestId: 'request_seg_audio_1',
+      audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
+    });
     expect(reoWorkspace.readFinalizedAudioSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -1007,6 +1130,16 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       requestId: 'request_sup_1',
+    });
+    expect(reoWorkspace.readFinalizedAudioSegmentSupplementAudio).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_audio_1',
+      audioByteLength: 1,
+      audioHash: 'a'.repeat(64),
     });
     expect(reoWorkspace.createSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -1092,6 +1225,29 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
       mode: 'regenerate',
+    });
+    expect(reoWorkspace.requestSegmentSpeechSynthesis).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'fill-missing',
+    });
+    expect(reoWorkspace.requestSegmentSupplementSpeechSynthesis).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
+    });
+    expect(reoWorkspace.setVoiceSpeechSynthesisSpeaker).toHaveBeenCalledWith({
+      speaker: 'zh_male_m191_uranus_bigtts',
+    });
+    expect(reoWorkspace.regenerateImportedSpeechSynthesis).toHaveBeenCalledWith({
+      activeWorkspace: { workspaceHandle: 'wh_1', workspaceId: 'ws_1' },
+      mode: 'all',
+      speaker: 'zh_female_vv_uranus_bigtts',
     });
     expect(reoWorkspace.beginMicrophoneIntent).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

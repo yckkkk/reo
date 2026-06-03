@@ -500,7 +500,11 @@ async function executeBackfillTask(
     return { errorCode: 'canceled', ok: false };
   }
   const settings = voiceSettingsStore.read();
-  if (!settings.enabled || !settings.apiKeyConfigured || settings.lastValidationOk !== true) {
+  if (
+    !settings.enabled ||
+    !settings.apiKeyConfigured ||
+    settings.lastTranscriptionValidationCode === 'auth'
+  ) {
     return { errorCode: 'auth', ok: false };
   }
   const apiKey = voiceSettingsStore.readDecryptedApiKey();

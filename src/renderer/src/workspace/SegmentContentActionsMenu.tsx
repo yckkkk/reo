@@ -1,4 +1,4 @@
-import { Ellipsis, Eraser, ExternalLink, PencilLine } from 'lucide-react';
+import { Ellipsis, Eraser, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceSegmentEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 import { bindSegmentEntityActions } from './entityActionBindings';
 import { EntityPathActionGroup, entityActionMenuSeparatorClassName } from './EntityPathActionGroup';
+import { SpeechSynthesisSpeakerSubmenu } from './speechSynthesisMenuAction';
 
 export type SegmentContentActionsMenuProps = {
   readonly actionIdentity: WorkspaceSegmentEntityActionRequest;
@@ -24,13 +26,22 @@ export type SegmentContentActionsMenuProps = {
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
+  readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly open?: boolean;
+  readonly speechSynthesisDisabledReason?: string | null | undefined;
+  readonly transcriptExists?: boolean | undefined;
+  readonly transcriptionBackfillDisabledReason?: string | null | undefined;
   readonly trigger?: ReactElement;
 };
 
-function SegmentContentActionIcon({ icon: Icon }: { readonly icon: typeof ExternalLink }) {
+function SegmentContentActionIcon({ icon: Icon }: { readonly icon: LucideIcon }) {
   return <Icon className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />;
+}
+
+function disabledReasonExists(reason: string | null | undefined) {
+  return reason !== null && reason !== undefined;
 }
 
 export function SegmentContentActionsMenu({
@@ -42,12 +53,20 @@ export function SegmentContentActionsMenu({
   onClear,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestSpeechSynthesis,
+  onRequestTranscriptionBackfill,
   onRename,
   open,
+  speechSynthesisDisabledReason = null,
+  transcriptExists = false,
+  transcriptionBackfillDisabledReason = null,
   trigger,
 }: SegmentContentActionsMenuProps) {
   const actionBindings = bindSegmentEntityActions(actionIdentity);
   const clearLabel = contentKind === 'transcript' ? '清空转录' : '清空正文';
+  const transcriptionBackfillDisabled = disabledReasonExists(transcriptionBackfillDisabledReason);
+  const showSpeechSynthesis = contentKind === 'body' && onRequestSpeechSynthesis;
+  const showTranscriptionBackfill = contentKind === 'transcript' && onRequestTranscriptionBackfill;
   const defaultTrigger = (
     <Button type="button" variant="ghostIcon" size="icon" aria-label={menuLabel}>
       <Ellipsis className="size-16" aria-hidden="true" />
@@ -73,6 +92,37 @@ export function SegmentContentActionsMenu({
           onOpenDefault={actionBindings.onOpenDefault}
           onRevealInFinder={actionBindings.onRevealInFinder}
         />
+        {showSpeechSynthesis || showTranscriptionBackfill ? (
+          <>
+            <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
+            <DropdownMenuGroup>
+              {showSpeechSynthesis ? (
+                <SpeechSynthesisSpeakerSubmenu
+                  disabledReason={speechSynthesisDisabledReason}
+                  onSelect={onRequestSpeechSynthesis}
+                />
+              ) : null}
+              {showTranscriptionBackfill ? (
+                <DropdownMenuItem
+                  disabled={transcriptionBackfillDisabled}
+                  title={
+                    transcriptionBackfillDisabled ? transcriptionBackfillDisabledReason : undefined
+                  }
+                  onSelect={(event) => {
+                    if (transcriptionBackfillDisabled) {
+                      event.preventDefault();
+                      return;
+                    }
+                    onRequestTranscriptionBackfill();
+                  }}
+                >
+                  <SegmentContentActionIcon icon={RefreshCw} />
+                  {transcriptExists ? '重新生成转录' : '生成转录'}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={onRename}>

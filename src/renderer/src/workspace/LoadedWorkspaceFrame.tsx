@@ -3,12 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { showReoToast, toast } from '../components/ui/toaster';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
+  clearMemoryStudioAudioResourceCaches,
+  createMemoryStudioAudioResourceCaches,
   MemoryStudio,
   type SavedSegmentSupplementTranscriptContent,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
+  type MemoryStudioAudioResourceCaches,
+  type SpeechSynthesisController,
   type TranscriptionBackfillController,
 } from './MemoryStudio';
+import { closeAudioWaveformDecoder } from './audioWaveform';
 import { MemoryRail } from './MemoryRail';
 import type {
   SegmentSupplementDeleteTarget,
@@ -64,6 +69,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onShownReviewToastSessionKeyChange?: (sessionKey: string | null) => void;
   readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
+  readonly speechSynthesis?: SpeechSynthesisController;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => void;
@@ -99,6 +105,7 @@ export function LoadedWorkspaceFrame({
   onRenameSegmentSupplement,
   onShownReviewToastSessionKeyChange,
   onInlineMarkdownDirtyChange,
+  speechSynthesis,
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
@@ -115,6 +122,11 @@ export function LoadedWorkspaceFrame({
   const needsReviewCount = snapshot.review?.needsReviewCount ?? 0;
   const reviewToastId = workspaceReviewToastId(snapshot.workspaceId);
   const reviewToastSessionKey = `${workspaceSession.workspaceHandle}:${snapshot.workspaceId}`;
+  const audioResourceCachesRef = useRef<MemoryStudioAudioResourceCaches | null>(null);
+  if (audioResourceCachesRef.current === null) {
+    audioResourceCachesRef.current = createMemoryStudioAudioResourceCaches();
+  }
+  const audioResourceCaches = audioResourceCachesRef.current;
   const activeReviewToastIdRef = useRef<string | null>(null);
   const fallbackShownReviewToastSessionKeyRef = useRef<string | null>(null);
   const copyNeedsReviewPromptRef = useRef<() => void>(() => {});
@@ -221,6 +233,13 @@ export function LoadedWorkspaceFrame({
     };
   }, [reviewToastId]);
 
+  useEffect(() => {
+    return () => {
+      clearMemoryStudioAudioResourceCaches(audioResourceCaches);
+      void closeAudioWaveformDecoder().catch(() => {});
+    };
+  }, [audioResourceCaches, workspaceSession.workspaceHandle]);
+
   return (
     <WorkspaceFrame
       memoryRailOpen={memoryRailOpen}
@@ -251,6 +270,7 @@ export function LoadedWorkspaceFrame({
       {currentMemory ? (
         <MemoryStudio
           key={currentMemory.memoryId}
+          audioResourceCaches={audioResourceCaches}
           memory={currentMemory}
           onDeleteSegment={onDeleteSegment}
           onDeleteSegmentSupplement={onDeleteSegmentSupplement}
@@ -265,6 +285,7 @@ export function LoadedWorkspaceFrame({
           onSwitchSegmentDefaultCover={onSwitchSegmentDefaultCover ?? (() => {})}
           onRenameSegment={onRenameSegment}
           {...(onInlineMarkdownDirtyChange ? { onInlineMarkdownDirtyChange } : {})}
+          {...(speechSynthesis ? { speechSynthesis } : {})}
           {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
           {...(onSegmentFocusConsumed ? { onSegmentFocusConsumed } : {})}
           {...(onStartSegmentSupplementNote ? { onStartSegmentSupplementNote } : {})}

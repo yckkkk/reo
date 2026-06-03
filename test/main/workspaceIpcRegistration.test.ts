@@ -84,6 +84,7 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
     });
     const closedHandles: string[] = [];
     const canceledBackfillReasons: string[] = [];
+    const canceledSpeechSynthesisReasons: string[] = [];
     const diagnosticEvents: Array<{
       readonly event: string;
       readonly fields: Record<string, unknown>;
@@ -115,19 +116,46 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
           ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
         resume: () => {},
       },
+      speechSynthesisRuntime: {
+        cancelAll: (reason: string) => {
+          canceledSpeechSynthesisReasons.push(`cancel:${reason}`);
+        },
+        cancelAllAndDrain: async (reason: string) => {
+          canceledSpeechSynthesisReasons.push(`drain:${reason}`);
+        },
+        enqueueAutomaticWorkspace: async () => ({ accepted: 0, capped: 0, duplicates: 0 }),
+        pause: () => {},
+        requestSegmentSpeechSynthesis: async () =>
+          ({
+            error: { code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE', message: 'unused' },
+            ok: false,
+          }) as never,
+        requestSupplementSpeechSynthesis: async () =>
+          ({
+            error: { code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE', message: 'unused' },
+            ok: false,
+          }) as never,
+        resume: () => {},
+      },
       voiceSettingsStore: {
         read: () => ({
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         }),
         setEnabled: async () => {},
+        setSpeechSynthesisSpeaker: async () => {},
         writeApiKey: async () => {},
         clearApiKey: async () => {},
-        recordValidation: async () => {},
+        recordTranscriptionValidation: async () => false,
+        recordSpeechSynthesisValidation: async () => false,
         readDecryptedApiKey: () => null,
       },
       async withDiagnostics<Result>(
@@ -174,12 +202,14 @@ test('registered closeWorkspace IPC closes the injected recording transcription 
     assert.equal(rejectedResponse.ok, false);
     assert.deepEqual(closedHandles, []);
     assert.deepEqual(canceledBackfillReasons, []);
+    assert.deepEqual(canceledSpeechSynthesisReasons, []);
 
     const response = await closeHandler(event, { workspaceHandle: 'wh_ipc' });
 
     assert.deepEqual(response, { ok: true, value: { closed: true } });
     assert.deepEqual(closedHandles, ['wh_ipc']);
     assert.deepEqual(canceledBackfillReasons, ['drain:workspace-switch']);
+    assert.deepEqual(canceledSpeechSynthesisReasons, ['drain:workspace-switch']);
     assert.deepEqual(diagnosticEvents, [
       { event: 'request.start', fields: { channel: WORKSPACE_CLOSE_CHANNEL } },
       { event: 'request.finish', fields: { channel: WORKSPACE_CLOSE_CHANNEL } },
@@ -251,21 +281,37 @@ test('registered workspace IPC fires automatic backfill on ready and validated s
       readonly workspaceHandle: string;
       readonly workspaceId: string;
     }> = [];
+    const automaticSpeechSyntheses: Array<{
+      readonly workspaceHandle: string;
+      readonly workspaceId: string;
+    }> = [];
     let latestIsCurrent: (() => boolean) | undefined;
     const settings: {
       apiKeyConfigured: boolean;
       apiKeyLastFour: string | null;
       enabled: boolean;
-      lastValidatedAt: string | null;
-      lastValidationCode: 'ok' | 'auth' | 'network' | null;
-      lastValidationOk: boolean | null;
+      speechSynthesisSpeaker:
+        | 'zh_female_vv_uranus_bigtts'
+        | 'zh_female_xiaohe_uranus_bigtts'
+        | 'zh_male_m191_uranus_bigtts'
+        | 'zh_male_shaonianzixin_uranus_bigtts';
+      lastTranscriptionValidatedAt: string | null;
+      lastTranscriptionValidationCode: 'ok' | 'auth' | 'network' | null;
+      lastTranscriptionValidationOk: boolean | null;
+      lastSpeechSynthesisValidatedAt: string | null;
+      lastSpeechSynthesisValidationCode: 'ok' | 'auth' | 'network' | null;
+      lastSpeechSynthesisValidationOk: boolean | null;
     } = {
       enabled: false,
       apiKeyConfigured: false,
       apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
+      speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+      lastTranscriptionValidatedAt: null,
+      lastTranscriptionValidationOk: null,
+      lastTranscriptionValidationCode: null,
+      lastSpeechSynthesisValidatedAt: null,
+      lastSpeechSynthesisValidationOk: null,
+      lastSpeechSynthesisValidationCode: null,
     };
 
     registerWorkspaceIpc({
@@ -300,23 +346,72 @@ test('registered workspace IPC fires automatic backfill on ready and validated s
           ({ error: { code: 'ERR_BACKFILL_UNAVAILABLE', message: 'unused' }, ok: false }) as never,
         resume: () => {},
       },
+      speechSynthesisRuntime: {
+        cancelAll: () => {},
+        cancelAllAndDrain: async () => {
+          assert.equal(latestIsCurrent?.(), false);
+        },
+        enqueueAutomaticWorkspace: async (input: {
+          readonly isCurrent?: () => boolean;
+          readonly workspaceHandle: string;
+          readonly workspaceId: string;
+        }) => {
+          latestIsCurrent = input.isCurrent;
+          automaticSpeechSyntheses.push({
+            workspaceHandle: input.workspaceHandle,
+            workspaceId: input.workspaceId,
+          });
+          return { accepted: 0, capped: 0, duplicates: 0 };
+        },
+        pause: () => {},
+        requestSegmentSpeechSynthesis: async () =>
+          ({
+            error: { code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE', message: 'unused' },
+            ok: false,
+          }) as never,
+        requestSupplementSpeechSynthesis: async () =>
+          ({
+            error: { code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE', message: 'unused' },
+            ok: false,
+          }) as never,
+        resume: () => {},
+      },
       voiceSettingsStore: {
         read: () => settings,
         setEnabled: async (enabled: boolean) => {
           settings.enabled = enabled;
         },
+        setSpeechSynthesisSpeaker: async (
+          speaker:
+            | 'zh_female_vv_uranus_bigtts'
+            | 'zh_female_xiaohe_uranus_bigtts'
+            | 'zh_male_m191_uranus_bigtts'
+            | 'zh_male_shaonianzixin_uranus_bigtts'
+        ) => {
+          settings.speechSynthesisSpeaker = speaker;
+        },
         writeApiKey: async () => {},
         clearApiKey: async () => {},
-        recordValidation: async ({ code }: { readonly code: string }) => {
+        recordTranscriptionValidation: async ({ code }: { readonly code: string }) => {
           settings.apiKeyConfigured = true;
           settings.apiKeyLastFour = '1234';
-          settings.lastValidationCode = code as never;
-          settings.lastValidationOk = code === 'ok';
-          settings.lastValidatedAt = '2026-05-17T12:00:00.000Z';
+          settings.lastTranscriptionValidationCode = code as never;
+          settings.lastTranscriptionValidationOk = code === 'ok';
+          settings.lastTranscriptionValidatedAt = '2026-05-17T12:00:00.000Z';
+          return true;
+        },
+        recordSpeechSynthesisValidation: async ({ code }: { readonly code: string }) => {
+          settings.apiKeyConfigured = true;
+          settings.apiKeyLastFour = '1234';
+          settings.lastSpeechSynthesisValidationCode = code as never;
+          settings.lastSpeechSynthesisValidationOk = code === 'ok';
+          settings.lastSpeechSynthesisValidatedAt = '2026-05-17T12:00:00.000Z';
+          return true;
         },
         readDecryptedApiKey: () => 'api-key',
       },
       voiceTranscriptionProbe: async () => ({ code: 'ok', ok: true }),
+      voiceSpeechSynthesisProbe: async () => ({ code: 'ok', ok: true }),
       async withDiagnostics<Result>(
         _event: {
           readonly area: string;
@@ -346,24 +441,35 @@ test('registered workspace IPC fires automatic backfill on ready and validated s
     })) as { ok: boolean; value?: { workspaceHandle: string; workspaceId: string } };
     assert.equal(readyResponse.ok, true);
     assert.deepEqual(automaticBackfills, []);
+    assert.deepEqual(automaticSpeechSyntheses, []);
 
-    await setEnabledHandler(event, { enabled: true });
-    assert.deepEqual(automaticBackfills, []);
+    try {
+      await setEnabledHandler(event, { enabled: true });
+      assert.deepEqual(automaticBackfills, []);
+      assert.deepEqual(automaticSpeechSyntheses, []);
 
-    await saveKeyHandler(event, { apiKey: 'abcd1234' });
-    assert.deepEqual(automaticBackfills, [
-      { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
-    ]);
+      await saveKeyHandler(event, { apiKey: 'abcd1234' });
+      assert.deepEqual(automaticBackfills, [
+        { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
+      ]);
+      assert.deepEqual(automaticSpeechSyntheses, [
+        { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
+      ]);
 
-    await saveKeyHandler(event, { apiKey: 'abcd1234' });
-    assert.deepEqual(automaticBackfills, [
-      { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
-    ]);
-
-    const closeResponse = (await closeHandler(event, { workspaceHandle: 'wh_ready' })) as {
-      ok: boolean;
-    };
-    assert.equal(closeResponse.ok, true);
+      await saveKeyHandler(event, { apiKey: 'abcd1234' });
+      assert.deepEqual(automaticBackfills, [
+        { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
+      ]);
+      assert.deepEqual(automaticSpeechSyntheses, [
+        { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
+        { workspaceHandle: 'wh_ready', workspaceId: readyResponse.value?.workspaceId },
+      ]);
+    } finally {
+      const closeResponse = (await closeHandler(event, { workspaceHandle: 'wh_ready' })) as {
+        ok: boolean;
+      };
+      assert.equal(closeResponse.ok, true);
+    }
   } finally {
     moduleWithLoad._load = originalLoad;
   }

@@ -9,6 +9,7 @@ import {
   scanWorkspaceBackfillTargets,
 } from '../../src/main/backfillRuntime.js';
 import { BACKFILL_AUDIO_MAX_INPUT_BYTES } from '../../src/main/backfillAudioDataSource.js';
+import type { VoiceSettingsSnapshot } from '../../src/main/voiceSettingsStore.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
 import type {
@@ -23,13 +24,17 @@ const usable = () => ({ ok: true as const });
 const BASELINE_TIPTAP_CONTENT_HASH = 'c'.repeat(64);
 
 const validVoiceSettingsStore = {
-  read: () => ({
+  read: (): VoiceSettingsSnapshot => ({
     apiKeyConfigured: true,
     apiKeyLastFour: 'key1',
     enabled: true,
-    lastValidationCode: 'ok' as const,
-    lastValidationOk: true,
-    lastValidatedAt: '2026-05-17T01:00:00.000Z',
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+    lastTranscriptionValidationCode: 'ok' as const,
+    lastTranscriptionValidationOk: true,
+    lastTranscriptionValidatedAt: '2026-05-17T01:00:00.000Z',
+    lastSpeechSynthesisValidationCode: null,
+    lastSpeechSynthesisValidationOk: null,
+    lastSpeechSynthesisValidatedAt: null,
   }),
   readDecryptedApiKey: () => 'api-key-1',
 };
@@ -1792,11 +1797,17 @@ test('workspace backfill runtime drops an automatic scan that finishes after can
   assert.equal(saved, false);
 });
 
-test('workspace backfill runtime rejects manual targets when voice settings are not enabled and validated', async () => {
+test('workspace backfill runtime rejects manual targets when voice settings cannot provide auth', async () => {
   for (const [name, voiceSettingsStore] of [
     ['disabled', invalidVoiceSettingsStore({ enabled: false })],
     ['not configured', invalidVoiceSettingsStore({ apiKeyConfigured: false })],
-    ['not validated', invalidVoiceSettingsStore({ lastValidationOk: false })],
+    [
+      'auth failed',
+      invalidVoiceSettingsStore({
+        lastTranscriptionValidationCode: 'auth',
+        lastTranscriptionValidationOk: false,
+      }),
+    ],
     ['missing decrypted key', invalidVoiceSettingsStore({}, null)],
   ] as const) {
     let recognized = false;
@@ -1807,6 +1818,9 @@ test('workspace backfill runtime rejects manual targets when voice settings are 
         contentType: 'audio/ogg; codecs=opus',
         format: 'ogg-opus',
       }),
+      readMemoryDetail: async () => {
+        throw new Error('readMemoryDetail should not run without auth');
+      },
       readSegmentAudio: async () => ({
         audio: new Uint8Array([1]),
         audioByteLength: 1,
@@ -1836,6 +1850,78 @@ test('workspace backfill runtime rejects manual targets when voice settings are 
     assert.equal(response.ok, false, name);
     assert.equal(response.error.code, 'ERR_BACKFILL_AUTH_FAILED', name);
     assert.equal(recognized, false, name);
+  }
+});
+
+test('workspace backfill runtime allows configured keys when transcription validation is missing or network-only', async () => {
+  for (const [name, voiceSettingsStore] of [
+    [
+      'never validated',
+      invalidVoiceSettingsStore({
+        lastTranscriptionValidationCode: null,
+        lastTranscriptionValidationOk: null,
+        lastTranscriptionValidatedAt: null,
+      }),
+    ],
+    [
+      'network validation',
+      invalidVoiceSettingsStore({
+        lastTranscriptionValidationCode: 'network',
+        lastTranscriptionValidationOk: null,
+      }),
+    ],
+  ] as const) {
+    let recognized = false;
+    const runtime = createWorkspaceBackfillRuntime({
+      prepareAudioData: async () => ({
+        base64: 'b2dnLW9wdXM=',
+        byteLength: 12,
+        contentType: 'audio/ogg; codecs=opus',
+        format: 'ogg-opus',
+      }),
+      readMemoryDetail: async () => ({ ok: true, value: memoryDetail() }),
+      readSegmentAudio: async () => ({
+        audio: new Uint8Array([1]),
+        audioByteLength: 1,
+        lastTranscriptionAttempt: 'failed',
+        ok: true,
+        transcript: { exists: false, text: '' },
+      }),
+      recognize: async () => {
+        recognized = true;
+        return { ok: true, requestId: 'request-validation-soft', transcriptText: '补转录完成。' };
+      },
+      saveSegmentTranscript: async () => ({
+        memory: {
+          audioByteLength: 1,
+          createdAt: '2026-05-17T01:00:00.000Z',
+          audioDurationMs: 1000,
+          hasAudioTranscript: true,
+          memoryId: 'mem_1',
+          segmentCount: 1,
+          audioSegmentCount: 1,
+          noteSegmentCount: 0,
+          hasAnyNote: false,
+          supplementCount: 0,
+          title: 'Memory',
+          updatedAt: '2026-05-17T01:00:00.000Z',
+        },
+        ok: true,
+        baselineTiptapContentHash: BASELINE_TIPTAP_CONTENT_HASH,
+        saved: true,
+      }),
+      saveSupplementTranscript: async () =>
+        ({
+          error: { code: 'ERR_WORKSPACE_INVALID_REQUEST', message: 'unused' },
+          ok: false,
+        }) as never,
+      voiceSettingsStore,
+    });
+
+    const response = await runtime.requestSegmentBackfill(segmentTask());
+
+    assert.equal(response.ok, true, name);
+    assert.equal(recognized, true, name);
   }
 });
 
