@@ -6,6 +6,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from './dropdown-menu';
 
@@ -70,5 +73,32 @@ describe('DropdownMenu primitive', () => {
     expect(screen.getByRole('menuitem', { name: '重命名片段' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '删除片段' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '恢复片段' })).toBeInTheDocument();
+  });
+
+  it('keeps submenu trigger density and icon sizing aligned with menu items', () => {
+    render(
+      <DropdownMenu open modal={false}>
+        <DropdownMenuTrigger>更多</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuSub open>
+            <DropdownMenuSubTrigger>
+              <svg aria-hidden="true" className="size-16 shrink-0 text-muted-foreground" />
+              生成语音
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem>Vivi</DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+    const subTrigger = screen.getByRole('menuitem', { name: '生成语音' });
+    const icons = subTrigger.querySelectorAll('svg');
+
+    expect(subTrigger).toHaveClass('min-h-32', 'gap-4', 'px-8', 'text-ui-md');
+    expect(icons[0]).toHaveClass('size-16');
+    expect(icons[1]).toHaveClass('ml-auto', 'size-[14px]', 'shrink-0');
+    expect(screen.getByRole('menuitem', { name: 'Vivi' })).toHaveClass('min-h-32');
   });
 });

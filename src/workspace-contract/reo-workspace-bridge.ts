@@ -53,8 +53,12 @@ import type {
   WorkspaceOpenSegmentSupplementDocumentRequest,
   WorkspaceReadSegmentContentRequest,
   WorkspaceReadSegmentContentResponse,
+  WorkspaceReadSegmentSpeechAudioRequest,
+  WorkspaceReadSegmentSpeechAudioResponse,
   WorkspaceReadSegmentSupplementContentRequest,
   WorkspaceReadSegmentSupplementContentResponse,
+  WorkspaceReadSegmentSupplementSpeechAudioRequest,
+  WorkspaceReadSegmentSupplementSpeechAudioResponse,
   WorkspaceSaveSegmentAttachmentRequest,
   WorkspaceSaveSegmentSupplementAttachmentRequest,
   WorkspaceListSegmentAttachmentsRequest,
@@ -62,8 +66,12 @@ import type {
   WorkspaceSaveAttachmentResponse,
   WorkspaceListAttachmentsResponse,
   WorkspaceReadFinalizedAudioSegmentRequest,
+  WorkspaceReadFinalizedAudioSegmentAudioRequest,
+  WorkspaceReadFinalizedAudioSegmentAudioResponse,
   WorkspaceReadFinalizedAudioSegmentResponse,
   WorkspaceReadFinalizedAudioSegmentSupplementRequest,
+  WorkspaceReadFinalizedAudioSegmentSupplementAudioRequest,
+  WorkspaceReadFinalizedAudioSegmentSupplementAudioResponse,
   WorkspaceReadFinalizedAudioSegmentSupplementResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
@@ -107,13 +115,21 @@ import type {
   WorkspaceRecordingMarkdownSaveResponse,
   WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest,
   WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse,
+  WorkspaceRequestSegmentSupplementSpeechSynthesisRequest,
+  WorkspaceRequestSegmentSupplementSpeechSynthesisResponse,
   WorkspaceRequestSegmentTranscriptionBackfillRequest,
   WorkspaceRequestSegmentTranscriptionBackfillResponse,
+  WorkspaceRequestSegmentSpeechSynthesisRequest,
+  WorkspaceRequestSegmentSpeechSynthesisResponse,
+  WorkspaceRegenerateImportedSpeechSynthesisRequest,
+  WorkspaceRegenerateImportedSpeechSynthesisResponse,
   WorkspaceSegmentSupplementMarkdownSaveRequest,
   WorkspaceSegmentSupplementMarkdownSaveResponse,
   WorkspaceRemoveMemorySpaceResponse,
   WorkspaceSaveVoiceTranscriptionApiKeyRequest,
   WorkspaceSaveVoiceTranscriptionApiKeyResponse,
+  WorkspaceSetVoiceSpeechSynthesisSpeakerRequest,
+  WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   WorkspaceSetVoiceTranscriptionEnabledRequest,
   WorkspaceSetVoiceTranscriptionEnabledResponse,
   WorkspaceUpdateMemorySpaceTitleRequest,
@@ -244,6 +260,12 @@ export interface ReoWorkspaceBridge {
   readonly readFinalizedAudioSegmentSupplement: (
     payload: WorkspaceReadFinalizedAudioSegmentSupplementRequest
   ) => Promise<WorkspaceReadFinalizedAudioSegmentSupplementResponse>;
+  readonly readFinalizedAudioSegmentAudio: (
+    payload: WorkspaceReadFinalizedAudioSegmentAudioRequest
+  ) => Promise<WorkspaceReadFinalizedAudioSegmentAudioResponse>;
+  readonly readFinalizedAudioSegmentSupplementAudio: (
+    payload: WorkspaceReadFinalizedAudioSegmentSupplementAudioRequest
+  ) => Promise<WorkspaceReadFinalizedAudioSegmentSupplementAudioResponse>;
   readonly createRecordingDraft: (
     payload: WorkspaceHandleRequest
   ) => Promise<WorkspaceCreateRecordingDraftResponse>;
@@ -274,6 +296,12 @@ export interface ReoWorkspaceBridge {
   readonly readSegmentSupplementContent: (
     payload: WorkspaceReadSegmentSupplementContentRequest
   ) => Promise<WorkspaceReadSegmentSupplementContentResponse>;
+  readonly readSegmentSpeechAudio: (
+    payload: WorkspaceReadSegmentSpeechAudioRequest
+  ) => Promise<WorkspaceReadSegmentSpeechAudioResponse>;
+  readonly readSegmentSupplementSpeechAudio: (
+    payload: WorkspaceReadSegmentSupplementSpeechAudioRequest
+  ) => Promise<WorkspaceReadSegmentSupplementSpeechAudioResponse>;
   readonly writeSegmentContent: (
     payload: WorkspaceWriteSegmentContentRequest
   ) => Promise<WorkspaceWriteSegmentContentResponse>;
@@ -343,6 +371,15 @@ export interface ReoWorkspaceBridge {
   readonly requestSegmentSupplementTranscriptionBackfill: (
     payload: WorkspaceRequestSegmentSupplementTranscriptionBackfillRequest
   ) => Promise<WorkspaceRequestSegmentSupplementTranscriptionBackfillResponse>;
+  readonly requestSegmentSpeechSynthesis: (
+    payload: WorkspaceRequestSegmentSpeechSynthesisRequest
+  ) => Promise<WorkspaceRequestSegmentSpeechSynthesisResponse>;
+  readonly requestSegmentSupplementSpeechSynthesis: (
+    payload: WorkspaceRequestSegmentSupplementSpeechSynthesisRequest
+  ) => Promise<WorkspaceRequestSegmentSupplementSpeechSynthesisResponse>;
+  readonly regenerateImportedSpeechSynthesis: (
+    payload: WorkspaceRegenerateImportedSpeechSynthesisRequest
+  ) => Promise<WorkspaceRegenerateImportedSpeechSynthesisResponse>;
   readonly beginMicrophoneIntent: (
     payload: WorkspaceMicrophoneIntentRequest
   ) => Promise<WorkspaceMicrophoneIntentResponse>;
@@ -367,6 +404,9 @@ export interface ReoWorkspaceBridge {
   readonly setVoiceTranscriptionEnabled: (
     payload: WorkspaceSetVoiceTranscriptionEnabledRequest
   ) => Promise<WorkspaceSetVoiceTranscriptionEnabledResponse>;
+  readonly setVoiceSpeechSynthesisSpeaker: (
+    payload: WorkspaceSetVoiceSpeechSynthesisSpeakerRequest
+  ) => Promise<WorkspaceSetVoiceSpeechSynthesisSpeakerResponse>;
   readonly saveVoiceTranscriptionApiKey: (
     payload: WorkspaceSaveVoiceTranscriptionApiKeyRequest
   ) => Promise<WorkspaceSaveVoiceTranscriptionApiKeyResponse>;

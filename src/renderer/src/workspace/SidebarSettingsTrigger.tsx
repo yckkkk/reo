@@ -16,7 +16,9 @@ export function SidebarSettingsTrigger({
   recordingActive,
 }: SidebarSettingsTriggerProps) {
   const { data: voiceSettings } = useQuery(voiceSettingsQueryOptions());
-  const showVoiceCredentialsDot = voiceSettings?.lastValidationCode === 'auth';
+  const showVoiceCredentialsDot =
+    voiceSettings?.lastTranscriptionValidationCode === 'auth' ||
+    voiceSettings?.lastSpeechSynthesisValidationCode === 'auth';
 
   function handleClick() {
     if (recordingActive) {

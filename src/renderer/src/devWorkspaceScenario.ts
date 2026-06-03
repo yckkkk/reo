@@ -26,6 +26,20 @@ const AUDIO_SUPPLEMENT_TRANSCRIPT =
 const NOTE_BODY =
   '## 页面观察\n\n这条笔记用于验证 note segment 的正文状态。浏览器调试场景需要同时覆盖录音、笔记、补充录音和补充笔记。';
 const SUPPLEMENT_NOTE_BODY = '补充笔记用于验证内容 tab 切换、长标题截断和正文编辑 surface。';
+const MISSING_SPEECH_SYNTHESIS = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
 
 let installedDevWorkspaceScenario: DevWorkspaceScenarioName | null = null;
 
@@ -240,8 +254,8 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
       memoryId: memory.memoryId,
       segmentId: audioSegment.segmentId,
-      audio,
       audioByteLength,
+      audioHash: BASELINE_HASH,
       transcript: {
         exists: true,
         text: AUDIO_TRANSCRIPT,
@@ -256,8 +270,8 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       memoryId: memory.memoryId,
       segmentId: audioSegment.segmentId,
       supplementId: 'sup_dev_followup_audio',
-      audio,
       audioByteLength,
+      audioHash: BASELINE_HASH,
       transcript: {
         exists: true,
         text: AUDIO_SUPPLEMENT_TRANSCRIPT,
@@ -286,6 +300,7 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       bodyByteLength: byteLength(NOTE_BODY),
       baselineContentHash: BASELINE_HASH,
       baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
+      speechSynthesis: MISSING_SPEECH_SYNTHESIS,
     },
     session: {
       workspaceHandle: 'dev-scenario-workspace-handle',
@@ -305,6 +320,7 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       bodyByteLength: byteLength(SUPPLEMENT_NOTE_BODY),
       baselineContentHash: BASELINE_HASH,
       baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
+      speechSynthesis: MISSING_SPEECH_SYNTHESIS,
     },
   };
 }
@@ -364,6 +380,31 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     readFinalizedAudioSegmentSupplement: (
       payload: Parameters<ReoWorkspaceBridge['readFinalizedAudioSegmentSupplement']>[0]
     ) => ok({ ...scenario.audioSupplementContent, requestId: payload.requestId }),
+    readFinalizedAudioSegmentAudio: (
+      payload: Parameters<ReoWorkspaceBridge['readFinalizedAudioSegmentAudio']>[0]
+    ) =>
+      ok({
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        audio: scenario.audio,
+        audioByteLength: payload.audioByteLength,
+        audioHash: BASELINE_HASH,
+      }),
+    readFinalizedAudioSegmentSupplementAudio: (
+      payload: Parameters<ReoWorkspaceBridge['readFinalizedAudioSegmentSupplementAudio']>[0]
+    ) =>
+      ok({
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        supplementId: payload.supplementId,
+        audio: scenario.audio,
+        audioByteLength: payload.audioByteLength,
+        audioHash: BASELINE_HASH,
+      }),
     createRecordingDraft: () => unsupported(),
     createSegmentSupplementRecordingDraft: () => unsupported(),
     createNoteSegmentDraft: () => unsupported(),
@@ -435,6 +476,40 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
         segment: scenario.detail.segments[0],
         supplement: scenario.detail.segments[0]?.supplements[0],
       }),
+    requestSegmentSpeechSynthesis: () =>
+      ok({
+        speechSynthesis: {
+          status: 'missing' as const,
+          audioByteLength: null,
+          contentHash: null,
+          format: null,
+          lastSynthesisAttempt: 'never' as const,
+          mimeType: null,
+          model: null,
+          reason: null,
+          resourceId: null,
+          sampleRate: null,
+          speaker: null,
+          updatedAt: null,
+        },
+      }),
+    requestSegmentSupplementSpeechSynthesis: () =>
+      ok({
+        speechSynthesis: {
+          status: 'missing' as const,
+          audioByteLength: null,
+          contentHash: null,
+          format: null,
+          lastSynthesisAttempt: 'never' as const,
+          mimeType: null,
+          model: null,
+          reason: null,
+          resourceId: null,
+          sampleRate: null,
+          speaker: null,
+          updatedAt: null,
+        },
+      }),
     beginMicrophoneIntent: () => ok({ accepted: true }),
     clearMicrophoneIntent: () => ok({ cleared: true }),
     startRecordingTranscription: () =>
@@ -448,9 +523,13 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       }),
     setVoiceTranscriptionEnabled: () =>
@@ -459,9 +538,28 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
+        },
+      }),
+    setVoiceSpeechSynthesisSpeaker: () =>
+      ok({
+        settings: {
+          enabled: false,
+          apiKeyConfigured: false,
+          apiKeyLastFour: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       }),
     saveVoiceTranscriptionApiKey: () => unsupported(),
@@ -471,9 +569,13 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       }),
     validateVoiceTranscriptionCredentials: () =>
@@ -482,9 +584,13 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       }),
     openVoiceTranscriptionProviderConsole: entityOk,

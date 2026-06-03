@@ -1,4 +1,5 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +12,7 @@ function DropdownMenu({
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
+const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 
 function DropdownMenuContent({
   className,
@@ -41,11 +43,55 @@ function DropdownMenuItem({
       data-slot="dropdown-menu-item"
       className={cn(
         'reo-squircle relative flex min-h-32 w-full cursor-default select-none items-center gap-4 rounded-md px-8 text-left text-ui-md font-medium leading-[1.15] outline-none transition-colors duration-150 ease-out',
-        'text-popover-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:text-muted-foreground',
+        'text-popover-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:text-muted-foreground',
         className
       )}
       {...props}
     />
+  );
+}
+
+function DropdownMenuSubTrigger({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
+  return (
+    <DropdownMenuPrimitive.SubTrigger
+      data-slot="dropdown-menu-sub-trigger"
+      className={cn(
+        'reo-squircle relative flex min-h-32 w-full cursor-default select-none items-center gap-4 rounded-md px-8 text-left text-ui-md font-medium leading-[1.15] outline-none transition-colors duration-150 ease-out',
+        'text-popover-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:text-muted-foreground',
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRight
+        className="ml-auto size-[14px] shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </DropdownMenuPrimitive.SubTrigger>
+  );
+}
+
+function DropdownMenuSubContent({
+  className,
+  sideOffset = 8,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+  return (
+    <DropdownMenuPortal>
+      <DropdownMenuPrimitive.SubContent
+        data-slot="dropdown-menu-sub-content"
+        sideOffset={sideOffset}
+        className={cn(
+          'reo-float-motion reo-squircle z-50 min-w-160 overflow-hidden rounded-[18px] border-0 bg-popover p-[6px] text-popover-foreground shadow-float outline-none',
+          className
+        )}
+        {...props}
+      />
+    </DropdownMenuPortal>
   );
 }
 
@@ -68,5 +114,8 @@ export {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 };

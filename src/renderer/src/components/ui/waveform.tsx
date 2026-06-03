@@ -290,6 +290,7 @@ export function Waveform({
       className={cn('relative overflow-hidden', className)}
       data-waveform-progress={safeProgress === null ? undefined : String(safeProgress)}
       data-waveform-progress-style={safeProgress === null ? undefined : 'split'}
+      data-waveform-bar-gap={barGap}
       data-waveform-bar-radius={barRadius}
       data-waveform-bar-width={barWidth}
       data-waveform-mode={mode}

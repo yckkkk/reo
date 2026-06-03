@@ -1,8 +1,10 @@
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceSegmentSupplementEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
+import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 import { bindSegmentSupplementEntityActions } from './entityActionBindings';
 import { EntityActionMenu } from './entityActionMenu';
+import { createSpeechSynthesisExtraAction } from './speechSynthesisMenuAction';
 
 export type SegmentSupplementActionIdentity = WorkspaceSegmentSupplementEntityActionRequest;
 
@@ -12,9 +14,11 @@ export type SegmentSupplementActionsMenuProps = {
   readonly onDelete: () => void;
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly open?: boolean;
+  readonly speechSynthesisDisabledReason?: string | null | undefined;
   readonly supplementTitle: string;
   readonly transcriptExists?: boolean | undefined;
   readonly transcriptionBackfillDisabledReason?: string | null | undefined;
@@ -28,9 +32,11 @@ export function SegmentSupplementActionsMenu({
   onDelete,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onRename,
   open,
+  speechSynthesisDisabledReason = null,
   supplementTitle,
   transcriptExists = false,
   transcriptionBackfillDisabledReason = null,
@@ -53,6 +59,16 @@ export function SegmentSupplementActionsMenu({
       onRename={onRename}
       onRevealInFinder={actionBindings.onRevealInFinder}
       open={open}
+      extraActions={
+        onRequestSpeechSynthesis
+          ? [
+              createSpeechSynthesisExtraAction(
+                onRequestSpeechSynthesis,
+                speechSynthesisDisabledReason
+              ),
+            ]
+          : undefined
+      }
       transcriptionAction={
         onRequestTranscriptionBackfill
           ? {

@@ -17,8 +17,12 @@ import {
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
@@ -32,9 +36,13 @@ import {
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
+  WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
@@ -62,8 +70,12 @@ import {
   workspaceRestoreDeletedSegmentRequestSchema,
   workspaceRestoreDeletedSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentAudioRequestSchema,
+  workspaceReadFinalizedAudioSegmentAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceCreateRecordingDraftResponseSchema,
   workspaceCreateSegmentSupplementRecordingDraftRequestSchema,
@@ -124,12 +136,22 @@ import {
   workspaceRecordingMarkdownSaveRequestSchema,
   workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
   workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema,
+  workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema,
+  workspaceRegenerateImportedSpeechSynthesisRequestSchema,
+  workspaceRegenerateImportedSpeechSynthesisResponseSchema,
   workspaceRequestSegmentTranscriptionBackfillRequestSchema,
   workspaceRequestSegmentTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentSpeechSynthesisRequestSchema,
+  workspaceRequestSegmentSpeechSynthesisResponseSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
   workspaceReadSegmentContentResponseSchema,
+  workspaceReadSegmentSpeechAudioRequestSchema,
+  workspaceReadSegmentSpeechAudioResponseSchema,
   workspaceReadSegmentSupplementContentResponseSchema,
+  workspaceReadSegmentSupplementSpeechAudioRequestSchema,
+  workspaceReadSegmentSupplementSpeechAudioResponseSchema,
   workspaceTiptapJsonContentSchema,
   workspaceWriteSegmentContentRequestSchema,
   workspaceWriteSegmentSupplementContentRequestSchema,
@@ -159,10 +181,14 @@ import {
   workspaceSaveVoiceTranscriptionApiKeyResponseSchema,
   workspaceSetVoiceTranscriptionEnabledRequestSchema,
   workspaceSetVoiceTranscriptionEnabledResponseSchema,
+  workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema,
+  workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema,
   workspaceSnapshotSchema,
   workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
+  voiceSpeechSynthesisSpeakerSchema,
   voiceTranscriptionSettingsSnapshotSchema,
+  type VoiceSpeechSynthesisSpeaker,
   type VoiceTranscriptionSettingsSnapshot,
   type WorkspaceClearVoiceTranscriptionApiKeyRequest,
   type WorkspaceClearVoiceTranscriptionApiKeyResponse,
@@ -176,8 +202,16 @@ import {
   type WorkspaceSaveVoiceTranscriptionApiKeyResponse,
   type WorkspaceSetVoiceTranscriptionEnabledRequest,
   type WorkspaceSetVoiceTranscriptionEnabledResponse,
+  type WorkspaceSetVoiceSpeechSynthesisSpeakerRequest,
+  type WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   type WorkspaceValidateVoiceTranscriptionCredentialsRequest,
   type WorkspaceValidateVoiceTranscriptionCredentialsResponse,
+  type WorkspaceRequestSegmentSpeechSynthesisRequest,
+  type WorkspaceRequestSegmentSpeechSynthesisResponse,
+  type WorkspaceRequestSegmentSupplementSpeechSynthesisRequest,
+  type WorkspaceRequestSegmentSupplementSpeechSynthesisResponse,
+  type WorkspaceRegenerateImportedSpeechSynthesisRequest,
+  type WorkspaceRegenerateImportedSpeechSynthesisResponse,
   type WorkspaceRevealMemorySpaceInFinderRequest,
   type WorkspaceRevealMemoryInFinderRequest,
   type WorkspaceRevealSegmentInFinderRequest,
@@ -225,12 +259,18 @@ function assertVoiceSettingsSnapshot(_snapshot: VoiceTranscriptionSettingsSnapsh
   void _snapshot;
 }
 
+function assertVoiceSpeechSynthesisSpeaker(_speaker: VoiceSpeechSynthesisSpeaker): void {
+  void _speaker;
+}
+
 function assertVoiceSettingsContracts(
   _contracts: readonly [
     WorkspaceReadVoiceTranscriptionSettingsRequest,
     WorkspaceReadVoiceTranscriptionSettingsResponse,
     WorkspaceSetVoiceTranscriptionEnabledRequest,
     WorkspaceSetVoiceTranscriptionEnabledResponse,
+    WorkspaceSetVoiceSpeechSynthesisSpeakerRequest,
+    WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
     WorkspaceSaveVoiceTranscriptionApiKeyRequest,
     WorkspaceSaveVoiceTranscriptionApiKeyResponse,
     WorkspaceClearVoiceTranscriptionApiKeyRequest,
@@ -239,6 +279,19 @@ function assertVoiceSettingsContracts(
     WorkspaceValidateVoiceTranscriptionCredentialsResponse,
     WorkspaceOpenVoiceTranscriptionProviderConsoleRequest,
     WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
+  ]
+): void {
+  void _contracts;
+}
+
+function assertSpeechSynthesisContracts(
+  _contracts: readonly [
+    WorkspaceRequestSegmentSpeechSynthesisRequest,
+    WorkspaceRequestSegmentSpeechSynthesisResponse,
+    WorkspaceRequestSegmentSupplementSpeechSynthesisRequest,
+    WorkspaceRequestSegmentSupplementSpeechSynthesisResponse,
+    WorkspaceRegenerateImportedSpeechSynthesisRequest,
+    WorkspaceRegenerateImportedSpeechSynthesisResponse,
   ]
 ): void {
   void _contracts;
@@ -275,6 +328,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentSupplement',
+    'workspace:readFinalizedAudioSegmentAudio',
+    'workspace:readFinalizedAudioSegmentSupplementAudio',
     'workspace:createRecordingDraft',
     'workspace:createSegmentSupplementRecordingDraft',
     'workspace:createNoteSegmentDraft',
@@ -284,8 +339,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:finalizeNoteSegmentDraft',
     'workspace:finalizeSegmentSupplementNoteDraft',
     'workspace:readSegmentContent',
+    'workspace:readSegmentSpeechAudio',
     'workspace:writeSegmentContent',
     'workspace:readSegmentSupplementContent',
+    'workspace:readSegmentSupplementSpeechAudio',
     'workspace:writeSegmentSupplementContent',
     'workspace:saveSegmentAttachment',
     'workspace:listSegmentAttachments',
@@ -308,6 +365,9 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:saveSegmentSupplementTranscript',
     'workspace:requestSegmentTranscriptionBackfill',
     'workspace:requestSegmentSupplementTranscriptionBackfill',
+    'workspace:requestSegmentSpeechSynthesis',
+    'workspace:requestSegmentSupplementSpeechSynthesis',
+    'workspace:regenerateImportedSpeechSynthesis',
     'workspace:beginMicrophoneIntent',
     'workspace:clearMicrophoneIntent',
     'workspace:startRecordingTranscription',
@@ -316,6 +376,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:closeRecordingTranscription',
     'workspace:readVoiceTranscriptionSettings',
     'workspace:setVoiceTranscriptionEnabled',
+    'workspace:setVoiceSpeechSynthesisSpeaker',
     'workspace:saveVoiceTranscriptionApiKey',
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
@@ -368,6 +429,14 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
       'workspace:readFinalizedAudioSegmentSupplement',
     ],
+    [
+      WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+      'workspace:readFinalizedAudioSegmentAudio',
+    ],
+    [
+      WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
+      'workspace:readFinalizedAudioSegmentSupplementAudio',
+    ],
     [WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio'],
     [WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL, 'workspace:cloneRecordingDraftPrefix'],
     [WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle'],
@@ -404,11 +473,29 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
       'workspace:requestSegmentSupplementTranscriptionBackfill',
     ],
+    [WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL, 'workspace:readSegmentSpeechAudio'],
+    [
+      WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
+      'workspace:readSegmentSupplementSpeechAudio',
+    ],
+    [WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL, 'workspace:requestSegmentSpeechSynthesis'],
+    [
+      WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
+      'workspace:requestSegmentSupplementSpeechSynthesis',
+    ],
+    [
+      WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
+      'workspace:regenerateImportedSpeechSynthesis',
+    ],
     [
       WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
       'workspace:readVoiceTranscriptionSettings',
     ],
     [WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, 'workspace:setVoiceTranscriptionEnabled'],
+    [
+      WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
+      'workspace:setVoiceSpeechSynthesisSpeaker',
+    ],
     [WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, 'workspace:saveVoiceTranscriptionApiKey'],
     [
       WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
@@ -537,17 +624,270 @@ test('workspace backfill request schemas use explicit entity identity and save r
   );
 });
 
+test('workspace speech synthesis request schemas mirror backfill entity identity and bounded responses', () => {
+  const segmentRequest = workspaceRequestSegmentSpeechSynthesisRequestSchema.parse({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    mode: 'fill-missing',
+    speaker: 'zh_male_m191_uranus_bigtts',
+  });
+  assert.deepEqual(segmentRequest, {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    mode: 'fill-missing',
+    speaker: 'zh_male_m191_uranus_bigtts',
+  });
+  assert.equal(
+    workspaceRequestSegmentSpeechSynthesisRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentSpeechSynthesisRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'overwrite',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentSpeechSynthesisRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'regenerate',
+      speaker: 'zh_female_unknown_bigtts',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRequestSegmentSpeechSynthesisRequestSchema.safeParse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'regenerate',
+      bodyMarkdown: 'forbidden',
+    }).success,
+    false
+  );
+
+  const readySpeech = {
+    status: 'ready',
+    audioByteLength: 2048,
+    contentHash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    format: 'mp3',
+    lastSynthesisAttempt: 'success',
+    mimeType: 'audio/mpeg',
+    model: 'seed-tts-2.0-expressive',
+    reason: null,
+    resourceId: 'seed-tts-2.0',
+    sampleRate: 24000,
+    speaker: 'zh_female_vv_uranus_bigtts',
+    updatedAt: '2026-06-02T13:05:00.000Z',
+  };
+  const segmentResponse = workspaceRequestSegmentSpeechSynthesisResponseSchema.parse({
+    ok: true,
+    value: {
+      speechSynthesis: readySpeech,
+    },
+  });
+
+  const supplementRequest = workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema.parse({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    mode: 'regenerate',
+    speaker: 'zh_female_xiaohe_uranus_bigtts',
+  });
+  assert.deepEqual(supplementRequest, {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    mode: 'regenerate',
+    speaker: 'zh_female_xiaohe_uranus_bigtts',
+  });
+  const supplementResponse = workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema.parse({
+    ok: true,
+    value: {
+      speechSynthesis: {
+        status: 'unsupported',
+        audioByteLength: null,
+        contentHash: null,
+        format: null,
+        lastSynthesisAttempt: 'never',
+        mimeType: null,
+        model: null,
+        reason: 'text-too-long',
+        resourceId: null,
+        sampleRate: null,
+        speaker: null,
+        updatedAt: null,
+      },
+    },
+  });
+
+  assertSpeechSynthesisContracts([
+    segmentRequest,
+    segmentResponse,
+    supplementRequest,
+    supplementResponse,
+    workspaceRegenerateImportedSpeechSynthesisRequestSchema.parse({
+      mode: 'all',
+      speaker: 'zh_female_vv_uranus_bigtts',
+    }),
+    workspaceRegenerateImportedSpeechSynthesisResponseSchema.parse({
+      ok: true,
+      value: {
+        failed: 0,
+        failedTargets: [],
+        generated: 0,
+        skipped: 0,
+        speaker: 'zh_female_vv_uranus_bigtts',
+        total: 0,
+      },
+    }),
+  ]);
+  assert.equal(
+    workspaceRequestSegmentSpeechSynthesisResponseSchema.safeParse({
+      ok: false,
+      error: { code: 'ERR_SPEECH_SYNTHESIS_ALREADY_RUNNING', message: 'Already running' },
+    }).success,
+    true
+  );
+  assert.equal(
+    workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema.safeParse({
+      ok: false,
+      error: {
+        code: 'ERR_SPEECH_SYNTHESIS_NOTE_CHANGED',
+        message: 'Note changed before save',
+      },
+    }).success,
+    true
+  );
+  assert.equal(
+    workspaceErrorCodeSchema.safeParse('ERR_SPEECH_SYNTHESIS_TEXT_TOO_LONG').success,
+    true
+  );
+});
+
+test('workspace imported note speech regeneration schema uses speaker and retry targets only', () => {
+  const allRequest = workspaceRegenerateImportedSpeechSynthesisRequestSchema.parse({
+    activeWorkspace: {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    },
+    mode: 'all',
+    speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+  });
+  assert.deepEqual(allRequest, {
+    activeWorkspace: {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+    },
+    mode: 'all',
+    speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+  });
+
+  const retryRequest = workspaceRegenerateImportedSpeechSynthesisRequestSchema.parse({
+    mode: 'retry',
+    speaker: 'zh_female_xiaohe_uranus_bigtts',
+    targets: [
+      {
+        kind: 'segment',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+      },
+      {
+        kind: 'supplement',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
+      },
+    ],
+  });
+  assert.equal(retryRequest.mode, 'retry');
+  assert.equal(retryRequest.targets.length, 2);
+
+  assert.equal(
+    workspaceRegenerateImportedSpeechSynthesisRequestSchema.safeParse({
+      mode: 'all',
+      speaker: 'zh_female_unknown_bigtts',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRegenerateImportedSpeechSynthesisRequestSchema.safeParse({
+      mode: 'retry',
+      speaker: 'zh_female_vv_uranus_bigtts',
+      targets: [],
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceRegenerateImportedSpeechSynthesisRequestSchema.safeParse({
+      mode: 'all',
+      rootPath: '/forbidden',
+      speaker: 'zh_female_vv_uranus_bigtts',
+    }).success,
+    false
+  );
+
+  const response = workspaceRegenerateImportedSpeechSynthesisResponseSchema.parse({
+    ok: true,
+    value: {
+      failed: 1,
+      failedTargets: [
+        {
+          kind: 'supplement',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          supplementId: 'sup_1',
+        },
+      ],
+      generated: 2,
+      skipped: 0,
+      speaker: 'zh_female_xiaohe_uranus_bigtts',
+      total: 3,
+    },
+  });
+  assert.equal(response.ok, true);
+  if (!response.ok) {
+    throw new Error('expected regenerate imported speech synthesis response to parse as ok');
+  }
+  assert.equal(response.value.failedTargets[0]?.kind, 'supplement');
+});
+
 test('workspace IPC channels include application-scoped voice settings channels', () => {
   const voiceSettingsChannels = [
     'workspace:readVoiceTranscriptionSettings',
     'workspace:setVoiceTranscriptionEnabled',
+    'workspace:setVoiceSpeechSynthesisSpeaker',
     'workspace:saveVoiceTranscriptionApiKey',
     'workspace:clearVoiceTranscriptionApiKey',
     'workspace:validateVoiceTranscriptionCredentials',
     'workspace:openVoiceTranscriptionProviderConsole',
   ];
 
-  assert.equal(voiceSettingsChannels.length, 6);
+  assert.equal(voiceSettingsChannels.length, 7);
 
   for (const channel of voiceSettingsChannels) {
     assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
@@ -559,10 +899,11 @@ test('workspace error code schema accepts voice settings and provider console er
     'ERR_VOICE_SETTINGS_STORAGE_UNAVAILABLE',
     'ERR_VOICE_SETTINGS_WRITE_FAILED',
     'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED',
+    'ERR_VOICE_SPEECH_SYNTHESIS_PROBE_FAILED',
     'ERR_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_REJECTED',
   ];
 
-  assert.equal(voiceSettingsErrorCodes.length, 4);
+  assert.equal(voiceSettingsErrorCodes.length, 5);
 
   for (const code of voiceSettingsErrorCodes) {
     assert.equal(workspaceErrorCodeSchema.safeParse(code).success, true);
@@ -600,19 +941,29 @@ test('voice transcription settings contract exposes redacted snapshot and strict
     enabled: true,
     apiKeyConfigured: true,
     apiKeyLastFour: '1234',
-    lastValidatedAt: '2026-05-16T13:05:00.000Z',
-    lastValidationOk: false,
-    lastValidationCode: 'auth',
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+    lastTranscriptionValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastTranscriptionValidationOk: false,
+    lastTranscriptionValidationCode: 'auth',
+    lastSpeechSynthesisValidatedAt: '2026-05-16T13:06:00.000Z',
+    lastSpeechSynthesisValidationOk: true,
+    lastSpeechSynthesisValidationCode: 'ok',
   });
+  const speaker = voiceSpeechSynthesisSpeakerSchema.parse('zh_male_m191_uranus_bigtts');
 
   assertVoiceSettingsSnapshot(snapshot);
+  assertVoiceSpeechSynthesisSpeaker(speaker);
   assert.deepEqual(snapshot, {
     enabled: true,
     apiKeyConfigured: true,
     apiKeyLastFour: '1234',
-    lastValidatedAt: '2026-05-16T13:05:00.000Z',
-    lastValidationOk: false,
-    lastValidationCode: 'auth',
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+    lastTranscriptionValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastTranscriptionValidationOk: false,
+    lastTranscriptionValidationCode: 'auth',
+    lastSpeechSynthesisValidatedAt: '2026-05-16T13:06:00.000Z',
+    lastSpeechSynthesisValidationOk: true,
+    lastSpeechSynthesisValidationCode: 'ok',
   });
   assert.equal('apiKey' in snapshot, false);
   assert.equal('apiKeyCiphertext' in snapshot, false);
@@ -622,17 +973,25 @@ test('voice transcription settings contract exposes redacted snapshot and strict
       enabled: false,
       apiKeyConfigured: false,
       apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
+      speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+      lastTranscriptionValidatedAt: null,
+      lastTranscriptionValidationOk: null,
+      lastTranscriptionValidationCode: null,
+      lastSpeechSynthesisValidatedAt: null,
+      lastSpeechSynthesisValidationOk: null,
+      lastSpeechSynthesisValidationCode: null,
     }),
     {
       enabled: false,
       apiKeyConfigured: false,
       apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
+      speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+      lastTranscriptionValidatedAt: null,
+      lastTranscriptionValidationOk: null,
+      lastTranscriptionValidationCode: null,
+      lastSpeechSynthesisValidatedAt: null,
+      lastSpeechSynthesisValidationOk: null,
+      lastSpeechSynthesisValidationCode: null,
     }
   );
 
@@ -645,7 +1004,19 @@ test('voice transcription settings contract exposes redacted snapshot and strict
   assert.throws(() =>
     voiceTranscriptionSettingsSnapshotSchema.parse({
       ...snapshot,
-      lastValidationCode: 'timeout',
+      speechSynthesisSpeaker: 'zh_female_unknown_bigtts',
+    })
+  );
+  assert.throws(() =>
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      ...snapshot,
+      lastTranscriptionValidationCode: 'timeout',
+    })
+  );
+  assert.throws(() =>
+    voiceTranscriptionSettingsSnapshotSchema.parse({
+      ...snapshot,
+      lastSpeechSynthesisValidationCode: 'timeout',
     })
   );
   assert.throws(() =>
@@ -675,9 +1046,13 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
     enabled: true,
     apiKeyConfigured: true,
     apiKeyLastFour: '1234',
-    lastValidatedAt: '2026-05-16T13:05:00.000Z',
-    lastValidationOk: true,
-    lastValidationCode: 'ok',
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+    lastTranscriptionValidatedAt: '2026-05-16T13:05:00.000Z',
+    lastTranscriptionValidationOk: true,
+    lastTranscriptionValidationCode: 'ok',
+    lastSpeechSynthesisValidatedAt: '2026-05-16T13:06:00.000Z',
+    lastSpeechSynthesisValidationOk: true,
+    lastSpeechSynthesisValidationCode: 'ok',
   };
 
   const readRequest = workspaceReadVoiceTranscriptionSettingsRequestSchema.parse(undefined);
@@ -691,6 +1066,15 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
   const setEnabledResponse = workspaceSetVoiceTranscriptionEnabledResponseSchema.parse({
     ok: true,
     value: { settings: { ...settings, enabled: false } },
+  });
+  const setSpeakerRequest = workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema.parse({
+    speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+  });
+  const setSpeakerResponse = workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema.parse({
+    ok: true,
+    value: {
+      settings: { ...settings, speechSynthesisSpeaker: 'zh_male_shaonianzixin_uranus_bigtts' },
+    },
   });
   const saveApiKeyRequest = workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({
     apiKey: 'abcd1234',
@@ -706,9 +1090,13 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
         enabled: true,
         apiKeyConfigured: false,
         apiKeyLastFour: null,
-        lastValidatedAt: null,
-        lastValidationOk: null,
-        lastValidationCode: null,
+        speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+        lastTranscriptionValidatedAt: null,
+        lastTranscriptionValidationOk: null,
+        lastTranscriptionValidationCode: null,
+        lastSpeechSynthesisValidatedAt: null,
+        lastSpeechSynthesisValidationOk: null,
+        lastSpeechSynthesisValidationCode: null,
       },
     },
   });
@@ -732,6 +1120,8 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
     readResponse,
     setEnabledRequest,
     setEnabledResponse,
+    setSpeakerRequest,
+    setSpeakerResponse,
     saveApiKeyRequest,
     saveApiKeyResponse,
     clearRequest,
@@ -743,6 +1133,7 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
   ]);
 
   assert.deepEqual(saveApiKeyRequest, { apiKey: 'abcd1234' });
+  assert.deepEqual(setSpeakerRequest, { speaker: 'zh_male_shaonianzixin_uranus_bigtts' });
   assert.equal(readResponse.ok, true);
   assert.equal(saveApiKeyResponse.ok, true);
   if (readResponse.ok) {
@@ -754,6 +1145,11 @@ test('voice transcription settings IPC schemas validate payloads and redacted re
   assert.throws(() => workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({ apiKey: 'abc' }));
   assert.throws(() =>
     workspaceSaveVoiceTranscriptionApiKeyRequestSchema.parse({ apiKey: 'a'.repeat(1025) })
+  );
+  assert.throws(() =>
+    workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema.parse({
+      speaker: 'zh_female_unknown_bigtts',
+    })
   );
   assert.throws(() =>
     workspaceReadVoiceTranscriptionSettingsResponseSchema.parse({
@@ -804,6 +1200,20 @@ test('note content schemas require baseline hash for finalized edit conflict det
       },
     ],
   };
+  const readySpeechSynthesis = {
+    status: 'ready',
+    audioByteLength: 512,
+    contentHash: baselineContentHash,
+    format: 'mp3',
+    lastSynthesisAttempt: 'success',
+    mimeType: 'audio/mpeg',
+    model: 'seed-tts-2.0-expressive',
+    reason: null,
+    resourceId: 'seed-tts-2.0',
+    sampleRate: 24000,
+    speaker: 'zh_female_vv_uranus_bigtts',
+    updatedAt: '2026-06-02T13:05:00.000Z',
+  };
   const readSegmentResponse = workspaceReadSegmentContentResponseSchema.parse({
     ok: true,
     value: {
@@ -818,9 +1228,49 @@ test('note content schemas require baseline hash for finalized edit conflict det
       bodyByteLength: 4,
       baselineContentHash,
       baselineTiptapContentHash: baselineContentHash,
+      speechSynthesis: readySpeechSynthesis,
     },
   });
   assert.equal(readSegmentResponse.ok, true);
+
+  const readSegmentSpeechAudioResponse = workspaceReadSegmentSpeechAudioResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'req_note_speech_audio',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      contentHash: baselineContentHash,
+      mimeType: 'audio/mpeg',
+    },
+  });
+  assert.equal(readSegmentSpeechAudioResponse.ok, true);
+  assert.deepEqual(
+    workspaceReadSegmentSpeechAudioRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      requestId: 'req_note_speech_audio',
+      audioByteLength: 3,
+      contentHash: baselineContentHash,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-02T12:00:00.000Z',
+    }),
+    {
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      requestId: 'req_note_speech_audio',
+      audioByteLength: 3,
+      contentHash: baselineContentHash,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-02T12:00:00.000Z',
+    }
+  );
 
   const readSupplementResponse = workspaceReadSegmentSupplementContentResponseSchema.parse({
     ok: true,
@@ -837,9 +1287,66 @@ test('note content schemas require baseline hash for finalized edit conflict det
       bodyByteLength: 15,
       baselineContentHash,
       baselineTiptapContentHash: baselineContentHash,
+      speechSynthesis: {
+        status: 'unsupported',
+        audioByteLength: null,
+        contentHash: null,
+        format: null,
+        lastSynthesisAttempt: 'never',
+        mimeType: null,
+        model: null,
+        reason: 'text-too-long',
+        resourceId: null,
+        sampleRate: null,
+        speaker: null,
+        updatedAt: null,
+      },
     },
   });
   assert.equal(readSupplementResponse.ok, true);
+
+  const readSupplementSpeechAudioResponse =
+    workspaceReadSegmentSupplementSpeechAudioResponseSchema.parse({
+      ok: true,
+      value: {
+        requestId: 'req_note_supplement_speech_audio',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
+        audio: new Uint8Array([4, 5, 6]),
+        audioByteLength: 3,
+        contentHash: baselineContentHash,
+        mimeType: 'audio/mpeg',
+      },
+    });
+  assert.equal(readSupplementSpeechAudioResponse.ok, true);
+  assert.deepEqual(
+    workspaceReadSegmentSupplementSpeechAudioRequestSchema.parse({
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'req_note_supplement_speech_audio',
+      audioByteLength: 3,
+      contentHash: baselineContentHash,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-02T12:00:00.000Z',
+    }),
+    {
+      workspaceHandle: 'workspace-handle',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'req_note_supplement_speech_audio',
+      audioByteLength: 3,
+      contentHash: baselineContentHash,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-02T12:00:00.000Z',
+    }
+  );
 
   assert.throws(() =>
     workspaceWriteSegmentContentRequestSchema.parse({
@@ -1864,8 +2371,8 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         supplementId: 'sup_1',
-        audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
+        audioHash: 'd'.repeat(64),
         transcript: {
           exists: true,
           text: '补充录音转写正文',
@@ -1886,8 +2393,8 @@ test('segment supplement recording contract keeps parent identity explicit', () 
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         supplementId: 'sup_1',
-        audio: new Uint8Array([4, 5]),
         audioByteLength: 2,
+        audioHash: 'd'.repeat(64),
         transcript: {
           exists: true,
           text: '补充录音转写正文',
@@ -1898,6 +2405,56 @@ test('segment supplement recording contract keeps parent identity explicit', () 
           },
           baselineTiptapContentHash: 'e'.repeat(64),
         },
+      },
+    }
+  );
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_audio_1',
+      audioByteLength: 2,
+      audioHash: 'd'.repeat(64),
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      requestId: 'request_sup_audio_1',
+      audioByteLength: 2,
+      audioHash: 'd'.repeat(64),
+    }
+  );
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema.parse({
+      ok: true,
+      value: {
+        requestId: 'request_sup_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+        audioHash: 'd'.repeat(64),
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        requestId: 'request_sup_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        supplementId: 'sup_1',
+        audio: new Uint8Array([4, 5]),
+        audioByteLength: 2,
+        audioHash: 'd'.repeat(64),
       },
     }
   );
@@ -2860,8 +3417,8 @@ test('finalized audio segment read contract requires memory and segment identity
       workspaceId: 'ws_1',
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
-      audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
       transcript: {
         exists: true,
         text: '正文',
@@ -2881,8 +3438,8 @@ test('finalized audio segment read contract requires memory and segment identity
       workspaceId: 'ws_1',
       memoryId: 'mem_20260506_000001',
       segmentId: 'seg_20260506_000001',
-      audio: new Uint8Array([1, 2, 3]),
       audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
       transcript: {
         exists: true,
         text: '正文',
@@ -2895,6 +3452,39 @@ test('finalized audio segment read contract requires memory and segment identity
       },
     });
   }
+  assert.deepEqual(
+    workspaceReadFinalizedAudioSegmentAudioRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      requestId: 'request_audio_1',
+      audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      requestId: 'request_audio_1',
+      audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
+    }
+  );
+  const audioResponse = workspaceReadFinalizedAudioSegmentAudioResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'request_audio_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_20260506_000001',
+      segmentId: 'seg_20260506_000001',
+      audio: new Uint8Array([1, 2, 3]),
+      audioByteLength: 3,
+      audioHash: 'a'.repeat(64),
+    },
+  });
+  assert.equal(audioResponse.ok, true);
   assert.throws(() =>
     workspaceReadFinalizedAudioSegmentRequestSchema.parse({
       workspaceHandle: 'wh_1',

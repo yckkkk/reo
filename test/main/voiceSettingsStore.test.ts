@@ -6,8 +6,29 @@ import test from 'node:test';
 import {
   createVoiceSettingsStore,
   getVoiceSettingsFilePath,
+  type VoiceSettingsSnapshot,
   type VoiceSettingsFile,
 } from '../../src/main/voiceSettingsStore.js';
+
+const DEFAULT_SPEECH_SYNTHESIS_SPEAKER = 'zh_female_vv_uranus_bigtts';
+
+function voiceSettingsSnapshot(
+  overrides: Partial<VoiceSettingsSnapshot> = {}
+): VoiceSettingsSnapshot {
+  return {
+    enabled: false,
+    apiKeyConfigured: false,
+    apiKeyLastFour: null,
+    speechSynthesisSpeaker: DEFAULT_SPEECH_SYNTHESIS_SPEAKER,
+    lastTranscriptionValidatedAt: null,
+    lastTranscriptionValidationOk: null,
+    lastTranscriptionValidationCode: null,
+    lastSpeechSynthesisValidatedAt: null,
+    lastSpeechSynthesisValidationOk: null,
+    lastSpeechSynthesisValidationCode: null,
+    ...overrides,
+  };
+}
 
 type FakeSafeStorageBackend =
   | 'basic_text'
@@ -67,14 +88,7 @@ function setup() {
 test('voiceSettingsStore: read returns disabled default when userData file is missing', () => {
   const { store, cleanup } = setup();
   try {
-    assert.deepEqual(store.read(), {
-      enabled: false,
-      apiKeyConfigured: false,
-      apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(store.read(), voiceSettingsSnapshot());
   } finally {
     cleanup();
   }
@@ -88,14 +102,10 @@ test('voiceSettingsStore: writeApiKey encrypts into application userData JSON an
     assert.deepEqual(atomicWrites, [filePath]);
     assert.equal(filePath, path.join(userDataDir, 'voice-transcription-settings.json'));
     assert.equal(store.readDecryptedApiKey(), 'abcd1234EFGH5678');
-    assert.deepEqual(store.read(), {
-      enabled: false,
-      apiKeyConfigured: true,
-      apiKeyLastFour: '5678',
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(
+      store.read(),
+      voiceSettingsSnapshot({ apiKeyConfigured: true, apiKeyLastFour: '5678' })
+    );
 
     const raw = JSON.parse(readFileSync(filePath, 'utf8')) as VoiceSettingsFile;
     assert.equal(raw.apiKeyCiphertext, Buffer.from('enc:abcd1234EFGH5678').toString('base64'));
@@ -110,20 +120,32 @@ test('voiceSettingsStore: setEnabled and clearApiKey keep enabled independent fr
   try {
     await store.setEnabled(true);
     await store.writeApiKey('xxxx1234');
-    await store.recordValidation({ apiKey: 'xxxx1234', code: 'ok' });
+    await store.recordTranscriptionValidation({ apiKey: 'xxxx1234', code: 'ok' });
     await store.clearApiKey();
 
-    assert.deepEqual(store.read(), {
-      enabled: true,
-      apiKeyConfigured: false,
-      apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(store.read(), voiceSettingsSnapshot({ enabled: true }));
 
     await store.setEnabled(false);
     assert.equal(store.read().enabled, false);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voiceSettingsStore: setSpeechSynthesisSpeaker updates speaker and resets only synthesis validation', async () => {
+  const { store, cleanup } = setup();
+  try {
+    await store.writeApiKey('xxxx1234');
+    await store.recordTranscriptionValidation({ apiKey: 'xxxx1234', code: 'ok' });
+    await store.recordSpeechSynthesisValidation({ apiKey: 'xxxx1234', code: 'ok' });
+
+    await store.setSpeechSynthesisSpeaker('zh_male_shaonianzixin_uranus_bigtts');
+
+    assert.equal(store.read().speechSynthesisSpeaker, 'zh_male_shaonianzixin_uranus_bigtts');
+    assert.equal(store.read().lastTranscriptionValidationCode, 'ok');
+    assert.equal(store.read().lastSpeechSynthesisValidatedAt, null);
+    assert.equal(store.read().lastSpeechSynthesisValidationOk, null);
+    assert.equal(store.read().lastSpeechSynthesisValidationCode, null);
   } finally {
     cleanup();
   }
@@ -146,6 +168,98 @@ test('voiceSettingsStore: corrupted JSON falls back to default disabled snapshot
   }
 });
 
+test('voiceSettingsStore: migrates v1 settings without dropping the encrypted api key', () => {
+  const { userDataDir, filePath, cleanup } = setup();
+  try {
+    writeFileSync(
+      filePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          enabled: true,
+          apiKeyCiphertext: Buffer.from('enc:abcd1234').toString('base64'),
+          apiKeyLastFour: '1234',
+          lastValidatedAt: '2026-06-02T08:28:00.000Z',
+          lastValidationOk: true,
+          lastValidationCode: 'ok',
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const store = createVoiceSettingsStore({
+      safeStorage: makeFakeSafeStorage(),
+      userDataDir,
+      platform: 'linux',
+    });
+
+    assert.equal(store.readDecryptedApiKey(), 'abcd1234');
+    assert.deepEqual(
+      store.read(),
+      voiceSettingsSnapshot({
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastTranscriptionValidatedAt: '2026-06-02T08:28:00.000Z',
+        lastTranscriptionValidationOk: true,
+        lastTranscriptionValidationCode: 'ok',
+      })
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('voiceSettingsStore: resets invalid legacy speech speaker without dropping the api key', () => {
+  const { userDataDir, filePath, cleanup } = setup();
+  try {
+    writeFileSync(
+      filePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 2,
+          enabled: true,
+          apiKeyCiphertext: Buffer.from('enc:abcd1234').toString('base64'),
+          apiKeyLastFour: '1234',
+          speechSynthesisSpeaker: 'zh_female_vv_jupiter_bigtts',
+          lastTranscriptionValidatedAt: '2026-06-02T08:28:00.000Z',
+          lastTranscriptionValidationOk: true,
+          lastTranscriptionValidationCode: 'ok',
+          lastSpeechSynthesisValidatedAt: '2026-06-02T08:29:00.000Z',
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: 'network',
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const store = createVoiceSettingsStore({
+      safeStorage: makeFakeSafeStorage(),
+      userDataDir,
+      platform: 'linux',
+    });
+
+    assert.equal(store.readDecryptedApiKey(), 'abcd1234');
+    assert.deepEqual(
+      store.read(),
+      voiceSettingsSnapshot({
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: '1234',
+        lastTranscriptionValidatedAt: '2026-06-02T08:28:00.000Z',
+        lastTranscriptionValidationOk: true,
+        lastTranscriptionValidationCode: 'ok',
+      })
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('voiceSettingsStore: decrypt failure returns null and does not leak ciphertext in snapshot', async () => {
   const { store, filePath, cleanup } = setup();
   try {
@@ -160,14 +274,10 @@ test('voiceSettingsStore: decrypt failure returns null and does not leak ciphert
     });
 
     assert.equal(reloaded.readDecryptedApiKey(), null);
-    assert.deepEqual(reloaded.read(), {
-      enabled: false,
-      apiKeyConfigured: true,
-      apiKeyLastFour: '1234',
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(
+      reloaded.read(),
+      voiceSettingsSnapshot({ apiKeyConfigured: true, apiKeyLastFour: '1234' })
+    );
   } finally {
     cleanup();
   }
@@ -208,22 +318,51 @@ test('voiceSettingsStore: readDecryptedApiKey returns null when secure safeStora
   }
 });
 
-test('voiceSettingsStore: recordValidation maps ok auth and network to tri-state snapshot', async () => {
+test('voiceSettingsStore: recordTranscriptionValidation maps ok auth and network to tri-state snapshot', async () => {
   const { store, cleanup } = setup();
   try {
     await store.writeApiKey('abcd1234');
-    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'ok' }), true);
-    assert.equal(store.read().lastValidationOk, true);
-    assert.equal(store.read().lastValidationCode, 'ok');
-    assert.match(store.read().lastValidatedAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'abcd1234', code: 'ok' }),
+      true
+    );
+    assert.equal(store.read().lastTranscriptionValidationOk, true);
+    assert.equal(store.read().lastTranscriptionValidationCode, 'ok');
+    assert.match(store.read().lastTranscriptionValidatedAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
 
-    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'auth' }), true);
-    assert.equal(store.read().lastValidationOk, false);
-    assert.equal(store.read().lastValidationCode, 'auth');
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'abcd1234', code: 'auth' }),
+      true
+    );
+    assert.equal(store.read().lastTranscriptionValidationOk, false);
+    assert.equal(store.read().lastTranscriptionValidationCode, 'auth');
 
-    assert.equal(await store.recordValidation({ apiKey: 'abcd1234', code: 'network' }), true);
-    assert.equal(store.read().lastValidationOk, null);
-    assert.equal(store.read().lastValidationCode, 'network');
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'abcd1234', code: 'network' }),
+      true
+    );
+    assert.equal(store.read().lastTranscriptionValidationOk, null);
+    assert.equal(store.read().lastTranscriptionValidationCode, 'network');
+    assert.equal(store.read().lastSpeechSynthesisValidationCode, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('voiceSettingsStore: recordSpeechSynthesisValidation keeps synthesis status separate', async () => {
+  const { store, cleanup } = setup();
+  try {
+    await store.writeApiKey('abcd1234');
+    await store.recordTranscriptionValidation({ apiKey: 'abcd1234', code: 'ok' });
+
+    assert.equal(
+      await store.recordSpeechSynthesisValidation({ apiKey: 'abcd1234', code: 'auth' }),
+      true
+    );
+    assert.equal(store.read().lastTranscriptionValidationCode, 'ok');
+    assert.equal(store.read().lastSpeechSynthesisValidationOk, false);
+    assert.equal(store.read().lastSpeechSynthesisValidationCode, 'auth');
+    assert.match(store.read().lastSpeechSynthesisValidatedAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
   } finally {
     cleanup();
   }
@@ -235,23 +374,28 @@ test('voiceSettingsStore: skips stale validation after key changes', async () =>
     await store.writeApiKey('first1234');
     await store.writeApiKey('second5678');
 
-    assert.equal(await store.recordValidation({ apiKey: 'first1234', code: 'ok' }), false);
-    assert.deepEqual(store.read(), {
-      enabled: false,
-      apiKeyConfigured: true,
-      apiKeyLastFour: '5678',
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'first1234', code: 'ok' }),
+      false
+    );
+    assert.deepEqual(
+      store.read(),
+      voiceSettingsSnapshot({ apiKeyConfigured: true, apiKeyLastFour: '5678' })
+    );
 
-    assert.equal(await store.recordValidation({ apiKey: 'second5678', code: 'auth' }), true);
-    assert.equal(store.read().lastValidationOk, false);
-    assert.equal(store.read().lastValidationCode, 'auth');
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'second5678', code: 'auth' }),
+      true
+    );
+    assert.equal(store.read().lastTranscriptionValidationOk, false);
+    assert.equal(store.read().lastTranscriptionValidationCode, 'auth');
 
     await store.clearApiKey();
-    assert.equal(await store.recordValidation({ apiKey: 'second5678', code: 'ok' }), false);
-    assert.equal(store.read().lastValidationCode, null);
+    assert.equal(
+      await store.recordTranscriptionValidation({ apiKey: 'second5678', code: 'ok' }),
+      false
+    );
+    assert.equal(store.read().lastTranscriptionValidationCode, null);
   } finally {
     cleanup();
   }
@@ -290,14 +434,10 @@ test('voiceSettingsStore: serializes concurrent writes against the latest cache'
     writes.shift()?.();
     await keyPromise;
 
-    assert.deepEqual(store.read(), {
-      enabled: true,
-      apiKeyConfigured: true,
-      apiKeyLastFour: '1234',
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(
+      store.read(),
+      voiceSettingsSnapshot({ enabled: true, apiKeyConfigured: true, apiKeyLastFour: '1234' })
+    );
   } finally {
     rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -314,14 +454,7 @@ test('voiceSettingsStore: ignores oversized settings files during startup', () =
       platform: 'linux',
     });
 
-    assert.deepEqual(store.read(), {
-      enabled: false,
-      apiKeyConfigured: false,
-      apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(store.read(), voiceSettingsSnapshot());
   } finally {
     cleanup();
   }

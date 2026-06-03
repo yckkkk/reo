@@ -2,20 +2,31 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   listMemorySpaces,
   readFinalizedAudioSegment,
+  readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
+  readFinalizedAudioSegmentSupplementAudio,
   readMemoryDetail,
   readSegmentContent,
+  readSegmentSpeechAudio,
   readSegmentSupplementContent,
+  readSegmentSupplementSpeechAudio,
   type WorkspaceNoteSegmentContent,
+  type WorkspaceNoteSegmentSpeechAudio,
   type WorkspaceNoteSegmentSupplementContent,
+  type WorkspaceNoteSegmentSupplementSpeechAudio,
   type WorkspaceFinalizedAudioSegmentSupplementContent,
+  type WorkspaceFinalizedAudioSegmentSupplementAudio,
   type WorkspaceFinalizedAudioSegmentContent,
+  type WorkspaceFinalizedAudioSegmentAudio,
   type WorkspaceMemorySpace,
   type WorkspaceMemoryDetail,
   type WorkspaceSession,
   type WorkspaceSnapshot,
 } from './workspaceApi';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
+
+const WORKSPACE_CONTENT_QUERY_GC_TIME_MS = 5 * 60_000;
+const PLAYBACK_AUDIO_QUERY_GC_TIME_MS = 0;
 
 export function workspaceSnapshotQueryKey({
   workspaceId,
@@ -62,6 +73,28 @@ function createSegmentContentRequestId(workspaceId: string, memoryId: string, se
     .slice(2)}`;
 }
 
+function createSegmentAudioRequestId(
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  audioIdentity: string
+) {
+  return `segment-audio:${workspaceId}:${memoryId}:${segmentId}:${audioIdentity}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function createSegmentSpeechAudioRequestId(
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  contentHash: string
+) {
+  return `segment-speech-audio:${workspaceId}:${memoryId}:${segmentId}:${contentHash}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
 function createSegmentSupplementContentRequestId(
   workspaceId: string,
   memoryId: string,
@@ -69,6 +102,30 @@ function createSegmentSupplementContentRequestId(
   supplementId: string
 ) {
   return `segment-supplement-content:${workspaceId}:${memoryId}:${segmentId}:${supplementId}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function createSegmentSupplementAudioRequestId(
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  supplementId: string,
+  audioIdentity: string
+) {
+  return `segment-supplement-audio:${workspaceId}:${memoryId}:${segmentId}:${supplementId}:${audioIdentity}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function createSegmentSupplementSpeechAudioRequestId(
+  workspaceId: string,
+  memoryId: string,
+  segmentId: string,
+  supplementId: string,
+  contentHash: string
+) {
+  return `segment-supplement-speech-audio:${workspaceId}:${memoryId}:${segmentId}:${supplementId}:${contentHash}:${Date.now()}:${Math.random()
     .toString(36)
     .slice(2)}`;
 }
@@ -103,22 +160,30 @@ export function memoryDetailQueryOptions(session: WorkspaceSession, memoryId: st
       return result.value;
     },
     retry: false,
-    refetchOnMount: 'always' as const,
     staleTime: Infinity,
+    gcTime: Infinity,
   });
 }
 
 export function segmentContentQueryKey({
   workspaceId,
+  workspaceHandle,
   memoryId,
   segmentId,
 }: {
   readonly workspaceId: string;
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly workspaceHandle?: string;
+  readonly workspaceHandle: string;
 }) {
-  return ['workspace', 'segment-content', workspaceId, memoryId, segmentId] as const;
+  return [
+    'workspace',
+    'segment-content',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+  ] as const;
 }
 
 export function segmentContentQueryOptions(
@@ -130,6 +195,7 @@ export function segmentContentQueryOptions(
   return queryOptions({
     queryKey: segmentContentQueryKey({
       workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
       memoryId,
       segmentId,
     }),
@@ -165,13 +231,14 @@ export function segmentContentQueryOptions(
       return result.value;
     },
     retry: false,
-    refetchOnMount: 'always' as const,
     staleTime: Infinity,
+    gcTime: WORKSPACE_CONTENT_QUERY_GC_TIME_MS,
   });
 }
 
 export function segmentSupplementContentQueryKey({
   workspaceId,
+  workspaceHandle,
   memoryId,
   segmentId,
   supplementId,
@@ -180,12 +247,13 @@ export function segmentSupplementContentQueryKey({
   readonly memoryId: string;
   readonly segmentId: string;
   readonly supplementId: string;
-  readonly workspaceHandle?: string;
+  readonly workspaceHandle: string;
 }) {
   return [
     'workspace',
     'segment-supplement-content',
     workspaceId,
+    workspaceHandle,
     memoryId,
     segmentId,
     supplementId,
@@ -194,14 +262,437 @@ export function segmentSupplementContentQueryKey({
 
 export function segmentSupplementContentQueryPrefix({
   workspaceId,
+  workspaceHandle,
   memoryId,
   segmentId,
 }: {
   readonly workspaceId: string;
+  readonly workspaceHandle: string;
   readonly memoryId: string;
   readonly segmentId: string;
 }) {
-  return ['workspace', 'segment-supplement-content', workspaceId, memoryId, segmentId] as const;
+  return [
+    'workspace',
+    'segment-supplement-content',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+  ] as const;
+}
+
+export function segmentAudioQueryKey({
+  audioByteLength,
+  audioHash,
+  audioIdentityVersion,
+  memoryId,
+  segmentId,
+  workspaceId,
+  workspaceHandle,
+}: {
+  readonly audioByteLength: number;
+  readonly audioHash: string | null;
+  readonly audioIdentityVersion: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly workspaceId: string;
+  readonly workspaceHandle: string;
+}) {
+  return [
+    'workspace',
+    'segment-audio',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+    audioByteLength,
+    audioHash ?? audioIdentityVersion,
+  ] as const;
+}
+
+export function segmentSupplementAudioQueryKey({
+  audioByteLength,
+  audioHash,
+  audioIdentityVersion,
+  memoryId,
+  segmentId,
+  supplementId,
+  workspaceId,
+  workspaceHandle,
+}: {
+  readonly audioByteLength: number;
+  readonly audioHash: string | null;
+  readonly audioIdentityVersion: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly workspaceId: string;
+  readonly workspaceHandle: string;
+}) {
+  return [
+    'workspace',
+    'segment-supplement-audio',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+    supplementId,
+    audioByteLength,
+    audioHash ?? audioIdentityVersion,
+  ] as const;
+}
+
+export function segmentSpeechAudioQueryKey({
+  audioByteLength,
+  contentHash,
+  memoryId,
+  segmentId,
+  speaker,
+  updatedAt,
+  workspaceId,
+  workspaceHandle,
+}: {
+  readonly audioByteLength: number;
+  readonly contentHash: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly speaker: string;
+  readonly updatedAt: string;
+  readonly workspaceId: string;
+  readonly workspaceHandle: string;
+}) {
+  return [
+    'workspace',
+    'segment-speech-audio',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+    contentHash,
+    audioByteLength,
+    speaker,
+    updatedAt,
+  ] as const;
+}
+
+export function segmentSupplementSpeechAudioQueryKey({
+  audioByteLength,
+  contentHash,
+  memoryId,
+  segmentId,
+  speaker,
+  supplementId,
+  updatedAt,
+  workspaceId,
+  workspaceHandle,
+}: {
+  readonly audioByteLength: number;
+  readonly contentHash: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly speaker: string;
+  readonly supplementId: string;
+  readonly updatedAt: string;
+  readonly workspaceId: string;
+  readonly workspaceHandle: string;
+}) {
+  return [
+    'workspace',
+    'segment-supplement-speech-audio',
+    workspaceId,
+    workspaceHandle,
+    memoryId,
+    segmentId,
+    supplementId,
+    contentHash,
+    audioByteLength,
+    speaker,
+    updatedAt,
+  ] as const;
+}
+
+export function segmentAudioQueryOptions({
+  audioByteLength,
+  audioHash,
+  audioIdentityVersion,
+  memoryId,
+  segmentId,
+  session,
+}: {
+  readonly audioByteLength: number;
+  readonly audioHash: string | null;
+  readonly audioIdentityVersion: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly session: WorkspaceSession;
+}) {
+  return queryOptions({
+    queryKey: segmentAudioQueryKey({
+      audioByteLength,
+      audioHash,
+      audioIdentityVersion,
+      memoryId,
+      segmentId,
+      workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
+    }),
+    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentAudio> => {
+      const audioIdentity = audioHash ?? audioIdentityVersion;
+      const requestId = createSegmentAudioRequestId(
+        session.workspaceId,
+        memoryId,
+        segmentId,
+        audioIdentity
+      );
+      const result = await readFinalizedAudioSegmentAudio({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId,
+        segmentId,
+        audioByteLength,
+        audioHash,
+        requestId,
+      });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '片段音频加载失败。'));
+      }
+
+      if (
+        result.value.requestId !== requestId ||
+        result.value.workspaceId !== session.workspaceId ||
+        result.value.memoryId !== memoryId ||
+        result.value.segmentId !== segmentId ||
+        result.value.audioByteLength !== audioByteLength ||
+        (audioHash !== null && result.value.audioHash !== audioHash)
+      ) {
+        throw new Error('Stale segment audio response');
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: Infinity,
+    gcTime: PLAYBACK_AUDIO_QUERY_GC_TIME_MS,
+  });
+}
+
+export function segmentSupplementAudioQueryOptions({
+  audioByteLength,
+  audioHash,
+  audioIdentityVersion,
+  memoryId,
+  segmentId,
+  session,
+  supplementId,
+}: {
+  readonly audioByteLength: number;
+  readonly audioHash: string | null;
+  readonly audioIdentityVersion: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly session: WorkspaceSession;
+  readonly supplementId: string;
+}) {
+  return queryOptions({
+    queryKey: segmentSupplementAudioQueryKey({
+      audioByteLength,
+      audioHash,
+      audioIdentityVersion,
+      memoryId,
+      segmentId,
+      supplementId,
+      workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
+    }),
+    queryFn: async (): Promise<WorkspaceFinalizedAudioSegmentSupplementAudio> => {
+      const audioIdentity = audioHash ?? audioIdentityVersion;
+      const requestId = createSegmentSupplementAudioRequestId(
+        session.workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        audioIdentity
+      );
+      const result = await readFinalizedAudioSegmentSupplementAudio({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        audioByteLength,
+        audioHash,
+        requestId,
+      });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '补充录音音频加载失败。'));
+      }
+
+      if (
+        result.value.requestId !== requestId ||
+        result.value.workspaceId !== session.workspaceId ||
+        result.value.memoryId !== memoryId ||
+        result.value.segmentId !== segmentId ||
+        result.value.supplementId !== supplementId ||
+        result.value.audioByteLength !== audioByteLength ||
+        (audioHash !== null && result.value.audioHash !== audioHash)
+      ) {
+        throw new Error('Stale segment supplement audio response');
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: Infinity,
+    gcTime: PLAYBACK_AUDIO_QUERY_GC_TIME_MS,
+  });
+}
+
+export function segmentSpeechAudioQueryOptions({
+  audioByteLength,
+  contentHash,
+  memoryId,
+  segmentId,
+  session,
+  speaker,
+  updatedAt,
+}: {
+  readonly audioByteLength: number;
+  readonly contentHash: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly session: WorkspaceSession;
+  readonly speaker: WorkspaceNoteSegmentContent['speechSynthesis']['speaker'] & string;
+  readonly updatedAt: string;
+}) {
+  return queryOptions({
+    queryKey: segmentSpeechAudioQueryKey({
+      audioByteLength,
+      contentHash,
+      memoryId,
+      segmentId,
+      speaker,
+      updatedAt,
+      workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
+    }),
+    queryFn: async (): Promise<WorkspaceNoteSegmentSpeechAudio> => {
+      const requestId = createSegmentSpeechAudioRequestId(
+        session.workspaceId,
+        memoryId,
+        segmentId,
+        contentHash
+      );
+      const result = await readSegmentSpeechAudio({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId,
+        segmentId,
+        contentHash,
+        audioByteLength,
+        requestId,
+        speaker,
+        updatedAt,
+      });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '笔记语音加载失败。'));
+      }
+
+      if (
+        result.value.requestId !== requestId ||
+        result.value.workspaceId !== session.workspaceId ||
+        result.value.memoryId !== memoryId ||
+        result.value.segmentId !== segmentId ||
+        result.value.contentHash !== contentHash ||
+        result.value.audioByteLength !== audioByteLength
+      ) {
+        throw new Error('Stale segment speech audio response');
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: Infinity,
+    gcTime: PLAYBACK_AUDIO_QUERY_GC_TIME_MS,
+  });
+}
+
+export function segmentSupplementSpeechAudioQueryOptions({
+  audioByteLength,
+  contentHash,
+  memoryId,
+  segmentId,
+  session,
+  speaker,
+  supplementId,
+  updatedAt,
+}: {
+  readonly audioByteLength: number;
+  readonly contentHash: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly session: WorkspaceSession;
+  readonly speaker: WorkspaceNoteSegmentSupplementContent['speechSynthesis']['speaker'] & string;
+  readonly supplementId: string;
+  readonly updatedAt: string;
+}) {
+  return queryOptions({
+    queryKey: segmentSupplementSpeechAudioQueryKey({
+      audioByteLength,
+      contentHash,
+      memoryId,
+      segmentId,
+      speaker,
+      supplementId,
+      updatedAt,
+      workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
+    }),
+    queryFn: async (): Promise<WorkspaceNoteSegmentSupplementSpeechAudio> => {
+      const requestId = createSegmentSupplementSpeechAudioRequestId(
+        session.workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        contentHash
+      );
+      const result = await readSegmentSupplementSpeechAudio({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        contentHash,
+        audioByteLength,
+        requestId,
+        speaker,
+        updatedAt,
+      });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '补充笔记语音加载失败。'));
+      }
+
+      if (
+        result.value.requestId !== requestId ||
+        result.value.workspaceId !== session.workspaceId ||
+        result.value.memoryId !== memoryId ||
+        result.value.segmentId !== segmentId ||
+        result.value.supplementId !== supplementId ||
+        result.value.contentHash !== contentHash ||
+        result.value.audioByteLength !== audioByteLength
+      ) {
+        throw new Error('Stale segment supplement speech audio response');
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: Infinity,
+    gcTime: PLAYBACK_AUDIO_QUERY_GC_TIME_MS,
+  });
 }
 
 export function segmentSupplementContentQueryOptions(
@@ -214,6 +705,7 @@ export function segmentSupplementContentQueryOptions(
   return queryOptions({
     queryKey: segmentSupplementContentQueryKey({
       workspaceId: session.workspaceId,
+      workspaceHandle: session.workspaceHandle,
       memoryId,
       segmentId,
       supplementId,
@@ -257,19 +749,19 @@ export function segmentSupplementContentQueryOptions(
       return result.value;
     },
     retry: false,
-    refetchOnMount: 'always',
     staleTime: Infinity,
+    gcTime: WORKSPACE_CONTENT_QUERY_GC_TIME_MS,
   });
 }
 
-export function workspaceHandleScopedContentQueryBelongsToWorkspace(
+export function workspaceProjectionQueryBelongsToWorkspace(
   queryKey: readonly unknown[],
-  workspaceId: string
+  workspaceId?: string
 ) {
   const [scope, kind, queryWorkspaceId] = queryKey;
   return (
     scope === 'workspace' &&
-    queryWorkspaceId === workspaceId &&
+    (workspaceId === undefined || queryWorkspaceId === workspaceId) &&
     (kind === 'memory-detail' ||
       kind === 'segment-content' ||
       kind === 'segment-supplement-content')
@@ -294,6 +786,129 @@ export function workspaceContentQueryBelongsToWorkspace(
     queryWorkspaceId === workspaceId &&
     (kind === 'segment-content' || kind === 'segment-supplement-content')
   );
+}
+
+export function workspaceSpeechAudioQueryBelongsToWorkspace(
+  queryKey: readonly unknown[],
+  workspaceId?: string
+) {
+  const [scope, kind, queryWorkspaceId] = queryKey;
+  return (
+    scope === 'workspace' &&
+    (workspaceId === undefined || queryWorkspaceId === workspaceId) &&
+    (kind === 'segment-speech-audio' || kind === 'segment-supplement-speech-audio')
+  );
+}
+
+export function workspacePlaybackAudioQueryBelongsToWorkspace(
+  queryKey: readonly unknown[],
+  workspaceId?: string
+) {
+  const [scope, kind, queryWorkspaceId] = queryKey;
+  return (
+    scope === 'workspace' &&
+    (workspaceId === undefined || queryWorkspaceId === workspaceId) &&
+    (kind === 'segment-audio' ||
+      kind === 'segment-supplement-audio' ||
+      kind === 'segment-speech-audio' ||
+      kind === 'segment-supplement-speech-audio')
+  );
+}
+
+export function workspacePlaybackAudioQueryBelongsToEntity(
+  queryKey: readonly unknown[],
+  target: {
+    readonly workspaceId: string;
+    readonly workspaceHandle: string;
+    readonly memoryId: string;
+    readonly segmentId?: string;
+    readonly supplementId?: string;
+  }
+) {
+  const [scope, kind, workspaceId, workspaceHandle, memoryId, segmentId, supplementId] = queryKey;
+
+  if (
+    scope !== 'workspace' ||
+    workspaceId !== target.workspaceId ||
+    workspaceHandle !== target.workspaceHandle ||
+    memoryId !== target.memoryId
+  ) {
+    return false;
+  }
+
+  if (target.segmentId === undefined) {
+    return (
+      kind === 'segment-audio' ||
+      kind === 'segment-supplement-audio' ||
+      kind === 'segment-speech-audio' ||
+      kind === 'segment-supplement-speech-audio'
+    );
+  }
+
+  if (segmentId !== target.segmentId) {
+    return false;
+  }
+
+  if (target.supplementId === undefined) {
+    return (
+      kind === 'segment-audio' ||
+      kind === 'segment-supplement-audio' ||
+      kind === 'segment-speech-audio' ||
+      kind === 'segment-supplement-speech-audio'
+    );
+  }
+
+  return (
+    supplementId === target.supplementId &&
+    (kind === 'segment-supplement-audio' || kind === 'segment-supplement-speech-audio')
+  );
+}
+
+export function seedWorkspaceHandleScopedContentQueries(
+  queryClient: QueryClient,
+  session: WorkspaceSession
+) {
+  for (const query of queryClient.getQueryCache().getAll()) {
+    const [scope, kind, queryWorkspaceId, queryWorkspaceHandle] = query.queryKey;
+    if (
+      scope !== 'workspace' ||
+      queryWorkspaceId !== session.workspaceId ||
+      queryWorkspaceHandle === session.workspaceHandle ||
+      query.state.data === undefined
+    ) {
+      continue;
+    }
+
+    const [, , , , memoryId, segmentId, supplementId] = query.queryKey;
+    if (typeof memoryId !== 'string' || typeof segmentId !== 'string') {
+      continue;
+    }
+
+    const nextKey =
+      kind === 'segment-content'
+        ? segmentContentQueryKey({
+            workspaceId: session.workspaceId,
+            workspaceHandle: session.workspaceHandle,
+            memoryId,
+            segmentId,
+          })
+        : kind === 'segment-supplement-content' && typeof supplementId === 'string'
+          ? segmentSupplementContentQueryKey({
+              workspaceId: session.workspaceId,
+              workspaceHandle: session.workspaceHandle,
+              memoryId,
+              segmentId,
+              supplementId,
+            })
+          : null;
+
+    if (nextKey === null || queryClient.getQueryData(nextKey) !== undefined) {
+      continue;
+    }
+
+    queryClient.setQueryData(nextKey, query.state.data);
+    void queryClient.invalidateQueries({ exact: true, queryKey: nextKey, refetchType: 'none' });
+  }
 }
 
 export function memorySpacesQueryKey() {

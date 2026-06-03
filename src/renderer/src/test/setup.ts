@@ -84,6 +84,9 @@ window.EventTarget.prototype.dispatchEvent = function dispatchWindowEvent(event:
 };
 
 Element.prototype.setPointerCapture ??= () => undefined;
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => undefined;
+Element.prototype.scrollIntoView ??= () => undefined;
 
 function createTestDomRect(): DOMRect {
   return {

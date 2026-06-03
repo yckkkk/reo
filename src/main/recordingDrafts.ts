@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   closeSync,
   constants,
@@ -49,9 +50,12 @@ import {
   markSupplementTranscriptionAttemptSuccess,
   memorySegmentDirectory,
   readFinalizedSegmentProjection,
+  readFinalizedSegmentSupplementAudioProjection,
   readFinalizedSegmentSupplementProjectionFromKnownDirectory,
   readFinalizedSegmentSummary,
   readFinalizedSegmentSummaryFromKnownDirectory,
+  repairFinalizedSegmentAudioHash,
+  repairFinalizedSegmentSupplementAudioHash,
   replaceSegmentTranscript,
   resolveSegmentSupplementDirectoryInSegmentDirectory,
   refreshMemoryIndexEntry,
@@ -212,6 +216,10 @@ function recordingKey(rootPath: string, segmentId: string): string {
   return `${path.resolve(rootPath)}:${segmentId}`;
 }
 
+function recordingAudioHash(audio: Uint8Array): string {
+  return createHash('sha256').update(audio).digest('hex');
+}
+
 function recordingRootKey(rootPath: string): string {
   return path.resolve(rootPath);
 }
@@ -340,6 +348,7 @@ async function resolveFinalizedAudioSegmentReadTarget(
 ): Promise<{
   readonly directory: string;
   readonly audioByteLength: number;
+  readonly audioHash: string | null;
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }> {
   const directory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
@@ -358,6 +367,7 @@ async function resolveFinalizedAudioSegmentReadTarget(
   return {
     directory,
     audioByteLength: summary.audioByteLength,
+    audioHash: summary.audioHash ?? null,
     lastTranscriptionAttempt: summary.lastTranscriptionAttempt,
   };
 }
@@ -371,6 +381,7 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
 ): Promise<{
   readonly directory: string;
   readonly audioByteLength: number;
+  readonly audioHash: string | null;
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }> {
   const segmentDirectory = await memorySegmentDirectory(rootPath, memoryId, segmentId);
@@ -405,10 +416,18 @@ async function resolveFinalizedAudioSegmentSupplementReadTarget(
   if (supplement.type !== 'audio') {
     throw new Error('Segment supplement is not audio');
   }
+  const audioProjection = await readFinalizedSegmentSupplementAudioProjection({
+    rootPath,
+    workspaceId,
+    memoryId,
+    segmentId,
+    supplementId,
+  });
   return {
     directory: supplementDirectory,
-    audioByteLength: supplement.audioByteLength,
-    lastTranscriptionAttempt: supplement.lastTranscriptionAttempt,
+    audioByteLength: audioProjection.audioByteLength,
+    audioHash: audioProjection.audioHash,
+    lastTranscriptionAttempt: audioProjection.lastTranscriptionAttempt,
   };
 }
 
@@ -1491,13 +1510,11 @@ async function readOptionalFinalizedTranscriptFile(
 }
 
 export async function readFinalizedAudioSegmentContent({
-  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
   rootPath,
   memoryId,
   segmentId,
   assertWorkspaceUsable,
 }: {
-  readonly maxBytes?: number;
   readonly rootPath: string;
   readonly memoryId: string;
   readonly segmentId: string;
@@ -1505,10 +1522,81 @@ export async function readFinalizedAudioSegmentContent({
 }): Promise<
   | {
       readonly ok: true;
-      readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly audioHash: string | null;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
       readonly transcript: PublicFinalizedTranscriptContent;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentReadTarget(rootPath, memoryId, segmentId);
+
+    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeTranscript = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeTranscript) {
+      return stillUsableBeforeTranscript;
+    }
+    const transcript = await readOptionalFinalizedTranscriptFile(
+      target.directory,
+      recordingDirectoryIdentity,
+      {
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+        markdownFileName: 'segment.md',
+        objectType: 'segment',
+      }
+    );
+    if (transcript.markdownChanged) {
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
+    const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsable) {
+      return stillUsable;
+    }
+    await assertSameDirectory(target.directory, recordingDirectoryIdentity);
+    return {
+      ok: true,
+      audioByteLength: target.audioByteLength,
+      audioHash: target.audioHash,
+      lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+      transcript: publicTranscriptContent(transcript),
+    };
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Finalized audio segment not found');
+  }
+}
+
+export async function readFinalizedAudioSegmentAudio({
+  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  rootPath,
+  memoryId,
+  segmentId,
+  expectedAudioByteLength,
+  expectedAudioHash,
+  assertWorkspaceUsable,
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly expectedAudioByteLength: number;
+  readonly expectedAudioHash?: string | null;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audio: Uint8Array;
+      readonly audioByteLength: number;
+      readonly audioHash: string;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1523,11 +1611,12 @@ export async function readFinalizedAudioSegmentContent({
       1,
       Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
     );
-
-    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
-    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
-    if (stillUsableBeforeAudio) {
-      return stillUsableBeforeAudio;
+    if (target.audioByteLength !== expectedAudioByteLength) {
+      return workspaceError(
+        'ERR_WORKSPACE_UNSAFE_PATH',
+        'Finalized audio identity is stale',
+        'previous-file-preserved'
+      );
     }
     if (target.audioByteLength > maxReadableBytes) {
       return workspaceError(
@@ -1535,19 +1624,8 @@ export async function readFinalizedAudioSegmentContent({
         'Finalized audio is too large to read'
       );
     }
-    const transcript = await readOptionalFinalizedTranscriptFile(
-      target.directory,
-      recordingDirectoryIdentity,
-      {
-        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-        markdownFileName: 'segment.md',
-        objectType: 'segment',
-      }
-    );
-    if (transcript.markdownChanged) {
-      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    }
 
+    const recordingDirectoryIdentity = await readDirectoryIdentity(target.directory);
     const audioFd = openFileForReadInDirectory(
       target.directory,
       recordingDirectoryIdentity,
@@ -1563,7 +1641,13 @@ export async function readFinalizedAudioSegmentContent({
         );
       }
       const content = (await readFileDescriptor(audioFd)) as Buffer;
-      if (content.byteLength !== target.audioByteLength || content.byteLength > maxReadableBytes) {
+      const audioHash = recordingAudioHash(content);
+      if (
+        content.byteLength !== target.audioByteLength ||
+        content.byteLength > maxReadableBytes ||
+        (expectedAudioHash && audioHash !== expectedAudioHash) ||
+        (target.audioHash && audioHash !== target.audioHash)
+      ) {
         return workspaceError(
           'ERR_WORKSPACE_UNSAFE_PATH',
           'Finalized audio path is unsafe',
@@ -1575,12 +1659,21 @@ export async function readFinalizedAudioSegmentContent({
         return stillUsable;
       }
       await assertSameDirectory(target.directory, recordingDirectoryIdentity);
+      if (!target.audioHash) {
+        await repairFinalizedSegmentAudioHash({
+          ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+          audioByteLength: target.audioByteLength,
+          audioHash,
+          memoryId,
+          rootPath,
+          segmentId,
+        }).catch(() => undefined);
+      }
       return {
         ok: true,
         audio: content,
         audioByteLength: target.audioByteLength,
-        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript: publicTranscriptContent(transcript),
+        audioHash,
       };
     } finally {
       closeSync(audioFd);
@@ -1699,7 +1792,6 @@ export async function readFinalizedAudioSegmentBackfillSource({
 }
 
 export async function readFinalizedAudioSegmentSupplementContent({
-  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
   rootPath,
   workspaceId,
   memoryId,
@@ -1707,7 +1799,6 @@ export async function readFinalizedAudioSegmentSupplementContent({
   supplementId,
   assertWorkspaceUsable,
 }: {
-  readonly maxBytes?: number;
   readonly rootPath: string;
   readonly workspaceId: string;
   readonly memoryId: string;
@@ -1717,10 +1808,94 @@ export async function readFinalizedAudioSegmentSupplementContent({
 }): Promise<
   | {
       readonly ok: true;
-      readonly audio: Uint8Array;
       readonly audioByteLength: number;
+      readonly audioHash: string | null;
       readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
       readonly transcript: PublicFinalizedTranscriptContent;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const usable = checkWorkspaceUsable(assertWorkspaceUsable);
+  if (usable) {
+    return usable;
+  }
+
+  try {
+    const target = await resolveFinalizedAudioSegmentSupplementReadTarget(
+      rootPath,
+      workspaceId,
+      memoryId,
+      segmentId,
+      supplementId
+    );
+
+    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
+    const stillUsableBeforeTranscript = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsableBeforeTranscript) {
+      return stillUsableBeforeTranscript;
+    }
+    const transcript = await readOptionalFinalizedTranscriptFile(
+      target.directory,
+      supplementDirectoryIdentity,
+      {
+        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+        markdownFileName: 'supplement.md',
+        objectType: 'supplement',
+      }
+    );
+    if (transcript.markdownChanged) {
+      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
+    }
+    const stillUsable = checkWorkspaceUsable(assertWorkspaceUsable);
+    if (stillUsable) {
+      return stillUsable;
+    }
+    await assertSameDirectory(target.directory, supplementDirectoryIdentity);
+    return {
+      ok: true,
+      audioByteLength: target.audioByteLength,
+      audioHash: target.audioHash,
+      lastTranscriptionAttempt: target.lastTranscriptionAttempt,
+      transcript: publicTranscriptContent(transcript),
+    };
+  } catch (error) {
+    const workspaceErrorEnvelope = caughtWorkspaceError(error);
+    if (workspaceErrorEnvelope) {
+      return workspaceErrorEnvelope;
+    }
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Finalized segment supplement audio not found'
+    );
+  }
+}
+
+export async function readFinalizedAudioSegmentSupplementAudio({
+  maxBytes = MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
+  rootPath,
+  workspaceId,
+  memoryId,
+  segmentId,
+  supplementId,
+  expectedAudioByteLength,
+  expectedAudioHash,
+  assertWorkspaceUsable,
+}: {
+  readonly maxBytes?: number;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly expectedAudioByteLength: number;
+  readonly expectedAudioHash?: string | null;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly audio: Uint8Array;
+      readonly audioByteLength: number;
+      readonly audioHash: string;
     }
   | WorkspaceErrorEnvelope
 > {
@@ -1741,11 +1916,12 @@ export async function readFinalizedAudioSegmentSupplementContent({
       1,
       Math.min(Math.trunc(maxBytes), MAX_BACKFILL_AUDIO_READ_BYTES)
     );
-
-    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
-    const stillUsableBeforeAudio = checkWorkspaceUsable(assertWorkspaceUsable);
-    if (stillUsableBeforeAudio) {
-      return stillUsableBeforeAudio;
+    if (target.audioByteLength !== expectedAudioByteLength) {
+      return workspaceError(
+        'ERR_WORKSPACE_UNSAFE_PATH',
+        'Finalized segment supplement audio identity is stale',
+        'previous-file-preserved'
+      );
     }
     if (target.audioByteLength > maxReadableBytes) {
       return workspaceError(
@@ -1753,19 +1929,8 @@ export async function readFinalizedAudioSegmentSupplementContent({
         'Finalized segment supplement audio is too large to read'
       );
     }
-    const transcript = await readOptionalFinalizedTranscriptFile(
-      target.directory,
-      supplementDirectoryIdentity,
-      {
-        ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
-        markdownFileName: 'supplement.md',
-        objectType: 'supplement',
-      }
-    );
-    if (transcript.markdownChanged) {
-      await refreshMemoryIndexEntry(rootPath, memoryId, assertWorkspaceUsable);
-    }
 
+    const supplementDirectoryIdentity = await readDirectoryIdentity(target.directory);
     const audioFd = openFileForReadInDirectory(
       target.directory,
       supplementDirectoryIdentity,
@@ -1781,7 +1946,13 @@ export async function readFinalizedAudioSegmentSupplementContent({
         );
       }
       const content = (await readFileDescriptor(audioFd)) as Buffer;
-      if (content.byteLength !== target.audioByteLength || content.byteLength > maxReadableBytes) {
+      const audioHash = recordingAudioHash(content);
+      if (
+        content.byteLength !== target.audioByteLength ||
+        content.byteLength > maxReadableBytes ||
+        (expectedAudioHash && audioHash !== expectedAudioHash) ||
+        (target.audioHash && audioHash !== target.audioHash)
+      ) {
         return workspaceError(
           'ERR_WORKSPACE_UNSAFE_PATH',
           'Finalized segment supplement audio path is unsafe',
@@ -1793,12 +1964,23 @@ export async function readFinalizedAudioSegmentSupplementContent({
         return stillUsable;
       }
       await assertSameDirectory(target.directory, supplementDirectoryIdentity);
+      if (!target.audioHash) {
+        await repairFinalizedSegmentSupplementAudioHash({
+          ...(assertWorkspaceUsable ? { assertWorkspaceUsable } : {}),
+          audioByteLength: target.audioByteLength,
+          audioHash,
+          memoryId,
+          rootPath,
+          segmentId,
+          supplementId,
+          workspaceId,
+        }).catch(() => undefined);
+      }
       return {
         ok: true,
         audio: content,
         audioByteLength: target.audioByteLength,
-        lastTranscriptionAttempt: target.lastTranscriptionAttempt,
-        transcript: publicTranscriptContent(transcript),
+        audioHash,
       };
     } finally {
       closeSync(audioFd);

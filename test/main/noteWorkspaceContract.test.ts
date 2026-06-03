@@ -49,6 +49,20 @@ const bodyTiptapJson = {
     },
   ],
 };
+const missingSpeechSynthesis = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
 const timestamp = '2026-05-19T12:00:00.000Z';
 const memorySummary = {
   audioByteLength: 0,
@@ -287,6 +301,7 @@ test('note finalize and content schemas expose projections without absolute path
       bodyByteLength: 7,
       baselineContentHash,
       baselineTiptapContentHash,
+      speechSynthesis: missingSpeechSynthesis,
     },
   });
   assert.equal(readContentResponse.ok, true);

@@ -2,15 +2,22 @@ import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react
 import {
   clearVoiceTranscriptionApiKey,
   readVoiceTranscriptionSettings,
+  regenerateImportedSpeechSynthesis,
   saveVoiceTranscriptionApiKey,
+  setVoiceSpeechSynthesisSpeaker,
   setVoiceTranscriptionEnabled,
   validateVoiceTranscriptionCredentials,
   type VoiceTranscriptionCredentialsValidation,
   type VoiceTranscriptionSettings,
   type VoiceTranscriptionSettingsResponseValue,
+  type ImportedSpeechSynthesisRegenerationResult,
   type WorkspaceError,
 } from '../workspace/workspaceApi';
 import { workspaceErrorDisplayMessage } from '../workspace/workspaceErrorMessages';
+import {
+  workspaceProjectionQueryBelongsToWorkspace,
+  workspaceSpeechAudioQueryBelongsToWorkspace,
+} from '../workspace/workspaceQueries';
 
 type VoiceSettingsErrorLike = {
   readonly code?: string;
@@ -50,9 +57,13 @@ function toVoiceSettingsProjection(
     enabled: settings.enabled,
     apiKeyConfigured: settings.apiKeyConfigured,
     apiKeyLastFour: settings.apiKeyLastFour,
-    lastValidatedAt: settings.lastValidatedAt,
-    lastValidationOk: settings.lastValidationOk,
-    lastValidationCode: settings.lastValidationCode,
+    speechSynthesisSpeaker: settings.speechSynthesisSpeaker,
+    lastTranscriptionValidatedAt: settings.lastTranscriptionValidatedAt,
+    lastTranscriptionValidationOk: settings.lastTranscriptionValidationOk,
+    lastTranscriptionValidationCode: settings.lastTranscriptionValidationCode,
+    lastSpeechSynthesisValidatedAt: settings.lastSpeechSynthesisValidatedAt,
+    lastSpeechSynthesisValidationOk: settings.lastSpeechSynthesisValidationOk,
+    lastSpeechSynthesisValidationCode: settings.lastSpeechSynthesisValidationCode,
   };
 }
 
@@ -109,6 +120,23 @@ export function setVoiceTranscriptionEnabledMutationOptions(queryClient: QueryCl
   });
 }
 
+export function setVoiceSpeechSynthesisSpeakerMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (
+      payload: Parameters<typeof setVoiceSpeechSynthesisSpeaker>[0]
+    ): Promise<VoiceTranscriptionSettingsResponseValue> => {
+      const response = await setVoiceSpeechSynthesisSpeaker(payload);
+
+      if (!response.ok) {
+        throw voiceSettingsMutationError(response.error, '无法更新语音设置。');
+      }
+
+      return toVoiceSettingsResponseValue(response.value);
+    },
+    onSuccess: (value) => seedVoiceSettings(queryClient, value),
+  });
+}
+
 export function saveVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: async (
@@ -120,7 +148,7 @@ export function saveVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryCl
         if (response.error.dataRetention === 'file-written-index-stale') {
           await invalidateVoiceSettings(queryClient);
         }
-        throw voiceSettingsMutationError(response.error, '无法保存语音识别密钥。');
+        throw voiceSettingsMutationError(response.error, '无法保存豆包语音密钥。');
       }
 
       return toVoiceSettingsResponseValue(response.value);
@@ -135,7 +163,7 @@ export function clearVoiceTranscriptionApiKeyMutationOptions(queryClient: QueryC
       const response = await clearVoiceTranscriptionApiKey();
 
       if (!response.ok) {
-        throw voiceSettingsMutationError(response.error, '无法清除语音识别密钥。');
+        throw voiceSettingsMutationError(response.error, '无法清除豆包语音密钥。');
       }
 
       return toVoiceSettingsResponseValue(response.value);
@@ -150,11 +178,37 @@ export function validateVoiceTranscriptionCredentialsMutationOptions(queryClient
       const response = await validateVoiceTranscriptionCredentials();
 
       if (!response.ok) {
-        throw voiceSettingsMutationError(response.error, '无法验证语音识别密钥。');
+        throw voiceSettingsMutationError(response.error, '无法验证豆包语音密钥。');
       }
 
       return response.value;
     },
     onSuccess: () => invalidateVoiceSettings(queryClient),
+  });
+}
+
+function invalidateWorkspaceSpeechSynthesisContent(queryClient: QueryClient, workspaceId?: string) {
+  queryClient.removeQueries({
+    predicate: (query) => workspaceSpeechAudioQueryBelongsToWorkspace(query.queryKey, workspaceId),
+  });
+  return queryClient.invalidateQueries({
+    predicate: (query) => workspaceProjectionQueryBelongsToWorkspace(query.queryKey, workspaceId),
+  });
+}
+
+export function regenerateImportedSpeechSynthesisMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (
+      payload: Parameters<typeof regenerateImportedSpeechSynthesis>[0]
+    ): Promise<ImportedSpeechSynthesisRegenerationResult> => {
+      const response = await regenerateImportedSpeechSynthesis(payload);
+
+      if (!response.ok) {
+        throw voiceSettingsMutationError(response.error, '无法重新生成笔记语音。');
+      }
+
+      return response.value;
+    },
+    onSuccess: () => invalidateWorkspaceSpeechSynthesisContent(queryClient),
   });
 }

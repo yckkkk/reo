@@ -37,9 +37,10 @@ import {
 import { Waveform } from '@/components/ui/waveform';
 import {
   canDecodeAudioBytesToWaveformData,
-  closeAudioWaveformDecoder,
+  createFallbackWaveformData,
   decodeAudioBytesToWaveformData,
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT,
+  MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_TIMEOUT_MS,
 } from './audioWaveform';
 import { CarouselArrowButton } from './CarouselArrowButton';
 import {
@@ -102,6 +103,10 @@ import type {
   WorkspaceSnapshot,
 } from './workspaceApi';
 import {
+  SPEECH_SYNTHESIS_SPEAKER_OPTIONS,
+  type VoiceSpeechSynthesisSpeaker,
+} from '../voiceSpeechSynthesisSpeakers';
+import {
   saveSegmentSupplementTranscript,
   saveTranscript,
   updateSegmentContentTabOrder,
@@ -109,10 +114,14 @@ import {
 import {
   memoryDetailQueryOptions,
   memoryDetailQueryKey,
+  segmentAudioQueryOptions,
   segmentSupplementContentQueryOptions,
   segmentSupplementContentQueryKey,
+  segmentSupplementAudioQueryOptions,
+  segmentSupplementSpeechAudioQueryOptions,
   segmentContentQueryOptions,
   segmentContentQueryKey,
+  segmentSpeechAudioQueryOptions,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
 import {
@@ -129,6 +138,7 @@ import {
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 
 type MemoryStudioProps = {
+  readonly audioResourceCaches: MemoryStudioAudioResourceCaches;
   readonly memory: WorkspaceMemorySummary;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
@@ -142,6 +152,7 @@ type MemoryStudioProps = {
   readonly onRenameSegmentSupplement: (target: SegmentSupplementRenameTarget) => void;
   readonly onRenameSegmentContent: (target: SegmentContentRenameTarget) => void;
   readonly onRenameSegment: (target: SegmentRenameTarget) => void;
+  readonly speechSynthesis?: SpeechSynthesisController;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onInlineMarkdownDirtyChange?: (dirty: boolean) => void;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
@@ -165,6 +176,7 @@ export type SegmentSupplementTranscriptionRetryTarget = {
 };
 
 export type TranscriptionBackfillMode = 'fill-missing' | 'regenerate';
+export type SpeechSynthesisMode = 'fill-missing' | 'regenerate';
 
 export type TranscriptionBackfillController = {
   readonly disabledReason?: string | null;
@@ -176,6 +188,37 @@ export type TranscriptionBackfillController = {
   readonly retrySupplement?: (
     target: SegmentSupplementTranscriptionRetryTarget & {
       readonly mode: TranscriptionBackfillMode;
+    }
+  ) => Promise<void> | void;
+};
+
+export type SegmentSpeechSynthesisTarget = {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+};
+
+export type SegmentSupplementSpeechSynthesisTarget = {
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+};
+
+export type SpeechSynthesisController = {
+  readonly disabledReason?: string | null;
+  readonly isSegmentRunning?: (target: SegmentSpeechSynthesisTarget) => boolean;
+  readonly isSupplementRunning?: (target: SegmentSupplementSpeechSynthesisTarget) => boolean;
+  readonly requestSegment?: (
+    target: SegmentSpeechSynthesisTarget & {
+      readonly mode: SpeechSynthesisMode;
+      readonly speaker: VoiceSpeechSynthesisSpeaker;
+    }
+  ) => Promise<void> | void;
+  readonly requestSupplement?: (
+    target: SegmentSupplementSpeechSynthesisTarget & {
+      readonly mode: SpeechSynthesisMode;
+      readonly speaker: VoiceSpeechSynthesisSpeaker;
     }
   ) => Promise<void> | void;
 };
@@ -206,6 +249,9 @@ const hiddenSegmentStripScrollState: SegmentStripScrollState = {
 };
 const INLINE_MARKDOWN_UNSAVED_MESSAGE = '请先保存当前文本编辑。';
 const INLINE_MARKDOWN_AUTOSAVE_DELAY_MS = 300;
+const MEMORY_STUDIO_AUDIO_RESOURCE_CACHE_LIMIT = 12;
+const MEMORY_STUDIO_AUDIO_RESOURCE_CACHE_BYTE_LIMIT = 64 * 1024 * 1024;
+const MEMORY_STUDIO_PLAYBACK_EAGER_LOAD_MAX_BYTES = 2 * 1024 * 1024;
 
 type MemorySegment = WorkspaceMemoryDetail['segments'][number];
 type MemorySegmentSupplement = MemorySegment['supplements'][number];
@@ -218,12 +264,14 @@ type TranscriptProjection =
   | { readonly exists: boolean; readonly text: string; readonly baselineHash: string }
   | null
   | undefined;
-type PlaybackWaveformSource = 'decoded-audio' | 'pending' | 'unavailable';
-type MemoryStudioAudioResource = {
+type PlaybackWaveformSource = 'decoded-audio' | 'generated-overview' | 'pending' | 'unavailable';
+export type MemoryStudioAudioResource = {
+  audioByteLength: number;
   audioUrl: string;
   decodePromise: Promise<void>;
   decodeStarted: boolean;
   memoryId: string;
+  mimeType: string;
   requestId: string;
   segmentId: string;
   supplementId?: string;
@@ -234,6 +282,25 @@ type MemoryStudioAudioResource = {
 };
 type SegmentAudioResource = MemoryStudioAudioResource;
 type SegmentSupplementAudioResource = MemoryStudioAudioResource;
+
+export type MemoryStudioAudioResourceCaches = {
+  readonly segment: Map<string, SegmentAudioResource>;
+  readonly supplement: Map<string, SegmentSupplementAudioResource>;
+};
+
+export function createMemoryStudioAudioResourceCaches(): MemoryStudioAudioResourceCaches {
+  return {
+    segment: new Map<string, SegmentAudioResource>(),
+    supplement: new Map<string, SegmentSupplementAudioResource>(),
+  };
+}
+
+export function clearMemoryStudioAudioResourceCaches(
+  audioResourceCaches: MemoryStudioAudioResourceCaches
+): void {
+  clearMemoryStudioAudioResources(audioResourceCaches.segment);
+  clearMemoryStudioAudioResources(audioResourceCaches.supplement);
+}
 type SavedSegmentTranscriptContent = {
   readonly expectedSession: WorkspaceSession;
   readonly baselineTranscriptHash: string;
@@ -262,7 +329,7 @@ function isNoteMemorySegment(segment: MemorySegment): segment is NoteMemorySegme
 function isAudioSegmentContent(
   content: WorkspaceFinalizedAudioSegmentContent | WorkspaceNoteSegmentContent | undefined
 ): content is WorkspaceFinalizedAudioSegmentContent {
-  return content !== undefined && 'audio' in content;
+  return content !== undefined && 'transcript' in content && 'audioByteLength' in content;
 }
 
 function isNoteSegmentContent(
@@ -277,7 +344,7 @@ function isAudioSegmentSupplementContent(
     | WorkspaceNoteSegmentSupplementContent
     | undefined
 ): content is WorkspaceFinalizedAudioSegmentSupplementContent {
-  return content !== undefined && 'audio' in content;
+  return content !== undefined && 'transcript' in content && 'audioByteLength' in content;
 }
 
 function isNoteSegmentSupplementContent(
@@ -299,6 +366,15 @@ function isNoteMemorySegmentSupplement(
   supplement: MemorySegmentSupplement
 ): supplement is NoteMemorySegmentSupplement {
   return supplement.type === 'note';
+}
+
+function canEagerLoadPlaybackAudio(byteLength: number | null | undefined): boolean {
+  return (
+    typeof byteLength === 'number' &&
+    Number.isFinite(byteLength) &&
+    byteLength > 0 &&
+    byteLength <= MEMORY_STUDIO_PLAYBACK_EAGER_LOAD_MAX_BYTES
+  );
 }
 
 type TranscriptionConfirmIntent =
@@ -353,6 +429,33 @@ function transcriptionBackfillDisabledReason({
   }
   return baseReason ?? null;
 }
+
+function noteSpeechSynthesisDisabledReason({
+  baseReason,
+  dirty,
+  running,
+  speechSynthesis,
+}: {
+  readonly baseReason?: string | null | undefined;
+  readonly dirty: boolean;
+  readonly running: boolean;
+  readonly speechSynthesis:
+    | WorkspaceNoteSegmentContent['speechSynthesis']
+    | WorkspaceNoteSegmentSupplementContent['speechSynthesis']
+    | undefined;
+}) {
+  if (running) {
+    return '正在生成语音。';
+  }
+  if (dirty) {
+    return INLINE_MARKDOWN_UNSAVED_MESSAGE;
+  }
+  if (speechSynthesis?.reason === 'text-too-long') {
+    return '正文过长，暂不支持生成语音。';
+  }
+  return baseReason ?? null;
+}
+
 type ActiveContentTab = 'transcript' | `supplement:${string}`;
 type PersistedContentTab = 'segment' | `supplement:${string}`;
 type DraggedContentTab = {
@@ -481,9 +584,10 @@ function insertContentTabValue(
 function memoryStudioAudioResourceKey(
   input: Pick<
     MemoryStudioAudioResource,
-    'memoryId' | 'requestId' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
+    'memoryId' | 'mimeType' | 'segmentId' | 'workspaceHandle' | 'workspaceId'
   > & {
     readonly audioByteLength: number;
+    readonly audioResourceIdentity: string;
     readonly supplementId?: string;
   }
 ) {
@@ -491,7 +595,7 @@ function memoryStudioAudioResourceKey(
   if (input.supplementId !== undefined) {
     parts.push(input.supplementId);
   }
-  parts.push(input.requestId, String(input.audioByteLength));
+  parts.push(input.audioResourceIdentity, String(input.audioByteLength), input.mimeType);
   return parts.join('\0');
 }
 
@@ -528,8 +632,51 @@ function pruneMemoryStudioAudioResources<TResource extends MemoryStudioAudioReso
   }
 }
 
+function touchMemoryStudioAudioResource<TResource extends MemoryStudioAudioResource>(
+  audioResourceCache: Map<string, TResource>,
+  resourceKey: string,
+  resource: TResource
+) {
+  audioResourceCache.delete(resourceKey);
+  audioResourceCache.set(resourceKey, resource);
+}
+
+function enforceMemoryStudioAudioResourceCacheLimit<TResource extends MemoryStudioAudioResource>(
+  audioResourceCache: Map<string, TResource>,
+  protectedResourceKey?: string
+) {
+  let cachedByteLength = 0;
+  for (const resource of audioResourceCache.values()) {
+    cachedByteLength += resource.audioByteLength;
+  }
+
+  while (
+    audioResourceCache.size > MEMORY_STUDIO_AUDIO_RESOURCE_CACHE_LIMIT ||
+    cachedByteLength > MEMORY_STUDIO_AUDIO_RESOURCE_CACHE_BYTE_LIMIT
+  ) {
+    const oldestResourceKey = audioResourceCache.keys().next().value;
+    if (typeof oldestResourceKey !== 'string') {
+      return;
+    }
+    if (oldestResourceKey === protectedResourceKey) {
+      if (audioResourceCache.size <= 1) {
+        return;
+      }
+      const protectedResource = audioResourceCache.get(oldestResourceKey);
+      if (!protectedResource) {
+        return;
+      }
+      touchMemoryStudioAudioResource(audioResourceCache, oldestResourceKey, protectedResource);
+      continue;
+    }
+    cachedByteLength -= audioResourceCache.get(oldestResourceKey)?.audioByteLength ?? 0;
+    revokeMemoryStudioAudioResource(audioResourceCache, oldestResourceKey);
+  }
+}
+
 type MemoryStudioAudioPlaybackRowProps = {
   readonly audioAvailable: boolean;
+  readonly audioLoadable: boolean;
   readonly durationMs: number;
   readonly loading: boolean;
   readonly onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -543,6 +690,7 @@ type MemoryStudioAudioPlaybackRowProps = {
   readonly playbackProgress: number;
   readonly playing: boolean;
   readonly rowSlot: string;
+  readonly rowTestId?: string | undefined;
   readonly waveformData: readonly number[];
   readonly waveformLabel: string;
   readonly waveformSlot: string;
@@ -551,6 +699,7 @@ type MemoryStudioAudioPlaybackRowProps = {
 
 function MemoryStudioAudioPlaybackRow({
   audioAvailable,
+  audioLoadable,
   durationMs,
   loading,
   onKeyDown,
@@ -564,17 +713,19 @@ function MemoryStudioAudioPlaybackRow({
   playbackProgress,
   playing,
   rowSlot,
+  rowTestId,
   waveformData,
   waveformLabel,
   waveformSlot,
   waveformSource,
 }: MemoryStudioAudioPlaybackRowProps) {
-  const disabled = !audioAvailable || loading;
+  const disabled = (!audioAvailable && !audioLoadable) || loading;
 
   return (
     <div
       data-component="memory-studio-audio-player"
       data-slot={rowSlot}
+      data-testid={rowTestId}
       className="grid w-full min-w-0 shrink-0 grid-cols-[40px_minmax(64px,1fr)_max-content] items-center gap-12"
     >
       <button
@@ -594,15 +745,16 @@ function MemoryStudioAudioPlaybackRow({
       </button>
       <Waveform
         active={playing}
-        aria-disabled={!audioAvailable}
+        aria-disabled={!audioAvailable && !audioLoadable}
         aria-label={waveformLabel}
         aria-orientation="horizontal"
         aria-valuemax={durationMs}
         aria-valuemin={0}
         aria-valuenow={Math.round(playbackTimeMs)}
         aria-valuetext={`${durationLabel(playbackTimeMs)} / ${durationLabel(durationMs)}`}
-        barRadius={4}
-        barWidth={4}
+        barGap={3}
+        barRadius={2}
+        barWidth={2}
         className="min-w-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         data={waveformData}
         data-slot={waveformSlot}
@@ -611,12 +763,18 @@ function MemoryStudioAudioPlaybackRow({
         label={waveformLabel}
         onKeyDown={onKeyDown}
         onPointerCancel={onPointerCancel}
-        onPointerDown={onPointerDown}
+        onPointerDown={(event) => {
+          if (!audioAvailable && audioLoadable) {
+            onTogglePlayback();
+            return;
+          }
+          onPointerDown(event);
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         progress={playbackProgress}
         role="slider"
-        tabIndex={audioAvailable ? 0 : -1}
+        tabIndex={audioAvailable || audioLoadable ? 0 : -1}
         tone="voice"
       />
       <span
@@ -629,16 +787,16 @@ function MemoryStudioAudioPlaybackRow({
   );
 }
 
-type MemoryStudioAudioBytes =
-  | WorkspaceFinalizedAudioSegmentContent['audio']
-  | WorkspaceFinalizedAudioSegmentSupplementContent['audio'];
+type MemoryStudioAudioBytes = Uint8Array;
 
 type MemoryStudioAudioPlaybackInput = {
   readonly audio: MemoryStudioAudioBytes | null;
   readonly audioByteLength: number | null;
+  readonly audioResourceIdentity: string | null;
   readonly audioResourceCache: Map<string, MemoryStudioAudioResource>;
   readonly durationMs: number;
   readonly memoryId: string;
+  readonly mimeType?: string;
   readonly playbackErrorMessage: string;
   readonly playbackResetKey: string;
   readonly requestId: string | null;
@@ -671,9 +829,11 @@ function memoryStudioAudioResourceBelongsToTarget(
 function useMemoryStudioAudioPlayback({
   audio,
   audioByteLength,
+  audioResourceIdentity,
   audioResourceCache,
   durationMs,
   memoryId,
+  mimeType = 'audio/webm',
   playbackErrorMessage,
   playbackResetKey,
   requestId,
@@ -686,17 +846,24 @@ function useMemoryStudioAudioPlayback({
   const currentAudioResourceKeyRef = useRef<string | null>(null);
   const waveformDecodeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const waveformDecodeGenerationRef = useRef(0);
+  const pendingPlayOnAudioReadyRef = useRef(false);
   const pointerScrubbingRef = useRef(false);
   const playingRef = useRef(false);
   const playbackTimeMsRef = useRef(0);
   const lastPlaybackTimePublishAtRef = useRef(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [resolvedDurationMs, setResolvedDurationMs] = useState(durationMs);
   const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [waveformData, setWaveformData] = useState<readonly number[]>([]);
   const [waveformSource, setWaveformSource] = useState<PlaybackWaveformSource>('pending');
-  const playbackProgress = durationMs > 0 ? Math.min(1, playbackTimeMs / durationMs) : 0;
+  const playbackProgress =
+    resolvedDurationMs > 0 ? Math.min(1, playbackTimeMs / resolvedDurationMs) : 0;
+
+  useEffect(() => {
+    setResolvedDurationMs(durationMs);
+  }, [durationMs, playbackResetKey]);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -722,6 +889,7 @@ function useMemoryStudioAudioPlayback({
 
   useEffect(() => {
     const audioElement = audioRef.current;
+    pendingPlayOnAudioReadyRef.current = false;
 
     return () => {
       pointerScrubbingRef.current = false;
@@ -733,28 +901,16 @@ function useMemoryStudioAudioPlayback({
   }, [playbackResetKey]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (audio === null || audioByteLength === null || requestId === null) {
-      currentAudioResourceKeyRef.current = null;
-      setAudioUrl(null);
-      setPlaybackTimeMs(0);
-      setWaveformData([]);
-      setWaveformSource('pending');
-      return () => {
-        cancelled = true;
-      };
+    if (!audioUrl || !pendingPlayOnAudioReadyRef.current || playingRef.current) {
+      return;
     }
 
-    const audioResourceKey = memoryStudioAudioResourceKey({
-      ...(supplementId !== undefined ? { supplementId } : {}),
-      audioByteLength,
-      memoryId,
-      requestId,
-      segmentId,
-      workspaceHandle,
-      workspaceId,
-    });
+    pendingPlayOnAudioReadyRef.current = false;
+    void startPlayback();
+  }, [audioUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
     const target: MemoryStudioAudioPlaybackTarget = {
       ...(supplementId !== undefined ? { supplementId } : {}),
       memoryId,
@@ -762,20 +918,121 @@ function useMemoryStudioAudioPlayback({
       workspaceHandle,
       workspaceId,
     };
+    const audioResourceKey =
+      audioByteLength !== null && audioResourceIdentity !== null && requestId !== null
+        ? memoryStudioAudioResourceKey({
+            ...(supplementId !== undefined ? { supplementId } : {}),
+            audioByteLength,
+            audioResourceIdentity,
+            memoryId,
+            mimeType,
+            segmentId,
+            workspaceHandle,
+            workspaceId,
+          })
+        : null;
+
+    if (
+      audio === null ||
+      audioByteLength === null ||
+      audioResourceIdentity === null ||
+      requestId === null
+    ) {
+      if (audioResourceKey !== null) {
+        const cachedResource = audioResourceCache.get(audioResourceKey);
+        if (cachedResource) {
+          const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
+          currentAudioResourceKeyRef.current = audioResourceKey;
+          touchMemoryStudioAudioResource(audioResourceCache, audioResourceKey, cachedResource);
+          setAudioUrl(cachedResource.audioUrl);
+          setPlaybackError(null);
+          if (resourceChanged) {
+            audioRef.current?.pause();
+            setPlaying(false);
+            playingRef.current = false;
+            setPlaybackTimeMs(0);
+          }
+          setWaveformData(cachedResource.waveformData);
+          setWaveformSource(cachedResource.waveformSource);
+          return () => {
+            cancelled = true;
+          };
+        }
+      }
+
+      if (audioResourceIdentity === null) {
+        pruneMemoryStudioAudioResources(
+          audioResourceCache,
+          (resource) => !memoryStudioAudioResourceBelongsToTarget(resource, target)
+        );
+      }
+      audioRef.current?.pause();
+      currentAudioResourceKeyRef.current = null;
+      setAudioUrl(null);
+      setPlaybackError(null);
+      setPlaybackTimeMs(0);
+      setPlaying(false);
+      playingRef.current = false;
+      setResolvedDurationMs(durationMs);
+      if (audioByteLength !== null && audioResourceIdentity !== null) {
+        setWaveformData(
+          createFallbackWaveformData(
+            audioByteLength,
+            durationMs,
+            MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
+          )
+        );
+        setWaveformSource('generated-overview');
+      } else {
+        setWaveformData([]);
+        setWaveformSource('pending');
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (audioResourceKey === null) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const resourceChanged = currentAudioResourceKeyRef.current !== audioResourceKey;
     currentAudioResourceKeyRef.current = audioResourceKey;
     const cachedResource = audioResourceCache.get(audioResourceKey);
 
     if (cachedResource) {
+      touchMemoryStudioAudioResource(audioResourceCache, audioResourceKey, cachedResource);
       setAudioUrl(cachedResource.audioUrl);
+      setPlaybackError(null);
       if (resourceChanged) {
+        audioRef.current?.pause();
+        setPlaying(false);
+        playingRef.current = false;
         setPlaybackTimeMs(0);
       }
       setWaveformData(cachedResource.waveformData);
       setWaveformSource(cachedResource.waveformSource);
 
       if (cachedResource.waveformSource === 'pending') {
+        const pendingResourceTimeoutId = window.setTimeout(() => {
+          if (
+            cancelled ||
+            currentAudioResourceKeyRef.current !== audioResourceKey ||
+            audioResourceCache.get(audioResourceKey) !== cachedResource ||
+            cachedResource.waveformSource !== 'pending'
+          ) {
+            return;
+          }
+
+          cachedResource.waveformData = [];
+          cachedResource.waveformSource = 'unavailable';
+          setWaveformData(cachedResource.waveformData);
+          setWaveformSource(cachedResource.waveformSource);
+        }, MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_TIMEOUT_MS);
+
         void cachedResource.decodePromise.finally(() => {
+          window.clearTimeout(pendingResourceTimeoutId);
           if (cancelled) {
             return;
           }
@@ -790,13 +1047,15 @@ function useMemoryStudioAudioPlayback({
       };
     }
 
-    const nextAudioUrl = URL.createObjectURL(new Blob([audio as BlobPart], { type: 'audio/webm' }));
+    const nextAudioUrl = URL.createObjectURL(new Blob([audio as BlobPart], { type: mimeType }));
     const nextResource: MemoryStudioAudioResource = {
       ...(supplementId !== undefined ? { supplementId } : {}),
+      audioByteLength,
       audioUrl: nextAudioUrl,
       decodePromise: Promise.resolve(),
       decodeStarted: false,
       memoryId,
+      mimeType,
       requestId,
       segmentId,
       waveformData: [],
@@ -811,15 +1070,24 @@ function useMemoryStudioAudioPlayback({
         !memoryStudioAudioResourceBelongsToTarget(resource, target)
     );
     audioResourceCache.set(audioResourceKey, nextResource);
+    enforceMemoryStudioAudioResourceCacheLimit(audioResourceCache, audioResourceKey);
 
     setAudioUrl(nextAudioUrl);
+    setPlaybackError(null);
+    audioRef.current?.pause();
+    setPlaying(false);
+    playingRef.current = false;
     setPlaybackTimeMs(0);
     setWaveformData(nextResource.waveformData);
     setWaveformSource(nextResource.waveformSource);
 
     if (!canDecodeAudioBytesToWaveformData(audioByteLength)) {
-      nextResource.waveformData = [];
-      nextResource.waveformSource = 'unavailable';
+      nextResource.waveformData = createFallbackWaveformData(
+        audioByteLength,
+        durationMs,
+        MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
+      );
+      nextResource.waveformSource = 'generated-overview';
       setWaveformData(nextResource.waveformData);
       setWaveformSource(nextResource.waveformSource);
       return () => {
@@ -873,8 +1141,12 @@ function useMemoryStudioAudioPlayback({
           ) {
             return;
           }
-          nextResource.waveformData = [];
-          nextResource.waveformSource = 'unavailable';
+          nextResource.waveformData = createFallbackWaveformData(
+            audioByteLength,
+            durationMs,
+            MEMORY_STUDIO_PLAYBACK_WAVEFORM_BAR_COUNT
+          );
+          nextResource.waveformSource = 'generated-overview';
 
           if (cancelled) {
             return;
@@ -893,9 +1165,11 @@ function useMemoryStudioAudioPlayback({
   }, [
     audio,
     audioByteLength,
+    audioResourceIdentity,
     audioResourceCache,
+    durationMs,
     memoryId,
-    requestId,
+    mimeType,
     segmentId,
     supplementId,
     workspaceHandle,
@@ -907,7 +1181,7 @@ function useMemoryStudioAudioPlayback({
       return;
     }
 
-    const nextTimeMs = Math.min(durationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
+    const nextTimeMs = Math.min(resolvedDurationMs, Math.max(0, Math.round(nextPlaybackTimeMs)));
     if (audioRef.current) {
       audioRef.current.currentTime = nextTimeMs / 1000;
     }
@@ -925,7 +1199,7 @@ function useMemoryStudioAudioPlayback({
     }
 
     const progress = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    setPlaybackPosition(progress * durationMs);
+    setPlaybackPosition(progress * resolvedDurationMs);
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -970,7 +1244,34 @@ function useMemoryStudioAudioPlayback({
     }
     if (event.key === 'End') {
       event.preventDefault();
-      setPlaybackPosition(durationMs);
+      setPlaybackPosition(resolvedDurationMs);
+    }
+  }
+
+  async function startPlayback() {
+    const audioElement = audioRef.current;
+
+    if (!audioElement || !audioUrl) {
+      return;
+    }
+
+    try {
+      setPlaybackError(null);
+      await audioElement.play();
+      playingRef.current = true;
+      setPlaying(true);
+    } catch {
+      playingRef.current = false;
+      setPlaying(false);
+      setPlaybackError(playbackErrorMessage);
+    }
+  }
+
+  function requestPlaybackWhenReady() {
+    pendingPlayOnAudioReadyRef.current = true;
+    if (audioUrl) {
+      pendingPlayOnAudioReadyRef.current = false;
+      void startPlayback();
     }
   }
 
@@ -988,22 +1289,13 @@ function useMemoryStudioAudioPlayback({
       return;
     }
 
-    try {
-      setPlaybackError(null);
-      await audioElement.play();
-      playingRef.current = true;
-      setPlaying(true);
-    } catch {
-      playingRef.current = false;
-      setPlaying(false);
-      setPlaybackError(playbackErrorMessage);
-    }
+    await startPlayback();
   }
 
   function handleEnded() {
     playingRef.current = false;
     setPlaying(false);
-    publishPlaybackTime(durationMs, true);
+    publishPlaybackTime(resolvedDurationMs, true);
   }
 
   function handlePause() {
@@ -1012,15 +1304,26 @@ function useMemoryStudioAudioPlayback({
   }
 
   function handleTimeUpdate(event: SyntheticEvent<HTMLAudioElement>) {
-    publishPlaybackTime(Math.min(durationMs, Math.round(event.currentTarget.currentTime * 1000)));
+    publishPlaybackTime(
+      Math.min(resolvedDurationMs, Math.round(event.currentTarget.currentTime * 1000))
+    );
+  }
+
+  function handleLoadedMetadata(event: SyntheticEvent<HTMLAudioElement>) {
+    const durationSeconds = event.currentTarget.duration;
+    if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+      setResolvedDurationMs(Math.round(durationSeconds * 1000));
+    }
   }
 
   return {
     audioAvailable: audioUrl !== null,
     audioRef,
     audioUrl,
+    durationMs: resolvedDurationMs,
     handleEnded,
     handleKeyDown,
+    handleLoadedMetadata,
     handlePause,
     handlePointerDown,
     handlePointerMove,
@@ -1030,6 +1333,7 @@ function useMemoryStudioAudioPlayback({
     playbackProgress,
     playbackTimeMs,
     playing,
+    requestPlaybackWhenReady,
     togglePlayback,
     waveformData,
     waveformSource,
@@ -1039,43 +1343,62 @@ function useMemoryStudioAudioPlayback({
 type MemoryStudioAudioPlaybackController = ReturnType<typeof useMemoryStudioAudioPlayback>;
 
 function MemoryStudioAudioPlayback({
+  audioLoadable,
   controller,
   durationMs,
   errorClassName,
   loading,
+  onRequestAudio,
   playButtonLabel,
   rowSlot,
+  rowTestId,
   showPlaybackError = true,
   waveformLabel,
   waveformSlot,
 }: {
+  readonly audioLoadable?: boolean;
   readonly controller: MemoryStudioAudioPlaybackController;
   readonly durationMs: number;
   readonly errorClassName: string;
   readonly loading: boolean;
+  readonly onRequestAudio?: (() => void) | undefined;
   readonly playButtonLabel: string;
   readonly rowSlot: string;
+  readonly rowTestId?: string | undefined;
   readonly showPlaybackError?: boolean;
   readonly waveformLabel: string;
   readonly waveformSlot: string;
 }) {
+  const resolvedAudioLoadable = audioLoadable === true && onRequestAudio !== undefined;
+  const handleTogglePlayback = () => {
+    if (!controller.audioAvailable && resolvedAudioLoadable) {
+      controller.requestPlaybackWhenReady();
+      onRequestAudio();
+      return;
+    }
+
+    void controller.togglePlayback();
+  };
+
   return (
     <>
       <MemoryStudioAudioPlaybackRow
         audioAvailable={controller.audioAvailable}
-        durationMs={durationMs}
+        audioLoadable={resolvedAudioLoadable}
+        durationMs={controller.durationMs || durationMs}
         loading={loading}
         onKeyDown={controller.handleKeyDown}
         onPointerCancel={controller.endPointerScrub}
         onPointerDown={controller.handlePointerDown}
         onPointerMove={controller.handlePointerMove}
         onPointerUp={controller.endPointerScrub}
-        onTogglePlayback={controller.togglePlayback}
+        onTogglePlayback={handleTogglePlayback}
         playButtonLabel={playButtonLabel}
         playbackTimeMs={controller.playbackTimeMs}
         playbackProgress={controller.playbackProgress}
         playing={controller.playing}
         rowSlot={rowSlot}
+        rowTestId={rowTestId}
         waveformData={controller.waveformData}
         waveformLabel={waveformLabel}
         waveformSlot={waveformSlot}
@@ -1085,6 +1408,7 @@ function MemoryStudioAudioPlayback({
         ref={controller.audioRef}
         src={controller.audioUrl ?? undefined}
         onEnded={controller.handleEnded}
+        onLoadedMetadata={controller.handleLoadedMetadata}
         onPause={controller.handlePause}
         onTimeUpdate={controller.handleTimeUpdate}
       />
@@ -1147,6 +1471,7 @@ type ContentTabMoreTriggerProps = Omit<
   readonly dataSlot:
     | 'memory-studio-primary-tab-more-anchor'
     | 'memory-studio-supplement-more-anchor';
+  readonly onRequestOpen?: (() => void) | undefined;
   readonly revealMode: 'drag-source' | 'drag-suppressed' | 'normal';
   readonly triggerLabel: string;
 };
@@ -1162,10 +1487,16 @@ const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTrigge
       onDragStart,
       onMouseDown,
       onPointerDown,
+      onRequestOpen,
+      style,
       ...buttonProps
     },
     ref
   ) {
+    const effectiveRevealMode =
+      actionsAccessible && revealMode !== 'drag-suppressed' ? 'drag-source' : revealMode;
+    const visible = effectiveRevealMode === 'drag-source';
+
     return (
       <button
         {...buttonProps}
@@ -1176,22 +1507,32 @@ const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTrigge
         data-slot={dataSlot}
         draggable={false}
         tabIndex={actionsAccessible ? 0 : -1}
-        className={contentTabMoreClassName(revealMode)}
+        className={contentTabMoreClassName(effectiveRevealMode)}
+        style={{
+          ...style,
+          marginLeft: visible ? 6 : 0,
+          maxWidth: visible ? 20 : 0,
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'scale(1)' : 'scale(0.75)',
+          transitionProperty: visible ? 'none' : undefined,
+        }}
         onPointerDown={(event) => {
-          stopContentTabMoreEventPropagation(event);
           onPointerDown?.(event);
+          onRequestOpen?.();
+          stopContentTabMoreEventPropagation(event);
         }}
         onMouseDown={(event) => {
-          stopContentTabMoreEventPropagation(event);
           onMouseDown?.(event);
+          stopContentTabMoreEventPropagation(event);
         }}
         onClick={(event) => {
-          stopContentTabMoreEventPropagation(event);
           onClick?.(event);
+          onRequestOpen?.();
+          stopContentTabMoreEventPropagation(event);
         }}
         onDragStart={(event) => {
-          stopContentTabMoreEventPropagation(event);
           onDragStart?.(event);
+          stopContentTabMoreEventPropagation(event);
         }}
       >
         <span className="inline-flex size-20 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground">
@@ -1227,6 +1568,7 @@ function SegmentSupplementTab({
   onDragStart,
   onKeyDown,
   onMenuOpenChange,
+  onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onDelete,
   onRename,
@@ -1234,6 +1576,7 @@ function SegmentSupplementTab({
   dragging,
   revealMode,
   menuOpen,
+  speechSynthesisDisabledReason,
   transcriptExists,
   transcriptionBackfillDisabledReason,
 }: {
@@ -1257,9 +1600,11 @@ function SegmentSupplementTab({
   readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDelete: () => void;
   readonly onMenuOpenChange: (open: boolean) => void;
+  readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly onSelect: () => void;
+  readonly speechSynthesisDisabledReason?: string | null | undefined;
   readonly transcriptExists?: boolean | undefined;
   readonly transcriptionBackfillDisabledReason?: string | null | undefined;
 }) {
@@ -1333,12 +1678,14 @@ function SegmentSupplementTab({
           onDelete();
         }}
         onOpenChange={onMenuOpenChange}
+        onRequestSpeechSynthesis={onRequestSpeechSynthesis}
         onRequestTranscriptionBackfill={onRequestTranscriptionBackfill}
         onRename={() => {
           onMenuOpenChange(false);
           onRename();
         }}
         open={menuOpen}
+        speechSynthesisDisabledReason={speechSynthesisDisabledReason}
         supplementTitle={supplement.title}
         transcriptExists={transcriptExists}
         transcriptionBackfillDisabledReason={transcriptionBackfillDisabledReason}
@@ -1347,6 +1694,7 @@ function SegmentSupplementTab({
             ref={moreButtonRef}
             actionsAccessible={actionsAccessible}
             dataSlot="memory-studio-supplement-more-anchor"
+            onRequestOpen={() => onMenuOpenChange(true)}
             revealMode={revealMode}
             triggerLabel={`${supplement.title} 更多操作`}
           />
@@ -1371,6 +1719,7 @@ function PrimaryContentTab({
   onDragOver,
   onDragStart,
   onKeyDown,
+  onMenuOpenChange,
   onSelect,
   panelId,
   tabId,
@@ -1389,6 +1738,7 @@ function PrimaryContentTab({
   readonly onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  readonly onMenuOpenChange: (open: boolean) => void;
   readonly onSelect: () => void;
   readonly panelId: string;
   readonly renderMoreMenu: (
@@ -1408,6 +1758,7 @@ function PrimaryContentTab({
       ref={moreButtonRef}
       actionsAccessible={actionsAccessible}
       dataSlot="memory-studio-primary-tab-more-anchor"
+      onRequestOpen={() => onMenuOpenChange(true)}
       revealMode={dragging ? 'drag-source' : 'normal'}
       triggerLabel={triggerLabel}
     />
@@ -1482,15 +1833,49 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
   readonly segment: AudioMemorySegment;
   readonly workspaceSession: WorkspaceSession;
 }) {
+  const [audioRequested, setAudioRequested] = useState(false);
+  useEffect(() => {
+    setAudioRequested(false);
+  }, [
+    content?.audioHash,
+    content?.audioByteLength,
+    content?.requestId,
+    segment.segmentId,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+  const audioQuery = useQuery({
+    ...segmentAudioQueryOptions({
+      audioByteLength: content?.audioByteLength ?? 0,
+      audioHash: content?.audioHash ?? null,
+      audioIdentityVersion: content?.requestId ?? 'pending-content',
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      session: workspaceSession,
+    }),
+    enabled:
+      content !== undefined &&
+      (audioRequested || canEagerLoadPlaybackAudio(content.audioByteLength)),
+  });
+  const requestAudio = () => {
+    setAudioRequested(true);
+    if (audioQuery.isError) {
+      void audioQuery.refetch();
+    }
+  };
+  const audio = audioQuery.data?.audio ?? null;
   const playback = useMemoryStudioAudioPlayback({
-    audio: content?.audio ?? null,
-    audioByteLength: content?.audioByteLength ?? null,
+    audio,
+    audioByteLength: content ? (audioQuery.data?.audioByteLength ?? content.audioByteLength) : null,
+    audioResourceIdentity: content
+      ? `audio:${audioQuery.data?.audioHash ?? content.audioHash ?? content.requestId}`
+      : null,
     audioResourceCache,
     durationMs: segment.durationMs,
     memoryId: segment.memoryId,
     playbackErrorMessage: '片段无法播放，请稍后重试。',
     playbackResetKey: segment.segmentId,
-    requestId: content?.requestId ?? null,
+    requestId: content ? (audioQuery.data?.requestId ?? content.requestId) : null,
     segmentId: segment.segmentId,
     workspaceHandle: workspaceSession.workspaceHandle,
     workspaceId: workspaceSession.workspaceId,
@@ -1501,11 +1886,235 @@ const SegmentAudioPlayer = memo(function SegmentAudioPlayer({
       controller={playback}
       durationMs={segment.durationMs}
       errorClassName="mt-8 shrink-0 text-ui-sm leading-ui-sm text-muted-foreground"
-      loading={loading}
+      audioLoadable={content !== undefined}
+      loading={
+        loading ||
+        ((audioRequested || canEagerLoadPlaybackAudio(content?.audioByteLength)) &&
+          audioQuery.isLoading)
+      }
+      onRequestAudio={requestAudio}
       playButtonLabel={`${playback.playing ? '暂停' : '播放'}片段 ${segment.title}`}
       rowSlot="memory-studio-player"
       waveformLabel="片段播放进度"
       waveformSlot="memory-studio-playback-waveform"
+    />
+  );
+});
+
+const SegmentNoteSpeechPlayer = memo(function SegmentNoteSpeechPlayer({
+  audioResourceCache,
+  content,
+  loading,
+  segment,
+  workspaceSession,
+}: {
+  readonly audioResourceCache: Map<string, SegmentAudioResource>;
+  readonly content: WorkspaceNoteSegmentContent | undefined;
+  readonly loading: boolean;
+  readonly segment: NoteMemorySegment;
+  readonly workspaceSession: WorkspaceSession;
+}) {
+  const [audioRequested, setAudioRequested] = useState(false);
+  const speechSynthesis = content?.speechSynthesis;
+  const playableSpeechSynthesis =
+    (speechSynthesis?.status === 'ready' || speechSynthesis?.status === 'stale') &&
+    speechSynthesis.audioByteLength !== null &&
+    speechSynthesis.contentHash !== null &&
+    speechSynthesis.speaker !== null &&
+    speechSynthesis.updatedAt !== null
+      ? {
+          audioByteLength: speechSynthesis.audioByteLength,
+          contentHash: speechSynthesis.contentHash,
+          speaker: speechSynthesis.speaker,
+          updatedAt: speechSynthesis.updatedAt,
+        }
+      : null;
+  useEffect(() => {
+    setAudioRequested(false);
+  }, [
+    playableSpeechSynthesis?.audioByteLength,
+    playableSpeechSynthesis?.contentHash,
+    playableSpeechSynthesis?.speaker,
+    playableSpeechSynthesis?.updatedAt,
+    segment.segmentId,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+  const speechAudioQuery = useQuery({
+    ...segmentSpeechAudioQueryOptions({
+      audioByteLength: playableSpeechSynthesis?.audioByteLength ?? 0,
+      contentHash: playableSpeechSynthesis?.contentHash ?? '0'.repeat(64),
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      session: workspaceSession,
+      speaker: playableSpeechSynthesis?.speaker ?? SPEECH_SYNTHESIS_SPEAKER_OPTIONS[0].value,
+      updatedAt: playableSpeechSynthesis?.updatedAt ?? 'pending',
+    }),
+    enabled:
+      playableSpeechSynthesis !== null &&
+      (audioRequested || canEagerLoadPlaybackAudio(playableSpeechSynthesis.audioByteLength)),
+  });
+  const requestAudio = () => {
+    setAudioRequested(true);
+    if (speechAudioQuery.isError) {
+      void speechAudioQuery.refetch();
+    }
+  };
+  const speechAudio = speechAudioQuery.data?.audio ?? null;
+  const playback = useMemoryStudioAudioPlayback({
+    audio: playableSpeechSynthesis ? speechAudio : null,
+    audioByteLength: playableSpeechSynthesis
+      ? (speechAudioQuery.data?.audioByteLength ?? playableSpeechSynthesis.audioByteLength)
+      : null,
+    audioResourceIdentity: playableSpeechSynthesis
+      ? `speech:${playableSpeechSynthesis.contentHash}:${playableSpeechSynthesis.speaker}:${playableSpeechSynthesis.updatedAt}`
+      : null,
+    audioResourceCache,
+    durationMs: 0,
+    memoryId: segment.memoryId,
+    mimeType: speechSynthesis?.mimeType ?? 'audio/mpeg',
+    playbackErrorMessage: '笔记语音无法播放，请稍后重试。',
+    playbackResetKey: `${segment.segmentId}:${speechSynthesis?.contentHash ?? 'missing'}`,
+    requestId:
+      playableSpeechSynthesis && content
+        ? (speechAudioQuery.data?.requestId ?? content.requestId)
+        : null,
+    segmentId: segment.segmentId,
+    workspaceHandle: workspaceSession.workspaceHandle,
+    workspaceId: workspaceSession.workspaceId,
+  });
+
+  if (!playableSpeechSynthesis) {
+    return <MemoryStudioPlayerPlaceholder />;
+  }
+
+  return (
+    <MemoryStudioAudioPlayback
+      controller={playback}
+      durationMs={0}
+      errorClassName="mt-8 shrink-0 text-ui-sm leading-ui-sm text-muted-foreground"
+      audioLoadable={playableSpeechSynthesis !== null}
+      loading={
+        loading ||
+        ((audioRequested || canEagerLoadPlaybackAudio(playableSpeechSynthesis?.audioByteLength)) &&
+          speechAudioQuery.isLoading)
+      }
+      onRequestAudio={requestAudio}
+      playButtonLabel={`${playback.playing ? '暂停' : '播放'}笔记语音 ${segment.title}`}
+      rowSlot="memory-studio-player"
+      rowTestId="note-speech-player-row"
+      waveformLabel="笔记语音播放进度"
+      waveformSlot="memory-studio-playback-waveform"
+    />
+  );
+});
+
+const SegmentSupplementNoteSpeechPlayer = memo(function SegmentSupplementNoteSpeechPlayer({
+  audioResourceCache,
+  content,
+  loading,
+  supplement,
+  workspaceSession,
+}: {
+  readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
+  readonly content: WorkspaceNoteSegmentSupplementContent | undefined;
+  readonly loading: boolean;
+  readonly supplement: NoteMemorySegmentSupplement;
+  readonly workspaceSession: WorkspaceSession;
+}) {
+  const [audioRequested, setAudioRequested] = useState(false);
+  const speechSynthesis = content?.speechSynthesis;
+  const playableSpeechSynthesis =
+    (speechSynthesis?.status === 'ready' || speechSynthesis?.status === 'stale') &&
+    speechSynthesis.audioByteLength !== null &&
+    speechSynthesis.contentHash !== null &&
+    speechSynthesis.speaker !== null &&
+    speechSynthesis.updatedAt !== null
+      ? {
+          audioByteLength: speechSynthesis.audioByteLength,
+          contentHash: speechSynthesis.contentHash,
+          speaker: speechSynthesis.speaker,
+          updatedAt: speechSynthesis.updatedAt,
+        }
+      : null;
+  useEffect(() => {
+    setAudioRequested(false);
+  }, [
+    playableSpeechSynthesis?.audioByteLength,
+    playableSpeechSynthesis?.contentHash,
+    playableSpeechSynthesis?.speaker,
+    playableSpeechSynthesis?.updatedAt,
+    supplement.supplementId,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+  const speechAudioQuery = useQuery({
+    ...segmentSupplementSpeechAudioQueryOptions({
+      audioByteLength: playableSpeechSynthesis?.audioByteLength ?? 0,
+      contentHash: playableSpeechSynthesis?.contentHash ?? '0'.repeat(64),
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      session: workspaceSession,
+      speaker: playableSpeechSynthesis?.speaker ?? SPEECH_SYNTHESIS_SPEAKER_OPTIONS[0].value,
+      supplementId: supplement.supplementId,
+      updatedAt: playableSpeechSynthesis?.updatedAt ?? 'pending',
+    }),
+    enabled:
+      playableSpeechSynthesis !== null &&
+      (audioRequested || canEagerLoadPlaybackAudio(playableSpeechSynthesis.audioByteLength)),
+  });
+  const requestAudio = () => {
+    setAudioRequested(true);
+    if (speechAudioQuery.isError) {
+      void speechAudioQuery.refetch();
+    }
+  };
+  const speechAudio = speechAudioQuery.data?.audio ?? null;
+  const playback = useMemoryStudioAudioPlayback({
+    audio: playableSpeechSynthesis ? speechAudio : null,
+    audioByteLength: playableSpeechSynthesis
+      ? (speechAudioQuery.data?.audioByteLength ?? playableSpeechSynthesis.audioByteLength)
+      : null,
+    audioResourceIdentity: playableSpeechSynthesis
+      ? `speech:${playableSpeechSynthesis.contentHash}:${playableSpeechSynthesis.speaker}:${playableSpeechSynthesis.updatedAt}`
+      : null,
+    audioResourceCache,
+    durationMs: 0,
+    memoryId: supplement.memoryId,
+    mimeType: speechSynthesis?.mimeType ?? 'audio/mpeg',
+    playbackErrorMessage: '补充笔记语音无法播放，请稍后重试。',
+    playbackResetKey: `${supplement.supplementId}:${speechSynthesis?.contentHash ?? 'missing'}`,
+    requestId:
+      playableSpeechSynthesis && content
+        ? (speechAudioQuery.data?.requestId ?? content.requestId)
+        : null,
+    segmentId: supplement.segmentId,
+    supplementId: supplement.supplementId,
+    workspaceHandle: workspaceSession.workspaceHandle,
+    workspaceId: workspaceSession.workspaceId,
+  });
+
+  if (!playableSpeechSynthesis) {
+    return <MemoryStudioSupplementPlayerPlaceholder />;
+  }
+
+  return (
+    <MemoryStudioAudioPlayback
+      controller={playback}
+      durationMs={0}
+      errorClassName="mt-8 text-ui-xs leading-ui-xs text-muted-foreground"
+      audioLoadable={playableSpeechSynthesis !== null}
+      loading={
+        loading ||
+        ((audioRequested || canEagerLoadPlaybackAudio(playableSpeechSynthesis?.audioByteLength)) &&
+          speechAudioQuery.isLoading)
+      }
+      onRequestAudio={requestAudio}
+      playButtonLabel={`${playback.playing ? '暂停' : '播放'}补充笔记语音 ${supplement.title}`}
+      rowSlot="memory-studio-supplement-player"
+      rowTestId="note-supplement-speech-player-row"
+      waveformLabel="补充笔记语音播放进度"
+      waveformSlot="memory-studio-supplement-waveform"
     />
   );
 });
@@ -1515,6 +2124,16 @@ function MemoryStudioPlayerPlaceholder() {
     <div
       aria-hidden="true"
       data-slot="memory-studio-player-placeholder"
+      className="h-[42px] w-full min-w-0 shrink-0"
+    />
+  );
+}
+
+function MemoryStudioSupplementPlayerPlaceholder() {
+  return (
+    <div
+      aria-hidden="true"
+      data-slot="memory-studio-supplement-player"
       className="h-[42px] w-full min-w-0 shrink-0"
     />
   );
@@ -1625,20 +2244,56 @@ function SegmentSupplementAudioPlayer({
   const supplementId = supplement.supplementId;
   const supplementMemoryId = supplement.memoryId;
   const supplementSegmentId = supplement.segmentId;
-  const supplementAudio = audioSupplementContent?.audio ?? null;
-  const supplementAudioByteLength = audioSupplementContent?.audioByteLength ?? null;
+  const [audioRequested, setAudioRequested] = useState(false);
+  useEffect(() => {
+    setAudioRequested(false);
+  }, [
+    audioSupplementContent?.audioHash,
+    audioSupplementContent?.audioByteLength,
+    audioSupplementContent?.requestId,
+    supplementId,
+    workspaceSession.workspaceHandle,
+    workspaceSession.workspaceId,
+  ]);
+  const supplementAudioQuery = useQuery({
+    ...segmentSupplementAudioQueryOptions({
+      audioByteLength: audioSupplementContent?.audioByteLength ?? 0,
+      audioHash: audioSupplementContent?.audioHash ?? null,
+      audioIdentityVersion: audioSupplementContent?.requestId ?? 'pending-content',
+      memoryId: supplementMemoryId,
+      segmentId: supplementSegmentId,
+      session: workspaceSession,
+      supplementId,
+    }),
+    enabled:
+      audioSupplementContent !== undefined &&
+      (audioRequested || canEagerLoadPlaybackAudio(audioSupplementContent.audioByteLength)),
+  });
+  const requestSupplementAudio = () => {
+    setAudioRequested(true);
+    if (supplementAudioQuery.isError) {
+      void supplementAudioQuery.refetch();
+    }
+  };
   const supplementRequestId = audioSupplementContent?.requestId ?? null;
   const workspaceHandle = workspaceSession.workspaceHandle;
   const workspaceId = workspaceSession.workspaceId;
   const playback = useMemoryStudioAudioPlayback({
-    audio: supplementAudio,
-    audioByteLength: supplementAudioByteLength,
+    audio: supplementAudioQuery.data?.audio ?? null,
+    audioByteLength: audioSupplementContent
+      ? (supplementAudioQuery.data?.audioByteLength ?? audioSupplementContent.audioByteLength)
+      : null,
+    audioResourceIdentity: audioSupplementContent
+      ? `audio:${supplementAudioQuery.data?.audioHash ?? audioSupplementContent.audioHash ?? audioSupplementContent.requestId}`
+      : null,
     audioResourceCache,
     durationMs: supplement.durationMs,
     memoryId: supplementMemoryId,
     playbackErrorMessage: '补充录音无法播放，请稍后重试。',
     playbackResetKey: supplementId,
-    requestId: supplementRequestId,
+    requestId: audioSupplementContent
+      ? (supplementAudioQuery.data?.requestId ?? supplementRequestId)
+      : null,
     segmentId: supplementSegmentId,
     supplementId,
     workspaceHandle,
@@ -1716,7 +2371,13 @@ function SegmentSupplementAudioPlayer({
         controller={playback}
         durationMs={supplement.durationMs}
         errorClassName="mt-8 text-ui-xs leading-ui-xs text-muted-foreground"
-        loading={supplementContentQuery.isLoading}
+        audioLoadable={audioSupplementContent !== undefined}
+        loading={
+          supplementContentQuery.isLoading ||
+          ((audioRequested || canEagerLoadPlaybackAudio(audioSupplementContent?.audioByteLength)) &&
+            supplementAudioQuery.isLoading)
+        }
+        onRequestAudio={requestSupplementAudio}
         playButtonLabel={`${playback.playing ? '暂停' : '播放'}补充录音 ${supplement.title}`}
         rowSlot="memory-studio-supplement-player"
         showPlaybackError={false}
@@ -2355,6 +3016,7 @@ function InlineMarkdownContentEditor<TSaved>({
 
 function SegmentSupplementNotePanel({
   ariaLabelledBy,
+  audioResourceCache,
   onDiskVersionAccepted,
   onDirtyChange = () => undefined,
   onSaveEdit,
@@ -2367,6 +3029,7 @@ function SegmentSupplementNotePanel({
   workspaceSession,
 }: {
   readonly ariaLabelledBy: string;
+  readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
   readonly onDiskVersionAccepted?: (content: {
     readonly baselineContentHash: string;
     readonly baselineTiptapContentHash: string;
@@ -2390,33 +3053,42 @@ function SegmentSupplementNotePanel({
 }) {
   if (supplementContent && onSaveEdit) {
     return (
-      <InlineMarkdownContentEditor<SavedNoteSegmentSupplementContent>
-        ariaLabelledBy={ariaLabelledBy}
-        attachmentTarget={{
-          kind: 'segment-supplement',
-          memoryId: supplement.memoryId,
-          segmentId: supplement.segmentId,
-          supplementId: supplement.supplementId,
-        }}
-        baselineContentHash={supplementContent.baselineContentHash}
-        baselineTiptapContentHash={supplementContent.baselineTiptapContentHash}
-        failureCopy="无法保存补充笔记正文。"
-        headerLabel="Markdown 补充笔记"
-        initialMarkdown={supplementContent.bodyMarkdown}
-        initialTiptapJson={supplementContent.bodyTiptapJson}
-        onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
-        onDirtyChange={onDirtyChange}
-        onSave={onSaveEdit}
-        onSavedContent={onSavedContent}
-        panelId={panelId}
-        placeholder="写下补充笔记..."
-        surfaceTestId="memory-studio-inline-supplement-note-editor"
-        targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
-        title={supplement.title}
-        editorId={`${panelId}-inline-editor`}
-        editorLabel="补充笔记正文"
-        workspaceSession={workspaceSession}
-      />
+      <>
+        <SegmentSupplementNoteSpeechPlayer
+          audioResourceCache={audioResourceCache}
+          content={supplementContent}
+          loading={supplementContentLoading}
+          supplement={supplement}
+          workspaceSession={workspaceSession}
+        />
+        <InlineMarkdownContentEditor<SavedNoteSegmentSupplementContent>
+          ariaLabelledBy={ariaLabelledBy}
+          attachmentTarget={{
+            kind: 'segment-supplement',
+            memoryId: supplement.memoryId,
+            segmentId: supplement.segmentId,
+            supplementId: supplement.supplementId,
+          }}
+          baselineContentHash={supplementContent.baselineContentHash}
+          baselineTiptapContentHash={supplementContent.baselineTiptapContentHash}
+          failureCopy="无法保存补充笔记正文。"
+          headerLabel="Markdown 补充笔记"
+          initialMarkdown={supplementContent.bodyMarkdown}
+          initialTiptapJson={supplementContent.bodyTiptapJson}
+          onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
+          onDirtyChange={onDirtyChange}
+          onSave={onSaveEdit}
+          onSavedContent={onSavedContent}
+          panelId={panelId}
+          placeholder="写下补充笔记..."
+          surfaceTestId="memory-studio-inline-supplement-note-editor"
+          targetKey={`segment-supplement:${supplement.segmentId}:${supplement.supplementId}`}
+          title={supplement.title}
+          editorId={`${panelId}-inline-editor`}
+          editorLabel="补充笔记正文"
+          workspaceSession={workspaceSession}
+        />
+      </>
     );
   }
 
@@ -2442,6 +3114,7 @@ function SegmentSupplementNotePanel({
 }
 
 export function MemoryStudio({
+  audioResourceCaches,
   memory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
@@ -2453,6 +3126,7 @@ export function MemoryStudio({
   onRenameSegmentSupplement,
   onRenameSegmentContent,
   onRenameSegment,
+  speechSynthesis,
   transcriptionBackfill,
   onInlineMarkdownDirtyChange,
   onSegmentFocusConsumed,
@@ -2462,8 +3136,9 @@ export function MemoryStudio({
   workspaceSession,
 }: MemoryStudioProps) {
   const queryClient = useQueryClient();
-  const segmentAudioResourceCacheRef = useRef(new Map<string, SegmentAudioResource>());
-  const supplementAudioResourceCacheRef = useRef(new Map<string, SegmentSupplementAudioResource>());
+  const latestWorkspaceSessionRef = useRef(workspaceSession);
+  const segmentAudioResourceCache = audioResourceCaches.segment;
+  const supplementAudioResourceCache = audioResourceCaches.supplement;
   const [supplementMenuOpen, setSupplementMenuOpen] = useState(false);
   const [primaryContentMenuOpen, setPrimaryContentMenuOpen] = useState(false);
   const [primaryContentActionsVisible, setPrimaryContentActionsVisible] = useState(false);
@@ -2494,6 +3169,11 @@ export function MemoryStudio({
     start: 0,
     end: SEGMENT_STRIP_MIN_WINDOW_SIZE,
   });
+
+  useEffect(() => {
+    latestWorkspaceSessionRef.current = workspaceSession;
+  }, [workspaceSession]);
+
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const detailQuery = useQuery(memoryDetailQueryOptions(workspaceSession, memory.memoryId));
   const detail = detailQuery.data?.detail;
@@ -2611,6 +3291,28 @@ export function MemoryStudio({
     return true;
   }
 
+  function savedContentBelongsToCurrentSession(saved: {
+    readonly expectedSession: WorkspaceSession;
+  }) {
+    const latestWorkspaceSession = latestWorkspaceSessionRef.current;
+    return (
+      saved.expectedSession.workspaceHandle === latestWorkspaceSession.workspaceHandle &&
+      saved.expectedSession.workspaceId === latestWorkspaceSession.workspaceId
+    );
+  }
+
+  function handleSavedNoteSegmentContent(saved: SavedNoteSegmentContent) {
+    if (savedContentBelongsToCurrentSession(saved)) {
+      onNoteSegmentContentSaved(saved);
+    }
+  }
+
+  function handleSavedNoteSegmentSupplementContent(saved: SavedNoteSegmentSupplementContent) {
+    if (savedContentBelongsToCurrentSession(saved)) {
+      onNoteSegmentSupplementContentSaved(saved);
+    }
+  }
+
   function invalidateSegmentContent(targetSegment: MemorySegment | null) {
     if (targetSegment === null) {
       return;
@@ -2619,6 +3321,7 @@ export function MemoryStudio({
       exact: true,
       queryKey: segmentContentQueryKey({
         workspaceId: workspaceSession.workspaceId,
+        workspaceHandle: workspaceSession.workspaceHandle,
         memoryId: targetSegment.memoryId,
         segmentId: targetSegment.segmentId,
       }),
@@ -2634,6 +3337,7 @@ export function MemoryStudio({
       exact: true,
       queryKey: segmentSupplementContentQueryKey({
         workspaceId: workspaceSession.workspaceId,
+        workspaceHandle: workspaceSession.workspaceHandle,
         memoryId: targetSupplement.memoryId,
         segmentId: targetSupplement.segmentId,
         supplementId: targetSupplement.supplementId,
@@ -2653,7 +3357,6 @@ export function MemoryStudio({
     if (blockDirtyInlineMarkdownNavigation()) {
       return false;
     }
-    invalidateSegmentContent(targetSegment ?? null);
     setSelectedSegmentId(segmentId);
     return true;
   }
@@ -2676,11 +3379,6 @@ export function MemoryStudio({
     }
     if (blockDirtyInlineMarkdownNavigation()) {
       return false;
-    }
-    if (nextSupplementId === null) {
-      invalidateSegmentContent(selectedSegment);
-    } else {
-      invalidateSupplementContent(targetSupplement);
     }
     setActiveContentTab(nextTab);
     return true;
@@ -3050,41 +3748,35 @@ export function MemoryStudio({
   ]);
 
   useEffect(() => {
-    const audioResourceCache = supplementAudioResourceCacheRef.current;
-    const segmentAudioResourceCache = segmentAudioResourceCacheRef.current;
-
-    return () => {
-      clearMemoryStudioAudioResources(audioResourceCache);
-      clearMemoryStudioAudioResources(segmentAudioResourceCache);
-      void closeAudioWaveformDecoder().catch(() => {});
-    };
-  }, [memory.memoryId, workspaceSession.workspaceHandle, workspaceSession.workspaceId]);
-
-  useEffect(() => {
-    const selectedSegmentId = selectedSegment?.segmentId ?? null;
-    const liveSupplementIds = new Set(selectedSegmentSupplementIds);
+    const liveSegmentIds = new Set(allSegments.map((segment) => segment.segmentId));
+    const liveSupplementKeys = new Set(
+      allSegments.flatMap((segment) =>
+        segment.supplements.map((supplement) => `${segment.segmentId}\0${supplement.supplementId}`)
+      )
+    );
 
     pruneMemoryStudioAudioResources(
-      segmentAudioResourceCacheRef.current,
+      segmentAudioResourceCache,
       (resource) =>
         resource.workspaceHandle !== workspaceSession.workspaceHandle ||
         resource.workspaceId !== workspaceSession.workspaceId ||
         resource.memoryId !== memory.memoryId ||
-        resource.segmentId === selectedSegmentId
+        liveSegmentIds.has(resource.segmentId)
     );
     pruneMemoryStudioAudioResources(
-      supplementAudioResourceCacheRef.current,
+      supplementAudioResourceCache,
       (resource) =>
         resource.workspaceHandle !== workspaceSession.workspaceHandle ||
         resource.workspaceId !== workspaceSession.workspaceId ||
         resource.memoryId !== memory.memoryId ||
-        resource.segmentId !== selectedSegmentId ||
-        (resource.supplementId !== undefined && liveSupplementIds.has(resource.supplementId))
+        (resource.supplementId !== undefined &&
+          liveSupplementKeys.has(`${resource.segmentId}\0${resource.supplementId}`))
     );
   }, [
+    allSegments,
     memory.memoryId,
-    selectedSegment?.segmentId,
-    selectedSegmentSupplementIdsKey,
+    segmentAudioResourceCache,
+    supplementAudioResourceCache,
     workspaceSession.workspaceHandle,
     workspaceSession.workspaceId,
   ]);
@@ -3483,6 +4175,10 @@ export function MemoryStudio({
                   .map((segment) => {
                     const segmentIsAudio = isAudioMemorySegment(segment);
                     const isSelected = segment.segmentId === selectedSegment.segmentId;
+                    const segmentSpeechSynthesisProjection =
+                      !segmentIsAudio && isSelected
+                        ? noteSegmentContent?.speechSynthesis
+                        : undefined;
                     const segmentTranscriptionRunning =
                       segmentIsAudio &&
                       transcriptionBackfill?.isSegmentRunning?.({
@@ -3515,6 +4211,34 @@ export function MemoryStudio({
                             });
                           }
                         : undefined;
+                    const segmentSpeechSynthesisRunning =
+                      !segmentIsAudio &&
+                      speechSynthesis?.isSegmentRunning?.({
+                        workspaceId: workspaceSession.workspaceId,
+                        memoryId: memory.memoryId,
+                        segmentId: segment.segmentId,
+                      }) === true;
+                    const segmentSpeechSynthesisDisabledReason = !segmentIsAudio
+                      ? noteSpeechSynthesisDisabledReason({
+                          baseReason: speechSynthesis?.disabledReason,
+                          dirty: inlineMarkdownDirty,
+                          running: segmentSpeechSynthesisRunning,
+                          speechSynthesis: segmentSpeechSynthesisProjection,
+                        })
+                      : null;
+                    const requestSegmentSpeechSynthesis =
+                      !segmentIsAudio && speechSynthesis?.requestSegment
+                        ? (speaker: VoiceSpeechSynthesisSpeaker) => {
+                            setOpenSegmentMenuId(null);
+                            void speechSynthesis.requestSegment?.({
+                              workspaceId: workspaceSession.workspaceId,
+                              memoryId: memory.memoryId,
+                              segmentId: segment.segmentId,
+                              mode: 'regenerate',
+                              speaker,
+                            });
+                          }
+                        : undefined;
                     return (
                       <MemoryStudioSegmentCard
                         key={segment.segmentId}
@@ -3534,6 +4258,7 @@ export function MemoryStudio({
                             onOpenChange={(open) =>
                               setOpenSegmentMenuId(open ? segment.segmentId : null)
                             }
+                            onRequestSpeechSynthesis={requestSegmentSpeechSynthesis}
                             onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
                             onRename={() => {
                               setOpenSegmentMenuId(null);
@@ -3541,6 +4266,7 @@ export function MemoryStudio({
                             }}
                             open={openSegmentMenuId === segment.segmentId}
                             segmentTitle={segment.title}
+                            speechSynthesisDisabledReason={segmentSpeechSynthesisDisabledReason}
                             transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
                             transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
                             trigger={
@@ -3588,14 +4314,20 @@ export function MemoryStudio({
             >
               {isAudioMemorySegment(selectedSegment) ? (
                 <SegmentAudioPlayer
-                  audioResourceCache={segmentAudioResourceCacheRef.current}
+                  audioResourceCache={segmentAudioResourceCache}
                   content={isAudioSegmentContent(segmentContent) ? segmentContent : undefined}
                   loading={segmentContentQuery.isLoading}
                   segment={selectedSegment}
                   workspaceSession={workspaceSession}
                 />
               ) : (
-                <MemoryStudioPlayerPlaceholder />
+                <SegmentNoteSpeechPlayer
+                  audioResourceCache={segmentAudioResourceCache}
+                  content={noteSegmentContent}
+                  loading={segmentContentQuery.isLoading}
+                  segment={selectedSegment}
+                  workspaceSession={workspaceSession}
+                />
               )}
 
               <div
@@ -3639,6 +4371,7 @@ export function MemoryStudio({
                             handleContentTabDragStart(event, contentTab.value)
                           }
                           onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
+                          onMenuOpenChange={setPrimaryContentMenuOpen}
                           onSelect={() => requestActiveContentTab('transcript')}
                           panelId={contentTab.panelId}
                           renderMoreMenu={(trigger, onCloseAutoFocus) => (
@@ -3688,6 +4421,44 @@ export function MemoryStudio({
                                 }
                               }}
                               onOpenChange={setPrimaryContentMenuOpen}
+                              onRequestSpeechSynthesis={
+                                !isAudioMemorySegment(selectedSegment) &&
+                                speechSynthesis?.requestSegment
+                                  ? (speaker) => {
+                                      setPrimaryContentMenuOpen(false);
+                                      void speechSynthesis.requestSegment?.({
+                                        workspaceId: workspaceSession.workspaceId,
+                                        memoryId: memory.memoryId,
+                                        segmentId: selectedSegment.segmentId,
+                                        mode: 'regenerate',
+                                        speaker,
+                                      });
+                                    }
+                                  : undefined
+                              }
+                              onRequestTranscriptionBackfill={
+                                isAudioMemorySegment(selectedSegment) &&
+                                transcriptionBackfill?.retrySegment
+                                  ? () => {
+                                      setPrimaryContentMenuOpen(false);
+                                      if (selectedSegment.transcript.exists) {
+                                        setConfirmingTranscriptionBackfill({
+                                          kind: 'segment',
+                                          memoryId: memory.memoryId,
+                                          segmentId: selectedSegment.segmentId,
+                                          title: contentTab.title,
+                                        });
+                                        return;
+                                      }
+                                      void transcriptionBackfill.retrySegment?.({
+                                        workspaceId: workspaceSession.workspaceId,
+                                        memoryId: memory.memoryId,
+                                        segmentId: selectedSegment.segmentId,
+                                        mode: 'fill-missing',
+                                      });
+                                    }
+                                  : undefined
+                              }
                               onRename={() => {
                                 setPrimaryContentMenuOpen(false);
                                 onRenameSegmentContent({
@@ -3700,6 +4471,39 @@ export function MemoryStudio({
                                 });
                               }}
                               open={primaryContentMenuOpen}
+                              speechSynthesisDisabledReason={
+                                !isAudioMemorySegment(selectedSegment)
+                                  ? noteSpeechSynthesisDisabledReason({
+                                      baseReason: speechSynthesis?.disabledReason,
+                                      dirty: inlineMarkdownDirty,
+                                      running:
+                                        speechSynthesis?.isSegmentRunning?.({
+                                          workspaceId: workspaceSession.workspaceId,
+                                          memoryId: memory.memoryId,
+                                          segmentId: selectedSegment.segmentId,
+                                        }) === true,
+                                      speechSynthesis: noteSegmentContent?.speechSynthesis,
+                                    })
+                                  : null
+                              }
+                              transcriptExists={
+                                isAudioMemorySegment(selectedSegment)
+                                  ? selectedSegment.transcript.exists
+                                  : false
+                              }
+                              transcriptionBackfillDisabledReason={
+                                isAudioMemorySegment(selectedSegment)
+                                  ? transcriptionBackfillDisabledReason({
+                                      baseReason: transcriptionBackfill?.disabledReason,
+                                      running:
+                                        transcriptionBackfill?.isSegmentRunning?.({
+                                          workspaceId: workspaceSession.workspaceId,
+                                          memoryId: memory.memoryId,
+                                          segmentId: selectedSegment.segmentId,
+                                        }) === true,
+                                    })
+                                  : null
+                              }
                               trigger={trigger}
                             />
                           )}
@@ -3719,6 +4523,41 @@ export function MemoryStudio({
 
                     const supplement = contentTab.supplement;
                     const supplementIsAudio = isAudioMemorySegmentSupplement(supplement);
+                    const supplementSpeechSynthesisProjection =
+                      !supplementIsAudio &&
+                      activeSegmentSupplement?.supplementId === supplement.supplementId
+                        ? activeNoteSupplementContent?.speechSynthesis
+                        : undefined;
+                    const supplementSpeechSynthesisRunning =
+                      !supplementIsAudio &&
+                      speechSynthesis?.isSupplementRunning?.({
+                        workspaceId: workspaceSession.workspaceId,
+                        memoryId: memory.memoryId,
+                        segmentId: selectedSegment.segmentId,
+                        supplementId: supplement.supplementId,
+                      }) === true;
+                    const supplementSpeechSynthesisDisabledReason = !supplementIsAudio
+                      ? noteSpeechSynthesisDisabledReason({
+                          baseReason: speechSynthesis?.disabledReason,
+                          dirty: inlineMarkdownDirty,
+                          running: supplementSpeechSynthesisRunning,
+                          speechSynthesis: supplementSpeechSynthesisProjection,
+                        })
+                      : null;
+                    const requestSupplementSpeechSynthesis =
+                      !supplementIsAudio && speechSynthesis?.requestSupplement
+                        ? (speaker: VoiceSpeechSynthesisSpeaker) => {
+                            setOpenSupplementActionMenuId(null);
+                            void speechSynthesis.requestSupplement?.({
+                              workspaceId: workspaceSession.workspaceId,
+                              memoryId: memory.memoryId,
+                              segmentId: selectedSegment.segmentId,
+                              supplementId: supplement.supplementId,
+                              mode: 'regenerate',
+                              speaker,
+                            });
+                          }
+                        : undefined;
 
                     return (
                       <SegmentSupplementTab
@@ -3776,6 +4615,7 @@ export function MemoryStudio({
                         onMenuOpenChange={(open) =>
                           setOpenSupplementActionMenuId(open ? supplement.supplementId : null)
                         }
+                        onRequestSpeechSynthesis={requestSupplementSpeechSynthesis}
                         onRequestTranscriptionBackfill={
                           supplementIsAudio && transcriptionBackfill?.retrySupplement
                             ? () => {
@@ -3815,6 +4655,7 @@ export function MemoryStudio({
                           })
                         }
                         onSelect={() => requestActiveContentTab(contentTab.value)}
+                        speechSynthesisDisabledReason={supplementSpeechSynthesisDisabledReason}
                         transcriptExists={supplementIsAudio ? supplement.transcript.exists : false}
                         transcriptionBackfillDisabledReason={
                           supplementIsAudio
@@ -3958,7 +4799,7 @@ export function MemoryStudio({
                     initialMarkdown={noteSegmentContent.bodyMarkdown}
                     initialTiptapJson={noteSegmentContent.bodyTiptapJson}
                     onDiskVersionAccepted={(content) =>
-                      onNoteSegmentContentSaved(
+                      handleSavedNoteSegmentContent(
                         savedNoteSegmentContentFromConflict({
                           conflict: {
                             currentBodyMarkdown: content.markdown,
@@ -3988,7 +4829,7 @@ export function MemoryStudio({
                         tiptapJson,
                       })
                     }
-                    onSavedContent={onNoteSegmentContentSaved}
+                    onSavedContent={handleSavedNoteSegmentContent}
                     panelId={transcriptContentTab.panelId}
                     placeholder="写下正文..."
                     surfaceTestId="memory-studio-inline-note-editor"
@@ -4029,7 +4870,7 @@ export function MemoryStudio({
                     <SegmentSupplementAudioPlayer
                       ariaLabelledBy={activeContentTabModel.tabId}
                       supplement={activeSegmentSupplement}
-                      audioResourceCache={supplementAudioResourceCacheRef.current}
+                      audioResourceCache={supplementAudioResourceCache}
                       onDirtyChange={setInlineMarkdownDirty}
                       onTranscriptSaved={onSegmentSupplementTranscriptSaved}
                       panelId={activeContentTabModel.panelId}
@@ -4041,11 +4882,12 @@ export function MemoryStudio({
                   <SegmentSupplementNotePanel
                     key={activeSegmentSupplement.supplementId}
                     ariaLabelledBy={activeContentTabModel.tabId}
+                    audioResourceCache={supplementAudioResourceCache}
                     onDiskVersionAccepted={(content) => {
                       if (!activeNoteSupplementContent) {
                         return;
                       }
-                      onNoteSegmentSupplementContentSaved(
+                      handleSavedNoteSegmentSupplementContent(
                         savedNoteSegmentSupplementContentFromConflict({
                           conflict: {
                             currentBodyMarkdown: content.markdown,
@@ -4083,7 +4925,7 @@ export function MemoryStudio({
                         tiptapJson,
                       });
                     }}
-                    onSavedContent={onNoteSegmentSupplementContentSaved}
+                    onSavedContent={handleSavedNoteSegmentSupplementContent}
                     panelId={activeContentTabModel.panelId}
                     supplement={activeSegmentSupplement}
                     supplementContent={activeNoteSupplementContent}

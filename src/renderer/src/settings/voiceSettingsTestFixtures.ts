@@ -3,21 +3,34 @@ import type { VoiceTranscriptionSettings } from '../workspace/workspaceApi';
 
 export type VoiceSettingsSnapshotOptions = {
   readonly enabled?: boolean;
-  readonly lastValidationCode?: VoiceTranscriptionSettings['lastValidationCode'];
+  readonly lastSpeechSynthesisValidationCode?: VoiceTranscriptionSettings['lastSpeechSynthesisValidationCode'];
+  readonly lastValidationCode?: VoiceTranscriptionSettings['lastTranscriptionValidationCode'];
 };
 
 export function createVoiceSettingsSnapshot({
   enabled = true,
+  lastSpeechSynthesisValidationCode,
   lastValidationCode = 'ok',
 }: VoiceSettingsSnapshotOptions = {}): VoiceTranscriptionSettings {
+  const speechSynthesisValidationCode = lastSpeechSynthesisValidationCode ?? lastValidationCode;
   return {
     enabled,
     apiKeyConfigured: true,
     apiKeyLastFour: '1234',
-    lastValidatedAt: lastValidationCode === null ? null : '2026-05-16T09:00:00.000Z',
-    lastValidationOk:
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts',
+    lastTranscriptionValidatedAt: lastValidationCode === null ? null : '2026-05-16T09:00:00.000Z',
+    lastTranscriptionValidationOk:
       lastValidationCode === 'ok' ? true : lastValidationCode === null ? null : false,
-    lastValidationCode,
+    lastTranscriptionValidationCode: lastValidationCode,
+    lastSpeechSynthesisValidatedAt:
+      speechSynthesisValidationCode === null ? null : '2026-05-16T09:00:00.000Z',
+    lastSpeechSynthesisValidationOk:
+      speechSynthesisValidationCode === 'ok'
+        ? true
+        : speechSynthesisValidationCode === null
+          ? null
+          : false,
+    lastSpeechSynthesisValidationCode: speechSynthesisValidationCode,
   };
 }
 

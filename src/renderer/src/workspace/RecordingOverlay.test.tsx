@@ -69,9 +69,13 @@ function createVoiceSettingsSnapshot(enabled: boolean = true): VoiceTranscriptio
     enabled,
     apiKeyConfigured: enabled,
     apiKeyLastFour: enabled ? '1234' : null,
-    lastValidatedAt: enabled ? '2026-05-16T09:00:00.000Z' : null,
-    lastValidationOk: enabled ? true : null,
-    lastValidationCode: enabled ? 'ok' : null,
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+    lastTranscriptionValidatedAt: enabled ? '2026-05-16T09:00:00.000Z' : null,
+    lastTranscriptionValidationOk: enabled ? true : null,
+    lastTranscriptionValidationCode: enabled ? 'ok' : null,
+    lastSpeechSynthesisValidatedAt: enabled ? '2026-05-16T09:00:00.000Z' : null,
+    lastSpeechSynthesisValidationOk: enabled ? true : null,
+    lastSpeechSynthesisValidationCode: enabled ? 'ok' : null,
   };
 }
 
@@ -179,6 +183,14 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: false as const,
       error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
     })),
+    readFinalizedAudioSegmentAudio: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
+    })),
+    readFinalizedAudioSegmentSupplementAudio: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'ERR_RECORDING_NOT_FOUND' as const, message: 'Recording not found' },
+    })),
     createRecordingDraft: vi.fn(async () => ({
       ok: true as const,
       value: { nextSequence: 0, segmentId: 'seg_1' },
@@ -218,6 +230,20 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     readSegmentSupplementContent: vi.fn(async () => ({
       ok: false as const,
       error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Note unavailable' },
+    })),
+    readSegmentSpeechAudio: vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE' as const,
+        message: 'Speech unavailable',
+      },
+    })),
+    readSegmentSupplementSpeechAudio: vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'ERR_SPEECH_SYNTHESIS_TARGET_NOT_ELIGIBLE' as const,
+        message: 'Speech unavailable',
+      },
     })),
     writeSegmentContent: vi.fn(async () => ({
       ok: true as const,
@@ -437,6 +463,31 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: false as const,
       error: { code: 'ERR_BACKFILL_UNAVAILABLE' as const, message: 'Backfill unavailable' },
     })),
+    requestSegmentSpeechSynthesis: vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE' as const,
+        message: 'Speech synthesis unavailable',
+      },
+    })),
+    requestSegmentSupplementSpeechSynthesis: vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'ERR_SPEECH_SYNTHESIS_UNAVAILABLE' as const,
+        message: 'Speech synthesis unavailable',
+      },
+    })),
+    regenerateImportedSpeechSynthesis: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        speaker: 'zh_female_vv_uranus_bigtts' as const,
+        total: 0,
+        generated: 0,
+        failed: 0,
+        skipped: 0,
+        failedTargets: [],
+      },
+    })),
     beginMicrophoneIntent: vi.fn(async () => ({
       ok: true as const,
       value: { registered: true as const },
@@ -474,10 +525,20 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
+      },
+    })),
+    setVoiceSpeechSynthesisSpeaker: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        settings: voiceSettingsForTest,
       },
     })),
     saveVoiceTranscriptionApiKey: vi.fn(async () => ({
@@ -487,9 +548,13 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
           enabled: false,
           apiKeyConfigured: true,
           apiKeyLastFour: '1234',
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       },
     })),
@@ -500,9 +565,13 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
           enabled: false,
           apiKeyConfigured: false,
           apiKeyLastFour: null,
-          lastValidatedAt: null,
-          lastValidationOk: null,
-          lastValidationCode: null,
+          speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+          lastTranscriptionValidatedAt: null,
+          lastTranscriptionValidationOk: null,
+          lastTranscriptionValidationCode: null,
+          lastSpeechSynthesisValidatedAt: null,
+          lastSpeechSynthesisValidationOk: null,
+          lastSpeechSynthesisValidationCode: null,
         },
       },
     })),

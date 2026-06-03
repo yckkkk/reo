@@ -29,12 +29,27 @@ describe('devWorkspaceScenario', () => {
     const scenarioModule = await import('./devWorkspaceScenario');
     expect(scenarioModule.installDevWorkspaceScenarioBridge()).toBe('memory-studio-rich');
 
-    const response = await window.reoWorkspace.readFinalizedAudioSegment({
+    const contentResponse = await window.reoWorkspace.readFinalizedAudioSegment({
       workspaceHandle: 'dev-scenario-workspace-handle',
       workspaceId: 'dev-memory-studio-rich',
       memoryId: 'mem_dev_ui_review',
       segmentId: 'seg_dev_interview',
       requestId: 'request_visible_waveform',
+    });
+
+    expect(contentResponse.ok).toBe(true);
+    if (!contentResponse.ok) {
+      return;
+    }
+
+    const response = await window.reoWorkspace.readFinalizedAudioSegmentAudio({
+      workspaceHandle: 'dev-scenario-workspace-handle',
+      workspaceId: 'dev-memory-studio-rich',
+      memoryId: 'mem_dev_ui_review',
+      segmentId: 'seg_dev_interview',
+      requestId: 'request_visible_waveform_audio',
+      audioByteLength: contentResponse.value.audioByteLength,
+      audioHash: contentResponse.value.audioHash,
     });
 
     expect(response.ok).toBe(true);

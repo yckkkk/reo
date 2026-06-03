@@ -48,13 +48,17 @@ import {
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+  WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
+  WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
@@ -67,7 +71,10 @@ import {
   WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
   WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL,
+  WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
+  WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_REQUEST_SEGMENT_TRANSCRIPTION_BACKFILL_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL,
@@ -77,6 +84,7 @@ import {
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
@@ -137,15 +145,23 @@ import {
   workspaceCopySegmentSupplementAbsolutePathRequestSchema,
   workspaceCopySegmentSupplementRelativePathRequestSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
+  workspaceReadFinalizedAudioSegmentAudioRequestSchema,
+  workspaceReadFinalizedAudioSegmentAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema,
+  workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
   workspaceReadSegmentContentRequestSchema,
   workspaceReadSegmentContentResponseSchema,
+  workspaceReadSegmentSpeechAudioRequestSchema,
+  workspaceReadSegmentSpeechAudioResponseSchema,
   workspaceReadSegmentSupplementContentRequestSchema,
   workspaceReadSegmentSupplementContentResponseSchema,
+  workspaceReadSegmentSupplementSpeechAudioRequestSchema,
+  workspaceReadSegmentSupplementSpeechAudioResponseSchema,
   workspaceSaveSegmentAttachmentRequestSchema,
   workspaceSaveSegmentSupplementAttachmentRequestSchema,
   workspaceListSegmentAttachmentsRequestSchema,
@@ -195,6 +211,8 @@ import {
   workspaceSegmentSupplementIdRequestSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
   workspaceSegmentSupplementMarkdownSaveResponseSchema,
+  workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema,
+  workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema,
   workspaceSetVoiceTranscriptionEnabledRequestSchema,
   workspaceSetVoiceTranscriptionEnabledResponseSchema,
   workspaceClearVoiceTranscriptionApiKeyRequestSchema,
@@ -209,6 +227,12 @@ import {
   workspaceRecordingMarkdownSaveResponseSchema,
   workspaceRequestSegmentSupplementTranscriptionBackfillRequestSchema,
   workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema,
+  workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema,
+  workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema,
+  workspaceRegenerateImportedSpeechSynthesisRequestSchema,
+  workspaceRegenerateImportedSpeechSynthesisResponseSchema,
+  workspaceRequestSegmentSpeechSynthesisRequestSchema,
+  workspaceRequestSegmentSpeechSynthesisResponseSchema,
   workspaceRequestSegmentTranscriptionBackfillRequestSchema,
   workspaceRequestSegmentTranscriptionBackfillResponseSchema,
   workspaceHandleRequestSchema,
@@ -238,6 +262,7 @@ import {
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
   type WorkspaceErrorEnvelope,
+  type WorkspaceSpeechSynthesisBatchTarget,
   type WorkspaceSnapshot,
 } from '../workspace-contract/workspace-contract.js';
 import { buildWorkspaceReviewAgentPrompt } from '../workspace-contract/workspace-review-prompt.js';
@@ -287,7 +312,9 @@ import {
   discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
+  readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentContent,
+  readFinalizedAudioSegmentSupplementAudio,
   readFinalizedAudioSegmentSupplementContent,
   readRecordingDraftAudio,
   saveRecordingMarkdown,
@@ -299,7 +326,9 @@ import {
   finalizeNoteSegmentDraft,
   finalizeSegmentSupplementNoteDraft,
   readFinalizedNoteSegmentContent,
+  readFinalizedNoteSegmentSpeechAudio,
   readFinalizedNoteSegmentSupplementContent,
+  readFinalizedNoteSegmentSupplementSpeechAudio,
   writeFinalizedNoteSegmentContent,
   writeFinalizedNoteSegmentSupplementContent,
   writeNoteSegmentDraftBody,
@@ -356,11 +385,20 @@ import {
   runVoiceTranscriptionProbe,
   type VoiceTranscriptionProbeResult,
 } from './voiceTranscriptionProbe.js';
+import {
+  runVoiceSpeechSynthesisProbe,
+  type VoiceSpeechSynthesisProbeResult,
+} from './voiceSpeechSynthesisProbe.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
 import {
   createWorkspaceBackfillRuntime,
   type WorkspaceBackfillRuntime,
 } from './backfillRuntime.js';
+import {
+  createWorkspaceSpeechSynthesisRuntime,
+  type SpeechSynthesisBatchResult,
+  type WorkspaceSpeechSynthesisRuntime,
+} from './speechSynthesisRuntime.js';
 import { transcriptDigest } from './transcriptDigest.js';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -384,6 +422,10 @@ type OpenExternalUrl = (url: string) => Promise<void>;
 type OpenVoiceTranscriptionProviderConsole = OpenExternalUrl;
 type WriteClipboardText = (text: string) => void;
 type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
+type VoiceSpeechSynthesisProbe = (input: {
+  readonly apiKey: string;
+  readonly speaker: ReturnType<VoiceSettingsStore['read']>['speechSynthesisSpeaker'];
+}) => Promise<VoiceSpeechSynthesisProbeResult>;
 type ResolveMemorySpacePaths = (
   workspaceId: string,
   deps?: {
@@ -434,8 +476,10 @@ export interface RegisterWorkspaceIpcOptions {
   readonly recordingTranscriptionSessions?: RecordingTranscriptionSessionRegistry;
   readonly fileTruthWatcher?: WorkspaceFileTruthWatcherRegistry;
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
+  readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
   readonly voiceSettingsStore: VoiceSettingsStore;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
+  readonly voiceSpeechSynthesisProbe?: VoiceSpeechSynthesisProbe;
   readonly openExternal?: OpenVoiceTranscriptionProviderConsole;
   readonly showOpenDirectoryDialog?: ShowOpenDirectoryDialog;
   readonly withDiagnostics?: typeof withDiagnosticSpan;
@@ -472,6 +516,7 @@ interface HandleWorkspaceRequestOptions {
   readonly expectedSessionKey: string;
   readonly isTrustedUrl: (url: string) => boolean;
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
+  readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
   readonly handleStore?: WorkspaceHandleStore;
   readonly onBeforeBackfillCancel?: (workspaceHandle: string) => boolean;
   readonly onWorkspaceClosed?: (workspaceHandle: string) => Promise<void> | void;
@@ -549,12 +594,18 @@ type HandleVoiceSettingsRequestOptions = WorkspaceIpcBaseOptions & {
   readonly store: VoiceSettingsStore;
 };
 
+type HandleSetVoiceSpeechSynthesisSpeakerOptions = HandleVoiceSettingsRequestOptions & {
+  readonly speechSynthesisProbe?: VoiceSpeechSynthesisProbe;
+};
+
 type HandleSaveVoiceTranscriptionApiKeyOptions = HandleVoiceSettingsRequestOptions & {
   readonly probe: VoiceTranscriptionProbe;
+  readonly speechSynthesisProbe?: VoiceSpeechSynthesisProbe;
 };
 
 type HandleValidateVoiceTranscriptionCredentialsOptions = HandleVoiceSettingsRequestOptions & {
   readonly probe: VoiceTranscriptionProbe;
+  readonly speechSynthesisProbe?: VoiceSpeechSynthesisProbe;
 };
 
 type HandleOpenVoiceTranscriptionProviderConsoleOptions = WorkspaceIpcBaseOptions & {
@@ -2289,7 +2340,26 @@ async function recordVoiceSettingsValidation(
   try {
     return {
       ok: true as const,
-      validationApplied: await store.recordValidation({ apiKey, code }),
+      validationApplied: await store.recordTranscriptionValidation({ apiKey, code }),
+    };
+  } catch {
+    return {
+      ok: false as const,
+      error: voiceSettingsWriteFailedError(dataRetention),
+    };
+  }
+}
+
+async function recordVoiceSpeechSynthesisSettingsValidation(
+  store: VoiceSettingsStore,
+  apiKey: string,
+  code: VoiceSpeechSynthesisProbeResult['code'],
+  dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']>
+) {
+  try {
+    return {
+      ok: true as const,
+      validationApplied: await store.recordSpeechSynthesisValidation({ apiKey, code }),
     };
   } catch {
     return {
@@ -2312,6 +2382,30 @@ async function probeAndPersistVoiceValidation({
 }) {
   const result = await runVoiceSettingsProbe(apiKey, probe);
   const persisted = await recordVoiceSettingsValidation(store, apiKey, result.code, dataRetention);
+  if (!persisted.ok) {
+    return { ok: false as const, error: persisted.error };
+  }
+  return { ok: true as const, result, validationApplied: persisted.validationApplied };
+}
+
+async function probeAndPersistVoiceSpeechSynthesisValidation({
+  apiKey,
+  dataRetention,
+  probe,
+  store,
+}: {
+  readonly apiKey: string;
+  readonly dataRetention: NonNullable<WorkspaceErrorEnvelope['error']['dataRetention']>;
+  readonly probe: VoiceSpeechSynthesisProbe;
+  readonly store: VoiceSettingsStore;
+}) {
+  const result = await probe({ apiKey, speaker: store.read().speechSynthesisSpeaker });
+  const persisted = await recordVoiceSpeechSynthesisSettingsValidation(
+    store,
+    apiKey,
+    result.code,
+    dataRetention
+  );
   if (!persisted.ok) {
     return { ok: false as const, error: persisted.error };
   }
@@ -2370,6 +2464,16 @@ function isAllowedMarkdownExternalLinkUrl(
 
 function runDefaultVoiceTranscriptionProbe(apiKey: string): Promise<VoiceTranscriptionProbeResult> {
   return runVoiceTranscriptionProbe({ apiKey });
+}
+
+function runDefaultVoiceSpeechSynthesisProbe({
+  apiKey,
+  speaker,
+}: {
+  readonly apiKey: string;
+  readonly speaker: ReturnType<VoiceSettingsStore['read']>['speechSynthesisSpeaker'];
+}): Promise<VoiceSpeechSynthesisProbeResult> {
+  return runVoiceSpeechSynthesisProbe({ apiKey, speaker });
 }
 
 async function openSystemExternalUrl(url: string): Promise<void> {
@@ -2458,6 +2562,67 @@ async function handleSetVoiceTranscriptionEnabledCore({
   });
 }
 
+async function handleSetVoiceSpeechSynthesisSpeakerCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  speechSynthesisProbe = runDefaultVoiceSpeechSynthesisProbe,
+  store,
+}: HandleSetVoiceSpeechSynthesisSpeakerOptions): Promise<
+  z.infer<typeof workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'setVoiceSpeechSynthesisSpeaker request is invalid',
+      'none-written'
+    );
+  }
+
+  try {
+    await store.setSpeechSynthesisSpeaker(request.data.speaker);
+  } catch {
+    return workspaceError(
+      'ERR_VOICE_SETTINGS_WRITE_FAILED',
+      '语音设置无法写入本地配置。',
+      'none-written'
+    );
+  }
+
+  const settings = store.read();
+  const apiKey = store.readDecryptedApiKey();
+  if (settings.enabled && settings.apiKeyConfigured && apiKey) {
+    const validation = await probeAndPersistVoiceSpeechSynthesisValidation({
+      apiKey,
+      dataRetention: 'file-written-index-stale',
+      probe: speechSynthesisProbe,
+      store,
+    });
+    if (!validation.ok) {
+      return validation.error;
+    }
+  }
+
+  return workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema.parse({
+    ok: true,
+    value: { settings: store.read() },
+  });
+}
+
 async function handleSaveVoiceTranscriptionApiKeyCore({
   event,
   input,
@@ -2466,6 +2631,7 @@ async function handleSaveVoiceTranscriptionApiKeyCore({
   isTrustedUrl,
   store,
   probe,
+  speechSynthesisProbe = async () => ({ code: 'ok', ok: true }),
 }: HandleSaveVoiceTranscriptionApiKeyOptions): Promise<
   z.infer<typeof workspaceSaveVoiceTranscriptionApiKeyResponseSchema>
 > {
@@ -2508,6 +2674,15 @@ async function handleSaveVoiceTranscriptionApiKeyCore({
   });
   if (!validation.ok) {
     return validation.error;
+  }
+  const speechSynthesisValidation = await probeAndPersistVoiceSpeechSynthesisValidation({
+    apiKey,
+    dataRetention: 'file-written-index-stale',
+    probe: speechSynthesisProbe,
+    store,
+  });
+  if (!speechSynthesisValidation.ok) {
+    return speechSynthesisValidation.error;
   }
   return workspaceSaveVoiceTranscriptionApiKeyResponseSchema.parse({
     ok: true,
@@ -2569,6 +2744,7 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
   isTrustedUrl,
   store,
   probe,
+  speechSynthesisProbe = async () => ({ code: 'ok', ok: true }),
 }: HandleValidateVoiceTranscriptionCredentialsOptions): Promise<
   z.infer<typeof workspaceValidateVoiceTranscriptionCredentialsResponseSchema>
 > {
@@ -2616,6 +2792,15 @@ async function handleValidateVoiceTranscriptionCredentialsCore({
       'X-Api-Key 已变更，请重新验证。',
       'previous-file-preserved'
     );
+  }
+  const speechSynthesisValidation = await probeAndPersistVoiceSpeechSynthesisValidation({
+    apiKey,
+    dataRetention: 'previous-file-preserved',
+    probe: speechSynthesisProbe,
+    store,
+  });
+  if (!speechSynthesisValidation.ok) {
+    return speechSynthesisValidation.error;
   }
   return workspaceValidateVoiceTranscriptionCredentialsResponseSchema.parse({
     ok: true,
@@ -2746,6 +2931,12 @@ export async function handleSetVoiceTranscriptionEnabledForTest(
   options: HandleVoiceSettingsRequestOptions
 ): Promise<z.infer<typeof workspaceSetVoiceTranscriptionEnabledResponseSchema>> {
   return handleSetVoiceTranscriptionEnabledCore(options);
+}
+
+export async function handleSetVoiceSpeechSynthesisSpeakerForTest(
+  options: HandleSetVoiceSpeechSynthesisSpeakerOptions
+): Promise<z.infer<typeof workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema>> {
+  return handleSetVoiceSpeechSynthesisSpeakerCore(options);
 }
 
 export async function handleSaveVoiceTranscriptionApiKeyForTest(
@@ -3642,6 +3833,7 @@ export async function handleClearMicrophoneIntentForTest(
 
 async function handleCloseWorkspaceCore({
   backfillRuntime,
+  speechSynthesisRuntime,
   event,
   input,
   expectedSession,
@@ -3680,6 +3872,7 @@ async function handleCloseWorkspaceCore({
   recordingTranscriptionSessions.closeForWorkspaceHandle(request.data.workspaceHandle);
   if (onBeforeBackfillCancel?.(request.data.workspaceHandle) ?? true) {
     await backfillRuntime?.cancelAllAndDrain('workspace-switch');
+    await speechSynthesisRuntime?.cancelAllAndDrain('workspace-switch');
   }
   const closed = await handleStore.closeHandle({
     workspaceHandle: request.data.workspaceHandle,
@@ -4675,7 +4868,6 @@ function handleReadFinalizedAudioSegmentCore(
         }
 
         const result = await readFinalizedAudioSegmentContent({
-          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
           rootPath: handle.canonicalRoot,
           memoryId: request.memoryId,
           segmentId: request.segmentId,
@@ -4690,8 +4882,8 @@ function handleReadFinalizedAudioSegmentCore(
                   workspaceId: handle.workspaceId,
                   memoryId: request.memoryId,
                   segmentId: request.segmentId,
-                  audio: result.audio,
                   audioByteLength: result.audioByteLength,
+                  audioHash: result.audioHash,
                   transcript: result.transcript,
                 },
               }
@@ -4720,7 +4912,6 @@ function handleReadFinalizedAudioSegmentSupplementCore(
         }
 
         const result = await readFinalizedAudioSegmentSupplementContent({
-          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
           rootPath: handle.canonicalRoot,
           workspaceId: request.workspaceId,
           memoryId: request.memoryId,
@@ -4738,9 +4929,106 @@ function handleReadFinalizedAudioSegmentSupplementCore(
                   memoryId: request.memoryId,
                   segmentId: request.segmentId,
                   supplementId: request.supplementId,
+                  audioByteLength: result.audioByteLength,
+                  audioHash: result.audioHash,
+                  transcript: result.transcript,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadFinalizedAudioSegmentAudioCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAudioResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadFinalizedAudioSegmentAudioRequestSchema,
+    invalidMessage: 'readFinalizedAudioSegmentAudio request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Finalized audio workspace does not match the active handle'
+          );
+        }
+
+        const result = await readFinalizedAudioSegmentAudio({
+          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+          rootPath: handle.canonicalRoot,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          expectedAudioByteLength: request.audioByteLength,
+          expectedAudioHash: request.audioHash ?? null,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadFinalizedAudioSegmentAudioResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
                   audio: result.audio,
                   audioByteLength: result.audioByteLength,
-                  transcript: result.transcript,
+                  audioHash: result.audioHash,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadFinalizedAudioSegmentSupplementAudioCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema,
+    invalidMessage: 'readFinalizedAudioSegmentSupplementAudio request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Finalized segment supplement audio workspace does not match the active handle'
+          );
+        }
+
+        const result = await readFinalizedAudioSegmentSupplementAudio({
+          ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+          rootPath: handle.canonicalRoot,
+          workspaceId: request.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          expectedAudioByteLength: request.audioByteLength,
+          expectedAudioHash: request.audioHash ?? null,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  supplementId: request.supplementId,
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                  audioHash: result.audioHash,
                 },
               }
             : result
@@ -4771,6 +5059,30 @@ export async function handleReadFinalizedAudioSegmentSupplementForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementResponseSchema>> {
   return handleReadFinalizedAudioSegmentSupplementCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentAudio(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAudioResponseSchema>> {
+  return handleReadFinalizedAudioSegmentAudioCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentAudioForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentAudioResponseSchema>> {
+  return handleReadFinalizedAudioSegmentAudioCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentSupplementAudio(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema>> {
+  return handleReadFinalizedAudioSegmentSupplementAudioCore(options);
+}
+
+export async function handleReadFinalizedAudioSegmentSupplementAudioForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema>> {
+  return handleReadFinalizedAudioSegmentSupplementAudioCore(options);
 }
 
 function handleFinalizeNoteSegmentDraftCore({
@@ -4897,6 +5209,7 @@ function handleReadSegmentContentCore(
                   bodyByteLength: result.bodyByteLength,
                   baselineContentHash: result.baselineContentHash,
                   baselineTiptapContentHash: result.baselineTiptapContentHash,
+                  speechSynthesis: result.speechSynthesis,
                 },
               }
             : result
@@ -4947,6 +5260,107 @@ function handleReadSegmentSupplementContentCore(
                   bodyByteLength: result.bodyByteLength,
                   baselineContentHash: result.baselineContentHash,
                   baselineTiptapContentHash: result.baselineTiptapContentHash,
+                  speechSynthesis: result.speechSynthesis,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadSegmentSpeechAudioCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSpeechAudioResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadSegmentSpeechAudioRequestSchema,
+    invalidMessage: 'readSegmentSpeechAudio request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment speech audio workspace does not match the active handle'
+          );
+        }
+        const result = await readFinalizedNoteSegmentSpeechAudio({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          contentHash: request.contentHash,
+          audioByteLength: request.audioByteLength,
+          speaker: request.speaker,
+          updatedAt: request.updatedAt,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadSegmentSpeechAudioResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                  contentHash: result.contentHash,
+                  mimeType: result.mimeType,
+                },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function handleReadSegmentSupplementSpeechAudioCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSupplementSpeechAudioResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadSegmentSupplementSpeechAudioRequestSchema,
+    invalidMessage: 'readSegmentSupplementSpeechAudio request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment supplement speech audio workspace does not match the active handle'
+          );
+        }
+        const result = await readFinalizedNoteSegmentSupplementSpeechAudio({
+          rootPath: handle.canonicalRoot,
+          workspaceId: handle.workspaceId,
+          memoryId: request.memoryId,
+          segmentId: request.segmentId,
+          supplementId: request.supplementId,
+          contentHash: request.contentHash,
+          audioByteLength: request.audioByteLength,
+          speaker: request.speaker,
+          updatedAt: request.updatedAt,
+          assertWorkspaceUsable: assertUsable,
+        });
+        return workspaceReadSegmentSupplementSpeechAudioResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: {
+                  requestId: request.requestId,
+                  workspaceId: handle.workspaceId,
+                  memoryId: request.memoryId,
+                  segmentId: request.segmentId,
+                  supplementId: request.supplementId,
+                  audio: result.audio,
+                  audioByteLength: result.audioByteLength,
+                  contentHash: result.contentHash,
+                  mimeType: result.mimeType,
                 },
               }
             : result
@@ -5210,6 +5624,18 @@ export async function handleReadSegmentSupplementContentForTest(
   return handleReadSegmentSupplementContentCore(options);
 }
 
+export async function handleReadSegmentSpeechAudioForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSpeechAudioResponseSchema>> {
+  return handleReadSegmentSpeechAudioCore(options);
+}
+
+export async function handleReadSegmentSupplementSpeechAudioForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadSegmentSupplementSpeechAudioResponseSchema>> {
+  return handleReadSegmentSupplementSpeechAudioCore(options);
+}
+
 export async function handleWriteSegmentContentForTest(
   options: HandleWriteNoteContentOptions
 ): Promise<z.infer<typeof workspaceWriteSegmentContentResponseSchema>> {
@@ -5461,6 +5887,302 @@ function handleRequestSegmentSupplementTranscriptionBackfillCore({
   });
 }
 
+function handleRequestSegmentSpeechSynthesisCore({
+  speechSynthesisRuntime,
+  voiceSettingsStore,
+  ...options
+}: HandleWorkspaceRequestOptions & {
+  readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+  readonly voiceSettingsStore?: VoiceSettingsStore;
+}): Promise<z.infer<typeof workspaceRequestSegmentSpeechSynthesisResponseSchema>> {
+  const runtime =
+    speechSynthesisRuntime ??
+    (voiceSettingsStore ? createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore }) : null);
+  if (!runtime) {
+    return Promise.resolve(
+      workspaceRequestSegmentSpeechSynthesisResponseSchema.parse(
+        workspaceError(
+          'ERR_SPEECH_SYNTHESIS_UNAVAILABLE',
+          'Speech synthesis runtime is unavailable'
+        )
+      )
+    );
+  }
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRequestSegmentSpeechSynthesisRequestSchema,
+    invalidMessage: 'requestSegmentSpeechSynthesis request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Speech synthesis workspace does not match the active handle'
+          );
+        }
+        return workspaceRequestSegmentSpeechSynthesisResponseSchema.parse(
+          await runtime.requestSegmentSpeechSynthesis({
+            assertWorkspaceUsable: assertUsable,
+            memoryId: request.memoryId,
+            mode: request.mode,
+            rootPath: handle.canonicalRoot,
+            segmentId: request.segmentId,
+            ...(request.speaker ? { speaker: request.speaker } : {}),
+            workspaceHandle: request.workspaceHandle,
+            workspaceId: request.workspaceId,
+          })
+        );
+      }),
+  });
+}
+
+function handleRequestSegmentSupplementSpeechSynthesisCore({
+  speechSynthesisRuntime,
+  voiceSettingsStore,
+  ...options
+}: HandleWorkspaceRequestOptions & {
+  readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+  readonly voiceSettingsStore?: VoiceSettingsStore;
+}): Promise<z.infer<typeof workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema>> {
+  const runtime =
+    speechSynthesisRuntime ??
+    (voiceSettingsStore ? createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore }) : null);
+  if (!runtime) {
+    return Promise.resolve(
+      workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema.parse(
+        workspaceError(
+          'ERR_SPEECH_SYNTHESIS_UNAVAILABLE',
+          'Speech synthesis runtime is unavailable'
+        )
+      )
+    );
+  }
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRequestSegmentSupplementSpeechSynthesisRequestSchema,
+    invalidMessage: 'requestSegmentSupplementSpeechSynthesis request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Speech synthesis supplement workspace does not match the active handle'
+          );
+        }
+        return workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema.parse(
+          await runtime.requestSupplementSpeechSynthesis({
+            assertWorkspaceUsable: assertUsable,
+            memoryId: request.memoryId,
+            mode: request.mode,
+            rootPath: handle.canonicalRoot,
+            segmentId: request.segmentId,
+            supplementId: request.supplementId,
+            ...(request.speaker ? { speaker: request.speaker } : {}),
+            workspaceHandle: request.workspaceHandle,
+            workspaceId: request.workspaceId,
+          })
+        );
+      }),
+  });
+}
+
+function emptySpeechSynthesisBatchResult(
+  speaker: SpeechSynthesisBatchResult['speaker']
+): SpeechSynthesisBatchResult {
+  return {
+    failed: 0,
+    failedTargets: [],
+    generated: 0,
+    skipped: 0,
+    speaker,
+    total: 0,
+  };
+}
+
+function mergeSpeechSynthesisBatchResult(
+  current: SpeechSynthesisBatchResult,
+  next: SpeechSynthesisBatchResult
+): SpeechSynthesisBatchResult {
+  return {
+    failed: current.failed + next.failed,
+    failedTargets: [...current.failedTargets, ...next.failedTargets],
+    generated: current.generated + next.generated,
+    skipped: current.skipped + next.skipped,
+    speaker: current.speaker,
+    total: current.total + next.total,
+  };
+}
+
+function workspaceLockAssertUsable(
+  lock: Extract<Awaited<ReturnType<typeof acquireWorkspaceLock>>, { readonly ok: true }>
+): () => { readonly ok: true } | WorkspaceErrorEnvelope {
+  return () =>
+    lock.ok && lock.lock.isUsable()
+      ? { ok: true as const }
+      : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+}
+
+async function regenerateInactiveWorkspaceSpeechSynthesis({
+  memorySpaceRegistry,
+  runtime,
+  speaker,
+  targets,
+  workspaceId,
+}: {
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly runtime: WorkspaceSpeechSynthesisRuntime;
+  readonly speaker: SpeechSynthesisBatchResult['speaker'];
+  readonly targets?: readonly WorkspaceSpeechSynthesisBatchTarget[];
+  readonly workspaceId: string;
+}): Promise<SpeechSynthesisBatchResult | null> {
+  const memorySpace = await memorySpaceRegistry.resolveMemorySpace(workspaceId);
+  if (!memorySpace) {
+    return null;
+  }
+  const target = await validateWorkspaceOpenTarget(memorySpace.rootPath);
+  if (!target.ok || target.metadata.workspaceId !== workspaceId) {
+    return null;
+  }
+  const lock = await acquireWorkspaceLock({ canonicalRoot: target.canonicalRoot });
+  if (!lock.ok) {
+    return null;
+  }
+
+  try {
+    return await runtime.regenerateWorkspaceSpeechSynthesis({
+      assertWorkspaceUsable: workspaceLockAssertUsable(lock),
+      rootPath: target.canonicalRoot,
+      speaker,
+      ...(targets ? { targets } : {}),
+      workspaceHandle: `batch:${workspaceId}`,
+      workspaceId,
+    });
+  } finally {
+    if (lock.lock.isHeld()) {
+      await lock.lock.release().catch(() => {});
+    }
+  }
+}
+
+async function handleRegenerateImportedSpeechSynthesisCore({
+  event,
+  expectedSession,
+  expectedSessionKey,
+  handleStore = createWorkspaceHandleStore(),
+  input,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  speechSynthesisRuntime,
+  voiceSettingsStore,
+}: WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly handleStore?: WorkspaceHandleStore;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+  readonly voiceSettingsStore?: VoiceSettingsStore;
+}): Promise<z.infer<typeof workspaceRegenerateImportedSpeechSynthesisResponseSchema>> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+  const request = workspaceRegenerateImportedSpeechSynthesisRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'regenerateImportedSpeechSynthesis request is invalid'
+    );
+  }
+
+  const runtime =
+    speechSynthesisRuntime ??
+    (voiceSettingsStore ? createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore }) : null);
+  if (!runtime) {
+    return workspaceRegenerateImportedSpeechSynthesisResponseSchema.parse(
+      workspaceError('ERR_SPEECH_SYNTHESIS_UNAVAILABLE', 'Speech synthesis runtime is unavailable')
+    );
+  }
+
+  let memorySpaces: Awaited<ReturnType<WorkspaceMemorySpaceRegistry['listMemorySpaces']>>;
+  try {
+    memorySpaces = await memorySpaceRegistry.listMemorySpaces();
+  } catch (error) {
+    return workspaceMemorySpaceRegistryReadError(error);
+  }
+
+  let summary = emptySpeechSynthesisBatchResult(request.data.speaker);
+  for (const memorySpace of memorySpaces) {
+    const targets =
+      request.data.mode === 'retry'
+        ? request.data.targets.filter((target) => target.workspaceId === memorySpace.workspaceId)
+        : undefined;
+    if (request.data.mode === 'retry' && (!targets || targets.length === 0)) {
+      continue;
+    }
+
+    let result: SpeechSynthesisBatchResult | null = null;
+    const activeWorkspace = request.data.activeWorkspace;
+    if (activeWorkspace?.workspaceId === memorySpace.workspaceId) {
+      const required = handleStore.requireHandle({
+        workspaceHandle: activeWorkspace.workspaceHandle,
+        workspaceId: activeWorkspace.workspaceId,
+        sender: trusted.sender,
+      });
+      if (required.ok) {
+        result = await runtime.regenerateWorkspaceSpeechSynthesis({
+          assertWorkspaceUsable: required.handle.assertUsable,
+          rootPath: required.handle.canonicalRoot,
+          speaker: request.data.speaker,
+          ...(targets ? { targets } : {}),
+          workspaceHandle: activeWorkspace.workspaceHandle,
+          workspaceId: activeWorkspace.workspaceId,
+        });
+      }
+    } else {
+      result = await regenerateInactiveWorkspaceSpeechSynthesis({
+        memorySpaceRegistry,
+        runtime,
+        speaker: request.data.speaker,
+        ...(targets ? { targets } : {}),
+        workspaceId: memorySpace.workspaceId,
+      });
+    }
+    if (result) {
+      summary = mergeSpeechSynthesisBatchResult(summary, result);
+    } else if (targets) {
+      summary = mergeSpeechSynthesisBatchResult(summary, {
+        failed: targets.length,
+        failedTargets: targets,
+        generated: 0,
+        skipped: 0,
+        speaker: request.data.speaker,
+        total: targets.length,
+      });
+    } else {
+      summary = mergeSpeechSynthesisBatchResult(summary, {
+        ...emptySpeechSynthesisBatchResult(request.data.speaker),
+        skipped: 1,
+        total: 1,
+      });
+    }
+  }
+
+  return workspaceRegenerateImportedSpeechSynthesisResponseSchema.parse({
+    ok: true,
+    value: summary,
+  });
+}
+
 export async function handleRequestSegmentTranscriptionBackfillForTest(
   options: HandleWorkspaceRequestOptions & {
     readonly backfillRuntime?: WorkspaceBackfillRuntime;
@@ -5477,6 +6199,37 @@ export async function handleRequestSegmentSupplementTranscriptionBackfillForTest
   }
 ): Promise<z.infer<typeof workspaceRequestSegmentSupplementTranscriptionBackfillResponseSchema>> {
   return handleRequestSegmentSupplementTranscriptionBackfillCore(options);
+}
+
+export async function handleRequestSegmentSpeechSynthesisForTest(
+  options: HandleWorkspaceRequestOptions & {
+    readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+    readonly voiceSettingsStore?: VoiceSettingsStore;
+  }
+): Promise<z.infer<typeof workspaceRequestSegmentSpeechSynthesisResponseSchema>> {
+  return handleRequestSegmentSpeechSynthesisCore(options);
+}
+
+export async function handleRequestSegmentSupplementSpeechSynthesisForTest(
+  options: HandleWorkspaceRequestOptions & {
+    readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+    readonly voiceSettingsStore?: VoiceSettingsStore;
+  }
+): Promise<z.infer<typeof workspaceRequestSegmentSupplementSpeechSynthesisResponseSchema>> {
+  return handleRequestSegmentSupplementSpeechSynthesisCore(options);
+}
+
+export async function handleRegenerateImportedSpeechSynthesisForTest(
+  options: WorkspaceIpcBaseOptions & {
+    readonly event: TrustedSenderEventAdapter;
+    readonly handleStore?: WorkspaceHandleStore;
+    readonly input: unknown;
+    readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+    readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+    readonly voiceSettingsStore?: VoiceSettingsStore;
+  }
+): Promise<z.infer<typeof workspaceRegenerateImportedSpeechSynthesisResponseSchema>> {
+  return handleRegenerateImportedSpeechSynthesisCore(options);
 }
 
 function saveTranscriptWithHandle(
@@ -5662,7 +6415,9 @@ export function registerWorkspaceIpc({
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
   voiceSettingsStore,
   backfillRuntime = createWorkspaceBackfillRuntime({ voiceSettingsStore }),
+  speechSynthesisRuntime = createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore }),
   voiceTranscriptionProbe = runDefaultVoiceTranscriptionProbe,
+  voiceSpeechSynthesisProbe = runDefaultVoiceSpeechSynthesisProbe,
   openExternal = openSystemExternalUrl,
   showOpenDirectoryDialog = showSystemOpenDirectoryDialog,
   withDiagnostics = withDiagnosticSpan,
@@ -5693,10 +6448,24 @@ export function registerWorkspaceIpc({
   let readyBackfillWorkspace: ReadyBackfillWorkspace | null = null;
   let readyBackfillGeneration = 0;
   let lastFiredBackfillReadyKey: string | null = null;
+  let lastFiredSpeechSynthesisReadyKey: string | null = null;
 
   function voiceSettingsReadyForBackfill(): boolean {
     const settings = voiceSettingsStore.read();
-    return settings.enabled && settings.apiKeyConfigured && settings.lastValidationOk === true;
+    return (
+      settings.enabled &&
+      settings.apiKeyConfigured &&
+      settings.lastTranscriptionValidationCode !== 'auth'
+    );
+  }
+
+  function voiceSettingsReadyForSpeechSynthesis(): boolean {
+    const settings = voiceSettingsStore.read();
+    return (
+      settings.enabled &&
+      settings.apiKeyConfigured &&
+      settings.lastSpeechSynthesisValidationCode !== 'auth'
+    );
   }
 
   function maybeTriggerAutomaticBackfill(): void {
@@ -5709,6 +6478,22 @@ export function registerWorkspaceIpc({
     }
     lastFiredBackfillReadyKey = readyKey;
     void backfillRuntime.enqueueAutomaticWorkspace(readyBackfillWorkspace);
+  }
+
+  function maybeTriggerAutomaticSpeechSynthesis({
+    force = false,
+  }: {
+    readonly force?: boolean;
+  } = {}): void {
+    if (!readyBackfillWorkspace || !voiceSettingsReadyForSpeechSynthesis()) {
+      return;
+    }
+    const readyKey = `${readyBackfillWorkspace.workspaceId}:${readyBackfillWorkspace.workspaceHandle}`;
+    if (!force && lastFiredSpeechSynthesisReadyKey === readyKey) {
+      return;
+    }
+    lastFiredSpeechSynthesisReadyKey = readyKey;
+    void speechSynthesisRuntime.enqueueAutomaticWorkspace(readyBackfillWorkspace);
   }
 
   function rememberReadyBackfillWorkspace(
@@ -5757,6 +6542,7 @@ export function registerWorkspaceIpc({
       workspaceId,
     });
     maybeTriggerAutomaticBackfill();
+    maybeTriggerAutomaticSpeechSynthesis();
     return response;
   }
 
@@ -5765,6 +6551,7 @@ export function registerWorkspaceIpc({
   ): Response {
     if (response.ok) {
       maybeTriggerAutomaticBackfill();
+      maybeTriggerAutomaticSpeechSynthesis({ force: true });
     }
     return response;
   }
@@ -6159,6 +6946,32 @@ export function registerWorkspaceIpc({
         voiceSettingsStore,
       })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL, (event, input) =>
+    handleRequestSegmentSpeechSynthesisCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      speechSynthesisRuntime,
+      voiceSettingsStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_REQUEST_SEGMENT_SUPPLEMENT_SPEECH_SYNTHESIS_CHANNEL,
+    (event, input) =>
+      handleRequestSegmentSupplementSpeechSynthesisCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        speechSynthesisRuntime,
+        voiceSettingsStore,
+      })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL, (event, input) =>
     handleReadVoiceTranscriptionSettingsCore({
       event,
@@ -6179,6 +6992,34 @@ export function registerWorkspaceIpc({
       store: voiceSettingsStore,
     }).then(handleVoiceSettingsResult)
   );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
+    (event, input) =>
+      handleSetVoiceSpeechSynthesisSpeakerCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        speechSynthesisProbe: voiceSpeechSynthesisProbe,
+        store: voiceSettingsStore,
+      }).then(handleVoiceSettingsResult)
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
+    (event, input) =>
+      handleRegenerateImportedSpeechSynthesisCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+        memorySpaceRegistry,
+        speechSynthesisRuntime,
+        voiceSettingsStore,
+      })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
     handleSaveVoiceTranscriptionApiKeyCore({
       event,
@@ -6188,6 +7029,7 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       store: voiceSettingsStore,
       probe: voiceTranscriptionProbe,
+      speechSynthesisProbe: voiceSpeechSynthesisProbe,
     }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL, (event, input) =>
@@ -6211,6 +7053,7 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         store: voiceSettingsStore,
         probe: voiceTranscriptionProbe,
+        speechSynthesisProbe: voiceSpeechSynthesisProbe,
       }).then(handleVoiceSettingsResult)
   );
   registerWorkspaceIpcHandler(
@@ -6409,6 +7252,30 @@ export function registerWorkspaceIpc({
         handleStore,
       })
   );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
+    (event, input) =>
+      handleReadFinalizedAudioSegmentAudio({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
+    (event, input) =>
+      handleReadFinalizedAudioSegmentSupplementAudio({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_CLOSE_CHANNEL, (event, input) =>
     handleCloseWorkspace({
       event,
@@ -6417,6 +7284,7 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       backfillRuntime,
+      speechSynthesisRuntime,
       handleStore,
       onBeforeBackfillCancel: (workspaceHandle) => {
         if (readyBackfillWorkspace && readyBackfillWorkspace.workspaceHandle !== workspaceHandle) {
@@ -6425,6 +7293,7 @@ export function registerWorkspaceIpc({
         readyBackfillGeneration += 1;
         readyBackfillWorkspace = null;
         lastFiredBackfillReadyKey = null;
+        lastFiredSpeechSynthesisReadyKey = null;
         return true;
       },
       onWorkspaceClosed: (workspaceHandle) => fileTruthWatcher.closeWorkspace(workspaceHandle),
@@ -6479,7 +7348,12 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
-    }).then((response) => afterOk(response, () => backfillRuntime.pause('recording')))
+    }).then((response) =>
+      afterOk(response, () => {
+        backfillRuntime.pause('recording');
+        speechSynthesisRuntime.pause('recording');
+      })
+    )
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -6491,7 +7365,12 @@ export function registerWorkspaceIpc({
         expectedSessionKey,
         isTrustedUrl,
         handleStore,
-      }).then((response) => afterOk(response, () => backfillRuntime.pause('recording')))
+      }).then((response) =>
+        afterOk(response, () => {
+          backfillRuntime.pause('recording');
+          speechSynthesisRuntime.pause('recording');
+        })
+      )
   );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_NOTE_SEGMENT_DRAFT_CHANNEL, (event, input) =>
     handleCreateNoteSegmentDraft({
@@ -6572,7 +7451,9 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    })
+    }).then((response) =>
+      afterOk(response, () => maybeTriggerAutomaticSpeechSynthesis({ force: true }))
+    )
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
@@ -6585,7 +7466,9 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
         now: nowIso,
-      })
+      }).then((response) =>
+        afterOk(response, () => maybeTriggerAutomaticSpeechSynthesis({ force: true }))
+      )
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL, (event, input) =>
     handleReadSegmentContentCore({
@@ -6607,6 +7490,28 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_SEGMENT_SPEECH_AUDIO_CHANNEL, (event, input) =>
+    handleReadSegmentSpeechAudioCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
+    (event, input) =>
+      handleReadSegmentSupplementSpeechAudioCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL, (event, input) =>
     handleWriteSegmentContentCore({
       event,
@@ -6616,7 +7521,9 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    })
+    }).then((response) =>
+      afterOk(response, () => maybeTriggerAutomaticSpeechSynthesis({ force: true }))
+    )
   );
   registerWorkspaceIpcHandler(WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL, (event, input) =>
     handleWriteSegmentSupplementContentCore({
@@ -6627,7 +7534,9 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    })
+    }).then((response) =>
+      afterOk(response, () => maybeTriggerAutomaticSpeechSynthesis({ force: true }))
+    )
   );
   registerWorkspaceIpcHandler(WORKSPACE_SAVE_SEGMENT_ATTACHMENT_CHANNEL, (event, input) =>
     handleSaveSegmentAttachmentCore({
@@ -6771,7 +7680,12 @@ export function registerWorkspaceIpc({
       isTrustedUrl,
       handleStore,
       now: nowIso,
-    }).then((response) => afterOk(response, () => backfillRuntime.resume('recording')))
+    }).then((response) =>
+      afterOk(response, () => {
+        backfillRuntime.resume('recording');
+        speechSynthesisRuntime.resume('recording');
+      })
+    )
   );
   registerWorkspaceIpcHandler(
     WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -6784,7 +7698,12 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
         now: nowIso,
-      }).then((response) => afterOk(response, () => backfillRuntime.resume('recording')))
+      }).then((response) =>
+        afterOk(response, () => {
+          backfillRuntime.resume('recording');
+          speechSynthesisRuntime.resume('recording');
+        })
+      )
   );
   registerWorkspaceHandleRequest(
     WORKSPACE_DISCARD_RECORDING_DRAFT_CHANNEL,
@@ -6802,6 +7721,7 @@ export function registerWorkspaceIpc({
         );
         if (response.ok) {
           backfillRuntime.resume('recording');
+          speechSynthesisRuntime.resume('recording');
         }
         return response;
       })
@@ -6822,6 +7742,7 @@ export function registerWorkspaceIpc({
         );
         if (response.ok) {
           backfillRuntime.resume('recording');
+          speechSynthesisRuntime.resume('recording');
         }
         return response;
       })

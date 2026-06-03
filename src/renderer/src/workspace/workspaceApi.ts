@@ -214,6 +214,18 @@ export function readFinalizedAudioSegmentSupplement(
   return window.reoWorkspace.readFinalizedAudioSegmentSupplement(payload);
 }
 
+export function readFinalizedAudioSegmentAudio(
+  payload: Parameters<Window['reoWorkspace']['readFinalizedAudioSegmentAudio']>[0]
+) {
+  return window.reoWorkspace.readFinalizedAudioSegmentAudio(payload);
+}
+
+export function readFinalizedAudioSegmentSupplementAudio(
+  payload: Parameters<Window['reoWorkspace']['readFinalizedAudioSegmentSupplementAudio']>[0]
+) {
+  return window.reoWorkspace.readFinalizedAudioSegmentSupplementAudio(payload);
+}
+
 export function createRecordingDraft(
   payload: Parameters<Window['reoWorkspace']['createRecordingDraft']>[0]
 ) {
@@ -272,6 +284,18 @@ export function readSegmentSupplementContent(
   payload: Parameters<Window['reoWorkspace']['readSegmentSupplementContent']>[0]
 ) {
   return window.reoWorkspace.readSegmentSupplementContent(payload);
+}
+
+export function readSegmentSpeechAudio(
+  payload: Parameters<Window['reoWorkspace']['readSegmentSpeechAudio']>[0]
+) {
+  return window.reoWorkspace.readSegmentSpeechAudio(payload);
+}
+
+export function readSegmentSupplementSpeechAudio(
+  payload: Parameters<Window['reoWorkspace']['readSegmentSupplementSpeechAudio']>[0]
+) {
+  return window.reoWorkspace.readSegmentSupplementSpeechAudio(payload);
 }
 
 export function writeSegmentContent(
@@ -410,6 +434,18 @@ export function requestSegmentSupplementTranscriptionBackfill(
   return window.reoWorkspace.requestSegmentSupplementTranscriptionBackfill(payload);
 }
 
+export function requestSegmentSpeechSynthesis(
+  payload: Parameters<Window['reoWorkspace']['requestSegmentSpeechSynthesis']>[0]
+) {
+  return window.reoWorkspace.requestSegmentSpeechSynthesis(payload);
+}
+
+export function requestSegmentSupplementSpeechSynthesis(
+  payload: Parameters<Window['reoWorkspace']['requestSegmentSupplementSpeechSynthesis']>[0]
+) {
+  return window.reoWorkspace.requestSegmentSupplementSpeechSynthesis(payload);
+}
+
 export function beginMicrophoneIntent(
   payload: Parameters<Window['reoWorkspace']['beginMicrophoneIntent']>[0]
 ) {
@@ -454,6 +490,18 @@ export function setVoiceTranscriptionEnabled(
   payload: Parameters<Window['reoWorkspace']['setVoiceTranscriptionEnabled']>[0]
 ) {
   return window.reoWorkspace.setVoiceTranscriptionEnabled(payload);
+}
+
+export function setVoiceSpeechSynthesisSpeaker(
+  payload: Parameters<Window['reoWorkspace']['setVoiceSpeechSynthesisSpeaker']>[0]
+) {
+  return window.reoWorkspace.setVoiceSpeechSynthesisSpeaker(payload);
+}
+
+export function regenerateImportedSpeechSynthesis(
+  payload: Parameters<Window['reoWorkspace']['regenerateImportedSpeechSynthesis']>[0]
+) {
+  return window.reoWorkspace.regenerateImportedSpeechSynthesis(payload);
 }
 
 export function saveVoiceTranscriptionApiKey(
@@ -543,12 +591,28 @@ export type WorkspaceFinalizedAudioSegmentSupplementContent = Extract<
   Awaited<ReturnType<typeof readFinalizedAudioSegmentSupplement>>,
   { readonly ok: true }
 >['value'];
+export type WorkspaceFinalizedAudioSegmentAudio = Extract<
+  Awaited<ReturnType<typeof readFinalizedAudioSegmentAudio>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceFinalizedAudioSegmentSupplementAudio = Extract<
+  Awaited<ReturnType<typeof readFinalizedAudioSegmentSupplementAudio>>,
+  { readonly ok: true }
+>['value'];
 export type WorkspaceNoteSegmentContent = Extract<
   Awaited<ReturnType<typeof readSegmentContent>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceNoteSegmentSupplementContent = Extract<
   Awaited<ReturnType<typeof readSegmentSupplementContent>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceNoteSegmentSpeechAudio = Extract<
+  Awaited<ReturnType<typeof readSegmentSpeechAudio>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceNoteSegmentSupplementSpeechAudio = Extract<
+  Awaited<ReturnType<typeof readSegmentSupplementSpeechAudio>>,
   { readonly ok: true }
 >['value'];
 export type VoiceTranscriptionSettings = Extract<
@@ -561,6 +625,10 @@ export type VoiceTranscriptionSettingsResponseValue = Extract<
 >['value'];
 export type VoiceTranscriptionCredentialsValidation = Extract<
   Awaited<ReturnType<typeof validateVoiceTranscriptionCredentials>>,
+  { readonly ok: true }
+>['value'];
+export type ImportedSpeechSynthesisRegenerationResult = Extract<
+  Awaited<ReturnType<typeof regenerateImportedSpeechSynthesis>>,
   { readonly ok: true }
 >['value'];
 export type WorkspaceChooseDirectoryResponse = Awaited<ReturnType<typeof chooseWorkspaceDirectory>>;

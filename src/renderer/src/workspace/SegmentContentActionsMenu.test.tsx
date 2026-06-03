@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   installWorkspaceBridgeForEntityActionTests,
   openEntityActionMenu,
 } from './entityActionMenuTestHelpers';
 import { SegmentContentActionsMenu } from './SegmentContentActionsMenu';
+import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 
 const reoWorkspace = {
   copySegmentAbsolutePath: vi.fn(),
@@ -25,7 +26,12 @@ function renderMenu(
     contentKind?: 'body' | 'transcript';
     clearDisabled?: boolean;
     onClear?: () => void;
+    onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
+    onRequestTranscriptionBackfill?: () => void;
     onRename?: () => void;
+    speechSynthesisDisabledReason?: string | null;
+    transcriptExists?: boolean;
+    transcriptionBackfillDisabledReason?: string | null;
   } = {}
 ) {
   render(
@@ -35,7 +41,12 @@ function renderMenu(
       contentKind={props.contentKind ?? 'transcript'}
       menuLabel="转录 更多操作"
       onClear={props.onClear ?? vi.fn()}
+      onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
+      onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onRename={props.onRename ?? vi.fn()}
+      speechSynthesisDisabledReason={props.speechSynthesisDisabledReason ?? null}
+      transcriptExists={props.transcriptExists ?? false}
+      transcriptionBackfillDisabledReason={props.transcriptionBackfillDisabledReason ?? null}
     />
   );
 }
@@ -50,10 +61,11 @@ describe('SegmentContentActionsMenu', () => {
     reoWorkspace.revealSegmentInFinder.mockResolvedValue({ ok: true });
   });
 
-  it('shows path, rename, and clear actions for a primary transcript tab', async () => {
+  it('shows path, transcript generation, rename, and clear actions for a primary transcript tab', async () => {
     const onClear = vi.fn();
     const onRename = vi.fn();
-    renderMenu({ onClear, onRename });
+    const onRequestTranscriptionBackfill = vi.fn();
+    renderMenu({ onClear, onRename, onRequestTranscriptionBackfill });
 
     const { user } = await openEntityActionMenu('转录 更多操作');
     screen.getByRole('menu', { name: '转录 更多操作' });
@@ -63,14 +75,18 @@ describe('SegmentContentActionsMenu', () => {
       '在访达中显示',
       '复制相对路径',
       '复制绝对路径',
+      '生成转录',
       '重命名',
       '清空转录',
     ]);
     expect(screen.queryByRole('menuitem', { name: '编辑转录' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '重新生成转录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole('menuitem', { name: '生成转录' }));
+    expect(onRequestTranscriptionBackfill).toHaveBeenCalledOnce();
+
+    await openEntityActionMenu('转录 更多操作');
     await user.click(screen.getByRole('menuitem', { name: '重命名' }));
     expect(onRename).toHaveBeenCalledOnce();
 
@@ -88,6 +104,19 @@ describe('SegmentContentActionsMenu', () => {
     expect(screen.queryByRole('menuitem', { name: '编辑正文' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '编辑转录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '清空转录' })).not.toBeInTheDocument();
+  });
+
+  it('requests primary body speech synthesis from the speaker submenu', async () => {
+    const onRequestSpeechSynthesis = vi.fn();
+    renderMenu({ contentKind: 'body', onRequestSpeechSynthesis });
+
+    const { user } = await openEntityActionMenu('转录 更多操作');
+    const item = screen.getByRole('menuitem', { name: '生成/重新生成语音' });
+    await user.click(item);
+    fireEvent.click(await screen.findByRole('menuitem', { name: '少年梓辛' }));
+
+    expect(onRequestSpeechSynthesis).toHaveBeenCalledWith('zh_male_shaonianzixin_uranus_bigtts');
+    expect(screen.queryByRole('menuitem', { name: '重新生成语音' })).not.toBeInTheDocument();
   });
 
   it('disables clear while the primary content has not loaded', async () => {

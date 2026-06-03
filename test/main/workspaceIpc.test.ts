@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
@@ -41,12 +42,19 @@ import {
   handleOpenWorkspaceMemorySpaceForTest,
   handleReadWorkspaceSnapshotForTest,
   handleReadSegmentContentForTest,
+  handleReadSegmentSpeechAudioForTest,
   handleReadSegmentSupplementContentForTest,
+  handleReadSegmentSupplementSpeechAudioForTest,
   handleReadFinalizedAudioSegmentForTest,
+  handleReadFinalizedAudioSegmentAudioForTest,
   handleReadFinalizedAudioSegmentSupplementForTest,
+  handleReadFinalizedAudioSegmentSupplementAudioForTest,
   handleReadMemoryDetailForTest,
   handleRequestSegmentTranscriptionBackfillForTest,
   handleRequestSegmentSupplementTranscriptionBackfillForTest,
+  handleRequestSegmentSpeechSynthesisForTest,
+  handleRequestSegmentSupplementSpeechSynthesisForTest,
+  handleRegenerateImportedSpeechSynthesisForTest,
   handleRevealMemoryInFinderForTest,
   handleRevealMemorySpaceInFinderForTest,
   handleRevealSegmentInFinderForTest,
@@ -75,6 +83,7 @@ import {
   handleSaveTranscriptForTest,
   handleSaveSegmentSupplementTranscriptForTest,
   handleSaveVoiceTranscriptionApiKeyForTest,
+  handleSetVoiceSpeechSynthesisSpeakerForTest,
   handleSetVoiceTranscriptionEnabledForTest,
   handleValidateVoiceTranscriptionCredentialsForTest,
   sendRecordingTranscriptionEventForTest,
@@ -100,6 +109,7 @@ import {
   initializeWorkspaceFiles,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
 } from '../../src/main/workspaceFiles.js';
+import { setBeforeAtomicWorkspaceFileCommitForTest } from '../../src/main/atomicWorkspaceFile.js';
 import {
   parseWorkspaceMarkdownObject,
   renderWorkspaceMarkdownObject,
@@ -114,6 +124,11 @@ import { findSegmentDirectoryById } from '../../src/main/memoryFiles.js';
 import { transcriptDigest } from '../../src/main/transcriptDigest.js';
 import { createWorkspaceSelectionTokenStore } from '../../src/main/workspaceSelectionTokens.js';
 import { createWorkspaceMemorySpaceRegistry } from '../../src/main/workspaceMemorySpaceRegistry.js';
+import {
+  markFinalizedNoteSegmentSpeechSynthesisFailed,
+  saveFinalizedNoteSegmentSpeechSynthesis,
+  setBeforeNoteSpeechSynthesisWriteForTest,
+} from '../../src/main/noteDrafts.js';
 import type {
   TrustedSenderEventAdapter,
   TrustedSenderIdentity,
@@ -187,6 +202,43 @@ function makeVoiceSettingsStoreForIpcTest() {
   return { files, safeStorage, store };
 }
 
+function expectedVoiceSettingsSnapshot(
+  overrides: Partial<ReturnType<ReturnType<typeof createVoiceSettingsStore>['read']>> = {}
+) {
+  return {
+    enabled: false,
+    apiKeyConfigured: false,
+    apiKeyLastFour: null,
+    speechSynthesisSpeaker: 'zh_female_vv_uranus_bigtts' as const,
+    lastTranscriptionValidatedAt: null,
+    lastTranscriptionValidationOk: null,
+    lastTranscriptionValidationCode: null,
+    lastSpeechSynthesisValidatedAt: null,
+    lastSpeechSynthesisValidationOk: null,
+    lastSpeechSynthesisValidationCode: null,
+    ...overrides,
+  };
+}
+
+const missingSpeechSynthesis = {
+  status: 'missing' as const,
+  audioByteLength: null,
+  contentHash: null,
+  format: null,
+  lastSynthesisAttempt: 'never' as const,
+  mimeType: null,
+  model: null,
+  reason: null,
+  resourceId: null,
+  sampleRate: null,
+  speaker: null,
+  updatedAt: null,
+};
+
+function testAudioHash(audio: Uint8Array): string {
+  return createHash('sha256').update(audio).digest('hex');
+}
+
 function randomUUIDForTest() {
   return Math.random().toString(16).slice(2);
 }
@@ -248,14 +300,14 @@ test('voice settings IPC read returns snapshot without key or ciphertext', async
 
   assert.equal(response.ok, true);
   if (response.ok) {
-    assert.deepEqual(response.value.settings, {
-      enabled: true,
-      apiKeyConfigured: true,
-      apiKeyLastFour: 'CRET',
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(
+      response.value.settings,
+      expectedVoiceSettingsSnapshot({
+        enabled: true,
+        apiKeyConfigured: true,
+        apiKeyLastFour: 'CRET',
+      })
+    );
   }
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
   assert.equal(JSON.stringify(response).includes('enc:'), false);
@@ -342,14 +394,7 @@ test('voice settings IPC write channels reject untrusted senders before side eff
     }
   }
 
-  assert.deepEqual(store.read(), {
-    enabled: false,
-    apiKeyConfigured: false,
-    apiKeyLastFour: null,
-    lastValidatedAt: null,
-    lastValidationOk: null,
-    lastValidationCode: null,
-  });
+  assert.deepEqual(store.read(), expectedVoiceSettingsSnapshot());
   assert.equal(probeCalls, 0);
   assert.equal(openedUrls, 0);
 });
@@ -379,6 +424,44 @@ test('voice settings IPC setEnabled validates payload and toggles independently 
   assert.equal(JSON.stringify(enabled).includes('abcd1234SECRET'), false);
 });
 
+test('voice settings IPC setSpeechSynthesisSpeaker validates official speaker ids and returns settings', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  await store.setEnabled(true);
+  await store.writeApiKey('abcd1234SECRET');
+  let probeCall: { readonly apiKey: string; readonly speaker: string } | null = null;
+
+  const invalid = await handleSetVoiceSpeechSynthesisSpeakerForTest({
+    ...voiceIpcBaseOptions({ speaker: 'zh_female_unknown_bigtts' }),
+    store,
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) {
+    assert.equal(invalid.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
+  }
+
+  const response = await handleSetVoiceSpeechSynthesisSpeakerForTest({
+    ...voiceIpcBaseOptions({ speaker: 'zh_male_shaonianzixin_uranus_bigtts' }),
+    store,
+    speechSynthesisProbe: async ({ apiKey, speaker }) => {
+      probeCall = { apiKey, speaker };
+      return { code: 'ok', ok: true };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(
+      response.value.settings.speechSynthesisSpeaker,
+      'zh_male_shaonianzixin_uranus_bigtts'
+    );
+    assert.equal(response.value.settings.lastSpeechSynthesisValidationCode, 'ok');
+  }
+  assert.deepEqual(probeCall, {
+    apiKey: 'abcd1234SECRET',
+    speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+  });
+});
+
 test('voice settings IPC saveApiKey writes before probe and records ok auth network branches', async () => {
   for (const code of ['ok', 'auth', 'network'] as const) {
     const { store } = makeVoiceSettingsStoreForIpcTest();
@@ -402,9 +485,9 @@ test('voice settings IPC saveApiKey writes before probe and records ok auth netw
     if (response.ok) {
       assert.equal(response.value.settings.apiKeyConfigured, true);
       assert.equal(response.value.settings.apiKeyLastFour, 'CRET');
-      assert.equal(response.value.settings.lastValidationCode, code);
+      assert.equal(response.value.settings.lastTranscriptionValidationCode, code);
       assert.equal(
-        response.value.settings.lastValidationOk,
+        response.value.settings.lastTranscriptionValidationOk,
         code === 'ok' ? true : code === 'auth' ? false : null
       );
       assert.deepEqual(Object.keys(response.value), ['settings']);
@@ -430,6 +513,26 @@ test('voice settings IPC saveApiKey probes the same trimmed key that it persists
   assert.equal(store.readDecryptedApiKey(), 'abcd1234SECRET');
 });
 
+test('voice settings IPC saveApiKey records speech synthesis validation separately', async () => {
+  const { store } = makeVoiceSettingsStoreForIpcTest();
+  const response = await handleSaveVoiceTranscriptionApiKeyForTest({
+    ...voiceIpcBaseOptions({ apiKey: 'abcd1234SECRET' }),
+    store,
+    probe: async () => ({ code: 'auth' as const, ok: false as const }),
+    speechSynthesisProbe: async ({ apiKey, speaker }) => {
+      assert.equal(apiKey, 'abcd1234SECRET');
+      assert.equal(speaker, 'zh_female_vv_uranus_bigtts');
+      return { code: 'ok' as const, ok: true as const };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(response.value.settings.lastTranscriptionValidationCode, 'auth');
+    assert.equal(response.value.settings.lastSpeechSynthesisValidationCode, 'ok');
+  }
+});
+
 test('voice settings IPC saveApiKey ignores stale probe results after key changes', async () => {
   const { store } = makeVoiceSettingsStoreForIpcTest();
   const response = await handleSaveVoiceTranscriptionApiKeyForTest({
@@ -444,7 +547,7 @@ test('voice settings IPC saveApiKey ignores stale probe results after key change
   assert.equal(response.ok, true);
   assert.equal(store.readDecryptedApiKey(), 'second5678SECRET');
   assert.equal(store.read().apiKeyLastFour, 'CRET');
-  assert.equal(store.read().lastValidationCode, null);
+  assert.equal(store.read().lastTranscriptionValidationCode, null);
 });
 
 test('voice settings IPC saveApiKey reports validation persistence failures without leaking key', async () => {
@@ -454,7 +557,7 @@ test('voice settings IPC saveApiKey reports validation persistence failures with
     ...voiceIpcBaseOptions({ apiKey }),
     store: {
       ...store,
-      recordValidation: async () => {
+      recordTranscriptionValidation: async () => {
         throw new Error(`write failed for ${apiKey}`);
       },
     },
@@ -494,7 +597,7 @@ test('voice settings IPC saveApiKey maps storage failures without leaking key', 
 test('voice settings IPC clearApiKey wipes key and validation state', async () => {
   const { store } = makeVoiceSettingsStoreForIpcTest();
   await store.writeApiKey('abcd1234SECRET');
-  await store.recordValidation({ apiKey: 'abcd1234SECRET', code: 'auth' });
+  await store.recordTranscriptionValidation({ apiKey: 'abcd1234SECRET', code: 'auth' });
 
   const response = await handleClearVoiceTranscriptionApiKeyForTest({
     ...voiceIpcBaseOptions(),
@@ -503,14 +606,7 @@ test('voice settings IPC clearApiKey wipes key and validation state', async () =
 
   assert.equal(response.ok, true);
   if (response.ok) {
-    assert.deepEqual(response.value.settings, {
-      enabled: false,
-      apiKeyConfigured: false,
-      apiKeyLastFour: null,
-      lastValidatedAt: null,
-      lastValidationOk: null,
-      lastValidationCode: null,
-    });
+    assert.deepEqual(response.value.settings, expectedVoiceSettingsSnapshot());
   }
 });
 
@@ -542,8 +638,8 @@ test('voice settings IPC validate reads decrypted key only in main and handles m
   if (response.ok) {
     assert.equal(response.value.code, 'network');
   }
-  assert.equal(store.read().lastValidationOk, null);
-  assert.equal(store.read().lastValidationCode, 'network');
+  assert.equal(store.read().lastTranscriptionValidationOk, null);
+  assert.equal(store.read().lastTranscriptionValidationCode, 'network');
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
 });
 
@@ -565,7 +661,7 @@ test('voice settings IPC validate rejects stale probe results after key changes'
     assert.equal(response.error.code, 'ERR_VOICE_TRANSCRIPTION_PROBE_FAILED');
   }
   assert.equal(store.readDecryptedApiKey(), 'second5678SECRET');
-  assert.equal(store.read().lastValidationCode, null);
+  assert.equal(store.read().lastTranscriptionValidationCode, null);
 });
 
 test('voice settings IPC validate reports validation persistence failures without leaking key', async () => {
@@ -576,7 +672,7 @@ test('voice settings IPC validate reports validation persistence failures withou
     ...voiceIpcBaseOptions(),
     store: {
       ...store,
-      recordValidation: async () => {
+      recordTranscriptionValidation: async () => {
         throw new Error('write failed for abcd1234SECRET');
       },
     },
@@ -1498,6 +1594,173 @@ test('request supplement backfill IPC forwards mode and rejects missing mode as 
   }
 });
 
+test('request speech synthesis IPC forwards segment and supplement mode through validated ownership', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-speech-mode-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const calls: unknown[] = [];
+  const speechSynthesisRuntime = {
+    requestSegmentSpeechSynthesis: async (input: unknown) => {
+      calls.push(input);
+      return { ok: true as const, value: { speechSynthesis: missingSpeechSynthesis } };
+    },
+    requestSupplementSpeechSynthesis: async (input: unknown) => {
+      calls.push(input);
+      return { ok: true as const, value: { speechSynthesis: missingSpeechSynthesis } };
+    },
+  };
+
+  const segment = await handleRequestSegmentSpeechSynthesisForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      mode: 'fill-missing',
+      speaker: 'zh_male_m191_uranus_bigtts',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    speechSynthesisRuntime: speechSynthesisRuntime as never,
+  });
+  const supplement = await handleRequestSegmentSupplementSpeechSynthesisForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      mode: 'regenerate',
+      speaker: 'zh_female_xiaohe_uranus_bigtts',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    speechSynthesisRuntime: speechSynthesisRuntime as never,
+  });
+
+  assert.equal(segment.ok, true);
+  assert.equal(supplement.ok, true);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(
+    calls.map((call) =>
+      call && typeof call === 'object'
+        ? {
+            memoryId: 'memoryId' in call ? call.memoryId : undefined,
+            mode: 'mode' in call ? call.mode : undefined,
+            rootPath: 'rootPath' in call ? call.rootPath : undefined,
+            segmentId: 'segmentId' in call ? call.segmentId : undefined,
+            speaker: 'speaker' in call ? call.speaker : undefined,
+            supplementId: 'supplementId' in call ? call.supplementId : undefined,
+            workspaceId: 'workspaceId' in call ? call.workspaceId : undefined,
+          }
+        : null
+    ),
+    [
+      {
+        memoryId: 'mem_1',
+        mode: 'fill-missing',
+        rootPath,
+        segmentId: 'seg_1',
+        speaker: 'zh_male_m191_uranus_bigtts',
+        supplementId: undefined,
+        workspaceId: 'ws_ipc',
+      },
+      {
+        memoryId: 'mem_1',
+        mode: 'regenerate',
+        rootPath,
+        segmentId: 'seg_1',
+        speaker: 'zh_female_xiaohe_uranus_bigtts',
+        supplementId: 'sup_1',
+        workspaceId: 'ws_ipc',
+      },
+    ]
+  );
+});
+
+test('regenerate imported speech synthesis IPC forwards active workspace and selected speaker', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-speech-batch-'));
+  const handleStore = createRegisteredHandleStore(rootPath);
+  const calls: unknown[] = [];
+  const speechSynthesisRuntime = {
+    regenerateWorkspaceSpeechSynthesis: async (input: unknown) => {
+      calls.push(input);
+      return {
+        failed: 0,
+        failedTargets: [],
+        generated: 1,
+        skipped: 0,
+        speaker: 'zh_male_shaonianzixin_uranus_bigtts' as const,
+        total: 1,
+      };
+    },
+  };
+  const memorySpaceRegistry = {
+    listMemorySpaces: async () => [
+      {
+        addedAt: '2026-06-02T13:00:00.000Z',
+        description: '',
+        lastOpenedAt: '2026-06-02T13:01:00.000Z',
+        title: 'Workspace',
+        workspaceId: 'ws_ipc',
+      },
+    ],
+    resolveMemorySpace: async () => null,
+    resolveMemorySpaceRoot: async () => null,
+    removeMemorySpace: async () => {},
+    updateMemorySpaceSnapshot: async () => {
+      throw new Error('unused');
+    },
+    upsertMemorySpace: async () => {
+      throw new Error('unused');
+    },
+  };
+
+  const response = await handleRegenerateImportedSpeechSynthesisForTest({
+    event,
+    input: {
+      activeWorkspace: {
+        workspaceHandle: 'wh_ipc',
+        workspaceId: 'ws_ipc',
+      },
+      mode: 'all',
+      speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    handleStore,
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    memorySpaceRegistry,
+    speechSynthesisRuntime: speechSynthesisRuntime as never,
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  assert.deepEqual(
+    call && typeof call === 'object'
+      ? {
+          rootPath: 'rootPath' in call ? call.rootPath : undefined,
+          speaker: 'speaker' in call ? call.speaker : undefined,
+          workspaceHandle: 'workspaceHandle' in call ? call.workspaceHandle : undefined,
+          workspaceId: 'workspaceId' in call ? call.workspaceId : undefined,
+        }
+      : null,
+    {
+      rootPath,
+      speaker: 'zh_male_shaonianzixin_uranus_bigtts',
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+    }
+  );
+  assert.equal(response.value.generated, 1);
+});
+
 test('closeRecordingTranscription clears an active ASR session after workspace lock is lost', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-close-asr-lock-lost-'));
   const handleStore = createRegisteredHandleStore(rootPath, () => false);
@@ -2293,7 +2556,7 @@ test('readMemoryDetail returns current Memory segments without exposing handle o
   }
 });
 
-test('readFinalizedAudioSegment returns audio bytes and transcript without exposing file paths', async () => {
+test('readFinalizedAudioSegment returns transcript projection without exposing file paths or audio bytes', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -2340,7 +2603,6 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     assert.equal(result.value.workspaceId, 'ws_ipc');
     assert.equal(result.value.memoryId, 'mem_ipc_audio');
     assert.equal(result.value.segmentId, 'seg_ipc_audio');
-    assert.deepEqual(Array.from(result.value.audio), [1, 2, 3]);
     assert.equal(result.value.audioByteLength, 3);
     assert.equal(result.value.transcript.exists, true);
     assert.equal(result.value.transcript.text, '大家一起唱生日快乐。');
@@ -2358,9 +2620,36 @@ test('readFinalizedAudioSegment returns audio bytes and transcript without expos
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
   }
+
+  const audioResult = await handleReadFinalizedAudioSegmentAudioForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      requestId: 'request_seg_ipc_audio_bytes',
+      audioByteLength: 3,
+      audioHash: result.ok ? result.value.audioHash : null,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(audioResult.ok, true);
+  if (audioResult.ok) {
+    assert.equal(audioResult.value.requestId, 'request_seg_ipc_audio_bytes');
+    assert.deepEqual(Array.from(audioResult.value.audio), [1, 2, 3]);
+    assert.equal(audioResult.value.audioByteLength, 3);
+    assert.match(audioResult.value.audioHash, /^[a-f0-9]{64}$/);
+    assert.equal('workspaceHandle' in audioResult.value, false);
+    assert.equal('rootPath' in audioResult.value, false);
+  }
 });
 
-test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and transcript without exposing paths', async () => {
+test('readFinalizedAudioSegmentSupplement returns parent-scoped transcript projection without exposing paths or audio bytes', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-finalized-supplement-audio-'));
   await initializeWorkspaceFiles({
     rootPath,
@@ -2421,7 +2710,6 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     assert.equal(result.value.memoryId, 'mem_ipc_audio');
     assert.equal(result.value.segmentId, 'seg_ipc_audio');
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
-    assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
     assert.equal(result.value.transcript.exists, true);
     assert.equal(result.value.transcript.text, '补充录音转写正文');
@@ -2438,6 +2726,34 @@ test('readFinalizedAudioSegmentSupplement returns parent-scoped audio bytes and 
     assert.match(result.value.transcript.baselineTiptapContentHash, /^[a-f0-9]{64}$/);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
+  }
+
+  const audioResult = await handleReadFinalizedAudioSegmentSupplementAudioForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup_audio',
+      audioByteLength: 2,
+      audioHash: result.ok ? result.value.audioHash : null,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+
+  assert.equal(audioResult.ok, true);
+  if (audioResult.ok) {
+    assert.equal(audioResult.value.requestId, 'request_sup_ipc_followup_audio');
+    assert.deepEqual(Array.from(audioResult.value.audio), [4, 5]);
+    assert.equal(audioResult.value.audioByteLength, 2);
+    assert.match(audioResult.value.audioHash, /^[a-f0-9]{64}$/);
+    assert.equal('workspaceHandle' in audioResult.value, false);
+    assert.equal('rootPath' in audioResult.value, false);
   }
 });
 
@@ -2593,7 +2909,6 @@ test('readFinalizedAudioSegmentSupplement returns empty transcript when suppleme
     assert.equal(result.value.memoryId, 'mem_ipc_audio');
     assert.equal(result.value.segmentId, 'seg_ipc_audio');
     assert.equal(result.value.supplementId, 'sup_ipc_followup');
-    assert.deepEqual(Array.from(result.value.audio), [4, 5]);
     assert.equal(result.value.audioByteLength, 2);
     assert.equal(result.value.transcript.exists, false);
     assert.equal(result.value.transcript.text, '');
@@ -2602,6 +2917,28 @@ test('readFinalizedAudioSegmentSupplement returns empty transcript when suppleme
     assert.match(result.value.transcript.baselineTiptapContentHash, /^[a-f0-9]{64}$/);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
+  }
+  const audioResult = await handleReadFinalizedAudioSegmentSupplementAudioForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup_audio',
+      audioByteLength: 2,
+      audioHash: result.ok ? result.value.audioHash : null,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(audioResult.ok, true);
+  if (audioResult.ok) {
+    assert.deepEqual(Array.from(audioResult.value.audio), [4, 5]);
+    assert.equal(audioResult.value.audioByteLength, 2);
   }
 });
 
@@ -2661,10 +2998,31 @@ test('readFinalizedAudioSegmentSupplement reads renamed supplement file-space no
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.deepEqual(Array.from(result.value.audio), [7, 8, 9]);
     assert.equal(result.value.audioByteLength, 3);
     assert.equal('workspaceHandle' in result.value, false);
     assert.equal('rootPath' in result.value, false);
+  }
+  const audioResult = await handleReadFinalizedAudioSegmentSupplementAudioForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_audio',
+      segmentId: 'seg_ipc_audio',
+      supplementId: 'sup_ipc_followup',
+      requestId: 'request_sup_ipc_followup_audio',
+      audioByteLength: 3,
+      audioHash: result.ok ? result.value.audioHash : null,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(audioResult.ok, true);
+  if (audioResult.ok) {
+    assert.deepEqual(Array.from(audioResult.value.audio), [7, 8, 9]);
+    assert.equal(audioResult.value.audioByteLength, 3);
   }
 });
 
@@ -2934,7 +3292,211 @@ test('note content IPC creates drafts, finalizes, and reads and writes markdown 
       read.value.baselineContentHash,
       'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029'
     );
+    assert.equal(read.value.speechSynthesis.status, 'missing');
   }
+
+  const markedUnsupportedSpeech = await markFinalizedNoteSegmentSpeechSynthesisFailed({
+    rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_note',
+    segmentId: 'seg_ipc_note',
+    expectedContentHash: read.ok
+      ? read.value.baselineContentHash
+      : 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
+    speaker: 'zh_female_vv_uranus_bigtts',
+    reason: 'text-too-long',
+    now: () => '2026-05-19T13:11:20.000Z',
+  });
+  assert.equal(
+    markedUnsupportedSpeech.ok,
+    true,
+    markedUnsupportedSpeech.ok ? undefined : JSON.stringify(markedUnsupportedSpeech.error)
+  );
+  if (markedUnsupportedSpeech.ok) {
+    assert.equal(markedUnsupportedSpeech.speechSynthesis.status, 'unsupported');
+    assert.equal(markedUnsupportedSpeech.speechSynthesis.reason, 'text-too-long');
+  }
+  const readUnsupportedSpeech = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      requestId: 'request_note_unsupported_speech',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(
+    readUnsupportedSpeech.ok,
+    true,
+    readUnsupportedSpeech.ok ? undefined : JSON.stringify(readUnsupportedSpeech.error)
+  );
+  if (readUnsupportedSpeech.ok) {
+    assert.equal(readUnsupportedSpeech.value.speechSynthesis.status, 'unsupported');
+    assert.equal(readUnsupportedSpeech.value.speechSynthesis.reason, 'text-too-long');
+  }
+
+  const segmentManifestPath = path.join(
+    rootPath,
+    '.reo',
+    'objects',
+    'segments',
+    'seg_ipc_note.json'
+  );
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_note');
+  const segmentSpeechAudio = new Uint8Array([1, 2, 3, 4]);
+  await writeFile(path.join(segmentDirectory, 'speech.mp3'), segmentSpeechAudio);
+  const segmentManifest = JSON.parse(await readFile(segmentManifestPath, 'utf8')) as Record<
+    string,
+    unknown
+  >;
+  const segmentSpeechSynthesis = {
+    audioByteLength: 4,
+    audioHash: testAudioHash(segmentSpeechAudio),
+    contentHash: 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
+    format: 'mp3',
+    lastSynthesisAttempt: 'success',
+    mimeType: 'audio/mpeg',
+    model: 'seed-tts-2.0-expressive',
+    resourceId: 'seed-tts-2.0',
+    sampleRate: 24000,
+    speaker: 'zh_female_vv_uranus_bigtts',
+    updatedAt: '2026-05-19T13:11:30.000Z',
+  };
+  segmentManifest['speechSynthesis'] = segmentSpeechSynthesis;
+  await writeFile(segmentManifestPath, `${JSON.stringify(segmentManifest, null, 2)}\n`, 'utf8');
+
+  const readWithSpeech = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      requestId: 'request_note_speech',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(
+    readWithSpeech.ok,
+    true,
+    readWithSpeech.ok ? undefined : JSON.stringify(readWithSpeech.error)
+  );
+  if (readWithSpeech.ok) {
+    assert.equal(readWithSpeech.value.speechSynthesis.status, 'ready');
+    const readSpeechAudio = await handleReadSegmentSpeechAudioForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_ipc',
+        workspaceId: 'ws_ipc',
+        memoryId: 'mem_ipc_note',
+        segmentId: 'seg_ipc_note',
+        requestId: 'request_note_speech_audio',
+        contentHash: readWithSpeech.value.speechSynthesis.contentHash,
+        audioByteLength: readWithSpeech.value.speechSynthesis.audioByteLength,
+        speaker: readWithSpeech.value.speechSynthesis.speaker,
+        updatedAt: readWithSpeech.value.speechSynthesis.updatedAt,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(
+      readSpeechAudio.ok,
+      true,
+      readSpeechAudio.ok ? undefined : JSON.stringify(readSpeechAudio.error)
+    );
+    if (readSpeechAudio.ok) {
+      assert.deepEqual(readSpeechAudio.value.audio, new Uint8Array([1, 2, 3, 4]));
+    }
+  }
+
+  let speechSaveCommitCount = 0;
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    speechSaveCommitCount += 1;
+    if (speechSaveCommitCount === 2) {
+      throw new Error('simulate speech manifest write failure');
+    }
+  });
+  try {
+    const failedSpeechSave = await saveFinalizedNoteSegmentSpeechSynthesis({
+      rootPath,
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      expectedContentHash: 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
+      audio: new Uint8Array([9, 9, 9, 9]),
+      speaker: 'zh_female_vv_uranus_bigtts',
+      now: () => '2026-05-19T13:11:45.000Z',
+    });
+    assert.equal(failedSpeechSave.ok, false);
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+  assert.equal(speechSaveCommitCount, 2);
+  assert.deepEqual(
+    Array.from(await readFile(path.join(segmentDirectory, 'speech.mp3'))),
+    [1, 2, 3, 4]
+  );
+  const segmentManifestAfterFailedSave = JSON.parse(
+    await readFile(segmentManifestPath, 'utf8')
+  ) as { readonly speechSynthesis?: { readonly updatedAt?: string } };
+  assert.equal(
+    segmentManifestAfterFailedSave.speechSynthesis?.updatedAt,
+    '2026-05-19T13:11:30.000Z'
+  );
+
+  let speechIndexRefreshCommitCount = 0;
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    speechIndexRefreshCommitCount += 1;
+    if (speechIndexRefreshCommitCount === 3) {
+      setBeforeAtomicWorkspaceFileCommitForTest(null);
+      throw new Error('simulate speech index refresh failure');
+    }
+  });
+  try {
+    const staleIndexSpeechSave = await saveFinalizedNoteSegmentSpeechSynthesis({
+      rootPath,
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      expectedContentHash: 'd2d81d7d8b59bf4b4a651e00562fd6844c0acf53315298d3253af764a50b4029',
+      audio: new Uint8Array([7, 7, 7, 7]),
+      speaker: 'zh_female_vv_uranus_bigtts',
+      now: () => '2026-05-19T13:11:50.000Z',
+    });
+    assert.equal(
+      staleIndexSpeechSave.ok,
+      true,
+      staleIndexSpeechSave.ok ? undefined : JSON.stringify(staleIndexSpeechSave.error)
+    );
+    if (staleIndexSpeechSave.ok) {
+      assert.equal(staleIndexSpeechSave.speechSynthesis.status, 'ready');
+      assert.equal(staleIndexSpeechSave.speechSynthesis.updatedAt, '2026-05-19T13:11:50.000Z');
+    }
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+  assert.equal(speechIndexRefreshCommitCount, 3);
+  assert.deepEqual(
+    Array.from(await readFile(path.join(segmentDirectory, 'speech.mp3'))),
+    [7, 7, 7, 7]
+  );
+  const segmentManifestAfterStaleIndexSave = JSON.parse(
+    await readFile(segmentManifestPath, 'utf8')
+  ) as { readonly speechSynthesis?: { readonly updatedAt?: string } };
+  assert.equal(
+    segmentManifestAfterStaleIndexSave.speechSynthesis?.updatedAt,
+    '2026-05-19T13:11:50.000Z'
+  );
 
   const saved = await handleWriteSegmentContentForTest({
     event,
@@ -2962,6 +3524,97 @@ test('note content IPC creates drafts, finalizes, and reads and writes markdown 
       saved.value.baselineContentHash,
       '47e6abbb77864874ec6e52fa84dda332fa06bcf2b5e8e2f25961bdcca4bb45fb'
     );
+  }
+
+  const readStaleSpeech = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      requestId: 'request_note_stale_speech',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(readStaleSpeech.ok, true);
+  if (readStaleSpeech.ok) {
+    assert.equal(readStaleSpeech.value.speechSynthesis.status, 'stale');
+    const staleSpeechSynthesis = readStaleSpeech.value.speechSynthesis;
+    assert.ok(staleSpeechSynthesis.contentHash);
+    assert.ok(staleSpeechSynthesis.audioByteLength !== null);
+    assert.ok(staleSpeechSynthesis.speaker);
+    assert.ok(staleSpeechSynthesis.updatedAt);
+    const readStaleAudio = await handleReadSegmentSpeechAudioForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_ipc',
+        workspaceId: 'ws_ipc',
+        memoryId: 'mem_ipc_note',
+        segmentId: 'seg_ipc_note',
+        requestId: 'request_note_stale_speech_audio',
+        contentHash: staleSpeechSynthesis.contentHash,
+        audioByteLength: staleSpeechSynthesis.audioByteLength,
+        speaker: staleSpeechSynthesis.speaker,
+        updatedAt: staleSpeechSynthesis.updatedAt,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(readStaleAudio.ok, true);
+    if (readStaleAudio.ok) {
+      assert.deepEqual(readStaleAudio.value.audio, new Uint8Array([7, 7, 7, 7]));
+    }
+  }
+
+  const cleared = await handleWriteSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      bodyMarkdown: '',
+      baselineContentHash: readStaleSpeech.ok
+        ? readStaleSpeech.value.baselineContentHash
+        : '47e6abbb77864874ec6e52fa84dda332fa06bcf2b5e8e2f25961bdcca4bb45fb',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:12:30.000Z',
+  });
+  assert.equal(cleared.ok, true);
+  await assert.rejects(() => readFile(path.join(segmentDirectory, 'speech.mp3')), {
+    code: 'ENOENT',
+  });
+  const segmentManifestAfterClear = JSON.parse(await readFile(segmentManifestPath, 'utf8')) as {
+    readonly speechSynthesis?: unknown;
+  };
+  assert.equal(segmentManifestAfterClear.speechSynthesis, undefined);
+  const readClearedSpeech = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      requestId: 'request_note_cleared_speech',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(readClearedSpeech.ok, true);
+  if (readClearedSpeech.ok) {
+    assert.equal(readClearedSpeech.value.speechSynthesis.status, 'missing');
   }
 
   const supplementDraft = await handleCreateSegmentSupplementNoteDraftForTest({
@@ -3039,6 +3692,95 @@ test('note content IPC creates drafts, finalizes, and reads and writes markdown 
     );
   }
 
+  const supplementManifestPath = path.join(
+    rootPath,
+    '.reo',
+    'objects',
+    'supplements',
+    'sup_ipc_note.json'
+  );
+  const supplementDirectory = path.join(
+    await findSegmentDirectoryById(rootPath, 'seg_ipc_note'),
+    'supplements',
+    'sup_ipc_note--Final supplement note'
+  );
+  const supplementSpeechAudio = new Uint8Array([5, 6]);
+  await writeFile(path.join(supplementDirectory, 'speech.mp3'), supplementSpeechAudio);
+  const supplementManifest = JSON.parse(await readFile(supplementManifestPath, 'utf8')) as Record<
+    string,
+    unknown
+  >;
+  const supplementSpeechSynthesis = {
+    audioByteLength: 2,
+    audioHash: testAudioHash(supplementSpeechAudio),
+    contentHash: 'cd83ddfb49f07201f9d8c991fc3e691529c1fc0be063f0394d19d053d05fd5f3',
+    format: 'mp3',
+    lastSynthesisAttempt: 'success',
+    mimeType: 'audio/mpeg',
+    model: 'seed-tts-2.0-expressive',
+    resourceId: 'seed-tts-2.0',
+    sampleRate: 24000,
+    speaker: 'zh_female_vv_uranus_bigtts',
+    updatedAt: '2026-05-19T13:14:30.000Z',
+  };
+  supplementManifest['speechSynthesis'] = supplementSpeechSynthesis;
+  await writeFile(
+    supplementManifestPath,
+    `${JSON.stringify(supplementManifest, null, 2)}\n`,
+    'utf8'
+  );
+
+  const readSupplementWithSpeech = await handleReadSegmentSupplementContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_note',
+      segmentId: 'seg_ipc_note',
+      supplementId: 'sup_ipc_note',
+      requestId: 'request_sup_note_speech',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(
+    readSupplementWithSpeech.ok,
+    true,
+    readSupplementWithSpeech.ok ? undefined : JSON.stringify(readSupplementWithSpeech.error)
+  );
+  if (readSupplementWithSpeech.ok) {
+    assert.equal(readSupplementWithSpeech.value.speechSynthesis.status, 'ready');
+    const readSupplementSpeechAudio = await handleReadSegmentSupplementSpeechAudioForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_ipc',
+        workspaceId: 'ws_ipc',
+        memoryId: 'mem_ipc_note',
+        segmentId: 'seg_ipc_note',
+        supplementId: 'sup_ipc_note',
+        requestId: 'request_sup_note_speech_audio',
+        contentHash: readSupplementWithSpeech.value.speechSynthesis.contentHash,
+        audioByteLength: readSupplementWithSpeech.value.speechSynthesis.audioByteLength,
+        speaker: readSupplementWithSpeech.value.speechSynthesis.speaker,
+        updatedAt: readSupplementWithSpeech.value.speechSynthesis.updatedAt,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(
+      readSupplementSpeechAudio.ok,
+      true,
+      readSupplementSpeechAudio.ok ? undefined : JSON.stringify(readSupplementSpeechAudio.error)
+    );
+    if (readSupplementSpeechAudio.ok) {
+      assert.deepEqual(readSupplementSpeechAudio.value.audio, new Uint8Array([5, 6]));
+    }
+  }
+
   const savedSupplement = await handleWriteSegmentSupplementContentForTest({
     event,
     input: {
@@ -3062,6 +3804,163 @@ test('note content IPC creates drafts, finalizes, and reads and writes markdown 
   if (savedSupplement.ok) {
     assert.equal(savedSupplement.value.saved, true);
   }
+});
+
+test('note speech save is serialized with note body clearing', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-note-speech-queue-'));
+  await initializeWorkspaceFiles({
+    rootPath,
+    title: 'IPC note speech queue',
+    description: '',
+    createWorkspaceId: () => 'ws_ipc',
+    now: () => '2026-05-19T13:30:00.000Z',
+  });
+  const handleStore = createRegisteredHandleStore(rootPath);
+
+  const memory = await handleCreateMemoryForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      title: 'Note memory',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createMemoryId: () => 'mem_ipc_queue',
+    now: () => '2026-05-19T13:31:00.000Z',
+  });
+  assert.equal(memory.ok, true);
+
+  const draft = await handleCreateNoteSegmentDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_queue',
+      title: 'Draft note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    createSegmentId: () => 'seg_ipc_queue',
+    now: () => '2026-05-19T13:32:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+
+  const writeDraft = await handleWriteNoteSegmentDraftBodyForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      segmentId: 'seg_ipc_queue',
+      bodyMarkdown: 'Queued note body\n',
+      revision: 0,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(writeDraft.ok, true);
+
+  const finalized = await handleFinalizeNoteSegmentDraftForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_queue',
+      segmentId: 'seg_ipc_queue',
+      title: 'Final note',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:33:00.000Z',
+  });
+  assert.equal(finalized.ok, true);
+
+  const read = await handleReadSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_queue',
+      segmentId: 'seg_ipc_queue',
+      requestId: 'request_note_queue',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+  });
+  assert.equal(read.ok, true);
+  assert.equal(read.ok ? read.value.bodyMarkdown : '', 'Queued note body\n');
+  const baselineContentHash = read.ok ? read.value.baselineContentHash : '';
+
+  let resumeSpeechWrite!: () => void;
+  const speechWriteEntered = new Promise<void>((resolve) => {
+    setBeforeNoteSpeechSynthesisWriteForTest(async () => {
+      resolve();
+      await new Promise<void>((resume) => {
+        resumeSpeechWrite = resume;
+      });
+    });
+  });
+
+  const speechSave = saveFinalizedNoteSegmentSpeechSynthesis({
+    rootPath,
+    workspaceId: 'ws_ipc',
+    memoryId: 'mem_ipc_queue',
+    segmentId: 'seg_ipc_queue',
+    expectedContentHash: baselineContentHash,
+    audio: new Uint8Array([7, 7, 7, 7]),
+    speaker: 'zh_female_vv_uranus_bigtts',
+    now: () => '2026-05-19T13:34:00.000Z',
+  });
+
+  await speechWriteEntered;
+  let clearCompleted = false;
+  const clearBody = handleWriteSegmentContentForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      memoryId: 'mem_ipc_queue',
+      segmentId: 'seg_ipc_queue',
+      bodyMarkdown: '',
+      baselineContentHash,
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    now: () => '2026-05-19T13:35:00.000Z',
+  }).finally(() => {
+    clearCompleted = true;
+  });
+
+  await Promise.resolve();
+  assert.equal(clearCompleted, false);
+  resumeSpeechWrite();
+
+  try {
+    const [speechSaveResult, clearResult] = await Promise.all([speechSave, clearBody]);
+    assert.equal(speechSaveResult.ok, true);
+    assert.equal(clearResult.ok, true);
+  } finally {
+    setBeforeNoteSpeechSynthesisWriteForTest(null);
+  }
+
+  const segmentDirectory = await findSegmentDirectoryById(rootPath, 'seg_ipc_queue');
+  await assert.rejects(() => readFile(path.join(segmentDirectory, 'speech.mp3')), {
+    code: 'ENOENT',
+  });
+  const segmentManifestAfterClear = JSON.parse(
+    await readFile(path.join(rootPath, '.reo', 'objects', 'segments', 'seg_ipc_queue.json'), 'utf8')
+  ) as { readonly speechSynthesis?: unknown };
+  assert.equal(segmentManifestAfterClear.speechSynthesis, undefined);
 });
 
 test('recording finalize IPC forwards transcription attempt to durable manifest', async () => {

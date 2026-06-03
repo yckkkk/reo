@@ -5,15 +5,17 @@ import {
   createWaveformDataFromAudioBuffer,
   decodeAudioBytesToWaveformData,
   MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_MAX_BYTES,
+  MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_TIMEOUT_MS,
 } from './audioWaveform';
 
 afterEach(async () => {
+  vi.useRealTimers();
   await closeAudioWaveformDecoder();
   vi.unstubAllGlobals();
 });
 
 describe('audioWaveform', () => {
-  it('derives normalized peaks from decoded audio samples across channels', () => {
+  it('derives normalized RMS levels from decoded audio samples across channels', () => {
     const left = Float32Array.from([0, 0.2, -0.6, 0.1, 0.9, -0.4, 0.05, -0.8]);
     const right = Float32Array.from([0.8, -0.3, 0.1, -0.05, 0.2, -0.4, 0.3, -0.1]);
 
@@ -27,10 +29,10 @@ describe('audioWaveform', () => {
     );
 
     expect(waveform).toHaveLength(4);
-    expect(waveform[0]).toBeCloseTo(0.8 / 0.9, 4);
-    expect(waveform[1]).toBeCloseTo(0.6 / 0.9, 4);
+    expect(waveform[0]).toBeCloseTo(Math.sqrt(0.1925) / Math.sqrt(0.2925), 4);
+    expect(waveform[1]).toBeCloseTo(Math.sqrt(0.095625) / Math.sqrt(0.2925), 4);
     expect(waveform[2]).toBe(1);
-    expect(waveform[3]).toBeCloseTo(0.8 / 0.9, 4);
+    expect(waveform[3]).toBeCloseTo(Math.sqrt(0.185625) / Math.sqrt(0.2925), 4);
   });
 
   it('keeps silence silent instead of generating placeholder bars', () => {
@@ -44,6 +46,36 @@ describe('audioWaveform', () => {
     );
 
     expect(waveform).toEqual([0, 0, 0]);
+  });
+
+  it('samples long decoded audio with a bounded number of reads per waveform bar', () => {
+    const samples = Float32Array.from({ length: 12_000 }, (_value, index) =>
+      index % 2 === 0 ? 0.9 : 0.1
+    );
+    const accessedSamples = new Set<number>();
+    const sparseSamples = new Proxy(samples, {
+      get(target, prop) {
+        if (typeof prop === 'string') {
+          const index = Number(prop);
+          if (Number.isInteger(index) && index >= 0) {
+            accessedSamples.add(index);
+          }
+        }
+        return Reflect.get(target, prop, target);
+      },
+    });
+
+    const waveform = createWaveformDataFromAudioBuffer(
+      {
+        length: samples.length,
+        numberOfChannels: 1,
+        getChannelData: () => sparseSamples,
+      },
+      3
+    );
+
+    expect(waveform).toHaveLength(3);
+    expect(accessedSamples.size).toBeLessThan(samples.length / 2);
   });
 
   it('decodes the exact finalized audio byte range before peak extraction', async () => {
@@ -63,7 +95,8 @@ describe('audioWaveform', () => {
     const slicedBytes = sourceBuffer.subarray(1, 4);
     const waveform = await decodeAudioBytesToWaveformData(slicedBytes, 2);
 
-    expect(waveform).toEqual([0.5, 1]);
+    expect(waveform[0]).toBeCloseTo(Math.sqrt(0.125) / Math.sqrt(0.53125), 4);
+    expect(waveform[1]).toBe(1);
     expect(decodeAudioData).toHaveBeenCalledWith(expect.any(ArrayBuffer));
     const decodedBuffer = decodeAudioData.mock.calls[0]?.[0];
     if (!(decodedBuffer instanceof ArrayBuffer)) {
@@ -120,6 +153,25 @@ describe('audioWaveform', () => {
 
     await closeAudioWaveformDecoder();
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out stalled WebAudio waveform decodes', async () => {
+    vi.useFakeTimers();
+    const decodeAudioData = vi.fn(() => new Promise<AudioBuffer>(() => {}));
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return { close: vi.fn(async () => undefined), decodeAudioData };
+    });
+    vi.stubGlobal('AudioContext', AudioContextMock);
+
+    const decodePromise = decodeAudioBytesToWaveformData(new Uint8Array([1, 2, 3]), 1);
+    const rejectionExpectation = expect(decodePromise).rejects.toThrow(
+      'Audio waveform decode timed out.'
+    );
+
+    await vi.advanceTimersByTimeAsync(MEMORY_STUDIO_PLAYBACK_WAVEFORM_DECODE_TIMEOUT_MS);
+
+    await rejectionExpectation;
+    expect(decodeAudioData).toHaveBeenCalledOnce();
   });
 
   it('caps decoded waveform input size before WebAudio expansion', () => {

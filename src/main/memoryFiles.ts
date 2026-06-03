@@ -17,7 +17,7 @@ import {
 import { lstat, open, opendir, readdir, realpath, utimes } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import {
@@ -52,6 +52,7 @@ import {
 } from './workspaceMarkdownObjects.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
 import { readMemoryCoverProjectionFromDirectory } from './memoryCovers.js';
+import { noteSpeechSynthesisManifestSchema } from './noteSpeechSynthesisManifest.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
@@ -72,6 +73,7 @@ import {
   SEGMENT_ID_PATTERN,
   isSafeWorkspaceDirectoryName,
   lastTranscriptionAttemptSchema,
+  workspaceContentHashSchema,
   workspaceError,
   type FinalizeTranscriptionAttempt,
   type LastTranscriptionAttempt,
@@ -158,6 +160,7 @@ interface AudioSegmentObjectManifest {
   readonly durationMs: number;
   readonly nextSequence: number;
   readonly audioByteLength: number;
+  readonly audioHash?: string | null | undefined;
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
   readonly contentTabOrder?: readonly WorkspaceSegmentContentTabOrderItem[] | undefined;
 }
@@ -192,6 +195,7 @@ interface AudioSupplementObjectManifest {
   readonly durationMs: number;
   readonly nextSequence: number;
   readonly audioByteLength: number;
+  readonly audioHash?: string | null | undefined;
   readonly lastTranscriptionAttempt?: ManifestLastTranscriptionAttempt;
 }
 
@@ -255,6 +259,7 @@ export interface MemorySegmentSummary {
   readonly title: string;
   readonly durationMs: number;
   readonly audioByteLength: number;
+  readonly audioHash?: string | null;
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
 }
 
@@ -785,6 +790,48 @@ function deriveLastTranscriptionAttempt(manifest: {
   return manifest.lastTranscriptionAttempt ?? 'never';
 }
 
+function hashWorkspaceFileDescriptor(fd: number, byteLength: number): string {
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(Math.min(COPY_BUFFER_BYTES, Math.max(byteLength, 1)));
+  let offset = 0;
+
+  while (offset < byteLength) {
+    const bytesRead = readSync(
+      fd,
+      buffer,
+      0,
+      Math.min(buffer.byteLength, byteLength - offset),
+      offset
+    );
+    if (bytesRead <= 0) {
+      break;
+    }
+    hash.update(buffer.subarray(0, bytesRead));
+    offset += bytesRead;
+  }
+
+  if (offset !== byteLength) {
+    throw new Error('Workspace audio hash read did not cover the full payload');
+  }
+
+  return hash.digest('hex');
+}
+
+function readWorkspaceAudioDescriptor(
+  fd: number,
+  unsafeMessage: string
+): { readonly byteLength: number; readonly hash: string } {
+  const audio = fstatSync(fd);
+  if (!audio.isFile()) {
+    throw new Error(unsafeMessage);
+  }
+
+  return {
+    byteLength: audio.size,
+    hash: hashWorkspaceFileDescriptor(fd, audio.size),
+  };
+}
+
 function initialFinalizeTranscriptionAttempt(
   value: FinalizeTranscriptionAttempt | undefined
 ): FinalizeTranscriptionAttempt {
@@ -810,12 +857,14 @@ const audioSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend(
   durationMs: z.number().int().nonnegative(),
   nextSequence: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
+  audioHash: workspaceContentHashSchema.nullable().optional(),
   lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
 });
 
 const noteSegmentObjectManifestSchema = segmentObjectManifestBaseSchema.extend({
   kind: z.literal('note'),
   bodyByteLength: z.number().int().nonnegative(),
+  speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
 });
 
 const segmentObjectManifestSchema = z.discriminatedUnion('kind', [
@@ -842,12 +891,14 @@ const audioSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.e
   durationMs: z.number().int().nonnegative(),
   nextSequence: z.number().int().nonnegative(),
   audioByteLength: z.number().int().nonnegative(),
+  audioHash: workspaceContentHashSchema.nullable().optional(),
   lastTranscriptionAttempt: lastTranscriptionAttemptSchema.optional(),
 });
 
 const noteSupplementObjectManifestSchema = supplementObjectManifestBaseSchema.extend({
   kind: z.literal('note'),
   bodyByteLength: z.number().int().nonnegative(),
+  speechSynthesis: noteSpeechSynthesisManifestSchema.optional(),
 });
 
 const supplementObjectManifestSchema = z.discriminatedUnion('kind', [
@@ -2257,6 +2308,82 @@ async function writeSupplementObjectManifest({
   );
 }
 
+export async function repairFinalizedSegmentAudioHash({
+  assertWorkspaceUsable: assertUsable,
+  audioByteLength,
+  audioHash,
+  memoryId,
+  rootPath,
+  segmentId,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly audioByteLength: number;
+  readonly audioHash: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+}): Promise<void> {
+  const manifestPath = await segmentObjectManifestPath(rootPath, segmentId);
+  const manifest = segmentObjectManifestSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(manifestPath))
+  );
+  if (
+    manifest.kind !== 'audio' ||
+    manifest.memoryId !== memoryId ||
+    manifest.segmentId !== segmentId ||
+    manifest.audioByteLength !== audioByteLength ||
+    manifest.audioHash
+  ) {
+    return;
+  }
+  await writeWorkspaceJsonAtomic(
+    manifestPath,
+    { ...manifest, audioHash },
+    workspaceAtomicWriteAssert(assertUsable)
+  );
+}
+
+export async function repairFinalizedSegmentSupplementAudioHash({
+  assertWorkspaceUsable: assertUsable,
+  audioByteLength,
+  audioHash,
+  memoryId,
+  rootPath,
+  segmentId,
+  supplementId,
+  workspaceId,
+}: {
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly audioByteLength: number;
+  readonly audioHash: string;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  const manifestPath = await supplementObjectManifestPath(rootPath, supplementId);
+  const manifest = supplementObjectManifestSchema.parse(
+    JSON.parse(await readWorkspaceTextFile(manifestPath))
+  );
+  if (
+    manifest.kind !== 'audio' ||
+    manifest.workspaceId !== workspaceId ||
+    manifest.memoryId !== memoryId ||
+    manifest.segmentId !== segmentId ||
+    manifest.supplementId !== supplementId ||
+    manifest.audioByteLength !== audioByteLength ||
+    manifest.audioHash
+  ) {
+    return;
+  }
+  await writeWorkspaceJsonAtomic(
+    manifestPath,
+    { ...manifest, audioHash },
+    workspaceAtomicWriteAssert(assertUsable)
+  );
+}
+
 async function markTranscriptionAttemptSuccess<
   T extends SegmentObjectManifest | SupplementObjectManifest,
 >({
@@ -3573,6 +3700,7 @@ async function summarizeRecording(
     title: fileTruth.metadata.title,
     durationMs: fileTruth.metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
+    audioHash: fileTruth.metadata.audioHash ?? null,
     lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
   };
 }
@@ -5008,6 +5136,7 @@ export async function readFinalizedSegmentAudioProjection(input: {
   readonly segmentId: string;
 }): Promise<{
   readonly audioByteLength: number;
+  readonly audioHash: string | null;
   readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
   readonly transcript: { readonly exists: boolean };
 }> {
@@ -5022,10 +5151,59 @@ export async function readFinalizedSegmentAudioProjection(input: {
 
   return {
     audioByteLength: fileTruth.audioByteLength,
+    audioHash: fileTruth.metadata.audioHash ?? null,
     lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
     transcript: {
       exists: extractSegmentTranscript(fileTruth.metadata.markdownContent).length > 0,
     },
+  };
+}
+
+export async function readFinalizedSegmentSupplementAudioProjection(input: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<{
+  readonly audioByteLength: number;
+  readonly audioHash: string | null;
+  readonly lastTranscriptionAttempt: 'failed' | 'never' | 'success';
+}> {
+  const supplementDirectory = await segmentSupplementDirectory(
+    input.rootPath,
+    input.memoryId,
+    input.segmentId,
+    input.supplementId
+  );
+  const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
+  const metadata = await readFinalizedSegmentSupplementMetadata(
+    input.rootPath,
+    supplementDirectory,
+    supplementDirectoryIdentity
+  );
+  if (
+    metadata.kind !== 'audio' ||
+    metadata.workspaceId !== input.workspaceId ||
+    metadata.memoryId !== input.memoryId ||
+    metadata.segmentId !== input.segmentId ||
+    metadata.supplementId !== input.supplementId
+  ) {
+    throw new Error('Finalized segment supplement projection does not match file truth');
+  }
+  const audioByteLength = readFileSizeInKnownDirectory(
+    supplementDirectory,
+    supplementDirectoryIdentity,
+    'audio.webm'
+  );
+  if (metadata.audioByteLength !== audioByteLength) {
+    throw new Error('Finalized segment supplement projection does not match file truth');
+  }
+
+  return {
+    audioByteLength,
+    audioHash: metadata.audioHash ?? null,
+    lastTranscriptionAttempt: deriveLastTranscriptionAttempt(metadata),
   };
 }
 
@@ -5536,6 +5714,7 @@ export async function readFinalizedSegmentSummaryFromKnownDirectory({
     title: fileTruth.metadata.title,
     durationMs: fileTruth.metadata.durationMs,
     audioByteLength: fileTruth.audioByteLength,
+    audioHash: fileTruth.metadata.audioHash ?? null,
     lastTranscriptionAttempt: deriveLastTranscriptionAttempt(fileTruth.metadata),
   };
 }
@@ -6240,10 +6419,11 @@ async function writeFinalizedSegmentFiles({
     fileName: 'audio.webm',
     flags: constants.O_RDONLY | constants.O_NOFOLLOW,
   });
-  const audio = fstatSync(audioFd);
-  closeSync(audioFd);
-  if (!audio.isFile()) {
-    throw new Error('Recording audio path is unsafe');
+  let audioDescriptor: { readonly byteLength: number; readonly hash: string };
+  try {
+    audioDescriptor = readWorkspaceAudioDescriptor(audioFd, 'Recording audio path is unsafe');
+  } finally {
+    closeSync(audioFd);
   }
   const draftMetadata = draftSegmentMetadataSchema.parse(
     JSON.parse(
@@ -6257,7 +6437,7 @@ async function writeFinalizedSegmentFiles({
   if (
     draftMetadata.workspaceId !== workspaceId ||
     draftMetadata.segmentId !== segmentId ||
-    draftMetadata.audioByteLength !== audio.size
+    draftMetadata.audioByteLength !== audioDescriptor.byteLength
   ) {
     throw new Error('Draft segment metadata does not match file truth');
   }
@@ -6280,7 +6460,8 @@ async function writeFinalizedSegmentFiles({
     updatedAt: finalizedAt,
     durationMs,
     nextSequence: draftMetadata.nextSequence,
-    audioByteLength: audio.size,
+    audioByteLength: audioDescriptor.byteLength,
+    audioHash: audioDescriptor.hash,
     lastTranscriptionAttempt: initialFinalizeTranscriptionAttempt(
       lastTranscriptionAttemptOnFinalize
     ),
@@ -6318,10 +6499,14 @@ async function writeFinalizedSupplementFiles({
     fileName: 'audio.webm',
     flags: constants.O_RDONLY | constants.O_NOFOLLOW,
   });
-  const audio = fstatSync(audioFd);
-  closeSync(audioFd);
-  if (!audio.isFile()) {
-    throw new Error('Segment supplement audio path is unsafe');
+  let audioDescriptor: { readonly byteLength: number; readonly hash: string };
+  try {
+    audioDescriptor = readWorkspaceAudioDescriptor(
+      audioFd,
+      'Segment supplement audio path is unsafe'
+    );
+  } finally {
+    closeSync(audioFd);
   }
   const draftMetadata = draftSegmentSupplementMetadataSchema.parse(
     JSON.parse(
@@ -6337,7 +6522,7 @@ async function writeFinalizedSupplementFiles({
     draftMetadata.memoryId !== memoryId ||
     draftMetadata.segmentId !== segmentId ||
     draftMetadata.supplementId !== supplementId ||
-    draftMetadata.audioByteLength !== audio.size
+    draftMetadata.audioByteLength !== audioDescriptor.byteLength
   ) {
     throw new Error('Draft segment supplement metadata does not match file truth');
   }
@@ -6361,7 +6546,8 @@ async function writeFinalizedSupplementFiles({
     updatedAt: finalizedAt,
     durationMs,
     nextSequence: draftMetadata.nextSequence,
-    audioByteLength: audio.size,
+    audioByteLength: audioDescriptor.byteLength,
+    audioHash: audioDescriptor.hash,
     lastTranscriptionAttempt: initialFinalizeTranscriptionAttempt(
       lastTranscriptionAttemptOnFinalize
     ),

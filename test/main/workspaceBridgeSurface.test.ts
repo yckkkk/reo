@@ -41,6 +41,8 @@ const workspaceBridgeKeys = [
   'readMemoryDetail',
   'readFinalizedAudioSegment',
   'readFinalizedAudioSegmentSupplement',
+  'readFinalizedAudioSegmentAudio',
+  'readFinalizedAudioSegmentSupplementAudio',
   'createRecordingDraft',
   'createSegmentSupplementRecordingDraft',
   'createNoteSegmentDraft',
@@ -51,6 +53,8 @@ const workspaceBridgeKeys = [
   'finalizeSegmentSupplementNoteDraft',
   'readSegmentContent',
   'readSegmentSupplementContent',
+  'readSegmentSpeechAudio',
+  'readSegmentSupplementSpeechAudio',
   'writeSegmentContent',
   'writeSegmentSupplementContent',
   'saveSegmentAttachment',
@@ -74,6 +78,8 @@ const workspaceBridgeKeys = [
   'saveSegmentSupplementTranscript',
   'requestSegmentTranscriptionBackfill',
   'requestSegmentSupplementTranscriptionBackfill',
+  'requestSegmentSpeechSynthesis',
+  'requestSegmentSupplementSpeechSynthesis',
   'beginMicrophoneIntent',
   'clearMicrophoneIntent',
   'startRecordingTranscription',
@@ -82,6 +88,8 @@ const workspaceBridgeKeys = [
   'closeRecordingTranscription',
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
+  'setVoiceSpeechSynthesisSpeaker',
+  'regenerateImportedSpeechSynthesis',
   'saveVoiceTranscriptionApiKey',
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
@@ -112,6 +120,8 @@ const workspaceEntityActionBridgeKeys = [
 const applicationScopedBridgeContractKeys = [
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
+  'setVoiceSpeechSynthesisSpeaker',
+  'regenerateImportedSpeechSynthesis',
   'saveVoiceTranscriptionApiKey',
   'clearVoiceTranscriptionApiKey',
   'validateVoiceTranscriptionCredentials',
@@ -125,6 +135,8 @@ test('workspace bridge contract declares application-scoped methods before prelo
     [
       'readVoiceTranscriptionSettings',
       'setVoiceTranscriptionEnabled',
+      'setVoiceSpeechSynthesisSpeaker',
+      'regenerateImportedSpeechSynthesis',
       'saveVoiceTranscriptionApiKey',
       'clearVoiceTranscriptionApiKey',
       'validateVoiceTranscriptionCredentials',
@@ -217,6 +229,25 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     supplementId: 'sup_1',
     requestId: 'request_sup_1',
   });
+  await bridge.readFinalizedAudioSegmentAudio({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    requestId: 'request_seg_audio_1',
+    audioByteLength: 3,
+    audioHash: 'a'.repeat(64),
+  });
+  await bridge.readFinalizedAudioSegmentSupplementAudio({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    requestId: 'request_sup_audio_1',
+    audioByteLength: 2,
+    audioHash: 'b'.repeat(64),
+  });
   await bridge.createSegmentSupplementRecordingDraft({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -277,6 +308,29 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     segmentId: 'seg_1',
     supplementId: 'sup_1',
     requestId: 'request_sup_1',
+  });
+  await bridge.readSegmentSpeechAudio({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    requestId: 'request_seg_speech_1',
+    contentHash: 'a'.repeat(64),
+    audioByteLength: 3,
+    speaker: 'zh_female_vv_uranus_bigtts',
+    updatedAt: '2026-06-02T13:00:00.000Z',
+  });
+  await bridge.readSegmentSupplementSpeechAudio({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    requestId: 'request_sup_speech_1',
+    contentHash: 'b'.repeat(64),
+    audioByteLength: 4,
+    speaker: 'zh_male_m191_uranus_bigtts',
+    updatedAt: '2026-06-02T13:01:00.000Z',
   });
   await bridge.writeSegmentContent({
     workspaceHandle: 'wh_1',
@@ -378,6 +432,25 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     supplementId: 'sup_1',
     mode: 'regenerate',
   });
+  await bridge.requestSegmentSpeechSynthesis({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    mode: 'fill-missing',
+  });
+  await bridge.requestSegmentSupplementSpeechSynthesis({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    mode: 'regenerate',
+  });
+  await bridge.regenerateImportedSpeechSynthesis({
+    mode: 'all',
+    speaker: 'zh_female_vv_uranus_bigtts',
+  });
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
@@ -398,6 +471,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentSupplement',
+    'workspace:readFinalizedAudioSegmentAudio',
+    'workspace:readFinalizedAudioSegmentSupplementAudio',
     'workspace:createSegmentSupplementRecordingDraft',
     'workspace:createNoteSegmentDraft',
     'workspace:createSegmentSupplementNoteDraft',
@@ -407,6 +482,8 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:finalizeSegmentSupplementNoteDraft',
     'workspace:readSegmentContent',
     'workspace:readSegmentSupplementContent',
+    'workspace:readSegmentSpeechAudio',
+    'workspace:readSegmentSupplementSpeechAudio',
     'workspace:writeSegmentContent',
     'workspace:writeSegmentSupplementContent',
     'workspace:saveSegmentAttachment',
@@ -421,6 +498,9 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:saveSegmentSupplementTranscript',
     'workspace:requestSegmentTranscriptionBackfill',
     'workspace:requestSegmentSupplementTranscriptionBackfill',
+    'workspace:requestSegmentSpeechSynthesis',
+    'workspace:requestSegmentSupplementSpeechSynthesis',
+    'workspace:regenerateImportedSpeechSynthesis',
   ]);
 });
 
@@ -793,6 +873,12 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
 
   await bridge.readVoiceTranscriptionSettings(undefined);
   await bridge.setVoiceTranscriptionEnabled({ enabled: true });
+  await bridge.setVoiceSpeechSynthesisSpeaker({ speaker: 'zh_male_shaonianzixin_uranus_bigtts' });
+  await bridge.regenerateImportedSpeechSynthesis({
+    activeWorkspace: { workspaceHandle: 'wh_1', workspaceId: 'ws_1' },
+    mode: 'all',
+    speaker: 'zh_female_vv_uranus_bigtts',
+  });
   await bridge.saveVoiceTranscriptionApiKey({ apiKey: 'abcd1234' });
   await bridge.clearVoiceTranscriptionApiKey(undefined);
   await bridge.validateVoiceTranscriptionCredentials(undefined);
@@ -802,6 +888,18 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
   assert.deepEqual(calls, [
     { channel: 'workspace:readVoiceTranscriptionSettings', payload: undefined },
     { channel: 'workspace:setVoiceTranscriptionEnabled', payload: { enabled: true } },
+    {
+      channel: 'workspace:setVoiceSpeechSynthesisSpeaker',
+      payload: { speaker: 'zh_male_shaonianzixin_uranus_bigtts' },
+    },
+    {
+      channel: 'workspace:regenerateImportedSpeechSynthesis',
+      payload: {
+        activeWorkspace: { workspaceHandle: 'wh_1', workspaceId: 'ws_1' },
+        mode: 'all',
+        speaker: 'zh_female_vv_uranus_bigtts',
+      },
+    },
     { channel: 'workspace:saveVoiceTranscriptionApiKey', payload: { apiKey: 'abcd1234' } },
     { channel: 'workspace:clearVoiceTranscriptionApiKey', payload: undefined },
     { channel: 'workspace:validateVoiceTranscriptionCredentials', payload: undefined },
