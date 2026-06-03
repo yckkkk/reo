@@ -95,11 +95,17 @@ describe('MemoryStudioSegmentCard', () => {
     );
     expect(card).toHaveClass(
       'dark:[--cover-brightness:0.92]',
-      'dark:[--top-scrim-start:0.34]',
-      'dark:[--bottom-scrim-start:0.38]',
-      'group-hover/segment-card:[--top-state-start:0.16]',
-      'group-hover/segment-card:[--top-state-mid:0.07]'
+      '[--top-scrim-start:0.11]',
+      '[--bottom-scrim-start:0.12]',
+      'dark:[--top-scrim-start:0.15]',
+      'dark:[--bottom-scrim-start:0.16]',
+      'group-hover/segment-card:[--top-state-start:0.06]',
+      'group-hover/segment-card:[--top-state-mid:0.025]'
     );
+    expect(card.className).not.toContain('[--top-scrim-start:0.22]');
+    expect(card.className).not.toContain('[--bottom-scrim-start:0.24]');
+    expect(card.className).not.toContain('dark:[--top-scrim-start:0.34]');
+    expect(card.className).not.toContain('dark:[--bottom-scrim-start:0.38]');
     const toneScrim = card.querySelector('[data-slot="memory-studio-segment-card-tone-scrim"]');
     expect(toneScrim).toBeTruthy();
     expect((toneScrim as HTMLElement).style.background).toContain('var(--top-state-start)');
@@ -149,5 +155,30 @@ describe('MemoryStudioSegmentCard', () => {
     expect(
       card.querySelector('[data-slot="memory-studio-segment-card-note-size"]')
     ).toHaveTextContent('32 字节');
+  });
+
+  it('keeps selected and menu-open states from amplifying the cover protection scrim', () => {
+    render(
+      <MemoryStudioSegmentCard
+        actionMenu={<MemoryStudioSegmentCardActionButton segmentTitle="Spoken note" />}
+        menuOpen
+        onSelect={vi.fn()}
+        segment={noteSegment()}
+        selected
+        workspaceId="ws_1"
+      />
+    );
+
+    const card = document.querySelector('[data-slot="memory-studio-segment-card"]');
+    expect(card).toBeInstanceOf(HTMLElement);
+    if (!(card instanceof HTMLElement)) {
+      throw new Error('segment card should render');
+    }
+
+    expect(card.className).not.toContain('[--bottom-scrim-start:0.7]');
+    expect(card.className).not.toContain('[--bottom-scrim-start:0.68]');
+    expect(card.className).not.toContain('[--top-scrim-start:0.64]');
+    expect(card.className).not.toContain('[--top-scrim-start:0.62]');
+    expect(card.className).not.toContain('[--top-state-start:0.2]');
   });
 });

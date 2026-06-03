@@ -169,14 +169,12 @@ export function MemoryStudioSegmentCard({
             data-slot="memory-studio-segment-card"
             shape="segmentPreview"
             className={[
-              'relative flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between bg-transparent p-12 text-left text-[rgb(var(--cover-title-r)_var(--cover-title-g)_var(--cover-title-b)/0.96)] transition-[filter] duration-150 [--bottom-scrim-mid:0.12] [--bottom-scrim-start:0.24] [--cover-brightness:0.98] [--cover-contrast:1.01] [--cover-saturation:1.04] [--cover-scale:1.02] [--top-scrim-mid:0.12] [--top-scrim-start:0.22] [--top-state-mid:0] [--top-state-start:0] group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background group-hover/segment-card:[--bottom-scrim-start:0.3] group-hover/segment-card:[--cover-brightness:1.04] group-hover/segment-card:[--cover-scale:1.035] group-hover/segment-card:[--top-scrim-start:0.26] group-hover/segment-card:[--top-state-mid:0.07] group-hover/segment-card:[--top-state-start:0.16]',
-              'dark:[--bottom-scrim-mid:0.22] dark:[--bottom-scrim-start:0.38] dark:[--cover-brightness:0.92] dark:[--cover-saturation:1.02] dark:[--top-scrim-mid:0.2] dark:[--top-scrim-start:0.34] dark:group-hover/segment-card:[--bottom-scrim-start:0.34] dark:group-hover/segment-card:[--cover-brightness:0.98] dark:group-hover/segment-card:[--top-scrim-start:0.3]',
+              'relative flex aspect-square min-h-[var(--memory-studio-segment-card-min-size)] w-full min-w-[var(--memory-studio-segment-card-min-size)] flex-col justify-between bg-transparent p-12 text-left text-[rgb(var(--cover-title-r)_var(--cover-title-g)_var(--cover-title-b)/0.96)] transition-[filter] duration-150 [--bottom-scrim-mid:0.055] [--bottom-scrim-start:0.12] [--cover-brightness:0.98] [--cover-contrast:1.01] [--cover-saturation:1.04] [--cover-scale:1.02] [--top-scrim-mid:0.055] [--top-scrim-start:0.11] [--top-state-mid:0] [--top-state-start:0] group-focus-visible/segment-card:ring-2 group-focus-visible/segment-card:ring-ring group-focus-visible/segment-card:ring-offset-2 group-focus-visible/segment-card:ring-offset-background group-hover/segment-card:[--bottom-scrim-start:0.15] group-hover/segment-card:[--cover-brightness:1.04] group-hover/segment-card:[--cover-scale:1.035] group-hover/segment-card:[--top-scrim-start:0.14] group-hover/segment-card:[--top-state-mid:0.025] group-hover/segment-card:[--top-state-start:0.06]',
+              'dark:[--bottom-scrim-mid:0.08] dark:[--bottom-scrim-start:0.16] dark:[--cover-brightness:0.92] dark:[--cover-saturation:1.02] dark:[--top-scrim-mid:0.08] dark:[--top-scrim-start:0.15] dark:group-hover/segment-card:[--bottom-scrim-start:0.18] dark:group-hover/segment-card:[--cover-brightness:0.98] dark:group-hover/segment-card:[--top-scrim-start:0.17]',
               selected
-                ? '[--bottom-scrim-mid:0.42] [--bottom-scrim-start:0.7] [--cover-brightness:1] [--cover-contrast:1.04] [--cover-saturation:1.14] [--top-scrim-mid:0.42] [--top-scrim-start:0.64]'
+                ? '[--cover-brightness:1] [--cover-contrast:1.04] [--cover-saturation:1.12]'
                 : '',
-              menuOpen
-                ? '[--bottom-scrim-start:0.68] [--cover-brightness:0.97] [--top-scrim-start:0.62] [--top-state-mid:0.09] [--top-state-start:0.2]'
-                : '',
+              menuOpen ? '[--cover-brightness:0.97]' : '',
             ].join(' ')}
           >
             <span>
