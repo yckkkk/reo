@@ -188,7 +188,7 @@ describe('showReoToast — reo-doctor recovery', () => {
 });
 
 describe('ReoToaster', () => {
-  it('uses one top-right close button treatment for every toast surface', () => {
+  it('uses one compact action and flat close treatment for every toast surface', () => {
     render(<ReoToaster themeMode="light" />);
 
     const props = (toasterMock.mock.calls as unknown as Array<[unknown]>)[0]?.[0] as
@@ -205,18 +205,26 @@ describe('ReoToaster', () => {
       | undefined;
     const classNames = props?.toastOptions?.classNames;
 
+    expect(classNames?.toast).toContain('reo-toast');
     expect(classNames?.toast).toContain('relative');
     expect(classNames?.content).toContain('pr-32');
-    expect(classNames?.actionButton).toContain('mr-32');
+    expect(classNames?.actionButton).toContain('bg-primary');
+    expect(classNames?.actionButton).toContain('text-primary-foreground');
+    expect(classNames?.actionButton).toContain('hover:bg-primary-hover');
+    expect(classNames?.actionButton).toContain('rounded-md');
+    expect(classNames?.actionButton).toContain('mr-24');
     expect(classNames?.closeButton).toContain('reo-toast-close');
     expect(classNames?.closeButton).not.toContain('reo-toast-action');
     expect(classNames?.closeButton).toContain('absolute');
-    expect(classNames?.closeButton).toContain('right-16');
-    expect(classNames?.closeButton).toContain('top-16');
-    expect(classNames?.closeButton).toContain('bg-transparent');
-    expect(classNames?.closeButton).toContain('hover:bg-transparent');
-    expect(classNames?.closeButton).toContain('active:bg-transparent');
-    expect(classNames?.closeButton).toContain('focus-visible:bg-transparent');
+    expect(classNames?.closeButton).toContain('right-12');
+    // Vertically centered against the toast so the close glyph aligns with the
+    // title / action row instead of floating below it.
+    expect(classNames?.closeButton).toContain('top-1/2');
+    expect(classNames?.closeButton).toContain('-translate-y-1/2');
+    // No background fill in any state — the only hover cue is the muted → foreground
+    // glyph colour change owned by the reo-toast-close rule, so the close affordance
+    // never paints a chip behind the icon.
+    expect(classNames?.closeButton).not.toContain('bg-');
     expect(classNames?.closeButton).toContain('[&_svg]:h-16');
     expect(classNames?.closeButton).toContain('[&_svg]:w-16');
   });

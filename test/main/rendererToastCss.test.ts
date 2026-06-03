@@ -12,13 +12,39 @@ function cssRuleBody(selector: string): string {
   return match.groups['body'];
 }
 
-test('toast action hover keeps the soft flat surface without an inset border', () => {
-  const baseRule = cssRuleBody('.reo-toast-action');
-  const hoverRule = cssRuleBody('.reo-toast-action:hover');
+function cssRuleBodyContaining(selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = rendererCss.match(new RegExp(`[^{}]*${escapedSelector}[^{}]*\\{(?<body>[^}]*)\\}`));
 
-  assert.match(baseRule, /background-color:\s*transparent/);
-  assert.match(baseRule, /box-shadow:\s*none/);
-  assert.doesNotMatch(baseRule, /color-mix/);
-  assert.match(hoverRule, /background-color:\s*color-mix/);
-  assert.doesNotMatch(hoverRule, /box-shadow/);
+  assert.ok(match?.groups?.['body'], `Missing CSS rule containing ${selector}`);
+  return match.groups['body'];
+}
+
+function cssRuleBodiesContaining(selector: string): string[] {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return Array.from(
+    rendererCss.matchAll(new RegExp(`[^{}]*${escapedSelector}[^{}]*\\{(?<body>[^}]*)\\}`, 'g'))
+  ).map((match) => match.groups?.['body'] ?? '');
+}
+
+test('toast interactive controls keep Reo colour transitions instead of Sonner opacity', () => {
+  const controlsRule = cssRuleBodyContaining('[data-sonner-toast] [data-button]');
+
+  assert.match(controlsRule, /transition:/);
+  assert.match(controlsRule, /color 150ms ease-out/);
+  assert.match(controlsRule, /background-color 150ms ease-out/);
+  assert.doesNotMatch(controlsRule, /opacity 400ms/);
+});
+
+test('undo toast progress uses semantic tokens instead of raw colour mixes', () => {
+  const trackRule = cssRuleBody('.reo-undo-toast::before');
+  const fillRule = cssRuleBodiesContaining('.reo-undo-toast::after').find((body) =>
+    /background:\s*var\(--primary\)/.test(body)
+  );
+
+  assert.match(trackRule, /background:\s*var\(--accent\)/);
+  assert.ok(fillRule, 'Missing semantic primary fill rule for undo toast progress');
+  assert.match(fillRule, /animation:\s*reo-toast-progress var\(--reo-toast-duration, 5000ms\)/);
+  assert.doesNotMatch(trackRule, /color-mix/);
+  assert.doesNotMatch(fillRule, /color-mix/);
 });

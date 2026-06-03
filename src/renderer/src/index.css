@@ -254,6 +254,22 @@
   overflow: hidden;
 }
 
+[data-sonner-toast].reo-toast {
+  width: min(
+    calc((var(--spacing-160) * 2) + var(--spacing-40)),
+    calc(100vw - (var(--spacing-24) * 2))
+  );
+}
+
+[data-sonner-toast].reo-undo-toast,
+[data-sonner-toast].reo-doctor-toast {
+  width: min(
+    calc((var(--spacing-160) * 2) + var(--spacing-64)),
+    calc(100vw - (var(--spacing-24) * 2))
+  );
+  padding-block: var(--spacing-16);
+}
+
 /* Sonner ships un-gated dark-theme close-button rules ([data-sonner-theme='dark']
    … [data-close-button]) that set both background and glyph color even under
    `unstyled`. Reo owns the close affordance, so define its full surface here:
@@ -275,14 +291,35 @@
   color: var(--popover-foreground) !important;
 }
 
+/* Sonner forces `transition: opacity 400ms` onto every direct toast child
+   ([data-sonner-toast] > *), which would suppress the colour change on the
+   interactive controls. Give the action and close buttons a Reo-standard colour
+   transition instead — the descendant selector outranks Sonner's child rule. */
+[data-sonner-toast] [data-button],
+[data-sonner-toast] [data-close-button] {
+  transition:
+    color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.reo-undo-toast::before,
 .reo-undo-toast::after {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  right: var(--spacing-16);
+  bottom: var(--spacing-8);
+  left: var(--spacing-16);
   height: 2px;
   content: '';
-  background: color-mix(in oklab, var(--foreground) 54%, transparent);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+
+.reo-undo-toast::before {
+  background: var(--accent);
+}
+
+.reo-undo-toast::after {
+  background: var(--primary);
   transform-origin: left center;
   animation: reo-toast-progress var(--reo-toast-duration, 5000ms) linear forwards;
 }
