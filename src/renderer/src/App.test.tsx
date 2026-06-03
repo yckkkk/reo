@@ -2694,6 +2694,65 @@ describe('App', () => {
     expect(stageShell).toHaveClass('px-24', 'sm:px-40');
   });
 
+  it('does not carry the inline Memory rail open state into compact overlay mode', async () => {
+    const media = stubWorkspaceRailInlineMedia(true);
+    const user = userEvent.setup();
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await screen.findByRole('heading', { name: '今天想记录些什么？' });
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await user.click(within(titlebar).getByRole('button', { name: '展开记忆列表' }));
+
+    const railShell = document.querySelector('[data-slot="workspace-memory-rail-shell"]');
+    expect(screen.getByRole('navigation', { name: '记忆列表' })).toBeInTheDocument();
+    expect(railShell).toHaveAttribute('data-rail-mode', 'inline');
+    expect(railShell).toHaveAttribute('aria-hidden', 'false');
+
+    act(() => {
+      media.setMatches(false);
+    });
+
+    expect(within(titlebar).getByRole('button', { name: '展开记忆列表' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(railShell).toHaveAttribute('data-rail-mode', 'overlay');
+    expect(railShell).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('navigation', { name: '记忆列表' })).not.toBeInTheDocument();
+  });
+
   it('renames a Memory container from the right rail menu', async () => {
     const user = userEvent.setup();
     const originalMemory = {

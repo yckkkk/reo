@@ -874,6 +874,9 @@ export function App() {
     const syncMemoryRailMode = (event?: MediaQueryListEvent) => {
       const matches = event?.matches ?? mediaQuery.matches;
       setMemoryRailInline(matches);
+      if (!matches) {
+        setMemoryRailOpen(false);
+      }
     };
 
     syncMemoryRailMode();
