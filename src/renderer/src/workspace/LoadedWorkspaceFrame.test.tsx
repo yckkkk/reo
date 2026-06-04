@@ -90,9 +90,62 @@ beforeEach(() => {
   toastMock.dismiss.mockClear();
 });
 
+const dropdownMenuExitMotionSpies = new Set<{ mockRestore: () => void }>();
+
 afterEach(() => {
+  for (const spy of dropdownMenuExitMotionSpies) {
+    spy.mockRestore();
+  }
+  dropdownMenuExitMotionSpies.clear();
   vi.useRealTimers();
 });
+
+function mockDropdownMenuExitMotion() {
+  const originalGetComputedStyle = window.getComputedStyle.bind(window);
+  const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudoElt) => {
+    const styles = originalGetComputedStyle(element, pseudoElt);
+    if (element instanceof HTMLElement && element.dataset['slot'] === 'dropdown-menu-content') {
+      return new Proxy(styles, {
+        get(target, property, receiver) {
+          if (property === 'animationName') {
+            return element.dataset['state'] === 'closed' ? 'reo-float-out' : 'reo-float-in';
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+    }
+    return styles;
+  });
+  dropdownMenuExitMotionSpies.add(spy);
+  return {
+    mockRestore: () => {
+      dropdownMenuExitMotionSpies.delete(spy);
+      spy.mockRestore();
+    },
+  };
+}
+
+async function findClosingDropdownMenu(menuLabel: string) {
+  await waitFor(() => {
+    expect(
+      [
+        ...document.querySelectorAll('[data-slot="dropdown-menu-content"][data-state="closed"]'),
+      ].find((menu) => menu.getAttribute('aria-label') === menuLabel)
+    ).toBeInstanceOf(HTMLElement);
+  });
+  const menu = [
+    ...document.querySelectorAll('[data-slot="dropdown-menu-content"][data-state="closed"]'),
+  ].find((candidate) => candidate.getAttribute('aria-label') === menuLabel);
+  if (!(menu instanceof HTMLElement)) {
+    throw new Error(`Expected closing dropdown menu "${menuLabel}" to exist.`);
+  }
+  return menu;
+}
+
+async function finishClosingDropdownMenu(menuLabel: string) {
+  const menu = await findClosingDropdownMenu(menuLabel);
+  fireEvent.animationEnd(menu, { animationName: 'reo-float-out' });
+}
 
 function workspaceSession(snapshot: Partial<WorkspaceSession['snapshot']> = {}): WorkspaceSession {
   return {
@@ -1814,7 +1867,12 @@ describe('LoadedWorkspaceFrame', () => {
     expect(within(content).queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
 
     expect(tabRailRow).toBeInstanceOf(HTMLElement);
-    expect(tabRailRow).toHaveClass('justify-start');
+    expect(tabRailRow).toHaveClass(
+      'grid',
+      'w-full',
+      'min-w-0',
+      'grid-cols-[minmax(0,1fr)_max-content]'
+    );
     expect(tabRailRow).not.toHaveClass('justify-between');
     const contentTabActions = content.querySelector(
       '[data-slot="memory-studio-content-tab-actions"]'
@@ -5744,6 +5802,60 @@ describe('LoadedWorkspaceFrame', () => {
     ).toEqual(['现场补充', '转录', '补充录音']);
   });
 
+  it('keeps overflowing content tabs scrollable while the supplement action stays fixed', async () => {
+    const supplements = Array.from({ length: 8 }, (_, index) =>
+      audioSupplement({
+        supplementId: `sup_birthday_overflow_${index + 1}`,
+        title: `补充录音${index + 1} 很长标题`,
+        createdAt: `2026-05-06T13:${String(20 + index).padStart(2, '0')}:00.000`,
+        updatedAt: `2026-05-06T13:${String(20 + index).padStart(2, '0')}:05.000`,
+      })
+    );
+    const session = workspaceSession({
+      memories: [{ ...birthdayMemory, supplementCount: supplements.length }],
+    });
+    const detailWithSupplements = birthdayDetailWithSupplements(supplements);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_overflow_tabs',
+      detail: detailWithSupplements,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabRailRow = content.querySelector('[data-slot="memory-studio-content-tab-rail-row"]');
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const contentTabActions = content.querySelector(
+      '[data-slot="memory-studio-content-tab-actions"]'
+    );
+
+    expect(tabRailRow).toBeInstanceOf(HTMLElement);
+    expect(tabs.parentElement).toBe(tabRailRow);
+    expect(tabs.nextElementSibling).toBe(contentTabActions);
+    expect(tabs).toHaveClass('overflow-x-auto');
+    expect(contentTabActions).toBeInstanceOf(HTMLElement);
+    expect(tabs).not.toContainElement(contentTabActions as HTMLElement);
+    expect(
+      within(contentTabActions as HTMLElement).getByRole('button', {
+        name: '添加片段补充内容',
+      })
+    ).toBeInTheDocument();
+
+    const tabItems = [
+      ...tabs.querySelectorAll(
+        '[data-slot="memory-studio-primary-tab-item"], [data-slot="memory-studio-supplement-tab-item"]'
+      ),
+    ];
+    expect(tabItems).toHaveLength(9);
+    for (const tabItem of tabItems) {
+      expect(tabItem).toHaveClass('flex-none');
+    }
+  });
+
   it('commits content tab drag order to the workspace after drag end', async () => {
     const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
     const detailWithSupplements = birthdayDetailWithSupplements([
@@ -5893,6 +6005,7 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveClass('ml-[6px]');
     expect(moreButton).toHaveClass('max-w-20');
     expect(moreButton).toHaveClass('opacity-100');
+    expect(moreButton.style.transitionProperty).not.toBe('none');
 
     moreButton.focus();
     expect(moreButton).toHaveFocus();
@@ -5923,11 +6036,161 @@ describe('LoadedWorkspaceFrame', () => {
     expect(moreButton).toHaveClass('data-[state=open]:scale-100');
 
     await user.keyboard('{Escape}');
-    expect(supplementTab).toHaveFocus();
+    await waitFor(() => expect(supplementTab).toHaveFocus());
     expect(moreButton).toHaveAttribute('aria-hidden', 'true');
     expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('opacity-0');
+  });
+
+  it('switches directly between SegmentSupplement More menus with one click', async () => {
+    const user = userEvent.setup();
+    const getComputedStyleSpy = mockDropdownMenuExitMotion();
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 2 }] });
+    const detailWithSupplements = birthdayDetailWithSupplements([
+      audioSupplement(),
+      audioSupplement({
+        supplementId: 'sup_birthday_context',
+        title: '现场补充',
+        createdAt: '2026-05-06T13:12:00.000',
+        updatedAt: '2026-05-06T13:12:05.000',
+        durationMs: 7_000,
+        audioByteLength: 5,
+      }),
+    ]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_switch_supplement_menus',
+      detail: detailWithSupplements,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const firstSupplementTab = within(tabs).getByRole('tab', { name: '补充录音' });
+    const secondSupplementTab = within(tabs).getByRole('tab', { name: '现场补充' });
+    const firstSupplementTabItem = firstSupplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    ) as HTMLElement;
+    const secondSupplementTabItem = secondSupplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    ) as HTMLElement;
+    const firstMore = firstSupplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
+    ) as HTMLButtonElement;
+    const secondMore = secondSupplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
+    ) as HTMLButtonElement;
+
+    await user.hover(firstSupplementTabItem);
+    await user.click(firstMore);
+    expect(screen.getByRole('menu', { name: '补充录音 更多操作' })).toBeInTheDocument();
+
+    await user.hover(secondSupplementTabItem);
+    await waitFor(() => expect(secondMore).not.toHaveAttribute('aria-hidden'));
+    await user.click(secondMore);
+
+    expect(
+      document.querySelector(
+        '[data-slot="dropdown-menu-content"][aria-label="补充录音 更多操作"][data-state="open"]'
+      )
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('menu', { name: '现场补充 更多操作' })).toBeInTheDocument()
+    );
+    await finishClosingDropdownMenu('补充录音 更多操作');
+    await waitFor(() => expect(firstSupplementTab).not.toHaveFocus());
+    expect(screen.getByRole('menu', { name: '现场补充 更多操作' })).toBeInTheDocument();
+    getComputedStyleSpy.mockRestore();
+  });
+
+  it('switches from a SegmentSupplement More menu to a Segment card More menu with one click', async () => {
+    const user = userEvent.setup();
+    const getComputedStyleSpy = mockDropdownMenuExitMotion();
+    const session = workspaceSession({ memories: [{ ...birthdayMemory, supplementCount: 1 }] });
+    const detailWithSupplement = birthdayDetailWithSupplements([audioSupplement()]);
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_switch_supplement_to_segment_menu',
+      detail: detailWithSupplement,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const tabs = within(content).getByRole('tablist', { name: '片段内容类型' });
+    const supplementTab = within(tabs).getByRole('tab', { name: '补充录音' });
+    const supplementTabItem = supplementTab.closest(
+      '[data-slot="memory-studio-supplement-tab-item"]'
+    ) as HTMLElement;
+    const supplementMore = supplementTabItem.querySelector(
+      '[data-slot="memory-studio-supplement-more-anchor"]'
+    ) as HTMLButtonElement;
+    const segmentMore = await screen.findByRole('button', {
+      name: '片段 Birthday candles 更多操作',
+    });
+
+    await user.hover(supplementTabItem);
+    await user.click(supplementMore);
+    expect(screen.getByRole('menu', { name: '补充录音 更多操作' })).toBeInTheDocument();
+
+    await user.unhover(supplementTabItem);
+    await user.click(segmentMore);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menu', { name: '片段 Birthday candles 更多操作' })
+      ).toBeInTheDocument()
+    );
+    await finishClosingDropdownMenu('补充录音 更多操作');
+    await waitFor(() => expect(supplementTab).not.toHaveFocus());
+    expect(
+      screen.getByRole('menu', { name: '片段 Birthday candles 更多操作' })
+    ).toBeInTheDocument();
+    getComputedStyleSpy.mockRestore();
+  });
+
+  it('switches directly between Segment card More menus with one click', async () => {
+    const user = userEvent.setup();
+    const session = workspaceSession({ memories: [birthdayMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: session.snapshot.memories[0] ?? null,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_switch_segment_menus',
+      detail: birthdayDetailWithTwoSegments,
+    });
+
+    const firstMore = await screen.findByRole('button', {
+      name: '片段 Birthday candles 更多操作',
+    });
+    const secondMore = await screen.findByRole('button', {
+      name: '片段 Birthday song 更多操作',
+    });
+
+    await user.click(firstMore);
+    expect(
+      await screen.findByRole('menu', { name: '片段 Birthday candles 更多操作' })
+    ).toBeInTheDocument();
+
+    await user.click(secondMore);
+
+    expect(
+      screen.queryByRole('menu', { name: '片段 Birthday candles 更多操作' })
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('menu', { name: '片段 Birthday song 更多操作' })).toBeInTheDocument()
+    );
+    expect(screen.getByRole('menu', { name: '片段 Birthday song 更多操作' })).toBeInTheDocument();
   });
 
   it('closes the SegmentSupplement More menu when the selected Segment changes', async () => {

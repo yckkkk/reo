@@ -536,6 +536,7 @@ const CONTENT_TAB_MOTION_CLASS =
 const CONTENT_TAB_PILL_MAX_WIDTH_CLASS = 'max-w-[130px]';
 const CONTENT_TAB_PILL_WITH_ACTIONS_MAX_WIDTH_CLASS = 'max-w-[170px]';
 const CONTENT_TAB_DRAG_MIME = 'application/x-reo-content-tab';
+const ACTION_MENU_SWITCH_DISMISS_GRACE_MS = 80;
 
 function durationLabel(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -1599,7 +1600,7 @@ function MemoryStudioAudioPlayback({
 
 function contentTabPillClassName(active: boolean, hasActions = false) {
   return [
-    'relative inline-flex h-[34px] min-w-0 items-center overflow-hidden rounded-full select-none transition-colors',
+    'relative inline-flex h-[34px] min-w-0 flex-none items-center overflow-hidden rounded-full select-none transition-colors',
     hasActions ? CONTENT_TAB_PILL_WITH_ACTIONS_MAX_WIDTH_CLASS : CONTENT_TAB_PILL_MAX_WIDTH_CLASS,
     CONTENT_TAB_MOTION_CLASS,
     active
@@ -1639,6 +1640,19 @@ function stopContentTabMoreEventPropagation(event: { stopPropagation: () => void
   event.stopPropagation();
 }
 
+function deferDropdownOwnerSwitchOnPointerDown(
+  event: PointerEvent<HTMLButtonElement>,
+  requestOpen: () => void
+) {
+  if (event.button !== 0 || event.ctrlKey) {
+    return false;
+  }
+
+  event.preventDefault();
+  window.setTimeout(requestOpen, 0);
+  return true;
+}
+
 type ContentTabMoreTriggerProps = Omit<
   ComponentPropsWithoutRef<'button'>,
   'aria-hidden' | 'aria-label' | 'children' | 'className' | 'data-slot' | 'draggable' | 'type'
@@ -1647,10 +1661,68 @@ type ContentTabMoreTriggerProps = Omit<
   readonly dataSlot:
     | 'memory-studio-primary-tab-more-anchor'
     | 'memory-studio-supplement-more-anchor';
-  readonly onRequestOpen?: (() => void) | undefined;
+  readonly onDeferredPointerOpen?: (() => void) | undefined;
   readonly revealMode: 'drag-source' | 'drag-suppressed' | 'normal';
   readonly triggerLabel: string;
 };
+
+const CONTENT_SUPPLEMENT_ACTION_MENU_OWNER_PREFIX = 'content:supplement:';
+const SEGMENT_ACTION_MENU_OWNER_PREFIX = 'segment:';
+
+type MemoryStudioActionMenuOwner =
+  | 'content:primary'
+  | `content:supplement:${string}`
+  | `segment:${string}`;
+
+function contentSupplementActionMenuOwner(supplementId: string): MemoryStudioActionMenuOwner {
+  return `${CONTENT_SUPPLEMENT_ACTION_MENU_OWNER_PREFIX}${supplementId}`;
+}
+
+function segmentActionMenuOwner(segmentId: string): MemoryStudioActionMenuOwner {
+  return `${SEGMENT_ACTION_MENU_OWNER_PREFIX}${segmentId}`;
+}
+
+function contentSupplementIdFromActionMenuOwner(owner: MemoryStudioActionMenuOwner | null) {
+  return owner?.startsWith(CONTENT_SUPPLEMENT_ACTION_MENU_OWNER_PREFIX)
+    ? owner.slice(CONTENT_SUPPLEMENT_ACTION_MENU_OWNER_PREFIX.length)
+    : null;
+}
+
+function useHiddenContentTabMoreFocusRedirect({
+  actionsVisible,
+  menuOpen,
+}: {
+  readonly actionsVisible: boolean;
+  readonly menuOpen: boolean;
+}) {
+  const tabButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const redirectHiddenMoreFocusAfterMenuCloseRef = useRef(false);
+
+  useEffect(() => {
+    if (menuOpen) {
+      redirectHiddenMoreFocusAfterMenuCloseRef.current = true;
+    }
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (actionsVisible || menuOpen || document.activeElement !== moreButtonRef.current) {
+      return;
+    }
+
+    redirectHiddenMoreFocusAfterMenuCloseRef.current = false;
+    tabButtonRef.current?.focus();
+  }, [actionsVisible, menuOpen]);
+
+  function onHiddenMoreFocus() {
+    if (!actionsVisible && redirectHiddenMoreFocusAfterMenuCloseRef.current) {
+      redirectHiddenMoreFocusAfterMenuCloseRef.current = false;
+      tabButtonRef.current?.focus();
+    }
+  }
+
+  return { moreButtonRef, onHiddenMoreFocus, tabButtonRef };
+}
 
 const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTriggerProps>(
   function ContentTabMoreTrigger(
@@ -1662,8 +1734,8 @@ const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTrigge
       onClick,
       onDragStart,
       onMouseDown,
+      onDeferredPointerOpen,
       onPointerDown,
-      onRequestOpen,
       style,
       ...buttonProps
     },
@@ -1690,11 +1762,16 @@ const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTrigge
           maxWidth: visible ? 20 : 0,
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.75)',
-          transitionProperty: visible ? 'none' : undefined,
         }}
         onPointerDown={(event) => {
+          if (
+            onDeferredPointerOpen &&
+            deferDropdownOwnerSwitchOnPointerDown(event, onDeferredPointerOpen)
+          ) {
+            stopContentTabMoreEventPropagation(event);
+            return;
+          }
           onPointerDown?.(event);
-          onRequestOpen?.();
           stopContentTabMoreEventPropagation(event);
         }}
         onMouseDown={(event) => {
@@ -1703,7 +1780,6 @@ const ContentTabMoreTrigger = forwardRef<HTMLButtonElement, ContentTabMoreTrigge
         }}
         onClick={(event) => {
           onClick?.(event);
-          onRequestOpen?.();
           stopContentTabMoreEventPropagation(event);
         }}
         onDragStart={(event) => {
@@ -1745,6 +1821,7 @@ function SegmentSupplementTab({
   onDragEnter,
   onDragOver,
   onDragStart,
+  onDeferredMenuOpen,
   onKeyDown,
   onMenuOpenChange,
   onRequestArtifactRefresh,
@@ -1780,6 +1857,7 @@ function SegmentSupplementTab({
   readonly onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDelete: () => void;
+  readonly onDeferredMenuOpen?: (() => void) | undefined;
   readonly onMenuOpenChange: (open: boolean) => void;
   readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
@@ -1791,17 +1869,11 @@ function SegmentSupplementTab({
   readonly transcriptExists?: boolean | undefined;
   readonly transcriptionBackfillDisabledReason?: string | null | undefined;
 }) {
-  const tabButtonRef = useRef<HTMLButtonElement | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
   const actionsAccessible = actionsVisible || menuOpen;
-
-  useEffect(() => {
-    if (actionsVisible || menuOpen || document.activeElement !== moreButtonRef.current) {
-      return;
-    }
-
-    tabButtonRef.current?.focus();
-  }, [actionsVisible, menuOpen]);
+  const { moreButtonRef, onHiddenMoreFocus, tabButtonRef } = useHiddenContentTabMoreFocusRedirect({
+    actionsVisible,
+    menuOpen,
+  });
 
   return (
     <div
@@ -1850,12 +1922,6 @@ function SegmentSupplementTab({
       <SegmentSupplementActionsMenu
         actionIdentity={{ ...actionIdentity, supplementId: supplement.supplementId }}
         contentAlign="center"
-        onCloseAutoFocus={(event) => {
-          if (!actionsVisible) {
-            event.preventDefault();
-            tabButtonRef.current?.focus();
-          }
-        }}
         onDelete={() => {
           onMenuOpenChange(false);
           onDelete();
@@ -1879,7 +1945,8 @@ function SegmentSupplementTab({
             ref={moreButtonRef}
             actionsAccessible={actionsAccessible}
             dataSlot="memory-studio-supplement-more-anchor"
-            onRequestOpen={() => onMenuOpenChange(true)}
+            onDeferredPointerOpen={onDeferredMenuOpen}
+            onFocus={onHiddenMoreFocus}
             revealMode={revealMode}
             triggerLabel={`${supplement.title} 更多操作`}
           />
@@ -1899,12 +1966,12 @@ function PrimaryContentTab({
   renderMoreMenu,
   onActionsHidden,
   onActionsVisible,
+  onDeferredMenuOpen,
   onDragEnd,
   onDragEnter,
   onDragOver,
   onDragStart,
   onKeyDown,
-  onMenuOpenChange,
   onSelect,
   panelId,
   tabId,
@@ -1918,44 +1985,36 @@ function PrimaryContentTab({
   readonly menuOpen: boolean;
   readonly onActionsHidden: () => void;
   readonly onActionsVisible: () => void;
+  readonly onDeferredMenuOpen?: (() => void) | undefined;
   readonly onDragEnd: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDragEnter: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
-  readonly onMenuOpenChange: (open: boolean) => void;
   readonly onSelect: () => void;
   readonly panelId: string;
-  readonly renderMoreMenu: (
-    trigger: ReactElement,
-    onCloseAutoFocus: (event: Event) => void
-  ) => ReactNode;
+  readonly renderMoreMenu: (trigger: ReactElement) => ReactNode;
   readonly tabId: string;
   readonly tabIndex: number;
   readonly title: string;
 }) {
-  const tabButtonRef = useRef<HTMLButtonElement | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
   const actionsAccessible = actionsVisible || menuOpen;
+  const { moreButtonRef, onHiddenMoreFocus, tabButtonRef } = useHiddenContentTabMoreFocusRedirect({
+    actionsVisible,
+    menuOpen,
+  });
   const triggerLabel = `${title} 更多操作`;
   const moreTrigger = (
     <ContentTabMoreTrigger
       ref={moreButtonRef}
       actionsAccessible={actionsAccessible}
       dataSlot="memory-studio-primary-tab-more-anchor"
-      onRequestOpen={() => onMenuOpenChange(true)}
+      onDeferredPointerOpen={onDeferredMenuOpen}
+      onFocus={onHiddenMoreFocus}
       revealMode={dragging ? 'drag-source' : 'normal'}
       triggerLabel={triggerLabel}
     />
   );
-
-  useEffect(() => {
-    if (actionsVisible || menuOpen || document.activeElement !== moreButtonRef.current) {
-      return;
-    }
-
-    tabButtonRef.current?.focus();
-  }, [actionsVisible, menuOpen]);
 
   return (
     <div
@@ -1995,12 +2054,7 @@ function PrimaryContentTab({
           {children}
         </span>
       </button>
-      {renderMoreMenu(moreTrigger, (event) => {
-        if (!actionsVisible) {
-          event.preventDefault();
-          tabButtonRef.current?.focus();
-        }
-      })}
+      {renderMoreMenu(moreTrigger)}
     </div>
   );
 }
@@ -3432,11 +3486,14 @@ export function MemoryStudio({
   const segmentAudioResourceCache = audioResourceCaches.segment;
   const supplementAudioResourceCache = audioResourceCaches.supplement;
   const [supplementMenuOpen, setSupplementMenuOpen] = useState(false);
-  const [primaryContentMenuOpen, setPrimaryContentMenuOpen] = useState(false);
+  const [openActionMenuOwner, setOpenActionMenuOwner] =
+    useState<MemoryStudioActionMenuOwner | null>(null);
+  const primaryContentMenuOpen = openActionMenuOwner === 'content:primary';
+  const openSupplementActionMenuId = contentSupplementIdFromActionMenuOwner(openActionMenuOwner);
   const [primaryContentActionsVisible, setPrimaryContentActionsVisible] = useState(false);
-  const [openSupplementActionMenuId, setOpenSupplementActionMenuId] = useState<string | null>(null);
   const [hoveredSupplementActionId, setHoveredSupplementActionId] = useState<string | null>(null);
-  const [openSegmentMenuId, setOpenSegmentMenuId] = useState<string | null>(null);
+  const pendingActionMenuSwitchOwnerRef = useRef<MemoryStudioActionMenuOwner | null>(null);
+  const pendingActionMenuSwitchTimeoutRef = useRef<number | null>(null);
   const stripScrollRef = useRef<HTMLDivElement | null>(null);
   const segmentStripBlossomRef = useRef<SegmentStripBlossomInstance | null>(null);
   const [activeContentTab, setActiveContentTab] = useState<ActiveContentTab>('transcript');
@@ -3472,6 +3529,17 @@ export function MemoryStudio({
   useEffect(() => {
     latestWorkspaceSessionRef.current = workspaceSession;
   }, [workspaceSession]);
+
+  useEffect(
+    () => () => {
+      if (pendingActionMenuSwitchTimeoutRef.current !== null) {
+        window.clearTimeout(pendingActionMenuSwitchTimeoutRef.current);
+      }
+      pendingActionMenuSwitchTimeoutRef.current = null;
+      pendingActionMenuSwitchOwnerRef.current = null;
+    },
+    []
+  );
 
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const detailQuery = useQuery(memoryDetailQueryOptions(workspaceSession, memory.memoryId));
@@ -4030,9 +4098,8 @@ export function MemoryStudio({
 
   useEffect(() => {
     setSupplementMenuOpen(false);
-    setPrimaryContentMenuOpen(false);
+    setOpenActionMenuOwner(null);
     setPrimaryContentActionsVisible(false);
-    setOpenSupplementActionMenuId(null);
     setHoveredSupplementActionId(null);
     draggedContentTabRef.current = null;
     setDraggedContentTab(null);
@@ -4056,7 +4123,11 @@ export function MemoryStudio({
       openSupplementActionMenuId !== null &&
       !selectedSegmentSupplementIdSet.has(openSupplementActionMenuId)
     ) {
-      setOpenSupplementActionMenuId(null);
+      setOpenActionMenuOwner((currentOwner) =>
+        currentOwner === contentSupplementActionMenuOwner(openSupplementActionMenuId)
+          ? null
+          : currentOwner
+      );
     }
 
     if (
@@ -4420,6 +4491,61 @@ export function MemoryStudio({
     setDraggedContentTab(null);
   }
 
+  function clearPendingActionMenuSwitch(expectedOwner?: MemoryStudioActionMenuOwner) {
+    if (expectedOwner !== undefined && pendingActionMenuSwitchOwnerRef.current !== expectedOwner) {
+      return false;
+    }
+
+    if (pendingActionMenuSwitchTimeoutRef.current !== null) {
+      window.clearTimeout(pendingActionMenuSwitchTimeoutRef.current);
+      pendingActionMenuSwitchTimeoutRef.current = null;
+    }
+    pendingActionMenuSwitchOwnerRef.current = null;
+    return true;
+  }
+
+  function setActionMenuOwnerOpen(owner: MemoryStudioActionMenuOwner, open: boolean) {
+    if (open) {
+      setSupplementMenuOpen(false);
+      setOpenActionMenuOwner(owner);
+      return;
+    }
+
+    if (clearPendingActionMenuSwitch(owner)) {
+      return;
+    }
+
+    setOpenActionMenuOwner((currentOwner) => (currentOwner === owner ? null : currentOwner));
+  }
+
+  function closeActionMenuOwner() {
+    clearPendingActionMenuSwitch();
+    setOpenActionMenuOwner(null);
+  }
+
+  function setSegmentActionMenuOpen(segmentId: string, open: boolean) {
+    setActionMenuOwnerOpen(segmentActionMenuOwner(segmentId), open);
+  }
+
+  function setPrimaryContentActionMenuOpen(open: boolean) {
+    setActionMenuOwnerOpen('content:primary', open);
+  }
+
+  function setSupplementActionMenuOpen(supplementId: string, open: boolean) {
+    setActionMenuOwnerOpen(contentSupplementActionMenuOwner(supplementId), open);
+  }
+
+  function markPendingActionMenuSwitch(owner: MemoryStudioActionMenuOwner) {
+    clearPendingActionMenuSwitch();
+    pendingActionMenuSwitchOwnerRef.current = owner;
+    const timeoutId = window.setTimeout(() => {
+      if (pendingActionMenuSwitchTimeoutRef.current === timeoutId) {
+        clearPendingActionMenuSwitch(owner);
+      }
+    }, ACTION_MENU_SWITCH_DISMISS_GRACE_MS);
+    pendingActionMenuSwitchTimeoutRef.current = timeoutId;
+  }
+
   function scrollSegmentStrip(direction: 'left' | 'right') {
     if (direction === 'left') {
       segmentStripBlossomRef.current?.prev();
@@ -4491,7 +4617,7 @@ export function MemoryStudio({
                   const requestSegmentTranscriptionBackfill =
                     segmentIsAudio && transcriptionBackfill?.retrySegment
                       ? () => {
-                          setOpenSegmentMenuId(null);
+                          closeActionMenuOwner();
                           if (segment.transcript.exists) {
                             setConfirmingTranscriptionBackfill({
                               kind: 'segment',
@@ -4527,7 +4653,7 @@ export function MemoryStudio({
                   const requestSegmentSpeechSynthesis =
                     segmentIsNote && speechSynthesis?.requestSegment
                       ? (speaker: VoiceSpeechSynthesisSpeaker) => {
-                          setOpenSegmentMenuId(null);
+                          closeActionMenuOwner();
                           void speechSynthesis.requestSegment?.({
                             workspaceId: workspaceSession.workspaceId,
                             memoryId: memory.memoryId,
@@ -4540,13 +4666,17 @@ export function MemoryStudio({
                   const requestSegmentArtifactUpdate =
                     segmentIsArtifact && onUpdateArtifactSegment
                       ? () => {
-                          setOpenSegmentMenuId(null);
+                          closeActionMenuOwner();
                           onUpdateArtifactSegment({
                             memoryId: memory.memoryId,
                             segmentId: segment.segmentId,
                           });
                         }
                       : undefined;
+                  const segmentMenuOwner = segmentActionMenuOwner(segment.segmentId);
+                  const segmentActionMenuOpen = openActionMenuOwner === segmentMenuOwner;
+                  const switchingSegmentActionMenu =
+                    openActionMenuOwner !== null && openActionMenuOwner !== segmentMenuOwner;
                   return (
                     <MemoryStudioSegmentCard
                       key={segment.segmentId}
@@ -4561,39 +4691,48 @@ export function MemoryStudio({
                           contentAlign="end"
                           cover={segment.cover}
                           onDelete={() => {
-                            setOpenSegmentMenuId(null);
+                            closeActionMenuOwner();
                             onDeleteSegment({ memoryId: memory.memoryId, segment });
                           }}
-                          onOpenChange={(open) =>
-                            setOpenSegmentMenuId(open ? segment.segmentId : null)
-                          }
+                          onOpenChange={(open) => setSegmentActionMenuOpen(segment.segmentId, open)}
                           onRequestArtifactUpdate={requestSegmentArtifactUpdate}
                           onRequestSpeechSynthesis={requestSegmentSpeechSynthesis}
                           onRequestTranscriptionBackfill={requestSegmentTranscriptionBackfill}
                           onRename={() => {
-                            setOpenSegmentMenuId(null);
+                            closeActionMenuOwner();
                             onRenameSegment({ memoryId: memory.memoryId, segment });
                           }}
                           onResetCover={() => {
-                            setOpenSegmentMenuId(null);
+                            closeActionMenuOwner();
                             onResetSegmentCover({ memoryId: memory.memoryId, segment });
                           }}
                           onSwitchDefaultCover={() => {
-                            setOpenSegmentMenuId(null);
+                            closeActionMenuOwner();
                             onSwitchSegmentDefaultCover({ memoryId: memory.memoryId, segment });
                           }}
-                          open={openSegmentMenuId === segment.segmentId}
+                          open={segmentActionMenuOpen}
                           segmentTitle={segment.title}
                           speechSynthesisDisabledReason={segmentSpeechSynthesisDisabledReason}
                           transcriptExists={segmentIsAudio ? segment.transcript.exists : false}
                           transcriptionBackfillDisabledReason={segmentTranscriptionDisabledReason}
                           trigger={
-                            <MemoryStudioSegmentCardActionButton segmentTitle={segment.title} />
+                            <MemoryStudioSegmentCardActionButton
+                              segmentTitle={segment.title}
+                              onPointerDown={(event) => {
+                                if (!switchingSegmentActionMenu) {
+                                  return;
+                                }
+                                deferDropdownOwnerSwitchOnPointerDown(event, () => {
+                                  markPendingActionMenuSwitch(segmentMenuOwner);
+                                  setSegmentActionMenuOpen(segment.segmentId, true);
+                                });
+                              }}
+                            />
                           }
                           triggerLabel={`片段 ${segment.title} 更多操作`}
                         />
                       }
-                      menuOpen={openSegmentMenuId === segment.segmentId}
+                      menuOpen={segmentActionMenuOpen}
                       onSelect={() => requestSelectedSegment(segment.segmentId)}
                       segment={segment}
                       selectionPlacement={segmentSelectionPlacement(
@@ -4647,13 +4786,13 @@ export function MemoryStudio({
 
               <div
                 data-slot="memory-studio-content-tab-rail-row"
-                className="mt-12 flex shrink-0 items-center justify-start gap-8"
+                className="mt-12 grid w-full min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_max-content] items-center gap-8"
               >
                 <div
                   role="tablist"
                   aria-label="片段内容类型"
                   data-slot="memory-studio-content-tab-rail"
-                  className="edge-fade-x flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="edge-fade-x flex w-full min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
                   {contentTabs.map((contentTab) => {
                     if (contentTab.kind === 'transcript') {
@@ -4679,6 +4818,15 @@ export function MemoryStudio({
                               ? setPrimaryContentActionsVisible(false)
                               : undefined
                           }
+                          onDeferredMenuOpen={
+                            openActionMenuOwner !== null &&
+                            openActionMenuOwner !== 'content:primary'
+                              ? () => {
+                                  markPendingActionMenuSwitch('content:primary');
+                                  setPrimaryContentActionMenuOpen(true);
+                                }
+                              : undefined
+                          }
                           onDragEnd={handleContentTabDragEnd}
                           onDragEnter={handleContentTabDragEnter}
                           onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
@@ -4686,12 +4834,11 @@ export function MemoryStudio({
                             handleContentTabDragStart(event, contentTab.value)
                           }
                           onKeyDown={(event) => handleContentTabKeyDown(event, 'transcript')}
-                          onMenuOpenChange={setPrimaryContentMenuOpen}
                           onSelect={() => requestActiveContentTab('transcript')}
                           panelId={contentTab.panelId}
                           renderMoreMenu={
                             isArtifactMemorySegment(selectedSegment)
-                              ? (trigger, onCloseAutoFocus) => (
+                              ? (trigger) => (
                                   <SegmentContentActionsMenu
                                     actionIdentity={{
                                       memoryId: memory.memoryId,
@@ -4702,10 +4849,9 @@ export function MemoryStudio({
                                     contentAlign="center"
                                     contentKind="artifact"
                                     menuLabel={`${contentTab.title} 更多操作`}
-                                    onCloseAutoFocus={onCloseAutoFocus}
-                                    onOpenChange={setPrimaryContentMenuOpen}
+                                    onOpenChange={setPrimaryContentActionMenuOpen}
                                     onRequestArtifactRefresh={() => {
-                                      setPrimaryContentMenuOpen(false);
+                                      closeActionMenuOwner();
                                       requestArtifactPreviewRefresh(
                                         artifactSegmentPreviewRefreshKey(selectedSegment.segmentId)
                                       );
@@ -4713,7 +4859,7 @@ export function MemoryStudio({
                                     onRequestArtifactUpdate={
                                       onUpdateArtifactSegment
                                         ? () => {
-                                            setPrimaryContentMenuOpen(false);
+                                            closeActionMenuOwner();
                                             onUpdateArtifactSegment({
                                               memoryId: memory.memoryId,
                                               segmentId: selectedSegment.segmentId,
@@ -4725,7 +4871,7 @@ export function MemoryStudio({
                                     trigger={trigger}
                                   />
                                 )
-                              : (trigger, onCloseAutoFocus) => (
+                              : (trigger) => (
                                   <SegmentContentActionsMenu
                                     actionIdentity={{
                                       memoryId: memory.memoryId,
@@ -4734,7 +4880,6 @@ export function MemoryStudio({
                                       workspaceId: workspaceSession.workspaceId,
                                     }}
                                     contentAlign="center"
-                                    onCloseAutoFocus={onCloseAutoFocus}
                                     clearDisabled={
                                       isAudioMemorySegment(selectedSegment)
                                         ? !isAudioSegmentContent(segmentContent)
@@ -4745,7 +4890,7 @@ export function MemoryStudio({
                                     }
                                     menuLabel={`${contentTab.title} 更多操作`}
                                     onClear={() => {
-                                      setPrimaryContentMenuOpen(false);
+                                      closeActionMenuOwner();
                                       if (
                                         isAudioMemorySegment(selectedSegment) &&
                                         isAudioSegmentContent(segmentContent)
@@ -4776,12 +4921,12 @@ export function MemoryStudio({
                                         });
                                       }
                                     }}
-                                    onOpenChange={setPrimaryContentMenuOpen}
+                                    onOpenChange={setPrimaryContentActionMenuOpen}
                                     onRequestSpeechSynthesis={
                                       isNoteMemorySegment(selectedSegment) &&
                                       speechSynthesis?.requestSegment
                                         ? (speaker) => {
-                                            setPrimaryContentMenuOpen(false);
+                                            closeActionMenuOwner();
                                             void speechSynthesis.requestSegment?.({
                                               workspaceId: workspaceSession.workspaceId,
                                               memoryId: memory.memoryId,
@@ -4796,7 +4941,7 @@ export function MemoryStudio({
                                       isAudioMemorySegment(selectedSegment) &&
                                       transcriptionBackfill?.retrySegment
                                         ? () => {
-                                            setPrimaryContentMenuOpen(false);
+                                            closeActionMenuOwner();
                                             if (selectedSegment.transcript.exists) {
                                               setConfirmingTranscriptionBackfill({
                                                 kind: 'segment',
@@ -4816,7 +4961,7 @@ export function MemoryStudio({
                                         : undefined
                                     }
                                     onRename={() => {
-                                      setPrimaryContentMenuOpen(false);
+                                      closeActionMenuOwner();
                                       onRenameSegmentContent({
                                         memoryId: memory.memoryId,
                                         segment: selectedSegment,
@@ -4914,7 +5059,7 @@ export function MemoryStudio({
                     const requestSupplementSpeechSynthesis =
                       supplementIsNote && speechSynthesis?.requestSupplement
                         ? (speaker: VoiceSpeechSynthesisSpeaker) => {
-                            setOpenSupplementActionMenuId(null);
+                            closeActionMenuOwner();
                             void speechSynthesis.requestSupplement?.({
                               workspaceId: workspaceSession.workspaceId,
                               memoryId: memory.memoryId,
@@ -4928,7 +5073,7 @@ export function MemoryStudio({
                     const requestSupplementArtifactUpdate =
                       supplementIsArtifact && onUpdateArtifactSegmentSupplement
                         ? () => {
-                            setOpenSupplementActionMenuId(null);
+                            closeActionMenuOwner();
                             onUpdateArtifactSegmentSupplement({
                               memoryId: memory.memoryId,
                               segmentId: selectedSegment.segmentId,
@@ -4938,12 +5083,19 @@ export function MemoryStudio({
                         : undefined;
                     const requestSupplementArtifactRefresh = supplementIsArtifact
                       ? () => {
-                          setOpenSupplementActionMenuId(null);
+                          closeActionMenuOwner();
                           requestArtifactPreviewRefresh(
                             artifactSupplementPreviewRefreshKey(supplement.supplementId)
                           );
                         }
                       : undefined;
+                    const supplementActionMenuOpen =
+                      openSupplementActionMenuId === supplement.supplementId;
+                    const supplementMenuOwner = contentSupplementActionMenuOwner(
+                      supplement.supplementId
+                    );
+                    const switchingContentActionMenu =
+                      openActionMenuOwner !== null && openActionMenuOwner !== supplementMenuOwner;
 
                     return (
                       <SegmentSupplementTab
@@ -4968,7 +5120,7 @@ export function MemoryStudio({
                           draggedContentTab?.segmentId === selectedSegment.segmentId &&
                           draggedContentTab.value === contentTab.value
                         }
-                        menuOpen={openSupplementActionMenuId === supplement.supplementId}
+                        menuOpen={supplementActionMenuOpen}
                         revealMode={
                           draggedContentTab === null
                             ? 'normal'
@@ -4994,12 +5146,20 @@ export function MemoryStudio({
                               )
                             : undefined
                         }
+                        onDeferredMenuOpen={
+                          switchingContentActionMenu
+                            ? () => {
+                                markPendingActionMenuSwitch(supplementMenuOwner);
+                                setSupplementActionMenuOpen(supplement.supplementId, true);
+                              }
+                            : undefined
+                        }
                         onDragEnd={handleContentTabDragEnd}
                         onDragEnter={handleContentTabDragEnter}
                         onDragOver={(event) => handleContentTabDragOver(event, contentTab.value)}
                         onDragStart={(event) => handleContentTabDragStart(event, contentTab.value)}
                         onMenuOpenChange={(open) =>
-                          setOpenSupplementActionMenuId(open ? supplement.supplementId : null)
+                          setSupplementActionMenuOpen(supplement.supplementId, open)
                         }
                         onRequestArtifactRefresh={requestSupplementArtifactRefresh}
                         onRequestArtifactUpdate={requestSupplementArtifactUpdate}
@@ -5007,7 +5167,7 @@ export function MemoryStudio({
                         onRequestTranscriptionBackfill={
                           supplementIsAudio && transcriptionBackfill?.retrySupplement
                             ? () => {
-                                setOpenSupplementActionMenuId(null);
+                                closeActionMenuOwner();
                                 if (supplement.transcript.exists) {
                                   setConfirmingTranscriptionBackfill({
                                     kind: 'supplement',
