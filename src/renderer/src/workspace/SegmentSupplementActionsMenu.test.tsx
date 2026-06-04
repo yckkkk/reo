@@ -51,6 +51,8 @@ function renderMenu(
   props: {
     onDelete?: () => void;
     onRename?: () => void;
+    onRequestArtifactRefresh?: () => void;
+    onRequestArtifactUpdate?: () => void;
     onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
     onRequestTranscriptionBackfill?: () => void;
     speechSynthesisDisabledReason?: string | null;
@@ -62,6 +64,8 @@ function renderMenu(
     <SegmentSupplementActionsMenu
       actionIdentity={segmentSupplementActionPayload}
       onDelete={props.onDelete ?? vi.fn()}
+      onRequestArtifactRefresh={props.onRequestArtifactRefresh}
+      onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onRename={props.onRename ?? vi.fn()}
@@ -207,6 +211,21 @@ describe('SegmentSupplementActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'My Supplement 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows artifact refresh and agent update actions for artifact supplements', async () => {
+    const onRequestArtifactRefresh = vi.fn();
+    const onRequestArtifactUpdate = vi.fn();
+    renderMenu({ onRequestArtifactRefresh, onRequestArtifactUpdate });
+
+    const { user } = await openEntityActionMenu('My Supplement 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '刷新页面' }));
+    expect(onRequestArtifactRefresh).toHaveBeenCalledOnce();
+    expect(onRequestArtifactUpdate).not.toHaveBeenCalled();
+
+    await openEntityActionMenu('My Supplement 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    expect(onRequestArtifactUpdate).toHaveBeenCalledOnce();
   });
 
   it('shows the generate transcript action when the supplement has no transcript', async () => {

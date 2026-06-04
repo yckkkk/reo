@@ -103,9 +103,9 @@ HTML 通过显式 vendor script 获得 `window.reo`。Reo 不自动改写用户 
 
 推荐顶层分类：
 
-- `window.reo.state`：读写 `state.json` 命名 stores，带 version/baseline。
-- `window.reo.workspace`：读取当前 workspace、Memory、Segment 上下文投影。
-- `window.reo.content`：读取 Reo 内容投影，例如 note 正文、audio transcript、artifact metadata。
+- `window.reo.state`：读写 `state.json` 命名 stores，带 version/baseline；saved write 不改变 host preview URL。
+- `window.reo.workspace`：读取当前 workspace、全量 Memory summary、target identity 和当前对象上下文投影；作品再用 `window.reo.content.readMemoryDetail({ memoryId })` 按需读取同一 workspace 内的 Memory detail。
+- `window.reo.content`：读取当前对象投影和 Memory detail 投影；M2 不提供任意 note 正文、audio transcript 或 raw content bridge。
 - `window.reo.mutations`：调用 Reo typed 产品 mutation，复用现有事务、baseline、stale conflict 和恢复模型。
 - `window.reo.ui`：全屏、尺寸、主题等宿主 UI 协调能力。
 - `window.reo.agent`：复制或发起给用户 agent 的 prompt action。

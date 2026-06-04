@@ -1900,6 +1900,29 @@ describe('LoadedWorkspaceFrame', () => {
         previewVersion: 'a'.repeat(64),
       })
     );
+    const workTabItem = workTab.closest('[data-slot="memory-studio-primary-tab-item"]');
+    expect(workTabItem).not.toBeNull();
+    fireEvent.pointerEnter(workTabItem as HTMLElement);
+    fireEvent.mouseEnter(workTabItem as HTMLElement);
+    await user.click(
+      await within(workTabItem as HTMLElement).findByRole('button', { name: '作品 更多操作' })
+    );
+    const refreshMenu = await screen.findByRole('menu', { name: '作品 更多操作' });
+    await user.click(within(refreshMenu).getByRole('menuitem', { name: '刷新页面' }));
+    await waitFor(() => {
+      const reloadedFrame = within(content)
+        .getByRole('tabpanel', { name: '作品' })
+        .querySelector('iframe');
+      expect(reloadedFrame).not.toBe(iframe);
+      expect(reloadedFrame).toHaveAttribute(
+        'src',
+        artifactSegmentRuntimeUrl({
+          workspaceId: 'ws_1',
+          segmentId: 'seg_birthday_artifact',
+          previewVersion: 'a'.repeat(64),
+        })
+      );
+    });
     const updatedWork = artifactSegment({
       entryHash: 'b'.repeat(64),
       previewVersion: 'b'.repeat(64),
@@ -1928,8 +1951,6 @@ describe('LoadedWorkspaceFrame', () => {
         })
       );
     });
-    const workTabItem = workTab.closest('[data-slot="memory-studio-primary-tab-item"]');
-    expect(workTabItem).not.toBeNull();
     fireEvent.pointerEnter(workTabItem as HTMLElement);
     fireEvent.mouseEnter(workTabItem as HTMLElement);
     await user.click(

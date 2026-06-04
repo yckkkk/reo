@@ -1009,6 +1009,7 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /state\.json/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /window\.reo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /bridge\.js/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /they do not reload the host iframe/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /scaffold-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /validate-runtime\.mjs/);
@@ -1029,6 +1030,19 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'],
     /only long-term state/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'],
+    /does not reload the host iframe/
+  );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'], /刷新页面/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /all Memory summaries/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /readMemoryDetail\(\{ memoryId \}\)/
   );
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
@@ -1308,7 +1322,11 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /mockup/);
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['interaction-patterns.md'],
-    /window\.reo\.content/
+    /workspace\.read\(\)\.workspace\.memories/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['interaction-patterns.md'],
+    /readMemoryDetail\(\{ memoryId \}\)/
   );
   assert.doesNotMatch(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['interaction-patterns.md'],

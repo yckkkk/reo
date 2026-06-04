@@ -1,0 +1,173 @@
+{
+  "createdAt": "2026-06-04T15:47:30.000Z",
+  "workspaceRoot": "/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试",
+  "stateMachine": [
+    "Reo UI copies create-work prompt from an ordinary selected Memory",
+    "External user agent receives that prompt plus one plain user sentence",
+    "Agent writes ordinary Memory files for one artifact Segment and does not rely on .reo as semantic truth",
+    "Reo file truth projects the artifact into a segment manifest with entryHash",
+    "Electron artifact iframe loads the bundle and uses window.reo to read workspace summary and Memory details",
+    "Artifact state writes update state.json and the running iframe without changing iframe URL or timeOrigin",
+    "External Memory file additions converge into Reo projection and become visible to the artifact after open or refresh",
+    "Host tab More menu refresh remounts the iframe while preserving state.json-backed preferences and data"
+  ],
+  "invariants": [
+    "Works and future components share runtime capability; only mount and lifecycle differ.",
+    "Reo exposes typed runtime APIs, not Node, Electron, raw filesystem, .reo internals or generic file writes.",
+    "Reo does not provide runtime key, token, secret or hidden value storage.",
+    "state.json is a JSON object durable state file; state writes do not participate in artifact previewVersion and must not reload the iframe.",
+    "entry.html, runtime.json and assets participate in previewVersion; manual host refresh is explicit.",
+    "User/agent-created files are ordinary Memory files; Reo owns manifest/hash/cache convergence.",
+    "No permission popup, network confirmation, content review or quality review exists in Reo runtime."
+  ],
+  "copiedPrompt": {
+    "source": "/tmp/reo-m2-copied-prompt.txt",
+    "kind": "create-work",
+    "ordinaryUserSentence": "帮我做一个能看到这个记忆空间里有多少条记忆和片段的小面板。",
+    "includesDesignDefault": true,
+    "includesRuntimeSkill": true,
+    "includesWorksSkill": true,
+    "forbidsDotReoWrites": true,
+    "doesNotRequestSecretSurface": true,
+    "runtimeSkillForbidsSecretSurface": true
+  },
+  "externalAgentOutput": {
+    "tool": "codex-cli",
+    "reasoningEffort": "xhigh",
+    "segmentId": "seg_20260604083611_0dc5f870",
+    "directory": "memories/mem_20260517063940_89533fee--生活/segments/seg_20260604083611_0dc5f870--记忆空间数量小面板",
+    "files": ["segment.md", "entry.html", "runtime.json", "state.json", "assets/"],
+    "validator": {
+      "ok": true,
+      "issues": []
+    },
+    "inspectRuntime": {
+      "ok": true,
+      "title": "记忆空间数量小面板",
+      "template": "dashboard",
+      "usesBridge": true
+    },
+    "entryContains": {
+      "reoDesignTokens": true,
+      "workspaceRead": true,
+      "readAnyMemoryDetail": true,
+      "secretApi": false,
+      "fileUrl": false,
+      "absoluteUserPath": false,
+      "dotReoDependency": false
+    }
+  },
+  "projection": {
+    "manifestPath": ".reo/objects/segments/seg_20260604083611_0dc5f870.json",
+    "objectType": "segment",
+    "kind": "artifact",
+    "format": "html",
+    "entryByteLength": 20745,
+    "entryHash": "5a65df694b92b8dfe3513e50504d784a39a829d9296a16e041905af3289fe23a",
+    "entryHashMatchesSha256": true,
+    "previewUrlVersion": "20bcdf86e7356dd94889ccd8bd897601ee9b8e95c06e0545bba1f554b5f51c9c"
+  },
+  "realDevIframeInitialRead": {
+    "status": "实时读取",
+    "memoryCount": "5",
+    "segmentCount": "30",
+    "targetMemorySegmentCount": "5",
+    "rowCount": 5,
+    "hasBridge": true,
+    "hasWorkspaceRead": true,
+    "hasReadMemoryDetail": true
+  },
+  "externalMemoryUpdate": {
+    "ordinaryUserIntent": "普通用户只是想记一件小事：刷新面板以后，这条也应该算进去。",
+    "segmentId": "seg_20260604084210_6aa1b2c3",
+    "directory": "memories/mem_20260517063940_89533fee--生活/segments/seg_20260604084210_6aa1b2c3--刷新后出现的普通记录",
+    "manifestConverged": true,
+    "uiProjectionAfterWatcher": "生活 6 个片段",
+    "artifactReadAfterReopen": {
+      "status": "实时读取",
+      "memoryCount": "5",
+      "segmentCount": "31",
+      "targetMemorySegmentCount": "6",
+      "averageSegments": "6.2"
+    }
+  },
+  "artifactInternalStateAndRefresh": {
+    "action": "click artifact internal refresh, then uncheck show-empty",
+    "iframeTimeOriginStable": true,
+    "iframeUrlStable": true,
+    "entryHashStable": true,
+    "before": {
+      "rowCount": 5,
+      "showEmptyMemories": true,
+      "segmentCount": "31",
+      "targetMemorySegmentCount": "6"
+    },
+    "after": {
+      "rowCount": 4,
+      "showEmptyMemories": false,
+      "segmentCount": "31",
+      "targetMemorySegmentCount": "6",
+      "stateJsonShowEmptyMemories": false
+    }
+  },
+  "hostTabMoreRefresh": {
+    "action": "作品 更多操作 -> 刷新页面",
+    "beforeIframeId": "CDEABB8FA8250330952122C9B7A0650A",
+    "afterIframeId": "44F8A1EAFE5C6D3CDEE8D1F0FB256E41",
+    "iframeRemounted": true,
+    "urlStable": true,
+    "statePreferencePersisted": true,
+    "countsPersisted": true,
+    "after": {
+      "rowCount": 4,
+      "showEmptyMemories": false,
+      "segmentCount": "31",
+      "targetMemorySegmentCount": "6"
+    }
+  },
+  "screenshots": [
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-m2-real-dev-data-panel.png"
+  ],
+  "visualCheck": {
+    "fabOverlayPreserved": true,
+    "artifactPreviewRounded": true,
+    "workUsesReoDesignTokens": true,
+    "noSecretOrTokenUi": true
+  },
+  "runtimeFreshCrossMemoryRead": {
+    "checkedAt": "2026-06-04T16:26:49.578Z",
+    "method": "iframe target window.reo.content.readMemoryDetail({ memoryId }) through Electron CDP",
+    "otherMemoryId": "mem_20260519032914_666583be",
+    "targetSegmentId": "seg_20260604052142_86bbc739",
+    "sameSnapshotExternalChange": "temporary direct asset file added and removed on another Memory artifact",
+    "before": {
+      "hasReo": true,
+      "memoryCount": 5,
+      "otherMemoryId": "mem_20260519032914_666583be",
+      "otherMemoryTitle": "碎片记录",
+      "segmentCount": 23,
+      "targetPreviewVersion": "972248e1b4338ed67f1644b94656617d70d032bdf3e917caad1d7c7dedd8421e",
+      "targetEntryHash": "68b60aa62b1d6b38c687249f1aba9f557d94f7a63a4ba9446819e049e40e908d"
+    },
+    "afterExternalAsset": {
+      "hasReo": true,
+      "memoryCount": 5,
+      "otherMemoryId": "mem_20260519032914_666583be",
+      "otherMemoryTitle": "碎片记录",
+      "segmentCount": 23,
+      "targetPreviewVersion": "6f593a3a0212ea6868449f2359b585c77a8b0313fb9f059dbeeaa98b77da999d",
+      "targetEntryHash": "68b60aa62b1d6b38c687249f1aba9f557d94f7a63a4ba9446819e049e40e908d"
+    },
+    "afterRestore": {
+      "hasReo": true,
+      "memoryCount": 5,
+      "otherMemoryId": "mem_20260519032914_666583be",
+      "otherMemoryTitle": "碎片记录",
+      "segmentCount": 23,
+      "targetPreviewVersion": "972248e1b4338ed67f1644b94656617d70d032bdf3e917caad1d7c7dedd8421e",
+      "targetEntryHash": "68b60aa62b1d6b38c687249f1aba9f557d94f7a63a4ba9446819e049e40e908d"
+    },
+    "staleCacheAvoided": true,
+    "restored": true
+  }
+}

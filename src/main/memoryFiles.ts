@@ -56,7 +56,6 @@ import {
   ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
   ARTIFACT_RUNTIME_ENTRY_FILE,
   ARTIFACT_RUNTIME_MANIFEST_FILE,
-  ARTIFACT_RUNTIME_STATE_FILE,
 } from './artifactUrl.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
 import {
@@ -4451,7 +4450,7 @@ function readArtifactRuntimeBundlePreviewVersionInKnownDirectory(
     fileScope: 'root',
     value: { status: 'file', byteLength: entry.byteLength, hash: entry.hash },
   });
-  for (const fileName of [ARTIFACT_RUNTIME_MANIFEST_FILE, ARTIFACT_RUNTIME_STATE_FILE]) {
+  for (const fileName of [ARTIFACT_RUNTIME_MANIFEST_FILE]) {
     appendArtifactPreviewDescriptor(hash, {
       fileName,
       fileScope: 'root',

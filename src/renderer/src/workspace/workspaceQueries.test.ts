@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   memoryDetailQueryBelongsToWorkspace,
   memoryDetailQueryOptions,
   memoryDetailQueryKey,
   memorySpacesQueryKey,
+  runtimeMemoryDetailQueryOptions,
   segmentAudioQueryKey,
   segmentAudioQueryOptions,
   segmentSpeechAudioQueryOptions,
@@ -20,6 +22,44 @@ import {
   workspaceSpeechAudioQueryBelongsToWorkspace,
   workspaceSnapshotQueryKey,
 } from './workspaceQueries';
+import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function queryTestSession(): WorkspaceSession {
+  return {
+    workspaceHandle: 'workspace-handle-1',
+    workspaceId: 'ws_1',
+    snapshot: {
+      workspaceId: 'ws_1',
+      title: 'Daily memory',
+      description: '',
+      memories: [],
+    },
+  };
+}
+
+function queryTestMemoryDetail(title: string): WorkspaceMemoryDetail {
+  return {
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    title,
+    createdAt: '2026-06-04T09:00:00.000Z',
+    updatedAt: '2026-06-04T09:00:00.000Z',
+    segmentCount: 0,
+    noteSegmentCount: 0,
+    artifactSegmentCount: 0,
+    audioSegmentCount: 0,
+    audioDurationMs: 0,
+    audioByteLength: 0,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
+    supplementCount: 0,
+    segments: [],
+  };
+}
 
 describe('workspace queries', () => {
   it('does not include workspaceHandle in the workspace snapshot query key', () => {
@@ -54,16 +94,7 @@ describe('workspace queries', () => {
   });
 
   it('keeps fresh file-backed detail and content cached until explicit invalidation', () => {
-    const session = {
-      workspaceHandle: 'workspace-handle-1',
-      workspaceId: 'ws_1',
-      snapshot: {
-        workspaceId: 'ws_1',
-        title: 'Daily memory',
-        description: '',
-        memories: [],
-      },
-    };
+    const session = queryTestSession();
 
     expect(memoryDetailQueryOptions(session, 'mem_1').refetchOnMount).not.toBe('always');
     expect(segmentContentQueryOptions(session, 'mem_1', 'seg_1', 'note').refetchOnMount).not.toBe(
@@ -80,6 +111,47 @@ describe('workspace queries', () => {
       segmentSupplementContentQueryOptions(session, 'mem_1', 'seg_1', 'sup_1', 'audio')
         .refetchOnMount
     ).not.toBe('always');
+  });
+
+  it('forces runtime Memory detail reads through file truth even when the UI detail cache is fresh', async () => {
+    const session = queryTestSession();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    let readCount = 0;
+    const readMemoryDetail = vi.fn(
+      async (request: Parameters<Window['reoWorkspace']['readMemoryDetail']>[0]) => {
+        readCount += 1;
+        return {
+          ok: true,
+          value: {
+            requestId: request.requestId,
+            detail: queryTestMemoryDetail(`Detail ${readCount}`),
+          },
+        };
+      }
+    );
+    vi.stubGlobal('window', {
+      reoWorkspace: {
+        readMemoryDetail,
+      },
+    });
+
+    try {
+      const initial = await queryClient.fetchQuery(memoryDetailQueryOptions(session, 'mem_1'));
+      const cached = await queryClient.fetchQuery(memoryDetailQueryOptions(session, 'mem_1'));
+      expect(initial.detail.title).toBe('Detail 1');
+      expect(cached.detail.title).toBe('Detail 1');
+      expect(readMemoryDetail).toHaveBeenCalledTimes(1);
+
+      const runtimeRead = await queryClient.fetchQuery(
+        runtimeMemoryDetailQueryOptions(session, 'mem_1')
+      );
+      expect(runtimeRead.detail.title).toBe('Detail 2');
+      expect(readMemoryDetail).toHaveBeenCalledTimes(2);
+    } finally {
+      queryClient.clear();
+    }
   });
 
   it('keeps large playback audio caches short-lived without evicting projections too quickly', () => {

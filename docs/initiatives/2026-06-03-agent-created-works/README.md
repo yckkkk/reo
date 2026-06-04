@@ -50,12 +50,13 @@ M1 已完成 **静态沙箱作品**：
 - Reo 识别合法 `artifact` Segment / SegmentSupplement，首个 `format` 为 `html`。
 - Reo 在只读隔离预览面中渲染 HTML，并支持和当前内容编辑面类似的全屏查看。
 
-M2 Shared Generative Runtime 已完成基础闭环：
+M2 Shared Generative Runtime 的 works consumer 已完成实现、真实环境 E2E、xhigh 审查和 `verify:quick`，不进入 M3：
 
 - 用每对象 runtime URL / origin 替代 M1 共享 host 静态预览模型。
 - 引入 bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
 - 引入显式 vendor script 和 `window.reo` bridge。
-- 支持 runtime state、browser storage、network、agent prompt action 和首批高频 product mutations。
+- 支持 runtime state、browser storage、network、agent prompt action、workspace-wide read、作品手动刷新和首批高频 product mutations。
+- `state.json` 写入不重挂宿主 iframe；entry/runtime/assets 变化或用户手动刷新才刷新页面实例。
 - 强化 AGENTS.md 与 skills，让用户不点击 Reo、不复制 prompt 时，agent 也能从记忆空间内快速创建作品。
 - 组件只做合同级预留，不实现组件挂载 UI。
 

@@ -23,9 +23,11 @@ const segmentActionPayload = {
 
 function renderMenu(
   props: {
-    contentKind?: 'body' | 'transcript';
+    contentKind?: 'artifact' | 'body' | 'transcript';
     clearDisabled?: boolean;
     onClear?: () => void;
+    onRequestArtifactRefresh?: () => void;
+    onRequestArtifactUpdate?: () => void;
     onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
     onRequestTranscriptionBackfill?: () => void;
     onRename?: () => void;
@@ -41,6 +43,8 @@ function renderMenu(
       contentKind={props.contentKind ?? 'transcript'}
       menuLabel="转录 更多操作"
       onClear={props.onClear ?? vi.fn()}
+      onRequestArtifactRefresh={props.onRequestArtifactRefresh}
+      onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onRename={props.onRename ?? vi.fn()}
@@ -104,6 +108,31 @@ describe('SegmentContentActionsMenu', () => {
     expect(screen.queryByRole('menuitem', { name: '编辑正文' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '编辑转录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '清空转录' })).not.toBeInTheDocument();
+  });
+
+  it('shows artifact refresh and agent update actions for a primary artifact tab', async () => {
+    const onRequestArtifactRefresh = vi.fn();
+    const onRequestArtifactUpdate = vi.fn();
+    renderMenu({ contentKind: 'artifact', onRequestArtifactRefresh, onRequestArtifactUpdate });
+
+    const { user } = await openEntityActionMenu('转录 更多操作');
+
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '用默认应用打开',
+      '在访达中显示',
+      '复制相对路径',
+      '复制绝对路径',
+      '刷新页面',
+      '让 Agent 更新作品',
+    ]);
+
+    await user.click(screen.getByRole('menuitem', { name: '刷新页面' }));
+    expect(onRequestArtifactRefresh).toHaveBeenCalledOnce();
+    expect(onRequestArtifactUpdate).not.toHaveBeenCalled();
+
+    await openEntityActionMenu('转录 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    expect(onRequestArtifactUpdate).toHaveBeenCalledOnce();
   });
 
   it('requests primary body speech synthesis from the speaker submenu', async () => {

@@ -96,8 +96,10 @@
       },
     },
     content: {
-      readMemoryDetail: function () {
-        return call('content.readMemoryDetail');
+      readMemoryDetail: function (options) {
+        return call('content.readMemoryDetail', {
+          memoryId: options && options.memoryId,
+        });
       },
       readCurrentObject: function () {
         return call('content.readCurrentObject');

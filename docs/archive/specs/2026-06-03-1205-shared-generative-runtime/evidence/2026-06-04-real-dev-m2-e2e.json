@@ -177,7 +177,7 @@
     "iframe interaction writes state.json through window.reo.state",
     "reload keeps visible state from state.json",
     "supplement prompt replay creates a projected artifact supplement and persists iframe checkbox state through reload",
-    "external state edit changes previewVersion and stale baseline rejects overwrite",
+    "external state edit preserves previewVersion while stale baseline rejects overwrite",
     "artifact reads fresh Reo memory detail after external Reo content changes",
     "typed title mutation updates Markdown directory/frontmatter and runtime.json title",
     "network Web artifact fetched https://api.github.com/zen and persisted status/sample into state.json",

@@ -75,6 +75,7 @@ test('artifact vendor bridge accepts host responses only from the parent window'
 
   runInNewContext(source, { window: fakeWindow });
   assert.ok(fakeWindow.reo);
+  assert.equal('call' in fakeWindow.reo, false);
   const listener = listeners[0];
   assert.ok(listener);
 

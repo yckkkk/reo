@@ -8,7 +8,7 @@
 
 **Already Done:** M2.1 covers bundle recognition, protocol loading, per-object origin, iframe container capability, open ordinary Web network, external bundle edit refresh, and managed agent skills/scripts.
 
-**Current Slice:** Complete M2 for the first consumer, works. Component mount UI remains a non-goal; components inherit the same runtime contract later.
+**Current Slice:** Complete M2 for the first consumer, works. Component mount UI remains a non-goal; components inherit the same runtime contract later. 2026-06-04 correction: M2 also requires workspace-wide read context, user-triggered work page refresh, and state writes that do not remount the host iframe.
 
 ---
 
@@ -16,7 +16,7 @@
 
 - Artifact Segment and SegmentSupplement file truth recognizes `entry.html` as the entry.
 - Existing manifest projection still uses only entry byte length/hash, so `state.json` edits do not reorder Memories or force manifest churn.
-- Memory detail `previewVersion` reflects the runtime bundle files Reo serves (`entry.html`, `runtime.json`, `state.json`, direct `assets/` files), so external agent edits reload the artifact iframe.
+- Memory detail `previewVersion` reflects the host-relevant runtime bundle files Reo serves (`entry.html`, `runtime.json`, direct `assets/` files), so external entry/resource edits reload the artifact iframe; `state.json` is runtime state and does not change the host preview URL.
 - `reo-artifact` URLs use a per-object host plus path identity, giving each work its own browser origin.
 - Protocol serves only:
   - `entry.html`
@@ -28,8 +28,8 @@
 - Artifact iframe allows scripts and same-origin storage; it keeps Reo renderer/node/preload isolation.
 - Managed Reo works skills describe the bundle, bridge, templates, state and validation flow without exposing external reference projects.
 - `entry.html` can explicitly load `reo-artifact://vendor/reo-runtime/bridge.js` and receive `window.reo`.
-- `window.reo.state` reads and writes `state.json` with a version/baseline contract; stale writes return the current state/version.
-- `window.reo.workspace` and `window.reo.content` return current object context and current Memory detail projection without raw paths.
+- `window.reo.state` reads and writes `state.json` with a version/baseline contract; stale writes return the current state/version and saved writes do not remount the iframe.
+- `window.reo.workspace` returns current workspace summary, all Memory summaries, target identity and current object projection; `window.reo.content` returns current object projection and can read any Memory detail in the current workspace by `memoryId` without raw paths.
 - `window.reo.mutations` exposes only high-frequency M2 work actions: update the current work title through existing title mutation and copy Reo-built agent prompts for broader edits.
 - Reo runtime does not expose `window.reo.secrets` or any work-level key/token/value store; works use visible files, browser storage or ordinary Web capability for their own values.
 - `window.reo.ui` exposes host coordination for fullscreen request.
@@ -100,7 +100,7 @@ Steps:
 - [x] In `/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试`, create/update real works that exercise todo/review state, ordinary Web capability, runtime state, and Reo content/tooling bridge paths without adding product-level key/token management UI.
 - [x] Verify direct external edits/replacements of `entry.html`, `state.json`, and `runtime.json` do not break Reo.
 - [x] Run Codex CLI read-only review/challenge after targeted tests.
-- [x] Ask the factual confidence question, fix gaps, repeat until no known unresolved gap remains.
+- [x] Ask the factual confidence question for the current diff, fix gaps, repeat until no known unresolved gap remains.
 - [x] Run `npm run verify:quick` once before commit and cleanliness statement.
 - [x] Commit only owned changes.
 
@@ -135,7 +135,7 @@ Steps:
 Steps:
 
 - [x] RED: add/update workspace file tests showing artifact Segment/Supplement recognize `entry.html` and no longer accept `segment.html`/`supplement.html`.
-- [x] RED: add file-truth tests showing `state.json`, `runtime.json`, and direct asset edits change `previewVersion` without changing `entryHash`.
+- [x] RED: add file-truth tests showing `state.json` does not change `previewVersion`, while `runtime.json` and direct asset edits change `previewVersion` without changing `entryHash`.
 - [x] RED: run `MAIN_TEST_FILES=test/main/workspaceFiles.test.ts npm run test:main`.
 - [x] GREEN: replace entry descriptor reads with `entry.html`.
 - [x] GREEN: derive `previewVersion` from the runtime bundle fingerprint while keeping manifest entry hash stable.
@@ -184,9 +184,9 @@ Steps:
 - [x] Run focused main and renderer tests listed above.
 - [x] Run `npm run typecheck:quick`.
 - [x] Run `git diff --check`.
-- [x] Ask: "Do I have factual confidence in the implemented M2.1 contract?" First answer was no: Codex review exposed web subframe navigation mismatch and non-entry bundle edits not refreshing previews. Both were fixed with tests.
-- [x] Run `npm run verify:quick` once before final commit/cleanliness statement.
-- [x] Commit only owned changes.
+- [x] Ask: "Do I have factual confidence in the implemented early preview-slice contract?" First answer was no: Codex review exposed web subframe navigation mismatch and non-entry bundle edits not refreshing previews. Both were fixed with tests.
+- [x] Run `npm run verify:quick` once for the early preview-slice closeout.
+- [x] Commit early preview-slice owned changes.
 
 ## Verification Evidence
 
@@ -199,8 +199,8 @@ Steps:
 - Focused pass: `npm run test:renderer -- --project renderer-jsdom-components src/renderer/src/workspace/LoadedWorkspaceFrame.test.tsx`.
 - Focused pass: `npm run typecheck:quick`.
 - Focused pass: `git diff --check`.
-- Final pass: `npm run verify:quick`.
-- Real memory-space dogfood: in `/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试`, directly edited the M2 dogfood artifact `state.json` and `assets/style.css`; Reo read model reported changed `previewVersion` and stable `entryHash`.
+- Earlier pass: `npm run verify:quick`.
+- Real memory-space dogfood: in `/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试`, directly edited the M2 dogfood artifact `state.json` and `assets/style.css`; `state.json` remained runtime state while `assets/style.css` changed host `previewVersion` with stable `entryHash`.
 - M2 focused pass: `MAIN_TEST_FILES=test/main/artifactRuntimeState.test.ts,test/main/artifactRuntimeIpc.test.ts,test/main/workspaceBridgeSurface.test.ts,test/main/workspaceIpcRegistration.test.ts,test/main/artifactProtocol.test.ts,test/main/workspaceFiles.test.ts,test/main/appLifecycleSource.test.ts npm run test:main`.
 - M2 renderer focused pass: `npm run test:renderer -- --project renderer-jsdom-components src/renderer/src/workspace/artifactRuntimeBridge.test.tsx`.
 - M2 renderer API focused pass: `npm run test:renderer -- --project renderer-jsdom-browser src/renderer/src/workspace/workspaceApi.test.ts`.
@@ -214,7 +214,8 @@ Steps:
 - Codex CLI read-only review after targeted tests reported no blocker-level findings and specifically confirmed the prior note-body mutation leak, oversized state and managed skill ID findings were fixed; the earlier object-local value path was removed rather than carried forward.
 - Factual confidence check: yes for the full M2 works contract after removing the artifact secret/value bridge. Negative searches and opened contexts confirmed old entry names only remain in rejection tests, no artifact work note-body mutation API remains public, old `seg_agent_*` examples only remain as invalid examples, and current docs/spec state that Reo provides no work-level key/token/value store.
 - Final verification first exposed one stale public-contract snapshot: `test/main/workspaceContract.test.ts` did not list the six new explicit artifact runtime IPC channels. The runtime contract already exposed them; the test snapshot and named-channel assertions were updated, then `MAIN_TEST_FILES=test/main/workspaceContract.test.ts npm run test:main` passed.
-- Final pass: `npm run verify:quick` passed after the workspace contract snapshot, lint, and Prettier fixes.
+- Earlier final pass: `npm run verify:quick` passed after the workspace contract snapshot, lint, and Prettier fixes.
+- Fresh final pass: `npm run verify:quick` passed for the current full M2 diff after hook-level cross-Memory bridge, runtime fresh-detail cache, data-panel E2E evidence, formatting and review fixes.
 - Final M2 E2E state machine: ordinary user prompt -> external agent writes visible `memories/` files -> Reo file-truth detail projection converges manifest/hash/previewVersion -> runtime state bridge reads/writes `state.json` with baseline protection -> damaged entry produces fault projection without ready preview fields -> restored entry returns to ready projection.
 - Final M2 E2E invariant set: agents do not rely on `.reo` as semantic truth; `entry.html` is the only runtime entry; `state.json` accepts any JSON object; stale baseline never overwrites external edits; fault projection does not expose `entryHash`/`previewVersion`; Reo product layer provides no key/token manager UI, no permission popup, no network confirmation, and no content/quality review.
 - Final M2 E2E evidence in `/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试`: ordinary prompt `帮我做一个每天打卡的小工具，打开就能点一下记今天完成了。` updated existing `seg_20260604011359_0623d928--每日打卡`; Reo projected it from file truth, wrote `.reo/objects/segments/seg_20260604011359_0623d928.json`, matched `entryHash` `093c07fe2660103cda8747f0198f90d62b0d02fc01f79c809994577654c92883`, produced `previewVersion` `1a05200ba30dc15b1b9548dc16994f54c55cc45d116e98ac7652dbe672700b38`, and repaired nonsemantic `createdAt`/`updatedAt` frontmatter back to the current Markdown contract.
@@ -236,5 +237,5 @@ Steps:
 - 2026-06-04 real dev state E2E: screenshots are stored under `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-water-*.png`; iframe click changed visible count to `1`, `state.json` persisted `stores.data.days["2026-06-04"] = 1`, reload kept count `1`, and stale write returned `status: "stale"` while preserving external markers and not persisting `staleAttempt3`.
 - 2026-06-04 real dev Reo data E2E: the same artifact iframe called `window.reo.workspace.read()`, `window.reo.content.readCurrentObject()` and `window.reo.content.readMemoryDetail()`; after a normal note supplement `sup_20260604053012_54909845--数据同步验证二` was written directly under `笔记2`, the iframe saw `memorySupplementCount: 17`, parent `targetSupplementCount: 7`, and the new title in the live detail projection.
 - 2026-06-04 runtime title consistency fix: real `window.reo.mutations.updateTitle()` revealed that artifact Markdown directory/frontmatter changed but `runtime.json.title` could remain stale. Focused tests now cover artifact Segment and Supplement title mutations syncing runtime manifest title. Final dev rerun called `window.reo.mutations.updateTitle({ title: "三步小清单 已验证" })` from the artifact iframe target; Reo renamed the supplement directory, synced `supplement.md` and `runtime.json.title`, kept entry hash `ceafb51b70ffcdf3a0bd5cf0b879cd57e4a095f2c673684a5edb8919a7e6ab52`, and refreshed `previewVersion` to `06d0411d0683497a600b65e0bcefbb1ad52975f04fced9569258259606d40e87`.
-- 2026-06-04 stable evidence file: `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-m2-e2e.json` records the small-step state machine, immutable checks, actual copied prompt outputs, screenshot paths, stale result, network state output, Reo data sync result, external replacement, fault recovery, style proof, and iframe title mutation result for the real dev rerun.
+- 2026-06-04 stable evidence files: `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-m2-e2e.json` records the small-step state machine, immutable checks, actual copied prompt outputs, screenshot paths, stale result, network state output, Reo data sync result, external replacement, fault recovery, style proof, and iframe title mutation result for the real dev rerun; `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-m2-data-panel-e2e.json` records a copied-prompt data-panel work that reads the whole workspace, updates after external Memory file changes, preserves iframe identity for runtime state changes, uses the host tab More refresh only for explicit page remount, and proves iframe `window.reo.content.readMemoryDetail({ memoryId })` fresh-reads another Memory detail after a same-snapshot external artifact asset edit.
 - 2026-06-04 supplement prompt replay rerun: the copied create-supplement prompt plus ordinary user request `帮我在这条笔记下面做一个很简单的小清单，把接下来要做的事列出来。` produced `sup_20260604060457_75e11a6e--三步小清单`, then final iframe title mutation renamed it to `sup_20260604060457_75e11a6e--三步小清单 已验证` under `笔记2`. Validator passed; Reo projected it from file truth, converged manifest `entryHash` `ceafb51b70ffcdf3a0bd5cf0b879cd57e4a095f2c673684a5edb8919a7e6ab52`, and iframe checkbox state persisted as `1 / 3 项完成` through reload via visible `state.json`.

@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { AppWindow } from 'lucide-react';
+import { AppWindow, RefreshCw } from 'lucide-react';
 import type { WorkspaceSegmentSupplementEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
@@ -15,6 +15,7 @@ export type SegmentSupplementActionsMenuProps = {
   readonly onDelete: () => void;
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
@@ -34,6 +35,7 @@ export function SegmentSupplementActionsMenu({
   onDelete,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestArtifactRefresh,
   onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
@@ -49,6 +51,15 @@ export function SegmentSupplementActionsMenu({
   const menuLabel = triggerLabel ?? `${supplementTitle} 更多操作`;
   const actionBindings = bindSegmentSupplementEntityActions(actionIdentity);
   const extraActions: readonly EntityActionMenuExtraAction[] = [
+    ...(onRequestArtifactRefresh
+      ? [
+          {
+            icon: RefreshCw,
+            label: '刷新页面',
+            onSelect: onRequestArtifactRefresh,
+          },
+        ]
+      : []),
     ...(onRequestArtifactUpdate
       ? [
           {

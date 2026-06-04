@@ -7,6 +7,7 @@ import {
   useArtifactRuntimeBridge,
   type ArtifactRuntimeBridgeOptions,
   type ArtifactRuntimeBridgeTarget,
+  type ReadMemoryDetailForRuntime,
 } from './artifactRuntimeBridge';
 
 function session(): WorkspaceSession {
@@ -32,6 +33,21 @@ function session(): WorkspaceSession {
           hasAudioTranscript: false,
           hasAnyNote: false,
           supplementCount: 0,
+        },
+        {
+          memoryId: 'mem_other',
+          title: 'Other memory',
+          createdAt: '2026-06-04T10:00:00.000Z',
+          updatedAt: '2026-06-04T10:05:00.000Z',
+          segmentCount: 3,
+          noteSegmentCount: 1,
+          artifactSegmentCount: 1,
+          audioSegmentCount: 1,
+          audioDurationMs: 30_000,
+          audioByteLength: 2048,
+          hasAudioTranscript: true,
+          hasAnyNote: true,
+          supplementCount: 2,
         },
       ],
     },
@@ -74,6 +90,53 @@ function memoryDetail(): WorkspaceMemoryDetail {
   };
 }
 
+function otherMemoryDetail(): WorkspaceMemoryDetail {
+  return {
+    workspaceId: 'ws_bridge',
+    memoryId: 'mem_other',
+    title: 'Other memory',
+    createdAt: '2026-06-04T10:00:00.000Z',
+    updatedAt: '2026-06-04T10:05:00.000Z',
+    segmentCount: 3,
+    noteSegmentCount: 1,
+    artifactSegmentCount: 1,
+    audioSegmentCount: 1,
+    audioDurationMs: 30_000,
+    audioByteLength: 2048,
+    hasAudioTranscript: true,
+    hasAnyNote: true,
+    supplementCount: 2,
+    segments: [
+      {
+        workspaceId: 'ws_bridge',
+        memoryId: 'mem_other',
+        segmentId: 'seg_other',
+        type: 'note',
+        title: 'Other note',
+        createdAt: '2026-06-04T10:00:00.000Z',
+        updatedAt: '2026-06-04T10:05:00.000Z',
+        bodyByteLength: 128,
+        speechSynthesis: {
+          status: 'missing',
+          audioByteLength: null,
+          contentHash: null,
+          format: null,
+          lastSynthesisAttempt: 'never',
+          mimeType: null,
+          model: null,
+          reason: null,
+          resourceId: null,
+          sampleRate: null,
+          speaker: null,
+          updatedAt: null,
+        },
+        supplementCount: 0,
+        supplements: [],
+      },
+    ],
+  };
+}
+
 function messageEvent({
   data,
   origin,
@@ -86,16 +149,23 @@ function messageEvent({
   return { data, origin, source } as MessageEvent;
 }
 
+type BridgeHandlerTestOptions = Omit<ArtifactRuntimeBridgeOptions, 'readMemoryDetail'> & {
+  readonly readMemoryDetail?: ReadMemoryDetailForRuntime;
+};
+
 function bridgeHandlerOptions({
   api,
   iframeRef,
   memory,
   onProductMutation,
+  readMemoryDetail = async () => {
+    throw new Error('readMemoryDetail test default unavailable');
+  },
   onRequestFullscreen,
   src,
   target,
   workspaceSession,
-}: ArtifactRuntimeBridgeOptions) {
+}: BridgeHandlerTestOptions) {
   return {
     iframeRef,
     src,
@@ -103,6 +173,7 @@ function bridgeHandlerOptions({
       api,
       memory,
       onProductMutation,
+      readMemoryDetail,
       onRequestFullscreen,
       target,
       workspaceSession,
@@ -154,6 +225,7 @@ describe('artifact runtime bridge', () => {
         iframeRef,
         memory: memoryDetail(),
         onProductMutation: vi.fn(),
+        readMemoryDetail: vi.fn(async () => otherMemoryDetail()),
         onRequestFullscreen: vi.fn(),
         src,
         target,
@@ -202,6 +274,69 @@ describe('artifact runtime bridge', () => {
           state: { schemaVersion: 1, stores: { ui: { count: 1 } } },
           version: 'a'.repeat(64),
         },
+      },
+      origin
+    );
+  });
+
+  it('lets the hook route runtime cross-memory detail reads through the provided read model', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readMemoryDetail = vi.fn().mockResolvedValue(otherMemoryDetail());
+    const target: ArtifactRuntimeBridgeTarget = {
+      targetType: 'segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_bridge',
+    };
+    const iframeRef = {
+      current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+    };
+
+    function BridgeHarness() {
+      useArtifactRuntimeBridge({
+        api: {},
+        iframeRef,
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        readMemoryDetail,
+        onRequestFullscreen: vi.fn(),
+        src,
+        target,
+        workspaceSession: session(),
+      });
+      return <div />;
+    }
+
+    render(<BridgeHarness />);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'reo-runtime',
+          type: 'request',
+          requestId: 'req-other-memory',
+          method: 'content.readMemoryDetail',
+          payload: { memoryId: 'mem_other' },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(readMemoryDetail).toHaveBeenCalledWith({ memoryId: 'mem_other' });
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-other-memory',
+        ok: true,
+        value: otherMemoryDetail(),
       },
       origin
     );
@@ -468,7 +603,13 @@ describe('artifact runtime bridge', () => {
           requestId: 'req-workspace',
           ok: true,
           value: expect.objectContaining({
-            workspace: expect.objectContaining({ workspaceId: 'ws_bridge' }),
+            workspace: expect.objectContaining({
+              workspaceId: 'ws_bridge',
+              memories: expect.arrayContaining([
+                expect.objectContaining({ memoryId: 'mem_bridge', segmentCount: 1 }),
+                expect.objectContaining({ memoryId: 'mem_other', segmentCount: 3 }),
+              ]),
+            }),
             target: expect.objectContaining({ segmentId: 'seg_bridge' }),
           }),
         }),
@@ -503,6 +644,90 @@ describe('artifact runtime bridge', () => {
           value: { expanded: true },
         }),
       ])
+    );
+  });
+
+  it('lets runtime read any memory detail from the current workspace through the existing read model', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readMemoryDetail = vi.fn().mockResolvedValue(otherMemoryDetail());
+
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {},
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        readMemoryDetail,
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-runtime',
+          type: 'request',
+          requestId: 'req-current-memory',
+          method: 'content.readMemoryDetail',
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-runtime',
+          type: 'request',
+          requestId: 'req-other-memory',
+          method: 'content.readMemoryDetail',
+          payload: { memoryId: 'mem_other' },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(readMemoryDetail).toHaveBeenCalledTimes(1);
+    expect(readMemoryDetail).toHaveBeenCalledWith({
+      memoryId: 'mem_other',
+    });
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-current-memory',
+        ok: true,
+        value: memoryDetail(),
+      },
+      origin
+    );
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-other-memory',
+        ok: true,
+        value: otherMemoryDetail(),
+      },
+      origin
     );
   });
 

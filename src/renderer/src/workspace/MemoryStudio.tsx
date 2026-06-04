@@ -121,6 +121,7 @@ import {
 import {
   memoryDetailQueryOptions,
   memoryDetailQueryKey,
+  runtimeMemoryDetailQueryOptions,
   segmentAudioQueryOptions,
   segmentSupplementContentQueryOptions,
   segmentSupplementContentQueryKey,
@@ -139,6 +140,7 @@ import { createMarkdownAttachmentContext } from './markdownAttachmentSource';
 import {
   useArtifactRuntimeBridge,
   type ArtifactRuntimeBridgeTarget,
+  type ReadMemoryDetailForRuntime,
 } from './artifactRuntimeBridge';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 import {
@@ -612,6 +614,14 @@ function artifactSupplementPreviewUrl(
     supplementId: supplement.supplementId,
     workspaceId,
   });
+}
+
+function artifactSegmentPreviewRefreshKey(segmentId: string) {
+  return `segment:${segmentId}`;
+}
+
+function artifactSupplementPreviewRefreshKey(supplementId: string) {
+  return `supplement:${supplementId}`;
 }
 
 function orderContentTabs(
@@ -1737,6 +1747,7 @@ function SegmentSupplementTab({
   onDragStart,
   onKeyDown,
   onMenuOpenChange,
+  onRequestArtifactRefresh,
   onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
@@ -1770,6 +1781,7 @@ function SegmentSupplementTab({
   readonly onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   readonly onDelete: () => void;
   readonly onMenuOpenChange: (open: boolean) => void;
+  readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
@@ -1849,6 +1861,7 @@ function SegmentSupplementTab({
           onDelete();
         }}
         onOpenChange={onMenuOpenChange}
+        onRequestArtifactRefresh={onRequestArtifactRefresh}
         onRequestArtifactUpdate={onRequestArtifactUpdate}
         onRequestSpeechSynthesis={onRequestSpeechSynthesis}
         onRequestTranscriptionBackfill={onRequestTranscriptionBackfill}
@@ -2379,6 +2392,8 @@ function ArtifactPreviewPanel({
   memory,
   onProductMutation,
   onRepairArtifact,
+  readMemoryDetail,
+  refreshVersion = 0,
   runtimeFault,
   src,
   target,
@@ -2391,6 +2406,8 @@ function ArtifactPreviewPanel({
   readonly memory: WorkspaceMemoryDetail;
   readonly onProductMutation: () => void;
   readonly onRepairArtifact?: (() => void) | undefined;
+  readonly readMemoryDetail: ReadMemoryDetailForRuntime;
+  readonly refreshVersion?: number;
   readonly runtimeFault?: ArtifactMemorySegment['runtimeFault'];
   readonly src: string | null;
   readonly target: ArtifactRuntimeBridgeTarget;
@@ -2417,6 +2434,7 @@ function ArtifactPreviewPanel({
     iframeRef,
     memory,
     onProductMutation,
+    readMemoryDetail,
     onRequestFullscreen: () => setExpanded(true),
     src: src ?? '',
     target,
@@ -2449,7 +2467,7 @@ function ArtifactPreviewPanel({
         />
       ) : src !== null ? (
         <iframe
-          key={src}
+          key={`${src}:${refreshVersion}`}
           title={`作品预览：${title}`}
           sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
           src={src}
@@ -3439,6 +3457,17 @@ export function MemoryStudio({
   const [stripScrollState, setStripScrollState] = useState<SegmentStripScrollState>(
     hiddenSegmentStripScrollState
   );
+  const [artifactPreviewRefresh, setArtifactPreviewRefresh] = useState<{
+    readonly targetKey: string;
+    readonly version: number;
+  } | null>(null);
+
+  function requestArtifactPreviewRefresh(targetKey: string) {
+    setArtifactPreviewRefresh((current) => ({
+      targetKey,
+      version: current?.targetKey === targetKey ? current.version + 1 : 1,
+    }));
+  }
 
   useEffect(() => {
     latestWorkspaceSessionRef.current = workspaceSession;
@@ -3447,6 +3476,16 @@ export function MemoryStudio({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const detailQuery = useQuery(memoryDetailQueryOptions(workspaceSession, memory.memoryId));
   const detail = detailQuery.data?.detail;
+  const readArtifactRuntimeMemoryDetail = useMemo<ReadMemoryDetailForRuntime>(
+    () =>
+      async ({ memoryId }) => {
+        const response = await queryClient.fetchQuery(
+          runtimeMemoryDetailQueryOptions(workspaceSession, memoryId)
+        );
+        return response.detail;
+      },
+    [queryClient, workspaceSession]
+  );
   const refreshAfterArtifactRuntimeMutation = () => {
     void queryClient.invalidateQueries({
       queryKey: memoryDetailQueryKey({
@@ -4665,6 +4704,12 @@ export function MemoryStudio({
                                     menuLabel={`${contentTab.title} 更多操作`}
                                     onCloseAutoFocus={onCloseAutoFocus}
                                     onOpenChange={setPrimaryContentMenuOpen}
+                                    onRequestArtifactRefresh={() => {
+                                      setPrimaryContentMenuOpen(false);
+                                      requestArtifactPreviewRefresh(
+                                        artifactSegmentPreviewRefreshKey(selectedSegment.segmentId)
+                                      );
+                                    }}
                                     onRequestArtifactUpdate={
                                       onUpdateArtifactSegment
                                         ? () => {
@@ -4891,6 +4936,14 @@ export function MemoryStudio({
                             });
                           }
                         : undefined;
+                    const requestSupplementArtifactRefresh = supplementIsArtifact
+                      ? () => {
+                          setOpenSupplementActionMenuId(null);
+                          requestArtifactPreviewRefresh(
+                            artifactSupplementPreviewRefreshKey(supplement.supplementId)
+                          );
+                        }
+                      : undefined;
 
                     return (
                       <SegmentSupplementTab
@@ -4948,6 +5001,7 @@ export function MemoryStudio({
                         onMenuOpenChange={(open) =>
                           setOpenSupplementActionMenuId(open ? supplement.supplementId : null)
                         }
+                        onRequestArtifactRefresh={requestSupplementArtifactRefresh}
                         onRequestArtifactUpdate={requestSupplementArtifactUpdate}
                         onRequestSpeechSynthesis={requestSupplementSpeechSynthesis}
                         onRequestTranscriptionBackfill={
@@ -5139,6 +5193,13 @@ export function MemoryStudio({
                             })
                         : undefined
                     }
+                    readMemoryDetail={readArtifactRuntimeMemoryDetail}
+                    refreshVersion={
+                      artifactPreviewRefresh?.targetKey ===
+                      artifactSegmentPreviewRefreshKey(selectedSegment.segmentId)
+                        ? artifactPreviewRefresh.version
+                        : 0
+                    }
                     runtimeFault={selectedSegment.runtimeFault}
                     src={artifactSegmentPreviewUrl(workspaceSession.workspaceId, selectedSegment)}
                     target={{
@@ -5315,6 +5376,13 @@ export function MemoryStudio({
                               supplementId: activeSegmentSupplement.supplementId,
                             })
                         : undefined
+                    }
+                    readMemoryDetail={readArtifactRuntimeMemoryDetail}
+                    refreshVersion={
+                      artifactPreviewRefresh?.targetKey ===
+                      artifactSupplementPreviewRefreshKey(activeSegmentSupplement.supplementId)
+                        ? artifactPreviewRefresh.version
+                        : 0
                     }
                     runtimeFault={activeSegmentSupplement.runtimeFault}
                     src={artifactSupplementPreviewUrl(

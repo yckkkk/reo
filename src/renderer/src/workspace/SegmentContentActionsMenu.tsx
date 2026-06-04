@@ -26,6 +26,7 @@ export type SegmentContentActionsMenuProps = {
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
@@ -54,6 +55,7 @@ export function SegmentContentActionsMenu({
   onClear,
   onCloseAutoFocus,
   onOpenChange,
+  onRequestArtifactRefresh,
   onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
@@ -66,6 +68,7 @@ export function SegmentContentActionsMenu({
 }: SegmentContentActionsMenuProps) {
   const actionBindings = bindSegmentEntityActions(actionIdentity);
   const clearLabel = contentKind === 'transcript' ? '清空转录' : '清空正文';
+  const showArtifactRefresh = contentKind === 'artifact' && onRequestArtifactRefresh;
   const showArtifactUpdate = contentKind === 'artifact' && onRequestArtifactUpdate;
   const transcriptionBackfillDisabled = disabledReasonExists(transcriptionBackfillDisabledReason);
   const showSpeechSynthesis = contentKind === 'body' && onRequestSpeechSynthesis;
@@ -95,10 +98,19 @@ export function SegmentContentActionsMenu({
           onOpenDefault={actionBindings.onOpenDefault}
           onRevealInFinder={actionBindings.onRevealInFinder}
         />
-        {showArtifactUpdate || showSpeechSynthesis || showTranscriptionBackfill ? (
+        {showArtifactRefresh ||
+        showArtifactUpdate ||
+        showSpeechSynthesis ||
+        showTranscriptionBackfill ? (
           <>
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
+              {showArtifactRefresh ? (
+                <DropdownMenuItem onSelect={onRequestArtifactRefresh}>
+                  <SegmentContentActionIcon icon={RefreshCw} />
+                  刷新页面
+                </DropdownMenuItem>
+              ) : null}
               {showArtifactUpdate ? (
                 <DropdownMenuItem onSelect={onRequestArtifactUpdate}>
                   <SegmentContentActionIcon icon={AppWindow} />让 Agent 更新作品

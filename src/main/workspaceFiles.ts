@@ -420,7 +420,7 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD =
     '',
     '## State',
     '',
-    '`state.json` is the durable agent-readable state file. Runtime code may read and write it through `window.reo.state` with a version/baseline contract. If a work needs to remember user actions, progress, preferences, check-ins or todo items, write that durable state to `state.json`; browser storage such as localStorage and IndexedDB is only a fast UI cache or compatibility cache.',
+    '`state.json` is the durable agent-readable state file. Runtime code may read and write it through `window.reo.state` with a version/baseline contract. If a work needs to remember user actions, progress, preferences, check-ins or todo items, write that durable state to `state.json`; browser storage such as localStorage and IndexedDB is only a fast UI cache or compatibility cache. State writes update the running work through the returned state/version; they do not reload the host iframe.',
     '',
     'Read `references/state-and-storage.md` for store naming, versioning and merge rules.',
     '',
@@ -553,6 +553,8 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_STATE_REFERENCE_MD =
     '',
     'Each runtime object has its own origin, so localStorage and IndexedDB are isolated per object. Use browser storage for fast UI cache when helpful. Do not use browser storage as the only long-term state for check-ins, todo items, progress or user preferences; keep `state.json` as the visible durable state that users and agents can inspect and modify.',
     '',
+    'Writing `state.json` through `window.reo.state.write` does not reload the host iframe. Update the DOM from the returned result. Reo reloads the iframe when `entry.html`, `runtime.json` or `assets/` change, and the user can manually reload from the work tab More menu with “刷新页面”.',
+    '',
     '## Agent updates',
     '',
     'When an agent updates data, it should edit `state.json` and `entry.html` together if the entry embeds a static copy of the data. Preserve unknown store keys unless the user asks for a reset.',
@@ -577,8 +579,9 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BRIDGE_REFERENCE_MD =
     '## API groups',
     '',
     '- `window.reo.state.read()` and `window.reo.state.write(state, { baselineVersion })` for `state.json`.',
-    '- `window.reo.workspace.read()` for current workspace, memory summary, target identity and current object projection.',
-    '- `window.reo.content.readMemoryDetail()` and `window.reo.content.readCurrentObject()` for current Reo content projection without raw paths.',
+    '- `window.reo.workspace.read()` for current workspace summary, all Memory summaries, current Memory summary, target identity and current object projection.',
+    '- `window.reo.content.readMemoryDetail()` for the current Memory detail, or `window.reo.content.readMemoryDetail({ memoryId })` after reading `workspace.memories` when a work needs another Memory detail.',
+    '- `window.reo.content.readCurrentObject()` for the current Reo object projection without raw paths.',
     '- `window.reo.mutations.updateTitle({ title })` for the current work title.',
     '- `window.reo.ui.requestFullscreen()` to ask the host preview to expand.',
     '- `window.reo.agent.copyPrompt({ action })` to copy a Reo-built agent prompt. Use `action: "create-supplement"` from a work Segment; otherwise omit action to update the current work.',
@@ -1528,7 +1531,7 @@ export const DEFAULT_REO_WORKS_DESIGN_INTERACTIONS_REFERENCE_MD =
     '',
     '## Data update model',
     '',
-    'Works can read the current Reo projection through `window.reo.content` and `window.reo.workspace`. For larger data refreshes, the user can still copy an update prompt and let an agent rewrite `state.json` / `entry.html` from the latest files.',
+    'Works can read the whole workspace summary through `window.reo.workspace.read().workspace.memories`, then call `window.reo.content.readMemoryDetail({ memoryId })` for the Memory details they need. This keeps dashboards and data tools live without exposing raw paths, `.reo/` internals or a generic filesystem bridge.',
   ].join('\n') + '\n';
 
 export const DEFAULT_REO_WORKS_DESIGN_SVG_DIAGRAMS_REFERENCE_MD =

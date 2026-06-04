@@ -130,7 +130,11 @@ function createSegmentSupplementSpeechAudioRequestId(
     .slice(2)}`;
 }
 
-export function memoryDetailQueryOptions(session: WorkspaceSession, memoryId: string) {
+function createMemoryDetailQueryOptions(
+  session: WorkspaceSession,
+  memoryId: string,
+  staleTime: number
+) {
   return queryOptions({
     queryKey: memoryDetailQueryKey({ workspaceId: session.workspaceId, memoryId }),
     queryFn: async (): Promise<{
@@ -160,9 +164,17 @@ export function memoryDetailQueryOptions(session: WorkspaceSession, memoryId: st
       return result.value;
     },
     retry: false,
-    staleTime: Infinity,
+    staleTime,
     gcTime: Infinity,
   });
+}
+
+export function memoryDetailQueryOptions(session: WorkspaceSession, memoryId: string) {
+  return createMemoryDetailQueryOptions(session, memoryId, Infinity);
+}
+
+export function runtimeMemoryDetailQueryOptions(session: WorkspaceSession, memoryId: string) {
+  return createMemoryDetailQueryOptions(session, memoryId, 0);
 }
 
 export function segmentContentQueryKey({

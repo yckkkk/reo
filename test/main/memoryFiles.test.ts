@@ -3863,7 +3863,7 @@ test('artifact supplement with a damaged entry stays visible with a runtime faul
   assert.equal('previewVersion' in supplement, false);
 });
 
-test('direct artifact runtime state, manifest and assets refresh preview without changing entry hash', async () => {
+test('direct artifact runtime state does not refresh host preview while manifest and assets do', async () => {
   const rootPath = await workspaceRoot();
   const memoryId = 'mem_artifact_runtime_refresh';
   const segmentId = 'seg_artifact_runtime_refresh';
@@ -3902,7 +3902,7 @@ test('direct artifact runtime state, manifest and assets refresh preview without
   const afterState = await readSegmentProjection();
   assert.equal(afterState['entryHash'], sha256Text(html));
   assertWorkspaceHash(afterState['previewVersion']);
-  assert.notEqual(afterState['previewVersion'], initialSegment['previewVersion']);
+  assert.equal(afterState['previewVersion'], initialSegment['previewVersion']);
 
   await writeFile(
     path.join(segmentDirectory, 'runtime.json'),

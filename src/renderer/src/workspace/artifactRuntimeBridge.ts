@@ -27,12 +27,17 @@ type RuntimeApi = Partial<
   >
 >;
 
+export type ReadMemoryDetailForRuntime = (input: {
+  readonly memoryId: string;
+}) => Promise<WorkspaceMemoryDetail>;
+
 export type ArtifactRuntimeBridgeOptions = {
   readonly api: RuntimeApi;
   readonly enabled?: boolean;
   readonly iframeRef: RefObject<HTMLIFrameElement | null>;
   readonly memory: WorkspaceMemoryDetail;
   readonly onProductMutation: () => void;
+  readonly readMemoryDetail: ReadMemoryDetailForRuntime;
   readonly onRequestFullscreen: () => void;
   readonly src: string;
   readonly target: ArtifactRuntimeBridgeTarget;
@@ -184,11 +189,7 @@ function currentContext({
   readonly workspaceSession: WorkspaceSession;
 }) {
   return {
-    workspace: {
-      workspaceId: workspaceSession.workspaceId,
-      title: workspaceSession.snapshot.title,
-      description: workspaceSession.snapshot.description,
-    },
+    workspace: workspaceSession.snapshot,
     memory:
       workspaceSession.snapshot.memories.find(
         (candidate) => candidate.memoryId === target.memoryId
@@ -241,6 +242,7 @@ async function handleRuntimeRequest(
     memory,
     onProductMutation,
     onRequestFullscreen,
+    readMemoryDetail,
     target,
     workspaceSession,
   }: LatestBridgeOptions
@@ -276,7 +278,11 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'content.readMemoryDetail') {
-    return memory;
+    const requestedMemoryId = optionalString(request.payload, 'memoryId');
+    if (requestedMemoryId === undefined || requestedMemoryId === target.memoryId) {
+      return memory;
+    }
+    return readMemoryDetail?.({ memoryId: requestedMemoryId }) ?? missingApi(request.method);
   }
 
   if (request.method === 'content.readCurrentObject') {
@@ -485,6 +491,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
     target: options.target,
     workspaceSession: options.workspaceSession,
@@ -494,6 +501,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
     target: options.target,
     workspaceSession: options.workspaceSession,
