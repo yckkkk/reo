@@ -26,6 +26,12 @@ const workspaceBridgeKeys = [
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
   'copyArtifactAgentPrompt',
+  'readArtifactRuntimeState',
+  'writeArtifactRuntimeState',
+  'listArtifactRuntimeSecretSlots',
+  'getArtifactRuntimeSecret',
+  'setArtifactRuntimeSecret',
+  'clearArtifactRuntimeSecret',
   'copyNeedsReviewAgentPrompt',
   'updateMemorySpaceTitle',
   'closeWorkspace',
@@ -646,6 +652,80 @@ test('workspace preload bridge maps entity action and review prompt copy methods
         workspaceId: 'ws_1',
         needsReviewCount: 1,
       },
+    },
+  ]);
+});
+
+test('workspace preload bridge maps artifact runtime methods to explicit channels', async () => {
+  const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
+  const bridge = createWorkspaceBridge({
+    invoke: async (channel, payload) => {
+      calls.push({ channel, payload });
+      return { ok: true, value: {} };
+    },
+  });
+  const target = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    targetType: 'segment' as const,
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  };
+
+  await bridge.readArtifactRuntimeState({ ...target, requestId: 'state-read-1' });
+  await bridge.writeArtifactRuntimeState({
+    ...target,
+    requestId: 'state-write-1',
+    baselineVersion: 'a'.repeat(64),
+    state: { schemaVersion: 1, stores: { ui: {} } },
+  });
+  await bridge.listArtifactRuntimeSecretSlots({ ...target, requestId: 'secret-list-1' });
+  await bridge.getArtifactRuntimeSecret({
+    ...target,
+    requestId: 'secret-get-1',
+    slotId: 'apiKey',
+  });
+  await bridge.setArtifactRuntimeSecret({
+    ...target,
+    requestId: 'secret-set-1',
+    slotId: 'apiKey',
+    value: 'secret',
+  });
+  await bridge.clearArtifactRuntimeSecret({
+    ...target,
+    requestId: 'secret-clear-1',
+    slotId: 'apiKey',
+  });
+
+  assert.deepEqual(calls, [
+    {
+      channel: 'workspace:readArtifactRuntimeState',
+      payload: { ...target, requestId: 'state-read-1' },
+    },
+    {
+      channel: 'workspace:writeArtifactRuntimeState',
+      payload: {
+        ...target,
+        requestId: 'state-write-1',
+        baselineVersion: 'a'.repeat(64),
+        state: { schemaVersion: 1, stores: { ui: {} } },
+      },
+    },
+    {
+      channel: 'workspace:listArtifactRuntimeSecretSlots',
+      payload: { ...target, requestId: 'secret-list-1' },
+    },
+    {
+      channel: 'workspace:getArtifactRuntimeSecret',
+      payload: { ...target, requestId: 'secret-get-1', slotId: 'apiKey' },
+    },
+    {
+      channel: 'workspace:setArtifactRuntimeSecret',
+      payload: { ...target, requestId: 'secret-set-1', slotId: 'apiKey', value: 'secret' },
+    },
+    {
+      channel: 'workspace:clearArtifactRuntimeSecret',
+      payload: { ...target, requestId: 'secret-clear-1', slotId: 'apiKey' },
     },
   ]);
 });

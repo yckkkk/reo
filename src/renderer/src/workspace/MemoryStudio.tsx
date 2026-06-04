@@ -109,9 +109,18 @@ import {
   type VoiceSpeechSynthesisSpeaker,
 } from '../voiceSpeechSynthesisSpeakers';
 import {
+  clearArtifactRuntimeSecret,
+  copyArtifactAgentPrompt,
+  getArtifactRuntimeSecret,
+  listArtifactRuntimeSecretSlots,
+  readArtifactRuntimeState,
   saveSegmentSupplementTranscript,
   saveTranscript,
+  setArtifactRuntimeSecret,
   updateSegmentContentTabOrder,
+  updateSegmentSupplementTitle,
+  updateSegmentTitle,
+  writeArtifactRuntimeState,
 } from './workspaceApi';
 import {
   memoryDetailQueryOptions,
@@ -131,6 +140,10 @@ import {
   type MarkdownImageAttachmentTarget,
 } from './useMarkdownImageAttachment';
 import { createMarkdownAttachmentContext } from './markdownAttachmentSource';
+import {
+  useArtifactRuntimeBridge,
+  type ArtifactRuntimeBridgeTarget,
+} from './artifactRuntimeBridge';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 import {
   WorkspaceAlertDialogContent,
@@ -2299,17 +2312,51 @@ function MemoryStudioSupplementPlayerPlaceholder() {
 function ArtifactPreviewPanel({
   ariaLabelledBy,
   id,
+  memory,
+  onProductMutation,
   src,
+  target,
   title,
   topSpacingClassName = 'mt-12',
+  workspaceSession,
 }: {
   readonly ariaLabelledBy: string;
   readonly id: string;
+  readonly memory: WorkspaceMemoryDetail;
+  readonly onProductMutation: () => void;
   readonly src: string;
+  readonly target: ArtifactRuntimeBridgeTarget;
   readonly title: string;
   readonly topSpacingClassName?: string;
+  readonly workspaceSession: WorkspaceSession;
 }) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const bridgeApi = useMemo(
+    () => ({
+      clearArtifactRuntimeSecret,
+      copyArtifactAgentPrompt,
+      getArtifactRuntimeSecret,
+      listArtifactRuntimeSecretSlots,
+      readArtifactRuntimeState,
+      setArtifactRuntimeSecret,
+      updateSegmentSupplementTitle,
+      updateSegmentTitle,
+      writeArtifactRuntimeState,
+    }),
+    []
+  );
+
+  useArtifactRuntimeBridge({
+    api: bridgeApi,
+    iframeRef,
+    memory,
+    onProductMutation,
+    onRequestFullscreen: () => setExpanded(true),
+    src,
+    target,
+    workspaceSession,
+  });
 
   return (
     <EditorExpandShell
@@ -2336,6 +2383,7 @@ function ArtifactPreviewPanel({
         src={src}
         className="h-full w-full border-0 bg-background"
         data-slot="memory-studio-artifact-preview-frame"
+        ref={iframeRef}
         referrerPolicy="no-referrer"
       />
     </EditorExpandShell>
@@ -3326,6 +3374,17 @@ export function MemoryStudio({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const detailQuery = useQuery(memoryDetailQueryOptions(workspaceSession, memory.memoryId));
   const detail = detailQuery.data?.detail;
+  const refreshAfterArtifactRuntimeMutation = () => {
+    void queryClient.invalidateQueries({
+      queryKey: memoryDetailQueryKey({
+        workspaceId: workspaceSession.workspaceId,
+        memoryId: memory.memoryId,
+      }),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: workspaceSnapshotQueryKey(workspaceSession),
+    });
+  };
   const allSegments = detail?.segments ?? [];
   const visibleSegments = allSegments;
   const selectedSegmentResolution = useMemo(() => {
@@ -4996,8 +5055,17 @@ export function MemoryStudio({
                   <ArtifactPreviewPanel
                     ariaLabelledBy={transcriptContentTab.tabId}
                     id={transcriptContentTab.panelId}
+                    memory={detail}
+                    onProductMutation={refreshAfterArtifactRuntimeMutation}
                     src={artifactSegmentPreviewUrl(workspaceSession.workspaceId, selectedSegment)}
+                    target={{
+                      targetType: 'segment',
+                      workspaceId: workspaceSession.workspaceId,
+                      memoryId: selectedSegment.memoryId,
+                      segmentId: selectedSegment.segmentId,
+                    }}
                     title={transcriptContentTab.title}
+                    workspaceSession={workspaceSession}
                   />
                 ) : noteSegmentContent ? (
                   <InlineMarkdownContentEditor<SavedNoteSegmentContent>
@@ -5153,12 +5221,22 @@ export function MemoryStudio({
                     key={activeSegmentSupplement.supplementId}
                     ariaLabelledBy={activeContentTabModel.tabId}
                     id={activeContentTabModel.panelId}
+                    memory={detail}
+                    onProductMutation={refreshAfterArtifactRuntimeMutation}
                     src={artifactSupplementPreviewUrl(
                       workspaceSession.workspaceId,
                       activeSegmentSupplement
                     )}
+                    target={{
+                      targetType: 'supplement',
+                      workspaceId: workspaceSession.workspaceId,
+                      memoryId: activeSegmentSupplement.memoryId,
+                      segmentId: activeSegmentSupplement.segmentId,
+                      supplementId: activeSegmentSupplement.supplementId,
+                    }}
                     title={activeSegmentSupplement.title}
                     topSpacingClassName="mt-4"
+                    workspaceSession={workspaceSession}
                   />
                 ) : null
               ) : null}

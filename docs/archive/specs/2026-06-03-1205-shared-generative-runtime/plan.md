@@ -39,7 +39,7 @@
 
 - Todo / 复习表：验证状态持久化和 agent 可修改状态。
 - 联网仪表盘：验证网络、CDN/framework 和 secret。
-- Reo 内容工具：验证 bridge 读取内容与高频 mutation。
+- Reo 内容工具：验证 bridge 读取内容、状态写入、当前作品标题 mutation 与 agent prompt action。
 
 ## Review Gates
 

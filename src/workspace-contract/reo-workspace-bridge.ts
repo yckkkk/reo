@@ -1,5 +1,7 @@
 import type {
   WorkspaceChooseDirectoryResponse,
+  WorkspaceClearArtifactRuntimeSecretRequest,
+  WorkspaceClearArtifactRuntimeSecretResponse,
   WorkspaceClearMicrophoneIntentResponse,
   WorkspaceClearVoiceTranscriptionApiKeyRequest,
   WorkspaceClearVoiceTranscriptionApiKeyResponse,
@@ -36,10 +38,14 @@ import type {
   WorkspaceFinalizeSegmentSupplementNoteDraftResponse,
   WorkspaceFinalizeSegmentSupplementRecordingDraftRequest,
   WorkspaceFinalizeSegmentSupplementRecordingDraftResponse,
+  WorkspaceGetArtifactRuntimeSecretRequest,
+  WorkspaceGetArtifactRuntimeSecretResponse,
   WorkspaceHandleRequest,
   WorkspaceInitializeRequest,
   WorkspaceInitializeResponse,
   WorkspaceEntityActionResponse,
+  WorkspaceListArtifactRuntimeSecretSlotsRequest,
+  WorkspaceListArtifactRuntimeSecretSlotsResponse,
   WorkspaceListMemorySpacesResponse,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
@@ -52,6 +58,8 @@ import type {
   WorkspaceOpenRequest,
   WorkspaceOpenSegmentDocumentRequest,
   WorkspaceOpenSegmentSupplementDocumentRequest,
+  WorkspaceReadArtifactRuntimeStateRequest,
+  WorkspaceReadArtifactRuntimeStateResponse,
   WorkspaceReadSegmentContentRequest,
   WorkspaceReadSegmentContentResponse,
   WorkspaceReadSegmentSpeechAudioRequest,
@@ -137,6 +145,8 @@ import type {
   WorkspaceRemoveMemorySpaceResponse,
   WorkspaceSaveVoiceTranscriptionApiKeyRequest,
   WorkspaceSaveVoiceTranscriptionApiKeyResponse,
+  WorkspaceSetArtifactRuntimeSecretRequest,
+  WorkspaceSetArtifactRuntimeSecretResponse,
   WorkspaceSetVoiceSpeechSynthesisSpeakerRequest,
   WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   WorkspaceSetVoiceTranscriptionEnabledRequest,
@@ -155,6 +165,8 @@ import type {
   WorkspaceUpdateSegmentTitleResponse,
   WorkspaceValidateVoiceTranscriptionCredentialsRequest,
   WorkspaceValidateVoiceTranscriptionCredentialsResponse,
+  WorkspaceWriteArtifactRuntimeStateRequest,
+  WorkspaceWriteArtifactRuntimeStateResponse,
   WorkspaceWriteNoteSegmentDraftBodyRequest,
   WorkspaceWriteNoteSegmentDraftBodyResponse,
   WorkspaceWriteSegmentContentRequest,
@@ -226,6 +238,24 @@ export interface ReoWorkspaceBridge {
   readonly copyArtifactAgentPrompt: (
     payload: WorkspaceCopyArtifactAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly readArtifactRuntimeState: (
+    payload: WorkspaceReadArtifactRuntimeStateRequest
+  ) => Promise<WorkspaceReadArtifactRuntimeStateResponse>;
+  readonly writeArtifactRuntimeState: (
+    payload: WorkspaceWriteArtifactRuntimeStateRequest
+  ) => Promise<WorkspaceWriteArtifactRuntimeStateResponse>;
+  readonly listArtifactRuntimeSecretSlots: (
+    payload: WorkspaceListArtifactRuntimeSecretSlotsRequest
+  ) => Promise<WorkspaceListArtifactRuntimeSecretSlotsResponse>;
+  readonly getArtifactRuntimeSecret: (
+    payload: WorkspaceGetArtifactRuntimeSecretRequest
+  ) => Promise<WorkspaceGetArtifactRuntimeSecretResponse>;
+  readonly setArtifactRuntimeSecret: (
+    payload: WorkspaceSetArtifactRuntimeSecretRequest
+  ) => Promise<WorkspaceSetArtifactRuntimeSecretResponse>;
+  readonly clearArtifactRuntimeSecret: (
+    payload: WorkspaceClearArtifactRuntimeSecretRequest
+  ) => Promise<WorkspaceClearArtifactRuntimeSecretResponse>;
   readonly copyNeedsReviewAgentPrompt: (
     payload: WorkspaceCopyNeedsReviewAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;

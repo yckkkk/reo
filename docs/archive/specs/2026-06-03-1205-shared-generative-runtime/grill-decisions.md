@@ -21,7 +21,7 @@
 
 - 最小合同是 `entry.html`、`runtime.json`、`state.json`、`assets/`。
 - `runtime.json` 是描述 + 启动，不是权限审批。
-- `state.json` 是长期状态真源，使用命名 stores。
+- `state.json` 是长期状态真源，硬边界是 JSON object + version/baseline；命名 stores 是默认推荐组织方式。
 - localStorage 和 IndexedDB 允许使用，但不是 agent 可依赖的长期真源。
 - 本地资源必须进入 bundle。
 
@@ -37,7 +37,7 @@
 - HTML 显式引入 Reo vendor script，获得 `window.reo`。
 - API 按使用场景分组：state、workspace、content、mutations、secrets、ui、agent。
 - Reo prompt action 由 Reo 生成骨架，作品只传意图和状态片段。
-- Product mutation 复用 Reo 现有事务、baseline、stale conflict 和恢复模型。
+- Product mutation 复用 Reo 现有事务、baseline、stale conflict 和恢复模型；M2 works 只开放当前作品标题这类当前对象 mutation，不通过 bridge 写任意 note 正文。
 
 ## Agent 创作
 

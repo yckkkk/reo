@@ -11,6 +11,7 @@ import {
   WORKSPACE_CLEAR_MICROPHONE_INTENT_CHANNEL,
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_CLEAR_ARTIFACT_RUNTIME_SECRET_CHANNEL,
   WORKSPACE_APPEND_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
@@ -39,8 +40,10 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
+  WORKSPACE_GET_ARTIFACT_RUNTIME_SECRET_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_ARTIFACT_RUNTIME_SECRET_SLOTS_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
@@ -50,6 +53,7 @@ import {
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
+  WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -90,6 +94,7 @@ import {
   WORKSPACE_SAVE_TRANSCRIPT_CHANNEL,
   WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
+  WORKSPACE_SET_ARTIFACT_RUNTIME_SECRET_CHANNEL,
   WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
@@ -100,12 +105,15 @@ import {
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
   WORKSPACE_VALIDATE_VOICE_TRANSCRIPTION_CREDENTIALS_CHANNEL,
+  WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL,
   WORKSPACE_WRITE_NOTE_SEGMENT_DRAFT_BODY_CHANNEL,
   WORKSPACE_WRITE_SEGMENT_CONTENT_CHANNEL,
   WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
   WORKSPACE_WRITE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_BODY_CHANNEL,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
+  workspaceClearArtifactRuntimeSecretRequestSchema,
+  workspaceClearArtifactRuntimeSecretResponseSchema,
   workspaceChooseDirectoryResponseSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
@@ -129,8 +137,12 @@ import {
   workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
   workspaceFinalizeSegmentSupplementNoteDraftResponseSchema,
   workspaceFileTruthChangedEventSchema,
+  workspaceGetArtifactRuntimeSecretRequestSchema,
+  workspaceGetArtifactRuntimeSecretResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListArtifactRuntimeSecretSlotsRequestSchema,
+  workspaceListArtifactRuntimeSecretSlotsResponseSchema,
   workspaceListMemorySpacesResponseSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
@@ -151,6 +163,8 @@ import {
   workspaceCopySegmentRelativePathRequestSchema,
   workspaceCopySegmentSupplementAbsolutePathRequestSchema,
   workspaceCopySegmentSupplementRelativePathRequestSchema,
+  workspaceReadArtifactRuntimeStateRequestSchema,
+  workspaceReadArtifactRuntimeStateResponseSchema,
   workspaceReadFinalizedAudioSegmentRequestSchema,
   workspaceReadFinalizedAudioSegmentAudioRequestSchema,
   workspaceReadFinalizedAudioSegmentAudioResponseSchema,
@@ -222,6 +236,8 @@ import {
   workspaceRecordingTranscriptionStartRequestSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
   workspaceSaveVoiceTranscriptionApiKeyResponseSchema,
+  workspaceSetArtifactRuntimeSecretRequestSchema,
+  workspaceSetArtifactRuntimeSecretResponseSchema,
   workspaceSegmentIdRequestSchema,
   workspaceSegmentSupplementIdRequestSchema,
   workspaceSegmentSupplementMarkdownSaveRequestSchema,
@@ -234,6 +250,8 @@ import {
   workspaceClearVoiceTranscriptionApiKeyResponseSchema,
   workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
+  workspaceWriteArtifactRuntimeStateRequestSchema,
+  workspaceWriteArtifactRuntimeStateResponseSchema,
   workspaceOpenMarkdownExternalLinkRequestSchema,
   workspaceOpenMarkdownExternalLinkResponseSchema,
   workspaceOpenVoiceTranscriptionProviderConsoleRequestSchema,
@@ -418,6 +436,15 @@ import {
 } from './voiceSpeechSynthesisProbe.js';
 import type { VoiceSettingsStore } from './voiceSettingsStore.js';
 import {
+  clearArtifactRuntimeSecretValue,
+  getArtifactRuntimeSecretValue,
+  listArtifactRuntimeSecretSlots,
+  setArtifactRuntimeSecretValue,
+  type ArtifactRuntimeSecretStore,
+} from './artifactRuntimeSecrets.js';
+import { readArtifactRuntimeState, writeArtifactRuntimeState } from './artifactRuntimeState.js';
+import type { ArtifactRuntimeTarget } from './artifactRuntimeTarget.js';
+import {
   createWorkspaceBackfillRuntime,
   type WorkspaceBackfillRuntime,
 } from './backfillRuntime.js';
@@ -504,6 +531,7 @@ export interface RegisterWorkspaceIpcOptions {
   readonly fileTruthWatcher?: WorkspaceFileTruthWatcherRegistry;
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+  readonly artifactRuntimeSecretStore?: ArtifactRuntimeSecretStore;
   readonly voiceSettingsStore: VoiceSettingsStore;
   readonly voiceTranscriptionProbe?: VoiceTranscriptionProbe;
   readonly voiceSpeechSynthesisProbe?: VoiceSpeechSynthesisProbe;
@@ -544,6 +572,7 @@ interface HandleWorkspaceRequestOptions {
   readonly isTrustedUrl: (url: string) => boolean;
   readonly backfillRuntime?: WorkspaceBackfillRuntime;
   readonly speechSynthesisRuntime?: WorkspaceSpeechSynthesisRuntime;
+  readonly artifactRuntimeSecretStore?: ArtifactRuntimeSecretStore;
   readonly handleStore?: WorkspaceHandleStore;
   readonly onBeforeBackfillCancel?: (workspaceHandle: string) => boolean;
   readonly onWorkspaceClosed?: (workspaceHandle: string) => Promise<void> | void;
@@ -1243,6 +1272,268 @@ export async function handleCopyArtifactAgentPromptForTest(
   options: HandleCopyArtifactAgentPromptOptions
 ): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
   return handleCopyArtifactAgentPromptCore(options);
+}
+
+function artifactRuntimeTargetFromRequest(
+  request: z.infer<typeof workspaceReadArtifactRuntimeStateRequestSchema>
+): ArtifactRuntimeTarget {
+  if (request.targetType === 'supplement') {
+    return {
+      targetType: 'supplement',
+      workspaceId: request.workspaceId,
+      memoryId: request.memoryId,
+      segmentId: request.segmentId,
+      supplementId: request.supplementId,
+    };
+  }
+  return {
+    targetType: 'segment',
+    workspaceId: request.workspaceId,
+    memoryId: request.memoryId,
+    segmentId: request.segmentId,
+  };
+}
+
+function artifactRuntimeWorkspaceMismatchError(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+    'Artifact runtime workspace does not match the active handle'
+  );
+}
+
+function handleReadArtifactRuntimeStateCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadArtifactRuntimeStateResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceReadArtifactRuntimeStateRequestSchema,
+    invalidMessage: 'readArtifactRuntimeState request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await readArtifactRuntimeState({
+          rootPath: handle.canonicalRoot,
+          target: artifactRuntimeTargetFromRequest(request),
+        });
+        return workspaceReadArtifactRuntimeStateResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleWriteArtifactRuntimeStateCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteArtifactRuntimeStateResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceWriteArtifactRuntimeStateRequestSchema,
+    invalidMessage: 'writeArtifactRuntimeState request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await writeArtifactRuntimeState({
+          rootPath: handle.canonicalRoot,
+          target: artifactRuntimeTargetFromRequest(request),
+          baselineVersion: request.baselineVersion,
+          state: request.state,
+        });
+        return workspaceWriteArtifactRuntimeStateResponseSchema.parse(
+          result.ok
+            ? {
+                ok: true,
+                value: { requestId: request.requestId, ...result.value },
+              }
+            : result
+        );
+      }),
+  });
+}
+
+function missingArtifactRuntimeSecretStore(): WorkspaceErrorEnvelope {
+  return workspaceError(
+    'ERR_WORKSPACE_UPDATE_FAILED',
+    'Artifact runtime secret store is unavailable',
+    'previous-file-preserved'
+  );
+}
+
+function handleListArtifactRuntimeSecretSlotsCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListArtifactRuntimeSecretSlotsResponseSchema>> {
+  const store = options.artifactRuntimeSecretStore;
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_LIST_ARTIFACT_RUNTIME_SECRET_SLOTS_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceListArtifactRuntimeSecretSlotsRequestSchema,
+    invalidMessage: 'listArtifactRuntimeSecretSlots request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (!store) {
+          return missingArtifactRuntimeSecretStore();
+        }
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await listArtifactRuntimeSecretSlots({
+          rootPath: handle.canonicalRoot,
+          store,
+          target: artifactRuntimeTargetFromRequest(request),
+        });
+        return workspaceListArtifactRuntimeSecretSlotsResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { requestId: request.requestId, slots: result.value.slots } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleGetArtifactRuntimeSecretCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceGetArtifactRuntimeSecretResponseSchema>> {
+  const store = options.artifactRuntimeSecretStore;
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_GET_ARTIFACT_RUNTIME_SECRET_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceGetArtifactRuntimeSecretRequestSchema,
+    invalidMessage: 'getArtifactRuntimeSecret request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (!store) {
+          return missingArtifactRuntimeSecretStore();
+        }
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await getArtifactRuntimeSecretValue({
+          rootPath: handle.canonicalRoot,
+          store,
+          target: artifactRuntimeTargetFromRequest(request),
+          slotId: request.slotId,
+        });
+        return workspaceGetArtifactRuntimeSecretResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleSetArtifactRuntimeSecretCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSetArtifactRuntimeSecretResponseSchema>> {
+  const store = options.artifactRuntimeSecretStore;
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_SET_ARTIFACT_RUNTIME_SECRET_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceSetArtifactRuntimeSecretRequestSchema,
+    invalidMessage: 'setArtifactRuntimeSecret request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (!store) {
+          return missingArtifactRuntimeSecretStore();
+        }
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await setArtifactRuntimeSecretValue({
+          rootPath: handle.canonicalRoot,
+          store,
+          target: artifactRuntimeTargetFromRequest(request),
+          slotId: request.slotId,
+          value: request.value,
+        });
+        return workspaceSetArtifactRuntimeSecretResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
+            : result
+        );
+      }),
+  });
+}
+
+function handleClearArtifactRuntimeSecretCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceClearArtifactRuntimeSecretResponseSchema>> {
+  const store = options.artifactRuntimeSecretStore;
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_CLEAR_ARTIFACT_RUNTIME_SECRET_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceClearArtifactRuntimeSecretRequestSchema,
+    invalidMessage: 'clearArtifactRuntimeSecret request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (!store) {
+          return missingArtifactRuntimeSecretStore();
+        }
+        if (request.workspaceId !== handle.workspaceId) {
+          return artifactRuntimeWorkspaceMismatchError();
+        }
+        const result = await clearArtifactRuntimeSecretValue({
+          rootPath: handle.canonicalRoot,
+          store,
+          target: artifactRuntimeTargetFromRequest(request),
+          slotId: request.slotId,
+        });
+        return workspaceClearArtifactRuntimeSecretResponseSchema.parse(
+          result.ok
+            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
+            : result
+        );
+      }),
+  });
+}
+
+export async function handleReadArtifactRuntimeStateForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceReadArtifactRuntimeStateResponseSchema>> {
+  return handleReadArtifactRuntimeStateCore(options);
+}
+
+export async function handleWriteArtifactRuntimeStateForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceWriteArtifactRuntimeStateResponseSchema>> {
+  return handleWriteArtifactRuntimeStateCore(options);
+}
+
+export async function handleListArtifactRuntimeSecretSlotsForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceListArtifactRuntimeSecretSlotsResponseSchema>> {
+  return handleListArtifactRuntimeSecretSlotsCore(options);
+}
+
+export async function handleGetArtifactRuntimeSecretForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceGetArtifactRuntimeSecretResponseSchema>> {
+  return handleGetArtifactRuntimeSecretCore(options);
+}
+
+export async function handleSetArtifactRuntimeSecretForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceSetArtifactRuntimeSecretResponseSchema>> {
+  return handleSetArtifactRuntimeSecretCore(options);
+}
+
+export async function handleClearArtifactRuntimeSecretForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceClearArtifactRuntimeSecretResponseSchema>> {
+  return handleClearArtifactRuntimeSecretCore(options);
 }
 
 function handleCopyMemoryAbsolutePathCore({
@@ -6910,6 +7201,7 @@ export function registerWorkspaceIpc({
   fileTruthWatcher = defaultWorkspaceFileTruthWatcherRegistry,
   memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
   recordingTranscriptionSessions = defaultRecordingTranscriptionSessions,
+  artifactRuntimeSecretStore,
   voiceSettingsStore,
   backfillRuntime = createWorkspaceBackfillRuntime({ voiceSettingsStore }),
   speechSynthesisRuntime = createWorkspaceSpeechSynthesisRuntime({ voiceSettingsStore }),
@@ -7062,6 +7354,7 @@ export function registerWorkspaceIpc({
     }
     return response;
   }
+  const runtimeSecretStoreOption = artifactRuntimeSecretStore ? { artifactRuntimeSecretStore } : {};
 
   registerWorkspaceIpcHandler(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
@@ -7258,6 +7551,72 @@ export function registerWorkspaceIpc({
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
+    handleReadArtifactRuntimeStateCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
+    handleWriteArtifactRuntimeStateCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(
+    WORKSPACE_LIST_ARTIFACT_RUNTIME_SECRET_SLOTS_CHANNEL,
+    (event, input) =>
+      handleListArtifactRuntimeSecretSlotsCore({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        ...runtimeSecretStoreOption,
+        handleStore,
+      })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_GET_ARTIFACT_RUNTIME_SECRET_CHANNEL, (event, input) =>
+    handleGetArtifactRuntimeSecretCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      ...runtimeSecretStoreOption,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_SET_ARTIFACT_RUNTIME_SECRET_CHANNEL, (event, input) =>
+    handleSetArtifactRuntimeSecretCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      ...runtimeSecretStoreOption,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_CLEAR_ARTIFACT_RUNTIME_SECRET_CHANNEL, (event, input) =>
+    handleClearArtifactRuntimeSecretCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      ...runtimeSecretStoreOption,
       handleStore,
     })
   );

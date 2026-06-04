@@ -286,6 +286,27 @@ test('artifact protocol resolves versioned Reo vendor assets with immutable cach
   }
 });
 
+test('artifact protocol resolves the bundled Reo runtime bridge vendor asset', async () => {
+  const rootPath = await workspaceRoot();
+
+  const vendor = await resolveArtifactProtocolRequest(
+    'reo-artifact://vendor/reo-runtime/bridge.js?v=app',
+    rootResolver(rootPath),
+    { vendorRoot: path.join(process.cwd(), 'resources', 'artifact-vendor') }
+  );
+
+  assert.equal(vendor.ok, true);
+  if (vendor.ok) {
+    const script = Buffer.from(vendor.bytes).toString('utf8');
+    assert.equal(vendor.cacheControl, 'max-age=31536000, immutable');
+    assert.equal(vendor.mimeType, 'text/javascript');
+    assert.match(script, /window\.reo/);
+    assert.match(script, /postMessage/);
+    assert.match(script, /mutations\.updateTitle/);
+    assert.doesNotMatch(script, /saveNoteBody/);
+  }
+});
+
 test('artifact protocol rejects inactive workspaces, traversal, symlinks, unsupported MIME, and byte caps', async () => {
   const rootPath = await workspaceRoot();
   const { entryHash, segmentDirectory } = await writeArtifactSegmentForProtocolTest(rootPath);

@@ -16,8 +16,8 @@ Reo 不审查用户自己创造的作品。作品和组件运行时默认按用�
 - 默认支持 HTML、CSS、JavaScript、前端框架、CDN 库和普通 Web 网络。
 - 默认支持每个 runtime object 独立 origin，用于 localStorage、IndexedDB 和浏览器缓存隔离。
 - 默认支持可见 `state.json` 作为用户和 agent 可查看、可修改、可迁移的长期状态真源。
-- 默认支持 Reo typed bridge：状态、Reo 数据、产品 mutation、secret、UI、agent prompt action。
-- 默认支持 runtime 读取自身 secret slot 的值；secret 描述可见，secret 明文值由 Reo 托管。
+- 默认支持 Reo typed bridge：状态、Reo 数据、当前对象受限产品 mutation、secret、UI、agent prompt action。
+- 默认支持 runtime 读取自身 secret slot 的值；secret 描述可见，secret 值由 Reo 用 safeStorage 加密托管。
 - Reo runtime 不弹权限确认，不做联网风险提示，不做内容质量审查。
 
 Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不获得 Node/Electron/raw path，不绕过 Reo 现有产品 mutation 的事务、baseline 和恢复模型。
@@ -56,7 +56,7 @@ assets/
 - Reo bridge API 需求。
 - agent prompt actions 的建议入口。
 
-`state.json` 是长期状态真源，使用命名 stores，例如：
+`state.json` 是长期状态真源，必须是 JSON object。命名 stores 是推荐组织方式，不是 Reo 投影或 runtime state API 的硬性形状，例如：
 
 ```json
 {
@@ -70,7 +70,7 @@ assets/
 }
 ```
 
-localStorage、IndexedDB 和浏览器缓存允许使用，但只作为 Web app 兼容缓存；长期可见状态仍推荐写入 `state.json`。
+localStorage、IndexedDB 和浏览器缓存允许使用，但只作为 Web app 兼容缓存；长期可见状态仍推荐写入 `state.json`。用户或 agent 可以把 `state.json` 替换为任意 JSON object；Reo 只用 version/baseline 防止运行中写入覆盖外部修改。
 
 `assets/` 保存本地资源。用户本机文件必须复制进 bundle 才能被作品引用；不直接使用 `file://` 作为 runtime 资源合同。
 
@@ -112,7 +112,7 @@ HTML 通过显式 vendor script 获得 `window.reo`。Reo 不自动改写用户 
 
 `window.reo.agent` 的最终 prompt 由 Reo 生成骨架：作品传入意图、当前状态片段和建议文件；Reo 补入对象身份、相对路径、skill 入口和文件合同。
 
-首批 mutation 只覆盖高频产品动作和 runtime 自身能力：更新 runtime state、管理 secret、创建/更新作品与作品补充、更新标题、保存 note 正文、发起 agent prompt。删除、移动、批量破坏性动作不作为首批目标。
+首批 mutation 只覆盖高频产品动作和 runtime 自身能力：更新 runtime state、管理当前对象已声明 secret、创建/更新作品与作品补充、更新当前作品标题、发起 agent prompt。Artifact works 不通过 `window.reo` 直接写任意 note 正文；更广的 Reo 内容修改交给 agent prompt 和普通 Reo 文件合同。删除、移动、批量破坏性动作不作为首批目标。
 
 ## Agent Creation
 
@@ -157,9 +157,9 @@ Reo 采用 fail-open 诊断：
 Runtime secret 分为描述和值：
 
 - 描述在 `runtime.json` 的 secret slots 中，用户和 agent 可查看修改。
-- 值由 Reo 托管，绑定 runtime object id + slot id。
+- 值由 Reo safeStorage 加密托管，绑定 runtime object id + slot id。
 - 已保存的 secret 值可由当前 runtime 静默读取到内存使用。
-- Reo 不把 secret 明文写入 runtime bundle。
+- Reo 不把 secret 明文写入 runtime bundle 或 userData 明文 JSON。
 - 用户可通过 runtime 请求设置 secret，也可在对象 More 管理或清除。
 
 ## Network
@@ -174,7 +174,7 @@ M2 验收至少使用三类作品：
 
 1. Todo / 复习表：证明用户交互状态、`state.json`、localStorage/IndexedDB 兼容缓存和外部 agent 修改状态。
 2. 联网仪表盘：证明普通 Web 网络、CDN/framework、secret slot 和 runtime 错误恢复。
-3. Reo 内容工具：证明 `window.reo` 读取当前 workspace 内容投影，并通过 typed mutation 完成高频写入。
+3. Reo 内容工具：证明 `window.reo` 读取当前 workspace 内容投影，并通过 state、当前作品标题 mutation 或 agent prompt action 完成受控写入入口。
 
 ## Non-Goals
 

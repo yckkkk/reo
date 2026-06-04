@@ -132,6 +132,42 @@ export function copyArtifactAgentPrompt(
   return window.reoWorkspace.copyArtifactAgentPrompt(payload);
 }
 
+export function readArtifactRuntimeState(
+  payload: Parameters<Window['reoWorkspace']['readArtifactRuntimeState']>[0]
+) {
+  return window.reoWorkspace.readArtifactRuntimeState(payload);
+}
+
+export function writeArtifactRuntimeState(
+  payload: Parameters<Window['reoWorkspace']['writeArtifactRuntimeState']>[0]
+) {
+  return window.reoWorkspace.writeArtifactRuntimeState(payload);
+}
+
+export function listArtifactRuntimeSecretSlots(
+  payload: Parameters<Window['reoWorkspace']['listArtifactRuntimeSecretSlots']>[0]
+) {
+  return window.reoWorkspace.listArtifactRuntimeSecretSlots(payload);
+}
+
+export function getArtifactRuntimeSecret(
+  payload: Parameters<Window['reoWorkspace']['getArtifactRuntimeSecret']>[0]
+) {
+  return window.reoWorkspace.getArtifactRuntimeSecret(payload);
+}
+
+export function setArtifactRuntimeSecret(
+  payload: Parameters<Window['reoWorkspace']['setArtifactRuntimeSecret']>[0]
+) {
+  return window.reoWorkspace.setArtifactRuntimeSecret(payload);
+}
+
+export function clearArtifactRuntimeSecret(
+  payload: Parameters<Window['reoWorkspace']['clearArtifactRuntimeSecret']>[0]
+) {
+  return window.reoWorkspace.clearArtifactRuntimeSecret(payload);
+}
+
 export function copyNeedsReviewAgentPrompt(
   payload: Parameters<Window['reoWorkspace']['copyNeedsReviewAgentPrompt']>[0]
 ) {

@@ -27,6 +27,7 @@ import {
   setupContentSecurityPolicy,
   setupPermissionRequestHandler,
 } from './security.js';
+import { createArtifactRuntimeSecretStore } from './artifactRuntimeSecrets.js';
 import { createVoiceSettingsStore } from './voiceSettingsStore.js';
 import {
   closeAllWorkspaceHandles,
@@ -130,6 +131,10 @@ app
       safeStorage,
       userDataDir: app.getPath('userData'),
     });
+    const artifactRuntimeSecretStore = createArtifactRuntimeSecretStore({
+      safeStorage,
+      userDataDir: app.getPath('userData'),
+    });
     const recordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry({
       resolveVoiceSettings: () => {
         const snapshot = voiceSettingsStore.read();
@@ -148,6 +153,7 @@ app
       await closeAllWorkspaceHandles();
     };
     registerWorkspaceIpc({
+      artifactRuntimeSecretStore,
       backfillRuntime,
       expectedSession: session.defaultSession,
       expectedSessionKey: 'default',

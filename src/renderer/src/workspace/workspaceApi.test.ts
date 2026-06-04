@@ -3,6 +3,7 @@ import {
   appendRecordingAudioChunk,
   beginMicrophoneIntent,
   chooseWorkspaceDirectory,
+  clearArtifactRuntimeSecret,
   clearMicrophoneIntent,
   cloneRecordingDraftPrefix,
   closeWorkspace,
@@ -29,6 +30,8 @@ import {
   finalizeSegmentSupplementNoteDraft,
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
+  getArtifactRuntimeSecret,
+  listArtifactRuntimeSecretSlots,
   listMemorySpaces,
   openMarkdownExternalLink,
   openMemoryDocument,
@@ -42,6 +45,7 @@ import {
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
   readFinalizedAudioSegmentSupplementAudio,
+  readArtifactRuntimeState,
   readMemoryDetail,
   readSegmentContent,
   readSegmentSupplementContent,
@@ -61,12 +65,14 @@ import {
   restoreDeletedSegmentSupplement,
   restoreDeletedSegment,
   saveTranscript,
+  setArtifactRuntimeSecret,
   setVoiceSpeechSynthesisSpeaker,
   updateMemorySpaceTitle,
   updateMemoryTitle,
   updateSegmentContentTabOrder,
   updateSegmentSupplementTitle,
   appendSegmentSupplementRecordingAudioChunk,
+  writeArtifactRuntimeState,
   writeNoteSegmentDraftBody,
   writeSegmentContent,
   writeSegmentSupplementContent,
@@ -99,6 +105,12 @@ describe('workspace renderer API wrapper', () => {
     copySegmentRelativePath: vi.fn(),
     copySegmentSupplementRelativePath: vi.fn(),
     copyArtifactAgentPrompt: vi.fn(),
+    readArtifactRuntimeState: vi.fn(),
+    writeArtifactRuntimeState: vi.fn(),
+    listArtifactRuntimeSecretSlots: vi.fn(),
+    getArtifactRuntimeSecret: vi.fn(),
+    setArtifactRuntimeSecret: vi.fn(),
+    clearArtifactRuntimeSecret: vi.fn(),
     closeWorkspace: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),
     createMemory: vi.fn(),
@@ -242,6 +254,72 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
     expect(reoWorkspace.openMarkdownExternalLink).toHaveBeenCalledWith({
       url: 'https://tiptap.dev/docs',
+    });
+  });
+
+  it('forwards artifact runtime methods to the explicit preload surface', async () => {
+    const runtimeTarget = {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      targetType: 'segment' as const,
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    };
+
+    await readArtifactRuntimeState({ ...runtimeTarget, requestId: 'state-read-1' });
+    await writeArtifactRuntimeState({
+      ...runtimeTarget,
+      requestId: 'state-write-1',
+      baselineVersion: 'a'.repeat(64),
+      state: { schemaVersion: 1, stores: { ui: {} } },
+    });
+    await listArtifactRuntimeSecretSlots({ ...runtimeTarget, requestId: 'secret-list-1' });
+    await getArtifactRuntimeSecret({
+      ...runtimeTarget,
+      requestId: 'secret-get-1',
+      slotId: 'apiKey',
+    });
+    await setArtifactRuntimeSecret({
+      ...runtimeTarget,
+      requestId: 'secret-set-1',
+      slotId: 'apiKey',
+      value: 'value',
+    });
+    await clearArtifactRuntimeSecret({
+      ...runtimeTarget,
+      requestId: 'secret-clear-1',
+      slotId: 'apiKey',
+    });
+
+    expect(reoWorkspace.readArtifactRuntimeState).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'state-read-1',
+    });
+    expect(reoWorkspace.writeArtifactRuntimeState).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'state-write-1',
+      baselineVersion: 'a'.repeat(64),
+      state: { schemaVersion: 1, stores: { ui: {} } },
+    });
+    expect(reoWorkspace.listArtifactRuntimeSecretSlots).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'secret-list-1',
+    });
+    expect(reoWorkspace.getArtifactRuntimeSecret).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'secret-get-1',
+      slotId: 'apiKey',
+    });
+    expect(reoWorkspace.setArtifactRuntimeSecret).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'secret-set-1',
+      slotId: 'apiKey',
+      value: 'value',
+    });
+    expect(reoWorkspace.clearArtifactRuntimeSecret).toHaveBeenCalledWith({
+      ...runtimeTarget,
+      requestId: 'secret-clear-1',
+      slotId: 'apiKey',
     });
   });
 
