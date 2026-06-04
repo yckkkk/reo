@@ -442,10 +442,11 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD =
     '',
     '## Scripts',
     '',
-    '- Scaffold a bundle in an existing target object directory: `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <target-directory> --title "作品标题" --template dashboard`.',
+    '- Scaffold a runnable bundle in an existing target object directory: `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <target-directory> --title "作品标题" --template dashboard`.',
     '- Validate a bundle can run: `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>`.',
+    '- Inspect a bundle summary: `node skills/reo-generative-runtime/scripts/inspect-runtime.mjs <target-directory>`.',
     '',
-    'Validation is about file contract and runnability. It does not judge content quality, network risk or user intent.',
+    'Validation is about file contract and runnability. It does not judge content quality, network choices or user intent.',
   ].join('\n') + '\n';
 
 const DEFAULT_REO_GENERATIVE_RUNTIME_BUNDLE_CONTRACT_REFERENCE_MD =
@@ -597,10 +598,10 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BRIDGE_REFERENCE_MD =
     'Declare slots in `runtime.json`:',
     '',
     '```json',
-    '{ "secrets": [{ "id": "apiKey", "label": "API Key", "purpose": "Fetch a browser-compatible API" }] }',
+    '{ "secrets": [{ "id": "slotA", "label": "Slot A", "purpose": "Runtime-only value for this work" }] }',
     '```',
     '',
-    'Runtime can read configured values with `await window.reo.secrets.get("apiKey")`. Do not write secret values into `entry.html`, `runtime.json`, `state.json` or assets.',
+    'Runtime can read configured values with `await window.reo.secrets.get("slotA")`. Do not write secret values into `entry.html`, `runtime.json`, `state.json` or assets.',
   ].join('\n') + '\n';
 
 const DEFAULT_REO_GENERATIVE_RUNTIME_TEMPLATES_REFERENCE_MD =
@@ -640,7 +641,7 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATION_REFERENCE_MD =
     '- If `entry.html` uses `window.reo`, it also loads `reo-artifact://vendor/reo-runtime/bridge.js`.',
     '- The work stays light enough for future agent edits.',
     '',
-    'Run `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>` before ending a runtime task. This check validates runnability; it does not review taste, content quality, network risk or user choices.',
+    'Run `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>` before ending a runtime task. This check validates runnability; it does not review taste, content quality, network choices or user choices.',
   ].join('\n') + '\n';
 
 export const DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES = {
@@ -742,19 +743,66 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS =
     '  return true;',
     '}',
     '',
+    'function templateConfig(name) {',
+    '  const key = String(name || "custom").toLowerCase();',
+    '  const configs = {',
+    '    report: { id: "report", heading: "报告", summary: "把材料整理成清楚的段落、证据和下一步。", sections: ["重点", "证据", "下一步"] },',
+    '    explainer: { id: "explainer", heading: "解释器", summary: "用一个小例子把概念讲清楚。", sections: ["这个是什么", "为什么重要", "试试看"] },',
+    '    dashboard: { id: "dashboard", heading: "看板", summary: "用指标、列表和行动项快速看全局。", sections: ["指标", "趋势", "行动"] },',
+    '    editor: { id: "editor", heading: "编辑器", summary: "留下一个可以继续填写和整理的工作区。", sections: ["草稿", "检查", "完成"] },',
+    '    "spaced-review": { id: "spaced-review", heading: "复习表", summary: "安排今天、明天和本周要回顾的内容。", sections: ["今天", "明天", "本周"] },',
+    '    todo: { id: "todo", heading: "待办", summary: "记录下一步，并能在作品里勾选完成。", sections: ["今天", "以后", "完成"] },',
+    '    game: { id: "game", heading: "小游戏", summary: "用一个轻量互动帮助回顾和判断。", sections: ["问题", "选择", "结果"] },',
+    '    gallery: { id: "gallery", heading: "画廊", summary: "用一组卡片保存可继续扩展的材料。", sections: ["片段", "主题", "补充"] },',
+    '    map: { id: "map", heading: "地图", summary: "把关系、阶段或路径放到同一张图上。", sections: ["起点", "连接", "终点"] },',
+    '    prototype: { id: "prototype", heading: "原型", summary: "做一个可点击的简单流程。", sections: ["入口", "步骤", "结果"] },',
+    '    "data-tool": { id: "data-tool", heading: "数据工具", summary: "输入一个数字或文本，马上看到计算结果。", sections: ["输入", "计算", "结果"] },',
+    '    custom: { id: "custom", heading: "作品", summary: "一个可以被 agent 继续改写的本地 Web app。", sections: ["内容", "状态", "下一步"] },',
+    '  };',
+    '  return configs[key] || configs.custom;',
+    '}',
+    '',
+    'function initialState(config) {',
+    '  if (config.id === "todo") {',
+    '    return { schemaVersion: 1, stores: { ui: { filter: "all" }, data: { items: [] }, progress: { completed: 0 }, draft: { text: "" } } };',
+    '  }',
+    '  return { schemaVersion: 1, stores: { ui: { selected: config.sections[0] }, data: { sections: config.sections }, progress: {}, draft: {} } };',
+    '}',
+    '',
+    'function escapeHtml(value) {',
+    '  return String(value).replace(/[&<>"\']/g, function (char) {',
+    '    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;", "\'": "&#39;" }[char];',
+    '  });',
+    '}',
+    '',
+    'function bodyForTemplate(config) {',
+    '  if (config.id === "todo") {',
+    '    return `<form id="todo-form" class="toolbar"><input id="todo-input" placeholder="写下一件事"><button type="submit">新增一项</button></form><ul id="todo-list" class="list"></ul>`;',
+    '  }',
+    '  if (config.id === "dashboard") {',
+    '    return `<div class="metrics"><div><span>已整理</span><strong>3</strong></div><div><span>待处理</span><strong>2</strong></div><div><span>下一步</span><strong>1</strong></div></div>`;',
+    '  }',
+    '  return `<div class="grid">${config.sections.map(function (section) { return `<section class="panel"><h2>${escapeHtml(section)}</h2><p>把和「${escapeHtml(section)}」有关的内容放在这里，后续可以继续改写。</p></section>`; }).join("")}</div>`;',
+    '}',
+    '',
+    'function entryHtml(title, config) {',
+    '  return `<!doctype html>\\n<html lang="zh-CN">\\n<head>\\n  <meta charset="utf-8">\\n  <meta name="viewport" content="width=device-width, initial-scale=1">\\n  <title>${escapeHtml(title)}</title>\\n  <style>body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff;color:#2c2c2a;padding:24px;line-height:1.6}main{max-width:820px;margin:0 auto}h1{font-size:22px;font-weight:600;margin:0 0 8px}h2{font-size:16px;font-weight:500;margin:0 0 6px}.lead{color:#5f5e5a;margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.panel,.metrics>div{background:#f7f7f5;border-radius:12px;padding:16px}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.metrics span{display:block;color:#5f5e5a;font-size:13px}.metrics strong{font-size:24px;font-weight:500}.toolbar{display:flex;gap:8px;margin:16px 0}.toolbar input{flex:1;min-width:0;border:0;background:#f7f7f5;border-radius:8px;padding:10px 12px}.toolbar button,.list button{border:0;border-radius:8px;background:#2c2c2a;color:white;padding:10px 12px}.list{list-style:none;padding:0;margin:0;display:grid;gap:8px}.list li{display:flex;align-items:center;justify-content:space-between;background:#f7f7f5;border-radius:10px;padding:10px 12px}</style>\\n</head>\\n<body data-template="${config.id}">\\n  <main>\\n    <h1>${escapeHtml(title)}</h1>\\n    <p class="lead">${escapeHtml(config.summary)}</p>\\n    ${bodyForTemplate(config)}\\n  </main>\\n  <script src="reo-artifact://vendor/reo-runtime/bridge.js"></script>\\n  <script>\\n    (function(){\\n      var currentVersion = null;\\n      var state = { schemaVersion: 1, stores: { data: { items: [] } } };\\n      function items(){ return ((state.stores || {}).data || {}).items || []; }\\n      function render(){ var list = document.getElementById("todo-list"); if (!list) return; list.textContent = ""; items().forEach(function(item, index){ var row = document.createElement("li"); var label = document.createElement("span"); var button = document.createElement("button"); label.textContent = String(item && item.text ? item.text : ""); button.type = "button"; button.setAttribute("data-index", String(index)); button.textContent = item && item.done ? "已完成" : "完成"; row.appendChild(label); row.appendChild(button); list.appendChild(row); }); }\\n      function save(next){ if (!window.reo || !currentVersion) { state = next; render(); return Promise.resolve(); } return window.reo.state.write(next, { baselineVersion: currentVersion }).then(function(result){ if (result.status === "saved") { state = result.state; currentVersion = result.version; } else if (result.status === "stale") { state = result.currentState; currentVersion = result.currentVersion; } render(); }).catch(function(){ state = next; render(); }); }\\n      window.reo?.state?.read?.().then(function(snapshot){ state = snapshot.state || state; currentVersion = snapshot.version; render(); }).catch(render);\\n      document.addEventListener("submit", function(event){ if (event.target && event.target.id === "todo-form") { event.preventDefault(); var input = document.getElementById("todo-input"); var text = input && input.value ? input.value.trim() : ""; if (!text) return; if (input) input.value = ""; var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: items().concat([{ text: text, done: false }]) } }) }); void save(next); } });\\n      document.addEventListener("click", function(event){ var button = event.target && event.target.closest ? event.target.closest("[data-index]") : null; if (!button) return; var index = Number(button.getAttribute("data-index")); var nextItems = items().map(function(item, itemIndex){ return itemIndex === index ? Object.assign({}, item, { done: !item.done }) : item; }); var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: nextItems }, progress: { completed: nextItems.filter(function(item){ return item.done; }).length } }) }); void save(next); });\\n    })();\\n  </script>\\n</body>\\n</html>\\n`;',
+    '}',
+    '',
+    'const config = templateConfig(template);',
     'const runtimeManifest = {',
     '  schemaVersion: 1,',
     '  title,',
     '  entry: "entry.html",',
-    '  template,',
+    '  template: config.id,',
     '  state: { schemaVersion: 1, stores: ["ui", "data", "progress", "draft"] },',
     '  bridge: { needs: ["state", "workspace", "content", "mutations", "secrets", "ui", "agent"] },',
     '  secrets: [],',
     '};',
     'await writeNoReplace(path.join(target, "runtime.json"), `${JSON.stringify(runtimeManifest, null, 2)}\\n`);',
-    'await writeNoReplace(path.join(target, "state.json"), `${JSON.stringify({ schemaVersion: 1, stores: { ui: {}, data: {}, progress: {}, draft: {} } }, null, 2)}\\n`);',
-    'await writeNoReplace(path.join(target, "entry.html"), `<!doctype html>\\n<html lang="zh-CN">\\n<head>\\n  <meta charset="utf-8">\\n  <meta name="viewport" content="width=device-width, initial-scale=1">\\n  <title>${title}</title>\\n  <style>body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff;color:#2c2c2a;padding:24px;line-height:1.6}main{max-width:760px;margin:0 auto}h1{font-size:22px;font-weight:600;margin:0 0 12px}.panel{background:#f7f7f5;border-radius:12px;padding:16px}.meta{color:#5f5e5a;font-size:13px}</style>\\n</head>\\n<body>\\n  <main>\\n    <h1>${title}</h1>\\n    <section class="panel">Runtime bundle scaffolded. Replace this with the user-specific work.</section>\\n    <p class="meta" id="reo-state-status">state.json 可通过 window.reo.state 读写。</p>\\n  </main>\\n  <script src="reo-artifact://vendor/reo-runtime/bridge.js"></script>\\n  <script>\\n    window.reo?.state?.read?.().then(function(snapshot){\\n      var node = document.getElementById("reo-state-status");\\n      if (node) node.textContent = "state.json version " + snapshot.version.slice(0, 8);\\n    }).catch(function(){});\\n  </script>\\n</body>\\n</html>\\n`);',
-    'console.log(JSON.stringify({ ok: true, target: relative || "." }, null, 2));',
+    'await writeNoReplace(path.join(target, "state.json"), `${JSON.stringify(initialState(config), null, 2)}\\n`);',
+    'await writeNoReplace(path.join(target, "entry.html"), entryHtml(title, config));',
+    'console.log(JSON.stringify({ ok: true, target: relative || ".", template: config.id }, null, 2));',
   ].join('\n') + '\n';
 
 export const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS =
@@ -841,6 +889,64 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS =
     'console.log(JSON.stringify(report, null, 2));',
     'process.exit(issues.length === 0 ? 0 : 1);',
   ].join('\n') + '\n';
+
+export const DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS =
+  [
+    '#!/usr/bin/env node',
+    "import { lstat, readFile, readdir, realpath } from 'node:fs/promises';",
+    "import path from 'node:path';",
+    '',
+    'const targetArg = process.argv[2] ?? ".";',
+    'const root = process.cwd();',
+    'const rootReal = await realpath(root);',
+    'const target = path.resolve(root, targetArg);',
+    'const relative = path.relative(root, target);',
+    '',
+    'function insideRoot(realPath) {',
+    '  const realRelative = path.relative(rootReal, realPath);',
+    '  return !realRelative.startsWith("..") && !path.isAbsolute(realRelative);',
+    '}',
+    '',
+    'async function readText(fileName) {',
+    '  try {',
+    '    const filePath = path.join(target, fileName);',
+    '    const stats = await lstat(filePath);',
+    '    return stats.isFile() && !stats.isSymbolicLink() ? await readFile(filePath, "utf8") : null;',
+    '  } catch {',
+    '    return null;',
+    '  }',
+    '}',
+    '',
+    'let ok = true;',
+    'try {',
+    '  const stats = await lstat(target);',
+    '  ok = !relative.startsWith("..") && !path.isAbsolute(relative) && !relative.split(path.sep).includes(".reo") && stats.isDirectory() && !stats.isSymbolicLink() && insideRoot(await realpath(target));',
+    '} catch {',
+    '  ok = false;',
+    '}',
+    '',
+    'const entry = ok ? await readText("entry.html") : null;',
+    'const runtimeText = ok ? await readText("runtime.json") : null;',
+    'const stateText = ok ? await readText("state.json") : null;',
+    'let runtime = null;',
+    'let state = null;',
+    'try { runtime = runtimeText ? JSON.parse(runtimeText) : null; } catch {}',
+    'try { state = stateText ? JSON.parse(stateText) : null; } catch {}',
+    'let assets = [];',
+    'try { assets = (await readdir(path.join(target, "assets"), { withFileTypes: true })).filter((entry) => entry.isFile()).map((entry) => entry.name).sort(); } catch {}',
+    'const report = {',
+    '  ok: ok && !!entry && !!runtime && !!state,',
+    '  tool: "inspect-runtime",',
+    '  target: relative || ".",',
+    '  title: runtime && typeof runtime.title === "string" ? runtime.title : null,',
+    '  template: runtime && typeof runtime.template === "string" ? runtime.template : null,',
+    '  usesBridge: !!entry && /reo-artifact:\\/\\/vendor\\/reo-runtime\\/bridge\\.js/.test(entry),',
+    '  files: { entry: !!entry, runtime: !!runtime, state: !!state, assets },',
+    '};',
+    'console.log(JSON.stringify(report, null, 2));',
+    'process.exit(report.ok ? 0 : 1);',
+  ].join('\n') + '\n';
+
 export const DEFAULT_REO_WORKS_SKILL_MD =
   [
     '---',
@@ -858,7 +964,7 @@ export const DEFAULT_REO_WORKS_SKILL_MD =
     '',
     '- `references/file-contract.md`：新建或更新作品片段、作品补充的落文件合同。',
     '- `references/workflows.md`：从 Reo prompt、Memory 数据和既有作品推进创建/更新的步骤。',
-    '- `references/quality-check.md`：提交前的文件、隐私、轻量性能和 Reo 投影检查。',
+    '- `references/runtime-contract-check.md`：提交前的文件合同、runtime bundle 和 Reo 投影检查。',
     '- 运行时 bundle、状态、模板和脚本先读 `skills/reo-generative-runtime/SKILL.md`。',
     '- 需要视觉、交互、图表、diagram、dashboard、mockup 或创意表达时，继续读 `skills/reo-works-design/SKILL.md`。',
     '',
@@ -1218,11 +1324,11 @@ export const DEFAULT_REO_WORKS_WORKFLOWS_REFERENCE_MD =
     '- Visual poem, diagrammatic illustration or creative collage grounded in the Memory content.',
   ].join('\n') + '\n';
 
-export const DEFAULT_REO_WORKS_QUALITY_REFERENCE_MD =
+export const DEFAULT_REO_WORKS_RUNTIME_CONTRACT_REFERENCE_MD =
   [
-    '# Reo works quality check',
+    '# Reo works runtime contract check',
     '',
-    'Run this check before ending a works task.',
+    'Run this deterministic contract check before ending a works task.',
     '',
     '## File check',
     '',
@@ -1232,28 +1338,20 @@ export const DEFAULT_REO_WORKS_QUALITY_REFERENCE_MD =
     '- Local assets, if any, are ordinary files under `assets/` and are referenced with relative paths only.',
     '- No `.reo/objects`, `.reo/index.json`, lock, draft or review file was edited for normal creation/update.',
     '',
-    '## Preview check',
+    '## Runtime check',
     '',
     '- HTML renders useful static content before any script runs.',
     '- Scripts are optional and bounded to the current document.',
     '- Ordinary Web network, CDN libraries, remote fonts/images and browser `fetch`/XHR are allowed when useful.',
     '- No Node, Electron, raw filesystem paths, `file://`, symlinks or `.reo/` internals.',
-    '- No nested scroll containers unless the user explicitly requested a constrained table; prefer content that grows in normal flow.',
-    '- No fixed-position UI. Mock dialogs should be normal-flow faux viewports.',
+    '- `window.reo` usage loads `reo-artifact://vendor/reo-runtime/bridge.js` before work code.',
+    '- `state.json` is a JSON object and remains readable after agent edits.',
     '',
-    '## Visual check',
+    '## Projection check',
     '',
-    '- Flat, compact, content-first presentation; no landing-page hero.',
-    '- No gradients, glows, blur effects, decorative shadows, noisy backgrounds or emoji-dependent status.',
-    '- Text stays readable in light and dark mode.',
-    '- Every displayed number is rounded or formatted with `Intl.NumberFormat`, `.toFixed()` or `Math.round()`.',
-    '- Grid uses `minmax(0, 1fr)` when content might overflow; tables use fixed layout or a controlled wrapper.',
-    '',
-    '## Privacy check',
-    '',
-    '- Do not reveal absolute paths, local usernames, API keys, token fragments or hidden system metadata.',
-    '- Summarize sensitive source material instead of copying it when the work only needs trends or structure.',
-    '- Keep the work lightweight enough that future agent rewrites can update it directly.',
+    '- Reopen or refresh Reo and confirm the object appears as an artifact Segment or Supplement.',
+    '- If Reo reports a runtime fault, fix the missing/invalid bundle file instead of editing `.reo`.',
+    '- Do not create or edit `.reo/objects`, `.reo/index.json`, locks, drafts or review files for normal creation/update.',
   ].join('\n') + '\n';
 
 export const DEFAULT_REO_WORKS_DESIGN_CORE_REFERENCE_MD =
@@ -1562,7 +1660,7 @@ export const DEFAULT_REO_WORKS_DESIGN_MOCKUPS_AND_ART_REFERENCE_MD =
 export const DEFAULT_REO_WORKS_REFERENCE_FILES = {
   'file-contract.md': DEFAULT_REO_WORKS_FILE_CONTRACT_REFERENCE_MD,
   'workflows.md': DEFAULT_REO_WORKS_WORKFLOWS_REFERENCE_MD,
-  'quality-check.md': DEFAULT_REO_WORKS_QUALITY_REFERENCE_MD,
+  'runtime-contract-check.md': DEFAULT_REO_WORKS_RUNTIME_CONTRACT_REFERENCE_MD,
 } as const;
 
 export const DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES = {
@@ -1615,7 +1713,7 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
   [
     '#!/usr/bin/env node',
     "import { constants } from 'node:fs';",
-    "import { lstat, mkdir, open, readFile } from 'node:fs/promises';",
+    "import { lstat, mkdir, open, readFile, rm } from 'node:fs/promises';",
     "import path from 'node:path';",
     '',
     "const START = '<!-- reo-managed:agent-entry:start v1 -->';",
@@ -1629,6 +1727,7 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     `const RUNTIME_SKILL_MD = ${JSON.stringify(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD)};`,
     `const RUNTIME_REFERENCE_FILES = ${JSON.stringify(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES)};`,
     `const RUNTIME_SCRIPT_FILES = ${JSON.stringify({
+      'inspect-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS,
       'scaffold-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS,
       'validate-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
     })};`,
@@ -1738,6 +1837,14 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '      await writeRegularText(filePath, current, expected);',
     '    }',
     '  }',
+    '}',
+    '',
+    'async function removeManagedRegularFile(directoryPath, filename, repairedKey) {',
+    '  const filePath = path.join(directoryPath, filename);',
+    '  const current = await readRegularText(filePath);',
+    '  if (current.status !== "file") return;',
+    '  report.repaired[repairedKey].push(filename);',
+    '  if (fix) await rm(filePath, { force: true });',
     '}',
     '',
     'async function readNeedsReviewReport() {',
@@ -1879,10 +1986,12 @@ export const DEFAULT_REO_DOCTOR_SCRIPT_MJS =
     '',
     '  if (runtimeScriptsDirOk) {',
     '    await repairManagedTextFiles(runtimeScriptsDir, RUNTIME_SCRIPT_FILES, "runtimeScripts");',
+    '    await removeManagedRegularFile(runtimeScriptsDir, "migrate-runtime.mjs", "runtimeScripts");',
     '  }',
     '',
     '  if (worksReferencesDirOk) {',
     '    await repairManagedTextFiles(worksReferencesDir, WORKS_REFERENCE_FILES, "worksReferences");',
+    '    await removeManagedRegularFile(worksReferencesDir, "quality-check.md", "worksReferences");',
     '  }',
     '',
     '  if (worksDesignReferencesDirOk) {',
@@ -2478,6 +2587,26 @@ async function writeManagedReferenceFiles(
   }
 }
 
+async function removeManagedRegularFileIfPresent(
+  filePath: string,
+  assertUsable: AssertWorkspaceUsable | undefined
+): Promise<void> {
+  try {
+    const stats = await lstat(filePath);
+    if (!stats.isFile()) {
+      return;
+    }
+    assertWorkspaceUsable(assertUsable);
+    await rm(filePath, { force: true });
+    assertWorkspaceUsable(assertUsable);
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+}
+
 async function ensureWorkspaceManagedAgentConfig(
   canonicalRoot: string,
   assertUsable: AssertWorkspaceUsable | undefined
@@ -2578,14 +2707,23 @@ async function ensureWorkspaceManagedAgentConfig(
   await writeManagedReferenceFiles(
     runtimeScriptsDirectory,
     {
+      'inspect-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS,
       'scaffold-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS,
       'validate-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
     },
     assertUsable
   );
+  await removeManagedRegularFileIfPresent(
+    path.join(runtimeScriptsDirectory, 'migrate-runtime.mjs'),
+    assertUsable
+  );
   await writeManagedReferenceFiles(
     worksReferencesDirectory,
     DEFAULT_REO_WORKS_REFERENCE_FILES,
+    assertUsable
+  );
+  await removeManagedRegularFileIfPresent(
+    path.join(worksReferencesDirectory, 'quality-check.md'),
     assertUsable
   );
   await writeManagedReferenceFiles(

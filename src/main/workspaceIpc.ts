@@ -3813,11 +3813,11 @@ async function requireArtifactPromptTarget({
     nodeFsProbe,
     path.join(directoryAbsolute, entryFileName)
   );
-  if (entryState === 'present') {
+  if (entryState === 'present' || entryState === 'missing') {
     return null;
   }
   return workspaceError(
-    entryState === 'missing' ? 'ERR_ENTITY_DOCUMENT_MISSING' : 'ERR_WORKSPACE_UNSAFE_PATH',
+    'ERR_WORKSPACE_UNSAFE_PATH',
     'Artifact prompt target could not be resolved'
   );
 }

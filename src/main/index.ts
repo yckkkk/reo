@@ -102,7 +102,9 @@ type NavigationEventParams =
   | WebContentsWillRedirectEventParams;
 
 app.on('web-contents-created', (_event, contents) => {
-  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.setWindowOpenHandler(() => {
+    return { action: 'deny' };
+  });
 
   const handleNavigation = (event: Event<NavigationEventParams>): void => {
     if (isAllowedAppNavigationUrl(event.url, { isMainFrame: event.isMainFrame })) {

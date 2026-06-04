@@ -7,7 +7,7 @@
 - M2 是用户拥有的本地 Web Runtime。
 - 默认能力是 Web + Reo 全开。
 - Reo runtime 不做权限弹窗、风险审批或内容审查。
-- 风险提醒写进 skill，由用户 agent 在设计阶段简短提醒。
+- Reo managed skills 只记录文件合同和 `window.reo` API 形状，不承担风险教育、审批或内容审核。
 - Reo 只守宿主边界：不让用户 HTML 进入 Reo renderer，不暴露 Node/Electron/raw path，不绕过 Reo typed mutation。
 
 ## 作品与组件
@@ -36,7 +36,7 @@
 
 - HTML 显式引入 Reo vendor script，获得 `window.reo`。
 - API 按使用场景分组：state、workspace、content、mutations、secrets、ui、agent。
-- Reo prompt action 由 Reo 生成骨架，作品只传意图和状态片段。
+- Reo prompt action 由 Reo 生成骨架，作品只请求 documented action；Reo 使用可信对象身份、相对路径、skill 入口和文件合同拼出 prompt。
 - Product mutation 复用 Reo 现有事务、baseline、stale conflict 和恢复模型；M2 works 只开放当前作品标题这类当前对象 mutation，不通过 bridge 写任意 note 正文。
 
 ## Agent 创作
@@ -56,4 +56,4 @@
 ## 验收
 
 - Agent 快速创作和 runtime 能力完整同等重要。
-- 使用三类样例验收：todo/复习表、联网仪表盘、Reo 内容工具。
+- 使用三类样例验收：todo/复习表、普通 Web 状态工具、Reo 内容工具。

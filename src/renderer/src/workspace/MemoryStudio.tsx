@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppWindow, Ellipsis, FileText, Mic, Pause, Play, Plus } from 'lucide-react';
+import { AppWindow, Copy, Ellipsis, FileText, Mic, Pause, Play, Plus, Wrench } from 'lucide-react';
 import {
   useEffect,
   forwardRef,
@@ -593,6 +593,9 @@ function transcriptContentTabTitle(segment: MemorySegment | null) {
 }
 
 function artifactSegmentPreviewUrl(workspaceId: string, segment: ArtifactMemorySegment) {
+  if (!('previewVersion' in segment)) {
+    return null;
+  }
   return artifactSegmentRuntimeUrl({
     previewVersion: segment.previewVersion,
     segmentId: segment.segmentId,
@@ -604,6 +607,9 @@ function artifactSupplementPreviewUrl(
   workspaceId: string,
   supplement: ArtifactMemorySegmentSupplement
 ) {
+  if (!('previewVersion' in supplement)) {
+    return null;
+  }
   return artifactSupplementRuntimeUrl({
     previewVersion: supplement.previewVersion,
     segmentId: supplement.segmentId,
@@ -2309,11 +2315,75 @@ function MemoryStudioSupplementPlayerPlaceholder() {
   );
 }
 
+function ArtifactRuntimeFaultPanel({
+  fault,
+  onRepairArtifact,
+  title,
+}: {
+  readonly fault: NonNullable<ArtifactMemorySegment['runtimeFault']>;
+  readonly onRepairArtifact?: (() => void) | undefined;
+  readonly title: string;
+}) {
+  const [pendingAction, setPendingAction] = useState<'copy' | null>(null);
+
+  async function copyDiagnostic() {
+    setPendingAction('copy');
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API is unavailable');
+      }
+      await navigator.clipboard.writeText(fault.diagnostic);
+      showReoToast({ type: 'success', title: '诊断已复制' });
+    } catch {
+      showReoToast({ type: 'error', title: '无法复制诊断' });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  return (
+    <div
+      role="alert"
+      className="flex h-full min-h-0 w-full flex-col justify-center gap-12 bg-background p-20 text-left"
+    >
+      <div className="grid gap-6">
+        <h3 className="text-title-sm font-medium leading-title-sm">作品无法打开</h3>
+        <p className="text-ui-sm leading-ui-sm text-muted-foreground">{title}</p>
+      </div>
+      <pre className="max-h-160 overflow-auto rounded-md bg-muted p-12 text-ui-sm leading-ui-sm text-muted-foreground whitespace-pre-wrap">
+        {fault.diagnostic}
+      </pre>
+      <div className="flex flex-wrap gap-8">
+        <Button
+          type="button"
+          size="compact"
+          variant="secondary"
+          disabled={pendingAction !== null}
+          onClick={() => void copyDiagnostic()}
+        >
+          <Copy className="size-14" aria-hidden="true" />
+          复制诊断
+        </Button>
+        <Button
+          type="button"
+          size="compact"
+          disabled={pendingAction !== null || !onRepairArtifact}
+          onClick={onRepairArtifact}
+        >
+          <Wrench className="size-14" aria-hidden="true" />让 Agent 修复作品
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ArtifactPreviewPanel({
   ariaLabelledBy,
   id,
   memory,
   onProductMutation,
+  onRepairArtifact,
+  runtimeFault,
   src,
   target,
   title,
@@ -2324,7 +2394,9 @@ function ArtifactPreviewPanel({
   readonly id: string;
   readonly memory: WorkspaceMemoryDetail;
   readonly onProductMutation: () => void;
-  readonly src: string;
+  readonly onRepairArtifact?: (() => void) | undefined;
+  readonly runtimeFault?: ArtifactMemorySegment['runtimeFault'];
+  readonly src: string | null;
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly title: string;
   readonly topSpacingClassName?: string;
@@ -2349,11 +2421,12 @@ function ArtifactPreviewPanel({
 
   useArtifactRuntimeBridge({
     api: bridgeApi,
+    enabled: src !== null && !runtimeFault,
     iframeRef,
     memory,
     onProductMutation,
     onRequestFullscreen: () => setExpanded(true),
-    src,
+    src: src ?? '',
     target,
     workspaceSession,
   });
@@ -2376,16 +2449,24 @@ function ArtifactPreviewPanel({
       renderAsPanel
       title={title}
     >
-      <iframe
-        key={src}
-        title={`作品预览：${title}`}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
-        src={src}
-        className="h-full w-full border-0 bg-background"
-        data-slot="memory-studio-artifact-preview-frame"
-        ref={iframeRef}
-        referrerPolicy="no-referrer"
-      />
+      {runtimeFault ? (
+        <ArtifactRuntimeFaultPanel
+          fault={runtimeFault}
+          onRepairArtifact={onRepairArtifact}
+          title={title}
+        />
+      ) : src !== null ? (
+        <iframe
+          key={src}
+          title={`作品预览：${title}`}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+          src={src}
+          className="h-full w-full border-0 bg-background"
+          data-slot="memory-studio-artifact-preview-frame"
+          ref={iframeRef}
+          referrerPolicy="no-referrer"
+        />
+      ) : null}
     </EditorExpandShell>
   );
 }
@@ -5057,6 +5138,16 @@ export function MemoryStudio({
                     id={transcriptContentTab.panelId}
                     memory={detail}
                     onProductMutation={refreshAfterArtifactRuntimeMutation}
+                    onRepairArtifact={
+                      onUpdateArtifactSegment
+                        ? () =>
+                            onUpdateArtifactSegment({
+                              memoryId: selectedSegment.memoryId,
+                              segmentId: selectedSegment.segmentId,
+                            })
+                        : undefined
+                    }
+                    runtimeFault={selectedSegment.runtimeFault}
                     src={artifactSegmentPreviewUrl(workspaceSession.workspaceId, selectedSegment)}
                     target={{
                       targetType: 'segment',
@@ -5223,6 +5314,17 @@ export function MemoryStudio({
                     id={activeContentTabModel.panelId}
                     memory={detail}
                     onProductMutation={refreshAfterArtifactRuntimeMutation}
+                    onRepairArtifact={
+                      onUpdateArtifactSegmentSupplement
+                        ? () =>
+                            onUpdateArtifactSegmentSupplement({
+                              memoryId: activeSegmentSupplement.memoryId,
+                              segmentId: activeSegmentSupplement.segmentId,
+                              supplementId: activeSegmentSupplement.supplementId,
+                            })
+                        : undefined
+                    }
+                    runtimeFault={activeSegmentSupplement.runtimeFault}
                     src={artifactSupplementPreviewUrl(
                       workspaceSession.workspaceId,
                       activeSegmentSupplement

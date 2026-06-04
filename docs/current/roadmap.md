@@ -10,7 +10,7 @@
 - 先证明用户愿意表达，再扩展整理、回顾和产品本质长期轨道。
 - 组件必须过 craft 不变量门槛；未达到门槛的组件不能作为阶段完成依据，必要时先不做或留在 spec 中作为已知 gap。
 - 当前阶段不实现 Reo runtime 内嵌 AI，agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。
-- audio 主链是多模态实现路径里复杂度最高的；note 主链证明同一 Memory / Segment / SegmentSupplement 文件空间可以承载非音频表达；artifact first slice 证明外部 agent 可以通过 prompt-bridge 写入作品并由 Reo 预览。基础主链稳固后继续推进产品本质长期轨道，把剩余多模态 Segment 类型、Shared Generative Runtime、Gallery 走马灯、prompt-bridge UI、AGENTS.md / skills 全部到位。
+- audio 主链是多模态实现路径里复杂度最高的；note 主链证明同一 Memory / Segment / SegmentSupplement 文件空间可以承载非音频表达；artifact + Shared Generative Runtime 证明外部 agent 可以通过 prompt-bridge 写入用户拥有的小型 Web app，并由 Reo 隔离预览、投影状态和提供 typed bridge。基础主链稳固后继续推进产品本质长期轨道，把剩余多模态 Segment 类型、Gallery 走马灯、prompt-bridge UI、AGENTS.md / skills 全部到位。
 
 ## P0 产品基线与结构
 
@@ -140,13 +140,13 @@ P0-P6 是 audio + note + artifact first slice 基础表达的 enabling phase。R
 
 范围条目按优先级排列：
 
-- **多模态 Segment / SegmentSupplement 类型（核心必经）**：继续实现 `video`、`photo`、`imported_file` 等 Segment 类型及对应 SegmentSupplement，并把 Memory Studio、Segment 卡片、播放 / 浏览 / 编辑区扩展到跨模态。`artifact` 作品已进入首个静态 HTML 切片，后续由 Shared Generative Runtime 放大为用户拥有的小型 Web app 能力。`note` 当前保持轻量 Markdown create/edit、图片附件和外部编辑冲突基础；富文本、块编辑和复杂 Live Preview 不属于本轨道当前范围。这是 Reo "围绕一件事的所有材料"承诺成立的前提；缺这层 Reo 只是录音 + 笔记工具。每个新类型必须先有文件合同、IPC contract、查询更新、恢复路径、craft 门槛验证。
+- **多模态 Segment / SegmentSupplement 类型（核心必经）**：继续实现 `video`、`photo`、`imported_file` 等 Segment 类型及对应 SegmentSupplement，并把 Memory Studio、Segment 卡片、播放 / 浏览 / 编辑区扩展到跨模态。`artifact` 作品已进入 Shared Generative Runtime 基础，当前是用户拥有的小型 Web app 能力层；未来深化不重建另一套组件 runtime。`note` 当前保持轻量 Markdown create/edit、图片附件和外部编辑冲突基础；富文本、块编辑和复杂 Live Preview 不属于本轨道当前范围。这是 Reo "围绕一件事的所有材料"承诺成立的前提；缺这层 Reo 只是录音 + 笔记工具。每个新类型必须先有文件合同、IPC contract、查询更新、恢复路径、craft 门槛验证。
 - **回顾 mechanics（粘性核心）**：结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + runtime 组件形态实现，做成跨模态沉浸式回顾而非碎片推送。
 - **AGENTS.md + users.md 模板与 skills 目录**：记忆空间 root 与 Memory root 的 `AGENTS.md` 模板由 Reo 出厂提供；Workspace root 的 `users.md` 模板由 Reo 出厂 + 首次启动引导用户填写，承担"用户是谁 / 长期目标 / 偏好"的个人 context 层。默认 skills 分两层：原子 skill 共 8 项（引导 / 回顾 / 整理总结 / runtime 组件生成 + 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考），use-xxx 组合 skill 共 3 项（`use-学习闭环` / `use-记忆回顾循环` / `use-内容创作支援`）。skill 组合是 agent 责任，不是用户责任。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
 - **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、runtime 组件的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
 - **Shared Generative Runtime**：作品和未来组件共用的 runtime object 能力层。作品挂载在 Segment / SegmentSupplement；组件未来挂载在 Home、Workspace side tab、Memory panel/tab 等位置。Runtime 默认支持完整 Web app 能力、每对象 origin、可见 JSON state、secret、`window.reo` typed bridge、agent prompt action、模板和脚本。日历、时间线、成长册、关系曲线、概念时间线等都应复用同一 runtime，不重建组件专用能力层。
 - **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 跨模态混合呈现（录音 + 视频 + 照片节奏感切换），是 craft 不变量的核心承担页之一。
-- **作品 Segment / SegmentSupplement 深化**：agent 生成的报告、工具、仪表盘、复习表、待办、游戏、原型和其它小型 Web app 以 `artifact` 产品类型落到现有 Segment / SegmentSupplement 信息架构；首个静态预览能力之后，继续进入 Shared Generative Runtime。
+- **作品 Segment / SegmentSupplement 深化**：agent 生成的报告、工具、仪表盘、复习表、待办、游戏、原型和其它小型 Web app 以 `artifact` 产品类型落到现有 Segment / SegmentSupplement 信息架构，并复用当前 Shared Generative Runtime 能力层继续扩展 craft 与模板质量。
 
 实施时序与完成门槛由该轨道启动时的 initiative 与 spec 定义。本路线图只确立轨道存在和范围。
 
@@ -154,7 +154,7 @@ P0-P6 是 audio + note + artifact first slice 基础表达的 enabling phase。R
 
 ## 长期方向
 
-下列方向在产品本质长期轨道之外，进入主线前需要独立判断和 spec。注意：剩余多模态 Segment 类型（video / photo / imported_file）、artifact 作品深化与 Shared Generative Runtime 已提升到产品本质长期轨道，**不在本节**。
+下列方向在产品本质长期轨道之外，进入主线前需要独立判断和 spec。注意：剩余多模态 Segment 类型（video / photo / imported_file）、artifact 作品深化、Shared Generative Runtime 组件挂载和 Gallery 已提升到产品本质长期轨道，**不在本节**。
 
 - 草稿记忆空间：Home 入口的低摩擦录制设计（draft memory space / inbox 录制入口），让用户在未选定记忆空间时也能先表达、后归入。
 - 笔记编辑器保持轻量 Markdown 输入路线；富文本、块编辑和复杂 Live Preview 不在当前主线。

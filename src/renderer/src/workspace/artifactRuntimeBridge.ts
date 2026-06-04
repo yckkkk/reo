@@ -33,6 +33,7 @@ type RuntimeApi = Partial<
 
 export type ArtifactRuntimeBridgeOptions = {
   readonly api: RuntimeApi;
+  readonly enabled?: boolean;
   readonly iframeRef: RefObject<HTMLIFrameElement | null>;
   readonly memory: WorkspaceMemoryDetail;
   readonly onProductMutation: () => void;
@@ -48,6 +49,10 @@ type RuntimeRequest = {
   readonly requestId: string;
   readonly method: string;
   readonly payload?: unknown;
+};
+
+type ArtifactRuntimeMessageHandler = ((event: MessageEvent<unknown>) => void) & {
+  dispose: () => void;
 };
 
 type WorkspaceEnvelope =
@@ -71,6 +76,9 @@ class ArtifactRuntimeBridgeError extends Error {
     this.code = code;
   }
 }
+
+const HOST_MAX_PENDING_REQUESTS = 64;
+const HOST_REQUEST_TIMEOUT_MS = 30_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -389,7 +397,61 @@ async function handleRuntimeRequest(
 
 export function createArtifactRuntimeMessageHandler(options: ArtifactRuntimeBridgeOptions) {
   const expectedOrigin = new URL(options.src).origin;
-  return (event: MessageEvent<unknown>): void => {
+  const pending = new Map<string, number>();
+
+  const postRuntimeResponse = (
+    source: WindowProxy,
+    requestId: string,
+    response:
+      | {
+          readonly ok: true;
+          readonly value: unknown;
+        }
+      | {
+          readonly ok: false;
+          readonly error: {
+            readonly code: string;
+            readonly message: string;
+          };
+        }
+  ) => {
+    source.postMessage(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId,
+        ...response,
+      },
+      expectedOrigin
+    );
+  };
+
+  const finishPendingRequest = (
+    source: WindowProxy,
+    requestId: string,
+    response:
+      | {
+          readonly ok: true;
+          readonly value: unknown;
+        }
+      | {
+          readonly ok: false;
+          readonly error: {
+            readonly code: string;
+            readonly message: string;
+          };
+        }
+  ) => {
+    const timeoutId = pending.get(requestId);
+    if (timeoutId === undefined) {
+      return;
+    }
+    window.clearTimeout(timeoutId);
+    pending.delete(requestId);
+    postRuntimeResponse(source, requestId, response);
+  };
+
+  const handler = ((event: MessageEvent<unknown>): void => {
     if (event.origin !== expectedOrigin) {
       return;
     }
@@ -403,40 +465,70 @@ export function createArtifactRuntimeMessageHandler(options: ArtifactRuntimeBrid
 
     const source = runtimeWindow;
     const request = event.data;
+    if (pending.has(request.requestId)) {
+      postRuntimeResponse(source, request.requestId, {
+        ok: false,
+        error: {
+          code: 'ERR_REO_RUNTIME_DUPLICATE_REQUEST',
+          message: 'Reo runtime request is already pending',
+        },
+      });
+      return;
+    }
+    if (pending.size >= HOST_MAX_PENDING_REQUESTS) {
+      postRuntimeResponse(source, request.requestId, {
+        ok: false,
+        error: {
+          code: 'ERR_REO_RUNTIME_BUSY',
+          message: 'Too many Reo runtime requests',
+        },
+      });
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      if (!pending.delete(request.requestId)) {
+        return;
+      }
+      postRuntimeResponse(source, request.requestId, {
+        ok: false,
+        error: {
+          code: 'ERR_REO_RUNTIME_TIMEOUT',
+          message: 'Reo runtime request timed out',
+        },
+      });
+    }, HOST_REQUEST_TIMEOUT_MS);
+    pending.set(request.requestId, timeoutId);
+
     void handleRuntimeRequest(request, options)
       .then((value) => {
-        source.postMessage(
-          {
-            source: 'reo-host',
-            type: 'response',
-            requestId: request.requestId,
-            ok: true,
-            value,
-          },
-          expectedOrigin
-        );
+        finishPendingRequest(source, request.requestId, { ok: true, value });
       })
       .catch((error: unknown) => {
-        source.postMessage(
-          {
-            source: 'reo-host',
-            type: 'response',
-            requestId: request.requestId,
-            ok: false,
-            error: bridgeErrorFromUnknown(error),
-          },
-          expectedOrigin
-        );
+        finishPendingRequest(source, request.requestId, {
+          ok: false,
+          error: bridgeErrorFromUnknown(error),
+        });
       });
+  }) as ArtifactRuntimeMessageHandler;
+  handler.dispose = () => {
+    for (const timeoutId of pending.values()) {
+      window.clearTimeout(timeoutId);
+    }
+    pending.clear();
   };
+  return handler;
 }
 
 export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions): void {
   useEffect(() => {
+    if (options.enabled === false) {
+      return;
+    }
     const handler = createArtifactRuntimeMessageHandler(options);
     window.addEventListener('message', handler);
     return () => {
       window.removeEventListener('message', handler);
+      handler.dispose();
     };
   }, [options]);
 }

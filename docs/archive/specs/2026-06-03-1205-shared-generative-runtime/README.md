@@ -1,7 +1,7 @@
 # M2 Shared Generative Runtime
 
 创建：2026-06-03 12:05 America/Los_Angeles
-状态：active spec
+状态：archived implementation record
 
 ## Objective
 
@@ -17,12 +17,12 @@ Reo 不审查用户自己创造的作品。作品和组件运行时默认按用�
 - 默认支持每个 runtime object 独立 origin，用于 localStorage、IndexedDB 和浏览器缓存隔离。
 - 默认支持可见 `state.json` 作为用户和 agent 可查看、可修改、可迁移的长期状态真源。
 - 默认支持 Reo typed bridge：状态、Reo 数据、当前对象受限产品 mutation、secret、UI、agent prompt action。
-- 默认支持 runtime 读取自身 secret slot 的值；secret 描述可见，secret 值由 Reo 用 safeStorage 加密托管。
+- 默认支持 runtime 读取自身已声明 secret slot 的值；secret 描述在 `runtime.json` 中可见，值不写入 runtime bundle。
 - Reo runtime 不弹权限确认，不做联网风险提示，不做内容质量审查。
 
 Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不获得 Node/Electron/raw path，不绕过 Reo 现有产品 mutation 的事务、baseline 和恢复模型。
 
-风险教育属于 skills。涉及联网、secret 或写入 Reo 数据时，用户 agent 在设计阶段简短提醒用户，然后继续创作。
+Reo managed skills 只记录文件合同和 `window.reo` API 形状，不承担风险教育、审批或内容审核。
 
 ## Object Boundary
 
@@ -92,7 +92,7 @@ Runtime 继续使用 iframe 嵌入 Reo，不使用主 renderer 直接挂载用�
 默认容器能力：
 
 - 允许 scripts 和 same-origin，以支持完整 Web app、浏览器存储和框架 runtime。
-- 允许正常网页表单、弹窗和 Web-safe 外链行为。
+- 允许正常网页表单和下载；iframe popup/window-open 默认拒绝。
 - 网络按普通浏览器模型处理；M2 不提供 Reo fetch proxy，不绕过 CORS。
 - Web-safe 网络/资源协议可用；`file:` 资源必须进入 bundle。
 
@@ -106,13 +106,13 @@ HTML 通过显式 vendor script 获得 `window.reo`。Reo 不自动改写用户 
 - `window.reo.workspace`：读取当前 workspace、Memory、Segment 上下文投影。
 - `window.reo.content`：读取 Reo 内容投影，例如 note 正文、audio transcript、artifact metadata。
 - `window.reo.mutations`：调用 Reo typed 产品 mutation，复用现有事务、baseline、stale conflict 和恢复模型。
-- `window.reo.secrets`：读取当前 object + slot 绑定的 secret 值，或请求用户设置 secret。
-- `window.reo.ui`：全屏、尺寸、主题、外部打开等宿主 UI 协调能力。
+- `window.reo.secrets`：读取、写入或清除当前 object + slot 绑定的 secret 值；Reo 不提供权限审批或产品层 key/token 管理 UI。
+- `window.reo.ui`：全屏、尺寸、主题等宿主 UI 协调能力。
 - `window.reo.agent`：复制或发起给用户 agent 的 prompt action。
 
-`window.reo.agent` 的最终 prompt 由 Reo 生成骨架：作品传入意图、当前状态片段和建议文件；Reo 补入对象身份、相对路径、skill 入口和文件合同。
+`window.reo.agent` 的最终 prompt 由 Reo 生成骨架：作品只请求 documented action；Reo 使用可信对象身份、相对路径、skill 入口和文件合同拼出 prompt，不接受作品传入的意图、状态片段或建议文件作为 prompt 上下文。
 
-首批 mutation 只覆盖高频产品动作和 runtime 自身能力：更新 runtime state、管理当前对象已声明 secret、创建/更新作品与作品补充、更新当前作品标题、发起 agent prompt。Artifact works 不通过 `window.reo` 直接写任意 note 正文；更广的 Reo 内容修改交给 agent prompt 和普通 Reo 文件合同。删除、移动、批量破坏性动作不作为首批目标。
+首批 mutation 只覆盖高频产品动作和 runtime 自身能力：更新 runtime state、创建/更新作品与作品补充、更新当前作品标题、发起 agent prompt。Artifact works 不通过 `window.reo` 直接写任意 note 正文；更广的 Reo 内容修改交给 agent prompt 和普通 Reo 文件合同。删除、移动、批量破坏性动作不作为首批目标。
 
 ## Agent Creation
 
@@ -157,23 +157,23 @@ Reo 采用 fail-open 诊断：
 Runtime secret 分为描述和值：
 
 - 描述在 `runtime.json` 的 secret slots 中，用户和 agent 可查看修改。
-- 值由 Reo safeStorage 加密托管，绑定 runtime object id + slot id。
+- 值绑定 runtime object id + slot id，由底层 bridge 读写或清除，不写入 runtime bundle。
 - 已保存的 secret 值可由当前 runtime 静默读取到内存使用。
 - Reo 不把 secret 明文写入 runtime bundle 或 userData 明文 JSON。
-- 用户可通过 runtime 请求设置 secret，也可在对象 More 管理或清除。
+- 用户和用户 agent 决定 slot 如何使用；Reo 产品层不提供对象 More key/token 管理 UI。
 
 ## Network
 
 M2 默认开放普通网页网络能力。作品可以使用远程资源、CDN、HTTPS/HTTP/WebSocket 等 Web-safe 能力。Reo 不做联网确认或联网风险弹窗。
 
-M2 不提供 CORS proxy。第三方 API 是否可被浏览器直接调用，取决于该 API 的 CORS 策略。Skill 在涉及第三方 API 时简短提醒 agent 这一点。
+M2 不提供 CORS proxy。第三方 API 是否可被浏览器直接调用，取决于该 API 的 CORS 策略。Skill 只记录这条浏览器技术边界，不做风险提醒。
 
 ## Validation Examples
 
 M2 验收至少使用三类作品：
 
 1. Todo / 复习表：证明用户交互状态、`state.json`、localStorage/IndexedDB 兼容缓存和外部 agent 修改状态。
-2. 联网仪表盘：证明普通 Web 网络、CDN/framework、secret slot 和 runtime 错误恢复。
+2. 普通 Web 状态工具：证明普通 Web 网络、CDN/framework、可见 runtime state 和 runtime 错误恢复。
 3. Reo 内容工具：证明 `window.reo` 读取当前 workspace 内容投影，并通过 state、当前作品标题 mutation 或 agent prompt action 完成受控写入入口。
 
 ## Non-Goals

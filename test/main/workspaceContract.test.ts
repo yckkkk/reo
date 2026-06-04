@@ -3404,6 +3404,36 @@ test('workspace projection contract accepts artifact html segment and supplement
   );
 });
 
+test('workspace projection contract keeps artifact runtime faults separate from ready previews', () => {
+  const parsed = workspaceSegmentProjectionSchema.parse({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_artifact_1',
+    type: 'artifact',
+    format: 'html',
+    title: '间隔复习表',
+    createdAt: '2026-06-03T14:42:00.000Z',
+    updatedAt: '2026-06-03T14:43:00.000Z',
+    runtimeFault: {
+      reason: 'missing-entry',
+      diagnostic:
+        'Artifact runtime is missing entry.html at memories/mem_1/segments/seg_artifact_1/entry.html.',
+    },
+    cover: { source: 'default' },
+    supplementCount: 0,
+    supplements: [],
+  }) as Record<string, unknown>;
+
+  assert.equal(parsed['type'], 'artifact');
+  assert.equal('entryByteLength' in parsed, false);
+  assert.equal('entryHash' in parsed, false);
+  assert.equal('previewVersion' in parsed, false);
+  assert.equal(
+    'agentPrompt' in ((parsed['runtimeFault'] as Record<string, unknown> | undefined) ?? {}),
+    false
+  );
+});
+
 test('workspace segment projection contract accepts pathless cover metadata', () => {
   const parsed = workspaceSegmentProjectionSchema.parse({
     workspaceId: 'ws_1',

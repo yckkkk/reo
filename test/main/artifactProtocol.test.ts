@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import {
   ARTIFACT_PROTOCOL_CACHE_CONTROL,
   ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY,
@@ -31,6 +32,126 @@ function rootResolver(rootPath: string) {
       ? { ok: true as const, canonicalRoot: rootPath }
       : { ok: false as const };
 }
+
+test('artifact vendor bridge accepts host responses only from the parent window', async () => {
+  const source = await readFile(
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-runtime', 'bridge.js'),
+    'utf8'
+  );
+  const listeners: ((event: { data: unknown; source: unknown }) => void)[] = [];
+  let outbound: Record<string, unknown> | null = null;
+  const parentWindow = {
+    postMessage(payload: unknown) {
+      outbound = payload as Record<string, unknown>;
+    },
+  };
+  let timeoutId = 0;
+  const fakeWindow = {
+    parent: parentWindow,
+    addEventListener(type: string, callback: (event: { data: unknown; source: unknown }) => void) {
+      if (type === 'message') {
+        listeners.push(callback);
+      }
+    },
+    setTimeout() {
+      timeoutId += 1;
+      return timeoutId;
+    },
+    clearTimeout() {},
+  } as {
+    readonly parent: typeof parentWindow;
+    readonly addEventListener: (
+      type: string,
+      callback: (event: { data: unknown; source: unknown }) => void
+    ) => void;
+    readonly setTimeout: () => number;
+    readonly clearTimeout: () => void;
+    reo?: {
+      state: {
+        read: () => Promise<unknown>;
+      };
+    };
+  };
+
+  runInNewContext(source, { window: fakeWindow });
+  assert.ok(fakeWindow.reo);
+  const listener = listeners[0];
+  assert.ok(listener);
+
+  const readPromise = fakeWindow.reo.state.read();
+  assert.equal(outbound?.['source'], 'reo-runtime');
+  assert.equal(outbound?.['type'], 'request');
+  const requestId = outbound?.['requestId'];
+  assert.equal(typeof requestId, 'string');
+
+  listener({
+    data: {
+      source: 'reo-host',
+      type: 'response',
+      requestId,
+      ok: true,
+      value: { poisoned: true },
+    },
+    source: { not: 'parent' },
+  });
+  listener({
+    data: {
+      source: 'reo-host',
+      type: 'response',
+      requestId,
+      ok: true,
+      value: { trusted: true },
+    },
+    source: parentWindow,
+  });
+
+  assert.deepEqual(await readPromise, { trusted: true });
+});
+
+test('artifact vendor bridge bounds pending host requests and times out unanswered calls', async () => {
+  const source = await readFile(
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-runtime', 'bridge.js'),
+    'utf8'
+  );
+  let timeoutId = 0;
+  const timers = new Map<number, () => void>();
+  const fakeWindow = {
+    parent: {
+      postMessage() {},
+    },
+    addEventListener() {},
+    setTimeout(callback: () => void) {
+      timeoutId += 1;
+      timers.set(timeoutId, callback);
+      return timeoutId;
+    },
+    clearTimeout(id: number) {
+      timers.delete(id);
+    },
+  } as {
+    readonly parent: { readonly postMessage: () => void };
+    readonly addEventListener: () => void;
+    readonly setTimeout: (callback: () => void) => number;
+    readonly clearTimeout: (id: number) => void;
+    reo?: {
+      state: {
+        read: () => Promise<unknown>;
+      };
+    };
+  };
+
+  runInNewContext(source, { window: fakeWindow });
+  assert.ok(fakeWindow.reo);
+
+  const firstRequest = fakeWindow.reo.state.read();
+  for (let index = 1; index < 64; index += 1) {
+    void fakeWindow.reo.state.read();
+  }
+  await assert.rejects(fakeWindow.reo.state.read(), /Too many Reo runtime requests/);
+
+  timers.values().next().value?.();
+  await assert.rejects(firstRequest, /Reo runtime request timed out/);
+});
 
 test('artifact runtime URLs keep per-object hosts ASCII-safe without losing object identity', () => {
   const segmentUrl = artifactSegmentRuntimeUrl({

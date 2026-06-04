@@ -49,10 +49,15 @@ export const workspaceSupplementMarkdownDataSchema =
     language: z.string().optional(),
   });
 
-const workspaceMemoryMarkdownCandidateDataSchema = workspaceMemoryMarkdownDataSchema.partial();
-const workspaceSegmentMarkdownCandidateDataSchema = workspaceSegmentMarkdownDataSchema.partial();
-const workspaceSupplementMarkdownCandidateDataSchema =
-  workspaceSupplementMarkdownDataSchema.partial();
+const workspaceMemoryMarkdownCandidateDataSchema = workspaceMemoryMarkdownDataSchema
+  .partial()
+  .strip();
+const workspaceSegmentMarkdownCandidateDataSchema = workspaceSegmentMarkdownDataSchema
+  .partial()
+  .strip();
+const workspaceSupplementMarkdownCandidateDataSchema = workspaceSupplementMarkdownDataSchema
+  .partial()
+  .strip();
 
 export type WorkspaceMarkdownObjectType = 'memory' | 'segment' | 'supplement';
 export type WorkspaceMarkdownObjectData =

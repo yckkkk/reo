@@ -50,12 +50,13 @@ export async function resolveArtifactRuntimeTargetDirectory({
 }
 
 export function artifactRuntimeObjectKey(target: ArtifactRuntimeTarget, slotId: string): string {
+  const objectIdentity =
+    target.targetType === 'supplement'
+      ? { targetType: target.targetType, supplementId: target.supplementId }
+      : { targetType: target.targetType, segmentId: target.segmentId };
   return JSON.stringify({
     workspaceId: target.workspaceId,
-    memoryId: target.memoryId,
-    segmentId: target.segmentId,
-    supplementId: target.targetType === 'supplement' ? target.supplementId : null,
-    targetType: target.targetType,
+    ...objectIdentity,
     slotId,
   });
 }

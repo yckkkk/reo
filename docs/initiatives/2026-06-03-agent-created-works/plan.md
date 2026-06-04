@@ -41,9 +41,9 @@
 
 完成门槛：用户能复制 prompt，让外部 agent 生成作品，回到 Reo 查看、全屏、删除/恢复，并再次通过 prompt-bridge 更新。
 
-### M2 - Shared Generative Runtime（active spec）
+### M2 - Shared Generative Runtime（implementation closeout）
 
-当前 spec：`docs/specs/2026-06-03-1205-shared-generative-runtime/`
+执行记录：`docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
 
 交付：
 
@@ -51,13 +51,13 @@
 - Runtime bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
 - `window.reo` vendor bridge：state、workspace/content、mutations、secrets、ui、agent。
 - 可见 JSON state 真源、browser storage 兼容缓存和 state conflict 模型。
-- Runtime secret slots、Reo 托管 secret 值和 object+slot 绑定。
+- Runtime secret slots、底层 object+slot secret bridge 和不写入 bundle 的值存储。
 - 普通 Web 网络和框架/CDN 支持，不做 Reo CORS proxy。
-- agent creation skill、宽模板矩阵、scaffold/validate/inspect/migrate 脚本。
+- agent creation skill、宽模板矩阵、scaffold/validate/inspect 脚本。
 - 组件挂载点合同级预留。
-- 三类验证样例：todo/复习表、联网仪表盘、Reo 内容工具。
+- 三类验证样例：todo/复习表、普通 Web 状态工具、Reo 内容工具。
 
-完成门槛：用户给一个想法，agent 能快速生成可运行、可交互、可持久化的作品；runtime 能证明 state、network、secret、bridge 和首批 product mutation 能力。
+完成门槛：用户给一个想法，agent 能快速生成可运行、可交互、可持久化的作品；runtime 能证明 state、普通 Web 网络、bridge 和首批 product mutation 能力。
 
 ### M3+ - 组件挂载与完整形态联动
 

@@ -540,6 +540,7 @@ async function writeArtifactSegmentCandidateForTest(
     readonly html?: string;
     readonly includeEntry?: boolean;
     readonly finalizedAt?: string;
+    readonly extraFrontmatter?: readonly string[];
   }
 ): Promise<string> {
   const segmentDirectory = path.join(
@@ -558,6 +559,7 @@ async function writeArtifactSegmentCandidateForTest(
       `title: ${artifact.title}`,
       'kind: artifact',
       'format: html',
+      ...(artifact.extraFrontmatter ?? []),
       '---',
       '',
       '',
@@ -3428,6 +3430,189 @@ test('direct artifact html segment replacement refreshes manifest and preview ve
   assert.equal(segment['entryByteLength'], Buffer.byteLength(replacementHtml, 'utf8'));
   assert.equal(segment['entryHash'], sha256Text(replacementHtml));
   assertWorkspaceHash(segment['previewVersion']);
+});
+
+test('external artifact segment with nonsemantic frontmatter is repaired from file truth', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_external_artifact_repair';
+  const segmentId = 'seg_20260604051200_a1b2c3d4';
+  const html = '<!doctype html><html><body><h1>每日打卡</h1></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '外部作品',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '每日打卡',
+    html,
+    extraFrontmatter: [
+      'createdAt: 2026-06-04T08:14:09.000Z',
+      'updatedAt: 2026-06-04T08:22:58.000Z',
+    ],
+  });
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const segment = detail.value.segments[0] as Record<string, unknown> | undefined;
+  assert.ok(segment);
+  assert.equal(segment['type'], 'artifact');
+  assert.equal(segment['segmentId'], segmentId);
+  assert.equal(segment['entryHash'], sha256Text(html));
+  assert.equal(segment['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assertWorkspaceHash(segment['previewVersion']);
+
+  const manifest = (await readJson(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(manifest['kind'], 'artifact');
+  assert.equal(manifest['entryHash'], sha256Text(html));
+
+  const repairedMarkdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.deepEqual(repairedMarkdown.data, {
+    id: segmentId,
+    title: '每日打卡',
+    kind: 'artifact',
+    format: 'html',
+  });
+});
+
+test('artifact segment with a damaged entry stays visible with a runtime fault projection', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_fault_artifact_segment';
+  const segmentId = 'seg_20260604040100_a1b2c3d4';
+  const html = '<!doctype html><html><body><h1>可修复作品</h1></body></html>\n';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '作品损坏',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '可修复作品',
+    html,
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  await rm(path.join(segmentDirectory, 'entry.html'));
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  assert.equal(detail.value.segmentCount, 1);
+  assert.equal(detail.value.artifactSegmentCount, 1);
+  const segment = detail.value.segments[0] as Record<string, unknown> | undefined;
+  assert.ok(segment);
+  assert.equal(segment['type'], 'artifact');
+  assert.equal(segment['segmentId'], segmentId);
+  assert.deepEqual(segment['runtimeFault'], {
+    reason: 'missing-entry',
+    diagnostic: `Artifact runtime is missing entry.html at memories/${memoryId}/segments/${segmentId}/entry.html.`,
+  });
+  assert.equal('entryByteLength' in segment, false);
+  assert.equal('entryHash' in segment, false);
+  assert.equal('previewVersion' in segment, false);
+});
+
+test('artifact segment with a non-file entry is not converted into a runtime fault', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_unsafe_artifact_segment';
+  const segmentId = 'seg_20260604040200_b2c3d4e5';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '不安全入口',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '目录入口作品',
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  await rm(path.join(segmentDirectory, 'entry.html'));
+  await mkdir(path.join(segmentDirectory, 'entry.html'));
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  assert.equal(
+    detail.value.segments.some(
+      (segment) => segment.type === 'artifact' && segment.segmentId === segmentId
+    ),
+    false
+  );
+});
+
+test('artifact supplement with a damaged entry stays visible with a runtime fault projection', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_fault_artifact_supplement';
+  const segmentId = 'seg_20260604040300_c3d4e5f6';
+  const supplementId = 'sup_20260604040400_d4e5f6a7';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充作品损坏',
+  });
+  await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '父作品',
+  });
+  const supplementDirectory = await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '补充小工具',
+  });
+  await rebuildMemoryIndex(rootPath);
+
+  await rm(path.join(supplementDirectory, 'entry.html'));
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+  });
+
+  assert.equal(detail.ok, true);
+  if (!detail.ok) {
+    return;
+  }
+  const segment = detail.value.segments[0] as Record<string, unknown> | undefined;
+  const supplement = (segment?.['supplements'] as readonly Record<string, unknown>[])[0];
+  assert.ok(supplement);
+  assert.equal(segment?.['supplementCount'], 1);
+  assert.equal(supplement['type'], 'artifact');
+  assert.equal(supplement['supplementId'], supplementId);
+  assert.deepEqual(supplement['runtimeFault'], {
+    reason: 'missing-entry',
+    diagnostic: `Artifact runtime is missing entry.html at memories/${memoryId}/segments/${segmentId}/supplements/${supplementId}/entry.html.`,
+  });
+  assert.equal('entryByteLength' in supplement, false);
+  assert.equal('entryHash' in supplement, false);
+  assert.equal('previewVersion' in supplement, false);
 });
 
 test('direct artifact runtime state, manifest and assets refresh preview without changing entry hash', async () => {

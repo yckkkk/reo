@@ -8,13 +8,13 @@
   `docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
 - M1 静态作品与沙箱预览 - first slice 已完成：
   `docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
-- M2 Shared Generative Runtime - active spec：
-  `docs/specs/2026-06-03-1205-shared-generative-runtime/`
+- M2 Shared Generative Runtime - implementation closeout：
+  `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
 - M3+ 组件挂载与完整形态联动 - 未排期
 
 ## 下一步
 
-对 M2 active spec 执行 plan-eng-review，重点审查每对象 origin、bundle 合同、`window.reo` bridge、state/secret、product mutation、agent skills/templates/scripts 和三类验证样例。
+完成 M2 收口验证：按普通用户提示词在真实测试记忆空间验证外部 agent 创建作品、Reo file-truth 投影、runtime state/bridge/network/fault 关键边界、subagent review 和最终项目验证。
 
 ## 已融合草稿
 

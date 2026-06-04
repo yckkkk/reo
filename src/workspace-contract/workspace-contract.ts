@@ -581,6 +581,11 @@ export const workspaceNoteSpeechSynthesisProjectionSchema = z.strictObject({
   updatedAt: z.string().nullable(),
 });
 
+const workspaceArtifactRuntimeFaultSchema = z.strictObject({
+  reason: z.enum(['missing-entry', 'oversized-entry']),
+  diagnostic: z.string().min(1),
+});
+
 const workspaceAudioSegmentSupplementProjectionSchema = z.strictObject({
   workspaceId: z.string().min(1),
   memoryId: memoryIdSchema,
@@ -610,7 +615,7 @@ const workspaceNoteSegmentSupplementProjectionSchema = z.strictObject({
   bodyByteLength: z.number().int().nonnegative(),
 });
 
-const workspaceArtifactSegmentSupplementProjectionSchema = z.strictObject({
+const workspaceArtifactSegmentSupplementProjectionBaseSchema = z.strictObject({
   workspaceId: z.string().min(1),
   memoryId: memoryIdSchema,
   segmentId: segmentIdSchema,
@@ -620,12 +625,27 @@ const workspaceArtifactSegmentSupplementProjectionSchema = z.strictObject({
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  entryByteLength: z.number().int().nonnegative(),
-  entryHash: workspaceContentHashSchema,
-  previewVersion: workspaceContentHashSchema,
 });
 
-export const workspaceSegmentSupplementProjectionSchema = z.discriminatedUnion('type', [
+const workspaceReadyArtifactSegmentSupplementProjectionSchema =
+  workspaceArtifactSegmentSupplementProjectionBaseSchema.extend({
+    runtimeFault: z.undefined().optional(),
+    entryByteLength: z.number().int().nonnegative(),
+    entryHash: workspaceContentHashSchema,
+    previewVersion: workspaceContentHashSchema,
+  });
+
+const workspaceFaultArtifactSegmentSupplementProjectionSchema =
+  workspaceArtifactSegmentSupplementProjectionBaseSchema.extend({
+    runtimeFault: workspaceArtifactRuntimeFaultSchema,
+  });
+
+const workspaceArtifactSegmentSupplementProjectionSchema = z.union([
+  workspaceReadyArtifactSegmentSupplementProjectionSchema,
+  workspaceFaultArtifactSegmentSupplementProjectionSchema,
+]);
+
+export const workspaceSegmentSupplementProjectionSchema = z.union([
   workspaceAudioSegmentSupplementProjectionSchema,
   workspaceNoteSegmentSupplementProjectionSchema,
   workspaceArtifactSegmentSupplementProjectionSchema,
@@ -669,7 +689,7 @@ const workspaceNoteSegmentProjectionSchema = z.strictObject({
   contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
 });
 
-const workspaceArtifactSegmentProjectionSchema = z.strictObject({
+const workspaceArtifactSegmentProjectionBaseSchema = z.strictObject({
   workspaceId: z.string().min(1),
   memoryId: memoryIdSchema,
   segmentId: segmentIdSchema,
@@ -679,16 +699,31 @@ const workspaceArtifactSegmentProjectionSchema = z.strictObject({
   contentTitle: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  entryByteLength: z.number().int().nonnegative(),
-  entryHash: workspaceContentHashSchema,
-  previewVersion: workspaceContentHashSchema,
   cover: workspaceCoverProjectionSchema.optional(),
   supplementCount: z.number().int().nonnegative(),
   supplements: z.array(workspaceSegmentSupplementProjectionSchema),
   contentTabOrder: z.array(workspaceSegmentContentTabOrderItemSchema).optional(),
 });
 
-export const workspaceSegmentProjectionSchema = z.discriminatedUnion('type', [
+const workspaceReadyArtifactSegmentProjectionSchema =
+  workspaceArtifactSegmentProjectionBaseSchema.extend({
+    runtimeFault: z.undefined().optional(),
+    entryByteLength: z.number().int().nonnegative(),
+    entryHash: workspaceContentHashSchema,
+    previewVersion: workspaceContentHashSchema,
+  });
+
+const workspaceFaultArtifactSegmentProjectionSchema =
+  workspaceArtifactSegmentProjectionBaseSchema.extend({
+    runtimeFault: workspaceArtifactRuntimeFaultSchema,
+  });
+
+const workspaceArtifactSegmentProjectionSchema = z.union([
+  workspaceReadyArtifactSegmentProjectionSchema,
+  workspaceFaultArtifactSegmentProjectionSchema,
+]);
+
+export const workspaceSegmentProjectionSchema = z.union([
   workspaceAudioSegmentProjectionSchema,
   workspaceNoteSegmentProjectionSchema,
   workspaceArtifactSegmentProjectionSchema,
@@ -2376,6 +2411,9 @@ export type WorkspaceReviewSummary = z.infer<typeof workspaceReviewSummarySchema
 export type WorkspaceDefaultCoverTemplateId = z.infer<typeof workspaceDefaultCoverTemplateIdSchema>;
 export type WorkspaceCoverProjection = z.infer<typeof workspaceCoverProjectionSchema>;
 export type WorkspaceMemoryCoverProjection = z.infer<typeof workspaceMemoryCoverProjectionSchema>;
+export type WorkspaceArtifactRuntimeFaultProjection = z.infer<
+  typeof workspaceArtifactRuntimeFaultSchema
+>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
 export type WorkspaceSegmentProjection = z.infer<typeof workspaceSegmentProjectionSchema>;
 export type WorkspaceSegmentSupplementProjection = z.infer<

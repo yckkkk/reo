@@ -305,7 +305,9 @@ export function MemoryStudioSegmentCard({
                         data-slot="memory-studio-segment-card-artifact-size"
                         className="shrink-0 font-mono text-[13px] font-[700] leading-none tracking-[0.05em] text-[rgb(var(--cover-bottom-r)_var(--cover-bottom-g)_var(--cover-bottom-b)/0.82)]"
                       >
-                        {byteLengthLabel(segment.entryByteLength)}
+                        {'entryByteLength' in segment
+                          ? byteLengthLabel(segment.entryByteLength)
+                          : '修复'}
                       </span>
                     </>
                   ) : (

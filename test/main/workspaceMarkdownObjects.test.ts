@@ -150,6 +150,21 @@ test('workspace markdown candidate parser accepts body-only markdown', () => {
   assert.equal(candidate.content, '今天的想法\n\n继续写正文。\n');
 });
 
+test('workspace markdown candidate parser strips nonsemantic frontmatter', () => {
+  const candidate = parseWorkspaceMarkdownObjectCandidate({
+    objectType: 'segment',
+    markdown: `---\nid: seg_external_artifact\ntitle: 外部作品\nkind: artifact\nformat: html\ncreatedAt: 2026-06-04T08:14:09.000Z\nupdatedAt: 2026-06-04T08:22:58.000Z\n---\n# 外部作品\n`,
+  });
+
+  assert.deepEqual(candidate.data, {
+    id: 'seg_external_artifact',
+    title: '外部作品',
+    kind: 'artifact',
+    format: 'html',
+  });
+  assert.equal(candidate.content, '# 外部作品\n');
+});
+
 test('workspace markdown candidate parser rejects invalid frontmatter', () => {
   assert.throws(
     () =>

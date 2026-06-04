@@ -8,6 +8,7 @@ import {
   read as readCallback,
   readSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmdirSync,
   rmSync,
@@ -95,6 +96,7 @@ import {
   workspaceError,
   type WorkspaceCoverProjection,
   type WorkspaceDefaultCoverTemplateId,
+  type WorkspaceArtifactRuntimeFaultProjection,
   type FinalizeTranscriptionAttempt,
   type LastTranscriptionAttempt,
   workspaceMemorySummarySchema,
@@ -351,11 +353,21 @@ interface FinalizedNoteSegmentFileTruth extends FinalizedSegmentFileTruthBase {
   readonly metadata: FinalizedNoteSegmentSemanticTruth;
 }
 
-interface FinalizedArtifactSegmentFileTruth extends FinalizedSegmentFileTruthBase {
+interface FinalizedReadyArtifactSegmentFileTruth extends FinalizedSegmentFileTruthBase {
   readonly metadata: FinalizedArtifactSegmentSemanticTruth;
   readonly entryByteLength: number;
   readonly entryHash: string;
+  readonly runtimeFault?: undefined;
 }
+
+interface FinalizedFaultArtifactSegmentFileTruth extends FinalizedSegmentFileTruthBase {
+  readonly metadata: FinalizedArtifactSegmentSemanticTruth;
+  readonly runtimeFault: WorkspaceArtifactRuntimeFaultProjection;
+}
+
+type FinalizedArtifactSegmentFileTruth =
+  | FinalizedReadyArtifactSegmentFileTruth
+  | FinalizedFaultArtifactSegmentFileTruth;
 
 type FinalizedSegmentFileTruth =
   | FinalizedAudioSegmentFileTruth
@@ -931,6 +943,40 @@ function isArtifactEntryTooLargeError(error: unknown): boolean {
   return error instanceof ArtifactEntryTooLargeError;
 }
 
+function artifactRuntimeFaultProjection({
+  directory,
+  reason,
+  rootPath,
+}: {
+  readonly directory: string;
+  readonly reason: 'missing-entry' | 'oversized-entry';
+  readonly rootPath: string;
+}): WorkspaceArtifactRuntimeFaultProjection {
+  const relativeDirectory = workspaceRelativeDirectoryPath({ directory, rootPath });
+  const entryPath = `${relativeDirectory}/${ARTIFACT_RUNTIME_ENTRY_FILE}`;
+  return {
+    reason,
+    diagnostic:
+      reason === 'oversized-entry'
+        ? `Artifact runtime entry.html is too large at ${entryPath}.`
+        : `Artifact runtime is missing entry.html at ${entryPath}.`,
+  };
+}
+
+function workspaceRelativeDirectoryPath({
+  directory,
+  rootPath,
+}: {
+  readonly directory: string;
+  readonly rootPath: string;
+}): string {
+  const relative = path.relative(realpathSync(rootPath), realpathSync(directory));
+  if (relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+    return relative.split(path.sep).join('/');
+  }
+  throw new Error('Artifact runtime fault path is outside the workspace');
+}
+
 function initialFinalizeTranscriptionAttempt(
   value: FinalizeTranscriptionAttempt | undefined
 ): FinalizeTranscriptionAttempt {
@@ -1419,6 +1465,7 @@ type MarkdownCandidateDescriptor = {
   readonly candidateDirectory: string;
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
+  readonly needsSemanticRewrite: boolean;
 };
 
 async function collectMarkdownCandidateDescriptorsForReview({
@@ -1478,14 +1525,21 @@ async function collectMarkdownCandidateDescriptorsForReview({
         });
         continue;
       }
+      const markdown = readWorkspaceTextFileInKnownDirectory(
+        candidateDirectory,
+        candidateIdentity,
+        markdownFileName
+      );
       const candidate = parseWorkspaceMarkdownObjectCandidate({
         objectType,
-        markdown: readWorkspaceTextFileInKnownDirectory(
-          candidateDirectory,
-          candidateIdentity,
-          markdownFileName
-        ),
+        markdown,
       });
+      let needsSemanticRewrite = false;
+      try {
+        parseWorkspaceMarkdownObject({ objectType, markdown });
+      } catch {
+        needsSemanticRewrite = true;
+      }
       const candidateKind = 'kind' in candidate.data ? candidate.data.kind : undefined;
       if (
         candidateKind !== undefined &&
@@ -1500,6 +1554,7 @@ async function collectMarkdownCandidateDescriptorsForReview({
         candidateDirectory,
         candidateIdentity,
         directoryName: entry.name,
+        needsSemanticRewrite,
       });
       const candidateId =
         ('id' in candidate.data ? candidate.data.id : undefined) ??
@@ -1569,6 +1624,7 @@ async function reconcileNoteSegmentCandidate({
   candidateIdentity,
   directoryName,
   memoryId,
+  needsSemanticRewrite,
   reviewEntries,
   rootPath,
   workspaceId,
@@ -1579,6 +1635,7 @@ async function reconcileNoteSegmentCandidate({
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
   readonly memoryId: string;
+  readonly needsSemanticRewrite: boolean;
   readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
   readonly workspaceId: string;
@@ -1650,7 +1707,7 @@ async function reconcileNoteSegmentCandidate({
       nodeId: segmentId,
     });
     const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-    if (frontmatterId !== segmentId || candidateTitle !== title) {
+    if (frontmatterId !== segmentId || candidateTitle !== title || needsSemanticRewrite) {
       await writeWorkspaceFileAtomicInKnownDirectory({
         directory: candidateDirectory,
         directoryIdentity: candidateIdentity,
@@ -1765,7 +1822,7 @@ async function reconcileNoteSegmentCandidate({
     }
 
     const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-    if (frontmatterId !== segmentId || candidateTitle !== title) {
+    if (frontmatterId !== segmentId || candidateTitle !== title || needsSemanticRewrite) {
       await writeWorkspaceFileAtomicInKnownDirectory({
         directory: candidateDirectory,
         directoryIdentity: candidateIdentity,
@@ -1866,7 +1923,12 @@ async function reconcileNoteSegmentCandidate({
   }
 
   const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-  if (frontmatterId !== segmentId || candidateTitle !== title || candidateKind !== 'note') {
+  if (
+    frontmatterId !== segmentId ||
+    candidateTitle !== title ||
+    candidateKind !== 'note' ||
+    needsSemanticRewrite
+  ) {
     await writeWorkspaceFileAtomicInKnownDirectory({
       directory: candidateDirectory,
       directoryIdentity: candidateIdentity,
@@ -1958,6 +2020,7 @@ async function reconcileNoteSegmentsInMemoryDirectory({
         candidateIdentity: candidateDescriptor.candidateIdentity,
         directoryName: candidateDescriptor.directoryName,
         memoryId,
+        needsSemanticRewrite: candidateDescriptor.needsSemanticRewrite,
         ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
         workspaceId,
@@ -1975,6 +2038,7 @@ async function reconcileNoteSupplementCandidate({
   candidateIdentity,
   directoryName,
   memoryId,
+  needsSemanticRewrite,
   reviewEntries,
   rootPath,
   segmentId,
@@ -1986,6 +2050,7 @@ async function reconcileNoteSupplementCandidate({
   readonly candidateIdentity: DirectoryIdentity;
   readonly directoryName: string;
   readonly memoryId: string;
+  readonly needsSemanticRewrite: boolean;
   readonly reviewEntries?: WorkspaceReviewEntryInput[];
   readonly rootPath: string;
   readonly segmentId: string;
@@ -2059,7 +2124,7 @@ async function reconcileNoteSupplementCandidate({
       nodeId: supplementId,
     });
     const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-    if (frontmatterId !== supplementId || candidateTitle !== title) {
+    if (frontmatterId !== supplementId || candidateTitle !== title || needsSemanticRewrite) {
       await writeWorkspaceFileAtomicInKnownDirectory({
         directory: candidateDirectory,
         directoryIdentity: candidateIdentity,
@@ -2180,7 +2245,7 @@ async function reconcileNoteSupplementCandidate({
     }
 
     const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-    if (frontmatterId !== supplementId || candidateTitle !== title) {
+    if (frontmatterId !== supplementId || candidateTitle !== title || needsSemanticRewrite) {
       await writeWorkspaceFileAtomicInKnownDirectory({
         directory: candidateDirectory,
         directoryIdentity: candidateIdentity,
@@ -2284,7 +2349,12 @@ async function reconcileNoteSupplementCandidate({
   }
 
   const candidateTitle = 'title' in candidate.data ? candidate.data.title : undefined;
-  if (frontmatterId !== supplementId || candidateTitle !== title || candidateKind !== 'note') {
+  if (
+    frontmatterId !== supplementId ||
+    candidateTitle !== title ||
+    candidateKind !== 'note' ||
+    needsSemanticRewrite
+  ) {
     await writeWorkspaceFileAtomicInKnownDirectory({
       directory: candidateDirectory,
       directoryIdentity: candidateIdentity,
@@ -2381,6 +2451,7 @@ async function reconcileNoteSupplementsInSegmentDirectory({
         candidateIdentity: candidateDescriptor.candidateIdentity,
         directoryName: candidateDescriptor.directoryName,
         memoryId,
+        needsSemanticRewrite: candidateDescriptor.needsSemanticRewrite,
         ...(reviewEntries ? { reviewEntries } : {}),
         rootPath,
         segmentId,
@@ -4142,34 +4213,120 @@ function readFileSizeInKnownDirectory(
   }
 }
 
-function readArtifactEntryDescriptorInKnownDirectory(
+type ArtifactEntryDescriptor =
+  | { readonly status: 'file'; readonly byteLength: number; readonly hash: string }
+  | { readonly status: 'missing' }
+  | { readonly status: 'oversized'; readonly byteLength: number }
+  | { readonly status: 'blocked'; readonly reason: string };
+
+type ArtifactEntryProjectionDescriptor =
+  | {
+      readonly status: 'resolved';
+      readonly entry: { readonly byteLength: number; readonly hash: string } | null;
+      readonly runtimeFault?: WorkspaceArtifactRuntimeFaultProjection | undefined;
+    }
+  | { readonly status: 'blocked' };
+
+function readArtifactEntryDescriptorStatusInKnownDirectory(
   directory: string,
   directoryIdentity: DirectoryIdentity,
   fileName: typeof ARTIFACT_RUNTIME_ENTRY_FILE
-): { readonly byteLength: number; readonly hash: string } {
-  const fd = openExistingWorkspaceFileInDirectory({
-    directory,
-    directoryIdentity,
-    fileName,
-    flags: constants.O_RDONLY | constants.O_NOFOLLOW,
-  });
+): ArtifactEntryDescriptor {
+  let fd: number;
+  try {
+    fd = openExistingWorkspaceFileInDirectory({
+      directory,
+      directoryIdentity,
+      fileName,
+      flags: constants.O_RDONLY | constants.O_NOFOLLOW,
+    });
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ? { status: 'missing' }
+      : { status: 'blocked', reason: (error as NodeJS.ErrnoException).code ?? 'unknown' };
+  }
+
   try {
     const entry = fstatSync(fd);
     if (!entry.isFile()) {
-      throw new Error('Artifact entry file is not safe');
+      return { status: 'blocked', reason: 'not-file' };
     }
     if (entry.size > MAX_ARTIFACT_ENTRY_BYTES) {
-      throw new ArtifactEntryTooLargeError();
+      return { status: 'oversized', byteLength: entry.size };
     }
     const descriptor = {
+      status: 'file',
       byteLength: entry.size,
       hash: hashWorkspaceFileDescriptor(fd, entry.size),
-    };
+    } as const;
     assertSameDirectoryPath(directory, directoryIdentity);
     return descriptor;
   } finally {
     closeSync(fd);
   }
+}
+
+function readArtifactEntryProjectionDescriptor({
+  directory,
+  directoryIdentity,
+  rootPath,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly rootPath: string;
+}): ArtifactEntryProjectionDescriptor {
+  const descriptor = readArtifactEntryDescriptorStatusInKnownDirectory(
+    directory,
+    directoryIdentity,
+    ARTIFACT_RUNTIME_ENTRY_FILE
+  );
+  if (descriptor.status === 'blocked') {
+    return { status: 'blocked' };
+  }
+  if (descriptor.status === 'file') {
+    return {
+      status: 'resolved',
+      entry: {
+        byteLength: descriptor.byteLength,
+        hash: descriptor.hash,
+      },
+    };
+  }
+  return {
+    status: 'resolved',
+    entry: null,
+    runtimeFault: artifactRuntimeFaultProjection({
+      directory,
+      reason: descriptor.status === 'oversized' ? 'oversized-entry' : 'missing-entry',
+      rootPath,
+    }),
+  };
+}
+
+function readArtifactEntryDescriptorInKnownDirectory(
+  directory: string,
+  directoryIdentity: DirectoryIdentity,
+  fileName: typeof ARTIFACT_RUNTIME_ENTRY_FILE
+): { readonly byteLength: number; readonly hash: string } {
+  const descriptor = readArtifactEntryDescriptorStatusInKnownDirectory(
+    directory,
+    directoryIdentity,
+    fileName
+  );
+  if (descriptor.status === 'file') {
+    return {
+      byteLength: descriptor.byteLength,
+      hash: descriptor.hash,
+    };
+  }
+  if (descriptor.status === 'oversized') {
+    throw new ArtifactEntryTooLargeError();
+  }
+  throw new Error(
+    descriptor.status === 'missing'
+      ? 'Artifact entry file is missing'
+      : 'Artifact entry file is not safe'
+  );
 }
 
 type ArtifactRuntimeFileDescriptor =
@@ -4736,19 +4893,36 @@ async function readValidFinalizedSupplementProjection({
       updatedAt: supplement.updatedAt ?? supplement.finalizedAt,
     };
     if (supplement.kind === 'artifact') {
-      const entry = readArtifactEntryDescriptorInKnownDirectory(
-        supplementDirectory,
-        supplementDirectoryIdentity,
-        ARTIFACT_RUNTIME_ENTRY_FILE
-      );
+      const entryDescriptor = readArtifactEntryProjectionDescriptor({
+        directory: supplementDirectory,
+        directoryIdentity: supplementDirectoryIdentity,
+        rootPath,
+      });
+      if (entryDescriptor.status === 'blocked') {
+        return null;
+      }
+      const { entry, runtimeFault } = entryDescriptor;
       if (
         supplement.workspaceId !== workspaceId ||
         supplement.memoryId !== memoryId ||
         supplement.segmentId !== segmentId ||
         supplement.format !== 'html' ||
-        supplement.entryByteLength !== entry.byteLength ||
-        supplement.entryHash !== entry.hash
+        (!runtimeFault &&
+          (!entry ||
+            supplement.entryByteLength !== entry.byteLength ||
+            supplement.entryHash !== entry.hash))
       ) {
+        return null;
+      }
+      if (runtimeFault) {
+        return {
+          ...supplementBase,
+          type: 'artifact',
+          format: 'html',
+          runtimeFault,
+        };
+      }
+      if (!entry) {
         return null;
       }
       return {
@@ -5107,17 +5281,35 @@ async function readValidFinalizedSegmentFileTruthFromDirectory({
       };
     }
     if (recording.kind === 'artifact') {
-      const entry = readArtifactEntryDescriptorInKnownDirectory(
-        recordingDirectory,
-        recordingDirectoryIdentity,
-        ARTIFACT_RUNTIME_ENTRY_FILE
-      );
+      const entryDescriptor = readArtifactEntryProjectionDescriptor({
+        directory: recordingDirectory,
+        directoryIdentity: recordingDirectoryIdentity,
+        rootPath,
+      });
+      if (entryDescriptor.status === 'blocked') {
+        return null;
+      }
+      const { entry, runtimeFault } = entryDescriptor;
       if (
         recording.memoryId !== memoryId ||
         recording.format !== 'html' ||
-        recording.entryByteLength !== entry.byteLength ||
-        recording.entryHash !== entry.hash
+        (!runtimeFault &&
+          (!entry ||
+            recording.entryByteLength !== entry.byteLength ||
+            recording.entryHash !== entry.hash))
       ) {
+        return null;
+      }
+      if (runtimeFault) {
+        return {
+          segmentId: recording.segmentId,
+          recordingDirectory,
+          recordingDirectoryIdentity,
+          metadata: recording,
+          runtimeFault,
+        };
+      }
+      if (!entry) {
         return null;
       }
       return {
@@ -5845,6 +6037,14 @@ async function finalizedSegmentProjectionFromFileTruth({
   };
 
   if (isArtifactSegmentFileTruth(fileTruth)) {
+    if (fileTruth.runtimeFault) {
+      return {
+        ...segmentBase,
+        type: 'artifact',
+        format: 'html',
+        runtimeFault: fileTruth.runtimeFault,
+      };
+    }
     return {
       ...segmentBase,
       type: 'artifact',

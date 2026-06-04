@@ -212,7 +212,7 @@ describe('artifact runtime bridge', () => {
       ok: true,
       value: {
         requestId: 'req-secret',
-        slots: [{ id: 'apiKey', label: 'API Key', configured: true }],
+        slots: [{ id: 'slotA', label: 'Slot A', configured: true }],
       },
     });
     const writeArtifactRuntimeState = vi.fn().mockResolvedValue({
@@ -298,7 +298,12 @@ describe('artifact runtime bridge', () => {
       {
         requestId: 'req-agent',
         method: 'agent.copyPrompt',
-        payload: { action: 'create-supplement' },
+        payload: {
+          action: 'create-supplement',
+          intent: '把这个作品补成今天能继续用的打卡表',
+          state: { checkedDays: ['周一'] },
+          suggestedFiles: ['entry.html', 'state.json'],
+        },
       },
       {
         requestId: 'req-ui',
@@ -389,6 +394,141 @@ describe('artifact runtime bridge', () => {
           }),
         }),
       ])
+    );
+  });
+
+  it('bounds raw iframe requests at the host bridge', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readArtifactRuntimeState = vi.fn<Window['reoWorkspace']['readArtifactRuntimeState']>(
+      () =>
+        new Promise(() => {
+          // Keep host requests pending to exercise the host-side cap.
+        })
+    );
+
+    const handler = createArtifactRuntimeMessageHandler({
+      api: {
+        readArtifactRuntimeState,
+      },
+      iframeRef: {
+        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+      },
+      memory: memoryDetail(),
+      onProductMutation: vi.fn(),
+      onRequestFullscreen: vi.fn(),
+      src,
+      target: {
+        targetType: 'segment',
+        workspaceId: 'ws_bridge',
+        memoryId: 'mem_bridge',
+        segmentId: 'seg_bridge',
+      },
+      workspaceSession: session(),
+    });
+
+    for (let index = 0; index < 65; index += 1) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-runtime',
+            type: 'request',
+            requestId: `req-${index}`,
+            method: 'state.read',
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+
+    await flushBridge();
+
+    expect(readArtifactRuntimeState).toHaveBeenCalledTimes(64);
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-64',
+        ok: false,
+        error: {
+          code: 'ERR_REO_RUNTIME_BUSY',
+          message: 'Too many Reo runtime requests',
+        },
+      },
+      origin
+    );
+    (handler as { dispose?: () => void }).dispose?.();
+  });
+
+  it('ignores runtime-supplied agent prompt payloads before calling preload', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+
+    const handler = createArtifactRuntimeMessageHandler({
+      api: {
+        copyArtifactAgentPrompt,
+      },
+      iframeRef: {
+        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+      },
+      memory: memoryDetail(),
+      onProductMutation: vi.fn(),
+      onRequestFullscreen: vi.fn(),
+      src,
+      target: {
+        targetType: 'segment',
+        workspaceId: 'ws_bridge',
+        memoryId: 'mem_bridge',
+        segmentId: 'seg_bridge',
+      },
+      workspaceSession: session(),
+    });
+
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-runtime',
+          type: 'request',
+          requestId: 'req-agent-oversized',
+          method: 'agent.copyPrompt',
+          payload: {
+            state: { body: 'x'.repeat(20_000) },
+          },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_bridge',
+      workspaceId: 'ws_bridge',
+      action: 'update-segment',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_bridge',
+    });
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-agent-oversized',
+        ok: true,
+        value: undefined,
+      },
+      origin
     );
   });
 });

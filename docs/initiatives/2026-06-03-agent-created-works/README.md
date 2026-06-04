@@ -36,13 +36,13 @@ Reo 是本地创作宿主，不是作品审查器。用户和用户 agent 创造
 - `runtime.json` 描述启动、状态 schema、secret slots、Reo API 需求和 agent actions。
 - `window.reo` typed bridge，覆盖 state、workspace/content、product mutations、secrets、ui 和 agent prompt actions。
 
-Reo runtime 不做联网确认、权限弹窗、内容审查或质量审核。风险教育写入托管 skills，由用户 agent 在设计阶段简短提醒。
+Reo runtime 不做联网确认、权限弹窗、内容审查或质量审核。托管 skills 只记录文件合同、`window.reo` API 形状和技术边界，不承担风险教育、审批或内容审核。
 
 Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不获得 Node、Electron、raw path 或 generic filesystem bridge；写 Reo 真实数据必须走 Reo typed product mutation，并复用现有事务、baseline、stale conflict 和恢复模型。
 
 ## 首个工作单元
 
-首个实现切片已完成 **静态沙箱作品**：
+M1 已完成 **静态沙箱作品**：
 
 - FAB 增加 `作品` action，作用域是当前 Memory。
 - 内容 tab rail 的补充菜单增加 `作品补充`。
@@ -50,12 +50,12 @@ Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不�
 - Reo 识别合法 `artifact` Segment / SegmentSupplement，首个 `format` 为 `html`。
 - Reo 在只读隔离预览面中渲染 HTML，并支持和当前内容编辑面类似的全屏查看。
 
-下一工作单元是 **M2 Shared Generative Runtime**：
+M2 Shared Generative Runtime 已进入实现收口：
 
 - 用每对象 runtime URL / origin 替代 M1 共享 host 静态预览模型。
 - 引入 bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
 - 引入显式 vendor script 和 `window.reo` bridge。
-- 支持 runtime state、browser storage、network、secret、agent prompt action 和首批高频 product mutations。
+- 支持 runtime state、browser storage、network、secret bridge、agent prompt action 和首批高频 product mutations。
 - 强化 AGENTS.md 与 skills，让用户不点击 Reo、不复制 prompt 时，agent 也能从记忆空间内快速创建作品。
 - 组件只做合同级预留，不实现组件挂载 UI。
 
@@ -77,14 +77,14 @@ Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不�
 - 不在本轨道内做 Reo 内嵌 AI、自动整理或自动生成。
 - 不让 runtime 获得 Node、Electron、raw path 或 generic filesystem bridge。
 - 不做联网确认、权限弹窗、内容审查或作品质量审核。
-- 不把性能/轻量做成 runtime 门禁；轻量和风险提醒是生成 skill 的指引。
+- 不把性能/轻量做成 runtime 门禁；skills 只给出可运行文件形状和清晰实现建议，不做风险提醒。
 - 不为了未来可能性提前建无 consumer 的通用平台；M2 首个 consumer 是作品。
 - 不使用用户可见的 `html` 类型名。
 
 ## 关联
 
-- 当前 spec：`docs/specs/2026-06-03-1205-shared-generative-runtime/`
-- 已归档 spec：`docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
+- M2 执行记录：`docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
+- M0/M1 执行记录：`docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
 - ADR 0006：`docs/decisions/0006-agent-native-carrier-and-generative-ui.md`
 - ADR 0002：`docs/decisions/0002-electron-build-and-security-baseline.md`
 - ADR 0003：`docs/decisions/0003-local-memory-workspace.md`

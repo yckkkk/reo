@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
@@ -19,6 +19,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import {
   DEFAULT_REO_COVER_AESTHETIC_SKILL_MD,
@@ -68,6 +69,35 @@ import {
   setBeforeReadModelReaddirForTest,
 } from '../../src/main/memoryFiles.js';
 import { setAfterWorkspaceReoDirectoryCheckForTest } from '../../src/main/workspacePaths.js';
+
+const execFileAsync = promisify(execFile);
+
+type ScriptResult = {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+async function runNodeScript(args: readonly string[], cwd: string): Promise<ScriptResult> {
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [...args], {
+      cwd,
+      encoding: 'utf8',
+    });
+    return { status: 0, stdout, stderr };
+  } catch (error) {
+    const result = error as {
+      readonly code?: number | string;
+      readonly stdout?: string;
+      readonly stderr?: string;
+    };
+    return {
+      status: typeof result.code === 'number' ? result.code : null,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+    };
+  }
+}
 
 async function sha256(filePath: string): Promise<string> {
   return createHash('sha256')
@@ -658,7 +688,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.deepEqual(
     (await readdir(path.join(root, 'skills', 'reo-generative-runtime', 'scripts'))).sort(),
-    ['scaffold-runtime.mjs', 'validate-runtime.mjs']
+    ['inspect-runtime.mjs', 'scaffold-runtime.mjs', 'validate-runtime.mjs']
   );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
     'SKILL.md',
@@ -666,7 +696,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   ]);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works', 'references'))).sort(), [
     'file-contract.md',
-    'quality-check.md',
+    'runtime-contract-check.md',
     'workflows.md',
   ]);
   assert.deepEqual(
@@ -719,6 +749,8 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(runtimeSkillText, /普通 Web 网络/);
   assert.match(runtimeSkillText, /scaffold-runtime\.mjs/);
   assert.match(runtimeSkillText, /validate-runtime\.mjs/);
+  assert.match(runtimeSkillText, /inspect-runtime\.mjs/);
+  assert.doesNotMatch(runtimeSkillText, /migrate-runtime\.mjs/);
   assert.doesNotMatch(runtimeSkillText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksContractText = await readFile(
     path.join(root, 'skills', 'reo-works', 'references', 'file-contract.md'),
@@ -929,7 +961,7 @@ test('managed reo-works skill defines artifact file creation without external re
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
-  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/quality-check\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/runtime-contract-check\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /不要创建空白占位作品/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /不会被 Reo 投影/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
@@ -948,7 +980,14 @@ test('managed reo-works skill defines artifact file creation without external re
     /segment\.html|supplement\.html/
   );
   assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /Create from Reo prompt/);
-  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['quality-check.md'], /validate-runtime\.mjs/);
+  assert.match(
+    DEFAULT_REO_WORKS_REFERENCE_FILES['runtime-contract-check.md'],
+    /validate-runtime\.mjs/
+  );
+  assert.doesNotMatch(
+    DEFAULT_REO_WORKS_REFERENCE_FILES['runtime-contract-check.md'],
+    /visual|privacy|content quality|taste|risk/i
+  );
   for (const text of Object.values(DEFAULT_REO_WORKS_REFERENCE_FILES)) {
     assert.doesNotMatch(text, /Michaelliv|pi-generative-ui|github\.com/);
   }
@@ -971,6 +1010,8 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /scaffold-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /validate-runtime\.mjs/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /inspect-runtime\.mjs/);
+  assert.doesNotMatch(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /migrate-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /dashboard/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /todo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /spaced review/);
@@ -1017,8 +1058,7 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   });
   await symlink(outside, path.join(root, 'linked-outside'), 'dir');
 
-  const scaffoldOk = spawnSync(
-    process.execPath,
+  const scaffoldOk = await runNodeScript(
     [
       path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'scaffold-runtime.mjs'),
       'work',
@@ -1027,35 +1067,58 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
       '--template',
       'todo',
     ],
-    { cwd: root, encoding: 'utf8' }
+    root
   );
   assert.equal(scaffoldOk.status, 0, scaffoldOk.stderr || scaffoldOk.stdout);
-  assert.match(await readFile(path.join(root, 'work', 'entry.html'), 'utf8'), /window\.reo/);
-  assert.match(
-    await readFile(path.join(root, 'work', 'entry.html'), 'utf8'),
-    /reo-artifact:\/\/vendor\/reo-runtime\/bridge\.js/
-  );
+  const scaffoldedEntry = await readFile(path.join(root, 'work', 'entry.html'), 'utf8');
+  assert.match(scaffoldedEntry, /window\.reo/);
+  assert.match(scaffoldedEntry, /reo-artifact:\/\/vendor\/reo-runtime\/bridge\.js/);
+  assert.match(scaffoldedEntry, /data-template="todo"/);
+  assert.match(scaffoldedEntry, /新增一项/);
+  assert.doesNotMatch(scaffoldedEntry, /innerHTML\s*=\s*items\(\)\.map/);
+  assert.match(scaffoldedEntry, /label\.textContent\s*=/);
+  assert.match(scaffoldedEntry, /button\.textContent\s*=/);
+  assert.doesNotMatch(scaffoldedEntry, /Runtime bundle scaffolded/);
   assert.match(await readFile(path.join(root, 'work', 'runtime.json'), 'utf8'), /"secrets"/);
 
-  const validateOk = spawnSync(
-    process.execPath,
-    [
-      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
-      'work',
-    ],
-    { cwd: root, encoding: 'utf8' }
-  );
+  const [validateOk, inspectOk] = await Promise.all([
+    runNodeScript(
+      [
+        path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+        'work',
+      ],
+      root
+    ),
+    runNodeScript(
+      [
+        path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'inspect-runtime.mjs'),
+        'work',
+      ],
+      root
+    ),
+  ]);
   assert.equal(validateOk.status, 0, validateOk.stderr || validateOk.stdout);
+  assert.equal(inspectOk.status, 0, inspectOk.stderr || inspectOk.stdout);
+  assert.match(inspectOk.stdout, /"template": "todo"/);
+  assert.match(inspectOk.stdout, /"usesBridge": true/);
+  await assert.rejects(
+    stat(path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'migrate-runtime.mjs'))
+  );
 
-  const scaffold = spawnSync(
-    process.execPath,
+  const inspectReo = await runNodeScript(
+    [path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'inspect-runtime.mjs'), '.reo'],
+    root
+  );
+  assert.equal(inspectReo.status, 1, inspectReo.stdout);
+
+  const scaffold = await runNodeScript(
     [
       path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'scaffold-runtime.mjs'),
       'linked-outside/work',
       '--title',
       'Escaped work',
     ],
-    { cwd: root, encoding: 'utf8' }
+    root
   );
   assert.equal(scaffold.status, 1, scaffold.stdout);
   await assert.rejects(stat(path.join(outside, 'work')));
@@ -1065,13 +1128,12 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   await writeFile(path.join(outside, 'state.json'), '{"schemaVersion":1}\n');
   await mkdir(path.join(outside, 'assets'), { recursive: true });
 
-  const validate = spawnSync(
-    process.execPath,
+  const validate = await runNodeScript(
     [
       path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
       'linked-outside',
     ],
-    { cwd: root, encoding: 'utf8' }
+    root
   );
   assert.equal(validate.status, 1, validate.stderr || validate.stdout);
   const report = JSON.parse(validate.stdout) as {
@@ -1217,6 +1279,11 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
   });
   await writeFile(path.join(root, 'AGENTS.md'), '# 用户规则\n\n保留我的长期偏好。\n');
   await rm(path.join(root, 'skills'), { force: true, recursive: true });
+  await mkdir(path.join(root, 'skills', 'reo-works', 'references'), { recursive: true });
+  await writeFile(
+    path.join(root, 'skills', 'reo-works', 'references', 'quality-check.md'),
+    'old quality check\n'
+  );
 
   const opened = await openWorkspaceFiles({ rootPath: root });
 
@@ -1236,7 +1303,10 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
   await stat(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-works', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'));
-  await stat(path.join(root, 'skills', 'reo-works', 'references', 'quality-check.md'));
+  await stat(path.join(root, 'skills', 'reo-works', 'references', 'runtime-contract-check.md'));
+  await assert.rejects(
+    stat(path.join(root, 'skills', 'reo-works', 'references', 'quality-check.md'))
+  );
   await stat(
     path.join(root, 'skills', 'reo-works-design', 'references', 'interaction-patterns.md')
   );
@@ -1351,6 +1421,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     'validation.md',
   ]);
   assert.deepEqual([...report.repaired.runtimeScripts].sort(), [
+    'inspect-runtime.mjs',
     'scaffold-runtime.mjs',
     'validate-runtime.mjs',
   ]);
@@ -1358,7 +1429,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   assert.equal(report.repaired.worksDesignSkill, true);
   assert.deepEqual([...report.repaired.worksReferences].sort(), [
     'file-contract.md',
-    'quality-check.md',
+    'runtime-contract-check.md',
     'workflows.md',
   ]);
   assert.deepEqual(report.repaired.worksDesignReferences, ['charts.md']);

@@ -91,7 +91,7 @@ async function writeArtifactSegment(rootPath: string): Promise<string> {
         schemaVersion: 1,
         title: 'Runtime work',
         entry: 'entry.html',
-        secrets: [{ id: 'apiKey', label: 'API Key', purpose: '联网仪表盘测试' }],
+        secrets: [{ id: 'slotA', label: 'Slot A', purpose: 'Runtime slot test' }],
       },
       null,
       2
@@ -334,19 +334,19 @@ test('artifact runtime secrets bind object slot values outside the runtime bundl
     return;
   }
   assert.deepEqual(before.value.slots, [
-    { id: 'apiKey', label: 'API Key', purpose: '联网仪表盘测试', configured: false },
+    { id: 'slotA', label: 'Slot A', purpose: 'Runtime slot test', configured: false },
   ]);
 
   const set = await setArtifactRuntimeSecretValue({
     rootPath,
     store,
     target,
-    slotId: 'apiKey',
+    slotId: 'slotA',
     value: 'runtime-secret-value',
   });
   assert.equal(set.ok, true);
 
-  const value = await getArtifactRuntimeSecretValue({ rootPath, store, target, slotId: 'apiKey' });
+  const value = await getArtifactRuntimeSecretValue({ rootPath, store, target, slotId: 'slotA' });
   assert.equal(value.ok, true);
   if (value.ok) {
     assert.equal(value.value.configured, true);
@@ -371,6 +371,63 @@ test('artifact runtime secrets bind object slot values outside the runtime bundl
   assert.match(
     rawSecretFile,
     new RegExp(Buffer.from('enc:runtime-secret-value').toString('base64'))
+  );
+});
+
+test('artifact runtime secrets stay bound to object id when file truth repairs parents', async () => {
+  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-secrets-move-'));
+  const store = createArtifactRuntimeSecretStore({
+    platform: 'linux',
+    safeStorage: makeFakeSafeStorage(),
+    userDataDir,
+  });
+
+  await store.writeValue(
+    {
+      targetType: 'segment',
+      workspaceId: 'ws_runtime',
+      memoryId: 'mem_before',
+      segmentId: 'seg_runtime',
+    },
+    'slotA',
+    'segment-secret'
+  );
+  assert.equal(
+    store.readValue(
+      {
+        targetType: 'segment',
+        workspaceId: 'ws_runtime',
+        memoryId: 'mem_after',
+        segmentId: 'seg_runtime',
+      },
+      'slotA'
+    ),
+    'segment-secret'
+  );
+
+  await store.writeValue(
+    {
+      targetType: 'supplement',
+      workspaceId: 'ws_runtime',
+      memoryId: 'mem_before',
+      segmentId: 'seg_before',
+      supplementId: 'sup_runtime',
+    },
+    'slotA',
+    'supplement-secret'
+  );
+  assert.equal(
+    store.readValue(
+      {
+        targetType: 'supplement',
+        workspaceId: 'ws_runtime',
+        memoryId: 'mem_after',
+        segmentId: 'seg_after',
+        supplementId: 'sup_runtime',
+      },
+      'slotA'
+    ),
+    'supplement-secret'
   );
 });
 
@@ -422,7 +479,7 @@ test('artifact runtime secrets require declared slots and resolvable artifact ta
     rootPath,
     store,
     target: { ...target, segmentId: 'seg_missing' },
-    slotId: 'apiKey',
+    slotId: 'slotA',
     value: 'must-not-persist',
   });
   assert.equal(missingTargetSet.ok, false);
@@ -458,7 +515,7 @@ test('artifact runtime secrets reject writes when secure storage is unavailable'
     rootPath,
     store,
     target,
-    slotId: 'apiKey',
+    slotId: 'slotA',
     value: 'must-not-persist',
   });
   assert.equal(set.ok, false);

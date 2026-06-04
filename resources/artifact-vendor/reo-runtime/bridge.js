@@ -4,6 +4,8 @@
   }
 
   var nextId = 0;
+  var MAX_PENDING_REQUESTS = 64;
+  var REQUEST_TIMEOUT_MS = 30000;
   var pending = new Map();
 
   function createRequestId() {
@@ -22,6 +24,9 @@
 
   window.addEventListener('message', function (event) {
     var data = event.data;
+    if (event.source !== window.parent) {
+      return;
+    }
     if (!data || data.source !== 'reo-host' || data.type !== 'response') {
       return;
     }
@@ -30,6 +35,7 @@
       return;
     }
     pending.delete(data.requestId);
+    window.clearTimeout(entry.timeoutId);
     if (data.ok) {
       entry.resolve(data.value);
       return;
@@ -40,7 +46,25 @@
   function call(method, payload) {
     var requestId = createRequestId();
     return new Promise(function (resolve, reject) {
-      pending.set(requestId, { resolve: resolve, reject: reject });
+      if (pending.size >= MAX_PENDING_REQUESTS) {
+        reject(
+          runtimeError({
+            code: 'ERR_REO_RUNTIME_BUSY',
+            message: 'Too many Reo runtime requests',
+          })
+        );
+        return;
+      }
+      var timeoutId = window.setTimeout(function () {
+        pending.delete(requestId);
+        reject(
+          runtimeError({
+            code: 'ERR_REO_RUNTIME_TIMEOUT',
+            message: 'Reo runtime request timed out',
+          })
+        );
+      }, REQUEST_TIMEOUT_MS);
+      pending.set(requestId, { resolve: resolve, reject: reject, timeoutId: timeoutId });
       window.parent.postMessage(
         {
           source: 'reo-runtime',
@@ -106,7 +130,9 @@
     },
     agent: {
       copyPrompt: function (input) {
-        return call('agent.copyPrompt', input || {});
+        return call('agent.copyPrompt', {
+          action: input && input.action,
+        });
       },
     },
   };

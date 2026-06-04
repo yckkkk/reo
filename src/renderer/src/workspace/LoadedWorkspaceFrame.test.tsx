@@ -616,6 +616,27 @@ function renderLoadedWorkspaceFrame({
   copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
   copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
   copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
+  listArtifactRuntimeSecretSlots = vi.fn(async (request) => ({
+    ok: true,
+    value: {
+      requestId: request.requestId,
+      slots: [],
+    },
+  })),
+  setArtifactRuntimeSecret = vi.fn(async (request) => ({
+    ok: true,
+    value: {
+      requestId: request.requestId,
+      configured: true,
+    },
+  })),
+  clearArtifactRuntimeSecret = vi.fn(async (request) => ({
+    ok: true,
+    value: {
+      requestId: request.requestId,
+      configured: false,
+    },
+  })),
   readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -792,6 +813,9 @@ function renderLoadedWorkspaceFrame({
   readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly copyNeedsReviewAgentPrompt?: ReturnType<typeof vi.fn>;
   readonly copyArtifactAgentPrompt?: ReturnType<typeof vi.fn>;
+  readonly listArtifactRuntimeSecretSlots?: ReturnType<typeof vi.fn>;
+  readonly setArtifactRuntimeSecret?: ReturnType<typeof vi.fn>;
+  readonly clearArtifactRuntimeSecret?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplementAudio?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
@@ -816,6 +840,9 @@ function renderLoadedWorkspaceFrame({
       copySegmentSupplementRelativePath,
       copyArtifactAgentPrompt,
       copyNeedsReviewAgentPrompt,
+      listArtifactRuntimeSecretSlots,
+      setArtifactRuntimeSecret,
+      clearArtifactRuntimeSecret,
       openMemoryDocument,
       openSegmentSupplementDocument,
       readFinalizedAudioSegmentSupplement,
@@ -1933,6 +1960,161 @@ describe('LoadedWorkspaceFrame', () => {
     );
     expect(readSegmentContent).not.toHaveBeenCalled();
     expect(readFinalizedAudioSegment).not.toHaveBeenCalled();
+  });
+
+  it('shows a repairable runtime fault surface for damaged artifact segments', async () => {
+    const user = userEvent.setup();
+    const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const work = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_artifact',
+      type: 'artifact',
+      format: 'html',
+      title: '间隔复习表',
+      createdAt: '2026-05-06T13:20:00.000',
+      updatedAt: '2026-05-06T13:20:30.000',
+      supplementCount: 0,
+      supplements: [],
+      contentTabOrder: ['segment'],
+      runtimeFault: {
+        reason: 'missing-entry',
+        diagnostic:
+          'Artifact runtime is missing entry.html at memories/mem_birthday/segments/seg_birthday_artifact/entry.html.',
+      },
+    } as ArtifactSegment;
+    expect('entryHash' in work).toBe(false);
+    expect('previewVersion' in work).toBe(false);
+    const artifactMemory = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+    };
+    const detailWithFault: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      segments: [work],
+    };
+    const session = workspaceSession({ memories: [artifactMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      copyArtifactAgentPrompt,
+      currentMemory: artifactMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_fault',
+      detail: detailWithFault,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const workPanel = within(content).getByRole('tabpanel', { name: '作品' });
+
+    expect(within(workPanel).queryByTitle('作品预览：作品')).not.toBeInTheDocument();
+    expect(within(workPanel).getByRole('alert')).toHaveTextContent('作品无法打开');
+    expect(within(workPanel).getByText(/entry\.html/)).toBeInTheDocument();
+
+    await user.click(within(workPanel).getByRole('button', { name: '复制诊断' }));
+    expect(writeText).toHaveBeenCalledWith(
+      'Artifact runtime is missing entry.html at memories/mem_birthday/segments/seg_birthday_artifact/entry.html.'
+    );
+
+    await user.click(within(workPanel).getByRole('button', { name: '让 Agent 修复作品' }));
+    await waitFor(() =>
+      expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-secret',
+        workspaceId: 'ws_1',
+        action: 'update-segment',
+        memoryId: 'mem_birthday',
+        segmentId: 'seg_birthday_artifact',
+      })
+    );
+  });
+
+  it('shows an error when damaged artifact diagnostic copy has no clipboard API', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    const work = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_birthday',
+      segmentId: 'seg_birthday_artifact',
+      type: 'artifact',
+      format: 'html',
+      title: '间隔复习表',
+      createdAt: '2026-05-06T13:20:00.000',
+      updatedAt: '2026-05-06T13:20:30.000',
+      supplementCount: 0,
+      supplements: [],
+      contentTabOrder: ['segment'],
+      runtimeFault: {
+        reason: 'missing-entry',
+        diagnostic: 'Artifact runtime is missing entry.html.',
+      },
+    } as ArtifactSegment;
+    const artifactMemory = {
+      ...birthdayMemory,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+    };
+    const detailWithFault: WorkspaceMemoryDetail = {
+      ...birthdayDetail,
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 1,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      segments: [work],
+    };
+    const session = workspaceSession({ memories: [artifactMemory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: artifactMemory,
+      session,
+    });
+
+    queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+      requestId: 'request_mem_birthday_artifact_fault_no_clipboard',
+      detail: detailWithFault,
+    });
+
+    const studio = await screen.findByRole('region', { name: 'Memory Studio' });
+    const content = within(studio).getByRole('region', { name: '片段内容' });
+    const workPanel = within(content).getByRole('tabpanel', { name: '作品' });
+
+    await user.click(within(workPanel).getByRole('button', { name: '复制诊断' }));
+
+    expect(showReoToast).toHaveBeenCalledWith({ type: 'error', title: '无法复制诊断' });
+    expect(showReoToast).not.toHaveBeenCalledWith({ type: 'success', title: '诊断已复制' });
   });
 
   it('renders generated note speech as the segment player above the content tab rail', async () => {

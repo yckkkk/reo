@@ -32,13 +32,13 @@
 - 新增 shared generative runtime skill。
 - 更新 works skill 复用 runtime skill。
 - 设计宽模板矩阵，每个模板是可运行 bundle。
-- 提供 scaffold / validate / inspect / migrate 脚本。
+- 提供 scaffold / validate / inspect 脚本；不保留旧 migrate 脚本。
 - Prompt 生成任务包，支持点击 Reo 入口和用户手动让 agent 在记忆空间内创建作品。
 
 ## Phase 5 - Validation Examples
 
 - Todo / 复习表：验证状态持久化和 agent 可修改状态。
-- 联网仪表盘：验证网络、CDN/framework 和 secret。
+- 普通 Web 状态工具：验证网络、CDN/framework 和可见 runtime state。
 - Reo 内容工具：验证 bridge 读取内容、状态写入、当前作品标题 mutation 与 agent prompt action。
 
 ## Review Gates
