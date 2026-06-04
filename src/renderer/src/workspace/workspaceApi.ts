@@ -144,30 +144,6 @@ export function writeArtifactRuntimeState(
   return window.reoWorkspace.writeArtifactRuntimeState(payload);
 }
 
-export function listArtifactRuntimeSecretSlots(
-  payload: Parameters<Window['reoWorkspace']['listArtifactRuntimeSecretSlots']>[0]
-) {
-  return window.reoWorkspace.listArtifactRuntimeSecretSlots(payload);
-}
-
-export function getArtifactRuntimeSecret(
-  payload: Parameters<Window['reoWorkspace']['getArtifactRuntimeSecret']>[0]
-) {
-  return window.reoWorkspace.getArtifactRuntimeSecret(payload);
-}
-
-export function setArtifactRuntimeSecret(
-  payload: Parameters<Window['reoWorkspace']['setArtifactRuntimeSecret']>[0]
-) {
-  return window.reoWorkspace.setArtifactRuntimeSecret(payload);
-}
-
-export function clearArtifactRuntimeSecret(
-  payload: Parameters<Window['reoWorkspace']['clearArtifactRuntimeSecret']>[0]
-) {
-  return window.reoWorkspace.clearArtifactRuntimeSecret(payload);
-}
-
 export function copyNeedsReviewAgentPrompt(
   payload: Parameters<Window['reoWorkspace']['copyNeedsReviewAgentPrompt']>[0]
 ) {

@@ -325,6 +325,29 @@ export async function writeWorkspaceFileAtomicInKnownDirectory({
   });
 }
 
+export async function writeWorkspaceFileNoReplaceAtomicInKnownDirectory({
+  directory,
+  directoryIdentity,
+  fileName,
+  data,
+  assertUsable,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly fileName: string;
+  readonly data: string | Uint8Array;
+  readonly assertUsable?: AssertWorkspaceFileUsable | undefined;
+}): Promise<void> {
+  await writeWorkspaceFileAtomicInDirectory({
+    directory,
+    directoryIdentity,
+    targetName: fileName,
+    data,
+    noReplace: true,
+    assertUsable,
+  });
+}
+
 export async function writeWorkspaceJsonAtomic(
   filePath: string,
   value: unknown,

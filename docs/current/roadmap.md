@@ -144,7 +144,7 @@ P0-P6 是 audio + note + artifact first slice 基础表达的 enabling phase。R
 - **回顾 mechanics（粘性核心）**：结合记忆曲线 + 随机推送式回顾节奏 + 桌面入口提示。Flomo 已证明回顾机制是 prosumer 用户长期回来的根本原因；Reo 用 Gallery 走马灯 + 回顾 skills + runtime 组件形态实现，做成跨模态沉浸式回顾而非碎片推送。
 - **AGENTS.md + users.md 模板与 skills 目录**：记忆空间 root 与 Memory root 的 `AGENTS.md` 模板由 Reo 出厂提供；Workspace root 的 `users.md` 模板由 Reo 出厂 + 首次启动引导用户填写，承担"用户是谁 / 长期目标 / 偏好"的个人 context 层。默认 skills 分两层：原子 skill 共 8 项（引导 / 回顾 / 整理总结 / runtime 组件生成 + 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考），use-xxx 组合 skill 共 3 项（`use-学习闭环` / `use-记忆回顾循环` / `use-内容创作支援`）。skill 组合是 agent 责任，不是用户责任。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
 - **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、runtime 组件的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
-- **Shared Generative Runtime**：作品和未来组件共用的 runtime object 能力层。作品挂载在 Segment / SegmentSupplement；组件未来挂载在 Home、Workspace side tab、Memory panel/tab 等位置。Runtime 默认支持完整 Web app 能力、每对象 origin、可见 JSON state、secret、`window.reo` typed bridge、agent prompt action、模板和脚本。日历、时间线、成长册、关系曲线、概念时间线等都应复用同一 runtime，不重建组件专用能力层。
+- **Shared Generative Runtime**：作品和未来组件共用的 runtime object 能力层。作品挂载在 Segment / SegmentSupplement；组件未来挂载在 Home、Workspace side tab、Memory panel/tab 等位置。Runtime 默认支持完整 Web app 能力、每对象 origin、可见 JSON state、`window.reo` typed bridge、agent prompt action、模板和脚本；Reo 不提供作品 key/token/value 管理层。日历、时间线、成长册、关系曲线、概念时间线等都应复用同一 runtime，不重建组件专用能力层。
 - **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 跨模态混合呈现（录音 + 视频 + 照片节奏感切换），是 craft 不变量的核心承担页之一。
 - **作品 Segment / SegmentSupplement 深化**：agent 生成的报告、工具、仪表盘、复习表、待办、游戏、原型和其它小型 Web app 以 `artifact` 产品类型落到现有 Segment / SegmentSupplement 信息架构，并复用当前 Shared Generative Runtime 能力层继续扩展 craft 与模板质量。
 

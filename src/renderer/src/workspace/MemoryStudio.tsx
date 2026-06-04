@@ -109,14 +109,10 @@ import {
   type VoiceSpeechSynthesisSpeaker,
 } from '../voiceSpeechSynthesisSpeakers';
 import {
-  clearArtifactRuntimeSecret,
   copyArtifactAgentPrompt,
-  getArtifactRuntimeSecret,
-  listArtifactRuntimeSecretSlots,
   readArtifactRuntimeState,
   saveSegmentSupplementTranscript,
   saveTranscript,
-  setArtifactRuntimeSecret,
   updateSegmentContentTabOrder,
   updateSegmentSupplementTitle,
   updateSegmentTitle,
@@ -2406,12 +2402,8 @@ function ArtifactPreviewPanel({
   const [expanded, setExpanded] = useState(false);
   const bridgeApi = useMemo(
     () => ({
-      clearArtifactRuntimeSecret,
       copyArtifactAgentPrompt,
-      getArtifactRuntimeSecret,
-      listArtifactRuntimeSecretSlots,
       readArtifactRuntimeState,
-      setArtifactRuntimeSecret,
       updateSegmentSupplementTitle,
       updateSegmentTitle,
       writeArtifactRuntimeState,
@@ -2438,7 +2430,7 @@ function ArtifactPreviewPanel({
       expanded={expanded}
       expandLabel="展开作品预览"
       inlineClassName={[
-        'relative reo-content-tab-panel-motion flex min-h-0 w-full flex-1 overflow-hidden bg-background',
+        'relative reo-content-tab-panel-motion flex min-h-0 w-full flex-1 overflow-hidden bg-background reo-squircle rounded-xl border border-secondary',
         topSpacingClassName,
       ].join(' ')}
       inlineDataSlot="memory-studio-inline-artifact-preview"

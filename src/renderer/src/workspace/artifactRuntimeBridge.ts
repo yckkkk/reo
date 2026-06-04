@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 
 export type ArtifactRuntimeBridgeTarget =
@@ -19,12 +19,8 @@ export type ArtifactRuntimeBridgeTarget =
 type RuntimeApi = Partial<
   Pick<
     Window['reoWorkspace'],
-    | 'clearArtifactRuntimeSecret'
     | 'copyArtifactAgentPrompt'
-    | 'getArtifactRuntimeSecret'
-    | 'listArtifactRuntimeSecretSlots'
     | 'readArtifactRuntimeState'
-    | 'setArtifactRuntimeSecret'
     | 'updateSegmentSupplementTitle'
     | 'updateSegmentTitle'
     | 'writeArtifactRuntimeState'
@@ -41,6 +37,14 @@ export type ArtifactRuntimeBridgeOptions = {
   readonly src: string;
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly workspaceSession: WorkspaceSession;
+};
+
+type LatestBridgeOptions = Omit<ArtifactRuntimeBridgeOptions, 'enabled' | 'iframeRef' | 'src'>;
+
+type ArtifactRuntimeMessageHandlerLiveOptions = {
+  readonly iframeRef: RefObject<HTMLIFrameElement | null>;
+  readonly src: string;
+  readonly getLatestOptions: () => LatestBridgeOptions;
 };
 
 type RuntimeRequest = {
@@ -239,7 +243,7 @@ async function handleRuntimeRequest(
     onRequestFullscreen,
     target,
     workspaceSession,
-  }: ArtifactRuntimeBridgeOptions
+  }: LatestBridgeOptions
 ): Promise<unknown> {
   const baseTarget = runtimeTargetPayload({
     requestId: request.requestId,
@@ -286,45 +290,6 @@ async function handleRuntimeRequest(
     return object;
   }
 
-  if (request.method === 'secrets.list') {
-    return unwrapResult(
-      await (api.listArtifactRuntimeSecretSlots?.(
-        baseTarget as Parameters<Window['reoWorkspace']['listArtifactRuntimeSecretSlots']>[0]
-      ) ?? missingApi(request.method))
-    );
-  }
-
-  if (request.method === 'secrets.get') {
-    return unwrapResult(
-      await (api.getArtifactRuntimeSecret?.({
-        ...baseTarget,
-        slotId: requiredString(request.payload, 'slotId'),
-      } as Parameters<Window['reoWorkspace']['getArtifactRuntimeSecret']>[0]) ??
-        missingApi(request.method))
-    );
-  }
-
-  if (request.method === 'secrets.set') {
-    return unwrapResult(
-      await (api.setArtifactRuntimeSecret?.({
-        ...baseTarget,
-        slotId: requiredString(request.payload, 'slotId'),
-        value: requiredString(request.payload, 'value'),
-      } as Parameters<Window['reoWorkspace']['setArtifactRuntimeSecret']>[0]) ??
-        missingApi(request.method))
-    );
-  }
-
-  if (request.method === 'secrets.clear') {
-    return unwrapResult(
-      await (api.clearArtifactRuntimeSecret?.({
-        ...baseTarget,
-        slotId: requiredString(request.payload, 'slotId'),
-      } as Parameters<Window['reoWorkspace']['clearArtifactRuntimeSecret']>[0]) ??
-        missingApi(request.method))
-    );
-  }
-
   if (request.method === 'mutations.updateTitle') {
     const title = requiredString(request.payload, 'title');
     if (target.targetType === 'supplement') {
@@ -351,13 +316,6 @@ async function handleRuntimeRequest(
       } as Parameters<Window['reoWorkspace']['updateSegmentTitle']>[0]) ??
         missingApi(request.method)),
       onProductMutation
-    );
-  }
-
-  if (request.method === 'mutations.saveNoteBody') {
-    throw new ArtifactRuntimeBridgeError(
-      'ERR_REO_RUNTIME_INVALID_REQUEST',
-      'Note body writes are not available to artifact runtime works'
     );
   }
 
@@ -395,9 +353,12 @@ async function handleRuntimeRequest(
   );
 }
 
-export function createArtifactRuntimeMessageHandler(options: ArtifactRuntimeBridgeOptions) {
+export function createArtifactRuntimeMessageHandler(
+  options: ArtifactRuntimeMessageHandlerLiveOptions
+) {
   const expectedOrigin = new URL(options.src).origin;
   const pending = new Map<string, number>();
+  const getLatestOptions = options.getLatestOptions;
 
   const postRuntimeResponse = (
     source: WindowProxy,
@@ -499,7 +460,7 @@ export function createArtifactRuntimeMessageHandler(options: ArtifactRuntimeBrid
     }, HOST_REQUEST_TIMEOUT_MS);
     pending.set(request.requestId, timeoutId);
 
-    void handleRuntimeRequest(request, options)
+    void handleRuntimeRequest(request, getLatestOptions())
       .then((value) => {
         finishPendingRequest(source, request.requestId, { ok: true, value });
       })
@@ -520,15 +481,37 @@ export function createArtifactRuntimeMessageHandler(options: ArtifactRuntimeBrid
 }
 
 export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions): void {
+  const latestOptionsRef = useRef<LatestBridgeOptions>({
+    api: options.api,
+    memory: options.memory,
+    onProductMutation: options.onProductMutation,
+    onRequestFullscreen: options.onRequestFullscreen,
+    target: options.target,
+    workspaceSession: options.workspaceSession,
+  });
+
+  latestOptionsRef.current = {
+    api: options.api,
+    memory: options.memory,
+    onProductMutation: options.onProductMutation,
+    onRequestFullscreen: options.onRequestFullscreen,
+    target: options.target,
+    workspaceSession: options.workspaceSession,
+  };
+
   useEffect(() => {
     if (options.enabled === false) {
       return;
     }
-    const handler = createArtifactRuntimeMessageHandler(options);
+    const handler = createArtifactRuntimeMessageHandler({
+      iframeRef: options.iframeRef,
+      src: options.src,
+      getLatestOptions: () => latestOptionsRef.current,
+    });
     window.addEventListener('message', handler);
     return () => {
       window.removeEventListener('message', handler);
       handler.dispose();
     };
-  }, [options]);
+  }, [options.enabled, options.iframeRef, options.src]);
 }

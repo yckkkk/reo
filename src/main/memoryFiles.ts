@@ -4640,6 +4640,55 @@ async function updateSegmentMarkdownInKnownDirectory({
   });
 }
 
+async function updateArtifactRuntimeManifestTitleInKnownDirectory({
+  directory,
+  directoryIdentity,
+  title,
+}: {
+  readonly directory: string;
+  readonly directoryIdentity: DirectoryIdentity;
+  readonly title: string;
+}): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let runtimeManifestText: string;
+    try {
+      runtimeManifestText = readWorkspaceTextFileInKnownDirectory(
+        directory,
+        directoryIdentity,
+        ARTIFACT_RUNTIME_MANIFEST_FILE
+      );
+    } catch {
+      return;
+    }
+
+    let runtimeManifest: unknown;
+    try {
+      runtimeManifest = JSON.parse(runtimeManifestText);
+    } catch {
+      return;
+    }
+    if (!runtimeManifest || typeof runtimeManifest !== 'object' || Array.isArray(runtimeManifest)) {
+      return;
+    }
+
+    try {
+      await writeWorkspaceFileAtomicInKnownDirectory({
+        directory,
+        directoryIdentity,
+        fileName: ARTIFACT_RUNTIME_MANIFEST_FILE,
+        data: `${JSON.stringify({ ...runtimeManifest, title }, null, 2)}\n`,
+        expectedCurrentData: runtimeManifestText,
+      });
+      return;
+    } catch (error) {
+      if (attempt === 0 && error instanceof WorkspaceFileChangedBeforeAtomicWrite) {
+        continue;
+      }
+      return;
+    }
+  }
+}
+
 async function writeSupplementMarkdownInKnownDirectory({
   directory,
   directoryIdentity,
@@ -9904,6 +9953,13 @@ export async function updateSegmentTitleFromFileTruth(input: UpdateSegmentTitleI
           content: content.replace(/^# .*(\r?\n)?/, `# ${input.title}\n`),
         }),
       });
+      if (sourceFileTruth.metadata.kind === 'artifact') {
+        await updateArtifactRuntimeManifestTitleInKnownDirectory({
+          directory: finalDirectory,
+          directoryIdentity: finalDirectoryIdentity,
+          title: input.title,
+        });
+      }
       const memoryDirectoryPath = await memoryDirectory(input.rootPath, input.memoryId);
       await touchWorkspacePathBestEffort(finalDirectory, renamedAt);
       await touchWorkspacePathBestEffort(memoryDirectoryPath, renamedAt);
@@ -10175,6 +10231,13 @@ export async function updateSegmentSupplementTitleFromFileTruth(
           content: content.replace(/^# .*(\r?\n)?/, `# ${input.title}\n`),
         }),
       });
+      if (supplementMetadata.kind === 'artifact') {
+        await updateArtifactRuntimeManifestTitleInKnownDirectory({
+          directory: finalDirectory,
+          directoryIdentity: finalDirectoryIdentity,
+          title: input.title,
+        });
+      }
 
       assertWorkspaceUsable(input.assertWorkspaceUsable);
       let memory: MemorySummary;

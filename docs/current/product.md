@@ -114,7 +114,7 @@ Segment 选择只在当前 Memory 内同步 card、时间轴点、播放区、�
 
 Segment card、时间轴圆点和时间标签属于同一个横向 scroll item，圆点和时间固定在对应卡片下方居中，并随 Segment strip 横向滚动；时间标签显示该 Segment 的创建时间，不显示片段时长。播放区 waveform 从 selected finalized audio Segment 的真实音频 bytes 解码峰值生成，音频无法解码时不展示固定占位波形；selected finalized note Segment 保留同一播放区位置作为不可见等高布局占位，不显示不可播放文案，不新增另一套 note-only content layout。
 
-selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，artifact Segment 始终带 `作品` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器；ready 作品片段和作品补充使用隔离 iframe 预览，fault 作品显示可复制诊断和 agent 修复提示，并可复用当前内容展开壳进入沉浸式查看。作品 iframe 可通过 `window.reo` typed bridge 使用状态、上下文、当前 object+slot secret bridge、全屏、agent prompt 和当前作品标题更新；Reo 不把用户 HTML 放进 renderer 同源执行，不暴露 Node/Electron/raw path，也不提供产品层 key/token 管理 UI。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；作品 runtime bundle 的 `entry.html`、`runtime.json`、`state.json` 和 `assets/` direct asset 由 `reo-artifact://` 只读预览协议显示。其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
+selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，artifact Segment 始终带 `作品` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器；ready 作品片段和作品补充使用隔离 iframe 预览，fault 作品显示可复制诊断和 agent 修复提示，并可复用当前内容展开壳进入沉浸式查看。作品 iframe 可通过 `window.reo` typed bridge 使用状态、上下文、全屏、agent prompt 和当前作品标题更新；Reo 不把用户 HTML 放进 renderer 同源执行，不暴露 Node/Electron/raw path，也不提供产品层作品 key/token/value 管理、联网确认、权限弹窗、内容审查或质量审核。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；作品 runtime bundle 的 `entry.html`、`runtime.json`、`state.json` 和 `assets/` direct asset 由 `reo-artifact://` 只读预览协议显示。其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
 
 Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement content，不聚合整个 Workspace。右侧 Memory rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。
 
@@ -150,6 +150,6 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 
 当前 prompt-bridge runtime 已覆盖作品片段创建、作品补充创建和已有作品更新：点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。Workspace、Memory、Segment、SegmentSupplement 与未来 runtime 组件的 Entity More 菜单后续仍计划收敛到统一 `agent 操作 ▸` 子菜单。
 
-完整 Prompt-bridge UI、users.md 模板和 Shared Generative Runtime 当前都不是 runtime surface；本节只确立产品边界和入口形态，具体落地由独立 spec 处理。
+Shared Generative Runtime 是当前作品能力：作品片段和作品补充以本地 runtime bundle 运行，并通过显式 `window.reo` bridge 使用状态、Reo 数据、当前作品标题 mutation、宿主 UI 和 agent prompt action。Reo 只守 host、IPC、file-truth 和 typed mutation 边界，不做 key/token 管理、联网确认、权限弹窗、内容审查或质量审核。
 
 Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、托管 skills、Memory metadata、audio/note/artifact Segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。

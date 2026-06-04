@@ -17,15 +17,15 @@
 ## Phase 2 - Bridge Design
 
 - 定义 `window.reo` vendor runtime。
-- 定义 state、workspace、content、mutations、secrets、ui、agent 顶层 API。
+- 定义 state、workspace、content、mutations、ui、agent 顶层 API；不提供作品 key、token 或 hidden value store。
 - 定义 runtime session identity、message schema 和 stale/conflict 模型。
 - 定义首批 high-frequency product mutations。
 
-## Phase 3 - State And Secret Design
+## Phase 3 - State Design
 
 - 定义 `state.json` 命名 stores、schema version 和 baseline 写入。
 - 定义 localStorage/IndexedDB 的兼容缓存地位。
-- 定义 secret slots、object+slot 绑定、Reo 托管值和静默读取语义。
+- 明确用户和 agent 自行在作品文件、浏览器存储或普通 Web 能力内处理作品内部值。
 
 ## Phase 4 - Skills And Templates
 
@@ -43,6 +43,6 @@
 
 ## Review Gates
 
-- plan-eng-review：确认 URL/origin、bridge、state、secret、mutation 和 skill 边界。
+- plan-eng-review：确认 URL/origin、bridge、state、mutation 和 skill 边界。
 - review：确认无 raw path、Node/Electron、generic filesystem bridge 或双真源问题。
 - ycksimplify：确认没有把 runtime 抽象成过重平台，也没有重复造已有 IPC/transaction 轮子。

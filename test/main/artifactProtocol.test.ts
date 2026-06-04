@@ -424,6 +424,7 @@ test('artifact protocol resolves the bundled Reo runtime bridge vendor asset', a
     assert.match(script, /window\.reo/);
     assert.match(script, /postMessage/);
     assert.match(script, /mutations\.updateTitle/);
+    assert.doesNotMatch(script, /call:\s*call/);
     assert.doesNotMatch(script, /saveNoteBody/);
   }
 });

@@ -7250,11 +7250,14 @@ test('copyArtifactAgentPrompt writes a create segment prompt without creating fi
   assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/scripts\//);
   assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
+  assert.match(copiedText[0] ?? '', /用户未指定风格时默认按 `reo-works-design`/);
   assert.match(copiedText[0] ?? '', /kind: artifact/);
   assert.match(copiedText[0] ?? '', /format: html/);
   assert.match(copiedText[0] ?? '', /entry\.html/);
   assert.match(copiedText[0] ?? '', /runtime\.json/);
   assert.match(copiedText[0] ?? '', /state\.json/);
+  assert.match(copiedText[0] ?? '', /window\.reo\.state/);
+  assert.match(copiedText[0] ?? '', /不能作为唯一长期状态/);
   assert.match(copiedText[0] ?? '', /assets\//);
   assert.doesNotMatch(copiedText[0] ?? '', /segment\.html|supplement\.html/);
   assert.match(copiedText[0] ?? '', /memories\/mem_prompt--产品复盘/);

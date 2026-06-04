@@ -169,22 +169,6 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: false as const,
       error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Runtime unavailable' },
     })),
-    listArtifactRuntimeSecretSlots: vi.fn(async () => ({
-      ok: true as const,
-      value: { requestId: 'runtime-secrets', slots: [] },
-    })),
-    getArtifactRuntimeSecret: vi.fn(async () => ({
-      ok: true as const,
-      value: { requestId: 'runtime-secret', configured: false, value: null },
-    })),
-    setArtifactRuntimeSecret: vi.fn(async () => ({
-      ok: false as const,
-      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Runtime unavailable' },
-    })),
-    clearArtifactRuntimeSecret: vi.fn(async () => ({
-      ok: false as const,
-      error: { code: 'ERR_WORKSPACE_INVALID_REQUEST' as const, message: 'Runtime unavailable' },
-    })),
     copyNeedsReviewAgentPrompt: vi.fn(),
     closeWorkspace: vi.fn(),
     readWorkspaceSnapshot: vi.fn(),

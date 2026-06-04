@@ -1,54 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdirSync, renameSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import {
-  createArtifactRuntimeSecretStore,
-  clearArtifactRuntimeSecretValue,
-  getArtifactRuntimeSecretsFilePath,
-  getArtifactRuntimeSecretValue,
-  listArtifactRuntimeSecretSlots,
-  setArtifactRuntimeSecretValue,
-} from '../../src/main/artifactRuntimeSecrets.js';
+import { setBeforeAtomicWorkspaceFileTempOpenForTest } from '../../src/main/atomicWorkspaceFile.js';
 import {
   readArtifactRuntimeState,
   writeArtifactRuntimeState,
 } from '../../src/main/artifactRuntimeState.js';
 import { renderWorkspaceMarkdownObject } from '../../src/main/workspaceMarkdownObjects.js';
-
-type FakeSafeStorageBackend =
-  | 'basic_text'
-  | 'gnome_libsecret'
-  | 'kwallet'
-  | 'kwallet5'
-  | 'kwallet6'
-  | 'unknown';
-
-function makeFakeSafeStorage() {
-  let available = true;
-  let backend: FakeSafeStorageBackend | undefined;
-  const prefix = 'enc:';
-  return {
-    isEncryptionAvailable: () => available,
-    encryptString: (plaintext: string) => Buffer.from(`${prefix}${plaintext}`, 'utf8'),
-    decryptString: (cipher: Buffer) => {
-      const value = cipher.toString('utf8');
-      if (!value.startsWith(prefix)) {
-        throw new Error('decrypt failed');
-      }
-      return value.slice(prefix.length);
-    },
-    getSelectedStorageBackend: () => backend ?? 'gnome_libsecret',
-    setAvailable(value: boolean) {
-      available = value;
-    },
-    setBackend(value: FakeSafeStorageBackend | undefined) {
-      backend = value;
-    },
-  };
-}
 
 function sha256Text(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -91,7 +53,6 @@ async function writeArtifactSegment(rootPath: string): Promise<string> {
         schemaVersion: 1,
         title: 'Runtime work',
         entry: 'entry.html',
-        secrets: [{ id: 'slotA', label: 'Slot A', purpose: 'Runtime slot test' }],
       },
       null,
       2
@@ -148,7 +109,7 @@ async function writeArtifactSupplement(rootPath: string): Promise<string> {
   await writeFile(path.join(supplementDirectory, 'entry.html'), html);
   await writeFile(
     path.join(supplementDirectory, 'runtime.json'),
-    '{"schemaVersion":1,"title":"Runtime supplement","entry":"entry.html","secrets":[]}\n'
+    '{"schemaVersion":1,"title":"Runtime supplement","entry":"entry.html"}\n'
   );
   await writeFile(
     path.join(supplementDirectory, 'state.json'),
@@ -312,218 +273,47 @@ test('artifact runtime state fails open for missing or corrupt state files and s
   }
 });
 
-test('artifact runtime secrets bind object slot values outside the runtime bundle', async () => {
+test('artifact runtime state missing first write does not follow a replaced object directory', async () => {
   const rootPath = await workspaceRoot();
   const segmentDirectory = await writeArtifactSegment(rootPath);
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-secrets-'));
-  const store = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage: makeFakeSafeStorage(),
-    userDataDir,
-  });
   const target = {
     targetType: 'segment' as const,
     workspaceId: 'ws_runtime',
     memoryId: 'mem_runtime',
     segmentId: 'seg_runtime',
   };
+  await rm(path.join(segmentDirectory, 'state.json'));
 
-  const before = await listArtifactRuntimeSecretSlots({ rootPath, store, target });
-  assert.equal(before.ok, true);
-  if (!before.ok) {
+  const missingRead = await readArtifactRuntimeState({ rootPath, target });
+  assert.equal(missingRead.ok, true);
+  if (!missingRead.ok) {
     return;
   }
-  assert.deepEqual(before.value.slots, [
-    { id: 'slotA', label: 'Slot A', purpose: 'Runtime slot test', configured: false },
-  ]);
+  assert.equal(missingRead.value.source, 'missing');
 
-  const set = await setArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target,
-    slotId: 'slotA',
-    value: 'runtime-secret-value',
+  const replacedDirectory = `${segmentDirectory}.replaced`;
+  let replaced = false;
+  setBeforeAtomicWorkspaceFileTempOpenForTest(() => {
+    if (replaced) {
+      return;
+    }
+    replaced = true;
+    renameSync(segmentDirectory, replacedDirectory);
+    mkdirSync(segmentDirectory, { recursive: true });
   });
-  assert.equal(set.ok, true);
 
-  const value = await getArtifactRuntimeSecretValue({ rootPath, store, target, slotId: 'slotA' });
-  assert.equal(value.ok, true);
-  if (value.ok) {
-    assert.equal(value.value.configured, true);
-    assert.equal(value.value.value, 'runtime-secret-value');
+  try {
+    const result = await writeArtifactRuntimeState({
+      rootPath,
+      target,
+      baselineVersion: missingRead.value.version,
+      state: { schemaVersion: 1, stores: { created: true } },
+    });
+
+    assert.equal(result.ok, false);
+    await assert.rejects(readFile(path.join(segmentDirectory, 'state.json'), 'utf8'));
+    await assert.rejects(readFile(path.join(replacedDirectory, 'state.json'), 'utf8'));
+  } finally {
+    setBeforeAtomicWorkspaceFileTempOpenForTest(null);
   }
-
-  const after = await listArtifactRuntimeSecretSlots({ rootPath, store, target });
-  assert.equal(after.ok, true);
-  if (after.ok) {
-    assert.equal(after.value.slots[0]?.configured, true);
-  }
-  assert.doesNotMatch(
-    await readFile(path.join(segmentDirectory, 'runtime.json'), 'utf8'),
-    /secret-value/
-  );
-  assert.doesNotMatch(
-    await readFile(path.join(segmentDirectory, 'state.json'), 'utf8'),
-    /secret-value/
-  );
-  const rawSecretFile = await readFile(getArtifactRuntimeSecretsFilePath(userDataDir), 'utf8');
-  assert.doesNotMatch(rawSecretFile, /runtime-secret-value/);
-  assert.match(
-    rawSecretFile,
-    new RegExp(Buffer.from('enc:runtime-secret-value').toString('base64'))
-  );
-});
-
-test('artifact runtime secrets stay bound to object id when file truth repairs parents', async () => {
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-secrets-move-'));
-  const store = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage: makeFakeSafeStorage(),
-    userDataDir,
-  });
-
-  await store.writeValue(
-    {
-      targetType: 'segment',
-      workspaceId: 'ws_runtime',
-      memoryId: 'mem_before',
-      segmentId: 'seg_runtime',
-    },
-    'slotA',
-    'segment-secret'
-  );
-  assert.equal(
-    store.readValue(
-      {
-        targetType: 'segment',
-        workspaceId: 'ws_runtime',
-        memoryId: 'mem_after',
-        segmentId: 'seg_runtime',
-      },
-      'slotA'
-    ),
-    'segment-secret'
-  );
-
-  await store.writeValue(
-    {
-      targetType: 'supplement',
-      workspaceId: 'ws_runtime',
-      memoryId: 'mem_before',
-      segmentId: 'seg_before',
-      supplementId: 'sup_runtime',
-    },
-    'slotA',
-    'supplement-secret'
-  );
-  assert.equal(
-    store.readValue(
-      {
-        targetType: 'supplement',
-        workspaceId: 'ws_runtime',
-        memoryId: 'mem_after',
-        segmentId: 'seg_after',
-        supplementId: 'sup_runtime',
-      },
-      'slotA'
-    ),
-    'supplement-secret'
-  );
-});
-
-test('artifact runtime secrets require declared slots and resolvable artifact targets', async () => {
-  const rootPath = await workspaceRoot();
-  await writeArtifactSegment(rootPath);
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-secrets-'));
-  const store = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage: makeFakeSafeStorage(),
-    userDataDir,
-  });
-  const target = {
-    targetType: 'segment' as const,
-    workspaceId: 'ws_runtime',
-    memoryId: 'mem_runtime',
-    segmentId: 'seg_runtime',
-  };
-
-  const undeclaredSet = await setArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target,
-    slotId: 'undeclared',
-    value: 'must-not-persist',
-  });
-  assert.equal(undeclaredSet.ok, false);
-  if (!undeclaredSet.ok) {
-    assert.equal(undeclaredSet.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
-  }
-
-  const undeclaredGet = await getArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target,
-    slotId: 'undeclared',
-  });
-  assert.equal(undeclaredGet.ok, false);
-
-  const undeclaredClear = await clearArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target,
-    slotId: 'undeclared',
-  });
-  assert.equal(undeclaredClear.ok, false);
-
-  const missingTargetSet = await setArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target: { ...target, segmentId: 'seg_missing' },
-    slotId: 'slotA',
-    value: 'must-not-persist',
-  });
-  assert.equal(missingTargetSet.ok, false);
-  if (!missingTargetSet.ok) {
-    assert.equal(missingTargetSet.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-  }
-
-  const secretFile = await readFile(getArtifactRuntimeSecretsFilePath(userDataDir), 'utf8').catch(
-    () => ''
-  );
-  assert.doesNotMatch(secretFile, /must-not-persist/);
-});
-
-test('artifact runtime secrets reject writes when secure storage is unavailable', async () => {
-  const rootPath = await workspaceRoot();
-  await writeArtifactSegment(rootPath);
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-secrets-'));
-  const safeStorage = makeFakeSafeStorage();
-  safeStorage.setAvailable(false);
-  const store = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage,
-    userDataDir,
-  });
-  const target = {
-    targetType: 'segment' as const,
-    workspaceId: 'ws_runtime',
-    memoryId: 'mem_runtime',
-    segmentId: 'seg_runtime',
-  };
-
-  const set = await setArtifactRuntimeSecretValue({
-    rootPath,
-    store,
-    target,
-    slotId: 'slotA',
-    value: 'must-not-persist',
-  });
-  assert.equal(set.ok, false);
-  if (!set.ok) {
-    assert.equal(set.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
-  }
-  const secretFile = await readFile(getArtifactRuntimeSecretsFilePath(userDataDir), 'utf8').catch(
-    () => ''
-  );
-  assert.doesNotMatch(secretFile, /must-not-persist/);
 });

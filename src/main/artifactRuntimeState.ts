@@ -1,5 +1,4 @@
 import { closeSync, constants, fstatSync, readSync } from 'node:fs';
-import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { ARTIFACT_RUNTIME_STATE_FILE } from '../workspace-contract/artifact-runtime-url.js';
 import {
@@ -11,7 +10,7 @@ import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransa
 import {
   WorkspaceFileChangedBeforeAtomicWrite,
   writeWorkspaceFileAtomicInKnownDirectory,
-  writeWorkspaceFileNoReplaceAtomic,
+  writeWorkspaceFileNoReplaceAtomicInKnownDirectory,
 } from './atomicWorkspaceFile.js';
 import {
   type ArtifactRuntimeTarget,
@@ -260,10 +259,12 @@ export async function writeArtifactRuntimeState({
     }
     if (current.status === 'missing') {
       try {
-        await writeWorkspaceFileNoReplaceAtomic(
-          path.join(directory, ARTIFACT_RUNTIME_STATE_FILE),
-          nextText
-        );
+        await writeWorkspaceFileNoReplaceAtomicInKnownDirectory({
+          directory,
+          directoryIdentity,
+          fileName: ARTIFACT_RUNTIME_STATE_FILE,
+          data: nextText,
+        });
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
           const latest = readRuntimeStateFileInKnownDirectory(directory, directoryIdentity);

@@ -34,6 +34,7 @@ import {
   setAfterAtomicWorkspaceFileBackupRemoveForTest,
   setAfterAtomicWorkspaceFileTempOpenForTest,
   setAfterAtomicWorkspaceFileValidationForTest,
+  setBeforeAtomicWorkspaceFileCommitForTest,
   setBeforeAtomicWorkspaceFileTempOpenForTest,
   writeWorkspaceFileAtomic,
   writeWorkspaceFileAtomicForTest,
@@ -1251,6 +1252,62 @@ test('renames segment supplement file-space node and refreshes the parent memory
       },
     ],
   });
+});
+
+test('renames artifact supplement title and keeps runtime manifest title in sync', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_supplement_title_update';
+  const segmentId = 'seg_artifact_supplement_title_update';
+  const supplementId = 'sup_artifact_supplement_title_update';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '补充作品命名',
+  });
+  await writeFinalizedAudioSegmentForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '父片段',
+  });
+  const supplementDirectory = await writeArtifactSupplementCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '旧补充作品',
+  });
+  await writeFile(
+    path.join(supplementDirectory, 'runtime.json'),
+    `${JSON.stringify({ schemaVersion: 1, title: '旧补充作品', entry: 'entry.html' }, null, 2)}\n`
+  );
+  await rebuildMemoryIndex(rootPath);
+
+  const updated = await updateSegmentSupplementTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    supplementId,
+    title: '新补充作品',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.supplement.title, '新补充作品');
+  }
+  const renamedSupplementDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    segmentId,
+    'supplements',
+    `${supplementId}--新补充作品`
+  );
+  await stat(renamedSupplementDirectory);
+  const runtimeManifest = JSON.parse(
+    await readFile(path.join(renamedSupplementDirectory, 'runtime.json'), 'utf8')
+  ) as Record<string, unknown>;
+  assert.equal(runtimeManifest['title'], '新补充作品');
+  assert.equal(runtimeManifest['entry'], 'entry.html');
 });
 
 test('renames finalized note segment supplement file-space node through file truth', async () => {
@@ -3386,6 +3443,197 @@ test('direct artifact html segment file creation is repaired and projected', asy
   assert.equal('bodyByteLength' in segment, false);
   assert.equal('audioByteLength' in segment, false);
   assert.equal('transcript' in segment, false);
+});
+
+test('renames artifact segment title and keeps runtime manifest title in sync', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_segment_title_update';
+  const segmentId = 'seg_artifact_segment_title_update';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '作品命名',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '旧作品',
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'runtime.json'),
+    `${JSON.stringify({ schemaVersion: 1, title: '旧作品', entry: 'entry.html' }, null, 2)}\n`
+  );
+  await rebuildMemoryIndex(rootPath);
+
+  const updated = await updateSegmentTitleFromFileTruth({
+    rootPath,
+    workspaceId: 'ws_memory',
+    memoryId,
+    segmentId,
+    title: '新作品',
+    now: () => '2026-06-04T12:30:00.000Z',
+  });
+
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.equal(updated.value.segment.title, '新作品');
+  }
+  const renamedSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--新作品`
+  );
+  await stat(renamedSegmentDirectory);
+  const runtimeManifest = JSON.parse(
+    await readFile(path.join(renamedSegmentDirectory, 'runtime.json'), 'utf8')
+  ) as Record<string, unknown>;
+  assert.equal(runtimeManifest['title'], '新作品');
+  assert.equal(runtimeManifest['entry'], 'entry.html');
+});
+
+test('renaming artifact segment title preserves concurrent runtime manifest edits', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_segment_manifest_race';
+  const segmentId = 'seg_artifact_segment_manifest_race';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '作品并发',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '旧作品',
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'runtime.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        title: '旧作品',
+        entry: 'entry.html',
+        bridge: { needs: ['state'] },
+        template: { accent: 'old' },
+      },
+      null,
+      2
+    )}\n`
+  );
+  await rebuildMemoryIndex(rootPath);
+
+  const renamedSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--新作品`
+  );
+  const runtimeManifestPath = path.join(renamedSegmentDirectory, 'runtime.json');
+  let commitCount = 0;
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    commitCount += 1;
+    if (commitCount !== 2) {
+      return;
+    }
+    writeFileSync(
+      runtimeManifestPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          title: '旧作品',
+          entry: 'entry.html',
+          bridge: { needs: ['state', 'content'] },
+          template: { accent: 'agent' },
+        },
+        null,
+        2
+      )}\n`
+    );
+  });
+  try {
+    const updated = await updateSegmentTitleFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      title: '新作品',
+      now: () => '2026-06-04T12:35:00.000Z',
+    });
+
+    assert.equal(updated.ok, true);
+    const runtimeManifest = JSON.parse(
+      await readFile(path.join(renamedSegmentDirectory, 'runtime.json'), 'utf8')
+    ) as Record<string, unknown>;
+    assert.equal(runtimeManifest['title'], '新作品');
+    assert.deepEqual(runtimeManifest['bridge'], { needs: ['state', 'content'] });
+    assert.deepEqual(runtimeManifest['template'], { accent: 'agent' });
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+});
+
+test('renaming artifact segment title succeeds when runtime manifest mirror fails', async () => {
+  const rootPath = await workspaceRoot();
+  const memoryId = 'mem_artifact_segment_manifest_mirror_failure';
+  const segmentId = 'seg_artifact_segment_manifest_mirror_failure';
+  await writeMemoryForTest(rootPath, {
+    memoryId,
+    title: '作品镜像失败',
+  });
+  const segmentDirectory = await writeArtifactSegmentCandidateForTest(rootPath, {
+    memoryId,
+    segmentId,
+    title: '旧作品',
+  });
+  await writeFile(
+    path.join(segmentDirectory, 'runtime.json'),
+    `${JSON.stringify({ schemaVersion: 1, title: '旧作品', entry: 'entry.html' }, null, 2)}\n`
+  );
+  await rebuildMemoryIndex(rootPath);
+
+  let commitCount = 0;
+  setBeforeAtomicWorkspaceFileCommitForTest(() => {
+    commitCount += 1;
+    if (commitCount === 2) {
+      throw new Error('runtime manifest mirror unavailable');
+    }
+  });
+  try {
+    const updated = await updateSegmentTitleFromFileTruth({
+      rootPath,
+      workspaceId: 'ws_memory',
+      memoryId,
+      segmentId,
+      title: '新作品',
+      now: () => '2026-06-04T12:40:00.000Z',
+    });
+
+    assert.equal(updated.ok, true);
+    if (updated.ok) {
+      assert.equal(updated.value.segment.title, '新作品');
+    }
+  } finally {
+    setBeforeAtomicWorkspaceFileCommitForTest(null);
+  }
+
+  const renamedSegmentDirectory = path.join(
+    rootPath,
+    'memories',
+    memoryId,
+    'segments',
+    `${segmentId}--新作品`
+  );
+  await stat(renamedSegmentDirectory);
+  const segmentMarkdown = parseWorkspaceMarkdownObject({
+    objectType: 'segment',
+    markdown: await readFile(path.join(renamedSegmentDirectory, 'segment.md'), 'utf8'),
+  });
+  assert.equal(segmentMarkdown.data.title, '新作品');
+
+  const runtimeManifest = JSON.parse(
+    await readFile(path.join(renamedSegmentDirectory, 'runtime.json'), 'utf8')
+  ) as Record<string, unknown>;
+  assert.equal(runtimeManifest['title'], '旧作品');
 });
 
 test('direct artifact html segment replacement refreshes manifest and preview version', async () => {

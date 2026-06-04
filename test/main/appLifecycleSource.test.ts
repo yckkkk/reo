@@ -26,15 +26,10 @@ test('main bootstrap wires voice settings store into recording transcription at 
     /let closeWorkspaceRuntime:\s*\(\)\s*=>\s*Promise<void>\s*=\s*closeAllWorkspaceHandles/
   );
   assert.match(source, /createVoiceSettingsStore/);
-  assert.match(source, /createArtifactRuntimeSecretStore/);
   assert.match(source, /createRecordingTranscriptionSessionRegistry/);
   assert.match(
     source,
     /whenReady\(\)[\s\S]*createVoiceSettingsStore\(\{[\s\S]*safeStorage[\s\S]*userDataDir:\s*app\.getPath\('userData'\)[\s\S]*registerWorkspaceIpc/
-  );
-  assert.match(
-    source,
-    /whenReady\(\)[\s\S]*createArtifactRuntimeSecretStore\(\{[\s\S]*safeStorage[\s\S]*userDataDir:\s*app\.getPath\('userData'\)/
   );
   assert.match(
     source,

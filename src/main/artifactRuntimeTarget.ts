@@ -48,15 +48,3 @@ export async function resolveArtifactRuntimeTargetDirectory({
   }
   return resolved.supplementDirectory;
 }
-
-export function artifactRuntimeObjectKey(target: ArtifactRuntimeTarget, slotId: string): string {
-  const objectIdentity =
-    target.targetType === 'supplement'
-      ? { targetType: target.targetType, supplementId: target.supplementId }
-      : { targetType: target.targetType, segmentId: target.segmentId };
-  return JSON.stringify({
-    workspaceId: target.workspaceId,
-    ...objectIdentity,
-    slotId,
-  });
-}

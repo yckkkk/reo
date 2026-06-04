@@ -1,0 +1,373 @@
+{
+  "createdAt": "2026-06-04T12:50:00.000Z",
+  "workspaceRoot": "/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试",
+  "ordinaryUserRequest": "帮我做一个很简单的喝水打卡，打开以后点一下就记住今天喝了几杯。",
+  "copiedReoPromptKind": "创建一个 Reo 作品片段",
+  "noteAboutExternalCodexCli": "Two Codex CLI xhigh attempts read the copied Reo prompt and updated skills, but stalled before writing files. They were not counted as passing product evidence; empty directories were removed.",
+  "artifact": {
+    "segmentId": "seg_20260604052142_86bbc739",
+    "directory": "memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260604052142_86bbc739--今日喝水打卡 已验证2",
+    "title": "今日喝水打卡 已验证2",
+    "files": ["segment.md", "entry.html", "runtime.json", "state.json", "assets/"],
+    "validator": {
+      "ok": true,
+      "issues": []
+    },
+    "negativeSearch": "No window.reo.secrets, \"secrets\", localStorage, apiToken, token/key UI matches in the artifact directory.",
+    "runtime": {
+      "schemaVersion": 1,
+      "title": "今日喝水打卡 已验证2",
+      "entry": "entry.html",
+      "template": "todo",
+      "state": {
+        "schemaVersion": 1,
+        "stores": ["ui", "data", "progress", "draft"]
+      },
+      "bridge": {
+        "needs": ["state"]
+      }
+    },
+    "manifest": {
+      "schemaVersion": 1,
+      "objectType": "segment",
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260604052142_86bbc739",
+      "kind": "artifact",
+      "format": "html",
+      "createdAt": "2026-06-04T12:23:02.420Z",
+      "finalizedAt": "2026-06-04T12:23:02.420Z",
+      "updatedAt": "2026-06-04T12:23:02.420Z",
+      "entryByteLength": 10322,
+      "entryHash": "68b60aa62b1d6b38c687249f1aba9f557d94f7a63a4ba9446819e049e40e908d"
+    },
+    "entryHashMatchesSha256": true
+  },
+  "screenshots": [
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-water-before.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-water-after-click.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-water-after-reload.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-supplement-new-after-click.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-supplement-new-after-reload.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-current-after-data-sync.png",
+    "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-supplement-rounded-title-mutation.png"
+  ],
+  "devIframe": {
+    "afterClickCount": "1",
+    "afterReloadCount": "1",
+    "afterReloadStatus": "状态已从 state.json 读取",
+    "afterReloadButtonDisabled": false,
+    "stateAfterClickAndExternalEdits": {
+      "schemaVersion": 1,
+      "stores": {
+        "ui": {
+          "targetCups": 8,
+          "unitLabel": "杯"
+        },
+        "data": {
+          "days": {
+            "2026-06-04": 1
+          }
+        },
+        "progress": {
+          "lastActionAt": "2026-06-04T12:25:16.079Z"
+        },
+        "draft": {},
+        "externalAgent": {
+          "marker": "external-edit-202606040527",
+          "kept": true
+        },
+        "externalAgent2": {
+          "marker": "external-edit-202606040529",
+          "kept": true
+        },
+        "externalAgent3": {
+          "marker": "external-edit-202606040531",
+          "kept": true
+        }
+      }
+    }
+  },
+  "staleBaseline": {
+    "beforeVersion": "3e0793176df058ab18d7eb69c8d45f32af8acbd2249c4945c96aa8a65a9dc6c0",
+    "returnedStatus": "stale",
+    "currentVersion": "49d7bab05f5f308acaa2731ad88b6b7dc71f77ab1084bd27f3ee4496948d51ae",
+    "externalMarkerPreserved": true,
+    "staleAttemptPersisted": false
+  },
+  "reoDataSync": {
+    "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+    "memoryId": "mem_20260519032914_666583be",
+    "currentObjectId": "seg_20260604052142_86bbc739",
+    "memorySupplementCountAfterExternalNote": 17,
+    "parentSegmentId": "seg_20260526013336_a2815d52",
+    "parentSupplementCountAfterExternalNote": 7,
+    "newExternalNoteSupplementTitle": "数据同步验证二",
+    "readFromArtifactIframe": true
+  },
+  "titleMutation": {
+    "apiPath": "iframe target window.reo.mutations.updateTitle({ title: \"三步小清单 已验证\" }) in real Electron dev run",
+    "target": {
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260526013336_a2815d52",
+      "supplementId": "sup_20260604060457_75e11a6e"
+    },
+    "title": "三步小清单 已验证",
+    "directory": "memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260526013336_a2815d52--笔记2/supplements/sup_20260604060457_75e11a6e--三步小清单 已验证",
+    "supplementMarkdownTitleSynced": true,
+    "runtimeJsonTitleSynced": true,
+    "entryHashStable": "ceafb51b70ffcdf3a0bd5cf0b879cd57e4a095f2c673684a5edb8919a7e6ab52",
+    "projection": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260526013336_a2815d52",
+      "supplementId": "sup_20260604060457_75e11a6e",
+      "title": "三步小清单 已验证",
+      "createdAt": "2026-06-04T13:13:18.468Z",
+      "updatedAt": "2026-06-04T13:13:18.468Z",
+      "type": "artifact",
+      "format": "html",
+      "entryByteLength": 4907,
+      "entryHash": "ceafb51b70ffcdf3a0bd5cf0b879cd57e4a095f2c673684a5edb8919a7e6ab52",
+      "previewVersion": "06d0411d0683497a600b65e0bcefbb1ad52975f04fced9569258259606d40e87"
+    },
+    "screenshot": "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-supplement-rounded-title-mutation.png"
+  },
+  "supplementPromptReplay": {
+    "ordinaryUserRequest": "帮我在这条笔记下面做一个很简单的小清单，把接下来要做的事列出来。",
+    "copiedReoPromptKind": "创建一个 Reo 作品补充",
+    "supplementId": "sup_20260604060457_75e11a6e",
+    "directory": "memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260526013336_a2815d52--笔记2/supplements/sup_20260604060457_75e11a6e--三步小清单 已验证",
+    "validator": {
+      "ok": true,
+      "issues": []
+    },
+    "negativeSearch": "No window.reo.secrets, \"secrets\", localStorage, apiToken, token UI or API key UI matches. The string \"mark-key-risk\" is a checklist item id, not credential handling.",
+    "manifest": {
+      "schemaVersion": 1,
+      "objectType": "supplement",
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260526013336_a2815d52",
+      "supplementId": "sup_20260604060457_75e11a6e",
+      "kind": "artifact",
+      "format": "html",
+      "createdAt": "2026-06-04T13:13:18.468Z",
+      "finalizedAt": "2026-06-04T13:13:18.468Z",
+      "updatedAt": "2026-06-04T13:13:18.468Z",
+      "entryByteLength": 4907,
+      "entryHash": "ceafb51b70ffcdf3a0bd5cf0b879cd57e4a095f2c673684a5edb8919a7e6ab52"
+    },
+    "projection": {
+      "parentSegmentId": "seg_20260526013336_a2815d52",
+      "parentTitle": "笔记2",
+      "projectedTitleAfterIframeMutation": "三步小清单 已验证",
+      "previewVersionAfterTitleMutation": "06d0411d0683497a600b65e0bcefbb1ad52975f04fced9569258259606d40e87"
+    },
+    "iframeState": {
+      "afterClickProgress": "1 / 3 项完成",
+      "afterReloadProgress": "1 / 3 项完成",
+      "stateJsonDoneItem": "problem"
+    }
+  },
+  "stateMachineChecks": [
+    "copied Reo prompt plus ordinary user request defines target files",
+    "ordinary memories/ files project into .reo manifest",
+    "per-object iframe loads with previewVersion",
+    "iframe interaction writes state.json through window.reo.state",
+    "reload keeps visible state from state.json",
+    "supplement prompt replay creates a projected artifact supplement and persists iframe checkbox state through reload",
+    "external state edit changes previewVersion and stale baseline rejects overwrite",
+    "artifact reads fresh Reo memory detail after external Reo content changes",
+    "typed title mutation updates Markdown directory/frontmatter and runtime.json title",
+    "network Web artifact fetched https://api.github.com/zen and persisted status/sample into state.json",
+    "real dev iframe mutation renamed supplement through window.reo.mutations.updateTitle and kept entryHash stable",
+    "artifact preview panel uses rounded clipped surface consistent with editor/preview surfaces",
+    "temporary missing entry.html produces missing-entry fault and restoring entry.html returns to ready projection",
+    "copied create-work and create-supplement prompts include actual target paths, skills, design default and runtime bundle contract"
+  ],
+  "copiedPromptOutputs": {
+    "createSegment": {
+      "result": {
+        "ok": true
+      },
+      "text": "# 创建一个 Reo 作品片段\n\n请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；作品运行时 bundle、状态和验证先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；用户未指定风格时默认按 `reo-works-design` 的 Reo 视觉变量和参考模块，涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。\n\n边界：\n- 只使用下方 workspace-relative path，不要使用绝对路径。\n- 不要编辑 `.reo/index.json`、`.reo/objects/**`、`.reo/review/**`、draft、trash 或 lock 文件。\n- 不要调用 Reo IPC，不要创建录音或笔记 draft；直接写普通文件。\n- 作品对象 frontmatter 必须包含 `kind: artifact` 和 `format: html`。\n- 打卡、待办、进度、偏好和需要下次打开仍记得的用户操作结果必须通过 `window.reo.state` 写入 `state.json`；localStorage/IndexedDB 只能作为快速 UI cache 或兼容缓存，不能作为唯一长期状态。\n\n目标身份：\n- workspaceId: ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee\n- memoryId: mem_20260519032914_666583be\n\n目标 Memory：\n- memory directory: `memories/mem_20260519032914_666583be--碎片记录`\n\n创建要求：\n- 在 `memories/mem_20260519032914_666583be--碎片记录/segments/` 下创建一个新的片段目录，目录名使用新的 `seg_...` id 和可读标题。\n- 写入 `segment.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。\n- 写入同目录 runtime bundle：`entry.html`、`runtime.json`、`state.json` 和 `assets/`。\n- 不要先创建空占位；一次性给出可用作品。",
+      "summary": {
+        "heading": "# 创建一个 Reo 作品片段",
+        "targetPathLines": ["- memory directory: `memories/mem_20260519032914_666583be--碎片记录`"],
+        "includesSkills": {
+          "works": true,
+          "runtime": true,
+          "design": true
+        },
+        "designDefaultWhenUnspecified": true,
+        "bundleFiles": {
+          "entryHtml": true,
+          "runtimeJson": true,
+          "stateJson": true,
+          "assetsDirectory": true
+        },
+        "stateGuidance": true,
+        "noDotReoEdit": true,
+        "noAbsoluteRoot": true,
+        "noWorkspaceHandle": true,
+        "noOldEntrypoints": true
+      }
+    },
+    "createSupplement": {
+      "result": {
+        "ok": true
+      },
+      "text": "# 创建一个 Reo 作品补充\n\n请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；作品运行时 bundle、状态和验证先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；用户未指定风格时默认按 `reo-works-design` 的 Reo 视觉变量和参考模块，涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。\n\n边界：\n- 只使用下方 workspace-relative path，不要使用绝对路径。\n- 不要编辑 `.reo/index.json`、`.reo/objects/**`、`.reo/review/**`、draft、trash 或 lock 文件。\n- 不要调用 Reo IPC，不要创建录音或笔记 draft；直接写普通文件。\n- 作品对象 frontmatter 必须包含 `kind: artifact` 和 `format: html`。\n- 打卡、待办、进度、偏好和需要下次打开仍记得的用户操作结果必须通过 `window.reo.state` 写入 `state.json`；localStorage/IndexedDB 只能作为快速 UI cache 或兼容缓存，不能作为唯一长期状态。\n\n目标身份：\n- workspaceId: ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee\n- memoryId: mem_20260519032914_666583be\n- segmentId: seg_20260526013336_a2815d52\n\n目标 Segment：\n- segment directory: `memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260526013336_a2815d52--笔记2`\n\n创建要求：\n- 在 `memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260526013336_a2815d52--笔记2/supplements/` 下创建一个新的补充目录，目录名使用新的 `sup_...` id 和可读标题。\n- 写入 `supplement.md`，frontmatter 至少包含 `id`、`title`、`kind: artifact`、`format: html`。\n- 写入同目录 runtime bundle：`entry.html`、`runtime.json`、`state.json` 和 `assets/`。\n- 不要先创建空占位；一次性给出可用作品补充。",
+      "summary": {
+        "heading": "# 创建一个 Reo 作品补充",
+        "targetPathLines": [
+          "- segment directory: `memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260526013336_a2815d52--笔记2`"
+        ],
+        "includesSkills": {
+          "works": true,
+          "runtime": true,
+          "design": true
+        },
+        "designDefaultWhenUnspecified": true,
+        "bundleFiles": {
+          "entryHtml": true,
+          "runtimeJson": true,
+          "stateJson": true,
+          "assetsDirectory": true
+        },
+        "stateGuidance": true,
+        "noDotReoEdit": true,
+        "noAbsoluteRoot": true,
+        "noWorkspaceHandle": true,
+        "noOldEntrypoints": true
+      }
+    }
+  },
+  "styleAndDesignProof": {
+    "promptUsesDesignDefaultWhenUserDidNotSpecifyStyle": true,
+    "promptDesignReference": "用户未指定风格时默认按 `reo-works-design` 的 Reo 视觉变量和参考模块",
+    "devArtifactPanel": {
+      "screenshot": "docs/archive/specs/2026-06-03-1205-shared-generative-runtime/evidence/2026-06-04-real-dev-supplement-rounded-title-mutation.png",
+      "dataSlot": "memory-studio-inline-artifact-preview",
+      "classIncludes": [
+        "reo-squircle",
+        "rounded-xl",
+        "border",
+        "border-secondary",
+        "overflow-hidden"
+      ],
+      "computedBorderRadius": "20px",
+      "computedOverflow": "hidden",
+      "iframeTitleAfterMutation": "作品预览：三步小清单 已验证",
+      "iframeBodyColorsBeforeMutation": {
+        "background": "rgb(25, 25, 24)",
+        "color": "rgb(241, 239, 232)"
+      }
+    }
+  },
+  "bridgeSurfaceDev": {
+    "iframeWindowReoKeys": ["state", "workspace", "content", "mutations", "ui", "agent"],
+    "windowReoCallType": "undefined",
+    "noGenericCallSurface": true,
+    "noSecretsSurface": true
+  },
+  "networkWeb": {
+    "segmentId": "seg_20260604033100_e2f3a4b5",
+    "directory": "memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260604033100_e2f3a4b5--M2 CLI Web Status",
+    "fetchSource": "https://api.github.com/zen",
+    "state": {
+      "schemaVersion": 1,
+      "stores": {
+        "webStatus": {
+          "ok": true,
+          "status": 200,
+          "sample": "Design for failure.",
+          "checkedAt": "2026-06-04T11:06:42.324Z"
+        }
+      }
+    },
+    "runtime": {
+      "schemaVersion": 1,
+      "title": "M2 CLI Web Status",
+      "entry": "entry.html",
+      "template": "web-status",
+      "state": {
+        "schemaVersion": 1,
+        "stores": ["webStatus"]
+      },
+      "bridge": {
+        "needs": ["state"]
+      }
+    },
+    "manifest": {
+      "schemaVersion": 1,
+      "objectType": "segment",
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260604033100_e2f3a4b5",
+      "createdAt": "2026-06-04T03:17:54.170Z",
+      "finalizedAt": "2026-06-04T03:17:54.170Z",
+      "updatedAt": "2026-06-04T11:05:47.030Z",
+      "kind": "artifact",
+      "format": "html",
+      "entryByteLength": 2934,
+      "entryHash": "9023e9395015d42700fbd7505abd14cf5dcd888ad042db9477ad4dcf5028b77c"
+    },
+    "entryHashMatchesSha256": true
+  },
+  "externalReplacement": {
+    "segmentId": "seg_20260604033000_d1e2f3a4",
+    "directory": "memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260604033000_d1e2f3a4--M2 CLI Todo State",
+    "state": {
+      "schemaVersion": 1,
+      "stores": {
+        "externalEdit": {
+          "verified": true,
+          "at": "2026-06-04T00:00:00.000Z"
+        }
+      },
+      "directReplacement": true
+    },
+    "manifest": {
+      "schemaVersion": 1,
+      "objectType": "segment",
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_20260519032914_666583be",
+      "segmentId": "seg_20260604033000_d1e2f3a4",
+      "createdAt": "2026-06-04T03:17:54.153Z",
+      "finalizedAt": "2026-06-04T03:17:54.153Z",
+      "updatedAt": "2026-06-04T05:19:32.577Z",
+      "kind": "artifact",
+      "format": "html",
+      "entryByteLength": 1124,
+      "entryHash": "92970704659f3afeb9021fbe36ac1dfca65583c65b47da38d954fe74e6424b6e"
+    },
+    "entryHashMatchesSha256": true
+  },
+  "faultRecovery": {
+    "segmentId": "seg_20260604033000_d1e2f3a4",
+    "before": {
+      "entryHash": "92970704659f3afeb9021fbe36ac1dfca65583c65b47da38d954fe74e6424b6e",
+      "previewVersion": "9eb3673e3cdc80471b7a8933e5d9e5072fa673f99622e9fb982bc2f161d852b4"
+    },
+    "missingEntry": {
+      "runtimeFault": {
+        "reason": "missing-entry",
+        "diagnostic": "Artifact runtime is missing entry.html at memories/mem_20260519032914_666583be--碎片记录/segments/seg_20260604033000_d1e2f3a4--M2 CLI Todo State/entry.html."
+      },
+      "hasEntryHash": false,
+      "hasPreviewVersion": false
+    },
+    "restored": {
+      "entryHash": "92970704659f3afeb9021fbe36ac1dfca65583c65b47da38d954fe74e6424b6e",
+      "previewVersion": "9eb3673e3cdc80471b7a8933e5d9e5072fa673f99622e9fb982bc2f161d852b4",
+      "restoredSameAsBefore": true
+    }
+  },
+  "reviewState": {
+    "reviewDirectory": ".reo/review",
+    "entries": [],
+    "empty": true
+  }
+}

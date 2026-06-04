@@ -2,6 +2,8 @@
 
 本文件记录本轮 `$grill-me` 已收敛的决策。
 
+2026-06-04 最终判断：本文件中关于 `secrets` / object-local value slot 的早期结论已被推翻。M2 保留用户拥有 runtime、普通 Web 能力和 no-review/no-approval 模型，但 Reo runtime 不提供作品 key、token 或 hidden value store；这些取舍由用户和用户 agent 在作品自身文件、浏览器存储或普通 Web 能力内处理。
+
 ## Runtime 基线
 
 - M2 是用户拥有的本地 Web Runtime。
@@ -13,7 +15,7 @@
 ## 作品与组件
 
 - 作品和组件不按能力区分。
-- 二者共用 runtime object / bundle / bridge / state / secret / template 合同。
+- 二者共用 runtime object / bundle / bridge / state / template 合同。
 - 区别是挂载位置和生命周期：作品在 Segment/Supplement，组件未来在 Home、Workspace side tab、Memory panel/tab 等挂载点。
 - M2 首个 consumer 是作品；组件只做合同级预留。
 
@@ -30,12 +32,12 @@
 - 作品是完整 Web app，不是静态 HTML preview。
 - 支持前端框架、CDN、普通网页网络和 Web-safe 资源。
 - M2 不提供 Reo CORS proxy。
-- Secret API 提供 object+slot 绑定值，runtime 可静默读取。
+- Reo 不提供作品 key、token 或 hidden value store；runtime 使用普通 Web 能力和用户可见文件表达自己的需求。
 
 ## Bridge
 
 - HTML 显式引入 Reo vendor script，获得 `window.reo`。
-- API 按使用场景分组：state、workspace、content、mutations、secrets、ui、agent。
+- API 按使用场景分组：state、workspace、content、mutations、ui、agent。
 - Reo prompt action 由 Reo 生成骨架，作品只请求 documented action；Reo 使用可信对象身份、相对路径、skill 入口和文件合同拼出 prompt。
 - Product mutation 复用 Reo 现有事务、baseline、stale conflict 和恢复模型；M2 works 只开放当前作品标题这类当前对象 mutation，不通过 bridge 写任意 note 正文。
 

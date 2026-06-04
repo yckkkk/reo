@@ -20,7 +20,7 @@ Reo 新增一种由外部 agent 创建的内容形态：**作品**。
 
 M2 以后，Reo 使用 **Shared Generative Runtime**：
 
-- 作品和未来组件共用同一 runtime object / bundle / bridge / state / secret / template 合同。
+- 作品和未来组件共用同一 runtime object / bundle / bridge / state / template 合同。
 - 作品和组件不按能力分层；区别只在挂载位置和生命周期。
 - 作品位于 Segment 或 SegmentSupplement。
 - 组件未来位于 Home、Workspace side tab、Memory panel/tab 等挂载点。
@@ -33,8 +33,8 @@ Reo 是本地创作宿主，不是作品审查器。用户和用户 agent 创造
 - 普通 Web 网络和 Web-safe 资源。
 - 每个 runtime object 独立 origin，支持 localStorage、IndexedDB 和浏览器缓存隔离。
 - 可见 `state.json` 作为长期状态真源。
-- `runtime.json` 描述启动、状态 schema、secret slots、Reo API 需求和 agent actions。
-- `window.reo` typed bridge，覆盖 state、workspace/content、product mutations、secrets、ui 和 agent prompt actions。
+- `runtime.json` 描述启动、状态 schema、Reo API 需求和 agent actions。
+- `window.reo` typed bridge，覆盖 state、workspace/content、product mutations、ui 和 agent prompt actions。
 
 Reo runtime 不做联网确认、权限弹窗、内容审查或质量审核。托管 skills 只记录文件合同、`window.reo` API 形状和技术边界，不承担风险教育、审批或内容审核。
 
@@ -50,12 +50,12 @@ M1 已完成 **静态沙箱作品**：
 - Reo 识别合法 `artifact` Segment / SegmentSupplement，首个 `format` 为 `html`。
 - Reo 在只读隔离预览面中渲染 HTML，并支持和当前内容编辑面类似的全屏查看。
 
-M2 Shared Generative Runtime 已进入实现收口：
+M2 Shared Generative Runtime 已完成基础闭环：
 
 - 用每对象 runtime URL / origin 替代 M1 共享 host 静态预览模型。
 - 引入 bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
 - 引入显式 vendor script 和 `window.reo` bridge。
-- 支持 runtime state、browser storage、network、secret bridge、agent prompt action 和首批高频 product mutations。
+- 支持 runtime state、browser storage、network、agent prompt action 和首批高频 product mutations。
 - 强化 AGENTS.md 与 skills，让用户不点击 Reo、不复制 prompt 时，agent 也能从记忆空间内快速创建作品。
 - 组件只做合同级预留，不实现组件挂载 UI。
 
@@ -64,7 +64,7 @@ M2 Shared Generative Runtime 已进入实现收口：
 本 initiative 完成时：
 
 - 作品 Segment 和作品 SegmentSupplement 具备 durable 文件合同、识别路径、删除/恢复路径和 Memory Studio 投影。
-- Shared Generative Runtime 具备每对象 origin、bundle、bridge、state、secret、network 和 agent action 基础能力。
+- Shared Generative Runtime 具备每对象 origin、bundle、bridge、state、network 和 agent action 基础能力。
 - 用户 agent 能通过 Reo prompt、AGENTS.md、skills、templates 和 scripts 快速创建可运行作品。
 - 作品和未来组件共用 runtime 能力层，组件挂载点有合同级设计。
 - Reo 管理的 skill 群直接包含 prompt、模板、token、脚本和设计规则；最终交付给用户 agent 的 skill 不要求 agent 去参考外部项目。

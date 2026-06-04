@@ -5,15 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  createArtifactRuntimeSecretStore,
-  getArtifactRuntimeSecretsFilePath,
-} from '../../src/main/artifactRuntimeSecrets.js';
-import {
-  handleGetArtifactRuntimeSecretForTest,
-  handleClearArtifactRuntimeSecretForTest,
-  handleListArtifactRuntimeSecretSlotsForTest,
   handleReadArtifactRuntimeStateForTest,
-  handleSetArtifactRuntimeSecretForTest,
   handleWriteArtifactRuntimeStateForTest,
 } from '../../src/main/workspaceIpc.js';
 import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
@@ -39,38 +31,6 @@ const event: TrustedSenderEventAdapter = {
     url: 'reo-app://renderer/index.html',
   },
 };
-
-type FakeSafeStorageBackend =
-  | 'basic_text'
-  | 'gnome_libsecret'
-  | 'kwallet'
-  | 'kwallet5'
-  | 'kwallet6'
-  | 'unknown';
-
-function makeFakeSafeStorage() {
-  let available = true;
-  let backend: FakeSafeStorageBackend | undefined;
-  const prefix = 'enc:';
-  return {
-    isEncryptionAvailable: () => available,
-    encryptString: (plaintext: string) => Buffer.from(`${prefix}${plaintext}`, 'utf8'),
-    decryptString: (cipher: Buffer) => {
-      const value = cipher.toString('utf8');
-      if (!value.startsWith(prefix)) {
-        throw new Error('decrypt failed');
-      }
-      return value.slice(prefix.length);
-    },
-    getSelectedStorageBackend: () => backend ?? 'gnome_libsecret',
-    setAvailable(value: boolean) {
-      available = value;
-    },
-    setBackend(value: FakeSafeStorageBackend | undefined) {
-      backend = value;
-    },
-  };
-}
 
 function sha256Text(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -135,7 +95,7 @@ async function writeArtifactSegment(rootPath: string): Promise<string> {
   await writeFile(path.join(segmentDirectory, 'entry.html'), html);
   await writeFile(
     path.join(segmentDirectory, 'runtime.json'),
-    '{"schemaVersion":1,"title":"Runtime work","entry":"entry.html","secrets":[{"id":"apiKey","label":"API Key"}]}\n'
+    '{"schemaVersion":1,"title":"Runtime work","entry":"entry.html"}\n'
   );
   await writeFile(
     path.join(segmentDirectory, 'state.json'),
@@ -210,146 +170,4 @@ test('artifact runtime state IPC reads and writes through the active workspace h
     schemaVersion: 1,
     stores: { ui: { count: 1 } },
   });
-});
-
-test('artifact runtime secret IPC stores values outside the runtime bundle', async () => {
-  const rootPath = await workspaceRoot();
-  const segmentDirectory = await writeArtifactSegment(rootPath);
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-ipc-secrets-'));
-  const secretStore = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage: makeFakeSafeStorage(),
-    userDataDir,
-  });
-  const target = {
-    workspaceHandle: 'wh_runtime',
-    workspaceId: 'ws_runtime',
-    targetType: 'segment' as const,
-    memoryId: 'mem_runtime',
-    segmentId: 'seg_runtime',
-  };
-
-  const before = await handleListArtifactRuntimeSecretSlotsForTest({
-    ...baseIpcOptions(rootPath, { ...target, requestId: 'secret-list-1' }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(before.ok, true);
-  if (before.ok) {
-    assert.deepEqual(before.value.slots, [{ id: 'apiKey', label: 'API Key', configured: false }]);
-  }
-
-  const set = await handleSetArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-set-1',
-      slotId: 'apiKey',
-      value: 'ipc-secret',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(set.ok, true);
-  if (set.ok) {
-    assert.deepEqual(set.value, { requestId: 'secret-set-1', configured: true });
-  }
-
-  const value = await handleGetArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-get-1',
-      slotId: 'apiKey',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(value.ok, true);
-  if (value.ok) {
-    assert.deepEqual(value.value, {
-      requestId: 'secret-get-1',
-      configured: true,
-      value: 'ipc-secret',
-    });
-  }
-
-  assert.doesNotMatch(
-    await readFile(path.join(segmentDirectory, 'runtime.json'), 'utf8'),
-    /ipc-secret/
-  );
-  assert.doesNotMatch(
-    await readFile(path.join(segmentDirectory, 'state.json'), 'utf8'),
-    /ipc-secret/
-  );
-  const rawSecretFile = await readFile(getArtifactRuntimeSecretsFilePath(userDataDir), 'utf8');
-  assert.doesNotMatch(rawSecretFile, /ipc-secret/);
-  assert.match(rawSecretFile, new RegExp(Buffer.from('enc:ipc-secret').toString('base64')));
-});
-
-test('artifact runtime secret IPC rejects undeclared slots before touching userData', async () => {
-  const rootPath = await workspaceRoot();
-  await writeArtifactSegment(rootPath);
-  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-ipc-secrets-'));
-  const secretStore = createArtifactRuntimeSecretStore({
-    platform: 'linux',
-    safeStorage: makeFakeSafeStorage(),
-    userDataDir,
-  });
-  const target = {
-    workspaceHandle: 'wh_runtime',
-    workspaceId: 'ws_runtime',
-    targetType: 'segment' as const,
-    memoryId: 'mem_runtime',
-    segmentId: 'seg_runtime',
-  };
-
-  const set = await handleSetArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-set-undeclared',
-      slotId: 'undeclared',
-      value: 'must-not-persist',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(set.ok, false);
-  if (!set.ok) {
-    assert.equal(set.error.code, 'ERR_WORKSPACE_INVALID_REQUEST');
-  }
-
-  const get = await handleGetArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-get-undeclared',
-      slotId: 'undeclared',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(get.ok, false);
-
-  const clear = await handleClearArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-clear-undeclared',
-      slotId: 'undeclared',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(clear.ok, false);
-
-  const missingTarget = await handleSetArtifactRuntimeSecretForTest({
-    ...baseIpcOptions(rootPath, {
-      ...target,
-      requestId: 'secret-set-missing-target',
-      segmentId: 'seg_missing',
-      slotId: 'apiKey',
-      value: 'must-not-persist',
-    }),
-    artifactRuntimeSecretStore: secretStore,
-  });
-  assert.equal(missingTarget.ok, false);
-  if (!missingTarget.ok) {
-    assert.equal(missingTarget.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
-  }
-
-  const secretFile = await readFile(getArtifactRuntimeSecretsFilePath(userDataDir), 'utf8').catch(
-    () => ''
-  );
-  assert.doesNotMatch(secretFile, /must-not-persist/);
 });

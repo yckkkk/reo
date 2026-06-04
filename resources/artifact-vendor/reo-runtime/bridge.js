@@ -79,7 +79,6 @@
   }
 
   window.reo = {
-    call: call,
     state: {
       read: function () {
         return call('state.read');
@@ -107,20 +106,6 @@
     mutations: {
       updateTitle: function (input) {
         return call('mutations.updateTitle', input);
-      },
-    },
-    secrets: {
-      list: function () {
-        return call('secrets.list');
-      },
-      get: function (slotId) {
-        return call('secrets.get', { slotId: slotId });
-      },
-      set: function (slotId, value) {
-        return call('secrets.set', { slotId: slotId, value: value });
-      },
-      clear: function (slotId) {
-        return call('secrets.clear', { slotId: slotId });
       },
     },
     ui: {

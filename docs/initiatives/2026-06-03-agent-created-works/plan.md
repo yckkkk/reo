@@ -6,7 +6,7 @@
 
 - 从 Reo 产品模型出发：作品是 Memory-bound 或 Segment-bound 产物，不是通用 HTML 文件。
 - 作品和未来组件共享 runtime 能力层；区别在挂载位置和生命周期，不在能力等级。
-- Reo 是本地创作宿主，不是作品审查器；用户和用户 agent 承担作品内容、联网和 secret 使用风险。
+- Reo 是本地创作宿主，不是作品审查器；用户和用户 agent 承担作品内容、联网以及作品内部值使用风险。
 - Runtime 默认放大用户创作自由；Reo 只守宿主边界和文件真源边界。
 - 创建和更新优先保持 agent-native：Reo 复制上下文，外部 agent 写文件；M2 增加 runtime 内 agent prompt action。
 - 一次只推进一个可验证 spec。
@@ -49,9 +49,9 @@
 
 - 每对象 runtime URL / origin 模型。
 - Runtime bundle 四件套：`entry.html`、`runtime.json`、`state.json`、`assets/`。
-- `window.reo` vendor bridge：state、workspace/content、mutations、secrets、ui、agent。
+- `window.reo` vendor bridge：state、workspace/content、mutations、ui、agent。
 - 可见 JSON state 真源、browser storage 兼容缓存和 state conflict 模型。
-- Runtime secret slots、底层 object+slot secret bridge 和不写入 bundle 的值存储。
+- Reo 不提供作品 key、token 或 hidden value store；用户和 agent 在作品文件、浏览器存储或普通 Web 能力内自行处理这些取舍。
 - 普通 Web 网络和框架/CDN 支持，不做 Reo CORS proxy。
 - agent creation skill、宽模板矩阵、scaffold/validate/inspect 脚本。
 - 组件挂载点合同级预留。

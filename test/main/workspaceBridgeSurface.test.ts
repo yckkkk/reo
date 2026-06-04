@@ -28,10 +28,6 @@ const workspaceBridgeKeys = [
   'copyArtifactAgentPrompt',
   'readArtifactRuntimeState',
   'writeArtifactRuntimeState',
-  'listArtifactRuntimeSecretSlots',
-  'getArtifactRuntimeSecret',
-  'setArtifactRuntimeSecret',
-  'clearArtifactRuntimeSecret',
   'copyNeedsReviewAgentPrompt',
   'updateMemorySpaceTitle',
   'closeWorkspace',
@@ -679,23 +675,6 @@ test('workspace preload bridge maps artifact runtime methods to explicit channel
     baselineVersion: 'a'.repeat(64),
     state: { schemaVersion: 1, stores: { ui: {} } },
   });
-  await bridge.listArtifactRuntimeSecretSlots({ ...target, requestId: 'secret-list-1' });
-  await bridge.getArtifactRuntimeSecret({
-    ...target,
-    requestId: 'secret-get-1',
-    slotId: 'apiKey',
-  });
-  await bridge.setArtifactRuntimeSecret({
-    ...target,
-    requestId: 'secret-set-1',
-    slotId: 'apiKey',
-    value: 'secret',
-  });
-  await bridge.clearArtifactRuntimeSecret({
-    ...target,
-    requestId: 'secret-clear-1',
-    slotId: 'apiKey',
-  });
 
   assert.deepEqual(calls, [
     {
@@ -710,22 +689,6 @@ test('workspace preload bridge maps artifact runtime methods to explicit channel
         baselineVersion: 'a'.repeat(64),
         state: { schemaVersion: 1, stores: { ui: {} } },
       },
-    },
-    {
-      channel: 'workspace:listArtifactRuntimeSecretSlots',
-      payload: { ...target, requestId: 'secret-list-1' },
-    },
-    {
-      channel: 'workspace:getArtifactRuntimeSecret',
-      payload: { ...target, requestId: 'secret-get-1', slotId: 'apiKey' },
-    },
-    {
-      channel: 'workspace:setArtifactRuntimeSecret',
-      payload: { ...target, requestId: 'secret-set-1', slotId: 'apiKey', value: 'secret' },
-    },
-    {
-      channel: 'workspace:clearArtifactRuntimeSecret',
-      payload: { ...target, requestId: 'secret-clear-1', slotId: 'apiKey' },
     },
   ]);
 });

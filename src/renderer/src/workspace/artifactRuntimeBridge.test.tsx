@@ -1,7 +1,13 @@
+import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { artifactSegmentRuntimeUrl } from '../../../workspace-contract/artifact-runtime-url';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
-import { createArtifactRuntimeMessageHandler } from './artifactRuntimeBridge';
+import {
+  createArtifactRuntimeMessageHandler,
+  useArtifactRuntimeBridge,
+  type ArtifactRuntimeBridgeOptions,
+  type ArtifactRuntimeBridgeTarget,
+} from './artifactRuntimeBridge';
 
 function session(): WorkspaceSession {
   return {
@@ -80,6 +86,30 @@ function messageEvent({
   return { data, origin, source } as MessageEvent;
 }
 
+function bridgeHandlerOptions({
+  api,
+  iframeRef,
+  memory,
+  onProductMutation,
+  onRequestFullscreen,
+  src,
+  target,
+  workspaceSession,
+}: ArtifactRuntimeBridgeOptions) {
+  return {
+    iframeRef,
+    src,
+    getLatestOptions: () => ({
+      api,
+      memory,
+      onProductMutation,
+      onRequestFullscreen,
+      target,
+      workspaceSession,
+    }),
+  };
+}
+
 async function flushBridge() {
   await Promise.resolve();
   await Promise.resolve();
@@ -89,6 +119,94 @@ async function flushBridge() {
 }
 
 describe('artifact runtime bridge', () => {
+  it('keeps an in-flight iframe request alive across ordinary React rerenders', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    let resolveStateRead:
+      | ((result: Awaited<ReturnType<Window['reoWorkspace']['readArtifactRuntimeState']>>) => void)
+      | undefined;
+    const readArtifactRuntimeState = vi.fn<Window['reoWorkspace']['readArtifactRuntimeState']>(
+      () =>
+        new Promise((resolve) => {
+          resolveStateRead = resolve;
+        })
+    );
+    const target: ArtifactRuntimeBridgeTarget = {
+      targetType: 'segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_bridge',
+    };
+    const iframeRef = {
+      current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+    };
+
+    function BridgeHarness({ tick }: { readonly tick: number }) {
+      useArtifactRuntimeBridge({
+        api: {
+          readArtifactRuntimeState,
+        },
+        iframeRef,
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target,
+        workspaceSession: session(),
+      });
+      return <div data-tick={tick} />;
+    }
+
+    const rendered = render(<BridgeHarness tick={1} />);
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'reo-runtime',
+          type: 'request',
+          requestId: 'req-rerender',
+          method: 'state.read',
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+    expect(readArtifactRuntimeState).toHaveBeenCalledTimes(1);
+
+    rendered.rerender(<BridgeHarness tick={2} />);
+    resolveStateRead?.({
+      ok: true,
+      value: {
+        requestId: 'req-rerender',
+        source: 'file',
+        state: { schemaVersion: 1, stores: { ui: { count: 1 } } },
+        version: 'a'.repeat(64),
+      },
+    });
+    await flushBridge();
+
+    expect(runtimeWindow.postMessage).toHaveBeenCalledWith(
+      {
+        source: 'reo-host',
+        type: 'response',
+        requestId: 'req-rerender',
+        ok: true,
+        value: {
+          requestId: 'req-rerender',
+          source: 'file',
+          state: { schemaVersion: 1, stores: { ui: { count: 1 } } },
+          version: 'a'.repeat(64),
+        },
+      },
+      origin
+    );
+  });
+
   it('accepts only the expected artifact origin and iframe source', async () => {
     const src = artifactSegmentRuntimeUrl({
       workspaceId: 'ws_bridge',
@@ -108,25 +226,27 @@ describe('artifact runtime bridge', () => {
       },
     });
 
-    const handler = createArtifactRuntimeMessageHandler({
-      api: {
-        readArtifactRuntimeState,
-      },
-      iframeRef: {
-        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
-      },
-      memory: memoryDetail(),
-      onProductMutation: vi.fn(),
-      onRequestFullscreen: vi.fn(),
-      src,
-      target: {
-        targetType: 'segment',
-        workspaceId: 'ws_bridge',
-        memoryId: 'mem_bridge',
-        segmentId: 'seg_bridge',
-      },
-      workspaceSession: session(),
-    });
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          readArtifactRuntimeState,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
 
     handler(
       messageEvent({
@@ -195,7 +315,7 @@ describe('artifact runtime bridge', () => {
     );
   });
 
-  it('routes content, state, secret, agent, ui and typed mutation calls', async () => {
+  it('routes content, state, agent, ui and typed mutation calls', async () => {
     const src = artifactSegmentRuntimeUrl({
       workspaceId: 'ws_bridge',
       segmentId: 'seg_bridge',
@@ -208,13 +328,6 @@ describe('artifact runtime bridge', () => {
       value: { memory: memoryDetail(), segment: memoryDetail().segments[0] },
     });
     const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
-    const listArtifactRuntimeSecretSlots = vi.fn().mockResolvedValue({
-      ok: true,
-      value: {
-        requestId: 'req-secret',
-        slots: [{ id: 'slotA', label: 'Slot A', configured: true }],
-      },
-    });
     const writeArtifactRuntimeState = vi.fn().mockResolvedValue({
       ok: true,
       value: {
@@ -235,28 +348,29 @@ describe('artifact runtime bridge', () => {
     const onProductMutation = vi.fn();
     const onRequestFullscreen = vi.fn();
 
-    const handler = createArtifactRuntimeMessageHandler({
-      api: {
-        copyArtifactAgentPrompt,
-        listArtifactRuntimeSecretSlots,
-        updateSegmentTitle,
-        writeArtifactRuntimeState,
-      },
-      iframeRef: {
-        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
-      },
-      memory: memoryDetail(),
-      onProductMutation,
-      onRequestFullscreen,
-      src,
-      target: {
-        targetType: 'segment',
-        workspaceId: 'ws_bridge',
-        memoryId: 'mem_bridge',
-        segmentId: 'seg_bridge',
-      },
-      workspaceSession: session(),
-    });
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          copyArtifactAgentPrompt,
+          updateSegmentTitle,
+          writeArtifactRuntimeState,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation,
+        onRequestFullscreen,
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
 
     for (const request of [
       {
@@ -266,6 +380,10 @@ describe('artifact runtime bridge', () => {
       {
         requestId: 'req-content',
         method: 'content.readCurrentObject',
+      },
+      {
+        requestId: 'req-memory-detail',
+        method: 'content.readMemoryDetail',
       },
       {
         requestId: 'req-state',
@@ -283,17 +401,6 @@ describe('artifact runtime bridge', () => {
         requestId: 'req-title',
         method: 'mutations.updateTitle',
         payload: { title: 'Updated work' },
-      },
-      {
-        requestId: 'req-note',
-        method: 'mutations.saveNoteBody',
-        payload: {
-          targetType: 'segment',
-          memoryId: 'mem_bridge',
-          segmentId: 'seg_note',
-          bodyMarkdown: 'Updated note',
-          baselineContentHash: 'd'.repeat(64),
-        },
       },
       {
         requestId: 'req-agent',
@@ -333,14 +440,6 @@ describe('artifact runtime bridge', () => {
       requestId: 'req-state',
       baselineVersion: 'a'.repeat(64),
       state: { schemaVersion: 1, stores: { ui: { count: 2 } } },
-    });
-    expect(listArtifactRuntimeSecretSlots).toHaveBeenCalledWith({
-      workspaceHandle: 'wh_bridge',
-      workspaceId: 'ws_bridge',
-      targetType: 'segment',
-      memoryId: 'mem_bridge',
-      segmentId: 'seg_bridge',
-      requestId: 'req-secret',
     });
     expect(updateSegmentTitle).toHaveBeenCalledWith({
       workspaceHandle: 'wh_bridge',
@@ -382,16 +481,26 @@ describe('artifact runtime bridge', () => {
           }),
         }),
         expect.objectContaining({
+          requestId: 'req-memory-detail',
+          ok: true,
+          value: expect.objectContaining({
+            memoryId: 'mem_bridge',
+            segments: expect.arrayContaining([
+              expect.objectContaining({ segmentId: 'seg_bridge' }),
+            ]),
+          }),
+        }),
+        expect.objectContaining({
+          requestId: 'req-secret',
+          ok: false,
+          error: expect.objectContaining({
+            code: 'ERR_REO_RUNTIME_UNKNOWN_METHOD',
+          }),
+        }),
+        expect.objectContaining({
           requestId: 'req-ui',
           ok: true,
           value: { expanded: true },
-        }),
-        expect.objectContaining({
-          requestId: 'req-note',
-          ok: false,
-          error: expect.objectContaining({
-            code: 'ERR_REO_RUNTIME_INVALID_REQUEST',
-          }),
         }),
       ])
     );
@@ -412,25 +521,27 @@ describe('artifact runtime bridge', () => {
         })
     );
 
-    const handler = createArtifactRuntimeMessageHandler({
-      api: {
-        readArtifactRuntimeState,
-      },
-      iframeRef: {
-        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
-      },
-      memory: memoryDetail(),
-      onProductMutation: vi.fn(),
-      onRequestFullscreen: vi.fn(),
-      src,
-      target: {
-        targetType: 'segment',
-        workspaceId: 'ws_bridge',
-        memoryId: 'mem_bridge',
-        segmentId: 'seg_bridge',
-      },
-      workspaceSession: session(),
-    });
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          readArtifactRuntimeState,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
 
     for (let index = 0; index < 65; index += 1) {
       handler(
@@ -476,25 +587,27 @@ describe('artifact runtime bridge', () => {
     const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
     const copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
 
-    const handler = createArtifactRuntimeMessageHandler({
-      api: {
-        copyArtifactAgentPrompt,
-      },
-      iframeRef: {
-        current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
-      },
-      memory: memoryDetail(),
-      onProductMutation: vi.fn(),
-      onRequestFullscreen: vi.fn(),
-      src,
-      target: {
-        targetType: 'segment',
-        workspaceId: 'ws_bridge',
-        memoryId: 'mem_bridge',
-        segmentId: 'seg_bridge',
-      },
-      workspaceSession: session(),
-    });
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          copyArtifactAgentPrompt,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
 
     handler(
       messageEvent({

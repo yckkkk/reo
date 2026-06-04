@@ -3,6 +3,8 @@
 创建：2026-06-03 12:05 America/Los_Angeles
 状态：archived implementation record
 
+2026-06-04 final correction: early M2 drafts included `window.reo.secrets` / object-local value slots. That path was removed before final closeout. Current M2 keeps user-owned runtime, ordinary Web capability, typed Reo bridge and visible `state.json`, but Reo does not provide a work-level key, token or hidden value store.
+
 ## Objective
 
 M2 不再定义为只读 Widget Runtime，也不再把作品能力按安全等级逐步放开。
@@ -16,8 +18,8 @@ Reo 不审查用户自己创造的作品。作品和组件运行时默认按用�
 - 默认支持 HTML、CSS、JavaScript、前端框架、CDN 库和普通 Web 网络。
 - 默认支持每个 runtime object 独立 origin，用于 localStorage、IndexedDB 和浏览器缓存隔离。
 - 默认支持可见 `state.json` 作为用户和 agent 可查看、可修改、可迁移的长期状态真源。
-- 默认支持 Reo typed bridge：状态、Reo 数据、当前对象受限产品 mutation、secret、UI、agent prompt action。
-- 默认支持 runtime 读取自身已声明 secret slot 的值；secret 描述在 `runtime.json` 中可见，值不写入 runtime bundle。
+- 默认支持 Reo typed bridge：状态、Reo 数据、当前对象受限产品 mutation、UI、agent prompt action。
+- Reo runtime 不提供作品 key、token 或 hidden value store；用户和用户 agent 在作品自身文件、浏览器存储或普通 Web 能力内处理这些取舍。
 - Reo runtime 不弹权限确认，不做联网风险提示，不做内容质量审查。
 
 Reo 只守宿主边界：用户 HTML 不进入 Reo renderer 同源执行，不获得 Node/Electron/raw path，不绕过 Reo 现有产品 mutation 的事务、baseline 和恢复模型。
@@ -30,7 +32,7 @@ Reo managed skills 只记录文件合同和 `window.reo` API 形状，不承担�
 
 - 作品：Segment 或 SegmentSupplement 层级的 runtime object。
 - 组件：未来 Workspace/Home/Memory tab 等挂载点上的 runtime object。
-- 二者共用 bundle、runtime URL、bridge、state、secret、template 和 validation 合同。
+- 二者共用 bundle、runtime URL、bridge、state、template 和 validation 合同。
 
 M2 首个落地 consumer 是作品。组件只做合同级预留，不实现组件挂载 UI。
 
@@ -52,7 +54,6 @@ assets/
 - runtime object 标题、版本、入口和显示意图。
 - 使用的 template family。
 - state schema version 和命名 stores。
-- secret slots 的 id、label、用途和提示。
 - Reo bridge API 需求。
 - agent prompt actions 的建议入口。
 
@@ -106,7 +107,6 @@ HTML 通过显式 vendor script 获得 `window.reo`。Reo 不自动改写用户 
 - `window.reo.workspace`：读取当前 workspace、Memory、Segment 上下文投影。
 - `window.reo.content`：读取 Reo 内容投影，例如 note 正文、audio transcript、artifact metadata。
 - `window.reo.mutations`：调用 Reo typed 产品 mutation，复用现有事务、baseline、stale conflict 和恢复模型。
-- `window.reo.secrets`：读取、写入或清除当前 object + slot 绑定的 secret 值；Reo 不提供权限审批或产品层 key/token 管理 UI。
 - `window.reo.ui`：全屏、尺寸、主题等宿主 UI 协调能力。
 - `window.reo.agent`：复制或发起给用户 agent 的 prompt action。
 
@@ -152,15 +152,9 @@ Reo 采用 fail-open 诊断：
 
 `state.json` 写入使用 version/baseline。外部 agent 和运行中的作品同时修改 state 时，runtime 收到 stale 后重读，由作品逻辑决定合并或覆盖。
 
-## Secrets
+## Work-owned Values
 
-Runtime secret 分为描述和值：
-
-- 描述在 `runtime.json` 的 secret slots 中，用户和 agent 可查看修改。
-- 值绑定 runtime object id + slot id，由底层 bridge 读写或清除，不写入 runtime bundle。
-- 已保存的 secret 值可由当前 runtime 静默读取到内存使用。
-- Reo 不把 secret 明文写入 runtime bundle 或 userData 明文 JSON。
-- 用户和用户 agent 决定 slot 如何使用；Reo 产品层不提供对象 More key/token 管理 UI。
+Reo runtime 不提供作品级 key、token 或 hidden value store。作品需要用户输入值、第三方配置或浏览器侧持久化时，由用户和用户 agent 在作品自己的 UI、`state.json`、localStorage/IndexedDB 或普通 Web 能力内明确表达；Reo 不增加权限审批、联网确认、内容审查或质量审核。
 
 ## Network
 
@@ -190,5 +184,5 @@ M2 验收至少使用三类作品：
 - Active initiative 已改写为 Shared Generative Runtime 路线。
 - Spec 明确作品/组件共用能力层，区别只在挂载位置和生命周期。
 - Spec 明确 user-owned runtime 风险模型：风险交给用户和 agent；Reo 只守宿主边界。
-- Spec 明确 bundle、URL、bridge、state、secret、network、agent skill、验证样例。
+- Spec 明确 bundle、URL、bridge、state、network、agent skill、验证样例。
 - 后续可进入 plan-eng-review 和实现计划，不再把 M2 降级为只读 Widget Runtime。

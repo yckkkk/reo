@@ -30,6 +30,7 @@ import {
   DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES,
+  DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS,
   DEFAULT_REO_WORKS_SKILL_MD,
   DEFAULT_REO_WORKS_REFERENCE_FILES,
   DEFAULT_WORKSPACE_AGENTS_MD,
@@ -959,6 +960,7 @@ test('managed reo-works skill defines artifact file creation without external re
   assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /segment\.html|supplement\.html/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /用户未指定风格时默认按 `reo-works-design`/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/runtime-contract-check\.md/);
@@ -1015,11 +1017,23 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /dashboard/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /todo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /spaced review/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /state\.json/);
+  assert.doesNotMatch(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
+    /localStorage persistence/
+  );
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'],
     /window\.reo\.state/
   );
-  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /secrets\.get/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['state-and-storage.md'],
+    /only long-term state/
+  );
+  assert.doesNotMatch(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /window\.reo\.secrets/
+  );
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /mutations\.updateTitle/
@@ -1074,12 +1088,22 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.match(scaffoldedEntry, /window\.reo/);
   assert.match(scaffoldedEntry, /reo-artifact:\/\/vendor\/reo-runtime\/bridge\.js/);
   assert.match(scaffoldedEntry, /data-template="todo"/);
+  assert.equal(scaffoldedEntry.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS), true);
+  assert.match(scaffoldedEntry, /--color-background-primary:/);
+  assert.match(scaffoldedEntry, /--color-background-success: #27500a/);
+  assert.match(scaffoldedEntry, /--color-text-success: #c0dd97/);
+  assert.match(scaffoldedEntry, /--color-border-secondary: rgba\(44, 44, 42, 0\.3\)/);
+  assert.match(scaffoldedEntry, /background:var\(--color-background-primary\)/);
+  assert.match(scaffoldedEntry, /color:var\(--color-text-primary\)/);
+  assert.match(scaffoldedEntry, /border-radius:var\(--border-radius-md\)/);
   assert.match(scaffoldedEntry, /新增一项/);
   assert.doesNotMatch(scaffoldedEntry, /innerHTML\s*=\s*items\(\)\.map/);
   assert.match(scaffoldedEntry, /label\.textContent\s*=/);
   assert.match(scaffoldedEntry, /button\.textContent\s*=/);
   assert.doesNotMatch(scaffoldedEntry, /Runtime bundle scaffolded/);
-  assert.match(await readFile(path.join(root, 'work', 'runtime.json'), 'utf8'), /"secrets"/);
+  const runtimeJson = JSON.parse(await readFile(path.join(root, 'work', 'runtime.json'), 'utf8'));
+  assert.deepEqual(runtimeJson.bridge.needs, ['state']);
+  assert.equal(Object.hasOwn(runtimeJson, 'secrets'), false);
 
   const [validateOk, inspectOk] = await Promise.all([
     runNodeScript(
@@ -1101,6 +1125,91 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.equal(inspectOk.status, 0, inspectOk.stderr || inspectOk.stdout);
   assert.match(inspectOk.stdout, /"template": "todo"/);
   assert.match(inspectOk.stdout, /"usesBridge": true/);
+
+  await mkdir(path.join(root, 'bad-script', 'assets'), { recursive: true });
+  await writeFile(
+    path.join(root, 'bad-script', 'entry.html'),
+    `<!doctype html>
+<html><head><meta charset="utf-8"><title>Bad script</title></head>
+<body><script>document.body.textContent = 'broken
+line';</script></body></html>
+`
+  );
+  await writeFile(path.join(root, 'bad-script', 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(root, 'bad-script', 'state.json'), '{"schemaVersion":1}\n');
+  const validateBadScript = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'bad-script',
+    ],
+    root
+  );
+  assert.equal(validateBadScript.status, 1, validateBadScript.stdout);
+  assert.deepEqual(
+    (JSON.parse(validateBadScript.stdout) as { issues: Array<{ code: string }> }).issues.map(
+      (issue) => issue.code
+    ),
+    ['entry-script-syntax']
+  );
+
+  await mkdir(path.join(root, 'bad-classic-script-with-params', 'assets'), { recursive: true });
+  await writeFile(
+    path.join(root, 'bad-classic-script-with-params', 'entry.html'),
+    `<!doctype html>
+<html><head><meta charset="utf-8"><title>Bad classic script</title></head>
+<body><script type="text/javascript; charset=utf-8">document.body.textContent = 'broken
+line';</script></body></html>
+`
+  );
+  await writeFile(
+    path.join(root, 'bad-classic-script-with-params', 'runtime.json'),
+    '{"schemaVersion":1}\n'
+  );
+  await writeFile(
+    path.join(root, 'bad-classic-script-with-params', 'state.json'),
+    '{"schemaVersion":1}\n'
+  );
+  const validateBadClassicScriptWithParams = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'bad-classic-script-with-params',
+    ],
+    root
+  );
+  assert.equal(
+    validateBadClassicScriptWithParams.status,
+    1,
+    validateBadClassicScriptWithParams.stdout
+  );
+  assert.deepEqual(
+    (
+      JSON.parse(validateBadClassicScriptWithParams.stdout) as {
+        issues: Array<{ code: string }>;
+      }
+    ).issues.map((issue) => issue.code),
+    ['entry-script-syntax']
+  );
+
+  await mkdir(path.join(root, 'module-script', 'assets'), { recursive: true });
+  await writeFile(
+    path.join(root, 'module-script', 'entry.html'),
+    `<!doctype html>
+<html><head><meta charset="utf-8"><title>Module script</title>
+<script type="importmap">{"imports":{"demo":"./assets/demo.js"}}</script>
+</head><body><script type="module">import "demo"; await Promise.resolve();</script></body></html>
+`
+  );
+  await writeFile(path.join(root, 'module-script', 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(root, 'module-script', 'state.json'), '{"schemaVersion":1}\n');
+  const validateModuleScript = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'module-script',
+    ],
+    root
+  );
+  assert.equal(validateModuleScript.status, 0, validateModuleScript.stdout);
+
   await assert.rejects(
     stat(path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'migrate-runtime.mjs'))
   );
@@ -1158,6 +1267,8 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   ]);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-background-primary/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-text-primary/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-background-success: #27500a/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-text-success: #c0dd97/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--border-radius-md/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/core-design-system\.md/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/svg-and-diagrams\.md/);
@@ -1167,12 +1278,30 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /CDN/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /window\.reo/);
+  assert.equal(
+    DEFAULT_REO_WORKS_DESIGN_SKILL_MD.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS),
+    true
+  );
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /sendPrompt|cdnjs|unpkg|esm\.sh/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /M2\.1|Do not invent `window\.reo`/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
     /--color-background-primary/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /--color-background-success: #27500a/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /--color-text-success: #c0dd97/
+  );
+  assert.equal(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'].includes(
+      DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS
+    ),
+    true
   );
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /#EEEDFE/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /diagram/);

@@ -1,7 +1,5 @@
 import type {
   WorkspaceChooseDirectoryResponse,
-  WorkspaceClearArtifactRuntimeSecretRequest,
-  WorkspaceClearArtifactRuntimeSecretResponse,
   WorkspaceClearMicrophoneIntentResponse,
   WorkspaceClearVoiceTranscriptionApiKeyRequest,
   WorkspaceClearVoiceTranscriptionApiKeyResponse,
@@ -38,14 +36,10 @@ import type {
   WorkspaceFinalizeSegmentSupplementNoteDraftResponse,
   WorkspaceFinalizeSegmentSupplementRecordingDraftRequest,
   WorkspaceFinalizeSegmentSupplementRecordingDraftResponse,
-  WorkspaceGetArtifactRuntimeSecretRequest,
-  WorkspaceGetArtifactRuntimeSecretResponse,
   WorkspaceHandleRequest,
   WorkspaceInitializeRequest,
   WorkspaceInitializeResponse,
   WorkspaceEntityActionResponse,
-  WorkspaceListArtifactRuntimeSecretSlotsRequest,
-  WorkspaceListArtifactRuntimeSecretSlotsResponse,
   WorkspaceListMemorySpacesResponse,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
@@ -145,8 +139,6 @@ import type {
   WorkspaceRemoveMemorySpaceResponse,
   WorkspaceSaveVoiceTranscriptionApiKeyRequest,
   WorkspaceSaveVoiceTranscriptionApiKeyResponse,
-  WorkspaceSetArtifactRuntimeSecretRequest,
-  WorkspaceSetArtifactRuntimeSecretResponse,
   WorkspaceSetVoiceSpeechSynthesisSpeakerRequest,
   WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   WorkspaceSetVoiceTranscriptionEnabledRequest,
@@ -244,18 +236,6 @@ export interface ReoWorkspaceBridge {
   readonly writeArtifactRuntimeState: (
     payload: WorkspaceWriteArtifactRuntimeStateRequest
   ) => Promise<WorkspaceWriteArtifactRuntimeStateResponse>;
-  readonly listArtifactRuntimeSecretSlots: (
-    payload: WorkspaceListArtifactRuntimeSecretSlotsRequest
-  ) => Promise<WorkspaceListArtifactRuntimeSecretSlotsResponse>;
-  readonly getArtifactRuntimeSecret: (
-    payload: WorkspaceGetArtifactRuntimeSecretRequest
-  ) => Promise<WorkspaceGetArtifactRuntimeSecretResponse>;
-  readonly setArtifactRuntimeSecret: (
-    payload: WorkspaceSetArtifactRuntimeSecretRequest
-  ) => Promise<WorkspaceSetArtifactRuntimeSecretResponse>;
-  readonly clearArtifactRuntimeSecret: (
-    payload: WorkspaceClearArtifactRuntimeSecretRequest
-  ) => Promise<WorkspaceClearArtifactRuntimeSecretResponse>;
   readonly copyNeedsReviewAgentPrompt: (
     payload: WorkspaceCopyNeedsReviewAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;

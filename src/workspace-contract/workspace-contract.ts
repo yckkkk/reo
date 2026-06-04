@@ -1387,41 +1387,6 @@ export const workspaceWriteArtifactRuntimeStateRequestSchema =
       state: workspaceArtifactRuntimeStateJsonSchema,
     })
   );
-const workspaceArtifactRuntimeSecretSlotIdSchema = z
-  .string()
-  .min(1)
-  .max(120)
-  .refine(
-    (value) => !value.includes('/') && !value.includes('\\') && value !== '.' && value !== '..'
-  );
-export const workspaceListArtifactRuntimeSecretSlotsRequestSchema =
-  workspaceArtifactRuntimeTargetRequestSchema.and(
-    z.strictObject({
-      requestId: z.string().min(1),
-    })
-  );
-export const workspaceGetArtifactRuntimeSecretRequestSchema =
-  workspaceArtifactRuntimeTargetRequestSchema.and(
-    z.strictObject({
-      requestId: z.string().min(1),
-      slotId: workspaceArtifactRuntimeSecretSlotIdSchema,
-    })
-  );
-export const workspaceSetArtifactRuntimeSecretRequestSchema =
-  workspaceArtifactRuntimeTargetRequestSchema.and(
-    z.strictObject({
-      requestId: z.string().min(1),
-      slotId: workspaceArtifactRuntimeSecretSlotIdSchema,
-      value: z.string().max(128 * 1024),
-    })
-  );
-export const workspaceClearArtifactRuntimeSecretRequestSchema =
-  workspaceArtifactRuntimeTargetRequestSchema.and(
-    z.strictObject({
-      requestId: z.string().min(1),
-      slotId: workspaceArtifactRuntimeSecretSlotIdSchema,
-    })
-  );
 export const workspaceCopyNeedsReviewAgentPromptRequestSchema = workspaceHandleSchema
   .extend({
     workspaceId: z.string().min(1),
@@ -1533,58 +1498,6 @@ export const workspaceWriteArtifactRuntimeStateResponseSchema = z.discriminatedU
         currentVersion: baselineContentHashSchema,
       }),
     ]),
-  }),
-  workspaceErrorEnvelopeSchema,
-]);
-
-const workspaceArtifactRuntimeSecretSlotSchema = z.strictObject({
-  id: workspaceArtifactRuntimeSecretSlotIdSchema,
-  label: z.string().min(1).optional(),
-  purpose: z.string().min(1).optional(),
-  configured: z.boolean(),
-});
-
-export const workspaceListArtifactRuntimeSecretSlotsResponseSchema = z.discriminatedUnion('ok', [
-  z.strictObject({
-    ok: z.literal(true),
-    value: z.strictObject({
-      requestId: z.string().min(1),
-      slots: z.array(workspaceArtifactRuntimeSecretSlotSchema),
-    }),
-  }),
-  workspaceErrorEnvelopeSchema,
-]);
-
-export const workspaceGetArtifactRuntimeSecretResponseSchema = z.discriminatedUnion('ok', [
-  z.strictObject({
-    ok: z.literal(true),
-    value: z.strictObject({
-      requestId: z.string().min(1),
-      configured: z.boolean(),
-      value: z.string().nullable(),
-    }),
-  }),
-  workspaceErrorEnvelopeSchema,
-]);
-
-export const workspaceSetArtifactRuntimeSecretResponseSchema = z.discriminatedUnion('ok', [
-  z.strictObject({
-    ok: z.literal(true),
-    value: z.strictObject({
-      requestId: z.string().min(1),
-      configured: z.literal(true),
-    }),
-  }),
-  workspaceErrorEnvelopeSchema,
-]);
-
-export const workspaceClearArtifactRuntimeSecretResponseSchema = z.discriminatedUnion('ok', [
-  z.strictObject({
-    ok: z.literal(true),
-    value: z.strictObject({
-      requestId: z.string().min(1),
-      configured: z.literal(false),
-    }),
   }),
   workspaceErrorEnvelopeSchema,
 ]);
@@ -2499,30 +2412,6 @@ export type WorkspaceWriteArtifactRuntimeStateRequest = z.infer<
 >;
 export type WorkspaceWriteArtifactRuntimeStateResponse = z.infer<
   typeof workspaceWriteArtifactRuntimeStateResponseSchema
->;
-export type WorkspaceListArtifactRuntimeSecretSlotsRequest = z.infer<
-  typeof workspaceListArtifactRuntimeSecretSlotsRequestSchema
->;
-export type WorkspaceListArtifactRuntimeSecretSlotsResponse = z.infer<
-  typeof workspaceListArtifactRuntimeSecretSlotsResponseSchema
->;
-export type WorkspaceGetArtifactRuntimeSecretRequest = z.infer<
-  typeof workspaceGetArtifactRuntimeSecretRequestSchema
->;
-export type WorkspaceGetArtifactRuntimeSecretResponse = z.infer<
-  typeof workspaceGetArtifactRuntimeSecretResponseSchema
->;
-export type WorkspaceSetArtifactRuntimeSecretRequest = z.infer<
-  typeof workspaceSetArtifactRuntimeSecretRequestSchema
->;
-export type WorkspaceSetArtifactRuntimeSecretResponse = z.infer<
-  typeof workspaceSetArtifactRuntimeSecretResponseSchema
->;
-export type WorkspaceClearArtifactRuntimeSecretRequest = z.infer<
-  typeof workspaceClearArtifactRuntimeSecretRequestSchema
->;
-export type WorkspaceClearArtifactRuntimeSecretResponse = z.infer<
-  typeof workspaceClearArtifactRuntimeSecretResponseSchema
 >;
 export type WorkspaceCopyNeedsReviewAgentPromptRequest = z.infer<
   typeof workspaceCopyNeedsReviewAgentPromptRequestSchema

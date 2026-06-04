@@ -616,27 +616,6 @@ function renderLoadedWorkspaceFrame({
   copySegmentSupplementAbsolutePath = vi.fn().mockResolvedValue({ ok: true }),
   copyNeedsReviewAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
   copyArtifactAgentPrompt = vi.fn().mockResolvedValue({ ok: true }),
-  listArtifactRuntimeSecretSlots = vi.fn(async (request) => ({
-    ok: true,
-    value: {
-      requestId: request.requestId,
-      slots: [],
-    },
-  })),
-  setArtifactRuntimeSecret = vi.fn(async (request) => ({
-    ok: true,
-    value: {
-      requestId: request.requestId,
-      configured: true,
-    },
-  })),
-  clearArtifactRuntimeSecret = vi.fn(async (request) => ({
-    ok: true,
-    value: {
-      requestId: request.requestId,
-      configured: false,
-    },
-  })),
   readFinalizedAudioSegmentSupplement = vi.fn().mockResolvedValue({
     ok: false,
     error: {
@@ -813,9 +792,6 @@ function renderLoadedWorkspaceFrame({
   readonly copySegmentSupplementAbsolutePath?: ReturnType<typeof vi.fn>;
   readonly copyNeedsReviewAgentPrompt?: ReturnType<typeof vi.fn>;
   readonly copyArtifactAgentPrompt?: ReturnType<typeof vi.fn>;
-  readonly listArtifactRuntimeSecretSlots?: ReturnType<typeof vi.fn>;
-  readonly setArtifactRuntimeSecret?: ReturnType<typeof vi.fn>;
-  readonly clearArtifactRuntimeSecret?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplement?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegmentSupplementAudio?: ReturnType<typeof vi.fn>;
   readonly readFinalizedAudioSegment?: ReturnType<typeof vi.fn>;
@@ -840,9 +816,6 @@ function renderLoadedWorkspaceFrame({
       copySegmentSupplementRelativePath,
       copyArtifactAgentPrompt,
       copyNeedsReviewAgentPrompt,
-      listArtifactRuntimeSecretSlots,
-      setArtifactRuntimeSecret,
-      clearArtifactRuntimeSecret,
       openMemoryDocument,
       openSegmentSupplementDocument,
       readFinalizedAudioSegmentSupplement,
@@ -1912,6 +1885,8 @@ describe('LoadedWorkspaceFrame', () => {
     const iframe = workPanel.querySelector('iframe');
 
     expect(workTab).toHaveAttribute('aria-selected', 'true');
+    expect(workPanel).toHaveAttribute('data-slot', 'memory-studio-inline-artifact-preview');
+    expect(workPanel).toHaveClass('reo-squircle', 'rounded-xl', 'border', 'border-secondary');
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
     expect(iframe).toHaveAttribute(
       'sandbox',
@@ -1925,6 +1900,34 @@ describe('LoadedWorkspaceFrame', () => {
         previewVersion: 'a'.repeat(64),
       })
     );
+    const updatedWork = artifactSegment({
+      entryHash: 'b'.repeat(64),
+      previewVersion: 'b'.repeat(64),
+      updatedAt: '2026-05-06T13:21:00.000',
+    });
+    const detailWithUpdatedArtifact: WorkspaceMemoryDetail = {
+      ...detailWithArtifact,
+      segments: [updatedWork],
+    };
+    act(() => {
+      queryClient.setQueryData(['workspace', 'memory-detail', 'ws_1', 'mem_birthday'], {
+        requestId: 'request_mem_birthday_artifact_segment_updated',
+        detail: detailWithUpdatedArtifact,
+      });
+    });
+    await waitFor(() => {
+      const refreshedFrame = within(content)
+        .getByRole('tabpanel', { name: '作品' })
+        .querySelector('iframe');
+      expect(refreshedFrame).toHaveAttribute(
+        'src',
+        artifactSegmentRuntimeUrl({
+          workspaceId: 'ws_1',
+          segmentId: 'seg_birthday_artifact',
+          previewVersion: 'b'.repeat(64),
+        })
+      );
+    });
     const workTabItem = workTab.closest('[data-slot="memory-studio-primary-tab-item"]');
     expect(workTabItem).not.toBeNull();
     fireEvent.pointerEnter(workTabItem as HTMLElement);
@@ -1955,7 +1958,7 @@ describe('LoadedWorkspaceFrame', () => {
       artifactSegmentRuntimeUrl({
         workspaceId: 'ws_1',
         segmentId: 'seg_birthday_artifact',
-        previewVersion: 'a'.repeat(64),
+        previewVersion: 'b'.repeat(64),
       })
     );
     expect(readSegmentContent).not.toHaveBeenCalled();
@@ -5051,6 +5054,8 @@ describe('LoadedWorkspaceFrame', () => {
     const supplementPanel = await within(content).findByRole('tabpanel', { name: '作品补充' });
     const iframe = supplementPanel.querySelector('iframe');
 
+    expect(supplementPanel).toHaveAttribute('data-slot', 'memory-studio-inline-artifact-preview');
+    expect(supplementPanel).toHaveClass('reo-squircle', 'rounded-xl', 'border', 'border-secondary');
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
     expect(iframe).toHaveAttribute(
       'sandbox',
