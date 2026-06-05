@@ -614,6 +614,69 @@ describe('App', () => {
     await user.click(screen.getByRole('menuitem', { name: '创建本地记忆空间' }));
   }
 
+  function mockDailyMemoryWorkspaceInitialization() {
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+  }
+
+  function mockPersistedSecondMemorySpace() {
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_memory_space_two',
+            title: 'Memory Space two',
+            description: '',
+            addedAt: '2026-05-08T07:48:00.000Z',
+            lastOpenedAt: '2026-05-08T07:48:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.openMemorySpace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-2',
+        workspaceId: 'ws_memory_space_two',
+        snapshot: {
+          workspaceId: 'ws_memory_space_two',
+          title: 'Memory Space two',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+  }
+
+  async function createDailyMemoryWorkspace(user: ReturnType<typeof userEvent.setup>) {
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
+  }
+
   async function openInlineNoteEditor(user: ReturnType<typeof userEvent.setup>, _title = '笔记1') {
     await user.click(await screen.findByRole('tabpanel', { name: '正文' }));
     return screen.findByTestId('memory-studio-inline-note-editor');
@@ -11145,14 +11208,160 @@ describe('App', () => {
 
   it('releases the previous workspace handle when switching to a persisted memory space', async () => {
     const user = userEvent.setup();
-    reoWorkspace.chooseDirectory.mockResolvedValue({
+    mockDailyMemoryWorkspaceInitialization();
+    mockPersistedSecondMemorySpace();
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createDailyMemoryWorkspace(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
+
+    await waitFor(() => {
+      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      });
+    });
+    expect(screen.getAllByText('Memory Space two').length).toBeGreaterThan(0);
+  });
+
+  it('shows the next memory space without waiting for the previous handle release to finish', async () => {
+    const user = userEvent.setup();
+    const pendingClose =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['closeWorkspace']>>>();
+    mockDailyMemoryWorkspaceInitialization();
+    mockPersistedSecondMemorySpace();
+    reoWorkspace.closeWorkspace.mockReturnValueOnce(pendingClose.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createDailyMemoryWorkspace(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
+
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent(
+      'Memory Space two'
+    );
+    expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
+      workspaceHandle: 'workspace-handle-1',
+    });
+
+    await act(async () => {
+      pendingClose.resolve({ ok: true, value: { closed: true } });
+      await pendingClose.promise;
+    });
+  });
+
+  it('waits for a pending previous release before reopening that same memory space', async () => {
+    const user = userEvent.setup();
+    const pendingClose =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['closeWorkspace']>>>();
+    mockDailyMemoryWorkspaceInitialization();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
-        status: 'selected',
-        selectionToken: 'selection-token-1',
-        displayPath: 'Memory',
+        memorySpaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            description: '',
+            addedAt: '2026-05-08T07:47:00.000Z',
+            lastOpenedAt: '2026-05-08T07:47:00.000Z',
+          },
+          {
+            workspaceId: 'ws_memory_space_two',
+            title: 'Memory Space two',
+            description: '',
+            addedAt: '2026-05-08T07:48:00.000Z',
+            lastOpenedAt: '2026-05-08T07:48:00.000Z',
+          },
+        ],
       },
     });
+    reoWorkspace.openMemorySpace.mockImplementation(async ({ workspaceId }) => ({
+      ok: true,
+      value: {
+        workspaceHandle: workspaceId === 'ws_1' ? 'workspace-handle-3' : 'workspace-handle-2',
+        workspaceId,
+        snapshot: {
+          workspaceId,
+          title: workspaceId === 'ws_1' ? 'Daily memory' : 'Memory Space two',
+          description: '',
+          memories: [],
+        },
+      },
+    }));
+    reoWorkspace.closeWorkspace.mockReturnValueOnce(pendingClose.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createDailyMemoryWorkspace(user);
+    await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent(
+      'Memory Space two'
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Daily memory' }));
+
+    expect(reoWorkspace.openMemorySpace).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingClose.resolve({ ok: true, value: { closed: true } });
+      await pendingClose.promise;
+    });
+
+    await waitFor(() => expect(reoWorkspace.openMemorySpace).toHaveBeenCalledTimes(2));
+    expect(reoWorkspace.openMemorySpace).toHaveBeenLastCalledWith({ workspaceId: 'ws_1' });
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent('Daily memory');
+  });
+
+  it('keeps the next memory space visible when the previous handle release fails', async () => {
+    const user = userEvent.setup();
+    mockDailyMemoryWorkspaceInitialization();
+    mockPersistedSecondMemorySpace();
+    reoWorkspace.closeWorkspace.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'ERR_WORKSPACE_LOCK_FAILED',
+        message: 'Workspace lock could not be released',
+        dataRetention: 'unknown',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await createDailyMemoryWorkspace(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
+
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent(
+      'Memory Space two'
+    );
+    expect(await screen.findByText('无法获取记忆空间锁。')).toBeInTheDocument();
+    expect(screen.getByRole('banner', { name: '标题栏' })).toHaveTextContent('Memory Space two');
+  });
+
+  it('does not show a stale release failure after switching to another memory space', async () => {
+    const user = userEvent.setup();
+    const pendingClose =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['closeWorkspace']>>>();
+    mockDailyMemoryWorkspaceInitialization();
     reoWorkspace.listMemorySpaces.mockResolvedValue({
       ok: true,
       value: {
@@ -11164,35 +11373,32 @@ describe('App', () => {
             addedAt: '2026-05-08T07:48:00.000Z',
             lastOpenedAt: '2026-05-08T07:48:00.000Z',
           },
+          {
+            workspaceId: 'ws_memory_space_three',
+            title: 'Memory Space three',
+            description: '',
+            addedAt: '2026-05-08T07:49:00.000Z',
+            lastOpenedAt: '2026-05-08T07:49:00.000Z',
+          },
         ],
       },
     });
-    reoWorkspace.initializeWorkspace.mockResolvedValue({
+    reoWorkspace.openMemorySpace.mockImplementation(async ({ workspaceId }) => ({
       ok: true,
       value: {
-        workspaceHandle: 'workspace-handle-1',
-        workspaceId: 'ws_1',
+        workspaceHandle:
+          workspaceId === 'ws_memory_space_three' ? 'workspace-handle-3' : 'workspace-handle-2',
+        workspaceId,
         snapshot: {
-          workspaceId: 'ws_1',
-          title: 'Daily memory',
+          workspaceId,
+          title:
+            workspaceId === 'ws_memory_space_three' ? 'Memory Space three' : 'Memory Space two',
           description: '',
           memories: [],
         },
       },
-    });
-    reoWorkspace.openMemorySpace.mockResolvedValue({
-      ok: true,
-      value: {
-        workspaceHandle: 'workspace-handle-2',
-        workspaceId: 'ws_memory_space_two',
-        snapshot: {
-          workspaceId: 'ws_memory_space_two',
-          title: 'Memory Space two',
-          description: '',
-          memories: [],
-        },
-      },
-    });
+    }));
+    reoWorkspace.closeWorkspace.mockReturnValueOnce(pendingClose.promise);
 
     render(
       <ReoQueryProvider>
@@ -11200,21 +11406,30 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await openCreateWorkspaceDialog(user);
-    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
-    await user.click(screen.getByRole('button', { name: '浏览' }));
-    await screen.findByText('Memory');
-    await user.click(screen.getByRole('button', { name: '创建' }));
-    expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
-
+    await createDailyMemoryWorkspace(user);
     await user.click(await screen.findByRole('button', { name: 'Memory Space two' }));
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent(
+      'Memory Space two'
+    );
+    await user.click(screen.getByRole('button', { name: 'Memory Space three' }));
+    expect(await screen.findByRole('banner', { name: '标题栏' })).toHaveTextContent(
+      'Memory Space three'
+    );
 
-    await waitFor(() => {
-      expect(reoWorkspace.closeWorkspace).toHaveBeenCalledWith({
-        workspaceHandle: 'workspace-handle-1',
+    await act(async () => {
+      pendingClose.resolve({
+        ok: false,
+        error: {
+          code: 'ERR_WORKSPACE_LOCK_FAILED',
+          message: 'Workspace lock could not be released',
+          dataRetention: 'unknown',
+        },
       });
+      await pendingClose.promise;
     });
-    expect(screen.getAllByText('Memory Space two').length).toBeGreaterThan(0);
+
+    expect(screen.queryByText('无法获取记忆空间锁。')).not.toBeInTheDocument();
+    expect(screen.getByRole('banner', { name: '标题栏' })).toHaveTextContent('Memory Space three');
   });
 
   it('blocks workspace switching while a recording flow is open', async () => {

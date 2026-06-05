@@ -173,6 +173,12 @@ type TopLevelWorkspaceView = Extract<
   { readonly name: 'workspace-stage' | 'library' }
 >;
 type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
+type PendingWorkspaceRelease = {
+  readonly errorMessage: string | null;
+  readonly promise: Promise<boolean> | null;
+  readonly releaseId: symbol;
+  readonly session: WorkspaceSession;
+};
 type MemoryCreateIntent =
   | { readonly afterCreate: 'stay-on-stage' }
   | { readonly afterCreate: 'record-memory' }
@@ -786,6 +792,7 @@ export function App() {
   const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
+  const workspaceReleaseRecordsRef = useRef<Map<string, PendingWorkspaceRelease>>(new Map());
   const recordingRecoveryActionIdRef = useRef(0);
   const runningTranscriptionBackfillsRef = useRef<Map<string, string>>(new Map());
   const runningSpeechSynthesesRef = useRef<Map<string, string>>(new Map());
@@ -1247,32 +1254,111 @@ export function App() {
     );
   }
 
-  async function closeReplacementWorkspace(nextWorkspaceSession: WorkspaceSession) {
-    await closeWorkspace({ workspaceHandle: nextWorkspaceSession.workspaceHandle }).catch(() => {});
+  function reportWorkspaceReleaseFailure(message: string, visibleWhileSession?: WorkspaceSession) {
+    const currentSession = workspaceSessionRef.current;
+    if (
+      visibleWhileSession &&
+      (currentSession?.workspaceHandle !== visibleWhileSession.workspaceHandle ||
+        currentSession.workspaceId !== visibleWhileSession.workspaceId)
+    ) {
+      return;
+    }
+
+    showReoToast({ type: 'error', title: '操作失败', description: message });
   }
 
-  async function acceptWorkspaceSession(
-    nextWorkspaceSession: WorkspaceSession,
-    failureFallback = OPEN_MEMORY_SPACE_ERROR
+  function releasePreviousWorkspaceSession(
+    previousSession: WorkspaceSession,
+    visibleWhileSession?: WorkspaceSession
   ) {
-    const currentSession = workspaceSessionRef.current;
-    if (currentSession && currentSession.workspaceHandle !== nextWorkspaceSession.workspaceHandle) {
+    const existingRelease = workspaceReleaseRecordsRef.current.get(previousSession.workspaceHandle);
+    if (existingRelease?.promise) {
+      return existingRelease.promise;
+    }
+
+    const releaseId = Symbol(previousSession.workspaceHandle);
+    const releasePromise = (async () => {
+      let failureMessage: string | null = null;
       try {
         const closePrevious = await closeWorkspace({
-          workspaceHandle: currentSession.workspaceHandle,
+          workspaceHandle: previousSession.workspaceHandle,
         });
         if (!closePrevious.ok) {
-          await closeReplacementWorkspace(nextWorkspaceSession);
-          setWorkspaceEntryError(
-            workspaceErrorDisplayMessage(closePrevious.error, failureFallback)
+          failureMessage = workspaceErrorDisplayMessage(
+            closePrevious.error,
+            RELEASE_MEMORY_SPACE_ERROR
           );
-          return false;
         }
       } catch (error) {
-        await closeReplacementWorkspace(nextWorkspaceSession);
-        setWorkspaceEntryError(unknownErrorDisplayMessage(error, failureFallback));
+        failureMessage = unknownErrorDisplayMessage(error, RELEASE_MEMORY_SPACE_ERROR);
+      }
+
+      const currentRelease = workspaceReleaseRecordsRef.current.get(
+        previousSession.workspaceHandle
+      );
+      if (currentRelease?.releaseId !== releaseId) {
+        return failureMessage === null;
+      }
+
+      if (failureMessage) {
+        workspaceReleaseRecordsRef.current.set(previousSession.workspaceHandle, {
+          errorMessage: failureMessage,
+          promise: null,
+          releaseId,
+          session: previousSession,
+        });
+        reportWorkspaceReleaseFailure(failureMessage, visibleWhileSession);
         return false;
       }
+
+      workspaceReleaseRecordsRef.current.delete(previousSession.workspaceHandle);
+      return true;
+    })();
+
+    workspaceReleaseRecordsRef.current.set(previousSession.workspaceHandle, {
+      errorMessage: null,
+      promise: releasePromise,
+      releaseId,
+      session: previousSession,
+    });
+    return releasePromise;
+  }
+
+  async function retryFailedWorkspaceReleases() {
+    const failedReleases = [...workspaceReleaseRecordsRef.current.values()].filter(
+      (release) => release.promise === null && release.errorMessage !== null
+    );
+    for (const release of failedReleases) {
+      if (!(await releasePreviousWorkspaceSession(release.session))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function waitForWorkspaceReleaseBeforeOpen(workspaceId: string) {
+    const matchingReleases = [...workspaceReleaseRecordsRef.current.values()].filter(
+      (release) => release.session.workspaceId === workspaceId
+    );
+    for (const release of matchingReleases) {
+      if (release.promise && !(await release.promise)) {
+        return false;
+      }
+      const latestRelease = workspaceReleaseRecordsRef.current.get(release.session.workspaceHandle);
+      if (
+        latestRelease?.errorMessage &&
+        !(await releasePreviousWorkspaceSession(release.session))
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function acceptWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
+    const currentSession = workspaceSessionRef.current;
+    if (currentSession && currentSession.workspaceHandle !== nextWorkspaceSession.workspaceHandle) {
+      releasePreviousWorkspaceSession(currentSession, nextWorkspaceSession);
     }
 
     setRecordingFlow({ status: 'closed' });
@@ -2011,6 +2097,13 @@ export function App() {
 
     setWorkspaceEntryError(null);
     try {
+      if (!(await waitForWorkspaceReleaseBeforeOpen(workspaceId))) {
+        return;
+      }
+      if (!(await retryFailedWorkspaceReleases())) {
+        return;
+      }
+
       const response = await openMemorySpace({ workspaceId });
       if (!response.ok) {
         setWorkspaceEntryError(
@@ -2037,6 +2130,10 @@ export function App() {
 
     setWorkspaceEntryError(null);
     try {
+      if (!(await retryFailedWorkspaceReleases())) {
+        return;
+      }
+
       const selectionResult = await chooseSafeWorkspaceFolder();
 
       if (selectionResult.status === 'canceled') {
@@ -2160,9 +2257,7 @@ export function App() {
         onCreateFinish={finishWorkspaceAction}
         onCreateStart={beginWorkspaceAction}
         onOpenChange={handleWorkspaceCreateOpenChange}
-        onWorkspaceReady={(nextWorkspaceSession) =>
-          acceptWorkspaceSession(nextWorkspaceSession, '无法创建记忆空间。')
-        }
+        onWorkspaceReady={acceptWorkspaceSession}
         open={workspaceCreateOpen}
       />
       <MemorySpaceRemoveDialog
