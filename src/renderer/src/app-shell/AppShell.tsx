@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useResizableWidth } from '@/hooks/use-resizable-width';
 import { cn } from '@/lib/utils';
 import { MemorySpaceActionsMenu } from '../workspace/MemorySpaceActionsMenu';
 import { SidebarSettingsTrigger } from '../workspace/SidebarSettingsTrigger';
@@ -84,16 +85,6 @@ export type WorkspaceMemorySpace = {
   readonly workspaceId: string;
 };
 
-type DragState = {
-  readonly pointerId: number;
-  readonly startWidth: number;
-  readonly startX: number;
-};
-
-export function clampSidebarWidth(width: number) {
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
-}
-
 function sidebarNavButtonClass(current: boolean) {
   return cn(
     SIDEBAR_NAV_BUTTON_CLASS,
@@ -130,56 +121,28 @@ export function AppShell({
   memorySpaces = [],
 }: AppShellProps) {
   const [sidebarState, setSidebarState] = React.useState<AppShellState>('expanded');
-  const [sidebarWidth, setSidebarWidth] = React.useState(MIN_SIDEBAR_WIDTH);
-  const [dragState, setDragState] = React.useState<DragState | null>(null);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false);
   const [workspaceMemorySpaceMenuOpen, setWorkspaceMemorySpaceMenuOpen] = React.useState<
     string | null
   >(null);
   const suppressWorkspaceMenuCloseAutoFocusRef = React.useRef(false);
-  const safeSidebarWidth = clampSidebarWidth(sidebarWidth);
-
-  function handleResizePointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragState({
-      pointerId: event.pointerId,
-      startWidth: safeSidebarWidth,
-      startX: event.clientX,
-    });
-  }
-
-  function handleResizeKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setSidebarWidth(clampSidebarWidth(safeSidebarWidth - SIDEBAR_RESIZE_STEP));
-    }
-
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setSidebarWidth(clampSidebarWidth(safeSidebarWidth + SIDEBAR_RESIZE_STEP));
-    }
-  }
-
-  function handleResizePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (!dragState || event.pointerId !== dragState.pointerId) {
-      return;
-    }
-    const nextWidth = clampSidebarWidth(dragState.startWidth + event.clientX - dragState.startX);
-    setSidebarWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-  }
-
-  function endResize(event: React.PointerEvent<HTMLDivElement>) {
-    if (dragState && event.pointerId === dragState.pointerId) {
-      setDragState(null);
-    }
-  }
+  const {
+    isResizing: sidebarResizing,
+    resizeHandleProps: sidebarResizeHandleProps,
+    width: safeSidebarWidth,
+  } = useResizableWidth({
+    initialWidth: MIN_SIDEBAR_WIDTH,
+    maxWidth: MAX_SIDEBAR_WIDTH,
+    minWidth: MIN_SIDEBAR_WIDTH,
+    resizeEdge: 'right',
+    step: SIDEBAR_RESIZE_STEP,
+  });
 
   const panelLeft = sidebarState === 'expanded' ? `${safeSidebarWidth}px` : '0px';
   const panelTitlebarLeft =
     sidebarState === 'expanded' ? panelLeft : `${COLLAPSED_PANEL_TITLEBAR_LEFT}px`;
   const panelRadius = sidebarState === 'expanded' ? `${PANEL_RADIUS} 0 0 ${PANEL_RADIUS}` : '0px';
-  const panelMotionClass = dragState ? '' : PANEL_MOTION_CLASS;
+  const panelMotionClass = sidebarResizing ? '' : PANEL_MOTION_CLASS;
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
   const ThemeCycleIcon = THEME_STATE_VIEW[themePreference].icon;
@@ -451,12 +414,7 @@ export function AppShell({
             className="absolute right-0 top-0 h-full cursor-col-resize bg-transparent"
             style={{ width: 8 }}
             tabIndex={0}
-            onKeyDown={handleResizeKeyDown}
-            onPointerDown={handleResizePointerDown}
-            onPointerMove={handleResizePointerMove}
-            onPointerUp={endResize}
-            onPointerCancel={endResize}
-            onLostPointerCapture={endResize}
+            {...sidebarResizeHandleProps}
           />
         </aside>
 

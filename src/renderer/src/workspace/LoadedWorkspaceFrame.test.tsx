@@ -505,6 +505,65 @@ function mockContentTabRect(element: HTMLElement) {
   });
 }
 
+function mockWorkspaceFrameBodyWidth(element: Element, width: number) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      bottom: 720,
+      height: 720,
+      left: 0,
+      right: width,
+      top: 0,
+      width,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+const MEMORY_RAIL_RESIZE_LABEL = '调整记忆列表宽度';
+const MEMORY_RAIL_MIN_WIDTH = 240;
+const MEMORY_RAIL_MAX_WIDTH = 520;
+const MEMORY_RAIL_CONSTRAINED_MAX_WIDTH = 260;
+
+function getMemoryRailResizeHandle() {
+  return screen.getByRole('separator', { name: MEMORY_RAIL_RESIZE_LABEL });
+}
+
+function queryMemoryRailResizeHandle() {
+  return screen.queryByRole('separator', { name: MEMORY_RAIL_RESIZE_LABEL });
+}
+
+function getWorkspaceFrameResizeElements() {
+  const workspaceFrame = document.querySelector('[data-slot="workspace-frame"]');
+  const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
+  expect(workspaceFrame).toBeInstanceOf(HTMLElement);
+  expect(frameBody).toBeInstanceOf(HTMLElement);
+
+  return {
+    frameBody: frameBody as HTMLElement,
+    workspaceFrame: workspaceFrame as HTMLElement,
+  };
+}
+
+function dragMemoryRailResizeHandle(
+  handle: HTMLElement,
+  {
+    endX,
+    pointerId = 1,
+    startX,
+  }: {
+    readonly endX: number;
+    readonly pointerId?: number;
+    readonly startX: number;
+  }
+) {
+  fireEvent.pointerDown(handle, { clientX: startX, pointerId });
+  fireEvent.pointerMove(handle, { clientX: endX, pointerId });
+  fireEvent.pointerUp(handle, { pointerId });
+}
+
 function fireContentTabDragOver(
   element: HTMLElement,
   input: {
@@ -771,9 +830,11 @@ function renderLoadedWorkspaceFrame({
       message: 'Note supplement not found',
     },
   }),
+  memoryRailMode = 'inline',
   session = workspaceSession(),
 }: {
   readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
+  readonly memoryRailMode?: 'inline' | 'overlay';
   readonly memoryRailOpen?: boolean;
   readonly onDeleteMemory?: (memory: WorkspaceSession['snapshot']['memories'][number]) => void;
   readonly onDeleteSegment?: () => void;
@@ -919,10 +980,12 @@ function renderLoadedWorkspaceFrame({
       : undefined;
   const renderFrame = ({
     currentMemory: nextCurrentMemory,
+    memoryRailMode: nextMemoryRailMode = memoryRailMode,
     memoryRailOpen: nextMemoryRailOpen = memoryRailOpen,
     onDeleteMemory: nextOnDeleteMemory = onDeleteMemory,
   }: {
     readonly currentMemory: WorkspaceSession['snapshot']['memories'][number] | null;
+    readonly memoryRailMode?: 'inline' | 'overlay' | undefined;
     readonly memoryRailOpen?: boolean | undefined;
     readonly onDeleteMemory?:
       | ((memory: WorkspaceSession['snapshot']['memories'][number]) => void)
@@ -955,6 +1018,7 @@ function renderLoadedWorkspaceFrame({
         onStartSegmentSupplementNote={onStartSegmentSupplementNote}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
         onStartRecording={onStartRecording}
+        memoryRailMode={nextMemoryRailMode}
         {...(nextMemoryRailOpen === undefined ? {} : { memoryRailOpen: nextMemoryRailOpen })}
       />
     </QueryClientProvider>
@@ -968,6 +1032,7 @@ function renderLoadedWorkspaceFrame({
     ) => renderResult.rerender(renderFrame({ currentMemory: nextCurrentMemory, memoryRailOpen })),
     rerenderFrame: (overrides: {
       readonly currentMemory?: WorkspaceSession['snapshot']['memories'][number] | null;
+      readonly memoryRailMode?: 'inline' | 'overlay' | undefined;
       readonly memoryRailOpen?: boolean | undefined;
       readonly onDeleteMemory?:
         | ((memory: WorkspaceSession['snapshot']['memories'][number]) => void)
@@ -977,6 +1042,8 @@ function renderLoadedWorkspaceFrame({
         renderFrame({
           currentMemory:
             overrides.currentMemory === undefined ? currentMemory : overrides.currentMemory,
+          memoryRailMode:
+            overrides.memoryRailMode === undefined ? memoryRailMode : overrides.memoryRailMode,
           memoryRailOpen:
             overrides.memoryRailOpen === undefined ? memoryRailOpen : overrides.memoryRailOpen,
           onDeleteMemory: overrides.onDeleteMemory,
@@ -1471,6 +1538,147 @@ describe('LoadedWorkspaceFrame', () => {
     const frame = document.querySelector('[data-slot="workspace-frame"]');
     expect(frame).toHaveClass('bg-background');
     expect(frame).not.toHaveClass('bg-card', 'shadow-float');
+  });
+
+  it('resizes the inline right-side Memory rail by dragging its left separator', () => {
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session: workspaceSession({
+        memories: [morningMemory, recitalMemory, birthdayMemory],
+      }),
+    });
+
+    const handle = getMemoryRailResizeHandle();
+    const { frameBody, workspaceFrame } = getWorkspaceFrameResizeElements();
+    expect(handle).toHaveAttribute('aria-valuemin', `${MEMORY_RAIL_MIN_WIDTH}`);
+    expect(handle).toHaveAttribute('aria-valuemax', `${MEMORY_RAIL_MAX_WIDTH}`);
+    expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_MIN_WIDTH}`);
+    expect(handle).toHaveStyle({ width: '8px' });
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MIN_WIDTH}px`,
+    });
+    expect(frameBody).toHaveClass('duration-200');
+
+    fireEvent.pointerDown(handle, { clientX: MEMORY_RAIL_MIN_WIDTH, pointerId: 1 });
+    expect(frameBody).not.toHaveClass('duration-200');
+    fireEvent.pointerMove(handle, { clientX: -80, pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_MAX_WIDTH}`);
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MAX_WIDTH}px`,
+    });
+    expect(frameBody).toHaveClass('duration-200');
+  });
+
+  it('protects the workspace stage while retaining the requested right rail width', async () => {
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session: workspaceSession({
+        memories: [morningMemory, recitalMemory, birthdayMemory],
+      }),
+    });
+
+    const handle = getMemoryRailResizeHandle();
+    const { frameBody, workspaceFrame } = getWorkspaceFrameResizeElements();
+    mockWorkspaceFrameBodyWidth(frameBody, 880);
+    fireEvent.resize(window);
+    await waitFor(() =>
+      expect(handle).toHaveAttribute('aria-valuemax', `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}`)
+    );
+
+    dragMemoryRailResizeHandle(handle, { endX: -80, startX: MEMORY_RAIL_MIN_WIDTH });
+
+    expect(handle).toHaveAttribute('aria-valuemax', `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}`);
+    expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}`);
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}px`,
+    });
+
+    mockWorkspaceFrameBodyWidth(frameBody, 1140);
+    fireEvent.resize(window);
+
+    await waitFor(() => {
+      expect(handle).toHaveAttribute('aria-valuemax', `${MEMORY_RAIL_MAX_WIDTH}`);
+      expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_MAX_WIDTH}`);
+      expect(workspaceFrame).toHaveStyle({
+        '--workspace-memory-rail-width': `${MEMORY_RAIL_MAX_WIDTH}px`,
+      });
+    });
+  });
+
+  it('supports keyboard resizing from the right rail left boundary', () => {
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session: workspaceSession({
+        memories: [morningMemory, recitalMemory, birthdayMemory],
+      }),
+    });
+
+    const handle = getMemoryRailResizeHandle();
+    const { workspaceFrame } = getWorkspaceFrameResizeElements();
+
+    fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+
+    expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}`);
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_CONSTRAINED_MAX_WIDTH}px`,
+    });
+
+    fireEvent.keyDown(handle, { key: 'ArrowRight' });
+
+    expect(handle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_MIN_WIDTH}`);
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MIN_WIDTH}px`,
+    });
+  });
+
+  it('does not expose the Memory rail resize handle in overlay mode', () => {
+    renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      memoryRailMode: 'overlay',
+      session: workspaceSession({
+        memories: [morningMemory, recitalMemory, birthdayMemory],
+      }),
+    });
+
+    const rail = screen.getByRole('navigation', { name: '记忆列表' });
+    const railShell = rail.closest('[data-slot="workspace-memory-rail-shell"]');
+    expect(queryMemoryRailResizeHandle()).not.toBeInTheDocument();
+    expect(railShell).toHaveClass('absolute', 'inset-y-0', 'right-0');
+  });
+
+  it('keeps the requested right rail width after collapse and re-expand', () => {
+    const { rerenderFrame } = renderLoadedWorkspaceFrame({
+      currentMemory: birthdayMemory,
+      session: workspaceSession({
+        memories: [morningMemory, recitalMemory, birthdayMemory],
+      }),
+    });
+
+    const handle = getMemoryRailResizeHandle();
+    const { frameBody, workspaceFrame } = getWorkspaceFrameResizeElements();
+    dragMemoryRailResizeHandle(handle, { endX: -80, startX: MEMORY_RAIL_MIN_WIDTH });
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MAX_WIDTH}px`,
+    });
+
+    rerenderFrame({ memoryRailOpen: false });
+
+    expect(queryMemoryRailResizeHandle()).not.toBeInTheDocument();
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_0px]');
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MAX_WIDTH}px`,
+    });
+
+    rerenderFrame({ memoryRailOpen: true });
+
+    const restoredHandle = getMemoryRailResizeHandle();
+    expect(restoredHandle).toHaveAttribute('aria-valuenow', `${MEMORY_RAIL_MAX_WIDTH}`);
+    expect(frameBody).toHaveClass('grid-cols-[minmax(0,1fr)_var(--workspace-memory-rail-width)]');
+    expect(workspaceFrame).toHaveStyle({
+      '--workspace-memory-rail-width': `${MEMORY_RAIL_MAX_WIDTH}px`,
+    });
   });
 
   it('selects an existing Memory through the right rail without requiring a detail route', async () => {
