@@ -702,8 +702,32 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
     'SKILL.md',
+    'examples',
     'references',
   ]);
+  const worksDesignExamplesDirectory = path.join(root, 'skills', 'reo-works-design', 'examples');
+  const worksDesignExampleFiles = [
+    'derive-chain.html',
+    'number-line.html',
+    'rail-widget.html',
+    'reactive-binding.html',
+    'zoomable-series.html',
+  ];
+  assert.deepEqual((await readdir(worksDesignExamplesDirectory)).sort(), worksDesignExampleFiles);
+  for (const filename of worksDesignExampleFiles) {
+    const example = await readFile(path.join(worksDesignExamplesDirectory, filename), 'utf8');
+    assert.match(example, /^<!doctype html>/, filename);
+    assert.match(example, /--color-background-primary/, filename);
+    assert.match(example, /function derive\(/, filename);
+    assert.doesNotMatch(example, /[`]|\$\{/, filename);
+  }
+  const explorablesReference = await readFile(
+    path.join(root, 'skills', 'reo-works-design', 'references', 'explorables.md'),
+    'utf8'
+  );
+  assert.match(explorablesReference, /source -> derive -> render/);
+  assert.match(explorablesReference, /examples\/reactive-binding\.html/);
+  assert.match(explorablesReference, /独立源变量/);
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works', 'references'))).sort(), [
     'file-contract.md',
     'runtime-contract-check.md',
@@ -714,6 +738,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
     [
       'charts.md',
       'core-design-system.md',
+      'explorables.md',
       'interaction-patterns.md',
       'mockups-and-art.md',
       'modules.md',
@@ -1151,7 +1176,7 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.match(scaffoldedEntry, /--color-background-primary:/);
   assert.match(scaffoldedEntry, /--color-background-success: #27500a/);
   assert.match(scaffoldedEntry, /--color-text-success: #c0dd97/);
-  assert.match(scaffoldedEntry, /--color-border-secondary: rgba\(44, 44, 42, 0\.3\)/);
+  assert.match(scaffoldedEntry, /--color-border-secondary: rgba\(24, 24, 27, 0\.14\)/);
   assert.match(scaffoldedEntry, /background:var\(--color-background-primary\)/);
   assert.match(scaffoldedEntry, /color:var\(--color-text-primary\)/);
   assert.match(scaffoldedEntry, /border-radius:var\(--border-radius-md\)/);

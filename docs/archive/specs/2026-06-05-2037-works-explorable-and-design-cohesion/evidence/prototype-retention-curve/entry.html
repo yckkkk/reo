@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>间隔复习留存曲线</title>
+    <style>
+      /* ── Reo 作品 token（自带内联；值忠实投影 app theme.css）────────────── */
+      :root {
+        /* 结构地基 —— 来自 theme.css */
+        --surface-1: #ffffff;
+        --surface-2: #f4f4f5;
+        --surface-3: #ebebed;
+        --text-primary: #18181b; /* zinc-900 */
+        --text-secondary: #3f3f46; /* zinc-700 */
+        --text-tertiary: #71717a; /* zinc-500 */
+        --border: rgb(24 24 27 / 0.08);
+        --border-strong: rgb(24 24 27 / 0.14);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --font-sans: 'Waldenburg', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+        /* 缩小版 elevation —— theme.css shadow-float 的克制投影，非装饰发光 */
+        --shadow-card: 0 1px 2px rgb(17 24 39 / 0.04), 0 2px 8px rgb(17 24 39 / 0.05);
+
+        /* 强调色 —— 作品自己的分类色阶，与品牌 red/magenta/ember 分离 */
+        --teal-100: #9fe1cb;
+        --teal-600: #1d9e75;
+        --teal-800: #085041;
+        --amber-100: #fac775;
+        --amber-600: #ba7517;
+        --amber-800: #633806;
+        --coral-100: #f5c4b3;
+        --coral-600: #d85a30;
+        --coral-800: #712b13;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --surface-1: #09090b;
+          --surface-2: #18181b;
+          --surface-3: #1f1f23;
+          --text-primary: #fafafa;
+          --text-secondary: #d4d4d8;
+          --text-tertiary: #a1a1aa;
+          --border: rgb(255 255 255 / 0.1);
+          --border-strong: rgb(255 255 255 / 0.16);
+          --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 10px rgb(0 0 0 / 0.34);
+          --teal-100: #04342c;
+          --teal-600: #5dcaa5;
+          --teal-800: #9fe1cb;
+          --amber-100: #412402;
+          --amber-600: #ef9f27;
+          --amber-800: #fac775;
+          --coral-100: #4a1b0c;
+          --coral-600: #f0997b;
+          --coral-800: #f5c4b3;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text-primary);
+        background: var(--surface-1);
+        -webkit-font-smoothing: antialiased;
+      }
+      .work {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 24px 20px;
+        min-width: 0;
+      }
+
+      header {
+        margin-bottom: 20px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      .caption {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-tertiary);
+      }
+
+      /* 控制区 —— 源变量 */
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px 24px;
+        margin-bottom: 18px;
+      }
+      .control {
+        min-width: 0;
+      }
+      .control-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .control-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+      .control-value {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: var(--teal-600);
+        height: 20px;
+        cursor: pointer;
+      }
+      input[type='range']:focus-visible {
+        outline: 2px solid var(--teal-600);
+        outline-offset: 4px;
+        border-radius: var(--radius-sm);
+      }
+
+      /* 曲线 */
+      .plot {
+        background: var(--surface-2);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-card);
+        padding: 14px 14px 8px;
+        margin-bottom: 16px;
+      }
+      .plot svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .axis-line {
+        stroke: var(--border-strong);
+        stroke-width: 1;
+      }
+      .grid-line {
+        stroke: var(--border);
+        stroke-width: 1;
+      }
+      .threshold {
+        stroke: var(--text-tertiary);
+        stroke-width: 1;
+        stroke-dasharray: 4 4;
+      }
+      .curve {
+        fill: none;
+        stroke: var(--teal-600);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .curve-fill {
+        fill: var(--teal-600);
+        opacity: 0.08;
+      }
+      .now-line {
+        stroke: var(--text-tertiary);
+        stroke-width: 1;
+        stroke-dasharray: 2 3;
+      }
+      .now-dot {
+        fill: var(--teal-800);
+      }
+      .due-line {
+        stroke: var(--coral-600);
+        stroke-width: 1.5;
+        stroke-dasharray: 3 3;
+      }
+      .axis-text {
+        fill: var(--text-tertiary);
+        font-size: 11px;
+        font-family: var(--font-sans);
+      }
+      .axis-text.right {
+        text-anchor: end;
+      }
+      .axis-text.mid {
+        text-anchor: middle;
+      }
+      .due-text {
+        fill: var(--coral-600);
+        font-size: 11px;
+        font-family: var(--font-sans);
+        text-anchor: middle;
+      }
+
+      /* 派生卡 */
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+      }
+      .metric {
+        background: var(--surface-2);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-card);
+        padding: 12px 14px;
+        min-width: 0;
+      }
+      .metric-label {
+        font-size: 12px;
+        color: var(--text-tertiary);
+        margin-bottom: 4px;
+      }
+      .metric-value {
+        font-size: 24px;
+        font-weight: 500;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+        line-height: 1.2;
+      }
+      .metric-value .unit {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-left: 2px;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        line-height: 1.4;
+      }
+      .badge[data-status='solid'] {
+        background: var(--teal-100);
+        color: var(--teal-800);
+      }
+      .badge[data-status='due'] {
+        background: var(--amber-100);
+        color: var(--amber-800);
+      }
+      .badge[data-status='urgent'] {
+        background: var(--coral-100);
+        color: var(--coral-800);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="work">
+      <header>
+        <h1>间隔复习留存曲线</h1>
+        <p class="caption">
+          基于这条记忆的复习记录，估算记忆留存随时间的衰减，并标出建议的下次复习日。
+        </p>
+      </header>
+
+      <section class="controls" aria-label="参数">
+        <div class="control">
+          <div class="control-row">
+            <label class="control-label" for="days">距上次复习</label>
+            <span class="control-value" id="days-out">0 天</span>
+          </div>
+          <input
+            id="days"
+            type="range"
+            min="0"
+            max="30"
+            step="0.5"
+            value="6"
+            aria-label="距上次复习的天数"
+          />
+        </div>
+        <div class="control">
+          <div class="control-row">
+            <label class="control-label" for="stab">记忆稳定度</label>
+            <span class="control-value" id="stab-out">7.0</span>
+          </div>
+          <input
+            id="stab"
+            type="range"
+            min="1"
+            max="14"
+            step="0.5"
+            value="7"
+            aria-label="记忆稳定度，越高遗忘越慢"
+          />
+        </div>
+      </section>
+
+      <div class="plot">
+        <svg viewBox="0 0 600 300" role="img" aria-label="记忆留存随天数衰减的曲线">
+          <!-- 轴与网格在脚本里补充刻度文字；静态骨架先可读 -->
+          <g id="grid"></g>
+          <path id="area" class="curve-fill" d="" />
+          <path id="curve" class="curve" d="" />
+          <line id="threshold" class="threshold" x1="44" y1="0" x2="584" y2="0" />
+          <text id="threshold-text" class="axis-text right" x="582" y="0">建议复习线 70%</text>
+          <line id="now-line" class="now-line" x1="0" y1="16" x2="0" y2="264" />
+          <line id="due-line" class="due-line" x1="0" y1="16" x2="0" y2="264" />
+          <text id="due-text" class="due-text" x="0" y="278">下次复习</text>
+          <circle id="now-dot" class="now-dot" cx="0" cy="0" r="4.5" />
+          <line class="axis-line" x1="44" y1="264" x2="584" y2="264" />
+          <text class="axis-text" x="44" y="284">0 天</text>
+          <text class="axis-text mid" x="314" y="284">15</text>
+          <text class="axis-text right" x="584" y="284">30</text>
+          <text class="axis-text right" x="40" y="20">100%</text>
+          <text class="axis-text right" x="40" y="268">0%</text>
+        </svg>
+      </div>
+
+      <section class="metrics" aria-label="结果">
+        <div class="metric">
+          <div class="metric-label">当前留存率</div>
+          <div class="metric-value"><span id="m-retention">—</span><span class="unit">%</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">距建议复习</div>
+          <div class="metric-value"><span id="m-due">—</span><span class="unit">天</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">状态</div>
+          <div class="metric-value">
+            <span class="badge" id="m-status" data-status="solid">—</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      // ── 单一源状态 ───────────────────────────────────────────────
+      const state = { daysSince: 6, stability: 7 };
+
+      // ── 纯派生：留存模型 R(t) = e^(-t/S) ─────────────────────────
+      const THRESHOLD = 0.7;
+      const T_MAX = 30;
+      const retention = (t, S) => Math.exp(-t / S);
+      const dueDay = (S) => S * Math.log(1 / THRESHOLD); // R(t*) = 0.7
+
+      function derive(s) {
+        const r = retention(s.daysSince, s.stability);
+        const due = dueDay(s.stability);
+        const daysUntil = Math.max(0, due - s.daysSince);
+        let status = 'solid';
+        if (r < 0.4) status = 'urgent';
+        else if (r < THRESHOLD) status = 'due';
+        return { r, due, daysUntil, status };
+      }
+
+      // ── 坐标系：viewBox 0..600 × 0..300 ─────────────────────────
+      const M = { left: 44, right: 16, top: 16, bottom: 36 };
+      const PW = 600 - M.left - M.right; // 540
+      const PH = 300 - M.top - M.bottom; // 248
+      const X = (t) => M.left + (t / T_MAX) * PW;
+      const Y = (r) => M.top + (1 - r) * PH;
+
+      // ── 渲染：把派生模型投影到 SVG / DOM ─────────────────────────
+      const $ = (id) => document.getElementById(id);
+      const STATUS_TEXT = { solid: '稳固', due: '该复习了', urgent: '接近遗忘' };
+
+      function curvePath(S) {
+        let d = '';
+        for (let t = 0; t <= T_MAX + 0.01; t += 0.5) {
+          d += (t === 0 ? 'M' : 'L') + X(t).toFixed(1) + ' ' + Y(retention(t, S)).toFixed(1) + ' ';
+        }
+        return d.trim();
+      }
+
+      function render() {
+        const d = derive(state);
+
+        // 曲线 + 浅填充
+        const path = curvePath(state.stability);
+        $('curve').setAttribute('d', path);
+        $('area').setAttribute(
+          'd',
+          path +
+            ` L ${X(T_MAX).toFixed(1)} ${Y(0).toFixed(1)} L ${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z`
+        );
+
+        // 阈值线
+        const yT = Y(THRESHOLD);
+        $('threshold').setAttribute('y1', yT);
+        $('threshold').setAttribute('y2', yT);
+        $('threshold-text').setAttribute('y', (yT - 6).toFixed(1));
+
+        // 当前点 + 竖虚线
+        const nx = X(state.daysSince),
+          ny = Y(d.r);
+        $('now-dot').setAttribute('cx', nx.toFixed(1));
+        $('now-dot').setAttribute('cy', ny.toFixed(1));
+        $('now-line').setAttribute('x1', nx.toFixed(1));
+        $('now-line').setAttribute('x2', nx.toFixed(1));
+        $('now-line').setAttribute('y1', ny.toFixed(1));
+        $('now-line').setAttribute('y2', Y(0));
+
+        // 下次复习标记（落在范围内才显示）
+        const due = $('due-line'),
+          dueText = $('due-text');
+        if (d.due <= T_MAX) {
+          const dx = X(d.due);
+          due.style.display = '';
+          dueText.style.display = '';
+          due.setAttribute('x1', dx.toFixed(1));
+          due.setAttribute('x2', dx.toFixed(1));
+          dueText.setAttribute('x', Math.min(Math.max(dx, 30), 570).toFixed(1));
+        } else {
+          due.style.display = 'none';
+          dueText.style.display = 'none';
+        }
+
+        // 读数（全部格式化，无浮点噪声）
+        $('days-out').textContent = state.daysSince.toFixed(1).replace(/\.0$/, '') + ' 天';
+        $('stab-out').textContent = state.stability.toFixed(1);
+        $('m-retention').textContent = Math.round(d.r * 100);
+        $('m-due').textContent =
+          d.daysUntil < 0.05 ? '现在' : d.daysUntil.toFixed(1).replace(/\.0$/, '');
+        const badge = $('m-status');
+        badge.textContent = STATUS_TEXT[d.status];
+        badge.setAttribute('data-status', d.status);
+      }
+
+      // ── 事件：只改源状态，再重渲染 ──────────────────────────────
+      $('days').addEventListener('input', (e) => {
+        state.daysSince = +e.target.value;
+        render();
+      });
+      $('stab').addEventListener('input', (e) => {
+        state.stability = +e.target.value;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
