@@ -119,6 +119,13 @@
           memoryId: input && input.memoryId,
         });
       },
+      selectObject: function (input) {
+        return call('ui.selectObject', {
+          memoryId: input && input.memoryId,
+          segmentId: input && input.segmentId,
+          supplementId: input && input.supplementId,
+        });
+      },
     },
     agent: {
       copyPrompt: function (input) {

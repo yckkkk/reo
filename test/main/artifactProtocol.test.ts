@@ -154,6 +154,86 @@ test('artifact vendor bridge bounds pending host requests and times out unanswer
   await assert.rejects(firstRequest, /Reo runtime request timed out/);
 });
 
+test('artifact vendor bridge exposes workspace object selection as a narrow ui method', async () => {
+  const source = await readFile(
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-render', 'bridge.js'),
+    'utf8'
+  );
+  const listeners: ((event: { data: unknown; source: unknown }) => void)[] = [];
+  let outbound: Record<string, unknown> | null = null;
+  const parentWindow = {
+    postMessage(payload: unknown) {
+      outbound = payload as Record<string, unknown>;
+    },
+  };
+  let timeoutId = 0;
+  const fakeWindow = {
+    parent: parentWindow,
+    addEventListener(type: string, callback: (event: { data: unknown; source: unknown }) => void) {
+      if (type === 'message') {
+        listeners.push(callback);
+      }
+    },
+    setTimeout() {
+      timeoutId += 1;
+      return timeoutId;
+    },
+    clearTimeout() {},
+  } as {
+    readonly parent: typeof parentWindow;
+    readonly addEventListener: (
+      type: string,
+      callback: (event: { data: unknown; source: unknown }) => void
+    ) => void;
+    readonly setTimeout: () => number;
+    readonly clearTimeout: () => void;
+    reo?: {
+      ui: {
+        selectObject: (input: {
+          readonly memoryId: string;
+          readonly segmentId?: string;
+          readonly supplementId?: string;
+        }) => Promise<unknown>;
+      };
+    };
+  };
+
+  runInNewContext(source, { window: fakeWindow });
+  assert.ok(fakeWindow.reo);
+  const selection = fakeWindow.reo.ui.selectObject({
+    memoryId: 'mem_widget',
+    segmentId: 'seg_widget',
+    supplementId: 'sup_widget',
+  });
+  assert.equal(outbound?.['method'], 'ui.selectObject');
+  const payload = outbound?.['payload'] as
+    | {
+        readonly memoryId?: unknown;
+        readonly segmentId?: unknown;
+        readonly supplementId?: unknown;
+      }
+    | undefined;
+  assert.equal(payload?.memoryId, 'mem_widget');
+  assert.equal(payload?.segmentId, 'seg_widget');
+  assert.equal(payload?.supplementId, 'sup_widget');
+  const requestId = outbound?.['requestId'];
+  const listener = listeners[0];
+  assert.ok(listener);
+  listener({
+    data: {
+      source: 'reo-host',
+      type: 'response',
+      requestId,
+      ok: true,
+      value: { selected: true },
+    },
+    source: parentWindow,
+  });
+
+  const result = (await selection) as { readonly selected?: unknown };
+  assert.equal(result.selected, true);
+});
+
 test('artifact runtime URLs keep per-object hosts ASCII-safe without losing object identity', () => {
   const segmentUrl = artifactSegmentRuntimeUrl({
     workspaceId: 'ws_Mixed_空间',

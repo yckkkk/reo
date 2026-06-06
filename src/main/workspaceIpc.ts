@@ -4198,8 +4198,8 @@ function buildWorkspaceWidgetAgentPrompt({
     '- Widget frontmatter 必须包含 `kind: widget`、`format: html`、`mount: workspace-rail`。',
     '- `entry.html` 通过 `<script src="reo-render://vendor/reo-render/bridge.js"></script>` 加载 Reo bridge。',
     '- 需要下次打开仍保留的 Widget 状态必须通过 `window.reo.state` 写入 `state.json`；localStorage/IndexedDB 只能作为快速 UI cache 或兼容缓存，不能作为唯一长期状态。',
-    '- Widget 可以用 `window.reo.workspace.read()` 读取 workspace、当前 widget 和 currentMemory/null hint；如需切换主内容当前记忆，只能调用 `window.reo.ui.selectMemory({ memoryId })`。',
-    '- `workspace.memories` 中每个 Memory 的主键是 `memory.memoryId`，不是 `memory.id`；Memory 列表按钮必须用 `const memoryId = memory.memoryId` 再调用 `window.reo.ui.selectMemory({ memoryId })`。',
+    '- Widget 可以用 `window.reo.workspace.read()` 读取 workspace、当前 widget 和 currentMemory/null hint；如需切换主内容当前记忆，调用 `window.reo.ui.selectMemory({ memoryId })`；如需定位 active 片段或补充，先用 `window.reo.content.readMemoryDetail({ memoryId })` 取得对象，再调用 `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })`。',
+    '- `workspace.memories` 中每个 Memory 的主键是 `memory.memoryId`，不是 `memory.id`；Memory 列表按钮必须用 `const memoryId = memory.memoryId` 再调用 `window.reo.ui.selectMemory({ memoryId })` 或 `window.reo.ui.selectObject({ memoryId })`。',
     '- 右侧窄 rail 内的文本必须自适应：flex/grid 文本容器设置 `min-width: 0`；单行标题使用 `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`；长 id、URL 或自由文本使用 `overflow-wrap: anywhere`，不能横向溢出。',
     '',
     '目标身份：',
@@ -4219,7 +4219,7 @@ function buildWorkspaceWidgetAgentPrompt({
       '- 在 `widgets/` 下创建一个新的 Widget 目录，目录名使用新的 `wdg_YYYYMMDDHHMMSS_8hex--可读标题`。',
       '- 写入 `widget.md`，frontmatter 至少包含 `id`、`title`、`kind: widget`、`format: html`、`mount: workspace-rail`。',
       runtimeBundleLine,
-      '- 默认推荐创建 “Workspace 总览” Widget：统计 memories/segments/supplements/works/widgets/needs-review，提供可点击的 Memory 列表，并用 `window.reo.ui.selectMemory({ memoryId })` 切换主内容当前 Memory。',
+      '- 默认推荐创建 “Workspace 总览” Widget：统计 memories/segments/supplements/works/widgets/needs-review，提供可点击的 Memory 列表，并用 `window.reo.ui.selectMemory({ memoryId })` 或 `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })` 切换主内容当前对象。',
       '- Widget 是右侧 rail 的独立 tab，不要假设自己持久挂载；切 tab、折叠 rail 或切 workspace 后都可能被卸载。',
     ].join('\n');
   }

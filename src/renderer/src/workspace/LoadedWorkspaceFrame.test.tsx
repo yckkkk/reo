@@ -28,6 +28,7 @@ import type {
 import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import {
+  memoryDetailQueryKey,
   seedWorkspaceSnapshot,
   segmentContentQueryKey,
   segmentSupplementContentQueryKey,
@@ -714,6 +715,8 @@ function renderLoadedWorkspaceFrame({
   onRequestSegmentSpeechSynthesis,
   onRequestSupplementSpeechSynthesis,
   onSelectMemory = vi.fn(),
+  onSelectObject = vi.fn(),
+  segmentFocusIntent,
   onStartNote = vi.fn(),
   onStartSegmentSupplementNote = vi.fn(),
   onStartRecording = vi.fn(),
@@ -884,6 +887,11 @@ function renderLoadedWorkspaceFrame({
     }
   ) => void;
   readonly onSelectMemory?: (memoryId: string) => void;
+  readonly onSelectObject?: () => void;
+  readonly segmentFocusIntent?: {
+    readonly segmentId: string;
+    readonly supplementId?: string;
+  } | null;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: {
     readonly memoryId: string;
@@ -1011,9 +1019,13 @@ function renderLoadedWorkspaceFrame({
         onRenameSegment={onRenameSegment}
         onRenameSegmentSupplement={onRenameSegmentSupplement}
         onInlineMarkdownDirtyChange={onInlineMarkdownDirtyChange}
+        {...(segmentFocusIntent === undefined
+          ? {}
+          : { segmentFocusIntent: segmentFocusIntent as never })}
         {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
         {...(speechSynthesis ? { speechSynthesis } : {})}
         onSelectMemory={onSelectMemory}
+        onSelectObject={onSelectObject}
         onStartNote={onStartNote}
         onStartSegmentSupplementNote={onStartSegmentSupplementNote}
         onStartSegmentSupplementRecording={onStartSegmentSupplementRecording}
@@ -1693,6 +1705,34 @@ describe('LoadedWorkspaceFrame', () => {
     await user.click(screen.getByRole('button', { name: '选择记忆 My seventh birthday' }));
 
     expect(onSelectMemory).toHaveBeenCalledWith('mem_birthday');
+  });
+
+  it('focuses a requested SegmentSupplement from a host object selection intent', async () => {
+    const supplement = noteSupplement();
+    const memory = { ...birthdayMemory, supplementCount: 1 };
+    const session = workspaceSession({ memories: [memory] });
+    const { queryClient } = renderLoadedWorkspaceFrame({
+      currentMemory: memory,
+      segmentFocusIntent: {
+        segmentId: 'seg_birthday_voice',
+        supplementId: supplement.supplementId,
+      },
+      session,
+    });
+
+    act(() => {
+      queryClient.setQueryData(
+        memoryDetailQueryKey({ workspaceId: 'ws_1', memoryId: 'mem_birthday' }),
+        {
+          requestId: 'request_mem_birthday_supplement_focus',
+          detail: birthdayDetailWithSupplements([supplement]),
+        }
+      );
+    });
+
+    const supplementTab = await screen.findByRole('tab', { name: '补充笔记' });
+    await waitFor(() => expect(supplementTab).toHaveAttribute('aria-selected', 'true'));
+    expect(await screen.findByRole('tabpanel', { name: '补充笔记' })).toBeInTheDocument();
   });
 
   it('renders the selected Memory as an empty Memory Studio context', async () => {
@@ -3185,6 +3225,7 @@ describe('LoadedWorkspaceFrame', () => {
           onRenameSegmentContent={vi.fn()}
           onRenameSegmentSupplement={vi.fn()}
           onSelectMemory={vi.fn()}
+          onSelectObject={vi.fn()}
           onStartRecording={vi.fn()}
           onStartSegmentSupplementNote={vi.fn()}
           onStartSegmentSupplementRecording={vi.fn()}

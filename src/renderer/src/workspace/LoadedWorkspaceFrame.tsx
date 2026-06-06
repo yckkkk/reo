@@ -10,6 +10,7 @@ import {
   type ArtifactSupplementTarget,
   type SavedSegmentSupplementTranscriptContent,
   type SegmentSupplementArtifactTarget,
+  type MemoryStudioSegmentFocusIntent,
   type SegmentSupplementNoteTarget,
   type SegmentSupplementRecordingTarget,
   type MemoryStudioAudioResourceCaches,
@@ -44,6 +45,7 @@ import { copyArtifactAgentPrompt, copyNeedsReviewAgentPrompt } from './workspace
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 import { workspaceReviewToastId } from './workspaceReviewToast';
 import type { WorkspaceRailTab } from './workspaceRailTabs';
+import type { ArtifactRuntimeObjectSelectionTarget } from './artifactRuntimeBridge';
 
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
@@ -83,12 +85,13 @@ type LoadedWorkspaceFrameProps = {
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
   readonly onSelectMemory: (memoryId: string) => boolean | void;
+  readonly onSelectObject: (target: ArtifactRuntimeObjectSelectionTarget) => boolean | void;
   readonly onRequestWidgetUpdate?: ((widget: WorkspaceWidgetProjection) => void) | undefined;
   readonly onWidgetRuntimeMutation?: ((value: unknown) => boolean) | undefined;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
-  readonly segmentFocusIntent?: string | null;
+  readonly segmentFocusIntent?: MemoryStudioSegmentFocusIntent | null;
   readonly shownReviewToastSessionKey?: string | null;
   readonly workspaceSession: WorkspaceSession;
   readonly widgetRefreshVersions?: Readonly<Record<string, number>>;
@@ -173,6 +176,7 @@ export function LoadedWorkspaceFrame({
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
+  onSelectObject,
   onRequestWidgetUpdate = () => undefined,
   onWidgetRuntimeMutation,
   onStartNote,
@@ -223,6 +227,9 @@ export function LoadedWorkspaceFrame({
   const segmentFocusConsumed = useStableOptionalEventCallback(onSegmentFocusConsumed);
   const selectMemory = useStableEventCallback(
     (memoryId: string) => onSelectMemory(memoryId) !== false
+  );
+  const selectObject = useStableEventCallback(
+    (target: ArtifactRuntimeObjectSelectionTarget) => onSelectObject(target) !== false
   );
   const startNote = useStableOptionalEventCallback(onStartNote);
   const startSegmentSupplementNote = useStableOptionalEventCallback(onStartSegmentSupplementNote);
@@ -435,6 +442,7 @@ export function LoadedWorkspaceFrame({
           onProductMutation={refreshAfterWidgetRuntimeMutation}
           onRequestAgentUpdate={requestWidgetUpdate}
           onSelectMemory={selectMemory}
+          onSelectObject={selectObject}
           refreshVersion={widgetRefreshVersions[activeWidget.widgetId] ?? 0}
           widget={activeWidget}
           workspaceSession={workspaceSession}
@@ -463,6 +471,7 @@ export function LoadedWorkspaceFrame({
       requestWidgetUpdate,
       refreshAfterWidgetRuntimeMutation,
       selectMemory,
+      selectObject,
       snapshot.memories,
       switchMemoryDefaultCover,
       widgetRefreshVersions,

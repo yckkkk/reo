@@ -51,6 +51,7 @@ describe('forbidden first-slice capabilities', () => {
             onRenameSegment={() => {}}
             onRenameSegmentSupplement={() => {}}
             onSelectMemory={() => {}}
+            onSelectObject={() => {}}
             onStartSegmentSupplementRecording={() => {}}
             onStartRecording={() => {}}
           />

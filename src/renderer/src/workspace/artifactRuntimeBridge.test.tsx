@@ -9,6 +9,7 @@ import {
   createArtifactRuntimeMessageHandler,
   useArtifactRuntimeBridge,
   type ArtifactRuntimeBridgeOptions,
+  type ArtifactRuntimeObjectSelectionTarget,
   type ArtifactRuntimeBridgeTarget,
   type ReadMemoryDetailForRuntime,
 } from './artifactRuntimeBridge';
@@ -170,6 +171,7 @@ function messageEvent({
 
 type BridgeHandlerTestOptions = Omit<ArtifactRuntimeBridgeOptions, 'readMemoryDetail'> & {
   readonly readMemoryDetail?: ReadMemoryDetailForRuntime;
+  readonly onSelectObject?: ((target: ArtifactRuntimeObjectSelectionTarget) => boolean) | undefined;
 };
 
 function bridgeHandlerOptions({
@@ -177,6 +179,7 @@ function bridgeHandlerOptions({
   iframeRef,
   memory,
   onProductMutation,
+  onSelectObject,
   onSelectMemory,
   readMemoryDetail = async () => {
     throw new Error('readMemoryDetail test default unavailable');
@@ -193,6 +196,7 @@ function bridgeHandlerOptions({
       api,
       memory,
       onProductMutation,
+      onSelectObject,
       onSelectMemory,
       readMemoryDetail,
       onRequestFullscreen,
@@ -851,6 +855,176 @@ describe('artifact runtime bridge', () => {
         requestId: 'req-widget-select-blocked',
         ok: true,
         value: { selected: false },
+      })
+    );
+  });
+
+  it('lets workspace widgets select an existing SegmentSupplement object', async () => {
+    const src = workspaceWidgetRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      previewVersion: 'widget-v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const onSelectObject = vi.fn(() => true);
+    const detailWithSupplement: WorkspaceMemoryDetail = {
+      ...otherMemoryDetail(),
+      segments: [
+        {
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_other',
+          segmentId: 'seg_other',
+          type: 'note',
+          title: 'Other note',
+          createdAt: '2026-06-04T10:00:00.000Z',
+          updatedAt: '2026-06-04T10:05:00.000Z',
+          bodyByteLength: 128,
+          speechSynthesis: {
+            status: 'missing',
+            audioByteLength: null,
+            contentHash: null,
+            format: null,
+            lastSynthesisAttempt: 'never',
+            mimeType: null,
+            model: null,
+            reason: null,
+            resourceId: null,
+            sampleRate: null,
+            speaker: null,
+            updatedAt: null,
+          },
+          supplementCount: 1,
+          supplements: [
+            {
+              workspaceId: 'ws_bridge',
+              memoryId: 'mem_other',
+              segmentId: 'seg_other',
+              supplementId: 'sup_other_note',
+              type: 'note',
+              title: 'Other supplement',
+              createdAt: '2026-06-04T10:06:00.000Z',
+              updatedAt: '2026-06-04T10:06:00.000Z',
+              bodyByteLength: 32,
+            },
+          ],
+        },
+      ],
+    };
+    const readMemoryDetail = vi.fn().mockResolvedValue(detailWithSupplement);
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {},
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        onSelectObject,
+        readMemoryDetail,
+        src,
+        target: {
+          targetType: 'widget',
+          workspaceId: 'ws_bridge',
+          widgetId: 'wdg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-render',
+          type: 'request',
+          requestId: 'req-widget-select-object',
+          method: 'ui.selectObject',
+          payload: {
+            memoryId: 'mem_other',
+            segmentId: 'seg_other',
+            supplementId: 'sup_other_note',
+          },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(readMemoryDetail).toHaveBeenCalledWith({ memoryId: 'mem_other' });
+    expect(onSelectObject).toHaveBeenCalledWith({
+      memoryId: 'mem_other',
+      segmentId: 'seg_other',
+      supplementId: 'sup_other_note',
+    });
+    expect((runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        requestId: 'req-widget-select-object',
+        ok: true,
+        value: { selected: true },
+      })
+    );
+  });
+
+  it('rejects workspace widget object selection when the target is not navigable', async () => {
+    const src = workspaceWidgetRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      previewVersion: 'widget-v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const onSelectObject = vi.fn(() => true);
+    const readMemoryDetail = vi.fn().mockResolvedValue(otherMemoryDetail());
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {},
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        onSelectObject,
+        readMemoryDetail,
+        src,
+        target: {
+          targetType: 'widget',
+          workspaceId: 'ws_bridge',
+          widgetId: 'wdg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-render',
+          type: 'request',
+          requestId: 'req-widget-select-missing-object',
+          method: 'ui.selectObject',
+          payload: {
+            memoryId: 'mem_other',
+            segmentId: 'seg_other',
+            supplementId: 'sup_missing',
+          },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(onSelectObject).not.toHaveBeenCalled();
+    expect((runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        requestId: 'req-widget-select-missing-object',
+        ok: false,
+        error: expect.objectContaining({
+          code: 'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
+        }),
       })
     );
   });

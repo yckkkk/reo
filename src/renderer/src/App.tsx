@@ -29,6 +29,7 @@ import { SettingsShell } from './settings/SettingsShell';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
+import type { ArtifactRuntimeObjectSelectionTarget } from './workspace/artifactRuntimeBridge';
 import type {
   SavedSegmentSupplementTranscriptContent,
   SegmentSpeechSynthesisTarget,
@@ -202,6 +203,7 @@ type MemoryCreateIntent =
 type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
+  readonly supplementId?: string;
 };
 type TranscriptionBackfillResponse<TValue> =
   | { readonly ok: true; readonly value: TValue }
@@ -5363,6 +5365,24 @@ export function App() {
     return true;
   }
 
+  function selectObject(target: ArtifactRuntimeObjectSelectionTarget) {
+    if (target.segmentId === undefined) {
+      return selectMemory(target.memoryId);
+    }
+    if (blockWorkspaceFlowInterruption()) {
+      return false;
+    }
+
+    setSelectedMemoryId(target.memoryId);
+    setSegmentFocusIntent({
+      memoryId: target.memoryId,
+      segmentId: target.segmentId,
+      ...(target.supplementId ? { supplementId: target.supplementId } : {}),
+    });
+    setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+    return true;
+  }
+
   function copyWorkspaceWidgetPrompt(
     payload:
       | { readonly action: 'create-widget' }
@@ -5732,7 +5752,12 @@ export function App() {
             currentMemory={currentMemory}
             segmentFocusIntent={
               currentMemory && segmentFocusIntent?.memoryId === currentMemory.memoryId
-                ? segmentFocusIntent.segmentId
+                ? {
+                    segmentId: segmentFocusIntent.segmentId,
+                    ...(segmentFocusIntent.supplementId
+                      ? { supplementId: segmentFocusIntent.supplementId }
+                      : {}),
+                  }
                 : null
             }
             memoryRailOpen={memoryRailOpen}
@@ -5764,6 +5789,7 @@ export function App() {
               );
             }}
             onSelectMemory={selectMemory}
+            onSelectObject={selectObject}
             onRequestWidgetUpdate={requestUpdateWidget}
             onWidgetRuntimeMutation={handleWidgetRuntimeMutation}
             onRenameMemory={setMemoryRenameTarget}

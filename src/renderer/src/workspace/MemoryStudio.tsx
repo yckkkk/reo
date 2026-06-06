@@ -180,8 +180,13 @@ type MemoryStudioProps = {
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly onUpdateArtifactSegment?: (target: ArtifactSegmentTarget) => void;
   readonly onUpdateArtifactSegmentSupplement?: (target: ArtifactSupplementTarget) => void;
-  readonly segmentFocusIntent?: string | null;
+  readonly segmentFocusIntent?: MemoryStudioSegmentFocusIntent | null;
   readonly workspaceSession: WorkspaceSession;
+};
+
+export type MemoryStudioSegmentFocusIntent = {
+  readonly segmentId: string;
+  readonly supplementId?: string;
 };
 
 export type SegmentTranscriptionRetryTarget = {
@@ -4048,15 +4053,18 @@ export function MemoryStudio({
     if (!segmentFocusIntent) {
       return;
     }
-    if (!visibleSegments.some((segment) => segment.segmentId === segmentFocusIntent)) {
+    const { segmentId } = segmentFocusIntent;
+    if (!visibleSegments.some((segment) => segment.segmentId === segmentId)) {
       return;
     }
 
-    if (selectedSegment?.segmentId !== segmentFocusIntent && blockDirtyInlineMarkdownNavigation()) {
+    if (selectedSegment?.segmentId !== segmentId && blockDirtyInlineMarkdownNavigation()) {
       return;
     }
-    setSelectedSegmentId(segmentFocusIntent);
-    onSegmentFocusConsumed?.(segmentFocusIntent);
+    setSelectedSegmentId(segmentId);
+    if (!segmentFocusIntent.supplementId) {
+      onSegmentFocusConsumed?.(segmentId);
+    }
   }, [
     inlineMarkdownDirty,
     onSegmentFocusConsumed,
@@ -4107,6 +4115,34 @@ export function MemoryStudio({
     setInlineMarkdownDirty(false);
     setConfirmingTranscriptionBackfill(null);
   }, [selectedSegment?.segmentId]);
+
+  useEffect(() => {
+    const supplementId = segmentFocusIntent?.supplementId;
+    if (!supplementId || selectedSegment?.segmentId !== segmentFocusIntent.segmentId) {
+      return;
+    }
+    if (!selectedSegmentSupplementIdSet.has(supplementId)) {
+      return;
+    }
+    const nextTab = supplementContentTabValue(supplementId);
+    if (resolvedActiveContentTab === nextTab) {
+      onSegmentFocusConsumed?.(segmentFocusIntent.segmentId);
+      return;
+    }
+    if (blockDirtyInlineMarkdownNavigation()) {
+      return;
+    }
+    setActiveContentTab(nextTab);
+    onSegmentFocusConsumed?.(segmentFocusIntent.segmentId);
+  }, [
+    inlineMarkdownDirty,
+    onSegmentFocusConsumed,
+    resolvedActiveContentTab,
+    segmentFocusIntent,
+    selectedSegment?.segmentId,
+    selectedSegmentSupplementIdSet,
+    selectedSegmentSupplementIdsKey,
+  ]);
 
   useEffect(() => {
     setInlineMarkdownDirty(false);

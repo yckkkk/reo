@@ -21,6 +21,7 @@ The script creates `window.reo`. All methods return Promises. On Reo errors, the
 - `window.reo.mutations.updateTitle({ title })` for the current work title.
 - `window.reo.ui.requestFullscreen()` to ask the host preview to expand.
 - `window.reo.ui.selectMemory({ memoryId })` for workspace rail widgets that need to switch the main content Memory after reading `workspace.memories`; this keeps the widget tab active and does not make the widget become Memory content.
+- `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })` for workspace rail widgets that need to switch the main content Memory and focus an active Segment or SegmentSupplement. Use `supplementId` only with its parent `segmentId`.
 - `window.reo.agent.copyPrompt({ action })` to copy a Reo-built agent prompt. Use `action: "create-supplement"` from a work Segment; otherwise omit action to update the current work.
 
 ## Workspace Memory ids
@@ -34,6 +35,12 @@ for (const memory of snapshot.workspace.memories) {
   button.dataset.memoryId = memoryId;
   button.addEventListener("click", () => window.reo.ui.selectMemory({ memoryId }));
 }
+```
+
+For cards backed by `readMemoryDetail({ memoryId })`, use the active object ids returned by that detail:
+
+```js
+await window.reo.ui.selectObject({ memoryId, segmentId, supplementId });
 ```
 
 Do not use `memory.id`; that field is not part of the runtime workspace summary contract.

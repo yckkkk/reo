@@ -13,7 +13,11 @@ import {
   type WorkspaceWidgetProjection,
 } from './workspaceApi';
 import { runtimeMemoryDetailQueryOptions } from './workspaceQueries';
-import { useArtifactRuntimeBridge, type ReadMemoryDetailForRuntime } from './artifactRuntimeBridge';
+import {
+  useArtifactRuntimeBridge,
+  type ArtifactRuntimeObjectSelectionTarget,
+  type ReadMemoryDetailForRuntime,
+} from './artifactRuntimeBridge';
 
 type WorkspaceWidgetPanelProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
@@ -21,6 +25,7 @@ type WorkspaceWidgetPanelProps = {
   readonly onProductMutation: (value: unknown) => void;
   readonly onRequestAgentUpdate: (widget: WorkspaceWidgetProjection) => void;
   readonly onSelectMemory: (memoryId: string) => boolean;
+  readonly onSelectObject: (target: ArtifactRuntimeObjectSelectionTarget) => boolean;
   readonly refreshVersion?: number;
   readonly widget: WorkspaceWidgetProjection;
   readonly workspaceSession: WorkspaceSession;
@@ -62,6 +67,7 @@ export function WorkspaceWidgetPanel({
   onProductMutation,
   onRequestAgentUpdate,
   onSelectMemory,
+  onSelectObject,
   refreshVersion = 0,
   widget,
   workspaceSession,
@@ -102,6 +108,7 @@ export function WorkspaceWidgetPanel({
     memory: currentMemory,
     onProductMutation,
     onRequestFullscreen: () => undefined,
+    onSelectObject,
     onSelectMemory,
     readMemoryDetail,
     src: src ?? '',

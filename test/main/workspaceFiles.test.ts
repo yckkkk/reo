@@ -1090,6 +1090,7 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     /all Memory summaries/
   );
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectMemory/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectObject/);
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /readMemoryDetail\(\{ memoryId \}\)/
@@ -1783,6 +1784,107 @@ test('reo-doctor skill script reports unresolved needs-review entries', async ()
     {
       code: 'needs-review',
       path: '.reo/review/needs-review.json',
+    },
+  ]);
+});
+
+test('reo-doctor skill script reports orphan object mirrors outside active files and trash', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-orphan-object-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Doctor orphan object',
+    description: '',
+    createWorkspaceId: () => 'ws_doctor_orphan_object',
+    now: () => '2026-06-05T22:40:00.000Z',
+  });
+  await mkdir(path.join(root, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', 'seg_orphan.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId: 'ws_doctor_orphan_object',
+        memoryId: 'mem_missing',
+        segmentId: 'seg_orphan',
+        kind: 'note',
+        createdAt: '2026-06-05T22:40:00.000Z',
+        finalizedAt: '2026-06-05T22:40:00.000Z',
+        updatedAt: '2026-06-05T22:40:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+  await writeFile(
+    path.join(root, '.reo', 'objects', 'segments', 'seg_in_trash.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId: 'ws_doctor_orphan_object',
+        memoryId: 'mem_missing',
+        segmentId: 'seg_in_trash',
+        kind: 'note',
+        createdAt: '2026-06-05T22:40:00.000Z',
+        finalizedAt: '2026-06-05T22:40:00.000Z',
+        updatedAt: '2026-06-05T22:40:00.000Z',
+      },
+      null,
+      2
+    )}\n`
+  );
+  await mkdir(path.join(root, '.reo', 'trash', 'segments', 'seg_in_trash'), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(root, '.reo', 'trash', 'segments', 'seg_in_trash', 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { id: 'seg_in_trash', title: 'Trashed segment', kind: 'note' },
+      content: '# Trashed segment\n',
+    })
+  );
+
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs')],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout) as {
+    readonly ok: boolean;
+    readonly orphanObjects?: {
+      readonly count: number;
+      readonly entries: Array<{
+        readonly code: string;
+        readonly manifestPath: string;
+        readonly objectId: string;
+        readonly objectType: string;
+        readonly recoveryHint: string;
+      }>;
+    };
+    readonly issues: Array<{ readonly code: string; readonly path?: string }>;
+  };
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.orphanObjects, {
+    count: 1,
+    entries: [
+      {
+        code: 'orphan-object-mirror',
+        manifestPath: '.reo/objects/segments/seg_orphan.json',
+        objectId: 'seg_orphan',
+        objectType: 'segment',
+        recoveryHint:
+          'This .reo object mirror has no active semantic file and is not in trash. Preserve user content, then refresh Reo or remove the stale mirror only after confirming the object is gone.',
+      },
+    ],
+  });
+  assert.deepEqual(report.issues, [
+    {
+      code: 'orphan-object-mirror',
+      path: '.reo/objects/segments/seg_orphan.json',
     },
   ]);
 });

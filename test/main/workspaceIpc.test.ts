@@ -7309,6 +7309,7 @@ test('copyWidgetAgentPrompt writes a create prompt with managed entry and Widget
   assert.match(prompt, /text-overflow: ellipsis/);
   assert.match(prompt, /memory\.memoryId/);
   assert.match(prompt, /window\.reo\.ui\.selectMemory/);
+  assert.match(prompt, /window\.reo\.ui\.selectObject/);
   assert.doesNotMatch(prompt, /component/i);
   assert.doesNotMatch(prompt, /组件/);
   assert.equal(prompt.includes(root), false);

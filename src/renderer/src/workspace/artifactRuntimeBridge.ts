@@ -42,6 +42,23 @@ export type ReadMemoryDetailForRuntime = (input: {
   readonly memoryId: string;
 }) => Promise<WorkspaceMemoryDetail>;
 
+export type ArtifactRuntimeObjectSelectionTarget =
+  | {
+      readonly memoryId: string;
+      readonly segmentId?: undefined;
+      readonly supplementId?: undefined;
+    }
+  | {
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly supplementId?: undefined;
+    }
+  | {
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly supplementId: string;
+    };
+
 export type ArtifactRuntimeBridgeOptions = {
   readonly api: RuntimeApi;
   readonly enabled?: boolean;
@@ -51,6 +68,7 @@ export type ArtifactRuntimeBridgeOptions = {
   readonly readMemoryDetail: ReadMemoryDetailForRuntime;
   readonly onRequestFullscreen: () => void;
   readonly onSelectMemory?: ((memoryId: string) => boolean) | undefined;
+  readonly onSelectObject?: ((target: ArtifactRuntimeObjectSelectionTarget) => boolean) | undefined;
   readonly src: string;
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly workspaceSession: WorkspaceSession;
@@ -139,6 +157,28 @@ function optionalString(payload: unknown, key: string): string | undefined {
     );
   }
   return payload[key];
+}
+
+function objectSelectionTarget(payload: unknown): ArtifactRuntimeObjectSelectionTarget {
+  const memoryId = requiredString(payload, 'memoryId');
+  const segmentId = optionalString(payload, 'segmentId');
+  const supplementId = optionalString(payload, 'supplementId');
+
+  if (segmentId === undefined) {
+    if (supplementId !== undefined) {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_INVALID_REQUEST',
+        'segmentId is required when supplementId is provided'
+      );
+    }
+    return { memoryId };
+  }
+
+  if (supplementId === undefined) {
+    return { memoryId, segmentId };
+  }
+
+  return { memoryId, segmentId, supplementId };
 }
 
 function requireRecord(payload: unknown, key: string): Record<string, unknown> {
@@ -248,6 +288,53 @@ function missingApi(method: string): never {
   );
 }
 
+async function assertObjectSelectionTargetNavigable({
+  readMemoryDetail,
+  selectionTarget,
+  workspaceSession,
+}: {
+  readonly readMemoryDetail: ReadMemoryDetailForRuntime;
+  readonly selectionTarget: ArtifactRuntimeObjectSelectionTarget;
+  readonly workspaceSession: WorkspaceSession;
+}) {
+  const memoryExists = workspaceSession.snapshot.memories.some(
+    (candidate) => candidate.memoryId === selectionTarget.memoryId
+  );
+  if (!memoryExists) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_MEMORY_NOT_FOUND',
+      'Memory was not found'
+    );
+  }
+
+  if (selectionTarget.segmentId === undefined) {
+    return;
+  }
+
+  const detail = await readMemoryDetail({ memoryId: selectionTarget.memoryId });
+  const segment = detail.segments.find(
+    (candidate) => candidate.segmentId === selectionTarget.segmentId
+  );
+  if (!segment) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
+      'Runtime selection target was not found'
+    );
+  }
+
+  if (
+    selectionTarget.supplementId !== undefined &&
+    !segment.supplements.some(
+      (candidate) => candidate.supplementId === selectionTarget.supplementId
+    )
+  ) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
+      'Runtime selection target was not found'
+    );
+  }
+}
+
 function bridgeErrorFromUnknown(error: unknown) {
   if (error instanceof ArtifactRuntimeBridgeError) {
     return { code: error.code, message: error.message };
@@ -284,6 +371,7 @@ async function handleRuntimeRequest(
     memory,
     onProductMutation,
     onRequestFullscreen,
+    onSelectObject,
     onSelectMemory,
     readMemoryDetail,
     target,
@@ -421,6 +509,25 @@ async function handleRuntimeRequest(
       missingApi(request.method);
     }
     return { selected: onSelectMemory(memoryId) };
+  }
+
+  if (request.method === 'ui.selectObject') {
+    if (target.targetType !== 'widget') {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_UNSUPPORTED_METHOD',
+        'ui.selectObject is only available to workspace widgets'
+      );
+    }
+    if (!onSelectObject) {
+      missingApi(request.method);
+    }
+    const selectionTarget = objectSelectionTarget(request.payload);
+    await assertObjectSelectionTargetNavigable({
+      readMemoryDetail,
+      selectionTarget,
+      workspaceSession,
+    });
+    return { selected: onSelectObject(selectionTarget) };
   }
 
   if (request.method === 'agent.copyPrompt') {
@@ -595,6 +702,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    onSelectObject: options.onSelectObject,
     onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
@@ -606,6 +714,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    onSelectObject: options.onSelectObject,
     onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,

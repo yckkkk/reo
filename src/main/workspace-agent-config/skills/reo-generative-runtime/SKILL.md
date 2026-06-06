@@ -28,7 +28,7 @@ Read `references/state-and-storage.md` for store naming, versioning and merge ru
 
 ## Bridge
 
-To use Reo data, state, UI, mutation or agent prompt actions, explicitly load `reo-render://vendor/reo-render/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge. Memory summaries expose `memoryId`, not `id`; when iterating `workspace.memories`, use `const memoryId = memory.memoryId` before calling `selectMemory` or `readMemoryDetail`. Workspace rail widgets may call `window.reo.ui.selectMemory({ memoryId })` to switch the main content Memory; this does not switch away from the widget tab.
+To use Reo data, state, UI, mutation or agent prompt actions, explicitly load `reo-render://vendor/reo-render/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge. Memory summaries expose `memoryId`, not `id`; when iterating `workspace.memories`, use `const memoryId = memory.memoryId` before calling `selectMemory`, `selectObject` or `readMemoryDetail`. Workspace rail widgets may call `window.reo.ui.selectMemory({ memoryId })` to switch the main content Memory, or `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })` after reading Memory detail to focus an active Segment or SegmentSupplement; this does not switch away from the widget tab.
 
 Read `references/bridge-api.md` before using `window.reo`.
 
