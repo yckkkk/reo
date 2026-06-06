@@ -7,6 +7,7 @@ Use this reference for every visual Reo work.
 - Seamless: the work should feel like a natural part of Reo content, not an embedded website. Its structural tokens mirror Reo app theme.css (surfaces, zinc text, radius, fonts).
 - Layered, not flat-by-stripping: clean comes from typography and hierarchy. Keep restrained elevation (`var(--shadow-card)`) and scale effects down to Reo intensity instead of removing them. Avoid glow, noise, neon and heavy blur; use gradient only as a very faint intentional brand accent.
 - Compact: show the essential visual object inline; do not build a marketing page.
+- Inline-first: show the useful summary, primary controls and core result before a long scroll. Use sections, compact internal panels, deliberate internal scroll areas, fullscreen affordances or supplements when the work needs depth; do not force every work into one fixed height. Workspace rail widgets must remain usable from 240px to 520px wide.
 - Content first: labels, controls and visuals should serve the Memory data or user intent.
 - Defaults, not ceilings: these rules are a starting point. Go beyond them when it serves the user and the result stays cohesive with Reo, runnable, and grounded in the Memory.
 

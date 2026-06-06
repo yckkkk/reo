@@ -46,6 +46,10 @@ Read `references/templates.md` before choosing structure.
 
 Runtime layouts must survive narrow iframes and right rail widgets. For flex/grid text containers, set `min-width: 0`; for single-line labels use `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`; for long identifiers or free text use `overflow-wrap: anywhere`. Never let titles, ids, URLs or generated prose create horizontal overflow.
 
+Inline work previews should show the useful summary, primary controls and core result before the user has to scroll far. Complex works may use sections, compact internal panels, deliberate internal scroll areas, fullscreen affordances or work supplements for depth; do not lock every work to one fixed pixel height. Workspace rail widgets must stay useful from a 240px rail to a 520px rail.
+
+Do not put literal local file URL scheme examples, machine paths or usernames into user-visible runtime copy; the validator treats those strings conservatively.
+
 ## Scripts
 
 - Scaffold a runnable bundle in an existing target object directory: `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <target-directory> --title "标题" --template dashboard`.

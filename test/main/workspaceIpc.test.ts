@@ -7260,6 +7260,10 @@ test('copyArtifactAgentPrompt writes a create segment prompt without creating fi
   assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/scripts\//);
   assert.match(copiedText[0] ?? '', /skills\/reo-works-design\/references\//);
   assert.match(copiedText[0] ?? '', /用户未指定风格时默认按 `reo-works-design`/);
+  assert.match(copiedText[0] ?? '', /不要编辑根 `AGENTS\.md`/);
+  assert.match(copiedText[0] ?? '', /用户自带 skills/);
+  assert.match(copiedText[0] ?? '', /避免用户为了理解作品而长滚动/);
+  assert.match(copiedText[0] ?? '', /不要锁死单一高度/);
   assert.match(copiedText[0] ?? '', /kind: artifact/);
   assert.match(copiedText[0] ?? '', /format: html/);
   assert.match(copiedText[0] ?? '', /entry\.html/);
@@ -7301,7 +7305,8 @@ test('copyWidgetAgentPrompt writes a create prompt with managed entry and Widget
   const prompt = copiedText[0] ?? '';
   assert.match(prompt, /创建一个 Reo Workspace 侧栏 Widget/);
   assert.match(prompt, /\.reo\/REO\.md/);
-  assert.doesNotMatch(prompt, /AGENTS\.md/);
+  assert.match(prompt, /不要编辑根 `AGENTS\.md`/);
+  assert.match(prompt, /用户自带 skills/);
   assert.match(prompt, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(prompt, /skills\/reo-generative-runtime\/references\//);
   assert.match(prompt, /skills\/reo-generative-runtime\/scripts\//);
@@ -7315,6 +7320,8 @@ test('copyWidgetAgentPrompt writes a create prompt with managed entry and Widget
   assert.match(prompt, /state\.json/);
   assert.match(prompt, /assets\/icon\.svg/);
   assert.match(prompt, /text-overflow: ellipsis/);
+  assert.match(prompt, /240px 到 520px rail/);
+  assert.match(prompt, /长滚动/);
   assert.match(prompt, /memory\.memoryId/);
   assert.match(prompt, /window\.reo\.ui\.selectMemory/);
   assert.match(prompt, /window\.reo\.ui\.selectObject/);
@@ -7368,7 +7375,8 @@ test('copyWidgetAgentPrompt writes an update prompt scoped to an existing Widget
   const prompt = copiedText[0] ?? '';
   assert.match(prompt, /更新一个 Reo Workspace 侧栏 Widget/);
   assert.match(prompt, /\.reo\/REO\.md/);
-  assert.doesNotMatch(prompt, /AGENTS\.md/);
+  assert.match(prompt, /不要编辑根 `AGENTS\.md`/);
+  assert.match(prompt, /240px 到 520px rail/);
   assert.match(prompt, /widget directory: `widgets\/wdg_prompt--Daily`/);
   assert.match(prompt, /metadata: `widgets\/wdg_prompt--Daily\/widget\.md`/);
   assert.match(prompt, /widgetId: wdg_prompt/);

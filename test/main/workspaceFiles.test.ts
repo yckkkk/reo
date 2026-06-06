@@ -658,6 +658,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.equal(reoText, DEFAULT_WORKSPACE_REO_MD);
   assert.match(reoText, /Codex/);
   assert.match(reoText, /核心实体/);
+  assert.match(reoText, /即使根 `AGENTS\.md` 是用户自定义文件/);
   assert.match(reoText, /不需要离开当前记忆空间查询 Reo 仓库源码/);
   assert.match(reoText, /skills\/reo-edit\/SKILL\.md/);
   assert.match(reoText, /skills\/reo-cover-image\/SKILL\.md/);
@@ -672,6 +673,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(reoText, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(reoText, /skills\/reo-works-design\/references\//);
   assert.match(reoText, /skills\/reo-doctor\/SKILL\.md/);
+  assert.match(reoText, /用户自带 skills/);
   assert.doesNotMatch(agentsText, /普通文字/);
   assert.doesNotMatch(agentsText, /var\(--tt-color-highlight-blue\)/);
   assert.doesNotMatch(agentsText, /source\.hash/);
@@ -1069,6 +1071,9 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /state\.json/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /text-overflow: ellipsis/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /overflow-wrap: anywhere/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /240px rail to a 520px rail/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /fixed pixel height/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /literal local file URL scheme/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /min-width: 0/);
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
@@ -1078,6 +1083,8 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'],
     /horizontal text overflow/
   );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'], /long scroll/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'], /240px to 520px/);
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
     /localStorage persistence/
@@ -1373,6 +1380,8 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /CDN/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /window\.reo/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /240px 到 520px rail/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /不要把所有作品锁死到同一个固定高度/);
   assert.equal(
     DEFAULT_REO_WORKS_DESIGN_SKILL_MD.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS),
     true
@@ -1399,6 +1408,8 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
     true
   );
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /#EEEDFE/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /Inline-first/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /240px to 520px/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /diagram/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /mockup/);
   assert.match(
@@ -2381,7 +2392,7 @@ test('open workspace reconciles a corrupt index from one read model rebuild', as
   }
 });
 
-test('open workspace uses a valid index without scanning finalized memory files', async () => {
+test('index snapshot read uses a valid index without scanning finalized memory files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-fast-open-index-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -2415,15 +2426,21 @@ test('open workspace uses a valid index without scanning finalized memory files'
   });
 
   try {
-    assert.deepEqual(await openWorkspaceFiles({ rootPath: root }), {
-      ok: true,
-      snapshot: {
+    assert.deepEqual(
+      await readWorkspaceSnapshotFromIndex({
+        rootPath: root,
         workspaceId: 'ws_fast_open',
-        title: path.basename(root),
-        description: '',
-        memories: [indexedMemory],
-      },
-    });
+      }),
+      {
+        ok: true,
+        snapshot: {
+          workspaceId: 'ws_fast_open',
+          title: path.basename(root),
+          description: '',
+          memories: [indexedMemory],
+        },
+      }
+    );
   } finally {
     setBeforeReadModelReaddirForTest(null);
   }
@@ -2519,7 +2536,7 @@ test('open workspace fails without replacing index when memories cannot be read'
   assert.equal(await readFile(indexPath, 'utf8'), indexBefore);
 });
 
-test('open workspace uses stale valid index and snapshot refresh reconciles file truth', async () => {
+test('open workspace reconciles a stale valid index from file truth', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-stale-index-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -2564,12 +2581,12 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
       workspaceId: 'ws_stale_index',
       title: path.basename(root),
       description: '',
-      memories: [],
+      memories: [expectedMemory],
     },
   });
   assert.deepEqual(JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')), {
     schemaVersion: 1,
-    memories: [],
+    memories: [expectedMemory],
   });
 
   assert.deepEqual(
@@ -2595,6 +2612,121 @@ test('open workspace uses stale valid index and snapshot refresh reconciles file
     schemaVersion: 1,
     memories: [expectedMemory],
   });
+});
+
+test('open workspace projects an externally created Memory without Reo manifests', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-external-memory-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '外部写回',
+    description: '',
+    createWorkspaceId: () => 'ws_external_memory',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const memoryId = 'mem_20260606_external';
+  const memoryDirectory = path.join(root, 'memories', `${memoryId}--外部写回`);
+  await mkdir(memoryDirectory, { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: '外部写回' },
+      content: '# 外部写回\n\nAgent created this Memory with ordinary files only.\n',
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'index.json'),
+    '{\n  "schemaVersion": 1,\n  "memories": []\n}\n'
+  );
+
+  const opened = await openWorkspaceFiles({ rootPath: root });
+
+  assert.equal(opened.ok, true);
+  const [memory] = opened.ok ? opened.snapshot.memories : [];
+  assert.ok(memory);
+  assert.equal(memory.memoryId, memoryId);
+  assert.equal(memory.title, '外部写回');
+  assert.equal(typeof memory.createdAt, 'string');
+  assert.equal(typeof memory.updatedAt, 'string');
+  assert.equal(memory.segmentCount, 0);
+  assert.equal(memory.audioSegmentCount, 0);
+  assert.equal(memory.noteSegmentCount, 0);
+  assert.equal(memory.artifactSegmentCount, 0);
+  assert.equal(memory.audioDurationMs, 0);
+  assert.equal(memory.audioByteLength, 0);
+  assert.equal(memory.hasAudioTranscript, false);
+  assert.equal(memory.hasAnyNote, false);
+  assert.equal(memory.supplementCount, 0);
+  assert.deepEqual(memory.cover, { source: 'default' });
+  assert.equal(
+    (await readFile(path.join(root, '.reo', 'objects', 'memories', `${memoryId}.json`), 'utf8'))
+      .length > 0,
+    true
+  );
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, '.reo', 'index.json'), 'utf8')).memories[0].memoryId,
+    memoryId
+  );
+});
+
+test('open workspace reports externally created invalid artifact candidates', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-external-invalid-artifact-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: '外部非法作品',
+    description: '',
+    createWorkspaceId: () => 'ws_external_invalid_artifact',
+    now: () => '2026-05-06T13:08:00.000Z',
+  });
+  const memoryId = 'mem_20260606_review';
+  const segmentId = 'seg_20260606_missing_entry';
+  const memoryDirectory = path.join(root, 'memories', `${memoryId}--外部候选`);
+  const segmentDirectory = path.join(memoryDirectory, 'segments', `${segmentId}--缺入口作品`);
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(memoryDirectory, 'memory.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'memory',
+      data: { title: '外部候选' },
+      content: '# 外部候选\n',
+    })
+  );
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { id: segmentId, title: '缺入口作品', kind: 'artifact', format: 'html' },
+      content: '# 缺入口作品\n',
+    })
+  );
+  await writeFile(
+    path.join(root, '.reo', 'index.json'),
+    '{\n  "schemaVersion": 1,\n  "memories": []\n}\n'
+  );
+
+  const opened = await openWorkspaceFiles({ rootPath: root });
+
+  assert.equal(opened.ok, true);
+  if (!opened.ok) {
+    throw new Error('open should surface review instead of failing');
+  }
+  assert.equal(opened.snapshot.review?.needsReviewCount, 1);
+  assert.equal(opened.snapshot.review?.markdownCandidateCount, 1);
+  const report = await readNeedsReviewReport(root);
+  assert.deepEqual(
+    report.entries.map((entry) => ({
+      category: entry.category,
+      paths: entry.paths,
+      reason: entry.reason,
+    })),
+    [
+      {
+        category: 'markdown-segment',
+        paths: [`memories/${memoryId}--外部候选/segments/${segmentId}--缺入口作品/segment.md`],
+        reason: 'missing-artifact-entry',
+      },
+    ]
+  );
 });
 
 test('workspace snapshot refresh passively serializes note Segment sidecar JSON to Markdown', async () => {
@@ -3516,7 +3648,7 @@ test('needs-review report skips rewriting unchanged entries', async () => {
   assert.equal((await readNeedsReviewReport(root)).updatedAt, '2026-05-27T00:00:00.000Z');
 });
 
-test('open workspace returns valid index without reconciliation before returning ready', async () => {
+test('open workspace preserves the existing index when memories root changes before reconciliation persist', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-reconcile-swap-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -3545,11 +3677,15 @@ test('open workspace returns valid index without reconciliation before returning
 
   try {
     const opened = await openWorkspaceFiles({ rootPath: root });
-    assert.equal(opened.ok, true);
+    assert.equal(opened.ok, false);
+    if (!opened.ok) {
+      assert.equal(opened.error.code, 'ERR_WORKSPACE_OPEN_FAILED');
+      assert.equal(opened.error.dataRetention, 'previous-file-preserved');
+    }
   } finally {
     setBeforeWorkspaceIndexReconciliationPersistForTest(null);
   }
-  assert.equal(reconciliationStarted, false);
+  assert.equal(reconciliationStarted, true);
   assert.equal(await readFile(path.join(root, '.reo', 'index.json'), 'utf8'), previousIndex);
 });
 

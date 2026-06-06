@@ -1281,9 +1281,6 @@ export async function openWorkspaceFiles({
   rootPath,
   assertWorkspaceUsable: assertUsable,
 }: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
-  let index: WorkspaceIndex;
-  let metadata: WorkspaceMetadata;
-  let canonicalRoot: string;
   try {
     assertWorkspaceUsable(assertUsable);
     const target = await validateWorkspaceOpenTarget(rootPath);
@@ -1291,8 +1288,8 @@ export async function openWorkspaceFiles({
       assertWorkspaceUsable(assertUsable);
       return target;
     }
-    canonicalRoot = target.canonicalRoot;
-    metadata = target.metadata;
+    const canonicalRoot = target.canonicalRoot;
+    let metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
     const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
     if (typeof draftsDirectory !== 'string') {
@@ -1315,8 +1312,16 @@ export async function openWorkspaceFiles({
       assertWorkspaceUsable: () => assertWorkspaceUsable(assertUsable),
     });
     assertWorkspaceUsable(assertUsable);
-    index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => assertWorkspaceUsable(assertUsable),
+    const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
+    assertWorkspaceUsable(assertUsable);
+    const index = await readOrRebuildIndex(canonicalRoot, {
+      assertBeforePersist: async () => {
+        assertWorkspaceUsable(assertUsable);
+        await readModel.assertMemoriesRootCurrent();
+      },
+      rebuiltMemories: readModel.memories,
     });
     assertWorkspaceUsable(assertUsable);
     metadata = await repairWorkspaceTitleMetadataMirror({
@@ -1325,6 +1330,17 @@ export async function openWorkspaceFiles({
       ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
     assertWorkspaceUsable(assertUsable);
+    const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
+    const review = await writeWorkspaceNeedsReviewReport({
+      ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
+      entries: [...readModel.reviewEntries, ...widgets.reviewEntries],
+      rootPath: canonicalRoot,
+    });
+    assertWorkspaceUsable(assertUsable);
+    return {
+      ok: true,
+      snapshot: snapshotFrom(metadata, index, review, widgets.widgets),
+    };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
       return error.envelope;
@@ -1335,11 +1351,6 @@ export async function openWorkspaceFiles({
       'previous-file-preserved'
     );
   }
-  const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
-  return {
-    ok: true,
-    snapshot: snapshotFrom(metadata, index, undefined, widgets.widgets),
-  };
 }
 
 export async function repairWorkspaceTitleMirrorFromRootName({

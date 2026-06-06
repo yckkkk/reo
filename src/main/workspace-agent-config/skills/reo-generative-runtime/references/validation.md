@@ -11,6 +11,9 @@ Validation answers whether this bundle can run in Reo.
 - No `file://`, absolute local path, symlink, `.reo/` dependency or editor temp file is required.
 - If `entry.html` uses `window.reo`, it also loads `reo-render://vendor/reo-render/bridge.js`.
 - Narrow embeds do not have horizontal text overflow; flex/grid text containers can shrink with `min-width: 0`, single-line labels ellipsize, and long unbroken text can wrap.
+- Inline work previews show the useful summary, primary controls and core result before a long scroll; complex works use sections, deliberate internal scroll areas, fullscreen affordances or supplements instead of hiding the core value far below the fold.
+- Workspace rail widgets remain usable from 240px to 520px wide.
+- User-visible runtime copy does not include literal local file URL scheme examples, machine paths or usernames.
 - The work or widget stays light enough for future agent edits.
 
 Run `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>` before ending a runtime task. This check validates runnability; it does not review taste, content quality, network choices or user choices.

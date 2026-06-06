@@ -19,3 +19,7 @@ Start with the closest family, ship a runnable bundle, then add only the interac
 ## Responsive text
 
 Right rail widgets are narrow. Put `min-width: 0` on flex/grid text columns and any parent that should shrink. Single-line titles, memory names, counters and menu labels should use `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`. Long ids, URLs or user text that may not contain spaces should use `overflow-wrap: anywhere` instead of forcing horizontal scroll.
+
+## Inline preview size
+
+Works should make their useful summary, primary controls and core result visible early in the inline preview so the user does not need a long scroll just to understand the object. This is a soft target, not a fixed height rule: use sections, compact internal panels, deliberate internal scroll areas, fullscreen affordances or supplements when the work genuinely needs more space. Workspace rail widgets must remain usable from 240px to 520px wide.
